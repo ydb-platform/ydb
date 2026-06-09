@@ -263,8 +263,11 @@ def _schemeshard_devui_mon_paths(tablet_id, secure_path_mode):
     }
 
 
-def _schemeshard_post_action_paths(tablet_id, action, extra_params='', admin_secure_status=200):
-    q = f'TabletID={tablet_id}&Action={action}'
+def _schemeshard_post_action_paths(tablet_id, action, extra_params='', admin_secure_status=200, page=None):
+    q = f'TabletID={tablet_id}'
+    if page is not None:
+        q = f'{q}&Page={page}'
+    q = f'{q}&Action={action}'
     if extra_params:
         q = f'{q}&{extra_params}'
     all_forbidden, _, admin_allowed_sids_ok = tablet_devui_sid_matrix()
@@ -380,6 +383,54 @@ def test_schemeshard_new_post_action_is_admin_only_by_default(
         _schemeshard_post_action_paths(tid, 'FutureAction', admin_secure_status=400),
         '',
     )
+
+
+def test_schemeshard_post_table_partitions_format_switch_with_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
+    tid = cluster.schemeshard_tablet_id
+    _schemeshard_post_endpoints(
+        cluster,
+        _schemeshard_post_action_paths(
+            tid,
+            'TablePartitionsFormatSwitch',
+            'OwnerPathId=1&LocalPathId=1&format=shardidx',
+            admin_secure_status=400,
+        ),
+        'OwnerPathId=1&LocalPathId=1&format=shardidx',
+    )
+
+
+def test_schemeshard_post_table_partitions_format_sweep_with_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
+    tid = cluster.schemeshard_tablet_id
+    _schemeshard_post_endpoints(
+        cluster,
+        _schemeshard_post_action_paths(
+            tid,
+            'TablePartitionsFormatSweep',
+            page='Admin',
+            admin_secure_status=303,
+        ),
+        'Start=1&format=shardidx',
+    )
+
+
+def test_schemeshard_table_partitions_format_sweep_form_uses_secure_path(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    tid = cluster.schemeshard_tablet_id
+    url = f'https://{host}:{mon_port}/tablets/app/secure?TabletID={tid}&Page=Admin'
+    response = requests.get(url, headers={'Authorization': 'root@builtin'}, verify=False)
+    assert response.status_code == 200, response.text
+    assert "action='app/secure?" in response.text or 'action="app/secure?' in response.text
+    assert 'Action=TablePartitionsFormatSweep' in response.text
 
 
 def test_schemeshard_admin_link_uses_secure_path(

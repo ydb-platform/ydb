@@ -1,6 +1,5 @@
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/auth.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/tx/schemeshard/schemeshard__monitoring.h_serialized.h>  // for enum ESweepAlert support methods
 
@@ -854,7 +853,7 @@ private:
         // to give user clear knowledge what parameters were.
         // Params in the body are the actually used ones, query parameters will be ignored
         // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr))
-        const TString actionUrl = TStringBuilder() << "app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+        const TString actionUrl = TStringBuilder() << TabletDevUiAppPath() << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
             << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::TablePartitionsFormatSwitch)
             << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
             << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
@@ -902,7 +901,7 @@ private:
         // to give user clear knowledge what parameters were.
         // Params in the body are the actually used ones, query parameters will be ignored
         // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr)).
-        const TString actionUrl = TStringBuilder() << "app"
+        const TString actionUrl = TStringBuilder() << TabletDevUiAppPath()
             << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
             << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
             << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::TablePartitionsFormatSweep)
@@ -2111,7 +2110,7 @@ private:
 
             // make redirect with location relative to the original request url (path)
             TStringBuilder location;
-            location << "app"
+            location << TabletDevUiAppPath()
                 << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
                 << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
             ;

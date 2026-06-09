@@ -33,6 +33,7 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
         TTabletTypes::DataShard,
         TTabletTypes::Hive,
         TTabletTypes::GraphShard,
+        TTabletTypes::SchemeShard,
     };
 
     return std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end()

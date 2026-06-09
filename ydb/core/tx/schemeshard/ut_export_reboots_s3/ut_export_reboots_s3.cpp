@@ -181,39 +181,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     template <bool IsFs>
-    void RunParquetExport(TTestWithReboots& t,
-        const TVector<TTypedScheme>& schemeObjects,
-        const TVector<TExportItem>& items,
-        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions(),
-        const TString& extraSettings = "")
-    {
-        TString parquetSettings = extraSettings ? extraSettings : MakeParquetSettings();
-        Decorate(t, IsFs, schemeObjects, items, &Run, opts, parquetSettings);
-    }
-
-    template <bool IsFs>
-    void CancelParquetExport(TTestWithReboots& t,
-        const TVector<TTypedScheme>& schemeObjects,
-        const TVector<TExportItem>& items,
-        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions(),
-        const TString& extraSettings = "")
-    {
-        TString parquetSettings = extraSettings ? extraSettings : MakeParquetSettings();
-        Decorate(t, IsFs, schemeObjects, items, &Cancel, opts, parquetSettings);
-    }
-
-    template <bool IsFs>
-    void ForgetParquetExport(TTestWithReboots& t,
-        const TVector<TTypedScheme>& schemeObjects,
-        const TVector<TExportItem>& items,
-        const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions(),
-        const TString& extraSettings = "")
-    {
-        TString parquetSettings = extraSettings ? extraSettings : MakeParquetSettings();
-        Decorate(t, IsFs, schemeObjects, items, &Forget, opts, parquetSettings);
-    }
-
-    template <bool IsFs>
     void CancelExport(TTestWithReboots& t,
         const TVector<TTypedScheme>& schemeObjects,
         const TVector<TExportItem>& items,
@@ -1038,18 +1005,18 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
     // Parquet Export Tests
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
-        RunParquetExport<false>(t, {
+        RunExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, {{"/MyRoot/Table", ""}});
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnMultiShardTableWithParquet, 2, 1, false) {
-        RunParquetExport<false>(t, {
+        RunExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
@@ -1057,11 +1024,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 KeyColumnNames: ["key"]
                 UniformPartitionsCount: 2
             )",
-        }, {{"/MyRoot/Table", ""}});
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnManyTablesWithParquet, 2, 1, false) {
-        RunParquetExport<false>(t, {
+        RunExport<false>(t, {
             R"(
                 Name: "Table1"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1074,11 +1041,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, {{"/MyRoot/Table1", "table1"}, {"/MyRoot/Table2", "table2"}});
+        }, {{"/MyRoot/Table1", "table1"}, {"/MyRoot/Table2", "table2"}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnViewsAndTablesWithParquet, 2, 1, false) {
-        RunParquetExport<false>(t, {
+        RunExport<false>(t, {
             {
                 EPathTypeView,
                 R"(
@@ -1094,11 +1061,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                     KeyColumnNames: ["key"]
                 )"
             }
-        }, {{"/MyRoot/View", "view"}, {"/MyRoot/Table", "table"}});
+        }, {{"/MyRoot/View", "view"}, {"/MyRoot/Table", "table"}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithSmallRowGroup, 2, 1, false) {
-        RunParquetExport<false>(t, {
+        RunExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1111,7 +1078,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithLargeRowGroup, 2, 1, false) {
-        RunParquetExport<false>(t, {
+        RunExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1124,7 +1091,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithZstdCompression, 2, 1, false) {
-        RunParquetExport<false>(t, {
+        RunExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1173,7 +1140,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithComplexTypes, 2, 1, false) {
-        RunParquetExport<false>(t, {
+        RunExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -1184,28 +1151,28 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 Columns { Name: "timestamp_value" Type: "Timestamp" }
                 KeyColumnNames: ["key"]
             )",
-        }, {{"/MyRoot/Table", ""}});
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
-        CancelParquetExport<false>(t, {
+        CancelExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, {{"/MyRoot/Table", ""}});
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
-        ForgetParquetExport<false>(t, {
+        ForgetExport<false>(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, {{"/MyRoot/Table", ""}});
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 }

@@ -2,7 +2,7 @@
 
 #include "kafka.h"
 
-namespace NYdb::NKafkaWire {
+namespace NKafka {
 
 enum ETimestampType {
     CREATE_TIME = 0,
@@ -616,4 +616,4 @@ TKafkaRecordBatch ReadKafkaRecordBatch(
     TKafkaVersion version = 2);
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
-} // namespace NYdb::NKafkaWire
+} // namespace NKafka

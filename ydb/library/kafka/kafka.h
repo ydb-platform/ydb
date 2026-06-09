@@ -16,7 +16,7 @@
 #include <util/generic/strbuf.h>
 #include <util/system/types.h>
 
-namespace NYdb::NKafkaWire {
+namespace NKafka {
 
 enum ECompressionType : ui8 {
     NONE = 0,
@@ -504,4 +504,4 @@ std::unique_ptr<TApiMessage> CreateResponse(i16 apiKey);
 i16 RequestHeaderVersion(i16 apiKey, TKafkaVersion version);
 i16 ResponseHeaderVersion(i16 apiKey, TKafkaVersion version);
 
-} // namespace NYdb::NKafkaWire
+} // namespace NKafka

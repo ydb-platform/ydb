@@ -1,6 +1,6 @@
 #include "kafka_messages_int.h"
 
-namespace NYdb::NKafkaWire {
+namespace NKafka {
 
 TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawBytes& val) {
     write(val.data(), val.size());
@@ -93,4 +93,4 @@ TString Hex(const char* begin, const char *end) {
     return sb;
 }
 
-} // namespace NYdb::NKafkaWire
+} // namespace NKafka

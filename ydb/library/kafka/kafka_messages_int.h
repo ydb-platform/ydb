@@ -13,7 +13,7 @@
 #include "kafka_records.h"
 #include "kafka_log_impl.h"
 
-namespace NYdb::NKafkaWire {
+namespace NKafka {
 namespace NPrivate {
 
 struct TWriteCollector {
@@ -421,6 +421,10 @@ public:
         const auto& v = *value;
         WriteArraySize<Meta>(writable, version, v.size());
         writable.write(v.data(), v.size());
+    }
+
+    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaBytes& value) {
+        TKafkaInt32 length = ReadArraySize<Meta>(readable, version);
         if (length < 0) {
             if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
                 value = std::nullopt;
@@ -665,4 +669,4 @@ inline void ReadTag(TKafkaReadable& readable, TKafkaInt16 version, typename Meta
 
 } // NPrivate
 
-} // namespace NYdb::NKafkaWire
+} // namespace NKafka

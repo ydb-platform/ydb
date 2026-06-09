@@ -699,8 +699,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
     }  
     else if (setOpKind == "intersect" || setOpKind == "except" ) {
 
-        TOpIterator end(nullptr);
-
         auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         TVector<TInfoUnit> setOpColumns;
         for (const auto& t : itemType->GetItems()) {

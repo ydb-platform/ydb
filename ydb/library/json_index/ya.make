@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     json_index.cpp
+    json_corpus.cpp
 )
 
 PEERDIR(

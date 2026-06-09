@@ -6832,6 +6832,82 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
+    Y_UNIT_TEST(DisableAutoIndexSelectionPragma) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestAutoIndexPragma` (
+                id Uint32,
+                name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsertResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/TestAutoIndexPragma` (id, name) VALUES
+                (1u, "Alice"),
+                (2u, "Bob");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto explainScan = [&](const TString& query) {
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = db.StreamExecuteScanQuery(query, settings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return CollectStreamResult(it);
+        };
+
+        auto countIndexAccessInPlan = [](TStringBuf planJson) {
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(planJson, &plan, true);
+            return CountPlanNodesByKv(plan, "Table", "TestAutoIndexPragma/idx_name/indexImplTable");
+        };
+
+        {
+            auto res = explainScan(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "false";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )");
+            UNIT_ASSERT(res.PlanJson);
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(*res.PlanJson), 1,
+                "Expected auto-select index with OptDisableAutoIndexSelection=false, plan: " << *res.PlanJson);
+        }
+
+        {
+            auto res = explainScan(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "true";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )");
+            UNIT_ASSERT(res.PlanJson);
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(*res.PlanJson), 0,
+                "Expected no auto-select index with OptDisableAutoIndexSelection=true, plan: " << *res.PlanJson);
+        }
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "false";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(explainResult.GetPlan()), 1,
+                "Expected auto-select index on data query with OptDisableAutoIndexSelection=false, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "true";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(explainResult.GetPlan()), 0,
+                "Expected no auto-select index on data query with OptDisableAutoIndexSelection=true, plan: " << explainResult.GetPlan());
+        }
+    }
+
     Y_UNIT_TEST(UnionAllViewAutoSelectIndex) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();

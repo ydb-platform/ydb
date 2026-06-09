@@ -78,6 +78,7 @@ public:
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, Static> OptDisableTopSort;
+    NCommon::TConfSetting<bool, Static> OptDisableAutoIndexSelection;
     NCommon::TConfSetting<bool, Static> OptDisableSqlInToJoin;
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
@@ -250,6 +251,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
     bool GetUseKqpTasksGraphV2() const;
+    bool IsAutoIndexSelectionDisabled() const;
 };
 
 } // namespace NYql

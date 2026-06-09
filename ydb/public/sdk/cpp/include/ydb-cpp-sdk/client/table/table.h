@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
+#include <memory>
 #include <variant>
 
 namespace Ydb {
@@ -64,6 +65,8 @@ class TRetryContext;
 namespace NRetry {
 template <typename TClient>
 class TRetryDeadlineHelper;
+class TBulkUpsertRetryState;
+class TBulkUpsertRetryOperation;
 } // namespace NRetry
 
 namespace NScheme {
@@ -1556,6 +1559,10 @@ struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSetting
     FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
     google::protobuf::Arena* Arena_ = nullptr;
     TBulkUpsertSettings& Arena(google::protobuf::Arena* arena) { Arena_ = arena; return *this; }
+
+    // Internal: used by BulkUpsert retry wrapper only.
+    NRetry::TBulkUpsertRetryState* RetryRowsState_ = nullptr;
+    std::shared_ptr<NRetry::TBulkUpsertRetryState> RetryRowsStateHolder_;
 };
 
 struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
@@ -1583,6 +1590,7 @@ class TTableClient {
     friend class TSession;
     friend class TTransaction;
     friend class TSessionPool;
+    friend class NRetry::TBulkUpsertRetryOperation;
     friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
     friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
     friend class NRetry::Async::TRetryContext<TTableClient, TAsyncBulkUpsertResult>;

@@ -51,3 +51,66 @@ TEST(BulkUpsert, BulkUpsert) {
     DropTable(client, path);
     driver.Stop(true);
 }
+
+TEST(BulkUpsert, RetryOverheadOnHappyPath) {
+    constexpr size_t kPerfBatchSize = 10000;
+    constexpr size_t kWarmupIterations = 3;
+    constexpr size_t kMeasuredIterations = 30;
+    // Retry wrapper adds client-side bookkeeping; server RPC dominates, so allow modest variance.
+    constexpr double kMaxSlowdownRatio = 1.10;
+
+    auto [driver, basePath] = GetRunArgs();
+    const std::string tableNoRetry = basePath + "_perf_noretry";
+    const std::string tableWithRetry = basePath + "_perf_retry";
+
+    TTableClient client(driver);
+
+    const auto statusCreateNoRetry = CreateTable(client, tableNoRetry);
+    ASSERT_TRUE(statusCreateNoRetry.IsSuccess()) << ToString(statusCreateNoRetry);
+    const auto statusCreateWithRetry = CreateTable(client, tableWithRetry);
+    ASSERT_TRUE(statusCreateWithRetry.IsSuccess()) << ToString(statusCreateWithRetry);
+
+    const TBulkUpsertSettings noRetrySettings = [] {
+        TBulkUpsertSettings settings;
+        settings.RetrySettings(TRetryOperationSettings().MaxRetries(0));
+        return settings;
+    }();
+
+    const TBulkUpsertSettings withRetrySettings = [] {
+        TBulkUpsertSettings settings;
+        settings.RetrySettings(TRetryOperationSettings().MaxRetries(10).Idempotent(true));
+        return settings;
+    }();
+
+    auto runIterations = [&](const std::string& table, const TBulkUpsertSettings& settings, size_t iterations) {
+        TDuration total;
+        for (size_t i = 0; i < iterations; ++i) {
+            total += MeasureBulkUpsertWallTime(
+                client, table, i, static_cast<uint32_t>(i * kPerfBatchSize), settings, kPerfBatchSize);
+        }
+        return total;
+    };
+
+    try {
+        runIterations(tableNoRetry, noRetrySettings, kWarmupIterations);
+        runIterations(tableWithRetry, withRetrySettings, kWarmupIterations);
+
+        const TDuration noRetryTime = runIterations(tableNoRetry, noRetrySettings, kMeasuredIterations);
+        const TDuration withRetryTime = runIterations(tableWithRetry, withRetrySettings, kMeasuredIterations);
+
+        const double ratio = static_cast<double>(withRetryTime.MicroSeconds())
+            / static_cast<double>(noRetryTime.MicroSeconds());
+
+        EXPECT_LE(ratio, kMaxSlowdownRatio)
+            << "BulkUpsert with retries should not be significantly slower on the happy path."
+            << " noRetryTotalUs=" << noRetryTime.MicroSeconds()
+            << " withRetryTotalUs=" << withRetryTime.MicroSeconds()
+            << " ratio=" << ratio;
+    } catch (const NYdb::NStatusHelpers::TYdbErrorException& e) {
+        FAIL() << "BulkUpsert benchmark failed:\n" << e.what();
+    }
+
+    DropTable(client, tableNoRetry);
+    DropTable(client, tableWithRetry);
+    driver.Stop(true);
+}

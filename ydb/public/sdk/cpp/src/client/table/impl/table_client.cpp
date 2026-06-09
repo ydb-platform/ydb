@@ -1,5 +1,7 @@
 #include "table_client.h"
 
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/bulk_upsert_retry_state.h>
+
 namespace NYdb::inline Dev {
 
 namespace NTable {
@@ -1169,11 +1171,18 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
 }
 
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
+    auto* retryState = settings.RetryRowsState_;
+    const bool useInternalArena = retryState != nullptr && !settings.Arena_;
+
     Ydb::Table::BulkUpsertRequest* request = nullptr;
     std::unique_ptr<Ydb::Table::BulkUpsertRequest> holder;
 
     if (settings.Arena_) {
         request = MakeOperationRequestOnArena<Ydb::Table::BulkUpsertRequest>(settings, settings.Arena_);
+    } else if (useInternalArena) {
+        request = MakeOperationRequestOnArena<Ydb::Table::BulkUpsertRequest>(
+            settings, retryState->EnsureArena());
+        retryState->SetRequest(request);
     } else {
         holder = std::make_unique<Ydb::Table::BulkUpsertRequest>(MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings));
         request = holder.get();
@@ -1197,14 +1206,23 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     auto obs = MakeObservation("BulkUpsert");
 
     auto promise = NewPromise<TBulkUpsertResult>();
-    auto extractor = [promise, obs](google::protobuf::Any* any, TPlainStatus status) mutable {
+    auto stateHolder = settings.RetryRowsStateHolder_;
+
+    auto extractor = [promise, obs, retryState, stateHolder, request](
+        google::protobuf::Any* any, TPlainStatus status) mutable
+    {
         Y_UNUSED(any);
+        if (retryState && request && !retryState->HasBackup()
+            && !status.Ok() && NRetry::IsRetryableBulkUpsertFailure(status.Status, true))
+        {
+            retryState->CreateBackup(*request);
+        }
         obs->End(status.Status, status.Endpoint);
         TBulkUpsertResult val(TStatus(std::move(status)));
         promise.SetValue(std::move(val));
     };
 
-    if (settings.Arena_) {
+    if (settings.Arena_ || useInternalArena) {
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
             request,
             extractor,

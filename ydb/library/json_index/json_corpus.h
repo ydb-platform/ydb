@@ -4,6 +4,7 @@
 #include <util/system/types.h>
 
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace NKikimr::NJsonIndex {
@@ -52,10 +53,28 @@ enum class EJsonShape : uint8_t {
     // Full literal mix: {"shared_n": <key>, "shared_s": "u_v_<key>", "shared_b": bool, "shared_null": null, "shared_arr": [...]}
     FullLiteralMix = 13,
 
-    // SQL NULL - Text column is NULL
-    SqlNull = 14,
+    // Object whose keys straddle the LEB128 1->2 byte length boundary (lengths 64/126/127/128/200/1000)
+    // plus a long (>128 byte) string value. Every value equals <key> so lookups can match.
+    LongKeys = 14,
 
-    Count_ = 15,
+    // Keys that require quoted / bracket JsonPath notation (".", space, "*", "[", "]", "?", "@", "$")
+    // together with Unicode keys and values (Cyrillic / CJK / emoji).
+    SpecialKeys = 15,
+
+    // Wide object: ~130 "f_<i>" members (exercises $.* and the member-count boundary) plus numeric
+    // edge values (0, negative, -0.0, 1e15, exponent, high precision) and string look-alikes ("123"/"true"/"null"/"").
+    WideObject = 16,
+
+    // Long array: ~130 numeric elements (exercises [*], [last], large index, ranges and the element-count boundary).
+    LongArray = 17,
+
+    // Deeply nested object chain {"n":{"n":{...{"u_<key>":<key>,"leaf":<key>}}}} for deep-path / recursion stress.
+    VeryDeepNested = 18,
+
+    // SQL NULL - Text column is NULL
+    SqlNull = 19,
+
+    Count_ = 20,
 };
 
 static constexpr size_t kJsonCorpusNumShapes = static_cast<size_t>(EJsonShape::Count_);
@@ -84,6 +103,11 @@ public:
 
     static TGeneratedRow MakeRow(ui64 key, EJsonShape shape);
     static TString SerializeJson(ui64 key, EJsonShape shape);
+
+    // Construct the length-controlled object key / string value used by the LongKeys shape.
+    // Exposed so predicate generators can reproduce the exact key/value for targeted lookups.
+    static std::string MakeLongKey(ui64 key, size_t len);
+    static std::string MakeLongString(ui64 key, size_t len);
 
 private:
     std::vector<TGeneratedRow> Rows_;

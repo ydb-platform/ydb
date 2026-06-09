@@ -6,6 +6,26 @@
 
 namespace NKikimr::NJsonIndex {
 
+std::string TJsonCorpus::MakeLongKey(ui64 key, size_t len) {
+    std::string s = "u_" + std::to_string(key) + "_";
+    if (s.size() >= len) {
+        s.resize(len);
+    } else {
+        s.append(len - s.size(), 'k');
+    }
+    return s;
+}
+
+std::string TJsonCorpus::MakeLongString(ui64 key, size_t len) {
+    std::string s = "u_v_" + std::to_string(key) + "_";
+    if (s.size() >= len) {
+        s.resize(len);
+    } else {
+        s.append(len - s.size(), 'x');
+    }
+    return s;
+}
+
 TString TJsonCorpus::SerializeJson(ui64 key, EJsonShape shape) {
     using NJson::TJsonValue;
 
@@ -204,6 +224,79 @@ TString TJsonCorpus::SerializeJson(ui64 key, EJsonShape shape) {
             return NJson::WriteJson(&v, false);
         }
 
+        case EJsonShape::LongKeys: {
+            TJsonValue v(NJson::JSON_MAP);
+            for (size_t len : {size_t(64), size_t(126), size_t(127), size_t(128), size_t(200), size_t(1000)}) {
+                v.InsertValue(TString(MakeLongKey(key, len)), TJsonValue(static_cast<long long>(key)));
+            }
+            v.InsertValue("lstr", TJsonValue(TString(MakeLongString(key, 300))));
+            v.InsertValue(uk, TJsonValue(static_cast<long long>(key)));
+            return NJson::WriteJson(&v, false);
+        }
+
+        case EJsonShape::SpecialKeys: {
+            TJsonValue v(NJson::JSON_MAP);
+            v.InsertValue("dotted.key", TJsonValue(static_cast<long long>(key)));
+            v.InsertValue("with space", TJsonValue(static_cast<long long>(key)));
+            v.InsertValue("star*key", TJsonValue(static_cast<long long>(key)));
+            v.InsertValue("brack[0]", TJsonValue(static_cast<long long>(key)));
+            v.InsertValue("@id", TJsonValue(static_cast<long long>(key)));
+            v.InsertValue("$ref", TJsonValue(static_cast<long long>(key)));
+            v.InsertValue("q?", TJsonValue(static_cast<long long>(key)));
+            v.InsertValue("a.b.c", TJsonValue(static_cast<long long>(key)));
+            v.InsertValue("ключ", TJsonValue("значение"));
+            v.InsertValue("鍵", TJsonValue("値"));
+            v.InsertValue("emoji😀", TJsonValue("v😀"));
+            v.InsertValue(uk, TJsonValue(static_cast<long long>(key)));
+            return NJson::WriteJson(&v, false);
+        }
+
+        case EJsonShape::WideObject: {
+            TJsonValue v(NJson::JSON_MAP);
+            constexpr int kWidth = 130;
+            for (int i = 0; i < kWidth; ++i) {
+                v.InsertValue(TString("f_" + std::to_string(i)), TJsonValue(static_cast<long long>(i)));
+            }
+            v.InsertValue("zero", TJsonValue(static_cast<long long>(0)));
+            v.InsertValue("neg", TJsonValue(-static_cast<long long>(key) - 1));
+            v.InsertValue("big", TJsonValue(static_cast<long long>(1000000000000000LL)));
+            v.InsertValue("expo", TJsonValue(1.5e12));
+            v.InsertValue("tiny", TJsonValue(1.5e-7));
+            v.InsertValue("prec", TJsonValue(3.141592653589793));
+            v.InsertValue("negzero", TJsonValue(-0.0));
+            v.InsertValue("s_num", TJsonValue("123"));
+            v.InsertValue("s_bool", TJsonValue("true"));
+            v.InsertValue("s_null", TJsonValue("null"));
+            v.InsertValue("s_empty", TJsonValue(""));
+            v.InsertValue(uk, TJsonValue(static_cast<long long>(key)));
+            return NJson::WriteJson(&v, false);
+        }
+
+        case EJsonShape::LongArray: {
+            TJsonValue arr(NJson::JSON_ARRAY);
+            constexpr int kLen = 130;
+            for (int i = 0; i < kLen; ++i) {
+                arr.AppendValue(TJsonValue(static_cast<long long>(i)));
+            }
+            TJsonValue v(NJson::JSON_MAP);
+            v.InsertValue("arr", std::move(arr));
+            v.InsertValue(uk, TJsonValue(static_cast<long long>(key)));
+            return NJson::WriteJson(&v, false);
+        }
+
+        case EJsonShape::VeryDeepNested: {
+            constexpr int kDepth = 16;
+            TJsonValue cur(NJson::JSON_MAP);
+            cur.InsertValue(uk, TJsonValue(static_cast<long long>(key)));
+            cur.InsertValue("leaf", TJsonValue(static_cast<long long>(key)));
+            for (int i = 0; i < kDepth; ++i) {
+                TJsonValue parent(NJson::JSON_MAP);
+                parent.InsertValue("n", std::move(cur));
+                cur = std::move(parent);
+            }
+            return NJson::WriteJson(&cur, false);
+        }
+
         default:
             Y_ABORT("Unexpected JSON shape");
     }
@@ -242,6 +335,11 @@ TJsonCorpus::TJsonCorpus(TCorpusOptions opts) {
         EJsonShape::ArrayOfArrays,
         EJsonShape::ObjWithArrayObjs,
         EJsonShape::FullLiteralMix,
+        EJsonShape::LongKeys,
+        EJsonShape::SpecialKeys,
+        EJsonShape::WideObject,
+        EJsonShape::LongArray,
+        EJsonShape::VeryDeepNested,
     };
 
     if (opts.IncludeAllShapes) {

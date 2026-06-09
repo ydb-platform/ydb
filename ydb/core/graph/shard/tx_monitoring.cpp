@@ -45,7 +45,7 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_MONITORING; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        BLOG_D("TTxMonitoring::Execute");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxMonitoring::Execute");
         return true;
     }
 
@@ -68,7 +68,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("TTxMonitoring::Complete");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxMonitoring::Complete");
         TStringBuilder html;
         html << "<html>";
         html << "<style>";
@@ -160,12 +160,12 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_MONITORING; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        BLOG_D("TTxMonitoringGetSettings::Execute");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxMonitoringGetSettings::Execute");
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("TTxMonitoringGetSettings::Complete");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxMonitoringGetSettings::Complete");
         NJson::TJsonValue json;
         switch (Self->BackendType) {
             case EBackendType::Memory:

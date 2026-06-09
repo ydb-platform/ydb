@@ -469,11 +469,11 @@ public:
 
         auto& operationInfo = *operationInfoPtr->get();
 
-        if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validate) {
+        /* if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validate) {
             LOG_I("TTxReplyRetrySetColumnConstraint: superfluous event, id# " << BuildId
                 << ", state# " << ToString(operationInfo.OperationState));
             return true;
-        }
+        } */
 
         if (!operationInfo.ValidationShards.contains(shardIdx)) {
             LOG_I("TTxReplyRetrySetColumnConstraint: shard not found in ValidationShards"

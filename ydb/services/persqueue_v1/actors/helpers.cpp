@@ -1,8 +1,15 @@
 #include "helpers.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
+
+bool IsTopicMessagesBatchingEnabled(const NActors::TActorContext& ctx) {
+    const auto& flags = AppData(ctx)->FeatureFlags;
+    return flags.GetEnableTopicMessagesBatching() && flags.GetEnableTopicWriteOffsetDeltaInKeys();
+}
 
 bool HasMessages(const PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch& data) {
     for (const auto& partData : data.partition_data()) {

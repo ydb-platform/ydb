@@ -14,6 +14,12 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+//! Format of batched message payload written to topic.
+enum class EBatchMessageFormat {
+    STANDARD = 0,
+    KAFKA_BATCH = 1,
+};
+
 //! Result of close operation.
 //! If close was successful, returns Success. This status means that all messages in buffer were persistently written to the server.
 //! If close was not successful because of timeout, returns Timeout.
@@ -126,6 +132,13 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! sending small messages at high rate).
     FLUENT_SETTING_OPTIONAL(TDuration, BatchFlushInterval);
     FLUENT_SETTING_OPTIONAL(uint64_t, BatchFlushSizeBytes);
+
+    //! Max number of logical messages packed into a single write block.
+    //! Values greater than 1 require non-STANDARD BatchMessageFormat.
+    FLUENT_SETTING_DEFAULT(uint32_t, MaxMessageCount, 1);
+
+    //! Format of batched message payload in write block data field.
+    FLUENT_SETTING_DEFAULT(EBatchMessageFormat, BatchMessageFormat, EBatchMessageFormat::STANDARD);
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
 

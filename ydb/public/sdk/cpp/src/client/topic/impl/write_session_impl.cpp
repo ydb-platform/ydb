@@ -3,12 +3,16 @@
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
 
+#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/library/kafka/kafka_messages_int.h>
+
 #include <library/cpp/string_utils/url/url.h>
 
 #include <google/protobuf/util/time_util.h>
 
 #include <util/generic/store_policy.h>
 #include <util/generic/utility.h>
+#include <util/generic/yexception.h>
 #include <util/stream/buffer.h>
 #include <util/generic/guid.h>
 
@@ -28,6 +32,47 @@ namespace {
 
 using TTxId = std::pair<std::string_view, std::string_view>;
 using TTxIdOpt = std::optional<TTxId>;
+
+void ValidateWriteSessionSettings(const TWriteSessionSettings& settings) {
+    if (settings.MaxMessageCount_ > 1 && settings.BatchMessageFormat_ == EBatchMessageFormat::STANDARD) {
+        ythrow yexception() << "BatchMessageFormat must be set when MaxMessageCount > 1";
+    }
+}
+
+TBuffer BuildKafkaRecordBatchData(
+        const std::vector<std::string_view>& payloads,
+        const std::vector<TInstant>& createdAt)
+{
+    using namespace NKafka;
+
+    Y_ABORT_UNLESS(payloads.size() == createdAt.size());
+    Y_ABORT_UNLESS(!payloads.empty());
+
+    TKafkaRecordBatch kafkaBatch;
+    kafkaBatch.Magic = 2;
+
+    const i64 baseTimestamp = static_cast<i64>(createdAt.front().MilliSeconds());
+    kafkaBatch.BaseTimestamp = baseTimestamp;
+    kafkaBatch.MaxTimestamp = baseTimestamp;
+    kafkaBatch.LastOffsetDelta = static_cast<TKafkaRecordBatch::LastOffsetDeltaMeta::Type>(payloads.size() - 1);
+
+    for (size_t i = 0; i < payloads.size(); ++i) {
+        TKafkaRecord record;
+        record.OffsetDelta = static_cast<TKafkaRecord::OffsetDeltaMeta::Type>(i);
+        record.TimestampDelta = createdAt[i].MilliSeconds() - baseTimestamp;
+        kafkaBatch.MaxTimestamp = Max<i64>(kafkaBatch.MaxTimestamp, static_cast<i64>(createdAt[i].MilliSeconds()));
+        record.Value = TKafkaRawBytes(payloads[i].data(), payloads[i].size());
+        record.Length = record.Size(2) - NKafka::NPrivate::SizeOfVarint<TKafkaRecord::LengthMeta::Type>(0);
+        kafkaBatch.Records.push_back(std::move(record));
+    }
+
+    kafkaBatch.BatchLength = kafkaBatch.Size(2)
+        - sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type)
+        - sizeof(TKafkaRecordBatch::BatchLengthMeta::Type);
+
+    const TString serialized = WriteKafkaRecordBatch(kafkaBatch);
+    return TBuffer(serialized.data(), serialized.size());
+}
 
 TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
 {
@@ -82,6 +127,7 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
     , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
+    , MaxBlockMessageCount(Settings.MaxMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
             Settings.BatchFlushInterval_.value_or(TDuration::Zero()) ?
@@ -90,6 +136,7 @@ TWriteSessionImpl::TWriteSessionImpl(
                 TDuration::MilliSeconds(100)
     )
 {
+    ValidateWriteSessionSettings(settings);
     if (!Settings.RetryPolicy_) {
         Settings.RetryPolicy_ = IRetryPolicy::GetDefaultPolicy();
     }
@@ -873,6 +920,7 @@ void TWriteSessionImpl::InitImpl() {
     for (const auto& attr : Settings.Meta_.Fields) {
         (*init->mutable_write_session_meta())[attr.first] = attr.second;
     }
+
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: send init request: "<< req.ShortDebugString());
 
     TRACE_LAZY(DbDriverState->Log, "InitRequest",
@@ -1064,8 +1112,10 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefixImpl() << "Write session established. Init response: " << initResponse.ShortDebugString());
             TRACE_LAZY(DbDriverState->Log, "InitResponse",
                 TRACE_KV("partition_id", initResponse.partition_id()),
-                TRACE_KV("session_id", initResponse.session_id()));
+                TRACE_KV("session_id", initResponse.session_id()),
+                TRACE_KV("is_batching_supported", initResponse.is_batching_supported()));
             SessionId = initResponse.session_id();
+            BatchingSupported = initResponse.is_batching_supported();
 
             auto prevDirectWriteToPartitionId = DirectWriteToPartitionId;
             if (Settings.DirectWriteToPartition_ && !Settings.PartitionId_.has_value()) {
@@ -1124,12 +1174,14 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             writeStat->TopicQuotedTime = durationConv(stat.topic_quota_wait_time());
 
             for (const auto& ack : batchWriteResponse.acks()) {
-                // TODO: Fill writer statistics
-                uint64_t msgId = GetIdImpl(ack.seq_no());
+                const uint64_t firstMsgId = GetIdImpl(ack.seq_no());
+
+                size_t ackCount = 1;
+                if (!SentPackedMessage.empty() && SentPackedMessage.front().Offset == firstMsgId) {
+                    ackCount = SentPackedMessage.front().MessageCount;
+                }
 
                 Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
-
-                TrySignalAllAcksReceived(msgId);
 
                 TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
                 if (ack.has_written_in_tx()) {
@@ -1143,19 +1195,24 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                         : TWriteSessionEvent::TWriteAck::EES_DISCARDED;
                 }
 
-                uint64_t offset = ack.has_written() ? ack.written().offset() : 0;
+                const uint64_t baseOffset = ack.has_written() ? ack.written().offset() : 0;
 
-                acksEvent.Acks.push_back(TWriteSessionEvent::TWriteAck{
-                    msgId,
-                    msgWriteStatus,
-                    TWriteSessionEvent::TWriteAck::TWrittenMessageDetails {
-                        offset,
-                        PartitionId,
-                    },
-                    writeStat,
-                });
+                for (size_t i = 0; i < ackCount; ++i) {
+                    const uint64_t msgId = firstMsgId + i;
+                    TrySignalAllAcksReceived(msgId);
 
-                if (CleanupOnAcknowledgedImpl(msgId)) {
+                    acksEvent.Acks.push_back(TWriteSessionEvent::TWriteAck{
+                        msgId,
+                        msgWriteStatus,
+                        TWriteSessionEvent::TWriteAck::TWrittenMessageDetails {
+                            baseOffset + i,
+                            PartitionId,
+                        },
+                        writeStat,
+                    });
+                }
+
+                if (CleanupOnAcknowledgedImpl(firstMsgId)) {
                     result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 }
             }
@@ -1182,10 +1239,12 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     const auto& sentFront = SentOriginalMessages.front();
     uint64_t size = 0;
     uint64_t compressedSize = 0;
+    size_t packedMessageCount = 1;
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
         auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(SentPackedMessage.front().Data.size()));
         result = memoryUsage.NowOk && !memoryUsage.WasOk;
         const auto& front = SentPackedMessage.front();
+        packedMessageCount = front.MessageCount;
         if (front.Compressed) {
             compressedSize = front.Data.size();
         } else {
@@ -1211,12 +1270,20 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     Y_ABORT_UNLESS(Counters->BytesInflightCompressed->Val() >= 0);
     Y_ABORT_UNLESS(Counters->BytesInflightUncompressed->Val() >= 0);
 
-    Y_ABORT_UNLESS(sentFront.Id == id);
+    if (packedMessageCount > 1) {
+        for (size_t i = 0; i < packedMessageCount; ++i) {
+            Y_ABORT_UNLESS(!SentOriginalMessages.empty());
+            Y_ABORT_UNLESS(SentOriginalMessages.front().Id == id + i);
+            WrittenInTx.erase(SentOriginalMessages.front().Id);
+            SentOriginalMessages.pop();
+        }
+    } else {
+        Y_ABORT_UNLESS(sentFront.Id == id);
+        WrittenInTx.erase(id);
+        SentOriginalMessages.pop();
+    }
 
     (*Counters->BytesInflightTotal) = MemoryUsage;
-    SentOriginalMessages.pop();
-
-    WrittenInTx.erase(id);
 
     return result;
 }
@@ -1394,6 +1461,20 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
 
     Y_ABORT_UNLESS(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
 
+    if (Settings.BatchMessageFormat_ == EBatchMessageFormat::KAFKA_BATCH) {
+        for (const auto& message : CurrentBatch.Messages) {
+            if (message.Codec.has_value()) {
+                ythrow yexception() << "Pre-compressed messages are not supported with KAFKA_BATCH format";
+            }
+        }
+    }
+
+    while (!CurrentBatch.Acquired) {
+        if (!CurrentBatch.Acquire()) {
+            break;
+        }
+    }
+
     const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
     if (!skipCompression && Settings.CompressionExecutor_->IsAsync()) {
         MessagesAcquired += static_cast<uint64_t>(CurrentBatch.Acquire());
@@ -1402,6 +1483,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     size_t size = 0;
     for (size_t i = 0; i != CurrentBatch.Messages.size();) {
         TBlock block{};
+        const size_t blockStartIndex = i;
         for (; block.OriginalSize < MaxBlockSize && i != CurrentBatch.Messages.size(); ++i) {
             auto& currMessage = CurrentBatch.Messages[i];
 
@@ -1440,7 +1522,25 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
                                                std::move(currMessage.Tx));
             }
         }
-        block.Data = std::move(CurrentBatch.Data);
+
+        if (Settings.BatchMessageFormat_ == EBatchMessageFormat::KAFKA_BATCH) {
+            std::vector<std::string_view> payloads;
+            std::vector<TInstant> createdAt;
+            payloads.reserve(block.MessageCount);
+            createdAt.reserve(block.MessageCount);
+            for (size_t j = 0; j < block.MessageCount; ++j) {
+                const auto& message = CurrentBatch.Messages[blockStartIndex + j];
+                payloads.push_back(message.DataRef);
+                createdAt.push_back(message.CreatedAt);
+            }
+            block.Data = BuildKafkaRecordBatchData(payloads, createdAt);
+            block.OriginalDataRefs.assign(1, std::string_view(block.Data.data(), block.Data.size()));
+            block.OriginalSize = block.Data.size();
+            block.OriginalMemoryUsage = block.Data.size();
+        } else {
+            block.Data = std::move(CurrentBatch.Data);
+        }
+
         if (skipCompression) {
             PackedMessagesToSend.emplace(std::move(block));
         } else {
@@ -1513,6 +1613,100 @@ bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRe
     return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().Tx);
 }
 
+void TWriteSessionImpl::SendKafkaBatch(
+        const TBlock& block,
+        Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest)
+{
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_ABORT_UNLESS(writeRequest);
+    Y_ABORT_UNLESS(block.MessageCount > 1);
+
+    if (!BatchingSupported) {
+        ThrowFatalError("Server does not support messages batching");
+    }
+
+    Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+    std::vector<TOriginalMessage> batchMessages;
+    batchMessages.reserve(block.MessageCount);
+    for (size_t i = 0; i < block.MessageCount; ++i) {
+        Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+        batchMessages.emplace_back(std::move(OriginalMessagesToSend.front()));
+        OriginalMessagesToSend.pop();
+    }
+
+    const auto& firstMessage = batchMessages.front();
+    const auto& lastMessage = batchMessages.back();
+    auto* msgData = writeRequest->add_messages();
+
+    if (firstMessage.Tx) {
+        writeRequest->mutable_tx()->set_id(firstMessage.Tx->TxId);
+        writeRequest->mutable_tx()->set_session(firstMessage.Tx->SessionId);
+    }
+
+    msgData->set_seq_no(GetSeqNoImpl(firstMessage.Id));
+    msgData->set_max_seq_no(GetSeqNoImpl(lastMessage.Id));
+    msgData->set_message_count(static_cast<i64>(block.MessageCount));
+    msgData->set_message_format(
+        Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH);
+    *msgData->mutable_created_at() =
+        ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(firstMessage.CreatedAt.MilliSeconds());
+
+    for (auto& [k, v] : firstMessage.MessageMeta) {
+        auto* pair = msgData->add_metadata_items();
+        pair->set_key(TStringType{k});
+        pair->set_value(TStringType{v});
+    }
+
+    msgData->set_uncompressed_size(static_cast<i64>(block.OriginalSize));
+    msgData->set_data(block.Data.data(), block.Data.size());
+
+    for (auto& message : batchMessages) {
+        SentOriginalMessages.emplace(std::move(message));
+    }
+}
+
+void TWriteSessionImpl::SendStandardBlock(
+        const TBlock& block,
+        Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest)
+{
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_ABORT_UNLESS(writeRequest);
+    Y_ABORT_UNLESS(block.MessageCount == 1);
+
+    for (size_t i = 0; i != block.MessageCount; ++i) {
+        Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+
+        auto& message = OriginalMessagesToSend.front();
+        auto* msgData = writeRequest->add_messages();
+
+        if (message.Tx) {
+            writeRequest->mutable_tx()->set_id(message.Tx->TxId);
+            writeRequest->mutable_tx()->set_session(message.Tx->SessionId);
+        }
+
+        msgData->set_seq_no(GetSeqNoImpl(message.Id));
+        *msgData->mutable_created_at() =
+            ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
+
+        for (auto& [k, v] : message.MessageMeta) {
+            auto* pair = msgData->add_metadata_items();
+            pair->set_key(TStringType{k});
+            pair->set_value(TStringType{v});
+        }
+        SentOriginalMessages.emplace(std::move(message));
+        OriginalMessagesToSend.pop();
+
+        msgData->set_uncompressed_size(block.OriginalSize);
+        if (block.Compressed) {
+            msgData->set_data(block.Data.data(), block.Data.size());
+        } else {
+            for (auto& buffer : block.OriginalDataRefs) {
+                msgData->set_data(buffer.data(), buffer.size());
+            }
+        }
+    }
+}
+
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1537,37 +1731,14 @@ void TWriteSessionImpl::SendImpl() {
             }
             prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
-            Y_ABORT_UNLESS(block.MessageCount == 1);
-            for (size_t i = 0; i != block.MessageCount; ++i) {
-                Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
-                auto& message = OriginalMessagesToSend.front();
-                auto* msgData = writeRequest->add_messages();
+            const bool sendAsKafkaBatch = Settings.BatchMessageFormat_ == EBatchMessageFormat::KAFKA_BATCH
+                && block.MessageCount > 1;
 
-                if (message.Tx) {
-                    writeRequest->mutable_tx()->set_id(message.Tx->TxId);
-                    writeRequest->mutable_tx()->set_session(message.Tx->SessionId);
-                }
-
-                msgData->set_seq_no(GetSeqNoImpl(message.Id));
-                *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
-
-                for (auto& [k, v] : message.MessageMeta) {
-                    auto* pair = msgData->add_metadata_items();
-                    pair->set_key(TStringType{k});
-                    pair->set_value(TStringType{v});
-                }
-                SentOriginalMessages.emplace(std::move(message));
-                OriginalMessagesToSend.pop();
-
-                msgData->set_uncompressed_size(block.OriginalSize);
-                if (block.Compressed) {
-                    msgData->set_data(block.Data.data(), block.Data.size());
-                } else {
-                    for (auto& buffer: block.OriginalDataRefs) {
-                        msgData->set_data(buffer.data(), buffer.size());
-                    }
-                }
+            if (sendAsKafkaBatch) {
+                SendKafkaBatch(block, writeRequest);
+            } else {
+                SendStandardBlock(block, writeRequest);
             }
 
             TBlock moveBlock;

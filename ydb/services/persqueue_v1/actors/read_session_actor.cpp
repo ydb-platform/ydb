@@ -819,6 +819,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
             PeerName = init.reader_name();
         }
         AutoPartitioningSupport = init.auto_partitioning_support();
+        TopicMessagesBatchingEnabled = IsTopicMessagesBatchingEnabled(ctx) && init.is_batching_supported();
     }
 
     if (MaxTimeLagMs < 0) {
@@ -1322,7 +1323,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, ClientDC, RangesMode,
         converterIter->second, database, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs,
-        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes));
+        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes, TopicMessagesBatchingEnabled));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);

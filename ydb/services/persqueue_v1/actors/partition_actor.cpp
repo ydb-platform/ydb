@@ -28,7 +28,8 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes
+        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes,
+        bool topicMessagesBatchingEnabled
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -74,6 +75,7 @@ TPartitionActor::TPartitionActor(
     , DirectRead(directRead)
     , PartitionInFlightMemoryController(partitionMaxInFlightBytes)
     , UseMigrationProtocol(useMigrationProtocol)
+    , TopicMessagesBatchingEnabled(topicMessagesBatchingEnabled)
     , FirstRead(true)
     , ReadingFinishedSent(false)
     , NotCommitedToFinishParents(notCommitedToFinishParents)
@@ -485,7 +487,7 @@ template<typename TReadResponse>
 bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
-        const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) {
+        const NPersQueue::TTopicConverterPtr& topic, bool topicMessagesBatchingEnabled, const TActorContext& ctx) {
     constexpr bool UseMigrationProtocol = std::is_same_v<TReadResponse, PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch>;
     auto* partitionData = data->add_partition_data();
 
@@ -511,7 +513,8 @@ bool FillBatchedData(
         const auto& r = res.GetResult(i);
         WTime = r.GetWriteTimestampMS();
         AFL_ENSURE(r.GetOffset() >= ReadOffset);
-        ReadOffset = r.GetOffset() + 1;
+        const ui64 messageCount = Max<ui64>(1, r.GetMessageCount());
+        ReadOffset = r.GetOffset() + messageCount;
         hasOffset = true;
 
         auto proto(GetDeserializedData(r.GetData()));
@@ -600,6 +603,15 @@ bool FillBatchedData(
             message->set_message_group_id(GetBatchSourceId(currentBatch));
             auto* msgMeta = message->mutable_metadata_items();
             *msgMeta = (proto.GetMessageMeta());
+            if (topicMessagesBatchingEnabled) {
+                if (r.GetMessageCount() > 1) {
+                    message->set_message_count(r.GetMessageCount());
+                }
+                if (r.GetMessageFormat() == NKikimrClient::KAFKA_BATCH) {
+                    message->set_message_format(
+                        Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::KAFKA_BATCH);
+                }
+            }
         }
         hasData = true;
     }
@@ -800,10 +812,12 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     bool hasData = false;
     if (UseMigrationProtocol) {
         typename MigrationStreamingReadServerMessage::DataBatch* data = migrationResponse.mutable_data_batch();
-        hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, false, ctx);
     } else {
         StreamReadMessage::ReadResponse* data = response.mutable_read_response();
-        hasData = FillBatchedData<StreamReadMessage::ReadResponse>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        hasData = FillBatchedData<StreamReadMessage::ReadResponse>(
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, TopicMessagesBatchingEnabled, ctx);
     }
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);

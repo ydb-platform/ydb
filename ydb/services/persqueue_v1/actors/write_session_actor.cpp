@@ -171,6 +171,49 @@ static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 // metering
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
 
+TMaybe<TString> FillBatchFieldsFromTopicWriteMessage(
+        const Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData& msg,
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite,
+        bool batchingEnabled)
+{
+    const i64 messageCountField = msg.message_count();
+    const i64 maxSeqNoField = msg.max_seq_no();
+    if (messageCountField == 0 && maxSeqNoField == 0) {
+        return Nothing();
+    }
+
+    if (!batchingEnabled) {
+        return TString("messages batching is not supported");
+    }
+
+    if (messageCountField < 0) {
+        return TString("message_count must be >= 1");
+    }
+    if (maxSeqNoField != 0 && maxSeqNoField < msg.seq_no()) {
+        return TString("max_seq_no must be >= seq_no");
+    }
+
+    i64 messageCount = messageCountField;
+    if (messageCount <= 1 && maxSeqNoField >= msg.seq_no()) {
+        messageCount = maxSeqNoField - msg.seq_no() + 1;
+    }
+    if (messageCount <= 1) {
+        return Nothing();
+    }
+
+    const i64 maxSeqNo = maxSeqNoField != 0 ? maxSeqNoField : msg.seq_no() + messageCount - 1;
+    if (maxSeqNo != msg.seq_no() + messageCount - 1) {
+        return TString("max_seq_no is inconsistent with message_count");
+    }
+
+    cmdWrite.SetMessageCount(messageCount);
+    cmdWrite.SetMaxSeqNo(maxSeqNo);
+    if (msg.message_format() == Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH) {
+        cmdWrite.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+    }
+    return Nothing();
+}
+
 //TODO: add here tracking of bytes in/out
 
 
@@ -904,6 +947,7 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
                 init->mutable_supported_codecs()->add_codecs(CodecByName<UseMigrationProtocol>(codecName));
             }
         }
+        init->set_is_batching_supported(IsTopicMessagesBatchingEnabled(ctx));
     }
 
     InitSpan.End();
@@ -1238,6 +1282,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     };
 
     ui64 maxMessageMetadataSize = 0;
+    TMaybe<TString> batchError;
     auto addData = [&](const Topic::StreamWriteMessage::WriteRequest& writeRequest, const i32 messageIndex) {
         const auto& msg = writeRequest.messages(messageIndex);
 
@@ -1253,6 +1298,11 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetUncompressedSize(msg.uncompressed_size());
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
+
+        if (const auto error = FillBatchFieldsFromTopicWriteMessage(msg, *w, IsTopicMessagesBatchingEnabled(ctx))) {
+            batchError = *error;
+            return;
+        }
 
         payloadSize += w->GetData().size() + w->GetSourceId().size();
 
@@ -1273,6 +1323,10 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     } else {
         for (i32 messageIndex = 0; messageIndex != writeRequest.messages_size(); ++messageIndex) {
             addData(writeRequest, messageIndex);
+            if (batchError) {
+                CloseSession(*batchError, PersQueue::ErrorCode::BAD_REQUEST, ctx);
+                return;
+            }
         }
     }
 

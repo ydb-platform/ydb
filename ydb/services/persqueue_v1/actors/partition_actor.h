@@ -78,7 +78,8 @@ public:
                      const ui64 tabletID, const TTopicCounters& counters,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes);
+                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes,
+                     bool topicMessagesBatchingEnabled);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -275,6 +276,7 @@ private:
     EDirectReadRestoreStage DirectReadRestoreStage = EDirectReadRestoreStage::None;
 
     bool UseMigrationProtocol;
+    const bool TopicMessagesBatchingEnabled;
 
     bool FirstRead;
     bool ReadingFinishedSent;

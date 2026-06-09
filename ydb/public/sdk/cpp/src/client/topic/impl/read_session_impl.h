@@ -127,7 +127,7 @@ using TCallbackContextPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadS
 template <bool UseMigrationProtocol>
 class TUserRetrievedEventsInfoAccumulator {
 public:
-    void Add(TDataDecompressionInfoPtr<UseMigrationProtocol> info, i64 decompressedSize);
+    void Add(TDataDecompressionInfoPtr<UseMigrationProtocol> info, i64 decompressedSize, size_t messagesCount = 1);
     void OnUserRetrievedEvent() const;
 
 private:
@@ -238,7 +238,8 @@ public:
         TPartitionData<UseMigrationProtocol>&& msg,
         TCallbackContextPtr<UseMigrationProtocol> cbContext,
         bool doDecompress,
-        i64 serverBytesSize = 0 // to increment read request bytes size
+        i64 serverBytesSize = 0, // to increment read request bytes size
+        uint64_t maxBatchSize = 1
     );
     ~TDataDecompressionInfo();
 
@@ -274,6 +275,10 @@ public:
 
     bool GetDoDecompress() const {
         return DoDecompress;
+    }
+
+    uint64_t GetMaxBatchSize() const {
+        return MaxBatchSize;
     }
 
     i64 GetServerBytesSize() const {
@@ -375,6 +380,7 @@ private:
     std::vector<TMessageMetaPtrVector> MessagesMeta;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
     bool DoDecompress;
+    uint64_t MaxBatchSize = 1;
     std::atomic<i64> ServerBytesSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
@@ -422,7 +428,8 @@ public:
                   std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TMessage>& messages,
                   std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
                   size_t& maxByteSize,
-                  size_t& dataSize) const;
+                  size_t& dataSize,
+                  size_t& messagesTaken) const;
 
     size_t GetDataSize() const;
 

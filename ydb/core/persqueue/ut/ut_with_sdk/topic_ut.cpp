@@ -7,6 +7,8 @@
 
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
@@ -38,6 +40,23 @@ using TMessage = TDataEvent::TMessage;
     }                                                                                                 \
   } while (false)
 
+
+namespace {
+
+TTopicSdkTestSetup CreateBatchingSetup() {
+    NKikimrConfig::TFeatureFlags ff;
+    ff.SetEnableTopicMessagesBatching(true);
+    ff.SetEnableTopicWriteOffsetDeltaInKeys(true);
+
+    auto settings = TTopicSdkTestSetup::MakeServerSettings();
+    settings.SetFeatureFlags(ff);
+
+    TTopicSdkTestSetup setup("KafkaBatchMessagesWriteRead", settings, false);
+    setup.CreateTopic();
+    return setup;
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(WithSDK) {
 
@@ -1037,6 +1056,133 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         for (const auto& [_, writeSession] : writeSessions) {
             UNIT_ASSERT(writeSession->Close(TDuration::Seconds(5)));
         }
+    }
+
+    Y_UNIT_TEST(KafkaBatchMessagesWriteRead) {
+        TTopicSdkTestSetup setup = CreateBatchingSetup();
+        setup.GetRuntime().SetScheduledLimit(5000);
+
+        TTopicClient client(setup.MakeDriver());
+
+        const std::string producerId = "sourceid_batch_read";
+        constexpr size_t dataSize = 16;
+        constexpr ui64 maxBatchMessageCount = 5;
+
+        const TVector<std::tuple<ui64, ui32, char>> writes = {
+            {1, 5, 'a'},
+            {6, 3, 'b'},
+            {9, 1, 'c'},
+        };
+
+        TWriteSessionSettings writeSettings;
+        writeSettings.Path(setup.GetFullTopicPath())
+            .ProducerId(producerId)
+            .MessageGroupId(producerId)
+            .PartitionId(0)
+            .Codec(ECodec::RAW)
+            .MaxMessageCount(maxBatchMessageCount)
+            .BatchMessageFormat(EBatchMessageFormat::KAFKA_BATCH)
+            .BatchFlushInterval(TDuration::Seconds(3600))
+            .BatchFlushSizeBytes(10_MB);
+
+        auto writeSession = client.CreateWriteSession(writeSettings);
+
+        auto waitReady = [](const std::shared_ptr<IWriteSession>& session) {
+            for (;;) {
+                auto event = session->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    return std::move(ready->ContinuationToken);
+                }
+                if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected session close while waiting for ready: "
+                                               << closed->DebugString());
+                }
+            }
+        };
+
+        auto waitAcks = [](const std::shared_ptr<IWriteSession>& session, size_t expectedAckCount) {
+            size_t received = 0;
+            while (received < expectedAckCount) {
+                auto event = session->GetEvent(true);
+                UNIT_ASSERT(event.has_value());
+                if (auto* ack = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+                    for (const auto& item : ack->Acks) {
+                        UNIT_ASSERT_C(
+                            item.State == TWriteSessionEvent::TWriteAck::EES_WRITTEN,
+                            TStringBuilder() << "Unexpected ack state: " << item.State);
+                        ++received;
+                    }
+                } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected session close while waiting for ack: "
+                                               << closed->DebugString());
+                }
+            }
+        };
+
+        for (const auto& [firstSeqNo, messageCount, fill] : writes) {
+            for (ui32 i = 0; i < messageCount; ++i) {
+                TWriteMessage message(TString(dataSize, fill));
+                message.SeqNo(firstSeqNo + i);
+                writeSession->Write(waitReady(writeSession), std::move(message));
+            }
+            waitAcks(writeSession, messageCount);
+        }
+
+        UNIT_ASSERT(writeSession->Close(TDuration::Seconds(5)));
+
+        TReadSessionSettings readSettings;
+        readSettings.ConsumerName(TEST_CONSUMER);
+        readSettings.AppendTopics(TTopicReadSettings().Path(setup.GetFullTopicPath()));
+        readSettings.MaxBatchSize(maxBatchMessageCount);
+        readSettings.Decompress(true);
+
+        auto readSession = client.CreateReadSession(readSettings);
+
+        TVector<TMessage> receivedMessages;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (receivedMessages.size() < 9 && TInstant::Now() < deadline) {
+            UNIT_ASSERT_C(readSession->WaitEvent().Wait(TDuration::Seconds(5)),
+                "Read session event timeout");
+            auto event = readSession->GetEvent(false);
+            UNIT_ASSERT(event.has_value());
+
+            if (auto* start = std::get_if<TStartPartitionEvent>(&*event)) {
+                start->Confirm();
+                continue;
+            }
+            if (auto* stop = std::get_if<TStopPartitionEvent>(&*event)) {
+                stop->Confirm();
+                continue;
+            }
+            if (auto* data = std::get_if<TDataEvent>(&*event)) {
+                for (auto& message : data->GetMessages()) {
+                    receivedMessages.push_back(message);
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(receivedMessages.size(), 9u);
+
+        SortBy(receivedMessages, [](const TMessage& message) {
+            return message.GetOffset();
+        });
+
+        for (ui64 offset = 0; offset < 5; ++offset) {
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetOffset(), offset);
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetSeqNo(), offset + 1);
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetData(), TString(dataSize, 'a'));
+        }
+        for (ui64 offset = 5; offset < 8; ++offset) {
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetOffset(), offset);
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetSeqNo(), offset + 1);
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetData(), TString(dataSize, 'b'));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(receivedMessages[8].GetOffset(), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(receivedMessages[8].GetSeqNo(), 9u);
+        UNIT_ASSERT_VALUES_EQUAL(receivedMessages[8].GetData(), TString(dataSize, 'c'));
+
+        UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));
     }
 }
 } // namespace NKikimr

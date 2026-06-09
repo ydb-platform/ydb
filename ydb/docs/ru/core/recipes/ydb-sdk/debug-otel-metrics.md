@@ -1,10 +1,10 @@
 # Метрики с OpenTelemetry
 
-{{ ydb-short-name }} SDK инструментируют операции работы с таблицами метриками [OpenTelemetry](https://opentelemetry.io/), позволяя наблюдать состояние клиента — длительность и количество операций, состояние пула сессий — от кода приложения до gRPC-вызовов к YDB. Метрики экспортируются по стандартному протоколу OTLP и совместимы с Prometheus, Grafana, VictoriaMetrics и любым другим бэкендом, поддерживающим OpenTelemetry.
+{{ ydb-short-name }} SDK инструментируют операции Query Service метриками [OpenTelemetry](https://opentelemetry.io/), позволяя наблюдать состояние клиента — длительность и количество операций, состояние пула сессий — от кода приложения до gRPC-вызовов к YDB. Метрики экспортируются по стандартному протоколу OTLP и совместимы с Prometheus, Grafana, VictoriaMetrics и любым другим бэкендом, поддерживающим OpenTelemetry.
 
-## Список метрик
+## Список метрик {#metrics-list}
 
-### Метрики операций
+### Метрики операций {#operation-metrics}
 
 | Имя                             | Тип       | Единица       | Описание                                                                                                |
 |---------------------------------|-----------|---------------|---------------------------------------------------------------------------------------------------------|
@@ -22,7 +22,7 @@
 | `ydb.query.session.min`              | Gauge       | `{session}` | Настроенный минимальный размер пула сессий.                           |
 | `ydb.query.session.max`              | Gauge       | `{session}` | Настроенный максимальный размер пула сессий.                          |
 
-## Атрибуты
+## Атрибуты {#attributes}
 
 | Имя                           | Применяется к                                                  | Значение                                                                                                        |
 |-------------------------------|----------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
@@ -33,13 +33,71 @@
 | `ydb.query.session.pool.name` | Все метрики `ydb.query.session.*`                              | Имя пула сессий. По умолчанию формируется как `<endpoint>/<database>`; настраивается через API конкретного SDK. |
 | `ydb.query.session.state`     | `ydb.query.session.count`                                      | Состояние сессии: `idle` или `used`.                                                                            |
 
-## Подключение к SDK
+## Подключение к SDK {#integration}
 
 {% list tabs %}
 
 - Go
 
-  Функциональность на данный момент не поддерживается. Для сбора метрик из Go SDK используйте [Prometheus](debug-prometheus.md) (адаптер [ydb-go-sdk-prometheus](https://github.com/ydb-platform/ydb-go-sdk-prometheus)).
+  Установите адаптер OpenTelemetry для {{ ydb-short-name }} Go SDK:
+
+  ```bash
+  go get github.com/ydb-platform/ydb-go-sdk-otel
+  ```
+
+  Настройте `MeterProvider` и передайте адаптер в `ydb.Open`:
+
+  ```go
+  package main
+
+  import (
+      "context"
+      "os"
+
+      "go.opentelemetry.io/otel"
+      "go.opentelemetry.io/otel/attribute"
+      "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+      "go.opentelemetry.io/otel/sdk/metric"
+      "go.opentelemetry.io/otel/sdk/resource"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+      ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
+  )
+
+  func main() {
+      ctx := context.Background()
+
+      exporter, err := otlpmetricgrpc.New(ctx,
+          otlpmetricgrpc.WithEndpoint("localhost:4317"),
+          otlpmetricgrpc.WithInsecure(),
+      )
+      if err != nil {
+          panic(err)
+      }
+      res, _ := resource.Merge(resource.Default(), resource.NewSchemaless(
+          attribute.String("service.name", "my-service"),
+      ))
+      mp := metric.NewMeterProvider(
+          metric.WithReader(metric.NewPeriodicReader(exporter)),
+          metric.WithResource(res),
+      )
+      defer mp.Shutdown(ctx)
+      otel.SetMeterProvider(mp)
+
+      db, err := ydb.Open(ctx,
+          os.Getenv("YDB_CONNECTION_STRING"),
+          ydbOtel.WithMetrics(
+              mp.Meter("ydb-go-sdk"),
+              ydbOtel.WithDetailer(trace.DetailsAll),
+          ),
+      )
+      if err != nil {
+          panic(err)
+      }
+      defer db.Close(ctx)
+  }
+  ```
 
 - Python
 
@@ -171,7 +229,7 @@
   TDriver driver(driverConfig);
   ```
 
-  Метрики и трассировку можно подключить вместе — см. [пример из репозитория C++ SDK](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/otel_tracing/main.cpp).
+  Метрики и трассировку можно подключить вместе, зарегистрировав в `TDriverConfig` одновременно `MetricRegistry` и `TraceProvider`.
 
 - JavaScript
 
@@ -219,7 +277,7 @@
   await sdk.shutdown()
   ```
 
-  Метрики экспортируются тем же пакетом `@ydbjs/telemetry`, что и трассировка. Он подписывается на события `node:diagnostics_channel` из `@ydbjs/core`, `@ydbjs/query`, `@ydbjs/auth` и `@ydbjs/retry` и публикует OTel-инструменты, включая `db.client.operation.duration`, `ydb.retry.attempts`, `ydb.retry.duration` и метрики пула сессий. Подробнее см. [репозиторий JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk).
+  Метрики экспортируются тем же пакетом `@ydbjs/telemetry`, что и трассировка. Он подписывается на события `node:diagnostics_channel` из `@ydbjs/core`, `@ydbjs/query`, `@ydbjs/auth` и `@ydbjs/retry` и публикует OTel-инструменты, включая `ydb.client.operation.duration`, `ydb.retry.attempts`, `ydb.retry.duration` и метрики пула сессий. Подробнее см. [репозиторий JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk).
 
 - Rust
 

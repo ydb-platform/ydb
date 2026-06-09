@@ -526,9 +526,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService) {
-=======
     Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnCreate, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
@@ -669,8 +666,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             "new column id " << extraColumnId << " must be greater than max index id " << maxIndexId);
     }
 
-    Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService, ELocalIndexAsSchemeObject) {
->>>>>>> 334a2e3109b (Fix indexes ids (#41824))
+    Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);

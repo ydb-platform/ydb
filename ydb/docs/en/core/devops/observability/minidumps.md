@@ -1,8 +1,8 @@
 # Minidumps (built-in Google Breakpad)
 
-The `ydbd` server binary in {{ ydb-short-name }} can collect **minidumps** when the process crashes, using the built-in [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad/). A minidump is a compact snapshot of the process state (stack, registers, list of loaded modules) at the moment of a crash caused by an unhandled signal (`SIGSEGV`, `SIGABRT`, `SIGFPE`, and others).
+The `ydbd` nodes in {{ ydb-short-name }} can collect **minidumps** when the process crashes, using the built-in [Google Breakpad](https://chromium.googlesource.com/breakpad/breakpad/). A minidump is a compact snapshot of the process state (stack, registers, list of loaded modules) at the moment of a crash caused by an unhandled signal (`SIGSEGV`, `SIGABRT`, `SIGFPE`, and others).
 
-Unlike a system core dump, a minidump:
+Unlike a system [core dump](https://en.wikipedia.org/wiki/Core_dump), a minidump:
 
 - takes up significantly less space;
 - is collected by its own signal handler and does not depend on the host's `ulimit` and `core_pattern` settings;
@@ -11,7 +11,7 @@ Unlike a system core dump, a minidump:
 
 {% note info %}
 
-Minidump collection is supported on Linux only. The functionality is absent on other platforms.
+Minidump collection works on Linux only. On other platforms (for example, macOS) `ydbd` runs, but the built-in Breakpad is not part of the build and minidumps are not collected.
 
 {% endnote %}
 
@@ -76,10 +76,6 @@ fi
 ## Analyzing minidumps {#analyze}
 
 A minidump does not contain symbols: to obtain a human-readable stack, you need the symbols of the same `ydbd` build artifact. The standard Google Breakpad tools (`minidump_stackwalk` and `.sym` files) produced from the symbols of the corresponding build are used for the analysis.
-
-## Checking for built-in Breakpad {#check}
-
-You can find out whether the `ydbd` binary was built with the built-in Breakpad from the version compatibility information: when the built-in Breakpad is present, the line `HasInternalBreakpad: true` is added to it.
 
 ## See also {#see-also}
 

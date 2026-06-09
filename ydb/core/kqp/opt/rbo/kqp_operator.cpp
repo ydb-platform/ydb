@@ -641,6 +641,24 @@ TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> ri
                  const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters)
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys), JoinFilters(joinFilters) {}
 
+TVector<TInfoUnit> TOpJoin::GetLHSKeys() const {
+    TVector<TInfoUnit> lhsKeys;
+    lhsKeys.reserve(JoinKeys.size());
+    for (const auto& [lhsKey, _] : JoinKeys) {
+        lhsKeys.push_back(lhsKey);
+    }
+    return lhsKeys;
+}
+
+TVector<TInfoUnit> TOpJoin::GetRHSKeys() const {
+    TVector<TInfoUnit> rhsKeys;
+    rhsKeys.reserve(JoinKeys.size());
+    for (const auto& [_, rhsKey] : JoinKeys) {
+        rhsKeys.push_back(rhsKey);
+    }
+    return rhsKeys;
+}
+
 TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
     if (const auto& outputIUs = GetOutputIUsOverride()) {
         return *outputIUs;

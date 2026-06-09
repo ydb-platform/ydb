@@ -13,8 +13,6 @@ from security_test_helpers import (
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-
-
 def _is_valid_tablet_id(tablet_id):
     return tablet_id not in (None, 0)
 

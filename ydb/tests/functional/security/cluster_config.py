@@ -3,9 +3,6 @@
 import os
 import subprocess
 
-import os
-import subprocess
-
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
 

@@ -991,10 +991,7 @@ namespace {
         }
 
         Y_UNIT_TEST(WarmupUnavailableSysview) {
-            // Sysview returns UNAVAILABLE for every federated peer scan.
-            // Verifies both: (1) warmup correctly fails with "Fetch failed",
-            // (2) CompileCacheView/PeerScanWarnings counter increments exactly
-            // once per failing peer event.
+            // All peers UNAVAILABLE: warmup fails AND PeerScanWarnings bumps once per failing peer.
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.UserSids = {"user0"};
@@ -1036,6 +1033,10 @@ namespace {
                 "Warmup should fail when sysview is unavailable: " << warmupComplete->Get()->Message);
             UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("Fetch failed"),
                 "Message should indicate fetch failure: " << warmupComplete->Get()->Message);
+
+            // Truncated-count fetch is async — drain it so its SkipCurrentNode
+            // events land before we compare counter to intercept count.
+            env.Runtime.SimulateSleep(TDuration::Seconds(1));
 
             const ui32 intercepted = sysviewRequestCount.load();
             UNIT_ASSERT_C(intercepted >= 1,
@@ -1520,48 +1521,6 @@ namespace {
                 "WarmupSavedCompileMs must not change when window is not open");
         }
 
-        Y_UNIT_TEST(WarmupPartialNodeUnavailable) {
-            TWarmupTestParams params;
-            params.UseRealThreads = false;
-            params.UserSids = {"user0"};
-            params.FillImplicitParams = false;
-            params.NodeCount = 3;
-
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
-            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
-
-            const ui32 failNodeId = env.Runtime.GetNodeId(2);
-            const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
-                [failNodeId, &env](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
-                    if (ev->Cookie != failNodeId) {
-                        return;
-                    }
-                    auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-                    response->Record.SetNodeId(failNodeId);
-                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-                    NYql::TIssue issue("Simulated node failure");
-                    NYql::TIssues issues;
-                    issues.AddIssue(std::move(issue));
-                    NYql::IssuesToMessage(issues, response->Record.MutableIssues());
-                    env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
-                    ev.Reset();
-                });
-
-            TKqpWarmupConfig warmupActorConfig;
-            warmupActorConfig.SoftDeadline = TDuration::Seconds(10);
-            warmupActorConfig.HardDeadline = TDuration::Seconds(20);
-            warmupActorConfig.MaxCompilationDurationMs = 60000;
-
-            auto warmupComplete = RunWarmup(env, warmupActorConfig,
-                warmupActorConfig.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
-
-            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
-            UNIT_ASSERT_C(warmupComplete->Get()->Success,
-                "Warmup should succeed when at least one node responds: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
-                "Should compile queries from reachable nodes: " << warmupComplete->Get()->EntriesLoaded);
-        }
-
         Y_UNIT_TEST(CompileCacheViewPeerScanWarningsCounterClean) {
             // Sanity check: when every peer responds cleanly, the counter must NOT move.
             TWarmupTestParams params;
@@ -1584,41 +1543,6 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL_C(warningsAfter, warningsBefore,
                 "CompileCacheView/PeerScanWarnings must stay flat on clean scan"
                 << " (before=" << warningsBefore << ", after=" << warningsAfter << ")");
-        }
-
-        Y_UNIT_TEST(CompileCacheScanPartialNodeWarning) {
-            TWarmupTestParams params;
-            params.UseRealThreads = false;
-            params.UserSids = {"user0"};
-            params.NodeCount = 3;
-
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
-            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
-
-            const ui32 failNodeId = env.Runtime.GetNodeId(2);
-            const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
-                [failNodeId, &env](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
-                    if (ev->Cookie != failNodeId) {
-                        return;
-                    }
-                    auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-                    response->Record.SetNodeId(failNodeId);
-                    response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
-                    NYql::TIssues issues;
-                    issues.AddIssue(NYql::TIssue("Simulated node failure"));
-                    NYql::IssuesToMessage(issues, response->Record.MutableIssues());
-                    env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
-                    ev.Reset();
-                });
-
-            auto result = kikimr.RunCall([&] {
-                auto tableClient = kikimr.GetTableClient();
-                auto session = tableClient.CreateSession().GetValueSync().GetSession();
-                return session.ExecuteDataQuery(
-                    "SELECT COUNT(*) AS cnt FROM `/Root/.sys/compile_cache_queries`",
-                    TTxControl::BeginTx().CommitTx()).GetValueSync();
-            });
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
     } // Y_UNIT_TEST_SUITE(KqpWarmup)

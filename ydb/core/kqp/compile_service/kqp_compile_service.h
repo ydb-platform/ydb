@@ -116,12 +116,14 @@ public:
         const TActorContext& ctx,
         EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
+    // warmupAttribution + counters must be set together (Client mode without
+    // counters aborts in AccountWarmupHitImpl); no defaults to keep it explicit.
     TKqpCompileResult::TConstPtr FindByAst(
         const TKqpQueryId& query,
         const NYql::TAstParseResult& ast,
         bool promote,
-        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None,
-        TIntrusivePtr<TKqpCounters> counters = nullptr,
+        EWarmupAttributionMode warmupAttribution,
+        TIntrusivePtr<TKqpCounters> counters,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr);
 
     bool EraseByUid(const TString& uid) {

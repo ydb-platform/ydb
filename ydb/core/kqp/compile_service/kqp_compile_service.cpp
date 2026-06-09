@@ -876,7 +876,9 @@ private:
         if (QueryCache->FindByQuery(query, keepInCache)) {
             return false;
         }
-        if (compileResult->GetAst() && QueryCache->FindByAst(query, *compileResult->GetAst(), keepInCache)) {
+        if (compileResult->GetAst() && QueryCache->FindByAst(
+                query, *compileResult->GetAst(), keepInCache,
+                EWarmupAttributionMode::None, /*counters=*/nullptr)) {
             return false;
         }
         auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, compileResult->CompilationDuration ,std::move(query), compileResult->QueryAst,
@@ -1238,6 +1240,23 @@ void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) 
 }
 
 // Must be called under Lock, only after SID / TempTables rejection checks passed.
+namespace {
+
+// Drops entry on temp-table clash; returns whether an entry existed before the
+// drop so callers can distinguish a rejected hit from a true miss.
+bool RejectOnTempTableClash(
+    TKqpCompileResult::TConstPtr& compileResult,
+    const TKqpTempTablesState::TConstPtr& tempTablesState)
+{
+    const bool hadEntry = static_cast<bool>(compileResult);
+    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
+        compileResult = nullptr;
+    }
+    return hadEntry;
+}
+
+} // anonymous namespace
+
 void TKqpQueryCache::AccountWarmupHitImpl(
     const TKqpCompileResult::TConstPtr& compileResult,
     EWarmupAttributionMode mode,
@@ -1304,10 +1323,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
         counters->ReportCompileRequestGet(dbCounters);
 
         auto compileResult = FindByUidImpl(*uid, promote);
-        const bool hadEntry = static_cast<bool>(compileResult);
-        if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-            compileResult = nullptr;
-        }
+        const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
@@ -1347,11 +1363,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by queryId, queryId: "
         << query->SerializeToString());
     auto compileResult = FindByQueryImpl(*query, promote);
-    const bool hadEntry = static_cast<bool>(compileResult);
-    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-        // Rejected hit, not a true miss.
-        return nullptr;
-    }
+    const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
     if (compileResult) {
         counters->ReportQueryCacheHit(dbCounters, true);
@@ -1390,10 +1402,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     }
 
     auto compileResult = FindByUidImpl(*uid, promote);
-    const bool hadEntry = static_cast<bool>(compileResult);
-    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-        compileResult = nullptr;
-    }
+    const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
     if (compileResult) {
         AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
@@ -1459,10 +1468,10 @@ bool TKqpQueryCache::RefreshWarmupWindowStateImpl() {
             return false;
         }
         WarmupWindowOpened = true;
-        WarmupWindowStart = TInstant::Now();
+        WarmupWindowStart = TAppData::TimeProvider->Now();
         return true;
     }
-    if (TInstant::Now() - WarmupWindowStart >= WarmupObservationWindow) {
+    if (TAppData::TimeProvider->Now() - WarmupWindowStart >= WarmupObservationWindow) {
         WarmupWindowOpened = false;
         AtomicSet(WarmupWindowClosedAtomic, 1);
         WarmupPendingHitUids.clear();

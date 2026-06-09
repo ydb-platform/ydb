@@ -240,23 +240,24 @@ class CompileCacheView:
         return 0
 
     def trigger_compile_cache_scan(self, node, timeout_seconds=30):
-        """Run a SELECT against compile_cache_queries sysview from the given node."""
-        driver = ydb.Driver(endpoint=f"grpc://localhost:{node.port}", database=self.database)
-        driver.wait(timeout=10)
-        try:
+        """Run a SELECT against compile_cache_queries sysview pinned to `node`.
+
+        Discovery is disabled so the scan (and any retry) runs on `node` itself.
+        With a plain discovery-enabled driver SessionPool could balance the query
+        onto another node, and PeerScanWarnings would then move on the wrong node.
+        """
+        sql = f"SELECT NodeId, Query FROM `{self.database}/.sys/compile_cache_queries`"
+        settings = ydb.BaseRequestSettings().with_timeout(timeout_seconds)
+        with _node_pinned_driver(node, database=self.database) as driver:
             pool = ydb.SessionPool(driver)
             try:
                 def _do(session):
-                    sql = f"SELECT NodeId, Query FROM `{self.database}/.sys/compile_cache_queries`"
                     return session.transaction(ydb.SerializableReadWrite()).execute(
-                        sql, commit_tx=True,
-                        settings=ydb.BaseRequestSettings().with_timeout(timeout_seconds),
+                        sql, commit_tx=True, settings=settings,
                     )
                 pool.retry_operation_sync(_do)
             finally:
                 pool.stop()
-        finally:
-            driver.stop()
 
     @classmethod
     def wait_for_warmup_finished(cls, node, timeout=60):
@@ -354,7 +355,13 @@ class CompileCacheView:
 
 
 def _make_warmup_config(nodes=3, max_nodes_to_request=None,
-                        soft_deadline_seconds=None, hard_deadline_seconds=None):
+                        soft_deadline_seconds=60, hard_deadline_seconds=90):
+    # Defaults are generous on purpose: KqpProxy peer discovery in the functional
+    # test harness takes ~40s after a node restart (kqpproxy+ board cadence),
+    # which is much longer than production. With proto defaults (~10s soft) the
+    # warmup actor would always hit the soft deadline before TEvStartWarmup
+    # arrives and skip the fetch. Tests that explicitly want fast-skip semantics
+    # (TestWarmupSingleNode, TestWarmupMultiNodeColdStart) override these.
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
         nodes=nodes,
@@ -366,13 +373,13 @@ def _make_warmup_config(nodes=3, max_nodes_to_request=None,
         },
     )
     config.yaml_config["feature_flags"] = {"enable_compile_cache_view": True}
-    warmup_config = {"max_queries_to_load": 1000}
+    warmup_config = {
+        "max_queries_to_load": 1000,
+        "soft_deadline_seconds": soft_deadline_seconds,
+        "hard_deadline_seconds": hard_deadline_seconds,
+    }
     if max_nodes_to_request is not None:
         warmup_config["max_nodes_to_request"] = max_nodes_to_request
-    if soft_deadline_seconds is not None:
-        warmup_config["soft_deadline_seconds"] = soft_deadline_seconds
-    if hard_deadline_seconds is not None:
-        warmup_config["hard_deadline_seconds"] = hard_deadline_seconds
     config.yaml_config["table_service_config"] = {
         "compile_query_cache_size": 200 if nodes > 3 else 100,
         "enable_compile_cache_warmup": True,
@@ -784,31 +791,41 @@ class TestWarmupCounters:
         before = CompileCacheView.get_warmup_window_counters(node2)
         logger.info("[Counters] window before client traffic: %s", before)
 
-        # Client traffic on a warmed entry: HitsInWindow + SavedCompileMs must move.
+        # Client traffic on warmed entries: each distinct query that warmup
+        # repopulated should fire HitsInWindow at least once.
+        # populate_cache_on_nodes runs WARMUP_QUERIES + WARMUP_QUERY_PARAM.
+        expected_hits = len(WARMUP_QUERIES) + 1  # the parameterized query
         self.cache.populate_cache_on_nodes([node2.node_id], use_query_api=use_query_api)
         after_hit = CompileCacheView.get_warmup_window_counters(node2)
         logger.info("[Counters] window after warmed-entry hit: %s", after_hit)
 
-        assert after_hit["hits"] > before["hits"], (
-            "Warmup/HitsInWindow must increment after a client query matches a "
-            f"warmup-populated entry. before={before}, after={after_hit}"
+        hits_delta = after_hit["hits"] - before["hits"]
+        assert hits_delta >= expected_hits, (
+            f"Warmup/HitsInWindow must increment by at least {expected_hits} "
+            f"(one per distinct warmed query) after client traffic, "
+            f"got delta={hits_delta}. before={before}, after={after_hit}"
         )
-        assert after_hit["saved_ms"] >= before["saved_ms"], (
-            "Warmup/SavedCompileMs must be non-decreasing. "
+        assert after_hit["saved_ms"] > before["saved_ms"], (
+            "Warmup/SavedCompileMs must increase when warmup hits are attributed. "
             f"before={before}, after={after_hit}"
         )
 
-        # Fresh query inside the same observation window: MissesInWindow must move.
-        fresh_query = "SELECT 7919 + 42 AS unique_warmup_miss_probe"
+        # Fresh query inside the same observation window: each unique probe must
+        # bump MissesInWindow once.
+        fresh_queries = [
+            f"SELECT 7919 + {i} AS unique_warmup_miss_probe_{i}"
+            for i in range(3)
+        ]
         self.cache.populate_cache_on_nodes(
-            [node2.node_id], extra_queries=[fresh_query], use_query_api=use_query_api,
+            [node2.node_id], extra_queries=fresh_queries, use_query_api=use_query_api,
         )
         after_miss = CompileCacheView.get_warmup_window_counters(node2)
         logger.info("[Counters] window after fresh-query miss: %s", after_miss)
 
-        assert after_miss["misses"] > after_hit["misses"], (
-            "Warmup/MissesInWindow must increment after a client query that does "
-            "not match any warmup-populated entry, while the window is still open. "
+        misses_delta = after_miss["misses"] - after_hit["misses"]
+        assert misses_delta >= len(fresh_queries), (
+            f"Warmup/MissesInWindow must increment by at least {len(fresh_queries)} "
+            f"(one per fresh probe), got delta={misses_delta}. "
             f"after_hit={after_hit}, after_miss={after_miss}"
         )
 
@@ -848,19 +865,28 @@ class TestCompileCacheViewPeerWarnings:
         time.sleep(3)
 
         try:
+            # Each successful scan against a federated sysview that hits the dead
+            # peer should bump PeerScanWarnings exactly once. Run a fixed number
+            # of scans and require the counter to grow by at least that many.
+            scans_to_run = 3
             deadline = time.time() + 60
-            final = baseline
-            while time.time() < deadline:
+            scans_done = 0
+            while scans_done < scans_to_run and time.time() < deadline:
                 self.cache.trigger_compile_cache_scan(live_node, timeout_seconds=30)
-                final = CompileCacheView.get_peer_scan_warnings(live_node)
-                logger.info("[PeerWarnings] after scan: %d (baseline %d)", final, baseline)
-                if final > baseline:
-                    break
-                time.sleep(2)
+                scans_done += 1
+                current = CompileCacheView.get_peer_scan_warnings(live_node)
+                logger.info(
+                    "[PeerWarnings] after scan %d/%d: %d (baseline %d)",
+                    scans_done, scans_to_run, current, baseline,
+                )
+                time.sleep(1)
 
-            assert final > baseline, (
-                "CompileCacheView/PeerScanWarnings must increment when a peer is "
-                f"unreachable; baseline={baseline}, final={final}"
+            final = CompileCacheView.get_peer_scan_warnings(live_node)
+            delta = final - baseline
+            assert delta >= scans_done, (
+                "CompileCacheView/PeerScanWarnings must increment at least once "
+                f"per scan that hits the dead peer; ran {scans_done} scans, "
+                f"got delta={delta} (baseline={baseline}, final={final})"
             )
         finally:
             dead_node.start()

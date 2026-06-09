@@ -80,55 +80,55 @@ struct TEvPrivate {
     };
 };
 
+namespace {
+
+// IN (...) — partial peer failures are tolerated within a single sysview scan;
+// UNION ALL of point reads fails the whole fetch if any branch fails. IN collapses
+// to [min..max] so callers pass a contiguous slice (see StartFetch).
+TString BuildNodeIdInClause(const TVector<ui32>& nodeIds) {
+    TStringBuilder clause;
+    clause << "NodeId IN (";
+    for (size_t i = 0; i < nodeIds.size(); ++i) {
+        if (i > 0) {
+            clause << ", ";
+        }
+        clause << nodeIds[i];
+    }
+    clause << ")";
+    return clause;
+}
+
+} // anonymous namespace
+
 /*
     Helper actor to fetch and parse data from /.sys/compile_cache_queries.
     See TFetchCacheActor::OnRunQuery() for query constraints on cache records.
 */
 class TFetchCacheActor : public TQueryBase {
 public:
-    TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs, const TVector<ui32>& nodeIds, ui32 maxNodesToQuery)
+    TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs, const TVector<ui32>& nodeIds)
         : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , MaxQueriesToLoad(maxQueriesToLoad)
         , MaxCompilationDurationMs(maxCompilationDurationMs)
         , NodeIds(nodeIds)
-        , MaxNodesToRequest(maxNodesToQuery)
     {
         ForwardStreamIssuesOnSuccess = true;
     }
 
     void OnRunQuery() override {
         const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
-        const TString tablePath = TStringBuilder() << "`" << Database << "/.sys/compile_cache_queries`";
-        const TString commonPredicates = TStringBuilder()
-            << "IsTruncated = false "
-            << "AND AccessCount > 0 "
-            << "AND QueryType IS NOT NULL AND QueryType != '' "
-            << "AND CompilationDurationMs < " << MaxCompilationDurationMs;
-
-        // NodeId IN (...) on this sysview collapses into one [min..max] range scan,
-        // hitting every proxy node within that range. UNION ALL of single-key reads
-        // keeps each scan bound to one node and honours MaxNodesToRequest.
-        const ui32 nodesToQuery = MaxNodesToRequest > 0
-            ? std::min<ui32>(MaxNodesToRequest, NodeIds.size())
-            : NodeIds.size();
-
-        TStringBuilder inner;
-        for (ui32 i = 0; i < nodesToQuery; ++i) {
-            if (i > 0) {
-                inner << " UNION ALL ";
-            }
-            inner << "SELECT Query, UserSID, Metadata, AccessCount, CompilationDurationMs, QueryType, Syntax "
-                  << "FROM " << tablePath
-                  << " WHERE NodeId = " << NodeIds[i] << " AND " << commonPredicates;
-        }
-
         TStringBuilder sql;
         sql << "SELECT Query, UserSID, MAX(Metadata) AS Metadata, SUM(AccessCount) AS AccessCount, "
             << "MAX(CompilationDurationMs) AS CompilationDurationMs, MAX(QueryType) AS QueryType, MAX(Syntax) AS Syntax"
-            << " FROM (" << inner << ") "
-            << "GROUP BY Query, UserSID, QueryType, Syntax "
-            << "ORDER BY AccessCount DESC "
-            << "LIMIT " << limit;
+            << " FROM `" << Database << "/.sys/compile_cache_queries`"
+            << " WHERE IsTruncated = false"
+            << " AND AccessCount > 0"
+            << " AND QueryType IS NOT NULL AND QueryType != ''"
+            << " AND CompilationDurationMs < " << MaxCompilationDurationMs
+            << " AND " << BuildNodeIdInClause(NodeIds)
+            << " GROUP BY Query, UserSID, QueryType, Syntax"
+            << " ORDER BY AccessCount DESC"
+            << " LIMIT " << limit;
 
         RunStreamQuery(sql);
     }
@@ -175,7 +175,6 @@ private:
     ui32 MaxQueriesToLoad;
     ui64 MaxCompilationDurationMs;
     TVector<ui32> NodeIds;
-    ui32 MaxNodesToRequest;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
 };
 
@@ -185,33 +184,18 @@ private:
 */
 class TFetchTruncatedCountActor : public TQueryBase {
 public:
-    TFetchTruncatedCountActor(const TString& database, const TVector<ui32>& nodeIds, ui32 maxNodesToQuery)
+    TFetchTruncatedCountActor(const TString& database, const TVector<ui32>& nodeIds)
         : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , NodeIds(nodeIds)
-        , MaxNodesToRequest(maxNodesToQuery)
     {}
 
     void OnRunQuery() override {
-        const TString tablePath = TStringBuilder() << "`" << Database << "/.sys/compile_cache_queries`";
-
-        // See TFetchCacheActor::OnRunQuery for why UNION ALL instead of NodeId IN (...).
-        const ui32 nodesToQuery = MaxNodesToRequest > 0
-            ? std::min<ui32>(MaxNodesToRequest, NodeIds.size())
-            : NodeIds.size();
-
-        TStringBuilder inner;
-        for (ui32 i = 0; i < nodesToQuery; ++i) {
-            if (i > 0) {
-                inner << " UNION ALL ";
-            }
-            inner << "SELECT IsTruncated, QueryType FROM " << tablePath
-                  << " WHERE NodeId = " << NodeIds[i] << " AND AccessCount > 0";
-        }
-
         TStringBuilder sql;
         sql << "SELECT SUM(CASE WHEN IsTruncated = true THEN 1 ELSE 0 END) AS TruncatedCount,"
             << " SUM(CASE WHEN QueryType IS NULL OR QueryType = '' THEN 1 ELSE 0 END) AS EmptyQueryTypeCount"
-            << " FROM (" << inner << ")";
+            << " FROM `" << Database << "/.sys/compile_cache_queries`"
+            << " WHERE AccessCount > 0"
+            << " AND " << BuildNodeIdInClause(NodeIds);
 
         RunStreamQuery(sql);
     }
@@ -235,7 +219,6 @@ public:
 
 private:
     TVector<ui32> NodeIds;
-    ui32 MaxNodesToRequest;
     ui64 TruncatedCount = 0;
     ui64 EmptyQueryTypeCount = 0;
 };
@@ -286,12 +269,11 @@ void FillYdbParametersFromMetadata(
 
 } // anonymous namespace
 
-// Compile warmup actor runs before the node is registered and ready to serve queries.
-// The main goal is to compile popular queries before node starts to avoid execution time drops
-// during the first moments of node work.
-// Triggers: RM kqpexch+ board sync (single-node fast-skip) or KqpProxy TEvStartWarmup
-// (multi-node — fetch SQL federated via TEvListProxyNodesRequest).
-// SoftDeadline: fallback cluster-wide fetch. HardDeadline: lifetime cap.
+// Runs before the node accepts client traffic. Fetches popular queries from peer
+// compile caches via /.sys/compile_cache_queries and pre-compiles them so the
+// first user queries don't pay compile latency. Triggered by KqpProxy after it
+// discovers peers (TEvStartWarmup) or self-skips on single-node tenants
+// (HandleCheckTopology). SoftDeadline = stop scheduling new compiles, HardDeadline = abort.
 class TKqpCompileCacheWarmupActor : public NActors::TActorBootstrapped<TKqpCompileCacheWarmupActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -438,8 +420,8 @@ private:
             return;
         }
 
-        // Single-node fast-skip only; multi-node must wait for kqpproxy+ board
-        // (otherwise federated .sys/compile_cache_queries collapses to [self]-only).
+        // RM board is only used for single-node fast-skip — multi-node still waits
+        // for KqpProxy's TEvStartWarmup (otherwise the sysview scan sees [self]).
         auto boardNodeIds = rm->GetInitialBoardNodeIds();
         const ui32 selfNodeId = SelfId().NodeId();
         ui32 peerCount = 0;
@@ -473,21 +455,26 @@ private:
             return;
         }
 
-        ui32 maxNodesToQuery = Config.MaxNodesToRequest;
-        if (maxNodesToQuery == 0) {
-            maxNodesToQuery = NodeIds.size();
+        const ui32 maxNodesToQuery = Config.MaxNodesToRequest;
+        if (maxNodesToQuery > 0 && maxNodesToQuery < NodeIds.size()) {
+            // Contiguous slice of sorted NodeIds: see BuildNodeIdInClause for why.
+            // Random start clamped to tail so the window always fits.
+            std::sort(NodeIds.begin(), NodeIds.end());
+            const ui32 total = NodeIds.size();
+            ui32 start = AppData()->RandomProvider->GenRand() % total;
+            if (start + maxNodesToQuery > total) {
+                start = total - maxNodesToQuery;
+            }
+            NodeIds.erase(NodeIds.begin(), NodeIds.begin() + start);
+            NodeIds.resize(maxNodesToQuery);
         }
 
-        if (maxNodesToQuery < NodeIds.size()) {
-            PartialShuffle(NodeIds.begin(), NodeIds.end(), maxNodesToQuery, *AppData()->RandomProvider);
-        }
-
-        LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(maxNodesToQuery, NodeIds.size()) << " nodes");
+        LOG_I("Spawning fetch cache actor, filtering by " << NodeIds.size() << " nodes");
         const ui64 maxCompilationMs = Config.MaxCompilationDurationMs > 0
             ? Config.MaxCompilationDurationMs
             : Config.SoftDeadline.MilliSeconds() / 2;
-        Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs, NodeIds, maxNodesToQuery));
-        Register(new TFetchTruncatedCountActor(Database, NodeIds, maxNodesToQuery));
+        Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs, NodeIds));
+        Register(new TFetchTruncatedCountActor(Database, NodeIds));
         Become(&TThis::StateFetching);
     }
 
@@ -711,8 +698,7 @@ private:
     }
 
     void HandleSoftDeadlineInTopology() {
-        // Without peer NodeIds we'd either fan out to every proxy in the cluster
-        // or read only self (useless on warm restart).
+        // No peer NodeIds yet → can only read self (useless on warm restart).
         LOG_I("Soft deadline reached while waiting for topology, skipping warmup");
         Complete(true, "Skipped: topology not delivered before soft deadline");
     }

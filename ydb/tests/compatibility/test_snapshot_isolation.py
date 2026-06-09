@@ -10,6 +10,71 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Overview
+# ---------------------------------------------------------------------------
+#
+# The test checks snapshot-isolation correctness under concurrent writes and
+# during a rolling cluster upgrade/downgrade.
+#
+# Two source tables are maintained in parallel — one row-oriented
+# (datashard_table) and one column-oriented (column_table) — each holding
+# N_ROWS=10 000 rows with the schema (key, int_val, str_val):
+#
+#   key      : 0 .. 9_999  (unique row identifier)
+#   int_val  : key % GROUP_SIZE   (cycles 0-9 within every group of 10 rows)
+#   str_val  : zero-padded string mirror of int_val, e.g. "00003"
+#
+# Rows are divided into N_GROUPS=1000 consecutive groups of GROUP_SIZE=10
+# rows each.  Within every group, int_val takes each value in 0..9 exactly
+# once, so the group sum is always FIXED_GROUP_SUM = 0+1+…+9 = 45.
+# Updater threads continuously shuffle int_val values within a randomly
+# chosen group (preserving the group sum).
+#
+# ---------------------------------------------------------------------------
+# Result tables  (datashard_results / column_results)
+# ---------------------------------------------------------------------------
+#
+# Each result table holds exactly one row per filter type (filter_type is the
+# primary key).  A row records the aggregate computed by the most recently
+# committed aggregator transaction for that filter type:
+#
+#   filter_type    – one of "pk_range", "int_range", "str_range"
+#   filter_lo      – lower bound used in the source-table query
+#   filter_hi      – upper bound used in the source-table query
+#   row_count      – COUNT(*) returned by that query
+#   int_sum        – SUM(int_val) returned by that query
+#   count_distinct – COUNT(DISTINCT str_val) returned by that query
+#
+# Each aggregator thread runs a snapshot-isolation read-write transaction:
+#   1. READ aggregate from the source table with the chosen bounds.
+#   2. Sleep a random short interval (to widen the window for conflicts).
+#   3. UPSERT the result row — overwriting whichever bounds/values were there
+#      before.
+#
+# Because filter_type is the only PK column, all concurrent aggregators of
+# the same type write to the same single row, which generates write conflicts
+# that the SDK retries automatically.
+#
+# ---------------------------------------------------------------------------
+# Invariants verified by check_results()
+# ---------------------------------------------------------------------------
+#
+#   pk_range  : the range [filter_lo, filter_hi] is always group-aligned, so
+#               row_count == filter_hi - filter_lo + 1,
+#               int_sum   == (row_count / GROUP_SIZE) * FIXED_GROUP_SUM, and
+#               count_distinct == GROUP_SIZE (all 10 int_val values present).
+#
+#   int_range / str_range : a filter on int_val (or its string mirror) in
+#               [filter_lo, filter_hi] matches exactly one row per group, so
+#               row_count      == (filter_hi - filter_lo + 1) * N_GROUPS,
+#               int_sum        == avg(filter_lo..filter_hi) * N_GROUPS * range_len,
+#               count_distinct == filter_hi - filter_lo + 1.
+#
+# Any violation indicates that a transaction read an inconsistent snapshot
+# (mixing data from different logical points in time).
+# ---------------------------------------------------------------------------
+
 N_ROWS = 10_000
 GROUP_SIZE = 10
 N_GROUPS = N_ROWS // GROUP_SIZE  # 1000
@@ -231,10 +296,9 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     logger.warning("Int range aggregator error: %s", e)
 
     def _str_range_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
-        """Reads via a string-range filter under snapshot isolation.
-        Invariant: count(distinct str_val) must equal hi - lo + 1.
-        Since str_val is a zero-padded mirror of int_val, a snapshot-consistent
-        read must see exactly the expected set of distinct values in the range."""
+        """
+        Reads `table_name` with a string-range filter under snapshot isolation.
+        """
 
         driver = self.create_driver()
         with ydb.QuerySessionPool(driver) as pool:
@@ -289,6 +353,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             rows += rs.rows
 
         assert len(rows) == 3 # 3 filter types
+
         for row in rows:
             logger.info(f"Result row from {result_table}: {row}")
             filter_type = row.filter_type

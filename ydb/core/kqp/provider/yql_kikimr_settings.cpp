@@ -79,6 +79,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
 
     REGISTER_SETTING(*this, OptDisableTopSort);
+    REGISTER_SETTING(*this, OptDisableAutoIndexSelection);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
@@ -229,5 +230,9 @@ bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const
 
 bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownAggregate);
+}
+
+bool TKikimrConfiguration::IsAutoIndexSelectionDisabled() const {
+    return OptDisableAutoIndexSelection.Get().GetOrElse(false);
 }
 }

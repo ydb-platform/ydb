@@ -70,6 +70,7 @@ public:
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, Static> OptDisableTopSort;
+    NCommon::TConfSetting<bool, Static> OptDisableAutoIndexSelection;
     NCommon::TConfSetting<bool, Static> OptDisableSqlInToJoin;
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
@@ -233,6 +234,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
+    bool IsAutoIndexSelectionDisabled() const;
 };
 
 }

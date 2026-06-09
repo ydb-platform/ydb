@@ -143,11 +143,9 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     lo_group = random.randint(0, N_GROUPS - 2)
                     hi_group = random.randint(lo_group + 1, N_GROUPS - 1)
                     lo = lo_group * GROUP_SIZE
-                    hi = hi_group * GROUP_SIZE
+                    hi = hi_group * GROUP_SIZE - 1
 
                     def callee(tx, lo=lo, hi=hi):
-                        tx.begin()
-
                         with tx.execute(
                             f"SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd "
                             f"FROM `{table_name}` WHERE key BETWEEN $lo AND $hi",

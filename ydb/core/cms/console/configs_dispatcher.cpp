@@ -7,6 +7,8 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/util/config_index.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/metrics/histogram_collector.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/config/init/init.h>
@@ -136,6 +138,8 @@ private:
         NKikimrConfig::TConfigVersion UpdateInProcessConfigVersion;
         ui64 UpdateInProcessCookie;
         std::optional<TYamlVersion> UpdateInProcessYamlVersion;
+        // When the current in-flight update started, for fan-out completion latency.
+        TInstant UpdateInProcessStartedAt;
 
         // Subscribers who didn't respond yet to the latest config update. Populated
         // upfront, so the update can't complete while sends still wait in SendQueue.
@@ -330,6 +334,10 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV1;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV2;
+    // Notification fan-out observability (see Bootstrap).
+    ::NMonitoring::TDynamicCounters::TCounterPtr SendQueueDepth;
+    ::NMonitoring::THistogramPtr FanOutCompletionMs;
+    ::NMonitoring::THistogramPtr ConfigPayloadBytes;
     const std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
     std::vector<TString> Args;
@@ -395,6 +403,14 @@ void TConfigsDispatcher::Bootstrap()
     StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
     ConfigurationV1 = counters->GetCounter("ConfigurationV1", true);
     ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
+    // Current send-queue backlog (gauge): leading saturation indicator for paced fan-out.
+    SendQueueDepth = counters->GetCounter("SendQueueDepth", false);
+    // End-to-end fan-out latency: config update received -> all subscribers acked. The
+    // config-staleness SLI. Buckets ~1ms..~8.7min (powers of two). Aggregatable across the
+    // fleet via histogram_quantile over summed buckets.
+    FanOutCompletionMs = counters->GetHistogram("FanOutCompletionMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    // Delivered config payload size in bytes. Buckets 256B..16MB (powers of two).
+    ConfigPayloadBytes = counters->GetHistogram("ConfigPayloadBytes", NMonitoring::ExponentialHistogram(17, 2, 256));
 
     if (Labels.contains("configuration_version")) {
         if (Labels.at("configuration_version") == "v1") {
@@ -511,6 +527,8 @@ void TConfigsDispatcher::ProcessSendQueue()
         }
         ++sent;
     }
+
+    *SendQueueDepth = SendQueue.size();
 
     if (!SendQueue.empty()) {
         ScheduleSendQueueProcessing();
@@ -1327,12 +1345,14 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             auto sharedConfig = MakeIntrusive<TEvConsole::TSharedAppConfig>();
             sharedConfig->Swap(&trunc);
+            ConfigPayloadBytes->Collect(sharedConfig->ByteSizeLong());
             subscription->UpdateInProcessConfig = std::move(sharedConfig);
             subscription->UpdateInProcess->Record.SetLocal(true);
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
+            subscription->UpdateInProcessStartedAt = Now();
             subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), FilterKinds(kinds));
 
             if (YamlConfigEnabled) {
@@ -1481,12 +1501,14 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             }
             auto sharedConfig = MakeIntrusive<TEvConsole::TSharedAppConfig>();
             sharedConfig->Swap(&trunc);
+            ConfigPayloadBytes->Collect(sharedConfig->ByteSizeLong());
             subscription->UpdateInProcessConfig = std::move(sharedConfig);
             Y_FOR_EACH_BIT(kind, kinds) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(CurrentConfig.GetVersion(), kinds);
+            subscription->UpdateInProcessStartedAt = Now();
         }
         BLOG_TRACE("Sending for kinds: " << KindsToString(kinds));
         SendUpdateToSubscriber(subscription, subscriber->Subscriber);
@@ -1562,6 +1584,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
     subscription->SubscribersToUpdate.erase(ev->Sender);
 
     if (subscription->SubscribersToUpdate.empty()) {
+        // Full fan-out done: every subscriber acked the in-flight update.
+        FanOutCompletionMs->Collect((Now() - subscription->UpdateInProcessStartedAt).MilliSeconds());
         subscription->CurrentConfig.Config = *subscription->UpdateInProcessConfig;
         subscription->CurrentConfig.Version = subscription->UpdateInProcessConfigVersion;
         subscription->YamlVersion = subscription->UpdateInProcessYamlVersion;

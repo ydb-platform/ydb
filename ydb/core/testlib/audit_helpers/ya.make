@@ -10,8 +10,4 @@ PEERDIR(
     ydb/core/audit
 )
 
-IF (SANITIZER_TYPE == "thread")
-    SUPPRESSIONS(tsan.supp)
-ENDIF()
-
 END()

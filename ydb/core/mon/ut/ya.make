@@ -5,6 +5,10 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
+IF (SANITIZER_TYPE == "thread")
+    SUPPRESSIONS(tsan.supp)
+ENDIF()
+
 PEERDIR(
     ydb/core/mon
     ydb/core/mon/ut_utils

@@ -16,12 +16,14 @@ struct TClassifierSettings : public TSettingsBase {
 
     struct TParser : public TBase::TParser {
         void operator()(i64* setting) const;
+        void operator()(std::optional<bool>* setting) const;
         void operator()(TString* setting) const;
         void operator()(std::optional<TString>* setting) const;
     };
 
     struct TExtractor : public TBase::TExtractor {
         TString operator()(i64* setting) const;
+        TString operator()(std::optional<bool>* setting) const;
         TString operator()(TString* setting) const;
         TString operator()(std::optional<TString>* setting) const;
     };
@@ -34,6 +36,8 @@ struct TClassifierSettings : public TSettingsBase {
     i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
     TString ResourcePool = DEFAULT_POOL_ID;
     std::optional<TString> MemberName;
+    std::optional<TString> AppName;
+    std::optional<TString> FullScanOn;
 };
 
 }  // namespace NKikimr::NResourcePool

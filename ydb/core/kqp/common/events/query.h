@@ -20,6 +20,7 @@
 
 namespace NKikimr::NKqp {
     struct IWmSessionUpdater;
+    struct IWmQueryClassifier;
 }
 
 namespace NKikimr::NKqp::NPrivateEvents {
@@ -359,6 +360,14 @@ public:
         return WmSessionUpdater;
     }
 
+    void SetWmQueryClassifier(const std::shared_ptr<IWmQueryClassifier>& classifier) {
+        WmQueryClassifier = classifier;
+    }
+
+    std::shared_ptr<IWmQueryClassifier> GetWmQueryClassifier() {
+        return WmQueryClassifier;
+    }
+
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
         ProgressStatsPeriod = progressStatsPeriod;
     }
@@ -497,6 +506,7 @@ private:
     i64 Generation = 0;
     bool DisableDefaultTimeout = false;
     std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
+    std::shared_ptr<IWmQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

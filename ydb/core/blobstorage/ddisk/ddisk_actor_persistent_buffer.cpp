@@ -455,10 +455,10 @@ namespace NKikimr::NDDisk {
             auto sigPos = dataPos;
             sigPos.ExtractPlainDataAndAdvance(headerData.GetDataMut(), SectorSize);
             if (memcmp(headerData.GetDataMut(), TPersistentBufferHeader::PersistentBufferHeaderSignature, 16) == 0) {
-                TPersistentBufferHeader* header = reinterpret_cast<TPersistentBufferHeader*>(headerData.GetDataMut());
+                TRope headerRope(std::move(headerData));
+                TPersistentBufferHeader* header = reinterpret_cast<TPersistentBufferHeader*>(headerRope.Begin().ContiguousDataMut());
                 ui64 headerChecksum = header->Checksum;
                 header->Checksum = 0;
-                TRope headerRope(std::move(headerData));
                 ui64 sectorChecksum = CalculateChecksum(headerRope.Begin());
                 if (headerChecksum != sectorChecksum || header->PersistentBufferUniqueId != PersistentBufferUniqueId
                     || (header->NodeId != BaseInfo.PDiskActorID.NodeId()) || header->PDiskId != BaseInfo.PDiskId
@@ -484,10 +484,11 @@ namespace NKikimr::NDDisk {
                     PersistentBufferBarriersManager.AddErase(header, chunkIdx, sectorIdx);
                     continue;
                 }
-                auto* pos = headerData.GetDataMut() + sizeof(TPersistentBufferHeader);
+                auto& pbh = PersistentBufferHeaders[{chunkIdx, sectorIdx}];
+                auto* pos = headerRope.Begin().ContiguousDataMut() + sizeof(TPersistentBufferHeader);
                 for (ui32 batchIdx = 0; batchIdx < header->BatchSize; ++batchIdx) {
                     TPersistentBufferLsnRecordHeader* recordHeader = reinterpret_cast<TPersistentBufferLsnRecordHeader*>(pos);
-
+                    pbh.insert({recordHeader->TabletId, recordHeader->Generation, recordHeader->Lsn});
                     auto& buffer = PersistentBuffers[{recordHeader->TabletId, recordHeader->Generation}];
                     auto [it, inserted] = buffer.Records.try_emplace(recordHeader->Lsn);
                     if (!inserted) {
@@ -633,6 +634,9 @@ namespace NKikimr::NDDisk {
                     .VChunkIndex = inflight.VChunkIndex,
                     .Timestamp = TInstant::Now()
                 };
+                auto& pbh = PersistentBufferHeaders[{pr.Sectors[0].ChunkIdx, pr.Sectors[0].SectorIdx}];
+                pbh.insert({inflight.TabletId, inflight.Generation, inflight.Lsn});
+
                 buffer.Size += pr.Size;
                 pr.Data = std::move(inflight.DataParts.begin()->second);
                 PersistentBufferInMemoryCacheSize += pr.Size;
@@ -1194,7 +1198,7 @@ namespace NKikimr::NDDisk {
         barrier.Header.Header.Checksum = 0;
         memcpy(headerData.GetDataMut(), &barrier.Header, sizeof(TPersistentBufferBarriers));
         memset(headerData.GetDataMut() + sizeof(TPersistentBufferBarriers), 0, SectorSize - sizeof(TPersistentBufferBarriers));
-        TRope headerRope(headerData);
+        TRope headerRope(std::move(headerData));
         ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum = CalculateChecksum(headerRope.Begin());
         inflightRecord->second.OccupiedSectors.emplace_back(TPersistentBufferSectorInfo{barrier.ChunkIdx, barrier.SectorIdx, 0, 0, 0});
 
@@ -1257,8 +1261,9 @@ namespace NKikimr::NDDisk {
             auto zeroingData = TRcBuf::UninitializedPageAligned(SectorSize);
             memset(zeroingData.GetDataMut(), 0, SectorSize);
 
-            auto chunkOffset = pr.Sectors[0].SectorIdx * SectorSize;
-            auto diskOffset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, chunkOffset);
+            // Batched headers does not allow to zeroing header. Now we should do zero data sector
+            auto chunkOffset = pr.Sectors[1].SectorIdx * SectorSize;
+            auto diskOffset = DiskFormat->Offset(pr.Sectors[1].ChunkIdx, 0, chunkOffset);
             std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TPersistentBufferPartIoOp>();
             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
             partOp->SetCookie(batchEraseCookie);
@@ -1339,7 +1344,16 @@ namespace NKikimr::NDDisk {
             TPersistentBuffer::TRecord& pr = jt->second;
             SanitizePersistentBufferInMemoryCache(inflight.TabletId, generation, lsn, pr);
 
-            PersistentBufferSpaceAllocator.Free(pr.Sectors);
+            auto pbhIt = PersistentBufferHeaders.find({pr.Sectors[0].ChunkIdx, pr.Sectors[0].SectorIdx});
+            Y_ABORT_UNLESS(pbhIt != PersistentBufferHeaders.end());
+            auto& pbh = pbhIt->second;
+            pbh.erase({inflight.TabletId, generation, lsn});
+            if (pbh.empty()) {
+                PersistentBufferHeaders.erase(pbhIt);
+                PersistentBufferSpaceAllocator.Free(pr.Sectors);
+            } else {
+                PersistentBufferSpaceAllocator.Free({pr.Sectors.begin() + 1, pr.Sectors.end()});
+            }
 
             buffer.Size -= pr.Size;
             for (auto readCookie : pr.ReadInflight) {

@@ -70,7 +70,7 @@ namespace NKikimr::NDDisk {
         TPersistentBufferSpaceAllocator(ui32 sectorsInChunk = 32768);
 
         std::vector<TPersistentBufferSectorInfo> Occupy(ui32 sectorsCount);
-        void Free(const std::vector<TPersistentBufferSectorInfo>& locations);
+        void Free(const std::span<TPersistentBufferSectorInfo> locations);
         void MarkOccupied(const std::vector<TPersistentBufferSectorInfo>& locations);
         void AddNewChunk(ui32 chunkIdx);
         ui32 GetFreeSpace() const {

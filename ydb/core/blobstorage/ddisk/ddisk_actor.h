@@ -746,6 +746,7 @@ namespace NKikimr::NDDisk {
             std::vector<ui64> OperationsCookie;
         };
 
+        std::unordered_map<TPersistentBufferLocation, std::unordered_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
         std::unordered_map<TPersistentBufferRecordId, std::vector<ui64>> PersistentBufferWriteInflightsByRecord;
         std::unordered_map<TPersistentBufferRecordId, TPersistentBufferEraseInflight> PersistentBufferEraseInflightsByRecord;

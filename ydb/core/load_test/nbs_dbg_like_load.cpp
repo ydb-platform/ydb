@@ -866,7 +866,15 @@ public:
         // Sequential runs must keep a single address cursor, so we don't
         // split them across workers. Otherwise fan out so each worker gets
         // at most kMaxInflightPerActor; SplitShare distributes any remainder.
-        const ui32 numWorkers = CalcNumWorkers(TotalMaxInFlight, config.GetSequential());
+        ui32 numWorkers = CalcNumWorkers(TotalMaxInFlight, config.GetSequential());
+
+        // When a write cap is set, every worker must get a non-zero share:
+        // SplitShare would hand 0 to workers past index (totalStopCount - 1),
+        // and a worker with StopOnWritesDoneCount=0 treats it as "no cap" and
+        // writes for the entire DurationSeconds, exceeding the requested total.
+        if (totalStopCount > 0) {
+            numWorkers = Min(numWorkers, totalStopCount);
+        }
 
         LOG_I("Proxy bootstrap Tag# " << Tag
             << " TabletId# " << TabletId
@@ -886,8 +894,15 @@ public:
                 ? Counters->GetSubgroup("worker", ToString(i))
                 : nullptr;
 
+            // Give each worker a distinct tag so their RNG seeds diverge
+            // (the worker seeds with TInstant::Now() ^ tag, and a tight
+            // registration loop can observe the same Now()) and their log
+            // lines are distinguishable. The proxy tracks workers by actor
+            // id and rebuilds the finish event with the original Tag, so the
+            // service actor only ever sees the real tag.
+            const ui64 workerTag = Tag * 1000 + i;
             const TActorId workerId = Register(
-                new TNbsDbgLikeLoadActor(workerCmd, SelfId(), workerCounters, Tag));
+                new TNbsDbgLikeLoadActor(workerCmd, SelfId(), workerCounters, workerTag));
             Workers.insert(workerId);
         }
 
@@ -952,6 +967,12 @@ private:
             Merged = std::move(s);
             return;
         }
+        // The fields summed below are the only ones the load actor populates.
+        // BytesAccounted, LsnsCompleted, LsnsFailed, ReadsPbIssued,
+        // ReadsDDiskIssued and ReadsDDiskBytes are set only by the tablet-side
+        // actor and are always 0 here, so they keep the first worker's value
+        // (0) rather than being summed. Add them here if a load worker ever
+        // starts producing them.
         Merged.WritesIssued     += s.WritesIssued;
         Merged.WritesOk         += s.WritesOk;
         Merged.WritesErr        += s.WritesErr;

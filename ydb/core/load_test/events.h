@@ -28,6 +28,7 @@ struct TNbsDbgLikeFinishStats {
     ui64 ReadsPbIssued = 0;
     ui64 ReadsPbOk = 0;
     ui64 ReadsPbBytes = 0;
+    ui64 ReadsErr = 0; // measurement-window read errors (counterpart of WritesErr)
     ui64 ReadsDDiskIssued = 0;
     ui64 ReadsDDiskOk = 0;
     ui64 ReadsDDiskBytes = 0;
@@ -40,7 +41,6 @@ struct TNbsDbgLikeFinishStats {
     ui64 ReadsIssuedTotal = 0;
     ui64 ReadsOkTotal = 0;
     ui64 ReadBytesTotal = 0;
-    ui64 ReadsErr = 0;
 
     ui64 RunningMs = 0;
     ui64 MeasuredMs = 0;

@@ -81,7 +81,7 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
     }
 
     YDB_LOG_DEBUG("TDDiskActor::Handle(TEvHttpInfo)",
-        {"marker", "BSDD45"},
+        {"Marker", "BSDD45"},
         {"DDiskId", DDiskId},
         {"Sender", ev->Sender});
 

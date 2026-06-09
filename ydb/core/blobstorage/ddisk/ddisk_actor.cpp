@@ -51,7 +51,7 @@ namespace {
             it->second.resize(SectorInChunk);
             if (!inserted) {
                 YDB_LOG_ERROR("TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log",
-                    {"marker", "BSDD10"},
+                    {"Marker", "BSDD10"},
                     {"DDiskId", DDiskId},
                     {"PDiskActorId", BaseInfo.PDiskActorID},
                     {"ChunkIdx", idx});
@@ -204,7 +204,7 @@ namespace {
         FillPool(InternalSyncWriteOpPool);
 
         YDB_LOG_DEBUG("TDDiskActor::Bootstrap",
-            {"marker", "BSDD09"},
+            {"Marker", "BSDD09"},
             {"DDiskId", DDiskId});
         if (IsPersistentBufferActor) {
             InitUring();
@@ -235,7 +235,7 @@ namespace {
 
             if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
                 YDB_LOG_ERROR("TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
-                    {"marker", "BSDD23"},
+                    {"Marker", "BSDD23"},
                     {"DDiskId", DDiskId},
                     {"Cookie", ev->Cookie},
                     {"SyncId", syncId},
@@ -368,7 +368,7 @@ namespace {
         case NKikimrProto::CORRUPTED:
         case NKikimrProto::OUT_OF_SPACE:
             YDB_LOG_NOTICE("TDDiskActor: PDisk session lost, switching to terminate state",
-                {"marker", "BSDD44"},
+                {"Marker", "BSDD44"},
                 {"DDiskId", DDiskId},
                 {"Source", source},
                 {"Status", NKikimrProto::EReplyStatus_Name(status)},

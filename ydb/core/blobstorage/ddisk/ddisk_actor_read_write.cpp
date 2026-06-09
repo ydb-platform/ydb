@@ -48,7 +48,7 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvWrite::TPtr ev) {
         YDB_LOG_COMP_TRACE(BS_DDISK, "TDDiskActor::Handle(TEvWrite)",
-            {"marker", "BSDD50"},
+            {"Marker", "BSDD50"},
             {"DDiskId", DDiskId},
             {"Sender", ev->Sender},
             {"Cookie", ev->Cookie});
@@ -125,7 +125,7 @@ namespace NKikimr::NDDisk {
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvChunkWriteRawResult)",
-            {"marker", "BSDD07"},
+            {"Marker", "BSDD07"},
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
 
@@ -148,7 +148,7 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvRead::TPtr ev) {
         YDB_LOG_COMP_TRACE(BS_DDISK, "TDDiskActor::Handle(TEvRead)",
-            {"marker", "BSDD21"},
+            {"Marker", "BSDD21"},
             {"DDiskId", DDiskId},
             {"Msg", ev->Get()->Record});
 
@@ -202,7 +202,7 @@ namespace NKikimr::NDDisk {
 	void TDDiskActor::Handle(NPDisk::TEvChunkReadRawResult::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvChunkReadRawResult)",
-            {"marker", "BSDD08"},
+            {"Marker", "BSDD08"},
             {"DDiskId", DDiskId},
             {"Msg", msg.ToString()});
 

@@ -62,7 +62,7 @@ namespace NKikimr::NDDisk {
     template <typename TPolicy, typename TEventPtr>
     void TDDiskActor::HandleSync(TEventPtr ev) {
         YDB_LOG_COMP_TRACE(BS_DDISK, "TDDiskActor::HandleSync",
-            {"marker", "BSDD22"},
+            {"Marker", "BSDD22"},
             {"DDiskId", DDiskId},
             {"Msg", ev->Get()->Record});
 
@@ -95,7 +95,7 @@ namespace NKikimr::NDDisk {
 
         auto reject = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
             YDB_LOG_CTX_COMP_DEBUG(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::HandleSync reject",
-                {"reason", errorReason},
+                {"Reason", errorReason},
                 {"DDiskId", DDiskId});
             cleanupSyncState();
             counters.Reply(false);
@@ -221,7 +221,7 @@ namespace NKikimr::NDDisk {
     template <typename TEventPtr>
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
         YDB_LOG_COMP_TRACE(BS_DDISK, "TDDiskActor::InternalSyncReadResult",
-            {"marker", "BSDD26"},
+            {"Marker", "BSDD26"},
             {"DDiskId", DDiskId},
             {"Cookie", ev->Cookie},
             {"Msg", ev->Get()->Record});
@@ -233,7 +233,7 @@ namespace NKikimr::NDDisk {
                 return;
             }
             YDB_LOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult unknown sync for cookie",
-                {"marker", "BSDD24"},
+                {"Marker", "BSDD24"},
                 {"DDiskId", DDiskId},
                 {"Cookie", ev->Cookie});
             return;
@@ -249,7 +249,7 @@ namespace NKikimr::NDDisk {
         if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
             SyncReadCookiesInFlight.erase(ev->Cookie);
             YDB_LOG_COMP_ERROR(BS_DDISK, "TDDiskActor::InternalSyncReadResult request cookie out of range",
-                {"marker", "BSDD25"},
+                {"Marker", "BSDD25"},
                 {"DDiskId", DDiskId},
                 {"Cookie", ev->Cookie},
                 {"SyncId", syncId},

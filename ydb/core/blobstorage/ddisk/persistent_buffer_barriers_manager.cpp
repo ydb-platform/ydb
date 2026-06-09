@@ -129,7 +129,7 @@ namespace NKikimr::NDDisk {
 
         if (barrier.Header.Barriers[pos].Lsn >= lsn) {
             YDB_LOG_ERROR("TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous",
-                {"marker", "BSDD29"},
+                {"Marker", "BSDD29"},
                 {"TabletId", tabletId},
                 {"Lsn", lsn},
                 {"PrevLsn", barrier.Header.Barriers[pos].Lsn});
@@ -154,7 +154,7 @@ namespace NKikimr::NDDisk {
                 auto it = persistentBuffers.lower_bound({barrier.TabletId, 0});
                 if (it == persistentBuffers.end() || std::get<0>(it->first) != barrier.TabletId) {
                     YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers tablet records not found, erase barrier marked as free",
-                        {"marker", "BSDD30"},
+                        {"Marker", "BSDD30"},
                         {"TabletId", barrier.TabletId},
                         {"Lsn", barrier.Lsn});
                     PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
@@ -166,10 +166,10 @@ namespace NKikimr::NDDisk {
                         auto oldBarrierLocation = PersistentBufferBarriersLocation[barrier.TabletId];
                         ui64 oldLsn = PersistentBufferBarriers[std::get<0>(oldBarrierLocation)].Header.Barriers[std::get<1>(oldBarrierLocation)].Lsn;
                         YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
-                            {"marker", "BSDD38"},
+                            {"Marker", "BSDD38"},
                             {"TabletId", barrier.TabletId},
                             {"Lsn", barrier.Lsn},
-                            {"oldLsn", oldLsn});
+                            {"OldLsn", oldLsn});
                         if (barrier.Lsn > oldLsn) {
                             PersistentBufferBarrierHoles.push_back(it->second);
                             it->second = {pos, FreeBarrierPosition};
@@ -346,8 +346,8 @@ namespace NKikimr::NDDisk {
         auto tabletId = erasesHeader->TabletId;
         auto& erase = Erases[tabletId];
         if (erase.HeaderLsn > header->RecordLsn) {
-            YDB_LOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found ",
-                {"marker", "BSDD30"},
+            YDB_LOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found",
+                {"Marker", "BSDD30"},
                 {"TabletId", tabletId},
                 {"erase.HeaderLsn", erase.HeaderLsn},
                 {"header->RecordLsn", header->RecordLsn});
@@ -358,7 +358,7 @@ namespace NKikimr::NDDisk {
         erase.HeaderLsn = header->RecordLsn;
         erase.Lsns = Uncompact(erasesHeader->CompactLsns, header->Flags & TPersistentBufferHeader::IS_ERASE_COMPACT);
         YDB_LOG_DEBUG("TPersistentBufferBarriersManager::AddErase",
-            {"marker", "BSDD30"},
+            {"Marker", "BSDD30"},
             {"TabletId", tabletId},
             {"HeaderLsn", header->RecordLsn});
         return true;
@@ -385,7 +385,7 @@ namespace NKikimr::NDDisk {
                 TPersistentBuffer& buffer = pbIt->second;
                 for (ui64 lsn : erase.Lsns) {
                     YDB_LOG_COMP_DEBUG(BS_DDISK, "TPersistentBufferBarriersManager::RestoreErases tablet erase record found",
-                        {"marker", "BSDD30"},
+                        {"Marker", "BSDD30"},
                         {"TabletId", tid},
                         {"Lsn", lsn});
                     buffer.Records.erase(lsn);

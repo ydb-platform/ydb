@@ -514,7 +514,7 @@ namespace NKikimr::NDDisk {
 
             auto logError = [&](TStringBuf reason) {
                 YDB_LOG_CTX_COMP_DEBUG(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::CheckQuery validation failed",
-                    {"reason", reason},
+                    {"Reason", reason},
                     {"DDiskId", DDiskId},
                     {"EvType", ev.GetTypeRewrite()},
                     {"Sender", ev.Sender},

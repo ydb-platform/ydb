@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         );
     }
 
-    Y_UNIT_TEST(ResolveUsesOnlyNodeIdRequestParameterForNodeEntity) {
+    Y_UNIT_TEST(ResolveUsesOnlyNodeRequestParameterForNodeEntity) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";
         context.UrlParameters = MakeUrlParameters("cluster=ignored-cluster&custom_label=ignored&database=%2Fnew%2Fdb&node=static-node-1&host=host-1.example.net");
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{node_id=\"static-node-1\"}",
+            "{node=\"static-node-1\"}",
             "ds-42"
         );
     }
@@ -202,7 +202,65 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{k8s_node_name=\"host-1.example.net\"}",
+            "{host=\"host-1.example.net\"}",
+            "ds-42"
+        );
+    }
+
+    Y_UNIT_TEST(ResolveUsesLabelOverridesFromConfig) {
+        TGrafanaLoggingTestContext context;
+        context.Settings.SupportLinks.GrafanaLogging.DatabaseLabel = "db_path";
+        context.Settings.SupportLinks.GrafanaLogging.NodeLabel = "instance_id";
+        context.Settings.SupportLinks.GrafanaLogging.HostLabel = "node_name";
+        context.ClusterInfo["datasource_logging"] = "ds-42";
+
+        context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Database;
+        auto databaseResult = context.Resolve();
+        UNIT_ASSERT_VALUES_EQUAL(databaseResult.Errors.size(), 0u);
+        AssertPanesQuery(
+            databaseResult.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{db_path=\"/new/db\"}",
+            "ds-42"
+        );
+
+        context.UrlParameters = MakeUrlParameters("node=static-node-1");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Node;
+        auto nodeResult = context.Resolve();
+        UNIT_ASSERT_VALUES_EQUAL(nodeResult.Errors.size(), 0u);
+        AssertPanesQuery(
+            nodeResult.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{instance_id=\"static-node-1\"}",
+            "ds-42"
+        );
+
+        context.UrlParameters = MakeUrlParameters("host=host-1.example.net");
+        context.Context.EntityType = NMVP::ESupportLinksEntityType::Host;
+        auto hostResult = context.Resolve();
+        UNIT_ASSERT_VALUES_EQUAL(hostResult.Errors.size(), 0u);
+        AssertPanesQuery(
+            hostResult.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{node_name=\"host-1.example.net\"}",
+            "ds-42"
+        );
+    }
+
+    Y_UNIT_TEST(ResolveUsesClusterLabelOverrideForClusterEntity) {
+        TGrafanaLoggingTestContext context;
+        context.Settings.SupportLinks.GrafanaLogging.ClusterLabel = "cluster_id";
+        context.ClusterInfo["datasource_logging"] = "ds-42";
+        context.UrlParameters = MakeUrlParameters("cluster=testing-global");
+        auto result = context.Resolve();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0u);
+        AssertPanesQuery(
+            result.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{cluster_id=\"testing-global\"}",
             "ds-42"
         );
     }

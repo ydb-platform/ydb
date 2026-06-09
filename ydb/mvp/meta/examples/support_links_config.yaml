@@ -22,6 +22,11 @@ meta:
 
   grafana:
     endpoint: https://grafana.example.net
+    logging:
+      labels:
+        database: db_path
+        node: instance_id
+        host: node_name
 
   support_links:
     cluster:

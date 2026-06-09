@@ -6,8 +6,20 @@ import "ydb/mvp/core/protos/mvp.proto";
 
 message TMetaConfig {
     message TGrafanaConfig {
+        message TLoggingConfig {
+            message TLabelsConfig {
+                optional string Cluster = 1;
+                optional string Database = 2 [default = "database"];
+                optional string Node = 3 [default = "node"];
+                optional string Host = 4 [default = "host"];
+            }
+
+            optional TLabelsConfig Labels = 1;
+        }
+
         // Grafana base URL used to resolve relative Grafana links.
         optional string Endpoint = 1;
+        optional TLoggingConfig Logging = 2;
     }
 
     message TSupportLinksConfig {

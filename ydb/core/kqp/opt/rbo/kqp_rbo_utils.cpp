@@ -113,6 +113,11 @@ TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, const TInfoUnitSet& r
             if (std::find(res.begin(), res.end(), unit) == res.end()) {
                 res.push_back(unit);
             }
+        }
+    }
+    return res;
+}
+
 TVector<TInfoUnit> IUSetUnion(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     TVector<TInfoUnit> res;
     for (const auto& unit : left) {

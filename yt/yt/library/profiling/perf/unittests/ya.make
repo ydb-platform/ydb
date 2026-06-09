@@ -1,4 +1,4 @@
-GTEST()
+GTEST(unittester-library-profiling-perf)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 

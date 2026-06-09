@@ -262,12 +262,12 @@ arrow::compute::OutputType ConvertToOutputType(TType* output) {
     return arrow::compute::OutputType(ToValueDescr(output));
 }
 
-NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count) {
-    return holderFactory.CreateArrowBlock(arrow::Datum(count));
+NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count, NYql::EDatumValidationMode validationMode) {
+    return holderFactory.CreateArrowBlock(arrow::Datum(count), validationMode);
 }
 
 TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables,
-                               NYql::NUdf::EValidateDatumMode validateDatumMode,
+                               NYql::EDatumValidationMode validateDatumMode,
                                TStringBuf name, TComputationNodePtrVector&& argsNodes,
                                const TVector<TType*>& argsTypes,
                                TType* outputType,
@@ -307,7 +307,8 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
         auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
         ARROW_OK(executor->Execute(argDatums, listener.get()));
         auto output = executor->WrapResults(argDatums, listener->values());
-        return ctx.HolderFactory.CreateArrowBlock(std::move(output));
+        ValidateDatum(output, OutValueDescr_, OutputType_, ValidateDatumMode_);
+        return ctx.HolderFactory.CreateArrowBlock(std::move(output), NYql::EDatumValidationMode::None);
     }
 
     NYql::NUdf::TArgsDechunker dechunker(std::move(argDatums));
@@ -326,7 +327,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     }
     auto resultArray = MakeArray(arrays);
     ValidateDatum(resultArray, OutValueDescr_, OutputType_, ValidateDatumMode_);
-    return ctx.HolderFactory.CreateArrowBlock(std::move(resultArray));
+    return ctx.HolderFactory.CreateArrowBlock(std::move(resultArray), NYql::EDatumValidationMode::None);
 }
 
 void TBlockFuncNode::RegisterDependencies() const {
@@ -446,11 +447,12 @@ ui64 TBlockState::Slice() {
 
 NUdf::TUnboxedValuePod TBlockState::Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const {
     if (idx == BlockLengthIndex) {
-        return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
+        return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)), NYql::EDatumValidationMode::None);
     }
 
+    // Arrays here are slices of already-validated input data; no re-validation needed.
     if (auto array = Arrays[idx]) {
-        return holderFactory.CreateArrowBlock(std::move(array));
+        return holderFactory.CreateArrowBlock(std::move(array), NYql::EDatumValidationMode::None);
     } else {
         return Values[idx];
     }

@@ -81,7 +81,7 @@ private:
     std::vector<ui32> ColumnIdxSortedByName;
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
-    std::vector<TNameTypeInfo> Columns;
+    THashMap<ui32, TNameTypeInfo> Columns;
 
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
@@ -428,7 +428,7 @@ public:
         return PKColumns;
     }
 
-    const std::vector<TNameTypeInfo>& GetColumns() const {
+    const THashMap<ui32, TNameTypeInfo>& GetColumns() const {
         return Columns;
     }
 

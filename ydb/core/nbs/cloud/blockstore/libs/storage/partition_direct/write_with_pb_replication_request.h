@@ -22,25 +22,13 @@ public:
         TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlockRange64 vChunkRange,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
-        NWilson::TTraceId traceId);
+        std::shared_ptr<TWriteRequestBundle> bundle);
 
     ~TWriteWithPbReplicationRequestExecutor() override = default;
 
     void Run() override;
 
 private:
-    // Hosts which can be used for direct write requests for retry or hedge.
-    // it includes hosts that were not a direct destination
-    // of any write request - f.e. secondary hosts from ManyPBuffers request.
-    // It excludes hosts for which responses have been received.
-    THostMask AvailableHostsForDirectSending;
-    THostMask ActiveDirectWrites;
-    const TDuration PbufferReplyTimeout;
-
     void SendWriteRequestToManyPBuffers(TVector<THostIndex> hosts);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
@@ -54,6 +42,14 @@ private:
     void SendDirectWriteRequest(THostIndex host);
 
     TString ExtendedDebugState() const override;
+
+    const TDuration PbufferReplyTimeout;
+    // Hosts which can be used for direct write requests for retry or hedge.
+    // it includes hosts that were not a direct destination
+    // of any write request - f.e. secondary hosts from ManyPBuffers request.
+    // It excludes hosts for which responses have been received.
+    THostMask AvailableHostsForDirectSending;
+    THostMask ActiveDirectWrites;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

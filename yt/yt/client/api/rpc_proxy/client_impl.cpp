@@ -1796,7 +1796,7 @@ TFuture<void> TClient::AbandonJob(
 
 TFuture<TPollJobShellResponse> TClient::PollJobShell(
     NJobTrackerClient::TJobId jobId,
-    const std::optional<TString>& shellName,
+    const std::optional<std::string>& shellName,
     const TYsonString& parameters,
     const TPollJobShellOptions& options)
 {
@@ -1879,7 +1879,7 @@ TFuture<void> TClient::DumpJobProxyLog(
 }
 
 TFuture<TGetFileFromCacheResult> TClient::GetFileFromCache(
-    const TString& md5,
+    const std::string& md5,
     const TGetFileFromCacheOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -1900,7 +1900,7 @@ TFuture<TGetFileFromCacheResult> TClient::GetFileFromCache(
 
 TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
     const TYPath& path,
-    const TString& expectedMD5,
+    const std::string& expectedMD5,
     const TPutFileToCacheOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2315,7 +2315,7 @@ TFuture<void> TClient::KillProcess(
     ThrowUnimplemented("KillProcess");
 }
 
-TFuture<TString> TClient::WriteCoreDump(
+TFuture<std::string> TClient::WriteCoreDump(
     const std::string& /*address*/,
     const TWriteCoreDumpOptions& /*options*/)
 {
@@ -2329,7 +2329,7 @@ TFuture<TGuid> TClient::WriteLogBarrier(
     ThrowUnimplemented("WriteLogBarrier");
 }
 
-TFuture<TString> TClient::WriteOperationControllerCoreDump(
+TFuture<std::string> TClient::WriteOperationControllerCoreDump(
     TOperationId /*operationId*/,
     const TWriteOperationControllerCoreDumpOptions& /*options*/)
 {
@@ -2433,7 +2433,7 @@ TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
     EMaintenanceComponent component,
     const std::string& address,
     EMaintenanceType type,
-    const TString& comment,
+    const std::string& comment,
     const TAddMaintenanceOptions& options)
 {
     ValidateMaintenanceComment(comment);
@@ -2664,7 +2664,7 @@ TFuture<TCollectCoverageResult> TClient::CollectCoverage(
 
 TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
     NQueryTrackerClient::EQueryEngine engine,
-    const TString& query,
+    const std::string& query,
     const TStartQueryOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2977,8 +2977,8 @@ TFuture<void> TClient::SetBundleConfig(
 
 TFuture<void> TClient::SetUserPassword(
     const std::string& /*user*/,
-    const TString& /*currentPasswordSha256*/,
-    const TString& /*newPasswordSha256*/,
+    const std::string& /*currentPasswordSha256*/,
+    const std::string& /*newPasswordSha256*/,
     const TSetUserPasswordOptions& /*options*/)
 {
     ThrowUnimplemented("SetUserPassword");
@@ -2986,7 +2986,7 @@ TFuture<void> TClient::SetUserPassword(
 
 TFuture<TIssueTokenResult> TClient::IssueToken(
     const std::string& /*user*/,
-    const TString& /*passwordSha256*/,
+    const std::string& /*passwordSha256*/,
     const TIssueTokenOptions& /*options*/)
 {
     ThrowUnimplemented("IssueToken");
@@ -2994,8 +2994,8 @@ TFuture<TIssueTokenResult> TClient::IssueToken(
 
 TFuture<void> TClient::RevokeToken(
     const std::string& /*user*/,
-    const TString& /*passwordSha256*/,
-    const TString& /*tokenSha256*/,
+    const std::string& /*passwordSha256*/,
+    const std::string& /*tokenSha256*/,
     const TRevokeTokenOptions& /*options*/)
 {
     ThrowUnimplemented("RevokeToken");
@@ -3003,7 +3003,7 @@ TFuture<void> TClient::RevokeToken(
 
 TFuture<TListUserTokensResult> TClient::ListUserTokens(
     const std::string& /*user*/,
-    const TString& /*passwordSha256*/,
+    const std::string& /*passwordSha256*/,
     const TListUserTokensOptions& /*options*/)
 {
     ThrowUnimplemented("ListUserTokens");
@@ -3224,6 +3224,9 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     }
     if (options.Schema) {
         ToProto(req->mutable_schema(), options.Schema);
+    }
+    if (options.PushConfig) {
+        req->set_push_config(ToProto(*options.PushConfig));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {

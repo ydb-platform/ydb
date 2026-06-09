@@ -11,8 +11,10 @@
 namespace NKikimr::NKqp {
 namespace {
 
-constexpr size_t SQL_TEXT_MAX_SIZE = 4000;
-constexpr size_t QUERY_TEXT_LIMIT = 10240;
+// Default rsyslog $MaxMessageSize is 8 KB;
+constexpr size_t QUERY_TEXT_LIMIT = 6_KB;
+constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB;
+constexpr size_t ISSUES_TEXT_LIMIT = 1_KB;
 constexpr TStringBuf UI_QUERY_EXCLUDE_MARKER = "/*UI-QUERY-EXCLUDE*/";
 
 #define _KQP_REQ_LOG_AT(prio, stream) \
@@ -106,8 +108,11 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         wasTruncated = true;
     }
 
+    const size_t chunkSize = (truncateText && !requestText.empty())
+        ? requestText.size()
+        : SQL_TEXT_MAX_SIZE;
     const size_t total = requestText.empty() ? 1 :
-        (requestText.size() + SQL_TEXT_MAX_SIZE - 1) / SQL_TEXT_MAX_SIZE;
+        (requestText.size() + chunkSize - 1) / chunkSize;
 
     for (size_t i = 0; i < total; ++i) {
         TStringStream ss;
@@ -125,17 +130,26 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.WriteKey("event").WriteString("completed");
 
         if (!requestText.empty()) {
-            json.WriteKey("data").WriteString(requestText.SubStr(i * SQL_TEXT_MAX_SIZE, SQL_TEXT_MAX_SIZE));
+            json.WriteKey("data").WriteString(requestText.SubStr(i * chunkSize, chunkSize));
         }
 
+        bool issuesTruncated = false;
         if (!issues.Empty()) {
-            json.WriteKey("issues").WriteString(issues.ToOneLineString());
+            TString issuesStr = issues.ToOneLineString();
+            if (issuesStr.size() > ISSUES_TEXT_LIMIT) {
+                issuesStr.resize(ISSUES_TEXT_LIMIT);
+                issuesTruncated = true;
+            }
+            json.WriteKey("issues").WriteString(issuesStr);
         }
 
         if (i == 0) {
             WriteCompletedFields(json, fields);
             if (wasTruncated) {
                 json.WriteKey("data_truncated").WriteBool(true);
+            }
+            if (issuesTruncated) {
+                json.WriteKey("issues_truncated").WriteBool(true);
             }
         }
 
@@ -155,9 +169,13 @@ bool IsLogPriorityEnabled(NActors::NLog::EPriority prio) {
 }
 
 NActors::NLog::EPriority PickCompletedPriority(Ydb::StatusIds::StatusCode status) {
-    return status == Ydb::StatusIds::SUCCESS
-        ? NActors::NLog::PRI_DEBUG
-        : NActors::NLog::PRI_WARN;
+    if (status != Ydb::StatusIds::SUCCESS) {
+        return NActors::NLog::PRI_WARN;
+    }
+
+    return IsLogPriorityEnabled(NActors::NLog::PRI_TRACE)
+        ? NActors::NLog::PRI_TRACE
+        : NActors::NLog::PRI_DEBUG;
 }
 
 } // anonymous namespace

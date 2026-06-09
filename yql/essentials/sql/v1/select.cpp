@@ -3652,6 +3652,8 @@ public:
             return false;
         }
 
+        Columns_.SetAll();
+
         if (!InitCombineKeyExpr(ctx, src)) {
             return false;
         }

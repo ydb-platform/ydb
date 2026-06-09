@@ -71,6 +71,7 @@ bool Exists(const std::string& path)
 
 bool IsDirEmpty(const std::string& path)
 {
+    // TODO(babenko): migrate to std::string
     TString path_(path);
     if (!IsDir(path_)) {
         THROW_ERROR_EXCEPTION("%v is not a directory",
@@ -126,7 +127,7 @@ void Replace(const std::string& source, const std::string& destination)
 
 void RemoveRecursive(const std::string& path)
 {
-    RemoveDirWithContents(TString(path));
+    RemoveDirWithContents(std::string(path));
 }
 
 void Rename(const std::string& source, const std::string& destination)
@@ -148,7 +149,7 @@ void Rename(const std::string& source, const std::string& destination)
 std::string GetFileName(const std::string& path)
 {
     size_t slashPosition = path.find_last_of(LOCSLASH_C);
-    if (slashPosition == TString::npos) {
+    if (slashPosition == std::string::npos) {
         return path;
     }
     return path.substr(slashPosition + 1);
@@ -185,7 +186,7 @@ std::string GetRealPath(const std::string& path)
         }
     }
     if (!curPath.empty()) {
-        parts.push_back(RealPath(TString(curPath)));
+        parts.push_back(RealPath(std::string(curPath)));
     } else {
         parts.push_back(LOCSLASH_S);
     }
@@ -209,7 +210,7 @@ bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path)
             currentPath = currentPath.substr(1);
             continue;
         }
-        auto part = slashPosition == TString::npos ? currentPath : currentPath.substr(0, slashPosition);
+        auto part = slashPosition == std::string::npos ? currentPath : currentPath.substr(0, slashPosition);
         if (part == "..") {
             --depth;
             if (depth < 0) {
@@ -220,7 +221,7 @@ bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path)
         } else {
             ++depth;
         }
-        if (slashPosition == TString::npos) {
+        if (slashPosition == std::string::npos) {
             break;
         }
         currentPath = currentPath.substr(slashPosition + 1);
@@ -231,11 +232,11 @@ bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path)
 std::string GetFileExtension(const std::string& path)
 {
     size_t dotPosition = path.find_last_of('.');
-    if (dotPosition == TString::npos) {
+    if (dotPosition == std::string::npos) {
         return "";
     }
     size_t slashPosition = path.find_last_of(LOCSLASH_C);
-    if (slashPosition != TString::npos && dotPosition < slashPosition) {
+    if (slashPosition != std::string::npos && dotPosition < slashPosition) {
         return "";
     }
     return path.substr(dotPosition + 1);
@@ -245,7 +246,7 @@ std::string GetFileNameWithoutExtension(const std::string& path)
 {
     auto fileName = GetFileName(path);
     size_t dotPosition = fileName.find_last_of('.');
-    if (dotPosition == TString::npos) {
+    if (dotPosition == std::string::npos) {
         return fileName;
     }
     return fileName.substr(0, dotPosition);
@@ -272,7 +273,7 @@ std::vector<std::string> EnumerateFiles(const std::string& path, int depth, bool
     std::vector<std::string> result;
     if (NFS::Exists(path)) {
         TFileList list;
-        list.Fill(TString(path), TStringBuf(), TStringBuf(), depth, sortByName);
+        list.Fill(std::string(path), TStringBuf(), TStringBuf(), depth, sortByName);
         int size = list.Size();
         for (int i = 0; i < size; ++i) {
             result.push_back(list.Next());
@@ -286,7 +287,7 @@ std::vector<std::string> EnumerateDirectories(const std::string& path, int depth
     std::vector<std::string> result;
     if (NFS::Exists(path)) {
         TDirsList list;
-        list.Fill(TString(path), TStringBuf(), TStringBuf(), depth);
+        list.Fill(std::string(path), TStringBuf(), TStringBuf(), depth);
         int size = list.Size();
         for (int i = 0; i < size; ++i) {
             result.push_back(list.Next());
@@ -540,7 +541,7 @@ std::string CombinePaths(const std::vector<std::string>& paths)
 {
     YT_VERIFY(!paths.empty());
     if (paths.size() == 1) {
-        return TString(paths[0]);
+        return std::string(paths[0]);
     }
     auto result = CombinePaths(paths[0], paths[1]);
     for (int index = 2; index < std::ssize(paths); ++index) {
@@ -894,7 +895,9 @@ void SendfileChunkedCopy(
 {
 #ifdef _linux_
     try {
+        // TODO(babenko): migrate to std::string
         TFile src(TString(existingPath), OpenExisting | RdOnly | Seq | CloseOnExec);
+        // TODO(babenko): migrate to std::string
         TFile dst(TString(newPath), CreateAlways | WrOnly | Seq | CloseOnExec);
         dst.Flock(LOCK_EX);
         SendfileChunkedCopy(src, dst, chunkSize);
@@ -1112,7 +1115,7 @@ TFuture<TSpliceResult> SpliceAsync(
 
 TError AttachLsofOutput(TError error, const std::string& path)
 {
-    auto lsofOutput = TShellCommand("lsof", {TString(path)})
+    auto lsofOutput = TShellCommand("lsof", {std::string(path)})
         .Run()
         .Wait()
         .GetOutput();
@@ -1122,7 +1125,7 @@ TError AttachLsofOutput(TError error, const std::string& path)
 
 TError AttachFindOutput(TError error, const std::string& path)
 {
-    auto findOutput = TShellCommand("find", {TString(path), "-name", "*"})
+    auto findOutput = TShellCommand("find", {std::string(path), "-name", "*"})
         .Run()
         .Wait()
         .GetOutput();
@@ -1143,7 +1146,7 @@ TDeviceId GetDeviceId(const std::string& path)
 
 std::optional<std::string> FindBinaryPath(const std::string& binary)
 {
-    if (NFs::Exists(TString(binary))) {
+    if (NFs::Exists(std::string(binary))) {
         return (TFsPath(NFs::CurrentWorkingDirectory()) / binary).GetPath();
     }
 

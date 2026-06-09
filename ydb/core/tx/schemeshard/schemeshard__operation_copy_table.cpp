@@ -633,7 +633,6 @@ public:
                 checks
                     .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
-                    .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);
             }
 
@@ -641,7 +640,9 @@ public:
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(maxShardsToCreate);
+                    .PathShardsLimit(maxShardsToCreate)
+                    .ShardsLimit(maxShardsToCreate)
+                ;
             }
 
             if (!checks) {
@@ -756,6 +757,7 @@ public:
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
+            .EnableDetailedMetrics = true,
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);

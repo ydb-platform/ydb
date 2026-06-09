@@ -1206,11 +1206,10 @@ private:
         path->PathId.ToProto(ev->Record.MutablePathId());
         ev->Record.SetReadShadowData(true);
 
-        path.Rise().Dive(NTableIndex::NFulltext::DictTable);
-        ev->Record.SetOutputName(path.PathString());
+        ev->Record.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
 
-        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
-            buildInfo.SpecializedIndexDescription).GetSettings();
+        path.Rise().Dive(NTableIndex::NFulltext::DictTable);
+        ev->Record.SetDictTableName(path.PathString());
 
         const auto& shardStatus = buildInfo.Shards.at(shardIdx);
         if (shardStatus.Range.From.GetCells().size() > 1) {

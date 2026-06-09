@@ -1453,12 +1453,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         {
             NYdb::TDriver driver(
                 NYdb::TDriverConfig()
+                    .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
                     .SetEndpoint(location)
                     .SetDatabase(databasePath)
             );
             NYdb::NTopic::TTopicClient topicClient(driver);
-            auto result = topicClient.CreateTopic(topicName).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            WaitFor(TEST_OPERATION_TIMEOUT, "CreateTopic", [&](TString& error) {
+                auto result = topicClient.CreateTopic(topicName).GetValueSync();
+                if (result.IsSuccess()) {
+                   return true;
+                }
+                error = result.GetIssues().ToString();
+                UNIT_ASSERT_STRING_CONTAINS(error, "Database nodes resolve failed with no certain result");
+                return false;
+            });
             driver.Stop(true);
         }
 

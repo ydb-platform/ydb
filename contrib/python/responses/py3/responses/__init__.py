@@ -39,7 +39,7 @@ from responses.registries import FirstMatchRegistry
 try:
     from typing_extensions import Literal
 except ImportError:  # pragma: no cover
-    from typing import Literal  # pragma: no cover
+    from typing import Literal
 
 from io import BufferedReader
 from io import BytesIO
@@ -249,7 +249,9 @@ class CallList(Sequence[Any], Sized):
         """Overload for scenario when index is provided."""
 
     @overload
-    def __getitem__(self, idx: "slice[int, int, Optional[int]]") -> List[Call]:
+    def __getitem__(
+        self, idx: "slice[Optional[int], Optional[int], Optional[int]]"
+    ) -> List[Call]:
         """Overload for scenario when slice is provided."""
 
     def __getitem__(self, idx: Union[int, slice]) -> Union[Call, List[Call]]:
@@ -856,12 +858,21 @@ class RequestsMock:
 
         for rsp in data["responses"]:
             rsp = rsp["response"]
+            headers = rsp["headers"] if "headers" in rsp else None
+
+            if headers is not None and "content_type" in rsp:
+                headers = {
+                    k: v for k, v in headers.items() if k.lower() != "content-type"
+                }
+                if not headers:
+                    headers = None
+
             self.add(
                 method=rsp["method"],
                 url=rsp["url"],
                 body=rsp["body"],
                 status=rsp["status"],
-                headers=rsp["headers"] if "headers" in rsp else None,
+                headers=headers,
                 content_type=rsp["content_type"],
                 auto_calculate_content_length=rsp["auto_calculate_content_length"],
             )

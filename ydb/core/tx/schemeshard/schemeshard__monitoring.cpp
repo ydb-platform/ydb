@@ -2137,14 +2137,14 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
 
     const TCgiParameters& cgi = ev->Get()->Cgi();
     const bool securePathMode = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath();
-    if (!CheckTabletDevUiAccess(
+    if (!IsTabletDevUiAccessAllowed(
             AppData(),
             securePathMode,
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            IsPublicSchemeShardDevUiRequest(cgi),
-            ev->Sender))
+            IsPublicSchemeShardDevUiRequest(cgi)))
     {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;
     }
 

@@ -772,7 +772,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
     return result;
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
+NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     const TVector<TPBufferSegment>& segments,
@@ -795,11 +795,12 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         lsns.push_back(segment.Lsn);
     }
 
-    auto childSpan = CreateChildSpan(traceId, "NbsPartition.EraseFromPBuffer");
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.BatchEraseFromPBuffer");
 
     OnRequest(hostIndex, EOperation::Erase);
 
-    auto future = StorageTransport->EraseFromPBuffer(
+    auto future = StorageTransport->BatchEraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
         std::move(selectors),
         std::move(lsns),
@@ -849,6 +850,117 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         });
 
     return result;
+}
+
+void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
+{
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), lsn]()
+        {
+            auto self = weakSelf.lock();
+            if (!self) {
+                return;
+            }
+            LOG_DEBUG(
+                *self->ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s barrier-erase lsn=%lu on %lu PBuffer hosts",
+                self->LogTitle.GetWithTime().c_str(),
+                lsn,
+                self->PBufferConnections.size());
+            for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
+                self->DoBarrierEraseFromPBuffer(h, lsn, NWilson::TTraceId{});
+            }
+        });
+}
+
+void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
+    THostIndex hostIndex,
+    ui64 lsn,
+    const NWilson::TTraceId& traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvErasePersistentBufferResult =
+        NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
+
+    const auto startAt = TMonotonic::Now();
+
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.DoBarrierEraseFromPBuffer");
+
+    OnRequest(hostIndex, EOperation::BarrierErase);
+
+    auto future = StorageTransport->BarrierEraseFromPBuffer(
+        PBufferConnections[hostIndex].HostConnection,
+        lsn,
+        childSpan.get());
+
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         childSpan = std::move(childSpan),
+         hostIndex,
+         startAt,
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TFuture<TEvErasePersistentBufferResult>& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [weakSelf,
+                 childSpan = std::move(childSpan),
+                 hostIndex,
+                 startAt,
+                 threadChecker,
+                 result = UnsafeExtractValue(f)]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    auto self = weakSelf.lock();
+                    if (!self) {
+                        return;
+                    }
+                    self->OnResponse(
+                        hostIndex,
+                        TMonotonic::Now() - startAt,
+                        EOperation::BarrierErase,
+                        TranslateError(result));
+                });
+        });
+}
+
+NThreading::TFuture<std::optional<ui64>>
+TDirectBlockGroup::GatherSafeBarrierForErase()
+{
+    auto promise = NewPromise<std::optional<ui64>>();
+    auto future = promise.GetFuture();
+
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), promise]() mutable
+        {
+            auto self = weakSelf.lock();
+            if (!self) {
+                promise.SetValue(std::nullopt);
+                return;
+            }
+
+            std::optional<ui64> safeBarrier;
+            for (const auto& weakVChunk: self->VChunks) {
+                auto vChunk = weakVChunk.lock();
+                if (!vChunk) {
+                    continue;
+                }
+                const auto lsn = vChunk->GetSafeBarrierForErase();
+                if (lsn && (!safeBarrier || *lsn < *safeBarrier)) {
+                    safeBarrier = lsn;
+                }
+            }
+            promise.SetValue(safeBarrier);
+        });
+
+    return future;
 }
 
 NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(

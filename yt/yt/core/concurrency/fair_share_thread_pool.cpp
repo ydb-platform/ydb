@@ -2,7 +2,7 @@
 
 #include "private.h"
 #include "invoker_queue.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "scheduler_thread.h"
 #include "thread_pool_detail.h"
 

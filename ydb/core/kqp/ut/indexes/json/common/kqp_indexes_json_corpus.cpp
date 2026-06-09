@@ -1,6 +1,6 @@
 #include "kqp_indexes_json_corpus.h"
 
-#include <contrib/libs/fmt/include/fmt/format.h>
+#include <fmt/format.h>
 
 namespace NKikimr::NKqp {
 

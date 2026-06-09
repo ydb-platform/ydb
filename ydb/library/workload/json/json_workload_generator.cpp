@@ -79,8 +79,8 @@ TQueryInfoList TJsonWorkloadGenerator::Select() {
         return {};
     }
 
-    const auto& predicate = Predicates[PredicateIndex];
-    PredicateIndex = (PredicateIndex + 1) % Predicates.size();
+    const auto& predicate = Predicates[PredicateIndex.load()];
+    PredicateIndex.store((PredicateIndex.load() + 1) % Predicates.size());
 
     const TString limitClause = Params.Limit != 0 ? std::format("LIMIT {}", Params.Limit) : "";
     const TString tablePath = Params.GetFullTableName(Params.TableName.c_str());

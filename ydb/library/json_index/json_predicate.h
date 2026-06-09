@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/json_index/json_corpus.h>
-#include <ydb/public/sdk/cpp/src/client/params/impl.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 
 #include <optional>
 #include <vector>

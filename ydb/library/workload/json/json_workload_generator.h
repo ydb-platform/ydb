@@ -2,6 +2,8 @@
 
 #include "json_workload_params.h"
 
+#include <atomic>
+
 #include <ydb/library/json_index/json_corpus.h>
 #include <ydb/library/json_index/json_predicate.h>
 #include <ydb/library/workload/abstract/workload_query_generator.h>
@@ -35,7 +37,7 @@ private:
 
     std::optional<TJsonCorpus> Corpus;
     std::vector<TBuiltPredicate> Predicates;
-    size_t PredicateIndex = 0;
+    std::atomic<size_t> PredicateIndex = 0;
 };
 
 } // namespace NYdbWorkload

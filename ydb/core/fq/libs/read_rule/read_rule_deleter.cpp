@@ -11,14 +11,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
-
-#define LOG_I(stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
-
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STREAMS
 
 namespace NFq {
 namespace {
@@ -103,7 +96,10 @@ public:
     }
 
     void StartRequest() {
-        LOG_D("Make request for read rule deletion for topic `" << Topic.topic_path() << "` [" << Index << "]");
+        YDB_LOG_DEBUG("Make request for read rule deletion for topic ` `",
+            {"QueryId", QueryId},
+            {"TopicPath", Topic.topic_path()},
+            {"Index", Index});
 
         NYdb::NTopic::TAlterTopicSettings alterTopicSettings;
         alterTopicSettings.AppendDropConsumers(Topic.consumer_name());
@@ -139,7 +135,12 @@ public:
                 nextRetryDelay = Nothing(); // No topic => OK. Leave just transient issues.
             }
 
-            LOG_D("Failed to remove read rule from `" << Topic.topic_path() << "`: " << status.GetIssues().ToString() << ". Status: " << status.GetStatus() << ". Retry after: " << nextRetryDelay);
+            YDB_LOG_DEBUG("Failed to remove read rule from `.. Retry",
+                {"QueryId", QueryId},
+                {"TopicPath", Topic.topic_path()},
+                {"`", status.GetIssues().ToString()},
+                {"Status", status.GetStatus()},
+                {"After", nextRetryDelay});
             if (!nextRetryDelay) { // Not retryable
                 Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleDeleterResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
@@ -211,7 +212,10 @@ public:
         Children.reserve(Topics.size());
         Results.reserve(Topics.size());
         for (size_t i = 0; i < Topics.size(); ++i) {
-            LOG_D("Create read rule deleter actor for `" << Topics[i].topic_path() << "` [" << i << "]");
+            YDB_LOG_DEBUG("Create read rule deleter actor for ` `",
+                {"QueryId", QueryId},
+                {"TopicPath", Topics[i].topic_path()},
+                {"I", i});
             Children.push_back(Register(new TSingleReadRuleDeleter(SelfId(), QueryId, YdbDriver, PqGateway, Topics[i], Credentials[i], i, MaxRetries)));
         }
     }

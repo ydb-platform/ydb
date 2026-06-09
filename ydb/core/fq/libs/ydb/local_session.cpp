@@ -7,7 +7,7 @@
 #include <ydb/core/fq/libs/ydb/query_actor.h>
 
 #include <ydb/library/table_creator/table_creator.h>
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NFq {
 
@@ -52,7 +52,7 @@ public:
                 Y_ABORT("not primitive type %s not suported yet", ToString(typeParser.GetPrimitive()).c_str());
             }
             desc.SetType(type);
-            desc.SetNotNull(!optional); 
+            desc.SetNotNull(!optional);
             columns.push_back(desc);
         }
         Register(
@@ -65,7 +65,7 @@ public:
                 {},
                 /* isSystemUser */ true,
                 Nothing(),
-                Acl 
+                Acl
             )
         );
     }
@@ -91,7 +91,7 @@ private:
     NThreading::TPromise<NYdb::TStatus> Promise;
 };
 
-struct TLocalSession : public ISession { 
+struct TLocalSession : public ISession {
 
     TLocalSession()
         : ActorSystem(NActors::TActivationContext::ActorSystem())
@@ -143,7 +143,7 @@ struct TLocalSession : public ISession {
     void UpdateTransaction(std::optional<NYdb::NTable::TTransaction> /*transaction*/) override {
         // nothing
     }
-    
+
     bool HasActiveTransaction() const override {
         return HasTransaction;
     }

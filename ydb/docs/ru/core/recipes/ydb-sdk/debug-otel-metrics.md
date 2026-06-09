@@ -11,7 +11,7 @@
 | `ydb.client.operation.duration` | Histogram | `s`           | Длительность одной попытки клиентской операции (`ExecuteQuery`, `Commit`, `Rollback`, `CreateSession`). |
 | `ydb.client.operation.failed`   | Counter   | `{operation}` | Количество неуспешных клиентских операций.                                                              |
 
-### Метрики пула сессий
+### Метрики пула сессий {#session-pool-metrics}
 
 | Имя                                  | Тип         | Единица     | Описание                                                              |
 |--------------------------------------|-------------|-------------|-----------------------------------------------------------------------|
@@ -43,42 +43,7 @@
 
 - Python
 
-  Установите дополнительные зависимости `opentelemetry` и OTLP-экспортёр метрик:
-
-  ```bash
-  pip install ydb[opentelemetry]
-  pip install opentelemetry-exporter-otlp-proto-grpc
-  ```
-
-  Создайте `MeterProvider` и активируйте сбор метрик через `enable_metrics()`:
-
-  ```python
-  from opentelemetry.sdk.metrics import MeterProvider
-  from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-  from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-  from opentelemetry.sdk.resources import Resource
-
-  import ydb
-  from ydb.opentelemetry import enable_metrics, disable_metrics
-
-  resource = Resource(attributes={"service.name": "my-service"})
-  reader = PeriodicExportingMetricReader(
-      OTLPMetricExporter(endpoint="http://localhost:4317", insecure=True)
-  )
-  meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
-
-  enable_metrics(meter_provider=meter_provider)
-
-  with ydb.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
-      driver.wait(timeout=5)
-      with ydb.QuerySessionPool(driver) as pool:
-          pool.execute_with_retries("SELECT 1")
-
-  disable_metrics()
-  meter_provider.shutdown()
-  ```
-
-  Метрики и трассировка независимы — можно включить только метрики, только трассировку или оба сразу.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - C#
 
@@ -110,6 +75,12 @@
   Имя пула сессий задаётся параметром `PoolName=` в строке подключения `YdbDataSource`. Полный пример с нагрузкой и Grafana — в репозитории SDK ([Ydb.Sdk.AdoNet.OpenTelemetry/Metrics](https://github.com/ydb-platform/ydb-dotnet-sdk/blob/main/examples/Ydb.Sdk.AdoNet.OpenTelemetry/Metrics/Program.cs)).
 
 - Java
+
+  {% note info %}
+
+  В Java SDK на данный момент поддерживаются только [метрики пула сессий](#session-pool-metrics).
+
+  {% endnote %}
 
   Передайте свой `OpenTelemetry` в SDK через адаптер `OpenTelemetryMeter` и метод `QueryClient.Builder#withMeter`:
 

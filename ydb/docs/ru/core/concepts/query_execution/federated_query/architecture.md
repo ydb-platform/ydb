@@ -31,21 +31,21 @@
 
 ### Стабильные источники данных
 
-| Источник | Поддержка |
-| -------- | --------- |
-| [S3](https://aws.amazon.com/ru/s3/) | Встроенная в `ydbd` |
+{{ ydb-full-name }} имеет встроенную в `ydbd` поддержку следующих источников данных:
+
+- [S3](https://aws.amazon.com/ru/s3/)
 
 ### Экспериментальные источники данных
 
 {% include [!](_includes/experimental_connectors_warning.md) %}
 
-| Источник | Поддержка |
-| -------- | --------- |
-| [ClickHouse](https://clickhouse.com/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Greenplum](https://greenplum.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [MySQL](https://www.mysql.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [PostgreSQL](https://www.postgresql.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [{{ydb-short-name}}](https://ydb.tech/) (YDB-to-YDB) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) поддерживаются следующие внешние СУБД:
+
+- [ClickHouse](https://clickhouse.com/)
+- [Greenplum](https://greenplum.org/)
+- [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16)
+- [MySQL](https://www.mysql.org/)
+- [PostgreSQL](https://www.postgresql.org/)
+- [{{ ydb-short-name }}](https://ydb.tech/) (YDB-to-YDB)
 
 Подробнее см. в разделе [Источники данных на основе внешних коннекторов](experimental_external_connectors/index.md).

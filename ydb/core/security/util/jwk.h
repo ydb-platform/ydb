@@ -10,17 +10,17 @@
 
 namespace NKikimr::NSecurity {
 
-enum class EJWKKeyType : ui8 {
+enum class EJwkKeyType : ui8 {
     RSA,
     EC,
 };
 
-enum class EJWKUsage : ui8 {
+enum class EJwkUsage : ui8 {
     SIG /* "sig" */,
     ENC /* "enc" */,
 };
 
-enum class EJWKKeyOps : ui8 {
+enum class EJwkKeyOps : ui8 {
     SIGN /* "sign" */,
     VERIFY /* "verify" */,
     ENCRYPT /* "encrypt" */,
@@ -33,7 +33,7 @@ enum class EJWKKeyOps : ui8 {
 
 // Use for asymmetric JWS: https://datatracker.ietf.org/doc/html/rfc7518#section-3
 // TODO(vlad-serikov): Also implement for JWE: https://datatracker.ietf.org/doc/html/rfc7518#section-4
-enum class EJWKAlg : ui8 {
+enum class EJwkAlg : ui8 {
     RS256,
     RS384,
     RS512,
@@ -47,18 +47,18 @@ enum class EJWKAlg : ui8 {
 
 // {kty, kid} - Unique identifier
 // https://datatracker.ietf.org/doc/html/rfc7517#section-4
-struct TJWK {
-    EJWKKeyType Type; // `kty`
-    std::optional<EJWKUsage> Usage; // `use`
-    std::vector<EJWKKeyOps> KeyOperations; // `key_ops`
-    std::optional<EJWKAlg> Algorithm; // `alg`
+struct TJwk {
+    EJwkKeyType Type; // `kty`
+    std::optional<EJwkUsage> Usage; // `use`
+    std::vector<EJwkKeyOps> KeyOperations; // `key_ops`
+    std::optional<EJwkAlg> Algorithm; // `alg`
     std::string KeyId; // `kid`
     std::string X509Url; // `x5u`
     std::vector<std::string> X509Chain; // decoded `x5c` (in DER format)
     std::string X509CertificateSha1ThumbprintBytes; // decoded `x5t`
     std::string X509CertificateSha256ThumbprintBytes; // decoded `x5t#S256`
 
-    explicit TJWK(EJWKKeyType type);
+    explicit TJwk(EJwkKeyType type);
 
     // Returns std::nullopt if parameters are missing or if validation/parsing failed.
     // Otherwise, returns the extracted public key.
@@ -66,12 +66,12 @@ struct TJWK {
 };
 
 // https://datatracker.ietf.org/doc/html/rfc7517#section-5
-struct TJWKSet {
-    std::vector<TJWK> Keys; // `keys`
+struct TJwkSet {
+    std::vector<TJwk> Keys; // `keys`
 };
 
-std::optional<EJWKKeyType> GetKeyType(EJWKAlg alg);
-std::optional<TJWK> ParseJWK(const NJson::TJsonValue& jwk);
-std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet);
+std::optional<EJwkKeyType> GetKeyType(EJwkAlg alg);
+std::optional<TJwk> ParseJwk(const NJson::TJsonValue& jwk);
+std::optional<TJwkSet> ParseJwkSet(const NJson::TJsonValue& jwkSet);
 
 } // namespace NKikimr::NSecurity

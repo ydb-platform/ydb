@@ -64,7 +64,7 @@ message TAuthConfig {
     optional string UserAccountServiceSslTargetNameOverride = 88;
     optional string ServiceAccountServiceSslTargetNameOverride = 89;
     optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
-    optional TExternalIdpConfig ExternalIdp = 91;
+    optional TExternalIdpConfig ExternalIdpConfig = 91;
 }
 
 message TUserRegistryConfig {
@@ -197,7 +197,7 @@ message TExternalIdpConfig {
         optional string RequestTimeout = 4 [default = "15s"];
     }
 
-    message TJWKsCacheSettings {
+    message TJwksCacheSettings {
        optional string Timeout = 1 [default = "2h"];
     }
 
@@ -224,5 +224,5 @@ message TExternalIdpConfig {
     optional TPeriodicSettings JwksPeriodicSettings = 7;
 
     // Cache settings for JWKS keys
-    optional TJWKsCacheSettings JwksCacheSettings = 8;
+    optional TJwksCacheSettings JwksCacheSettings = 8;
 }

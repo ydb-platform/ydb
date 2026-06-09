@@ -53,24 +53,24 @@ constexpr TStringBuf WELL_KNOWN_DISCOVERY_URI = ".well-known/openid-configuratio
 // not a public key. Including them would enable the "algorithm confusion" attack
 // where an attacker signs a token with HS256 using the (public) RSA key.
 template <typename TVerifier>
-const std::unordered_map<NSecurity::EJWKAlg, std::function<void(TVerifier&, const TString&)>> SUPPORTED_ALGOS = {
-    {NSecurity::EJWKAlg::ES256,
+const std::unordered_map<NSecurity::EJwkAlg, std::function<void(TVerifier&, const TString&)>> SUPPORTED_ALGOS = {
+    {NSecurity::EJwkAlg::ES256,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es256(pubkey.c_str())); }},
-    {NSecurity::EJWKAlg::ES384,
+    {NSecurity::EJwkAlg::ES384,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es384(pubkey.c_str())); }},
-    {NSecurity::EJWKAlg::ES512,
+    {NSecurity::EJwkAlg::ES512,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::es512(pubkey.c_str())); }},
-    {NSecurity::EJWKAlg::PS256,
+    {NSecurity::EJwkAlg::PS256,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps256(pubkey.c_str())); }},
-    {NSecurity::EJWKAlg::PS384,
+    {NSecurity::EJwkAlg::PS384,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps384(pubkey.c_str())); }},
-    {NSecurity::EJWKAlg::PS512,
+    {NSecurity::EJwkAlg::PS512,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::ps512(pubkey.c_str())); }},
-    {NSecurity::EJWKAlg::RS256,
+    {NSecurity::EJwkAlg::RS256,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs256(pubkey.c_str())); }},
-    {NSecurity::EJWKAlg::RS384,
+    {NSecurity::EJwkAlg::RS384,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs384(pubkey.c_str())); }},
-    {NSecurity::EJWKAlg::RS512,
+    {NSecurity::EJwkAlg::RS512,
         [](TVerifier& v, const TString& pubkey) { v.allow_algorithm(jwt::algorithm::rs512(pubkey.c_str())); }},
 };
 
@@ -146,11 +146,11 @@ class TExternalIdpProvider : public NActors::TActorBootstrapped<TExternalIdpProv
         NMonitoring::TDynamicCounters::TCounterPtr Errors{nullptr};
     };
 
-    class TJWKsCache {
+    class TJwksCache {
     public:
-        TJWKsCache() = default;
-        TJWKsCache(
-            const NKikimrProto::TExternalIdpConfig::TJWKsCacheSettings& settings,
+        TJwksCache() = default;
+        TJwksCache(
+            const NKikimrProto::TExternalIdpConfig::TJwksCacheSettings& settings,
             NMonitoring::TDynamicCounterPtr counters
         );
 
@@ -220,7 +220,7 @@ private:
     TRecurringPeriod JwksRefresh;
 
     TString JwksUrl;
-    TJWKsCache JwksCache;
+    TJwksCache JwksCache;
 
     NMonitoring::TDynamicCounterPtr Counters;
 
@@ -316,33 +316,33 @@ void TExternalIdpProvider::TRecurringPeriod::OnReceived(TInstant now) {
     ResponseTime->Collect((Ended - Started).MilliSeconds());
 }
 
-TExternalIdpProvider::TJWKsCache::TJWKsCache(
-    const NKikimrProto::TExternalIdpConfig::TJWKsCacheSettings& settings,
+TExternalIdpProvider::TJwksCache::TJwksCache(
+    const NKikimrProto::TExternalIdpConfig::TJwksCacheSettings& settings,
     NMonitoring::TDynamicCounterPtr counters)
     : Timeout{TDuration::Parse(settings.GetTimeout())}
     , KeyCount(counters->GetCounter("JwksKeys", false))
 {}
 
-bool TExternalIdpProvider::TJWKsCache::IsStale(const TInstant& now) const {
+bool TExternalIdpProvider::TJwksCache::IsStale(const TInstant& now) const {
     return LastUpdate + Timeout < now;
 }
 
-size_t TExternalIdpProvider::TJWKsCache::Count() const {
+size_t TExternalIdpProvider::TJwksCache::Count() const {
     return Keys.size();
 }
 
-TMaybe<TString> TExternalIdpProvider::TJWKsCache::Get(const TString& key) const {
+TMaybe<TString> TExternalIdpProvider::TJwksCache::Get(const TString& key) const {
     const auto it = Keys.find(key);
     return (it == Keys.end()) ? Nothing() : MakeMaybe(it->second);
 }
 
-void TExternalIdpProvider::TJWKsCache::Update(const TInstant& now, THashMap<TString, TString> keys) {
+void TExternalIdpProvider::TJwksCache::Update(const TInstant& now, THashMap<TString, TString> keys) {
     Keys = std::move(keys);
     LastUpdate = now;
     KeyCount->Set(static_cast<i64>(Keys.size()));
 }
 
-void TExternalIdpProvider::TJWKsCache::Clear() {
+void TExternalIdpProvider::TJwksCache::Clear() {
     if (Count() == 0) {
         return;
     }
@@ -351,7 +351,7 @@ void TExternalIdpProvider::TJWKsCache::Clear() {
     KeyCount->Set(0);
 }
 
-TString TExternalIdpProvider::TJWKsCache::GetHtml(const TInstant& now) const {
+TString TExternalIdpProvider::TJwksCache::GetHtml(const TInstant& now) const {
     TStringBuilder html;
     html << "<div>";
 
@@ -468,7 +468,7 @@ void TExternalIdpProvider::RegisterFields(const TActorContext& ctx) {
         Counters->GetSubgroup("component", "Jwks")
     );
 
-    JwksCache = TJWKsCache(
+    JwksCache = TJwksCache(
         Config.GetJwksCacheSettings(),
         Counters->GetSubgroup("component", "Jwks")
     );
@@ -518,7 +518,7 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
         );
     }
 
-    NSecurity::EJWKAlg alg;
+    NSecurity::EJwkAlg alg;
     if (!TryFromString(decoded->get_algorithm(), alg)) {
         return ReplyError(
             ev->Sender, msg->Key, TEvExternalIdpProvider::EStatus::BAD_REQUEST,
@@ -779,13 +779,13 @@ void TExternalIdpProvider::HandleJwksResponse(
     };
 
     if (resp.Response == nullptr) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=JWKs response failed: " << resp.Error);
+        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=JWKS response failed: " << resp.Error);
         return;
     }
 
     if (resp.Response->Status != "200") {
         BLOG_E(
-            "IdP issuer=" << Config.GetIssuer() << " message=JWKs fetch network error"
+            "IdP issuer=" << Config.GetIssuer() << " message=JWKS fetch network error"
                 << " (" << resp.Response->Status << ")" << " " << resp.Response->Message
         );
         return;
@@ -797,9 +797,9 @@ void TExternalIdpProvider::HandleJwksResponse(
         return;
     }
 
-    const auto arr = NSecurity::ParseJWKSet(json);
+    const auto arr = NSecurity::ParseJwkSet(json);
     if (!arr.has_value()) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Failed to parse JWKSet");
+        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Failed to parse JWKS");
         return;
     }
 
@@ -861,7 +861,7 @@ void TExternalIdpProvider::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorConte
     html << DiscoveryRefresh.GetHtml();
     html << "</div>";
 
-    html << "<h3>JWKs</h3>";
+    html << "<h3>JWKS</h3>";
     html << "<div>";
     html << "<table class='table table-hover simple-table1'>";
     html << "<caption>Common info</caption>";

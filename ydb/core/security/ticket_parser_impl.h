@@ -2374,10 +2374,10 @@ protected:
             UseLoginProvider = true;
         }
 
-        if (Config.HasExternalIdp()) {
+        if (Config.HasExternalIdpConfig()) {
             BLOG_D("External IdP authentication is enabled");
             ExternalIdpProvider = Register(
-                CreateExternalIdpProvider(Config.GetExternalIdp(), {}),
+                CreateExternalIdpProvider(Config.GetExternalIdpConfig(), {}),
                 TMailboxType::HTSwap, AppData()->UserPoolId);
         }
     }

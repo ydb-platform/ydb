@@ -3332,7 +3332,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         authConfig.SetUseStaff(false);
 
         authConfig.SetExternalIdpAuthenticationDomain(DOM);
-        auto* idpSettings = authConfig.MutableExternalIdp();
+        auto* idpSettings = authConfig.MutableExternalIdpConfig();
         idpSettings->SetIssuer(ISS);
         idpSettings->SetSubjectClaimName("sub");
         idpSettings->SetGroupsClaimName("groups");
@@ -3421,7 +3421,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         authConfig.SetRefreshTime("2s");
 
         authConfig.SetExternalIdpAuthenticationDomain(DOM);
-        auto* idpSettings = authConfig.MutableExternalIdp();
+        auto* idpSettings = authConfig.MutableExternalIdpConfig();
         idpSettings->SetIssuer(ISS);
         idpSettings->SetSubjectClaimName("sub");
         idpSettings->SetGroupsClaimName("groups");
@@ -3515,7 +3515,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         authConfig.SetUseStaff(false);
 
         authConfig.SetExternalIdpAuthenticationDomain(DOM);
-        auto* idpSettings = authConfig.MutableExternalIdp();
+        auto* idpSettings = authConfig.MutableExternalIdpConfig();
         idpSettings->SetIssuer(ISS);
         idpSettings->SetSubjectClaimName("sub");
         idpSettings->SetGroupsClaimName("groups");

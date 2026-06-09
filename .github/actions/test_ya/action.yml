@@ -149,6 +149,10 @@ runs:
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
 
+        export TELEGRAM_BOT_TOKEN_FILE=$(mktemp)
+        echo -n "${{ inputs.telegram_ydbot_token }}" > $TELEGRAM_BOT_TOKEN_FILE
+        echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
+
     - name: ya build and test
       id: build
       shell: bash
@@ -454,6 +458,7 @@ runs:
             --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
             --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
             --ram-usage-file ram_usage.txt \
+            --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
             --chat-id "$GH_ALERTS_TG_CHAT" \
             --memory-threshold 97 || true
 

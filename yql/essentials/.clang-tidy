@@ -371,7 +371,7 @@ Checks: >
   -portability-restrict-system-includes,
   -portability-simd-intrinsics,
   -readability-avoid-return-with-void-value,
-  -readability-avoid-const-params-in-decls,
+  readability-avoid-const-params-in-decls,
   -readability-braces-around-statements,
   readability-const-return-type,
   readability-container-data-pointer,
@@ -414,7 +414,6 @@ Checks: >
   -readability-uniqueptr-delete-release,
   readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
-  readability-avoid-const-params-in-decls
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true

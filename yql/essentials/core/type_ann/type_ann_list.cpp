@@ -9648,7 +9648,9 @@ namespace {
         auto& keyExtractLambda = input->ChildRef(3U);
         auto& argMapLambda = input->ChildRef(4U);
 
-        bool isPresortUniversal;
+        // XXX: Explicitly initialize, since sort traits validation is omitted
+        // when both components are Void callable (see more info below).
+        bool isPresortUniversal = false;
         bool isKeyUniversal;
         bool isArgMapUniversal;
 

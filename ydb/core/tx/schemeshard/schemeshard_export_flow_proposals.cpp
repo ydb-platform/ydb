@@ -338,8 +338,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             switch (exportSettings.format_case()) {
             case Ydb::Export::ExportToS3Settings::kParquet:
-                backupSettings.mutable_parquet()->set_row_group_size(exportSettings.parquet().row_group_size());
-                break;
+                {
+                    auto parquet = backupSettings.mutable_parquet();
+                    if (exportSettings.parquet().row_group_size()) {
+                        parquet->SetRowGroupSize(exportSettings.parquet().row_group_size());
+                    }
+                    break;
+                }
             case Ydb::Export::ExportToS3Settings::kYdbDump:
             case Ydb::Export::ExportToS3Settings::FORMAT_NOT_SET:
                 // YdbDump format - empty message

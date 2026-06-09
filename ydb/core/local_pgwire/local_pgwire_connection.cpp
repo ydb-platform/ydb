@@ -58,7 +58,7 @@ public:
             record.SetUserName(ConnectionParams["user"]);
         }
         request.SetDatabase(database);
-        YDB_LOG_DEBUG( "Sent CreateSessionRequest to kqpProxy",
+        YDB_LOG_DEBUG("Sent CreateSessionRequest to kqpProxy",
             {"ShortDebugString", ev->Record.ShortDebugString()});
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
         TBase::Become(&TPgYdbConnection::StateCreateSession);
@@ -66,10 +66,10 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
         const auto& record(ev->Get()->Record);
-        YDB_LOG_DEBUG( "Received TEvCreateSessionResponse",
+        YDB_LOG_DEBUG("Received TEvCreateSessionResponse",
             {"ShortDebugString", record.ShortDebugString()});
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_DEBUG( "Session id is",
+            YDB_LOG_DEBUG("Session id is",
                 {"GetSessionId", record.GetResponse().GetSessionId()});
             Connection.SessionId = record.GetResponse().GetSessionId();
 
@@ -81,7 +81,7 @@ public:
             ConnectionEvent.Destroy(); // don't need it anymore
         } else {
             YDB_LOG_WARN("Failed to create session",
-                {"session", record.ShortDebugString()});
+                {"Session", record.ShortDebugString()});
             auto response = MakeHolder<NPG::TEvPGEvents::TEvFinishHandshake>();
             // TODO: report actuall error
             response->ErrorFields.push_back({'E', "ERROR"});
@@ -100,7 +100,7 @@ public:
     }
 
     void Handle(TEvEvents::TEvSingleQuery::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvSingleQuery",
+        YDB_LOG_DEBUG("TEvSingleQuery",
             {"Sender", ev->Sender});
         if (IsQueryEmpty(ev->Get()->Query)) {
             auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
@@ -112,13 +112,13 @@ public:
 
         ++Inflight;
         TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyQuery(SelfId(), ConnectionParams, Connection, std::move(ev)));
-        YDB_LOG_DEBUG( "Created",
-            {"pgwireKqpProxyQuery", actorId});
+        YDB_LOG_DEBUG("Created",
+            {"PgwireKqpProxyQuery", actorId});
         CurrentRunningQueries.insert(actorId);
     }
 
     void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvQuery",
+        YDB_LOG_DEBUG("TEvQuery",
             {"Sender", ev->Sender});
 
         TStatementIterator stmtIter((TString(ev->Get()->Message->GetQuery())));
@@ -139,17 +139,17 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvParse::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvParse",
+        YDB_LOG_DEBUG("TEvParse",
             {"Sender", ev->Sender});
         ++Inflight;
         TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyParse(SelfId(), ConnectionParams, Connection, std::move(ev)));
-        YDB_LOG_DEBUG( "Created",
-            {"pgwireKqpProxyParse", actorId});
+        YDB_LOG_DEBUG("Created",
+            {"PgwireKqpProxyParse", actorId});
         CurrentRunningQueries.insert(actorId);
     }
 
     void Handle(NPG::TEvPGEvents::TEvBind::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvBind",
+        YDB_LOG_DEBUG("TEvBind",
             {"Sender", ev->Sender});
         auto bindData = ev->Get()->Message->GetBindData();
         auto statementName(bindData.StatementName);
@@ -162,9 +162,9 @@ public:
             auto portalName(bindData.PortalName);
             // TODO(xenoxeno): performance hit
             Portals[portalName].Construct(itParsedStatement->second, std::move(bindData));
-            YDB_LOG_DEBUG( "Created portal from statement",
-                {"portalName", portalName},
-                {"statementName", statementName});
+            YDB_LOG_DEBUG("Created portal from statement",
+                {"PortalName", portalName},
+                {"StatementName", statementName});
         }
         Send(ev->Sender, bindResponse.release(), 0, ev->Cookie);
     }
@@ -188,7 +188,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvDescribe::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvDescribe",
+        YDB_LOG_DEBUG("TEvDescribe",
             {"Sender", ev->Sender});
         auto response = std::make_unique<NPG::TEvPGEvents::TEvDescribeResponse>();
         auto describeData = ev->Get()->Message->GetDescribeData();
@@ -226,7 +226,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvExecute::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvExecute",
+        YDB_LOG_DEBUG("TEvExecute",
             {"Sender", ev->Sender});
 
         TString portalName = ev->Get()->Message->GetExecuteData().PortalName;
@@ -248,43 +248,43 @@ public:
 
         ++Inflight;
         TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyExecute(SelfId(), ConnectionParams, Connection, std::move(ev), it->second));
-        YDB_LOG_DEBUG( "Created",
-            {"pgwireKqpProxyExecute", actorId});
+        YDB_LOG_DEBUG("Created",
+            {"PgwireKqpProxyExecute", actorId});
         CurrentRunningQueries.insert(actorId);
     }
 
     void Handle(TEvEvents::TEvUpdateStatement::TPtr& ev) {
         auto name(ev->Get()->ParsedStatement.QueryData.Name);
-        YDB_LOG_DEBUG( "Updating ParsedStatement",
-            {"name", name});
+        YDB_LOG_DEBUG("Updating ParsedStatement",
+            {"Name", name});
         ParsedStatements[name] = ev->Get()->ParsedStatement;
     }
 
     void Handle(TEvEvents::TEvProxyCompleted::TPtr& ev) {
         --Inflight;
-        YDB_LOG_DEBUG( "Received TEvProxyCompleted");
+        YDB_LOG_DEBUG("Received TEvProxyCompleted");
         auto& connection(ev->Get()->Connection);
         if (connection.Transaction.Status) {
-            YDB_LOG_DEBUG( "Updating transaction state to",
+            YDB_LOG_DEBUG("Updating transaction state to",
                 {"Status", connection.Transaction.Status});
             Connection.Transaction.Status = connection.Transaction.Status;
             switch (connection.Transaction.Status) {
                 case 'I':
                     Connection.Transaction.Id.clear();
-                    YDB_LOG_DEBUG( "Transaction id cleared");
+                    YDB_LOG_DEBUG("Transaction id cleared");
                     break;
                 case 'T':
                 case 'E':
                     if (connection.Transaction.Id) {
                         Connection.Transaction.Id = connection.Transaction.Id;
-                        YDB_LOG_DEBUG( "Transaction id is",
+                        YDB_LOG_DEBUG("Transaction id is",
                             {"Id", Connection.Transaction.Id});
                     }
                     break;
             }
         }
         if (connection.SessionId) {
-            YDB_LOG_DEBUG( "Session id is",
+            YDB_LOG_DEBUG("Session id is",
                 {"SessionId", connection.SessionId});
             Connection.SessionId = connection.SessionId;
         }
@@ -293,7 +293,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvCancelRequest::TPtr&) {
-        YDB_LOG_DEBUG( "Received TEvCancelRequest");
+        YDB_LOG_DEBUG("Received TEvCancelRequest");
         for (const TActorId& actor : CurrentRunningQueries) {
             Send(actor, new TEvEvents::TEvCancelRequest());
         }
@@ -303,7 +303,7 @@ public:
         if (Connection.SessionId) {
             auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
             ev->Record.MutableRequest()->SetSessionId(Connection.SessionId);
-            YDB_LOG_DEBUG( "Closing session, sent event to kqpProxy",
+            YDB_LOG_DEBUG("Closing session, sent event to kqpProxy",
                 {"SessionId", Connection.SessionId},
                 {"ShortDebugString", ev->Record.ShortDebugString()});
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());

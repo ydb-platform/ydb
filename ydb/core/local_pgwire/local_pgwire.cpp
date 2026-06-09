@@ -39,7 +39,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvAuth::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvAuth cookie",
+        YDB_LOG_DEBUG("TEvAuth cookie",
             {"InitialMessageDump", ev->Get()->InitialMessage->Dump()},
             {"Cookie", ev->Cookie});
         std::unordered_map<TString, TString> clientParams = ev->Get()->InitialMessage->GetClientParams();
@@ -61,7 +61,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionOpened::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvConnectionOpened cookie",
+        YDB_LOG_DEBUG("TEvConnectionOpened cookie",
             {"Sender", ev->Sender},
             {"Cookie", ev->Cookie});
         auto params = ev->Get()->Message->GetClientParams();
@@ -79,19 +79,19 @@ public:
         IActor* actor = CreateConnection(std::move(params), std::move(ev), {.ConnectionNum = connectionState.ConnectionNum});
         TActorId actorId = Register(actor);
         connectionState.YdbConnection = actorId;
-        YDB_LOG_DEBUG( "Created ydb connection num",
-            {"actorId", actorId},
+        YDB_LOG_DEBUG("Created ydb connection num",
+            {"ActorId", actorId},
             {"ConnectionNum", connectionState.ConnectionNum});
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionClosed::TPtr& ev) {
-        YDB_LOG_DEBUG( "TEvConnectionClosed cookie",
+        YDB_LOG_DEBUG("TEvConnectionClosed cookie",
             {"Sender", ev->Sender},
             {"Cookie", ev->Cookie});
         auto itConnection = ConnectionState.find(ev->Sender);
         if (itConnection != ConnectionState.end()) {
             Send(itConnection->second.YdbConnection, new TEvents::TEvPoisonPill());
-            YDB_LOG_DEBUG( "Destroyed ydb connection num",
+            YDB_LOG_DEBUG("Destroyed ydb connection num",
                 {"YdbConnection", itConnection->second.YdbConnection},
                 {"ConnectionNum", itConnection->second.ConnectionNum});
         }
@@ -147,17 +147,17 @@ public:
             uint32_t connectionNum = ev->Get()->Record.GetSecretKey();
             for (const auto& [pgConnectionId, connectionState] : ConnectionState) {
                 if (connectionState.ConnectionNum == connectionNum) {
-                    YDB_LOG_DEBUG( "Cancelling ConnectionNum",
-                        {"connectionNum", connectionNum});
+                    YDB_LOG_DEBUG("Cancelling ConnectionNum",
+                        {"ConnectionNum", connectionNum});
                     Forward(ev, connectionState.YdbConnection);
                     return;
                 }
             }
             YDB_LOG_CTX_WARN(*NActors::TlsActivationContext, "Cancelling ConnectionNum - connection not found",
-                {"connectionNum", connectionNum});
+                {"ConnectionNum", connectionNum});
         } else {
-            YDB_LOG_DEBUG( "Forwarding TEvCancelRequest to Node",
-                {"nodeId", nodeId});
+            YDB_LOG_DEBUG("Forwarding TEvCancelRequest to Node",
+                {"NodeId", nodeId});
             Forward(ev, CreateLocalPgWireProxyId(nodeId));
         }
     }

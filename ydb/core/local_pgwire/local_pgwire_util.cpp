@@ -144,7 +144,7 @@ NPG::TEvPGEvents::TRowValueField ColumnValueToRowValueField(NYdb::TValueParser& 
                         return {.Value = std::vector<uint8_t>(begin, end)};
                     } else {
                         YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Error converting value to binary",
-                            {"error", result.Error.GetRef()});
+                            {"Error", result.Error.GetRef()});
                     }
                     return {};
                 }

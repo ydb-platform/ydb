@@ -409,11 +409,11 @@ bool TReadInfo::UpdateUsage(const TClientBlob& blob,
         }
         lastBlobSize = 0;
 
-        return cnt >= Count;
+        return cnt >= Count || (size >= Size && !ReadToBlobEnd);
     }
 
     // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
-    return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count);
+    return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count || (size >= Size && !ReadToBlobEnd));
 }
 
 TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlob>& blobs,
@@ -613,7 +613,7 @@ TReadAnswer TReadInfo::FormAnswer(
             return cnt >= Count || (size >= Size && !ReadToBlobEnd);
         }
         // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
-        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && cnt >= Count || (size >= Size && !ReadToBlobEnd);
+        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count || (size >= Size && !ReadToBlobEnd));
     };
 
     AFL_ENSURE(blobs.size() == Blobs.size());

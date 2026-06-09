@@ -338,6 +338,7 @@ def _schemeshard_post_endpoints(cluster, endpoint_paths, post_data):
                 headers=headers,
                 data=form_body,
                 verify=False,
+                allow_redirects=False,
             )
             token_desc = token if token is not None else 'null'
             assert response.status_code == expected_status, (

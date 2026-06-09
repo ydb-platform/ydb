@@ -57,7 +57,7 @@ private:
     YDB_ACCESSOR(TString, TablePath, DEFAULT_TABLE_PATH);
 
 public:
-    TTieringTestHelper() {
+    TTieringTestHelper(bool enableLocalIndexAsSchemeObject = true) {
         CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<TCtrl>());
         (*CsController)->SetSkipSpecialCheckForEvict(true);
 
@@ -66,6 +66,8 @@ public:
         runnerSettings.SetColumnShardAlterObjectEnabled(true);
         runnerSettings.FeatureFlags.SetEnableColumnshardBool(true);
         runnerSettings.FeatureFlags.SetEnableColumnStore(true);
+        runnerSettings.FeatureFlags.SetEnableLocalIndexAsSchemeObject(enableLocalIndexAsSchemeObject);
+        
         TestHelper.emplace(runnerSettings);
         // Shorten LongTx delays directly on AppData so MinSnapshotForNewReads advances quickly
         // for tier blob GC to run within the test's WaitCondition window.
@@ -677,7 +679,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
     }
     Y_UNIT_TEST(TieringViaIndex, EIndexForTTLColumn) {
-        TTieringTestHelper tieringHelper;
+        
+        TTieringTestHelper tieringHelper{Arg<0>() != EIndexForTTLColumn::MaxIndex};
         auto& csController = tieringHelper.GetCsController();
         auto& testHelper = tieringHelper.GetTestHelper();
         TString createTableQuery = Arg<0>() == EIndexForTTLColumn::MaxIndex ? R"(

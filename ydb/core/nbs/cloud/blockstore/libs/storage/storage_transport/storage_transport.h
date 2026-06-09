@@ -116,10 +116,16 @@ public:
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>
-    EraseFromPBuffer(
+    BatchEraseFromPBuffer(
         const THostConnection& connection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
+        NWilson::TSpan* span) = 0;
+
+    virtual NThreading::TFuture<TEvErasePersistentBufferResult>
+    BarrierEraseFromPBuffer(
+        const THostConnection& connection,
+        ui64 lsn,
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvListPersistentBufferResult>

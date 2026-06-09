@@ -203,7 +203,7 @@ void TBaseFixture::Init()
         return future;
     };
 
-    DirectBlockGroup->EraseFromPBufferHandler = [&]   //
+    DirectBlockGroup->BatchEraseFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
          const TVector<TPBufferSegment>& segments,

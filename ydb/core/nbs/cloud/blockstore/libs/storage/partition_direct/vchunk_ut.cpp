@@ -40,11 +40,8 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Start();
 
         // Run write request
-        auto future = vchunk->WriteBlocksLocal(
-            callContext,
-            request,
-            1000,
-            NWilson::TTraceId());
+        auto future =
+            vchunk->WriteBlocksLocal(callContext, request, NWilson::TTraceId());
 
         // Wait for three PBuffers write requests.
         UNIT_ASSERT_VALUES_EQUAL(

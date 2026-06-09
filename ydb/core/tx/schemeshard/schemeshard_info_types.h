@@ -1001,6 +1001,7 @@ public:
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
+        bool EnableDetailedMetrics;
     };
 
     static TAlterDataPtr CreateAlterData(

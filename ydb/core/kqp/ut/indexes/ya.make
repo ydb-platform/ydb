@@ -29,6 +29,7 @@ END()
 RECURSE_FOR_TESTS(
     common
     fulltext
+    hybrid
     json
     prefixed_vector
     vector

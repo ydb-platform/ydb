@@ -485,26 +485,34 @@ TEraseHints TBlocksDirtyMap::MakeEraseBelatedHint()
     return result;
 }
 
+void TBlocksDirtyMap::RegisterInflightWrite(ui64 lsn, TBlockRange64 range)
+{
+    const bool inserted = Inflight.AddRange(
+        lsn,
+        range,
+        TInflightInfo(this, lsn, range.Size() * BlockSize));
+    Y_ABORT_UNLESS(inserted);
+}
+
 void TBlocksDirtyMap::WriteFinished(
     ui64 lsn,
     TBlockRange64 range,
     THostMask requested,
     THostMask confirmed)
 {
+    // Every write is pre-registered as pending at generation time (see
+    // RegisterInflightWrite), so the entry always exists here.
+    auto item = Inflight.GetValue(lsn);
+    Y_ABORT_UNLESS(item);
+    Y_ABORT_UNLESS(item->Range == range);
+
     if (confirmed.Count() < QuorumDirectBlockGroupHostCount) {
+        const bool removed = Inflight.RemoveRange(lsn);
+        Y_ABORT_UNLESS(removed);
         return;
     }
 
-    const bool inserted = Inflight.AddRange(
-        lsn,
-        range,
-        TInflightInfo(
-            this,
-            lsn,
-            range.Size() * BlockSize,
-            requested,
-            confirmed));
-    Y_ABORT_UNLESS(inserted);
+    item->Value.OnWritten(requested, confirmed);
 }
 
 void TBlocksDirtyMap::FlushFinished(
@@ -634,6 +642,11 @@ ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
     }
     // TSet is ordered, so the first element is the minimum. O(1) access.
     return *ReadyToErase.begin();
+}
+
+std::optional<ui64> TBlocksDirtyMap::GetSafeBarrierForErase() const
+{
+    return Inflight.GetMinKey();
 }
 
 const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(

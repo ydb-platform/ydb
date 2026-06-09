@@ -887,6 +887,62 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(ManyEmptyReturningClauses, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/DataShard` (
+                c1 Bool, c2 Utf8 NOT NULL, c3 Int8 NOT NULL, c4 Uint32 NOT NULL, c5 Int8, c6 Uint8 NOT NULL,
+                PRIMARY KEY (c5),
+            );
+        )";
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto params = TParamsBuilder()
+                .AddParam("$p0_rows")
+                    .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                        .AddMember("c5").Int8(0)
+                        .EndStruct()
+                    .EndList()
+                    .Build()
+                .AddParam("$p1_rows")
+                    .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                        .AddMember("c5").Int8(1)
+                        .EndStruct()
+                    .EndList()
+                    .Build()
+                .Build();
+
+            auto it = client.ExecuteQuery(
+                R"(
+                    DELETE FROM `/Root/DataShard` ON
+                    SELECT * FROM AS_TABLE($p0_rows)
+                    RETURNING c6, c1, c2, c5, c4, c3;
+
+                    DELETE FROM `/Root/DataShard` ON
+                    SELECT * FROM AS_TABLE($p1_rows)
+                    RETURNING c5;
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST_TWIN(SecondaryIndexInsertDuplicates, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);

@@ -146,7 +146,6 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
     // VHost thread
@@ -177,8 +176,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
         std::move(request),
         traceId,
         std::move(callContext),
-        vchunkRange,
-        lsn);
+        vchunkRange);
 
     bundle->GetSpan().Attribute("VChunkIndex", VChunkConfig.GetVChunkIndex());
 
@@ -235,6 +233,13 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
+}
+
+std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap.GetSafeBarrierForErase();
 }
 
 TString TVChunk::DebugPrintDirtyMap()
@@ -478,11 +483,18 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    // Generate the lsn and register the write as inflight on the same executor
+    // thread, so the cleanup watermark covers it from the moment of generation.
+    const ui64 lsn = PartitionDirectService->GenerateLsn();
+    bundle->SetLsn(lsn);
+    BlocksDirtyMap.RegisterInflightWrite(lsn, bundle->GetVChunkRange());
+
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s DoWriteBlocksLocal: %s",
+        "%s DoWriteBlocksLocal: lsn %lu %s",
         LogTitle.GetWithTime().c_str(),
+        lsn,
         bundle->GetVChunkRange().Print().c_str());
 
     auto writeExecutor = CreateWriteRequestExecutor(

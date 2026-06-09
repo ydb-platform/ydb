@@ -171,8 +171,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         while preserving the group sum invariant (SUM == FIXED_GROUP_SUM).
         """
 
-        driver = self.create_driver()
-        with ydb.QuerySessionPool(driver) as pool:
+        with self.create_driver() as driver, ydb.QuerySessionPool(driver) as pool:
             while not stop_event.is_set():
                 try:
                     group = random.randint(0, N_GROUPS - 1)
@@ -201,8 +200,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         when multiple threads write with the same filter_type)
         """
 
-        driver = self.create_driver()
-        with ydb.QuerySessionPool(driver) as pool:
+        with self.create_driver() as driver, ydb.QuerySessionPool(driver) as pool:
             while not stop_event.is_set():
                 try:
                     lo_group = random.randint(0, N_GROUPS - 2)
@@ -251,8 +249,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         table uses a secondary index.
         """
 
-        driver = self.create_driver()
-        with ydb.QuerySessionPool(driver) as pool:
+        with self.create_driver() as driver, ydb.QuerySessionPool(driver) as pool:
             while not stop_event.is_set():
                 try:
                     lo = random.randint(0, GROUP_SIZE - 2)
@@ -304,8 +301,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         Reads `table_name` with a string-range filter under snapshot isolation.
         """
 
-        driver = self.create_driver()
-        with ydb.QuerySessionPool(driver) as pool:
+        with self.create_driver() as driver, ydb.QuerySessionPool(driver) as pool:
             while not stop_event.is_set():
                 try:
                     lo = random.randint(0, GROUP_SIZE - 2)
@@ -375,7 +371,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             elif filter_type in ('int_range', 'str_range'):
                 range_len = row.filter_hi - row.filter_lo + 1
                 assert row.row_count == range_len * N_GROUPS
-                assert row.int_sum == (range_len * (row.filter_hi + row.filter_lo) / 2) * N_GROUPS
+                assert row.int_sum == (range_len * (row.filter_hi + row.filter_lo) // 2) * N_GROUPS
                 assert row.count_distinct == range_len
 
             else:

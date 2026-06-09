@@ -217,7 +217,7 @@ namespace NKikimr {
                 << " UnconfiguredStateReason# " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
 
         YDB_LOG_ERROR("Unconfigured Wakeup TIMEOUT Marker# DSP05",
-            {"details", details});
+            {"Details", details});
 
         ErrorDescription = "Configuration timeout occured (DSPE1). " + details;
         EstablishingSessionsPutMuteChecker.Unmute();
@@ -246,7 +246,7 @@ namespace NKikimr {
                 << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
                 << " NumUnconnectedDisks# " << NumUnconnectedDisks;
         YDB_LOG_ERROR("StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12",
-            {"details", details});
+            {"Details", details});
         ErrorDescription = "Timeout while establishing sessions (DSPE4). " + details;
         SetStateEstablishingSessionsTimeout();
     }
@@ -346,7 +346,7 @@ namespace NKikimr {
             YDB_LOG_NOTICE("EnsureMonitoring Marker# DSP58",
                 {"Group", GroupId},
                 {"IsLimitedKeyless", IsLimitedKeyless},
-                {"fullIfPossible", fullIfPossible});
+                {"FullIfPossible", fullIfPossible});
 
             bool limited = IsLimitedKeyless || !fullIfPossible;
             IsFullMonitoring = IsLimitedKeyless || fullIfPossible;

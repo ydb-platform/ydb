@@ -409,7 +409,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
             YDB_LOG_COMP_WARN(BS_PROXY_GET, "Long TEvGet request detected",
-                {"marker", "BPG71"},
+                {"Marker", "BPG71"},
                 {"LongRequestThreshold", LongRequestThreshold},
                 {"GroupId", Info->GroupID},
                 {"SubrequestsCount", evResult->ResponseSz},
@@ -422,7 +422,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         auto resultStatusPriority = PriorityForStatusResult(evResult->Status);
         if (IS_LOG_PRIORITY_ENABLED(resultStatusPriority, LogCtx.LogComponent) && PopAllowToken(handleClass)) {
             YDB_LOG_COMP(resultStatusPriority, BS_PROXY_GET, "Query history",
-                {"marker", "BPG72"},
+                {"Marker", "BPG72"},
                 {"GroupId", Info->GroupID},
                 {"HandleClass", NKikimrBlobStorage::EGetHandleClass_Name(handleClass)},
                 {"History", GetImpl.PrintHistory()});

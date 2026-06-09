@@ -190,10 +190,10 @@ namespace NKikimr {
             auto& queues = FailDomains[topology.GetFailDomainOrderNumber(vdiskId)].VDisks[vdiskId.VDisk].Queues;
             TActorId queueActorId = queues.GetQueue(queueId).ActorId;
             YDB_LOG_COMP_DEBUG(NKikimrServices::BS_PROXY, "Send",
-                {"to_queueActorId", queueActorId},
+                {"ToQueueActorId", queueActorId},
                 {"TypeName", TypeName(*event)},
-                {"event", event->ToString()},
-                {"cookie", cookie});
+                {"Event", event->ToString()},
+                {"Cookie", cookie});
             TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(), 0, cookie, nullptr,
                 std::move(traceId)));
         }

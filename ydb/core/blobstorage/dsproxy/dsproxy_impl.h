@@ -229,11 +229,11 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         UnconfiguredBufferSize += ev->Get()->CalculateSize();
         InitQueue.emplace_back(ev.Release());
         if (UnconfiguredBufferSize > UnconfiguredBufferSizeLimit && InitQueue.size() > 1) {
-            YDB_LOG_COMP_ERROR(NKikimrServices::BS_PROXY, ">, dropping the queue ( Marker# DSP08",
+            YDB_LOG_COMP_ERROR(NKikimrServices::BS_PROXY, ">, dropping the queue Marker# DSP08",
                 {"Group", GroupId},
                 {"UnconfiguredBufferSize", UnconfiguredBufferSize},
                 {"UnconfiguredBufferSizeLimit", UnconfiguredBufferSizeLimit},
-                {"size", (ui64)InitQueue.size()});
+                {"Size", (ui64)InitQueue.size()});
             if (CurrentStateFunc() == &TThis::StateUnconfigured) {
                 ErrorDescription = TStringBuilder() << "Too many requests while waiting for configuration (DSPE2)."
                         << " GroupId# " << GroupId
@@ -332,7 +332,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         YDB_LOG_COMP(priority, NKikimrServices::BS_PROXY, "HandleError Marker# DSP31",
             {"ExtraLogInfo", ExtraLogInfo},
             {"Group", GroupId},
-            {"ev", ev->Get()->Print(false)},
+            {"Ev", ev->Get()->Print(false)},
             {"Response", response->Print(false)});
         Send(ev->Sender, response.release(), 0, ev->Cookie);
     }

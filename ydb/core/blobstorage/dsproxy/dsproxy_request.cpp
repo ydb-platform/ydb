@@ -161,8 +161,8 @@ namespace NKikimr {
             result->ErrorReason = errorReason;
             result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
             YDB_LOG_COMP_ERROR(NKikimrServices::BS_PROXY, "HandleNormal Marker# DSP54",
-                {"ev", ev->Get()->Print(false)},
-                {"result", result->Print(false)});
+                {"Ev", ev->Get()->Print(false)},
+                {"Result", result->Print(false)});
             Send(ev->Sender, result.release(), 0, ev->Cookie);
         };
 

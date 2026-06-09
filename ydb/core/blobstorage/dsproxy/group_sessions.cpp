@@ -82,7 +82,7 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
                 {"Group", info->GroupID},
                 {"Actor", ProxyActor},
                 {"Queue", queue.ToString()},
-                {"targetNodeId", targetNodeId});
+                {"TargetNodeId", targetNodeId});
 
             auto& q = stateVDisk.Queues.GetQueue(queueId);
             q.ActorId = queue;

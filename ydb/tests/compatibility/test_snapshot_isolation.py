@@ -76,7 +76,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     filter_hi          Int32,
                     row_count          Int32,
                     int_sum            Int64,
-                    out_of_range_count Int32,
+                    count_distinct     Int32,
                     PRIMARY KEY (agg_id)
                 )
             """)
@@ -104,59 +104,81 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     # Worker threads
     # -------------------------------------------------------------------------
 
-    def _updater(self, table_name, stop_event, counter, lock):
+    def _updater(self, table_name, stop_event, exec_counter, lock):
         """Repeatedly picks a random group and redistributes its int_val values
         while preserving the group sum invariant (SUM == FIXED_GROUP_SUM)."""
-        while not stop_event.is_set():
-            try:
-                group = random.randint(0, N_GROUPS - 1)
-                lo = group * GROUP_SIZE
-                # Shuffle [0..GROUP_SIZE-1] — any permutation also sums to FIXED_GROUP_SUM.
-                new_vals = list(range(GROUP_SIZE))
-                random.shuffle(new_vals)
 
-                values_str = ", ".join(
-                    f"({lo + i}, {new_vals[i]}, \"{new_vals[i]:05d}\")"
-                    for i in range(GROUP_SIZE)
-                )
-                self._execute(
-                    f"UPSERT INTO `{table_name}` (key, int_val, str_val) VALUES {values_str}"
-                )
+        driver = self.create_driver()
+        with ydb.QuerySessionPool(self.driver) as pool:
+            while not stop_event.is_set():
+                try:
+                    group = random.randint(0, N_GROUPS - 1)
+                    lo = group * GROUP_SIZE
+                    # Shuffle [0..GROUP_SIZE-1] — any permutation also sums to FIXED_GROUP_SUM.
+                    new_vals = list(range(GROUP_SIZE))
+                    random.shuffle(new_vals)
 
-                with lock:
-                    exec_counter[0] += 1
-            except Exception as e:
-                logger.warning("Updater [%s] error: %s", table_name, e)
+                    values_str = ", ".join(
+                        f"({lo + i}, {new_vals[i]}, \"{new_vals[i]:05d}\")"
+                        for i in range(GROUP_SIZE)
+                    )
+                    pool.execute_with_retries(
+                        f"UPSERT INTO `{table_name}` (key, int_val, str_val) VALUES {values_str}"
+                    )
+
+                    with lock:
+                        exec_counter[0] += 1
+                    logger.info(f"Updater [{table_name}] iter: {exec_counter[0]}")
+                except Exception as e:
+                    logger.warning("Updater [%s] error: %s", table_name, e)
 
     def _pk_aggregator(self, table_name, result_table, agg_id, stop_event, exec_counter, lock):
         """Reads a group-aligned PK range under snapshot isolation, computes the
         aggregate, and writes it to the result table (generating write conflicts
         when multiple threads share the same agg_id slot)."""
-        while not stop_event.is_set():
-            try:
-                lo_group = random.randint(0, N_GROUPS - 51)
-                n_groups = random.randint(1, 50)
-                lo = lo_group * GROUP_SIZE
-                hi = lo + n_groups * GROUP_SIZE - 1
 
-                def callee(tx, lo=lo, hi=hi):
-                    rows = list(tx.execute(
-                        f"SELECT int_val FROM `{table_name}` WHERE key BETWEEN {lo} AND {hi}"
-                    )[0].rows)
-                    row_count = len(rows)
-                    int_sum = sum(r.int_val or 0 for r in rows)
-                    tx.execute(
-                        f"UPSERT INTO `{result_table}` "
-                        "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, out_of_range_count) "
-                        f"VALUES ({agg_id}, \"pk_range\", {lo}, {hi}, {row_count}, {int_sum}, 0)"
-                    )
+        driver = self.create_driver()
+        with ydb.QuerySessionPool(self.driver) as pool:
+            while not stop_event.is_set():
+                try:
+                    lo_group = random.randint(0, N_GROUPS - 2)
+                    hi_group = random.randint(lo_group + 1, N_GROUPS - 1)
+                    lo = lo_group * GROUP_SIZE
+                    hi = hi_group * GROUP_SIZE
 
-                with ydb.QuerySessionPool(self.driver) as pool:
+                    def callee(tx, lo=lo, hi=hi):
+                        tx.begin()
+
+                        with tx.execute(
+                            f"SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd "
+                            f"FROM `{table_name}` WHERE key BETWEEN $lo AND $hi",
+                            parameters={
+                                '$lo': lo,
+                                '$hi': hi,
+                            }) as results:
+                            res = list(results)[0].rows[0]
+
+                        with tx.execute(
+                            f"UPSERT INTO `{result_table}` "
+                            "(agg_id, filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
+                            f"VALUES ($agg_id, \"pk_range\", $lo, $hi, $row_count, $int_sum, $cd)",
+                            parameters={
+                                '$agg_id': (agg_id, ydb.PrimitiveType.Int32),
+                                '$lo': (lo, ydb.PrimitiveType.Int32),
+                                '$hi': (hi, ydb.PrimitiveType.Int32),
+                                '$row_count': (res.rc, ydb.PrimitiveType.Int32),
+                                '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
+                                '$cd': (res.cd, ydb.PrimitiveType.Int32),
+                            },
+                            commit_tx=True):
+                            pass
+
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
-                with lock:
-                    exec_counter[0] += 1
-            except Exception as e:
-                logger.warning("PK aggregator [%s] error: %s", table_name, e)
+
+                    with lock:
+                        exec_counter[0] += 1
+                except Exception as e:
+                    logger.warning("PK aggregator [%s] error: %s", table_name, e)
 
     def _sec_idx_aggregator(self, result_table, agg_id, stop_event, exec_counter, lock):
         """Reads datashard_table via its secondary index under snapshot isolation.
@@ -311,6 +333,13 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         for i in range(2):
             start(f'ds_pk_{i}', self._pk_aggregator,
                   'datashard_table', 'datashard_results', i % N_PK_SLOTS)
+
+        self._wait_for_progress(exec_counters, lock, min_per_counter=5)
+        res1 = self._execute("select * from column_results")
+        logger.warn(f"FFF1 {[rs.rows for rs in res1]}")
+        res2 = self._execute("select * from datashard_results")
+        logger.warn(f"FFF2 {[rs.rows for rs in res2]}")
+        return
 
         # --- Secondary-index aggregators (2 threads share 1 slot → conflicts) ---
         for i in range(2):

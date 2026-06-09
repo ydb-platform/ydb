@@ -270,13 +270,13 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
         UNIT_ASSERT(NKafka::NPrivate::IsDefaultValue<Meta_TKafkaBytes>(value));
 
         char v[] = "value";
-        value = TString(v);
+        value = TArrayRef(v);
         UNIT_ASSERT(!NKafka::NPrivate::IsDefaultValue<Meta_TKafkaBytes>(value));
     }
 
     Y_UNIT_TEST(TKafkaBytes_PresentVersion_NotTaggedVersion) {
         char v[] = "0123456789";
-        SIMPLE_HEAD(TKafkaBytes, TString(v));
+        SIMPLE_HEAD(TKafkaBytes, TArrayRef(v));
 
         NKafka::NPrivate::Write<Meta_TKafkaBytes>(collector, writable, 3, value);
         NKafka::NPrivate::Read<Meta_TKafkaBytes>(readable, 3, result);
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
 
     Y_UNIT_TEST(TKafkaBytes_PresentVersion_TaggedVersion) {
         char v[] = "0123456789";
-        SIMPLE_HEAD(TKafkaBytes, TString(v));
+        SIMPLE_HEAD(TKafkaBytes, TArrayRef(v));
 
         NKafka::NPrivate::Write<Meta_TKafkaBytes>(collector, writable, 11, value);
         UNIT_ASSERT_EQUAL(collector.NumTaggedFields, 1u);

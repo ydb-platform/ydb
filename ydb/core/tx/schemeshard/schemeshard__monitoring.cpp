@@ -20,7 +20,7 @@
 #error log macro redefinition
 #endif
 
-#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, stream)
+#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[schemeshard__monitoring] " << stream)
 
 namespace std {
 

@@ -36,7 +36,7 @@ The following types of load tests are supported at the moment:
 ## Global parameters for all workloads {#global_workload_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+| --- | --- | --- |
 | `--seconds <value>` | `-s <value>` | Duration of the test, in seconds. Default: 10. |
 | `--threads <value>` | `-t <value>` | The number of parallel threads creating the load. Default: 10. |
 | `--rate <value>` | - | Total rate for all threads, in transactions per second. Default: 0 (no rate limit). |

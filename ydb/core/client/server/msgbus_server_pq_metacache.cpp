@@ -101,8 +101,8 @@ public:
             tenant.SkipPrefix("/");
             tenant.ChopSuffix("/");
             if (tenant != "Root") {
-                YDB_LOG_CTX_NOTICE(ctx, "Started on tenant = ' ', will not request hive",
-                    {"tenant", tenant});
+                YDB_LOG_CTX_NOTICE(ctx, "Started on tenant, will not request hive",
+                    {"Tenant", tenant});
                 OnDynNode = true;
             } else {
                 StartHivePipe(ctx);
@@ -151,7 +151,7 @@ private:
     void StartHivePipe(const TActorContext& ctx) {
         auto hiveTabletId = GetHiveTabletId(ctx);
         YDB_LOG_CTX_DEBUG(ctx, "Start pipe to hive",
-            {"tablet", hiveTabletId});
+            {"Tablet", hiveTabletId});
         auto pipeRetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         pipeRetryPolicy.MaxRetryTime = TDuration::Seconds(1);
         NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = pipeRetryPolicy};
@@ -356,9 +356,9 @@ private:
         }
         if (db) schemeCacheRequest->DatabaseName = *db;
         YDB_LOG_CTX_DEBUG(ctx, "send request for topics, got requests infly",
-            {"topics", waiter->GetTopics().size()},
-            {"waiters", DescribeTopicsWaiters.size()},
-            {"db", db});
+            {"Topics", waiter->GetTopics().size()},
+            {"Waiters", DescribeTopicsWaiters.size()},
+            {"Db", db});
 
         ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release()), 0, 0, waiter->Span.GetTraceId());
     }
@@ -366,8 +366,8 @@ private:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         std::shared_ptr<TSchemeCacheNavigate> result(ev->Get()->Request.Release());
 
-        YDB_LOG_CTX_DEBUG(ctx, "Handle SchemeCache response:",
-            {"result", result->ToString(*AppData()->TypeRegistry)});
+        YDB_LOG_CTX_DEBUG(ctx, "Handle SchemeCache response",
+            {"Result", result->ToString(*AppData()->TypeRegistry)});
 
         bool needLogError = AnyOf(result->ResultSet, [](const auto& entry) {
             switch (entry.Status) {
@@ -386,8 +386,8 @@ private:
             }
         });
         if (needLogError) {
-            YDB_LOG_CTX_ERROR(ctx, "Handle SchemeCache response:",
-                {"result", result->ToString(*AppData()->TypeRegistry)});
+            YDB_LOG_CTX_ERROR(ctx, "Handle SchemeCache response",
+                {"Result", result->ToString(*AppData()->TypeRegistry)});
         }
 
         auto waiterIter = DescribeTopicsWaiters.find(result->Instant);
@@ -468,8 +468,8 @@ private:
 
     void HandleHiveMonResponse(NMon::TEvRemoteJsonInfoRes::TPtr& ev, const TActorContext& ctx) {
         ResetHiveRequestState(ctx);
-        YDB_LOG_CTX_DEBUG(ctx, "Got Hive landing data response: ' '",
-            {"ev", ev->Get()->Json});
+        YDB_LOG_CTX_DEBUG(ctx, "Got Hive landing data response",
+            {"Ev", ev->Get()->Json});
         TStringInput input(ev->Get()->Json);
         auto jsonValue = NJson::ReadJsonTree(&input, true);
         const auto& rootMap = jsonValue.GetMap();

@@ -358,15 +358,15 @@ TPersQueueBaseRequestProcessor::~TPersQueueBaseRequestProcessor() {
 
 bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext& ctx) {
     YDB_LOG_CTX_TRACE(ctx, "TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded topics count",
-        {"count", ChildrenToCreate.size()});
+        {"Count", ChildrenToCreate.size()});
 
     Y_ABORT_UNLESS(NeedChildrenCreation);
 
     if (AtomicAdd(Infly, ChildrenToCreate.size()) > MAX_INFLY) {
         AtomicSub(Infly, ChildrenToCreate.size());
         YDB_LOG_CTX_DEBUG(ctx, "topics count is greater then",
-            {"count", ChildrenToCreate.size()},
-            {"MAX_INFLY", MAX_INFLY});
+            {"Count", ChildrenToCreate.size()},
+            {"MAXINFLY", MAX_INFLY});
         return false;
     }
 
@@ -384,15 +384,15 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
         }
 
         if (topics.find(name) != topics.end()) {
-            YDB_LOG_CTX_ERROR(ctx, "already present topic ' '",
-                {"name", name});
+            YDB_LOG_CTX_ERROR(ctx, "already present topic",
+                {"Name", name});
             SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                                  TStringBuilder() << "already present topic '" << name  << "' Marker# PQ95");
             return true;
         }
 
         YDB_LOG_CTX_TRACE(ctx, "CreateTopicSubactor for topic",
-            {"name", name});
+            {"Name", name});
 
         THolder<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name);
         if (childActor.Get() != nullptr) {
@@ -402,7 +402,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
             Children.emplace(actorId, std::move(perTopicInfo));
         }
         else
-            YDB_LOG_CTX_WARN(ctx, "CreateTopicSubactor failed.");
+            YDB_LOG_CTX_WARN(ctx, "CreateTopicSubactor failed");
     }
     Y_ABORT_UNLESS(topics.size() == Children.size());
 
@@ -489,8 +489,8 @@ STFUNC(TTopicInfoBasedActor::StateFunc) {
         CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     default:
         YDB_LOG_WARN("Unexpected event",
-            {"type", ev->GetTypeRewrite()},
-            {"ev", ev->ToString()});
+            {"Type", ev->GetTypeRewrite()},
+            {"Ev", ev->ToString()});
     }
 }
 
@@ -1157,7 +1157,7 @@ public:
                     } else {
                         const auto& tabletInfo = TabletInfo[tabletId];
                         YDB_LOG_CTX_DEBUG(ctx, "sending HasDataInfoResponse",
-                            {"response", it->second.FetchInfo[part]->Record});
+                            {"Response", it->second.FetchInfo[part]->Record});
 
                         NTabletPipe::SendData(ctx, tabletInfo.PipeClient, it->second.FetchInfo[part].Release());
                         ++PartTabletsRequested;
@@ -1386,7 +1386,7 @@ public:
         }
         if (IsFetchRequest) {
             YDB_LOG_CTX_DEBUG(ctx, "scheduling HasDataInfoResponse in",
-                {"waitMs", RequestProto.GetFetchRequest().GetWaitMs()});
+                {"WaitMs", RequestProto.GetFetchRequest().GetWaitMs()});
             ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(RequestProto.GetFetchRequest().GetWaitMs(), 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
         }
         Y_ABORT_UNLESS(!TopicInfo.empty());
@@ -1539,7 +1539,7 @@ public:
         THolder<TBusResponse> result(new TBusResponse());
         result->Record.Swap(&record);
         YDB_LOG_CTX_INFO(ctx, "proxy answer",
-            {"requestId", TImplActor::RequestId});
+            {"RequestId", TImplActor::RequestId});
 
         SendReplyMove(result.Release());
 

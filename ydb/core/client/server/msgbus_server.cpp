@@ -579,11 +579,11 @@ void TMessageBusServer::OnError(TAutoPtr<NBus::TBusMessage> msg, NBus::EMessageS
     if (ActorSystem) {
         if (status == NBus::MESSAGE_SHUTDOWN) {
             YDB_LOG_CTX_DEBUG(*ActorSystem, "Msgbus client disconnected before reply was sent",
-                {"msg", msg->Describe()});
+                {"Msg", msg->Describe()});
         } else {
             YDB_LOG_CTX_ERROR(*ActorSystem, "Failed to send reply over msgbus",
-                {"status", status},
-                {"msg", msg->Describe()});
+                {"Status", status},
+                {"Msg", msg->Describe()});
         }
     }
 }

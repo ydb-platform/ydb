@@ -207,9 +207,9 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
             }
 
             YDB_LOG_CTX_DEBUG(*ActorSystem, "HttpRequest",
-                {"method", request.GetMethod()},
-                {"uri", request.GetUri()},
-                {"json", message->GetRecord()->AsJSON()});
+                {"Method", request.GetMethod()},
+                {"Uri", request.GetUri()},
+                {"Json", message->GetRecord()->AsJSON()});
 
             TBusHttpServerSession session(this, request, Protocol, Config);
             TBusHttpIdentity identity;

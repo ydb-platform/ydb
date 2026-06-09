@@ -59,7 +59,7 @@ public:
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
         YDB_LOG_CTX_DEBUG(ctx, "Forwarding CMS request",
-            {"request", Request.ShortDebugString().data()});
+            {"Request", Request.ShortDebugString().data()});
 
         if (Request.HasClusterStateRequest()) {
             TAutoPtr<TEvCms::TEvClusterStateRequest> request

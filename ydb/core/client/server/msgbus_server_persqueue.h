@@ -324,8 +324,8 @@ protected:
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
             YDB_LOG_COMP_WARN(NKikimrServices::PERSQUEUE, "Unexpected event",
-                {"type", ev->GetTypeRewrite()},
-                {"ev", ev->ToString()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Ev", ev->ToString()});
         }
     }
 
@@ -337,8 +337,8 @@ protected:
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
             YDB_LOG_COMP_WARN(NKikimrServices::PERSQUEUE, "Unexpected event",
-                {"type", ev->GetTypeRewrite()},
-                {"ev", ev->ToString()});
+                {"Type", ev->GetTypeRewrite()},
+                {"Ev", ev->ToString()});
         }
     }
 

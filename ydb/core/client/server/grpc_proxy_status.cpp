@@ -398,12 +398,12 @@ public:
             totalWeight += weight;
         }
 
-        YDB_LOG_CTX_DEBUG(ctx, "ChooseProxyResponses ",
-            {"preferLocal", preferLocalProxy},
-            {"localId", localNodeId},
-            {"nodes", s.c_str()},
-            {"cookie", cookie},
-            {"name", name});
+        YDB_LOG_CTX_DEBUG(ctx, "ChooseProxyResponses",
+            {"PreferLocal", preferLocalProxy},
+            {"LocalId", localNodeId},
+            {"Nodes", s.c_str()},
+            {"Cookie", cookie},
+            {"Name", name});
 
         if (name.empty()) {
             response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);

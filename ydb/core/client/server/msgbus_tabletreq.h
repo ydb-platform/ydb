@@ -62,10 +62,10 @@ protected:
 
     virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx,
             const TString& text = TString()) {
-        YDB_LOG_CTX_COMP_ERROR(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest text#",
+        YDB_LOG_CTX_COMP_ERROR(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest",
             {"TabletId", TabletId},
-            {"status", status},
-            {"text", text},
+            {"Status", status},
+            {"Text", text},
             {"Endl", Endl});
         return new TBusResponseStatus(status, text);
     }

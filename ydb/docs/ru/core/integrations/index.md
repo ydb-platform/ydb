@@ -47,6 +47,10 @@
 
 {% include notitle [Содержание](orm/_includes/toc-table.md) %}
 
+## Spring {#spring}
+
+{% include notitle [Содержание](spring/_includes/toc-table.md) %}
+
 ## Векторный поиск {#vectorsearch}
 
 {% include notitle [Содержание](vectorsearch/_includes/toc-table.md) %}

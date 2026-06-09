@@ -93,7 +93,7 @@ public:
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites: {
+            case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
                 if (!operationInfo.LockNullWritesTxId) {
                     operationInfo.LockNullWritesTxId = txId;
                     Self->PersistSetColumnConstraintLockNullWritesTxId(db, operationInfo);
@@ -102,7 +102,7 @@ public:
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
+            case TSetColumnConstraintOperationInfo::EOperationState::Finishing: {
                 if (!operationInfo.UnlockNullWritesTxId) {
                     operationInfo.UnlockNullWritesTxId = txId;
                     Self->PersistSetColumnConstraintUnlockNullWritesTxId(db, operationInfo);
@@ -122,7 +122,7 @@ public:
             }
 
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid:
-            case TSetColumnConstraintOperationInfo::EOperationState::Validate:
+            case TSetColumnConstraintOperationInfo::EOperationState::Validating:
             case TSetColumnConstraintOperationInfo::EOperationState::Done: {
                 // We dont need to get TxId on these states
                 Y_UNREACHABLE();
@@ -221,11 +221,11 @@ public:
             if (!replyOnCreation()) {
                 return false;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites) {
             Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
             operationInfo.LockNullWritesTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Finishing) {
             Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
             operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
@@ -286,11 +286,11 @@ public:
             Y_ENSURE(txId == operationInfo.LockTxId);
             operationInfo.LockTxDone = true;
             Self->PersistSetColumnConstraintLockTxDone(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites) {
             Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
             operationInfo.LockNullWritesTxDone = true;
             Self->PersistSetColumnConstraintLockNullWritesTxDone(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Finishing) {
             Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
             operationInfo.UnlockNullWritesTxDone = true;
             Self->PersistSetColumnConstraintUnlockNullWritesTxDone(db, operationInfo);
@@ -358,6 +358,17 @@ public:
 
         if (!found) {
             LOG_W("TTxReplyValidateRowCondition: shard not found for tabletId# " << tabletId);
+            return true;
+        }
+
+        // There is a scenario where, even when using a pipe,
+        // we may send a TEvValidateRowConditionRequest to a DataShard twice.
+        // As a result, we may receive two responses.
+        // Therefore, we should ignore extra responses so that
+        // `DoneValidationShards` does not end up containing duplicates.
+        if (!operationInfo.InProgressValidationShards.contains(shardIdx)) {
+            LOG_N("TTxReplyValidateRowCondition: superfluous shard event, id# " << BuildId
+                << ", shardIdx# " << shardIdx);
             return true;
         }
 
@@ -431,7 +442,68 @@ public:
     }
 };
 
-}
+struct TTxReplyRetrySetColumnConstraint : public TSchemeShard::TIndexBuilder::TTxBase
+{
+private:
+    TTabletId ShardId;
+
+public:
+    explicit TTxReplyRetrySetColumnConstraint(TSelf* self, TIndexBuildId operationId, TTabletId shardId)
+        : TTxBase(self, operationId, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
+        , ShardId(shardId)
+    {}
+
+    bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
+        const auto& shardIdx = Self->GetShardIdx(ShardId);
+
+        LOG_N("TTxReplyRetrySetColumnConstraint: PipeRetry"
+            << ", id# " << BuildId
+            << ", shardId# " << ShardId
+            << ", shardIdx# " << shardIdx);
+
+        auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
+        if (!operationInfoPtr) {
+            LOG_I("TTxReplyRetrySetColumnConstraint: operation not found, id# " << BuildId);
+            return true;
+        }
+
+        auto& operationInfo = *operationInfoPtr->get();
+
+        if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validating) {
+            LOG_I("TTxReplyRetrySetColumnConstraint: superfluous event, id# " << BuildId
+                << ", state# " << ToString(operationInfo.OperationState));
+            return true;
+        }
+
+        if (!operationInfo.ValidationShards.contains(shardIdx)) {
+            LOG_I("TTxReplyRetrySetColumnConstraint: shard not found in ValidationShards"
+                << ", id# " << BuildId
+                << ", shardIdx# " << shardIdx);
+            return true;
+        }
+
+        if (operationInfo.InProgressValidationShards.erase(shardIdx)) {
+            operationInfo.ToValidateShards.emplace_front(shardIdx);
+
+            Self->SetColumnConstraintPipes.Close(BuildId, ShardId, ctx);
+
+            Progress(BuildId);
+        }
+
+        return true;
+    }
+
+    void DoComplete(const TActorContext& /*ctx*/) override {}
+
+    void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
+        TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
+    {
+        LOG_E("TTxReplyRetrySetColumnConstraint: OnUnhandledException"
+            ", id# " << BuildId << ", exception: " << exc.what());
+    }
+};
+
+} // NSetColumnConstraint
 
 using namespace NTabletFlatExecutor;
 
@@ -561,13 +633,13 @@ public:
                 } else if (!operationInfo.LockTxDone) {
                     Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockTxId)));
                 } else {
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites);
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites);
                     Progress(BuildId);
                 }
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites: {
+            case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
                 if (operationInfo.LockNullWritesTxId == InvalidTxId) {
                     AllocateTxId(BuildId);
                 } else if (operationInfo.LockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {
@@ -575,16 +647,16 @@ public:
                 } else if (!operationInfo.LockNullWritesTxDone) {
                     Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.LockNullWritesTxId)));
                 } else {
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Validate);
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Validating);
                     Progress(BuildId);
                 }
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::Validate: {
+            case TSetColumnConstraintOperationInfo::EOperationState::Validating: {
                 if (DriveToSendMessageToPartOfShards(txc, operationInfo)) {
                     if (operationInfo.ValidationFailed) {
-                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites);
+                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     } else {
                         ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Unlocking);
                     }
@@ -593,7 +665,7 @@ public:
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
+            case TSetColumnConstraintOperationInfo::EOperationState::Finishing: {
                 if (operationInfo.UnlockNullWritesTxId == InvalidTxId) {
                     AllocateTxId(BuildId);
                 } else if (operationInfo.UnlockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {
@@ -654,6 +726,10 @@ public:
 
 ITransaction* TSchemeShard::CreateTxSetColumnConstraintProgress(TIndexBuildId operationId) {
     return new TIndexBuilder::TTxProgressSetColumnConstraint(this, operationId);
+}
+
+ITransaction* TSchemeShard::CreatePipeRetrySetColumnConstraint(TIndexBuildId operationId, TTabletId tabletId) {
+    return new NSetColumnConstraint::TTxReplyRetrySetColumnConstraint(this, operationId, tabletId);
 }
 
 ITransaction* TSchemeShard::CreateTxReplyAllocateSetColumnConstraint(

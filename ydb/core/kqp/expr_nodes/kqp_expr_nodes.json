@@ -848,6 +848,14 @@
             ]
         },
         {
+            "Name": "TKqpStreamEnumerate",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpStreamEnumerate"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOpRead",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},

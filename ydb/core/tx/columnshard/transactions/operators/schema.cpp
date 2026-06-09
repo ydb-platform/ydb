@@ -164,11 +164,11 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Copy to existing table");
             }
-            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
-            if (!txIdsToWait.empty()) {
-                AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
-                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
-            }
+            // CopyTable is a read-only metadata operation that creates a new path pointing to the
+            // same data. Unlike MoveTable, it does not modify the source path mapping, so it does
+            // not conflict with existing transactions and should not wait for them. Waiting for all
+            // txs via GetTxs() caused hangs when other long-running transactions existed on the shard
+            // (e.g., during export when backup txs are pending on the same shards).
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
             break;
         }
@@ -289,11 +289,6 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false));
             AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false));
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
-            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
-            AFL_VERIFY(txIdsToWait.erase(GetTxId()));
-            if (!txIdsToWait.empty()) {
-                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
-            }
         } break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;

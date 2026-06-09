@@ -8,6 +8,7 @@ SRCS(
     correlated_filter_pullup.cpp
     expand_cbo_tree.cpp
     extract_join_expressions.cpp
+    eliminate_left_join.cpp
     fuse_filters.cpp
     inline_cbo_tree.cpp
     inline_join_filters.cpp

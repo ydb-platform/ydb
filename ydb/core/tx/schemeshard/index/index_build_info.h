@@ -720,6 +720,19 @@ public:
         return BuildKind == EBuildKind::BuildFulltext;
     }
 
+    bool IsBuildFulltextRelevance() const {
+        return BuildKind == EBuildKind::BuildFulltext && (
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+    }
+
+    bool IsBuildFulltextCompact() const {
+        return BuildKind == EBuildKind::BuildFulltext && (
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+    }
+
     bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
@@ -853,9 +866,9 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     enum class EOperationState: ui32 {
         Invalid = 0,
         Locking = 10,
-        LockNullWrites = 20,
-        Validate = 30,
-        UnlockNullWrites = 40,
+        LockingNullWrites = 20,
+        Validating = 30,
+        Finishing = 40,
         Unlocking = 60,
         Done = 200
     };
@@ -880,7 +893,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     TTxId ValidationSnapshotTxId = TTxId();
     TStepId ValidationSnapshotStep = TStepId();
 
-    ui32 MaxInProgressValidationShards = 10;
+    constexpr static ui32 MaxInProgressValidationShards = 10;
 
     bool ValidationFailed = false;  // true if any shard found NULL values
 

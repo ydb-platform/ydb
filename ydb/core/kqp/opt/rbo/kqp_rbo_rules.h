@@ -80,6 +80,16 @@ class TInlineJoinFiltersRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
+/**
+ * Remove a left join when the right side cannot change left-side row multiplicity
+ * and no right-side output is used above the join.
+ */
+class TEliminateLeftJoinRule : public ISimplifiedRule {
+  public:
+    TEliminateLeftJoinRule() : ISimplifiedRule("Eliminate left join", ERuleProperties::RequireParents | ERuleProperties::RequireMetadata | ERuleProperties::RequireLiveness) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
 
 /***
  * Fuse two consequtive filters

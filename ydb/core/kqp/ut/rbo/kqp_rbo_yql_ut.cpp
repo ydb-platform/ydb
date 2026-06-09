@@ -584,6 +584,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(condition.Contains("t1.a") && condition.Contains("t2.b") && condition.Contains(" = "), plan);
     }
 
+    Y_UNIT_TEST(EliminateUnusedLeftJoin) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            select t1.a, t1.b
+            from `/Root/t1` as t1
+            left join `/Root/t2` as t2 on t1.a = t2.a;
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Name", "Join"), plan);
+    }
+
     Y_UNIT_TEST(ExplainTopSort) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();
@@ -2970,6 +2983,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         removeIdentity.RunStage(root, testContext.RboCtx);
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(DontEliminateLeftJoinWhenNoPK) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("b"), TInfoUnit("right_payload")}, pos);
+        rightRead->Props.Metadata = TRBOMetadata();
+
+        auto join = MakeIntrusive<TOpJoin>(
+            leftRead,
+            rightRead,
+            pos,
+            "Left",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+        );
+        TOpRoot root(join, pos, {"a", "payload"});
+
+        ComputeLogicalTestProps(root);
+        auto input = root.GetInput();
+        TEliminateLeftJoinRule rule;
+        UNIT_ASSERT(!rule.MatchAndApply(input, testContext.RboCtx, root.PlanProps));
+        UNIT_ASSERT_C(input == join, root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(RemoveIdentityMapUnderUnionAll) {

@@ -350,11 +350,17 @@ private:
 
         if (PendingDirectRead) {
             PreparedResponse = proxyResponse->Response;
-        } else {
-            Response->Record.CopyFrom(*proxyResponse->Response);
+            SendResponse(
+                ctx,
+                true,
+                PreparedResponse->GetPartitionResponse().GetCmdReadResult(),
+                PendingPartitionResponse);
+            return;
         }
 
-        Die(ctx);
+        Response->Record.CopyFrom(*proxyResponse->Response);
+        ctx.Send(Sender, Response.Release());
+        DieWithCleanup(ctx);
     }
 
     STFUNC(StateFunc) {

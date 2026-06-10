@@ -46,9 +46,7 @@ class TestExportImportS3(MixedClusterFixture):
         )
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_export_auto_dropping": True
-            }
+            extra_feature_flags=["enable_export_auto_dropping"]
         )
 
     @staticmethod

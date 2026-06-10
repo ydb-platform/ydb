@@ -14,8 +14,7 @@ class TestStress(MixedClusterFixture):
     def setup(self):
         yield from self.setup_cluster(
             # uncomment for 64 datetime in tpc-h/tpc-ds
-            # extra_feature_flags={"enable_table_datetime64": True},
-
+            # extra_feature_flags=["enable_table_datetime64"],
             column_shard_config={
                 'disabled_on_scheme_shard': False,
             },

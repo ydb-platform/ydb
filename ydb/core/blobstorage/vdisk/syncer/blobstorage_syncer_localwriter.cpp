@@ -298,9 +298,9 @@ namespace NKikimr {
             , ParentId(parentId)
             , Ev(std::move(ev))
             , OldSyncState(oldSyncState)
-            , CompressChunks(vconfig->MaxSyncLogChunksInFlight)
+            , CompressChunks(vconfig->EnableSyncLogChunkCompression)
             , MaxChunksInFlight(vconfig->MaxSyncLogChunksInFlight)
-            , MaxChunksSize(vconfig->MaxSyncLogChunkSize)
+            , MaxChunksSize(vconfig->MaxSyncDataCutterChunkSize)
         {}
 
     STRICT_STFUNC(StateFunc, {

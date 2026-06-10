@@ -43,5 +43,7 @@ jobs:
           YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
           YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # YDBOT_TOKEN so verify repair commits trigger PR-check on synchronize.
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          GITHUB_PUSH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         

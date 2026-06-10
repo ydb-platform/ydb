@@ -46,14 +46,17 @@ jobs:
           YDBDOC_REVIEW_ENABLED: ${{ vars.YDBDOC_REVIEW_ENABLED }}
           YDBDOC_MODEL_CHECK: ${{ vars.YDBDOC_MODEL_CHECK }}
           YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # YDBOT_TOKEN (not GITHUB_TOKEN) so translation PR creation and labels
+          # trigger downstream workflows (PR-check, docs rebuild), same as backport.
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          GITHUB_PUSH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
 
       - name: Trigger docs rebuild for translation PR
         if: ${{ !cancelled() }}
         uses: actions/github-script@v8
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;

@@ -4,7 +4,7 @@
 
 ## Типы {#types}
 
-[Локальные Блум-индексы](../concepts/glossary.md#local-bloom-skip-index) — частный случай [локального индекса](../concepts/glossary.md#local-index). Поддерживаются два типа:
+Поддерживаются два типа:
 
 * `bloom_filter` — фильтр по точным значениям индексируемой колонки; подходит для условий равенства и `IN` (см. [когда применять](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter` — фильтр по n-граммам строковой колонки (`String`, `Utf8`); подходит для поиска подстрок и шаблонов `LIKE` в [колоночных таблицах](../concepts/glossary.md#column-oriented-table).
@@ -12,6 +12,8 @@
 Отличия типов и сравнение с глобальными индексами: [локальные индексы](../concepts/query_execution/local_indexes.md).
 
 ## Параметры и значения по умолчанию {#parameters}
+
+При создании или добавлении индекса в секции `INDEX` / `ADD INDEX` необязательный блок `WITH (...)` задаёт параметры конкретного блум-индекса (см. [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md), [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom)).
 
 Полный перечень параметров `WITH (...)` и значений по умолчанию:
 
@@ -72,9 +74,15 @@ ALTER TABLE `/Root/events` ALTER INDEX idx_ngram SET (
 * `ngram_size` для `bloom_ngram_filter` обычно начинают с `3`; увеличение значения может сделать фильтрацию строже для более длинных подстрок.
 * Меняйте параметры по одному и сравнивайте результат на одной и той же нагрузке.
 
-## Ограничения и особенности {#limitations}
+## Особенности и ограничения {#limitations}
+
+{% include [bloom_skip_index_features.md](../yql/reference/syntax/_includes/bloom_skip_index_features.md) %}
+
+{% note info "Ограничения" %}
 
 {% include [bloom_skip_index_limitations.md](../yql/reference/syntax/_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
 
 ## Дополнительные материалы {#see-also}
 

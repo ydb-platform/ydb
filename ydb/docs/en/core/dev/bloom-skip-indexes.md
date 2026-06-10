@@ -4,7 +4,7 @@ Bloom skip indexes are [local](../concepts/glossary.md#local-index) auxiliary st
 
 ## Types {#types}
 
-[Local Bloom skip indexes](../concepts/glossary.md#local-bloom-skip-index) are a kind of [local index](../concepts/glossary.md#local-index). {{ ydb-short-name }} supports two types:
+{{ ydb-short-name }} supports two types:
 
 * `bloom_filter`: a filter over exact values of the indexed column; use for equality and `IN` (see [when to use which](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter`: a filter over n-grams of a string column (`String`, `Utf8`); use for substring and `LIKE` pattern search on [column-oriented tables](../concepts/glossary.md#column-oriented-table).
@@ -12,6 +12,8 @@ Bloom skip indexes are [local](../concepts/glossary.md#local-index) auxiliary st
 For type differences and comparison with global indexes, see [local indexes](../concepts/query_execution/local_indexes.md).
 
 ## Parameters and defaults {#parameters}
+
+When you create or add an index in the `INDEX` / `ADD INDEX` clause, the optional `WITH (...)` block sets parameters for that Bloom skip index (see [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md), [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom)).
 
 Full list of `WITH (...)` parameters and defaults:
 
@@ -72,9 +74,15 @@ Tips:
 * For `bloom_ngram_filter`, `ngram_size` typically starts at `3`; increasing it can make filtering stricter for longer substrings.
 * Change one parameter at a time and compare results under the same workload.
 
-## Limitations {#limitations}
+## Behavior and limitations {#limitations}
+
+{% include [bloom_skip_index_features.md](../yql/reference/syntax/_includes/bloom_skip_index_features.md) %}
+
+{% note info "Limitations" %}
 
 {% include [bloom_skip_index_limitations.md](../yql/reference/syntax/_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
 
 ## Additional Materials {#see-also}
 

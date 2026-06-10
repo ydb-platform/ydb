@@ -53,9 +53,15 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, and so on) and vector indexes is supported only for row-oriented tables. For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), `ADD INDEX` [supports only local Bloom skip indexes](#local-bloom).
 
-The following limitations apply to local Bloom skip indexes:
+Local Bloom skip index behavior:
+
+{% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
+
+{% note info "Limitations" %}
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
 
 ### Examples
 

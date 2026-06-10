@@ -202,9 +202,13 @@ The fulltext search capabilities and index parameters are described in [{#T}](..
 
 A **local index** is an auxiliary structure stored together with table data (unlike a [global secondary index](#secondary-index), which materializes a separate index table). A local index is not selected in queries with `VIEW` and is applied while reading the main table in storage. {{ ydb-short-name }} currently implements local [Bloom skip indexes](#local-bloom-skip-index); other kinds are planned.
 
+#### Bloom filter {#bloom-filter}
+
+A Bloom filter is a [probabilistic data structure](https://en.wikipedia.org/wiki/Bloom_filter) for testing set membership. It may produce [false positives](https://en.wikipedia.org/wiki/Bloom_filter#Probability_of_false_positives), but there are no false negatives: if any checked bit is zero, the element is not in the set.
+
 #### Local Bloom skip index {#local-bloom-skip-index}
 
-A **local Bloom skip index** is a kind of [local index](#local-index): a probabilistic column-value filter based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments that cannot contain the requested value. Supported types are `bloom_filter` and `bloom_ngram_filter`. See [Bloom skip indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/local_indexes.md).
+A local Bloom skip index is a kind of [local index](#local-index): a probabilistic column-value filter based on a [Bloom filter](#bloom-filter) that speeds up selective queries by skipping data fragments that cannot contain the requested value. See [Bloom skip indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/local_indexes.md).
 
 #### Column family {#column-family}
 

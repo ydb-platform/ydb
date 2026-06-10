@@ -1,6 +1,8 @@
 # Secondary Indexes
 
-{{ ydb-short-name }} automatically creates a primary key index, which is why selection by primary key is always efficient, affecting only the rows needed. Selections by criteria applied to one or more non-key columns typically result in a full table scan. To make these selections efficient, use _secondary indexes_.
+{{ ydb-short-name }} automatically creates a primary key index, which is why selection by primary key is always efficient, affecting only the rows needed. Selections by criteria applied to one or more non-key columns typically result in a full table scan. To make these selections efficient, use _secondary indexes_ — global structures backed by a separate index table.
+
+[Local indexes](../glossary.md#local-index) are a separate kind of auxiliary structure: they are stored with table data and applied in the storage layer on read, without materializing a separate index table (see [Bloom skip index](#bloom-skip-index) below).
 
 The current version of {{ ydb-short-name }} implements _synchronous_ and _asynchronous_ global secondary indexes. Each index is a hidden table that is updated:
 
@@ -33,7 +35,7 @@ Unlike traditional secondary indexes, which optimize equality or range searches,
 
 Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../query_execution/fulltext_search.md).
 
-## Bloom skip index
+## Bloom skip index {#bloom-skip-index}
 
 A [Bloom skip index](../../dev/bloom-skip-indexes.md) is a kind of [local index](../glossary.md#local-index).
 

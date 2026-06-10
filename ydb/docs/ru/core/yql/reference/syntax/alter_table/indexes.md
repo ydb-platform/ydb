@@ -54,9 +54,15 @@ ALTER TABLE `<table_name>`
 
 Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` [поддерживаются только локальные блум-индексы](#local-bloom).
 
-Для локальных блум-индексов действуют следующие ограничения:
+Особенности локальных блум-индексов:
+
+{% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
+
+{% note info "Ограничения" %}
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
 
 ### Примеры
 

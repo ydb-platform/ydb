@@ -653,87 +653,51 @@
 
 - C++
 
-  Подключение к топику на запись представлено объектом сессии записи с интерфейсом `IWriteSession` или `ISimpleBlockingWriteSession` (вариант для простой записи по одному сообщению без подтверждения, блокирующейся при превышении числа inflight записей или размера буфера SDK). Настройки сессии записи представлены структурой `TWriteSessionSettings`, для варианта `ISimpleBlockingWriteSession` часть настроек не поддерживается.
+  {% list tabs %}
 
-  Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
+  - IWriteSession
 
-  Пример создания сессии записи с интерфейсом `IWriteSession`.
+    Подключение к топику на запись представлено объектом сессии записи с интерфейсом `IWriteSession` или `ISimpleBlockingWriteSession` (вариант для простой записи по одному сообщению без подтверждения, блокирующейся при превышении числа inflight записей или размера буфера SDK). Настройки сессии записи представлены структурой `TWriteSessionSettings`, для варианта `ISimpleBlockingWriteSession` часть настроек не поддерживается.
 
-  ```cpp
-  std::string producerAndGroupID = "group-id";
-  auto settings = NYdb::NTopic::TWriteSessionSettings()
-      .Path("my-topic")
-      .ProducerId(producerAndGroupID)
-      .MessageGroupId(producerAndGroupID);
+    Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
 
-  auto session = topicClient.CreateWriteSession(settings);
-  ```
+    ```cpp
+    std::string producerAndGroupID = "group-id";
+    auto settings = NYdb::NTopic::TWriteSessionSettings()
+        .Path("my-topic")
+        .ProducerId(producerAndGroupID)
+        .MessageGroupId(producerAndGroupID);
 
-  Для высокоуровневого API записи в C++ SDK доступен интерфейс `IProducer` (заголовок `client/topic/producer.h`), который создаётся через `TTopicClient::CreateProducer`.
+    auto session = topicClient.CreateWriteSession(settings);
+    ```
 
-  `IProducer` скрывает управление несколькими низкоуровневыми сессиями записи и автоматически выбирает партицию по ключу. Это удобно, когда приложение пишет в топик как в единый поток и не хочет самостоятельно управлять `IWriteSession` и `TContinuationToken`.
+  - IProducer
 
-  Базовые настройки задаются через `TProducerSettings`:
+    Высокоуровневый API записи: интерфейс `IProducer` создаётся через `TTopicClient::CreateProducer`. Один объект скрывает управление несколькими сессиями записи и автоматически выбирает партицию по ключу сообщения.
 
-  - `ProducerIdPrefix` — префикс producer id для подсессий записи;
-  - `PartitionChooserStrategy` — стратегия выбора партиции по ключу сообщения:
-    - `Bound` — ключ сопоставляется с диапазонами партиций топика (`FromBound`/`ToBound` из описания топика). По умолчанию перед сопоставлением ключ проходит через MurmurHash64. Рекомендуется для топиков с [автопартиционированием](../../concepts/datamodel/topic.md#autopartitioning): при разделении партиции SDK обновляет границы и продолжает направлять сообщения с тем же ключом в корректный диапазон.
-    - `KafkaHash` — по аналогии с Kafka: от ключа считается MurmurHash, индекс партиции — остаток от деления хеша на число партиций. Удобно при миграции с Kafka. Не поддерживается при включённом автопартиционировании.
-  - `PartitioningKeyHasher` — функция преобразования ключа перед сопоставлением с диапазонами; используется только для стратегии `Bound`. Можно задать свою, например чтобы в сравнении участвовал исходный ключ без хеширования.
+    Настройки задаются через `TProducerSettings`:
 
-  Методы `IProducer`:
+    - `ProducerIdPrefix` — префикс producer id для подсессий записи;
+    - `PartitionChooserStrategy` — стратегия выбора партиции по ключу сообщения:
+      - `Bound` — ключ сопоставляется с диапазонами партиций топика (`FromBound`/`ToBound` из описания топика). По умолчанию перед сопоставлением ключ проходит через MurmurHash64. Рекомендуется для топиков с [автопартиционированием](../../concepts/datamodel/topic.md#autopartitioning): при разделении партиции SDK обновляет границы и продолжает направлять сообщения с тем же ключом в корректный диапазон.
+      - `KafkaHash` — по аналогии с Kafka: от ключа считается MurmurHash, индекс партиции — остаток от деления хеша на число партиций. Удобно при миграции с Kafka. Не поддерживается при включённом автопартиционировании.
+    - `PartitioningKeyHasher` — функция преобразования ключа перед сопоставлением с диапазонами; используется только для стратегии `Bound`. Можно задать свою, например чтобы в сравнении участвовал исходный ключ без хеширования.
 
-  - `Write(TWriteMessage&&)` — кладет сообщение во внутренний буфер и возвращает `TWriteResult`;
-  - `Flush()` — дожидается гарантированной доставки накопленного буфера на сервер (`TFuture<TFlushResult>`);
-  - `Close(TDuration)` — закрывает продюсер и завершает отправку буфера в пределах таймаута.
+    Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h#L10).
 
-  Пример использования `IProducer`:
+    ```cpp
+    auto producerSettings = NYdb::NTopic::TProducerSettings()
+        .Path("my-topic")
+        .ProducerIdPrefix("my-producer")
+        .MessageGroupId("orders-group")
+        .PartitionChooserStrategy(NYdb::NTopic::EPartitionChooserStrategy::Bound);
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/topic/client.h>
-  #include <iostream>
+    auto producer = topicClient.CreateProducer(producerSettings);
+    ```
 
-  auto producerSettings = NYdb::NTopic::TProducerSettings()
-      .Path("my-topic")
-      .ProducerIdPrefix("my-producer")
-      .MessageGroupId("orders-group")
-      .PartitionChooserStrategy(NYdb::NTopic::EPartitionChooserStrategy::Bound);
+    Подробный пример см. в [репозитории ydb-platform/ydb](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
 
-  auto producer = topicClient.CreateProducer(producerSettings);
-
-  for (ui64 i = 1; i <= 3; ++i) {
-      NYdb::NTopic::TWriteMessage msg(
-          "user-42",                             // partitioning key
-          "payload-" + std::to_string(i),       // data
-          i                                      // explicit seqNo
-      );
-
-      auto writeResult = producer->Write(std::move(msg));
-      switch (writeResult.Status) {
-          case NYdb::NTopic::EWriteStatus::Queued:
-              break;
-          case NYdb::NTopic::EWriteStatus::Timeout:
-              std::cerr << "Write timeout, retry with same SeqNo\n";
-              break;
-          case NYdb::NTopic::EWriteStatus::Error:
-              std::cerr << "Write error: " << writeResult.ErrorMessage << "\n";
-              break;
-      }
-  }
-
-  auto flushResult = producer->Flush().GetValueSync();
-  if (flushResult.Status != NYdb::NTopic::EFlushStatus::Success) {
-      std::cerr << "Flush failed or producer closed\n";
-  }
-
-  auto closeResult = producer->Close(TDuration::Seconds(5));
-  if (closeResult.Status != NYdb::NTopic::ECloseStatus::Success &&
-      closeResult.Status != NYdb::NTopic::ECloseStatus::AlreadyClosed) {
-      std::cerr << "Close finished with non-success status\n";
-  }
-  ```
-
-  Полный пример с `TProducerSettings`, ретраями и разбором `TWriteResult` / `TFlushResult` см. в [репозитории ydb-platform/ydb](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
+  {% endlist %}
 
 - Go
 
@@ -870,38 +834,53 @@
 
 - C++
 
-  Асинхронная запись возможна через интерфейс `IWriteSession`.
+  {% list tabs %}
 
-  Работа пользователя с объектом `IWriteSession` в общем устроена как обработка цикла событий с тремя типами событий: `TReadyToAcceptEvent`, `TAcksEvent` и `TSessionClosedEvent`.
+  - IWriteSession
 
-  Для каждого из типов событий можно установить обработчик этого события, а также можно установить общий обработчик. Обработчики устанавливаются в настройках сессии записи перед её созданием.
+    Работа с объектом `IWriteSession` устроена как обработка цикла событий с тремя типами событий: `TReadyToAcceptEvent`, `TAcksEvent` и `TSessionClosedEvent`.
 
-  Если обработчик для некоторого события не установлен, его необходимо получить и обработать в методах `GetEvent` / `GetEvents`. Для неблокирующего ожидания очередного события есть метод `WaitEvent` с интерфейсом `TFuture<void>()`.
+    Для каждого из типов событий можно установить обработчик этого события, а также можно установить общий обработчик. Обработчики устанавливаются в настройках сессии записи перед её созданием.
 
-  Для записи каждого сообщения пользователь должен "потратить" move-only объект `TContinuationToken`, который выдаёт SDK с событием `TReadyToAcceptEvent`. При записи сообщения можно установить пользовательские seqNo и временную метку создания, но по умолчанию их проставляет SDK автоматически.
+    Если обработчик для некоторого события не установлен, его необходимо получить и обработать в методах `GetEvent` / `GetEvents`. Для неблокирующего ожидания очередного события есть метод `WaitEvent` с интерфейсом `TFuture<void>()`.
 
-  По умолчанию `Write` выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Сессия сама переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку сообщений пока это возможно, в соответствии с настройкой `RetryPolicy`. При получении ошибки, после которой невозможно продолжить работу, сессия чтения отправляет пользователю `TSessionClosedEvent` с диагностической информацией.
+    Для записи каждого сообщения пользователь должен "потратить" move-only объект `TContinuationToken`, который выдаёт SDK с событием `TReadyToAcceptEvent`. При записи сообщения можно установить пользовательские seqNo и временную метку создания, но по умолчанию их проставляет SDK автоматически.
 
-  Так может выглядеть запись нескольких сообщений в цикле событий без использования обработчиков:
+    По умолчанию `Write` выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Сессия сама переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку сообщений пока это возможно, в соответствии с настройкой `RetryPolicy`. При получении ошибки, после которой невозможно продолжить работу, сессия чтения отправляет пользователю `TSessionClosedEvent` с диагностической информацией.
 
-  ```cpp
-  // Event loop
-  while (true) {
-      // Get event
-      // May block for a while if write session is busy
-      std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+    Так может выглядеть запись нескольких сообщений в цикле событий без использования обработчиков:
 
-      if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-          session->Write(std::move(event.ContinuationToken), "This is yet another message.");
+    ```cpp
+    // Event loop
+    while (true) {
+        // Get event
+        // May block for a while if write session is busy
+        std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
 
-      } else if (auto* ackEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
-          std::cout << ackEvent->DebugString() << std::endl;
+        if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+            session->Write(std::move(event.ContinuationToken), "This is yet another message.");
 
-      } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
-          break;
-      }
-  }
-  ```
+        } else if (auto* ackEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
+            std::cout << ackEvent->DebugString() << std::endl;
+
+        } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+            break;
+        }
+    }
+    ```
+
+  - IProducer
+
+    `Write` ставит сообщение во внутренний буфер, `Flush` дожидается доставки накопленных данных на сервер, `Close` завершает работу продюсера.
+
+    ```cpp
+    producer->Write(NYdb::NTopic::TWriteMessage("user-42", "order-created"));
+    producer->Flush().GetValueSync();
+    ```
+
+    Подробный пример с обработкой статусов, ретраями и закрытием продюсера см. в [репозитории ydb-platform/ydb](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
+
+  {% endlist %}
 
 - Go
 

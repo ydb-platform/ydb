@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
+#include <ydb/library/security/util.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -384,6 +385,11 @@ private:
     }
 
     void AddMessageToReplayLog(const TString& queryPlan) {
+        if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text)) {
+            // Skip both replay log and QueryDiagnostics replay message for sensitive queries.
+            return;
+        }
+
         NJson::TJsonValue replayMessage(NJson::JSON_MAP);
 
         NJson::TJsonValue tablesMeta(NJson::JSON_ARRAY);

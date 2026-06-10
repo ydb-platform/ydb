@@ -123,18 +123,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             }
         }
 
-        bool HasParquetFile(const TString& path) const {
-            if constexpr (IsFs) {
-                Y_ABORT_UNLESS(TempDir.Defined());
-                // For FS, check if the file has .parquet extension
-                return TFsPath(TStringBuilder() << TempDir->Path() << path << ".parquet").Exists();
-            } else {
-                Y_ABORT_UNLESS(S3MockInstance.Defined());
-                // For S3, check if the file has .parquet extension in the mock
-                return S3MockInstance->GetData().FindPtr(TStringBuilder() << path << ".parquet") != nullptr;
-            }
-        }
-
         TS3Mock& S3Mock() {
             Y_ABORT_UNLESS(S3MockInstance.Defined());
             return *S3MockInstance;
@@ -1129,7 +1117,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 // Verify that Parquet files were created
-                UNIT_ASSERT(env.HasParquetFile("/data_00"));
+                UNIT_ASSERT(env.HasFile("/data_00.parquet"));
 
                 TestGetExport(runtime, exportId, "/MyRoot");
                 TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);

@@ -20,6 +20,12 @@ By default, minidump collection is disabled. To enable it, specify the directory
 
 If the directory is not set by either method, the built-in Breakpad is not activated and does not install signal handlers.
 
+{% note info %}
+
+The specified directory must exist before the process starts; {{ ydb-short-name }} does not create it automatically. If the directory is missing at crash time, the minidump write will not be performed.
+
+{% endnote %}
+
 ### Environment variables {#env}
 
 | Variable | Purpose |

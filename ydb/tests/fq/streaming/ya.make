@@ -1,8 +1,13 @@
 PY3TEST()
 
+FORK_SUBTESTS()
+
+SPLIT_FACTOR(50)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 TEST_SRCS(
+    test_early_finish.py
     test_streaming.py
     test_watermarks.py
 )
@@ -19,13 +24,12 @@ PY_SRCS(
 
 
 REQUIREMENTS(cpu:4)
+REQUIREMENTS(ram:20)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:20)
 ELSE()
     SIZE(MEDIUM)
-    FORK_SUBTESTS()
 ENDIF()
 
 PEERDIR(

@@ -152,18 +152,10 @@ protected: //TDqComputeActorChannels::ICalbacks
         auto* outputChannel = this->OutputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(outputChannel, "task: " << this->Task.GetId() << ", output channelId: " << channelId);
 
+        outputChannel->EarlyFinish = true;
         outputChannel->Finished = true;
-        outputChannel->Channel->Finish();
-
-        CA_LOG_D("task: " << this->Task.GetId() << ", output channelId: " << channelId << " finished prematurely, "
-            << " about to clear buffer");
-
-        {
-            auto guard = TBase::BindAllocator();
-            ui32 dropRows = outputChannel->Channel->Drop();
-
-            CA_LOG_I("task: " << this->Task.GetId() << ", output channelId: " << channelId << " finished prematurely, "
-                << "drop " << dropRows << " rows");
+        if (outputChannel->Channel) {
+            outputChannel->Channel->Finish();
         }
 
         TBase::DoExecute();
@@ -179,6 +171,10 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
         for (const auto& [_, channelInfo] : this->InputChannelsMap) {
             if (channelInfo.CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                continue;
+            }
+
+            if (channelInfo.Channel && channelInfo.Channel->IsFinished()) {
                 continue;
             }
 

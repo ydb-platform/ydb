@@ -26,6 +26,7 @@
 #include <ydb/library/http_proxy/error/error.h>
 
 #include <ydb/services/sqs_topic/sqs_topic_proxy.h>
+#include <ydb/core/ymq/base/helpers.h>
 
 #include <ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h>
 
@@ -149,7 +150,13 @@ namespace NKikimr::NSqsTopic::V1 {
             Ydb::Ymq::V1::Message result;
 
             if (message.Codec == Ydb::Topic::CODEC_RAW) {
-                result.set_body(std::move(message.Data));
+                TString errorDescription;
+                if (NKikimr::NSQS::ValidateMessageBody(message.Data, errorDescription)) {
+                    result.set_body(std::move(message.Data));
+                } else {
+                    result.set_body(Base64Encode(message.Data));
+                    result.mutable_attributes()->emplace("BodyEncoding", "base64");
+                }
             } else {
                 result.set_body(Base64Encode(message.Data));
 

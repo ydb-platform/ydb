@@ -223,7 +223,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -236,7 +235,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 payload Utf8,
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
-                INDEX idx_minmax LOCAL USING min_max ON (payload)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -285,7 +283,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
         TKikimrRunner kikimr(settings);
 
         const TString tablePath = "/Root/olapTableEntityIdDisjointAlterAfterCreate";
@@ -300,7 +297,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 payload Utf8,
                 PRIMARY KEY (timestamp, uid),
                 INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
-                INDEX idx_minmax LOCAL USING min_max ON (payload)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
@@ -321,7 +317,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
         TKikimrRunner kikimr(settings);
 
         const TString tablePath = "/Root/olapTableEntityIdDisjointAddColumn";
@@ -336,7 +331,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 INDEX idx_bloom LOCAL USING bloom_filter ON (uid) WITH (false_positive_probability = 0.01),
                 INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (uid)
                     WITH (ngram_size = 3, false_positive_probability = 0.01),
-                INDEX idx_minmax LOCAL USING min_max ON (uid)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");

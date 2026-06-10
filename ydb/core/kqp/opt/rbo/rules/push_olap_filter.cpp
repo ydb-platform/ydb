@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
 #include <ydb/core/kqp/opt/physical/predicate_collector.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
@@ -103,6 +104,9 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     auto predicate = lambda.Body();
     auto lambdaArg = lambda.Args().Arg(0).Ptr();
 
+    // Compute the predicate selectivity now, while the filter lambda is still live and type-annotated
+    const double pushedDownFilterSelectivity = TPredicateSelectivityComputer(std::make_shared<TOptimizerStatistics>()).Compute(lambda.Body());
+
     // Here we want to apply coalesce and propagate it to optional predicates.
     // clang-format off
     predicate = Build<TCoCoalesce>(ctx.ExprCtx, input->Pos)
@@ -207,8 +211,11 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
         MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(), read->Limit,
                                read->GetRanges(), originalPredicate, read->SortDir, read->Props, read->Pos);
     if (IsValidPredicateToKeep(remainingFilter)) {
+        // Part of the predicate could not be pushed down. The remaining TOpFilter survives and its selectivity computed later.
         return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(remainingFilter.Cast().Ptr(), &ctx.ExprCtx, &props));
     }
+    // The whole predicate was pushed in: no TOpFilter remains, so carry its selectivity on the read.
+    newRead->Props.PushedDownFilterSelectivity = pushedDownFilterSelectivity;
     return newRead;
 }
 

@@ -227,6 +227,13 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
             }
         }
     }
+
+    // Overwrite with pre-computed selectivity for successfully pushed-down filters within the read operator.
+    if (Props.PushedDownFilterSelectivity.has_value()) {
+        double filterSelectivity = Props.PushedDownFilterSelectivity.value() * Props.Statistics->Selectivity;
+        Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
+        Props.Statistics->Selectivity = filterSelectivity;
+    }
 }
 
 /**

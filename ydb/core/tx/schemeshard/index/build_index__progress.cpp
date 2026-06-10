@@ -487,6 +487,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
     auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
 
+    auto path = TPath::Init(buildInfo.TablePathId, ss);
+
     for (const auto& colInfo : buildInfo.BuildColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         NScheme::TTypeInfo typeInfo;

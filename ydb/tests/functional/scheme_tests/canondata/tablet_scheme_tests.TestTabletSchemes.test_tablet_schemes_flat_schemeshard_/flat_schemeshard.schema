@@ -5348,6 +5348,36 @@
                 "ColumnId": 52,
                 "ColumnName": "CreateBuildSequenceTxDone",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 53,
+                "ColumnName": "FulltextNeedsRowIdColumn",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 54,
+                "ColumnName": "FulltextNeedsUniqueIndex",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 55,
+                "ColumnName": "AutoUniqueIndexName",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 56,
+                "ColumnName": "RowIdColumnBuildId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 57,
+                "ColumnName": "RowIdUniqueBuildId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 58,
+                "ColumnName": "ParentBuildId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5405,7 +5435,13 @@
                     49,
                     50,
                     51,
-                    52
+                    52,
+                    53,
+                    54,
+                    55,
+                    56,
+                    57,
+                    58
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/streams/zstd
     ydb/core/persqueue/public/write_meta
     ydb/core/protos
     ydb/library/kafka

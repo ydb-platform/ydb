@@ -5,13 +5,9 @@
 #include <ydb/library/kafka/kafka_records.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
-#include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/string.h>
-#include <util/stream/mem.h>
-#include <util/stream/output.h>
-#include <util/stream/zlib.h>
 
 namespace NKikimr::NPQ::NBatching {
 namespace {
@@ -34,10 +30,11 @@ NKafka::TKafkaRecord MakeKafkaRecord(
     return record;
 }
 
-TString MakeKafkaBatchPayload() {
+TString MakeKafkaBatchPayload(NKafka::ECompressionType compression = NKafka::ECompressionType::NONE) {
     NKafka::TKafkaRecordBatch batch;
     batch.BaseOffset = 100;
     batch.Magic = 2;
+    batch.Attributes = static_cast<NKafka::TKafkaRecordBatch::AttributesMeta::Type>(compression);
     batch.LastOffsetDelta = 1;
     batch.BaseTimestamp = 1000;
     batch.MaxTimestamp = 1007;
@@ -52,24 +49,6 @@ TString MakeKafkaBatchPayload() {
     return NKafka::WriteKafkaRecordBatch(batch);
 }
 
-TString CompressGzip(TStringBuf data) {
-    TString compressed;
-    TStringOutput output(compressed);
-    TZLibCompress gzip(&output, ZLib::GZip);
-    gzip.Write(data.data(), data.size());
-    gzip.Finish();
-    return compressed;
-}
-
-TString CompressZstd(TStringBuf data) {
-    TString compressed;
-    TStringOutput output(compressed);
-    TZstdCompress zstd(&output);
-    zstd.Write(data.data(), data.size());
-    zstd.Finish();
-    return compressed;
-}
-
 TString SerializeDataChunk(NKikimrPQClient::TDataChunk chunk) {
     TString serialized;
     Y_ENSURE(chunk.SerializeToString(&serialized));
@@ -78,8 +57,8 @@ TString SerializeDataChunk(NKikimrPQClient::TDataChunk chunk) {
 
 TReadResult MakeKafkaBatchReadResult(
     TString payload,
-    NPersQueueCommon::ECodec codec,
-    ui64 uncompressedSize,
+    NPersQueueCommon::ECodec codec = NPersQueueCommon::RAW,
+    ui64 uncompressedSize = 0,
     NKikimrPQClient::TDataChunk::EChunkType chunkType = NKikimrPQClient::TDataChunk::REGULAR)
 {
     NKikimrPQClient::TDataChunk chunk;
@@ -98,27 +77,7 @@ TReadResult MakeKafkaBatchReadResult(
     return readResult;
 }
 
-TString DecompressPayload(TStringBuf data, NPersQueueCommon::ECodec codec) {
-    if (codec == NPersQueueCommon::RAW) {
-        return TString(data);
-    }
-
-    TMemoryInput input(data.data(), data.size());
-    switch (codec) {
-        case NPersQueueCommon::GZIP: {
-            TZLibDecompress gzip(&input, ZLib::GZip);
-            return gzip.ReadAll();
-        }
-        case NPersQueueCommon::ZSTD: {
-            TZstdDecompress zstd(&input);
-            return zstd.ReadAll();
-        }
-        default:
-            ythrow yexception() << "unsupported message codec: " << static_cast<int>(codec);
-    }
-}
-
-void AssertKafkaBatchCut(const TVector<TReadResult>& cut, NPersQueueCommon::ECodec expectedCodec) {
+void AssertKafkaBatchCut(const TVector<TReadResult>& cut) {
     UNIT_ASSERT_VALUES_EQUAL(cut.size(), 2u);
 
     UNIT_ASSERT_VALUES_EQUAL(cut[0].GetOffset(), 10u);
@@ -137,40 +96,42 @@ void AssertKafkaBatchCut(const TVector<TReadResult>& cut, NPersQueueCommon::ECod
 
     const auto chunk0 = NKikimr::GetDeserializedData(cut[0].GetData());
     const auto chunk1 = NKikimr::GetDeserializedData(cut[1].GetData());
-    UNIT_ASSERT_VALUES_EQUAL(chunk0.GetCodec(), expectedCodec);
-    UNIT_ASSERT_VALUES_EQUAL(chunk1.GetCodec(), expectedCodec);
-    UNIT_ASSERT_VALUES_EQUAL(DecompressPayload(chunk0.GetData(), expectedCodec), "value0");
-    UNIT_ASSERT_VALUES_EQUAL(DecompressPayload(chunk1.GetData(), expectedCodec), "value1");
+    UNIT_ASSERT_VALUES_EQUAL(chunk0.GetCodec(), NPersQueueCommon::RAW);
+    UNIT_ASSERT_VALUES_EQUAL(chunk1.GetCodec(), NPersQueueCommon::RAW);
+    UNIT_ASSERT_VALUES_EQUAL(chunk0.GetData(), "value0");
+    UNIT_ASSERT_VALUES_EQUAL(chunk1.GetData(), "value1");
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TBatchCutterTest) {
     Y_UNIT_TEST(CutUncompressedKafkaBatchInDataChunk) {
-        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::RAW, 0);
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10), NPersQueueCommon::RAW);
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10));
     }
 
     Y_UNIT_TEST(CutGzipCompressedKafkaBatchInDataChunk) {
-        const auto payload = MakeKafkaBatchPayload();
         const auto readResult = MakeKafkaBatchReadResult(
-            CompressGzip(payload),
-            NPersQueueCommon::GZIP,
-            payload.size());
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10), NPersQueueCommon::GZIP);
+            MakeKafkaBatchPayload(NKafka::ECompressionType::GZIP));
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10));
     }
 
-    Y_UNIT_TEST(CutZstdCompressedKafkaBatchInDataChunk) {
-        const auto payload = MakeKafkaBatchPayload();
-        const auto readResult = MakeKafkaBatchReadResult(
-            CompressZstd(payload),
-            NPersQueueCommon::ZSTD,
-            payload.size());
-        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10), NPersQueueCommon::ZSTD);
+    Y_UNIT_TEST(CutFailsOnNonRawDataChunkCodec) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::GZIP);
+        UNIT_ASSERT_EXCEPTION(
+            TKafkaBatchCutter().Cut(readResult, 10),
+            yexception);
+    }
+
+    Y_UNIT_TEST(CutFailsOnUncompressedSize) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::RAW, 123);
+        UNIT_ASSERT_EXCEPTION(
+            TKafkaBatchCutter().Cut(readResult, 10),
+            yexception);
     }
 
     Y_UNIT_TEST(CutSkipsRecordsBeforeReadStartOffset) {
-        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::RAW, 0);
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
         const auto cut = TKafkaBatchCutter().Cut(readResult, 11);
         UNIT_ASSERT_VALUES_EQUAL(cut.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cut[0].GetOffset(), 11u);

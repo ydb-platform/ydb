@@ -7,7 +7,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/streams/zstd
     ydb/core/persqueue/common
     ydb/core/persqueue/events
     ydb/library/kafka

@@ -56,8 +56,7 @@ class TBlobStorageQueue {
                 bool local, bool useActorSystemTime)
             : Queue(EItemQueue::NotSet)
             , CostEssence(*event->Get())
-            , Span(TWilson::VDiskTopLevel, std::move(event->TraceId), "Backpressure.InFlight",
-                    NWilson::EFlags::AUTO_END)
+            , Span(TWilson::VDiskTopLevel, std::move(event->TraceId), "Backpressure.InFlight")
             , Event(event, serItems, serBytes, bspctx, interconnectChannel, local)
             , MsgId(Max<ui64>())
             , SequenceId(0)

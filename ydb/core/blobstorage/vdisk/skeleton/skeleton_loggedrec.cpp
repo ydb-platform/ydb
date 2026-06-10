@@ -41,7 +41,7 @@ namespace NKikimr {
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
-        , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.Put", NWilson::EFlags::AUTO_END)
+        , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.Put")
         , HandleClass(handleClass)
     {
         if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
@@ -97,7 +97,7 @@ namespace NKikimr {
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
-        , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.MultiPutItem", NWilson::EFlags::AUTO_END)
+        , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.MultiPutItem")
     {
         if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
             wilsonSpan->Attribute("blob_id", Id.ToString());

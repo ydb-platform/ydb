@@ -57,7 +57,7 @@ TEST(BulkUpsert, RetryOverheadOnHappyPath) {
     constexpr size_t kWarmupIterations = 3;
     constexpr size_t kMeasuredIterations = 30;
     // Retry wrapper adds client-side bookkeeping; server RPC dominates, so allow modest variance.
-    constexpr double kMaxSlowdownRatio = 1.10;
+    constexpr double kMaxSlowdownRatio = 1.03;
 
     auto [driver, basePath] = GetRunArgs();
     const std::string tableNoRetry = basePath + "_perf_noretry";

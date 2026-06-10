@@ -4,6 +4,7 @@
 #include "private.h"
 
 #include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/transaction.h>
 #include <yt/yt/client/api/rpc_proxy/transaction_impl.h>
 #include <yt/yt/client/api/dynamic_table_transaction_mixin.h>
@@ -41,22 +42,6 @@ constinit const auto Logger = FederatedClientLogger;
 DECLARE_REFCOUNTED_CLASS(TClient)
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TFuture<std::optional<std::string>> GetDataCenterByClient(const IClientPtr& client)
-{
-    TListNodeOptions options;
-    options.MaxSize = 1;
-
-    return client->ListNode(RpcProxiesPath, options)
-        .Apply(BIND([] (const NYson::TYsonString& items) {
-            auto itemsList = NYTree::ConvertTo<NYTree::IListNodePtr>(items);
-            if (!itemsList->GetChildCount()) {
-                return std::optional<std::string>();
-            }
-            auto host = itemsList->GetChildren()[0];
-            return NNet::InferYPClusterFromHostName(host->GetValue<std::string>());
-        }));
-}
 
 class TTransaction
     : public virtual ITransaction
@@ -255,13 +240,6 @@ private:
 DECLARE_REFCOUNTED_TYPE(TTransaction)
 
 ////////////////////////////////////////////////////////////////////////////////
-
-enum class EClientPriority : ui8
-{
-    Local,
-    Remote,
-    Undefined,
-};
 
 DECLARE_REFCOUNTED_STRUCT(TClientDescription)
 

@@ -386,7 +386,7 @@ private:
             }
         }
 
-        for (auto& scheduled : { CheckOrder, OutgoingRequests }) {
+        for (std::multimap<TMonotonic, TGroupId>& scheduled : { CheckOrder, OutgoingRequests }) {
             for (auto it = scheduled.begin(); it != scheduled.end(); ) {
                 if (deletedGroups.contains(it->second)) {
                     it = scheduled.erase(it);

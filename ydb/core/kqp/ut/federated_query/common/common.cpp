@@ -164,9 +164,9 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
 
         settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
         federatedQuerySetupFactory->SetScriptExecutionSettings({
-                .EnableBackgroundLeaseChecks = options.EnableScriptExecutionBackgroundChecks,
-                .LeaseCheckStartupTimeout = TDuration::Zero(),
-                });
+            .EnableBackgroundLeaseChecks = options.EnableScriptExecutionBackgroundChecks,
+            .LeaseCheckStartupTimeout = TDuration::Zero(),
+        });
 
         return std::make_shared<TKikimrRunner>(settings);
     }

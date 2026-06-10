@@ -2145,16 +2145,8 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         return;
     }
 
-    if (!msg.HasPayloadId()) {
-        ReplyWriteErr(origin, cookie, NBSIO_MISSING_PAYLOAD, "PayloadId field absent");
-        return;
-    }
-
-    const ui32 payloadId = msg.GetPayloadId();
-    if (payloadId >= ev->Get()->GetPayloadCount()) {
-        ReplyWriteErr(origin, cookie, NBSIO_MISSING_PAYLOAD,
-            TStringBuilder() << "PayloadId " << payloadId
-                << " >= PayloadCount " << ev->Get()->GetPayloadCount());
+    if (ev->Get()->Payload.IsEmpty()) {
+        ReplyWriteErr(origin, cookie, NBSIO_MISSING_PAYLOAD, "Payload absent");
         return;
     }
 
@@ -2248,7 +2240,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         creds, selector, lsn, NDDisk::TWriteInstruction(0), pbIds,
         TabletConfig.GetPBufferReplyTimeoutMicroseconds());
 
-    wireEv->AddPayload(TRope(ev->Get()->GetPayload(payloadId)));
+    wireEv->AddPayload(std::move(ev->Get()->Payload));
 
     Send(dbg.PBActor[coord], wireEv.release(), 0, lsn);
 

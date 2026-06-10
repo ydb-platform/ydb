@@ -360,9 +360,8 @@ public:
                 Result->Record.AddSysTablesPartOwners(pi);
             }
 
-            if (tableInfo.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
-                tableInfo.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
-                tableInfo.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact) {
+            if (tableInfo.TableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
+                tableInfo.TableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
                 // For now, only allow to split compact fulltext index table by __ydb_token
                 auto pb = Result->Record.MutableTableStats();
                 if (pb->GetSplitBySizeSuggestedKey().size()) {

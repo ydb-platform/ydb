@@ -497,7 +497,11 @@ auto CalcFulltextCompactImplTableDescImpl(
     }
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
-    implTableDesc.SetIndexImplType(indexType);
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+        implTableDesc.SetTableType(NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance);
+    } else {
+        implTableDesc.SetTableType(NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact);
+    }
 
     return implTableDesc;
 }

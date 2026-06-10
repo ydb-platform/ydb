@@ -2472,19 +2472,19 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
         if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {
             NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
             if (udfsPaths.empty()) {
-                Cout << "UDF directory " << udfsDir << " contains no dynamic UDFs. " << Endl;
+                Cout << "UDF directory " << udfsDir << " contains no dynamic UDFs." << Endl;
             } else {
-                Cout << "UDF directory " << udfsDir << " contains " << udfsPaths.size() << " dynamic UDFs. " << Endl;
+                Cout << "UDF directory " << udfsDir << " contains " << udfsPaths.size() << " dynamic UDFs." << Endl;
             }
             NMiniKQL::TUdfModuleRemappings remappings;
             for (const auto& udfPath : udfsPaths) {
                 FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
             }
         } else {
-            Cout << "UDF directory " << udfsDir << " doesn't exist, no dynamic UDFs will be loaded. " << Endl;
+            Cout << "UDF directory " << udfsDir << " doesn't exist, no dynamic UDFs will be loaded." << Endl;
         }
     } else {
-        Cout << "UDFsDir is not specified, no dynamic UDFs will be loaded. " << Endl;
+        Cout << "UDFsDir is not specified, no dynamic UDFs will be loaded." << Endl;
     }
 
     NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
@@ -2530,7 +2530,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 
     TKikimrRunner::SetSignalHandlers();
     Cout << "Starting YDB server" << Endl;
-    Cout << GetProgramSvnVersion() << Endl;
+    Cout << Strip(GetProgramSvnVersion()) << Endl;
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
     if (runner) {

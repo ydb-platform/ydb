@@ -1426,6 +1426,17 @@ private:
             case TIndexDescription::EType::GlobalJson:
                 kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson;
                 break;
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance;
+                hasDesc = true;
+                break;
+            case TIndexDescription::EType::GlobalFulltextCompact:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact;
+                hasDesc = true;
+                break;
+            case TIndexDescription::EType::GlobalJsonCompact:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
+                break;
             default:
                 YQL_ENSURE(false, "Index type " << index->Type << " is not supported");
             }

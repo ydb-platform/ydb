@@ -53,6 +53,23 @@ Y_UNIT_TEST_SUITE(TDDiskActorSync) {
             TReplyStatus::INCORRECT_REQUEST);
     }
 
+    Y_UNIT_TEST(EmptySourceWithoutDDiskId) {
+        TTestContext ctx;
+        NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
+
+        auto syncEv = MakeSync(creds);
+        AddDefaultSegmentFromDDisk(*syncEv, NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        syncEv->Record.AddSources();
+
+        auto result = ctx.SendAndGrab<NDDisk::TEvSyncResult>(syncEv.release());
+        AssertStatus<NDDisk::TEvSyncResult>(
+            result,
+            TReplyStatus::INCORRECT_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(
+            result->Get()->Record.GetErrorReason(),
+            "source ddisk id must be set");
+    }
+
     Y_UNIT_TEST(SourceWithoutDDiskId) {
         TTestContext ctx;
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);

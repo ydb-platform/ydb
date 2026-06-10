@@ -54,15 +54,6 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        size_t segmentCount = 0;
-        for (const auto& source : record.GetSources()) {
-            segmentCount += source.SegmentsSize();
-        }
-        if (!segmentCount) {
-            reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "segments must be non-empty");
-            return;
-        }
-
         struct TSourceInfo {
             TActorId DDiskActorId;
             TActorId PersistentBufferActorId;
@@ -86,6 +77,21 @@ namespace NKikimr::NDDisk {
                 std::make_optional(source.GetDDiskInstanceGuid()));
             return true;
         };
+
+        std::vector<TSourceInfo> sourceInfos;
+        sourceInfos.reserve(record.SourcesSize());
+        size_t segmentCount = 0;
+        for (const auto& source : record.GetSources()) {
+            auto& sourceInfo = sourceInfos.emplace_back();
+            if (!getSource(source, &sourceInfo)) {
+                return;
+            }
+            segmentCount += source.SegmentsSize();
+        }
+        if (!segmentCount) {
+            reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "segments must be non-empty");
+            return;
+        }
 
         const ui64 syncId = NextSyncId++;
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
@@ -129,14 +135,11 @@ namespace NKikimr::NDDisk {
             return true;
         };
 
+        ui32 sourceIndex = 0;
         for (const auto& source : record.GetSources()) {
+            const auto& sourceInfo = sourceInfos[sourceIndex++];
             if (!source.SegmentsSize()) {
                 continue;
-            }
-
-            TSourceInfo sourceInfo;
-            if (!getSource(source, &sourceInfo)) {
-                return;
             }
 
             for (const auto& segment : source.GetSegments()) {

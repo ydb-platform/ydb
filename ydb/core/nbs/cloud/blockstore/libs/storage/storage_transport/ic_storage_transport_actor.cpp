@@ -905,6 +905,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
 {
     auto* msg = ev->Get();
 
+    // SyncWithPBuffer must only be issued for an established pbuffer connection.
     Y_ABORT_UNLESS(msg->PBufferCredentials.DDiskInstanceGuid.has_value());
 
     const ui64 requestId = ++RequestIdGenerator;

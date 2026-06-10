@@ -711,6 +711,7 @@ struct TPersistentBufferFormat {
         }
 
         TSource* GetOrAddSource(const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            // Coalesce only consecutive same-source segments to preserve request order.
             if (Record.SourcesSize()) {
                 auto *source = Record.MutableSources(Record.SourcesSize() - 1);
                 if (IsSameSource(*source, ddiskId, ddiskInstanceGuid)) {

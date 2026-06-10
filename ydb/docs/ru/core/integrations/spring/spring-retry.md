@@ -21,7 +21,7 @@
 ## Требования {#requirements}
 
 - Java 17 или новее.
-- Spring Boot 3.4+ / Spring Framework 6.2+.
+- Spring Boot 3.4+ (основан на Spring Framework 6.2+).
 - [{{ ydb-short-name }} JDBC Driver](https://github.com/ydb-platform/ydb-jdbc-driver).
 - Доступ к экземпляру базы данных {{ ydb-short-name }}.
 
@@ -64,12 +64,18 @@
 
 ## Использование {#using}
 
-Модуль настраивается автоматически через механизм автоконфигурации Spring Boot. Как только зависимость оказывается в classpath, повтором перехватываются методы, помеченные `@Transactional` и `@YdbTransactional`. Достаточно настроить источник данных {{ ydb-short-name }}:
+Модуль настраивается автоматически через механизм автоконфигурации Spring Boot. Как только зависимость оказывается в classpath, модуль заменяет стандартный перехватчик транзакций Spring (бин `transactionInterceptor`) на свою реализацию и автоматически оборачивает логикой повтора все методы, помеченные `@Transactional` и `@YdbTransactional`. Никаких дополнительных аннотаций или явного подключения не требуется — достаточно настроить источник данных {{ ydb-short-name }}:
 
 ```properties
 spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
 spring.datasource.url=jdbc:ydb:<grpc/grpcs>://<host>:<2135/2136>/path/to/database[?saFile=file:~/sa_key.json]
 ```
+
+{% note info %}
+
+Повтор применяется только к внешней границе транзакции: метод, который присоединяется к уже открытой транзакции (`PROPAGATION_REQUIRED` при активной транзакции), не повторяется отдельно — повторяется транзакция целиком на верхнем уровне.
+
+{% endnote %}
 
 ### Аннотация @YdbTransactional {#annotation}
 
@@ -122,13 +128,28 @@ public String findPayload(String guid, int id) {
 
 ### Стратегия повтора {#policy}
 
-Модуль извлекает код статуса {{ ydb-short-name }} из цепочки исключений и принимает решение о повторе на основе двухуровневой стратегии backoff:
+Модуль извлекает код статуса {{ ydb-short-name }} из цепочки исключений и принимает решение о повторе. Сначала код проверяется по политике повтора (повторяется всегда или только для идемпотентных операций), затем для повторяемого кода выбирается уровень backoff:
 
-- **Быстрый уровень** (backoff с базой `fastBackoffBaseMs` и потолком `fastCapBackoffMs`) — для `ABORTED`, `UNDETERMINED`, `UNAVAILABLE`, транспортных ошибок и `CLIENT_GRPC_ERROR`.
-- **Медленный уровень** (backoff с базой `slowBackoffBaseMs` и потолком `slowCapBackoffMs`) — для `OVERLOADED` и `CLIENT_RESOURCE_EXHAUSTED`.
-- **Нулевая задержка** — для `BAD_SESSION`, `SESSION_BUSY` и `SESSION_EXPIRED`, поскольку повтор связан лишь с пересозданием сессии.
+| Код статуса | Когда повторяется | Уровень backoff |
+| --- | --- | --- |
+| `ABORTED` | всегда | быстрый |
+| `UNAVAILABLE` | всегда | быстрый |
+| `OVERLOADED` | всегда | медленный |
+| `CLIENT_RESOURCE_EXHAUSTED` | всегда | медленный |
+| `BAD_SESSION` | всегда | нулевой |
+| `SESSION_BUSY` | всегда | нулевой |
+| `UNDETERMINED` | только при `idempotent = true` | быстрый |
+| `TRANSPORT_UNAVAILABLE` (транспортная ошибка) | только при `idempotent = true` | быстрый |
+| `CLIENT_GRPC_ERROR` | только при `idempotent = true` | быстрый |
+| `SESSION_EXPIRED` | только при `idempotent = true` | нулевой |
 
-Коды `ABORTED`, `UNAVAILABLE`, `OVERLOADED`, `CLIENT_RESOURCE_EXHAUSTED`, `BAD_SESSION`, `SESSION_BUSY` считаются временными и повторяются всегда. Остальные повторяемые коды повторяются только при `idempotent = true`.
+Уровни backoff:
+
+- **Быстрый** — экспоненциальная задержка с базой `fastBackoffBaseMs` и потолком `fastCapBackoffMs`.
+- **Медленный** — экспоненциальная задержка с базой `slowBackoffBaseMs` и потолком `slowCapBackoffMs`.
+- **Нулевой** — повтор без задержки, поскольку он связан лишь с пересозданием сессии.
+
+Остальные коды статуса (например, `TIMEOUT`, `PRECONDITION_FAILED`, `NOT_FOUND`) не повторяются.
 
 ## Конфигурация {#configuration}
 
@@ -153,7 +174,7 @@ ydb.transaction.retry.fast-cap-backoff-ms=500
 | Свойство | Значение по умолчанию | Описание |
 | --- | --- | --- |
 | `ydb.transaction.retry.enabled` | `true` | Глобальное включение/отключение повтора. |
-| `ydb.transaction.retry.max-retries` | `10` | Максимальное число повторных попыток после первого неудачного выполнения. |
+| `ydb.transaction.retry.max-retries` | `10` | Максимальное число повторных попыток после первого неудачного выполнения. Должно быть `>= 1`; значение меньше `1` (в том числе `0`) приводит к ошибке при старте приложения. Чтобы полностью отключить повтор, используйте `ydb.transaction.retry.enabled=false`. |
 | `ydb.transaction.retry.slow-backoff-base-ms` | `50` | Базовая задержка медленного уровня backoff, мс. |
 | `ydb.transaction.retry.slow-cap-backoff-ms` | `5000` | Максимальная задержка медленного уровня backoff, мс. |
 | `ydb.transaction.retry.fast-backoff-base-ms` | `5` | Базовая задержка быстрого уровня backoff, мс. |

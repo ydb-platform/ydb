@@ -530,6 +530,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPosti
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingResumeFromLastKeyAck
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithOverlap
+ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.RunScan
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
 ydb/core/tx/datashard/ut_lock_rows DataShardLockRows.RandomizedDeadlockDetection
 ydb/core/tx/datashard/ut_lock_rows unittest.[*/*] chunk
@@ -776,6 +777,7 @@ ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth
 ydb/tests/functional/security test_mon_endpoints_auth.py.test_mon_endpoints_auth[require_healthcheck_authentication]
 ydb/tests/functional/serverless test_serverless.py.test_discovery[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_discovery[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
+ydb/tests/functional/serverless test_serverless.py.test_discovery[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_discovery[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/statistics py3test.[test_analyze.py */*] chunk
 ydb/tests/functional/statistics test_analyze.py.test_basic

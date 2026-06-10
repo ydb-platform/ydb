@@ -3101,14 +3101,16 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
         const i64 messageCountField = messageData.message_count();
         const bool expandBatch = Parent->GetDoDecompress()
             && maxBatchSize > 1
-            && messageCountField > 1
             && messageData.message_format() == Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::KAFKA_BATCH;
 
         if (expandBatch) {
             try {
                 TKafkaRecordBatch kafkaBatch = ReadKafkaRecordBatch(messageData.data());
+                const ui64 declaredCount = messageCountField > 0
+                    ? static_cast<ui64>(messageCountField)
+                    : kafkaBatch.Records.size();
                 const ui64 recordsToTake = Min<ui64>(
-                    static_cast<ui64>(messageCountField),
+                    declaredCount,
                     Min(maxBatchSize, kafkaBatch.Records.size()));
 
                 messagesTaken = 0;

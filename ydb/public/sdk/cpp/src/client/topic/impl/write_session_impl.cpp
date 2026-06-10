@@ -1241,14 +1241,14 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     uint64_t compressedSize = 0;
     size_t packedMessageCount = 1;
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
-        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(SentPackedMessage.front().Data.size()));
-        result = memoryUsage.NowOk && !memoryUsage.WasOk;
         const auto& front = SentPackedMessage.front();
+        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(front.OriginalMemoryUsage));
+        result = memoryUsage.NowOk && !memoryUsage.WasOk;
         packedMessageCount = front.MessageCount;
         if (front.Compressed) {
             compressedSize = front.Data.size();
         } else {
-            size = front.Data.size();
+            size = front.OriginalSize;
         }
 
         (*Counters->MessagesWritten) += front.MessageCount;
@@ -1475,6 +1475,18 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
         }
     }
 
+    // TBuffer::Append in Acquire() may reallocate the batch buffer, invalidating
+    // DataRefs of previously acquired messages. Payloads are laid out in the buffer
+    // contiguously in message order, so re-base all refs onto the final buffer.
+    {
+        size_t dataOffset = 0;
+        for (auto& message : CurrentBatch.Messages) {
+            Y_ABORT_UNLESS(dataOffset + message.DataRef.size() <= CurrentBatch.Data.size());
+            message.DataRef = std::string_view(CurrentBatch.Data.data() + dataOffset, message.DataRef.size());
+            dataOffset += message.DataRef.size();
+        }
+    }
+
     const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
     if (!skipCompression && Settings.CompressionExecutor_->IsAsync()) {
         MessagesAcquired += static_cast<uint64_t>(CurrentBatch.Acquire());
@@ -1523,7 +1535,9 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             }
         }
 
-        if (Settings.BatchMessageFormat_ == EBatchMessageFormat::KAFKA_BATCH) {
+        // A single message is sent in the standard format: SendImpl routes
+        // one-message blocks through SendStandardBlock without message_format.
+        if (Settings.BatchMessageFormat_ == EBatchMessageFormat::KAFKA_BATCH && block.MessageCount > 1) {
             std::vector<std::string_view> payloads;
             std::vector<TInstant> createdAt;
             payloads.reserve(block.MessageCount);
@@ -1535,8 +1549,6 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             }
             block.Data = BuildKafkaRecordBatchData(payloads, createdAt);
             block.OriginalDataRefs.assign(1, std::string_view(block.Data.data(), block.Data.size()));
-            block.OriginalSize = block.Data.size();
-            block.OriginalMemoryUsage = block.Data.size();
         } else {
             block.Data = std::move(CurrentBatch.Data);
         }
@@ -1767,6 +1779,12 @@ bool TWriteSessionImpl::Close(TDuration closeTimeout) {
     {
         std::lock_guard guard(Lock);
         LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefixImpl() << "Write session: close. Timeout " << closeTimeout);
+        // Messages buffered in CurrentBatch are not yet in OriginalMessagesToSend,
+        // so the wait loop below would not see them. Flush them to avoid losing
+        // a partially filled batch on close.
+        if (!CurrentBatch.Empty()) {
+            WriteBatchImpl();
+        }
     }
     auto startTime = TInstant::Now();
     auto remaining = closeTimeout;

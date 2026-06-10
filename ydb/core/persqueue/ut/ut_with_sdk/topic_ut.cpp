@@ -1082,51 +1082,47 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             .Codec(ECodec::RAW)
             .MaxMessageCount(maxBatchMessageCount)
             .BatchMessageFormat(EBatchMessageFormat::KAFKA_BATCH)
-            .BatchFlushInterval(TDuration::Seconds(3600))
+            // Groups smaller than MaxMessageCount are flushed by this interval;
+            // writes within a group are fast enough to never split a group.
+            .BatchFlushInterval(TDuration::Seconds(1))
             .BatchFlushSizeBytes(10_MB);
 
         auto writeSession = client.CreateWriteSession(writeSettings);
 
-        auto waitReady = [](const std::shared_ptr<IWriteSession>& session) {
-            for (;;) {
-                auto event = session->GetEvent(true);
+        std::optional<TContinuationToken> token;
+
+        for (const auto& [firstSeqNo, messageCount, fill] : writes) {
+            const ui64 lastSeqNo = firstSeqNo + messageCount - 1;
+            ui64 nextSeqNo = firstSeqNo;
+            THashSet<ui64> ackedSeqNos;
+
+            while (ackedSeqNos.size() < messageCount) {
+                if (token.has_value() && nextSeqNo <= lastSeqNo) {
+                    TWriteMessage message(TString(dataSize, fill));
+                    message.SeqNo(nextSeqNo++);
+                    writeSession->Write(std::move(*token), std::move(message));
+                    token.reset();
+                    continue;
+                }
+
+                auto event = writeSession->GetEvent(true);
                 UNIT_ASSERT(event.has_value());
                 if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-                    return std::move(ready->ContinuationToken);
-                }
-                if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected session close while waiting for ready: "
-                                               << closed->DebugString());
-                }
-            }
-        };
-
-        auto waitAcks = [](const std::shared_ptr<IWriteSession>& session, size_t expectedAckCount) {
-            size_t received = 0;
-            while (received < expectedAckCount) {
-                auto event = session->GetEvent(true);
-                UNIT_ASSERT(event.has_value());
-                if (auto* ack = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+                    token = std::move(ready->ContinuationToken);
+                } else if (auto* ack = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
                     for (const auto& item : ack->Acks) {
                         UNIT_ASSERT_C(
                             item.State == TWriteSessionEvent::TWriteAck::EES_WRITTEN,
                             TStringBuilder() << "Unexpected ack state: " << item.State);
-                        ++received;
+                        UNIT_ASSERT_C(
+                            item.SeqNo >= firstSeqNo && item.SeqNo <= lastSeqNo,
+                            TStringBuilder() << "Unexpected ack seqNo: " << item.SeqNo);
+                        ackedSeqNos.insert(item.SeqNo);
                     }
                 } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected session close while waiting for ack: "
-                                               << closed->DebugString());
+                    UNIT_FAIL(TStringBuilder() << "Unexpected session close: " << closed->DebugString());
                 }
             }
-        };
-
-        for (const auto& [firstSeqNo, messageCount, fill] : writes) {
-            for (ui32 i = 0; i < messageCount; ++i) {
-                TWriteMessage message(TString(dataSize, fill));
-                message.SeqNo(firstSeqNo + i);
-                writeSession->Write(waitReady(writeSession), std::move(message));
-            }
-            waitAcks(writeSession, messageCount);
         }
 
         UNIT_ASSERT(writeSession->Close(TDuration::Seconds(5)));

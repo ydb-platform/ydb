@@ -197,6 +197,13 @@ TMaybe<TString> FillBatchFieldsFromTopicWriteMessage(
     if (messageCount <= 1 && maxSeqNoField >= msg.seq_no()) {
         messageCount = maxSeqNoField - msg.seq_no() + 1;
     }
+
+    // Even a single message may be serialized in a non-standard format,
+    // so the format must be stored regardless of message count.
+    if (msg.message_format() == Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH) {
+        cmdWrite.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+    }
+
     if (messageCount <= 1) {
         return Nothing();
     }
@@ -208,9 +215,6 @@ TMaybe<TString> FillBatchFieldsFromTopicWriteMessage(
 
     cmdWrite.SetMessageCount(messageCount);
     cmdWrite.SetMaxSeqNo(maxSeqNo);
-    if (msg.message_format() == Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH) {
-        cmdWrite.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
-    }
     return Nothing();
 }
 

@@ -72,9 +72,9 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             ValidateDqCliqueRef(gatewaysConfig, cliqueValue);
 #else
             ValidateDqCliqueYtCluster(gatewaysConfig, cliqueValue);
-#endif*/
+#endif
         };
-
+*/
         TDataProviderInfo info;
         info.Names.insert(TString{DqProviderName});
 

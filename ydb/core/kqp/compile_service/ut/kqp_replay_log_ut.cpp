@@ -58,7 +58,7 @@ bool ReplayLogContainsSubstring(const TVector<TString>& collected, const TString
     return false;
 }
 
-void SendCompileQuery(TTestActorRuntime& runtime, const TString& sql) {
+void CompileQuery(TTestActorRuntime& runtime, const TString& sql) {
     const ui32 nodeIdx = 0;
     auto edgeActor = runtime.AllocateEdgeActor(nodeIdx);
     auto compileService = MakeKqpCompileServiceID(runtime.GetNodeId(nodeIdx));
@@ -93,6 +93,11 @@ void SendCompileQuery(TTestActorRuntime& runtime, const TString& sql) {
             /*applicationName*/ Nothing(),
             /*intrestedInResult*/ std::make_shared<std::atomic<bool>>(true),
             MakeIntrusive<TUserRequestContext>("replay-log-ut", "/Root", "replay-log-ut-session"))));
+
+    // Huge timeout below is set just in case – no such waiting is expected
+    const auto ev = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edgeActor, TDuration::Seconds(30));
+    UNIT_ASSERT_C(ev, "Compile request timed out: " + sql);
+    UNIT_ASSERT_C(ev->Get()->CompileResult, "CompileResult is null: " + sql);
 }
 
 void ExecuteSchemeQuery(TKikimrRunner& kikimr, const TString& query) {
@@ -149,18 +154,19 @@ Y_UNIT_TEST_SUITE(KqpReplayLog) {
 
         {
             TKikimrSettings settings;
+            settings.SetUseRealThreads(false);
             settings.SetQueryReplayBackendFactory(replayFactory);
 
             TKikimrRunner kikimr(settings);
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
             ExecuteSchemeQuery(kikimr, createTableQuery);
-            SendCompileQuery(runtime, createTableQuery);
+            CompileQuery(runtime, createTableQuery);
             PrepareDataQuery(kikimr, selectQuery);
 
-            SendCompileQuery(runtime, createSecretQuery);
+            CompileQuery(runtime, createSecretQuery);
             ExecuteSchemeQuery(kikimr, createSecretQuery);
-            SendCompileQuery(runtime, alterSecretQuery);
+            CompileQuery(runtime, alterSecretQuery);
             ExecuteSchemeQuery(kikimr, alterSecretQuery);
 
             ExecuteQueryWithParams(

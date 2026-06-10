@@ -408,6 +408,7 @@ private:
 
     void AddMessageToReplayLog(const TString& queryPlan) {
         if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text)) {
+            // Skip both replay log and QueryDiagnostics replay message for sensitive queries.
             return;
         }
 

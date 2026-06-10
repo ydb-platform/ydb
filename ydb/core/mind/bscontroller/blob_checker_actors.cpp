@@ -386,7 +386,7 @@ private:
             }
         }
 
-        auto eraseDeleted = [](td::multimap<TMonotonic, TGroupId>& scheduled) {
+        auto eraseDeleted = [](std::multimap<TMonotonic, TGroupId>& scheduled) {
             for (auto it = scheduled.begin(); it != scheduled.end(); ) {
                 if (deletedGroups.contains(it->second)) {
                     it = scheduled.erase(it);

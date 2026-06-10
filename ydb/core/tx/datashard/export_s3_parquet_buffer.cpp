@@ -267,9 +267,9 @@ TString TS3ParquetExportBuffer::GetError() const {
     return ErrorString;
 }
 
-class CheckpointOutputStream : public ICheckpointOutputStream {
+class TCheckpointOutputStream : public ICheckpointOutputStream {
 public:
-    CheckpointOutputStream() : Buffer_(), TotalWritten_(0), IsOpen_(true) {}
+    TCheckpointOutputStream() : Buffer_(), TotalWritten_(0), IsOpen_(true) {}
 
     // Implement the OutputStream interface
     arrow::Status Close() override {
@@ -304,7 +304,7 @@ private:
 };
 
 std::shared_ptr<ICheckpointOutputStream> ICheckpointOutputStream::Create() {
-    return std::make_shared<CheckpointOutputStream>();
+    return std::make_shared<TCheckpointOutputStream>();
 }
 
 } // anonymous namespace

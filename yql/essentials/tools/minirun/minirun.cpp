@@ -14,24 +14,23 @@ public:
         GetRunOptions().ResultsFormat = NYson::EYsonFormat::Pretty;
         GetRunOptions().OptimizeLibs = false;
         GetRunOptions().CustomTests = true;
+        GetRunOptions().EnableCredentials = true;
 
         GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
             opts.AddLongOption("ndebug", "Do not show debug info in error output").NoArgument().SetFlag(&GetRunOptions().NoDebug);
-            opts.AddLongOption("secure-param", "Secure parameter").RequiredArgument("key@value").KVHandler([&](TString key, TString value) {
-                SecureParams_[std::move(key)] = std::move(value);
-            }, '@');
         });
 
         GetRunOptions().SetSupportedGateways({TString{PureProviderName}});
         GetRunOptions().GatewayTypes.emplace(PureProviderName);
 
         AddProviderFactory([this]() -> NYql::TDataProviderInitializer {
-            return GetPureDataProviderInitializer({.SecureParams = SecureParams_});
+            THashMap<TString, TString> secureParams;
+            GetRunOptions().Credentials->ForEach([&](const TString& key, const TCredential& cred) {
+                secureParams["token:" + key] = cred.Content;
+            });
+            return GetPureDataProviderInitializer({.SecureParams = std::move(secureParams)});
         });
     }
-
-private:
-    THashMap<TString, TString> SecureParams_;
 };
 
 } // namespace NYql

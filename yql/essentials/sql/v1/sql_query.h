@@ -70,6 +70,8 @@ private:
     const bool AllowTopLevelPragmas_;
 };
 
+bool IsYqlSelectCompatiblePragma(TStringBuf prefix, TStringBuf pragma);
+
 void EnumeratePragmas(std::function<void(std::string_view)> callback);
 void EnumerateStmtContexts(std::function<void(std::string_view)> callback);
 

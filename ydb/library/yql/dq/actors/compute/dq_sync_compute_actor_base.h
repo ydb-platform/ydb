@@ -152,10 +152,18 @@ protected: //TDqComputeActorChannels::ICalbacks
         auto* outputChannel = this->OutputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(outputChannel, "task: " << this->Task.GetId() << ", output channelId: " << channelId);
 
-        outputChannel->EarlyFinish = true;
         outputChannel->Finished = true;
-        if (outputChannel->Channel) {
-            outputChannel->Channel->Finish();
+        outputChannel->Channel->Finish();
+
+        CA_LOG_D("task: " << this->Task.GetId() << ", output channelId: " << channelId << " finished prematurely, "
+            << " about to clear buffer");
+
+        {
+            auto guard = TBase::BindAllocator();
+            ui32 dropRows = outputChannel->Channel->Drop();
+
+            CA_LOG_I("task: " << this->Task.GetId() << ", output channelId: " << channelId << " finished prematurely, "
+                << "drop " << dropRows << " rows");
         }
 
         TBase::DoExecute();
@@ -174,11 +182,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 continue;
             }
 
-            if (channelInfo.Channel && channelInfo.Channel->IsFinished()) {
-                continue;
-            }
-
-            if (!channelInfo.IsPaused()) {
+            // A finished channel may no longer become paused, but its buffer still needs to be drained.
+            if (!channelInfo.IsPaused() && !channelInfo.Channel->IsFinished()) {
                 return false;
             }
 

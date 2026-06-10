@@ -844,24 +844,13 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
     }
 
     void ResumeInputsByCheckpoint() override final {
-        bool resumed = !SourcesMap.empty();
         for (auto& [id, channelInfo] : InputChannelsMap) {
-            if (!channelInfo.PendingCheckpoint) {
-                continue;
+            if (channelInfo.PendingCheckpoint) {
+                channelInfo.ResumeByCheckpoint();
             }
-
-            if (channelInfo.Channel && channelInfo.Channel->IsFinished()) {
-                channelInfo.PendingCheckpoint.reset();
-                continue;
-            }
-
-            channelInfo.ResumeByCheckpoint();
-            resumed = true;
         }
         // sources or input channels was unpaused, trigger new poll
-        if (resumed) {
-            ResumeExecution(EResumeSource::CAResumeByCheckpoint);
-        }
+        ResumeExecution(EResumeSource::CAResumeByCheckpoint);
     }
 
 protected:
@@ -2123,12 +2112,8 @@ protected:
 
         // Don't produce any input from sources if we're about to save checkpoint.
         if (Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved()) {
-            if (State == NDqProto::COMPUTE_STATE_FINISHED) {
-                CA_LOG_T("Allow polling sources despite pending checkpoint because compute actor is already finished");
-            } else {
-                CA_LOG_T("Skip polling sources because of pending checkpoint");
-                return pollResult;
-            }
+            CA_LOG_T("Skip polling sources because of pending checkpoint");
+            return pollResult;
         }
 
         CA_LOG_T("Poll sources");

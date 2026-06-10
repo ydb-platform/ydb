@@ -611,7 +611,7 @@ protected:
                 batch.Proto.SetValuePackerVersion(NYql::NDq::ToProto(data.PackerVersion));
 
                 if (streamingAllowed && !trailingResults) {
-                    ui32 seqNo = ++ResultChannelSeqNos[channelId];
+                    ui32 seqNo = 1;
                     SendStreamData(txResult, std::move(batches), channel.Id, seqNo, data.Finished);
                 } else {
                     ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
@@ -621,7 +621,7 @@ protected:
                 }
             } else if (data.Finished) {
                 if (streamingAllowed && !trailingResults) {
-                    ui32 seqNo = ++ResultChannelSeqNos[channelId];
+                    ui32 seqNo = 1;
                     TVector<NYql::NDq::TDqSerializedBatch> batches(1);
                     auto& batch = batches.front();
                     batch.Proto.SetTransportVersion(data.TransportVersion);
@@ -1881,7 +1881,6 @@ protected:
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
-    THashMap<ui32, ui32> ResultChannelSeqNos;
 
     ui64 LastTaskId = 0;
     TString LastComputeActorId = "";

@@ -10,7 +10,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: drop file and set environment variable
+    - name: drop file and set environment variable 
       if: "${{ inputs.ci_ydb_service_account_key_file_credentials != '' }}"
       shell: bash
       run: |

@@ -121,16 +121,6 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
             continue;
         }
 
-        // Local indexes (e.g. row-table prefix bloom filter) are engine-level filters, not
-        // queryable secondary indexes: they have no impl table and the query layer must not treat
-        // them as such. They remain visible via the raw schemeshard describe (DescribeTable /
-        // SHOW CREATE TABLE), just not in the table's KQP secondary-index metadata.
-        if (index.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
-            || index.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
-            || index.GetType() == NKikimrSchemeOp::EIndexTypeLocalMinMax) {
-            continue;
-        }
-
         tableMeta->Indexes.emplace_back(NYql::TIndexDescription(index));
     }
 }

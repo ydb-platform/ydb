@@ -147,11 +147,11 @@ public:
             }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
-                if (internal) {
-                    // Internal composite operations (e.g. row-table local prefix bloom index created
-                    // together with CREATE/ALTER TABLE, or the local-index migrator). The parent table
-                    // may be created under this same operation, already being altered under it, or
-                    // steady (migration). Reject only foreign concurrent operations.
+                if (internal && TTableIndexInfo::IsLocalIndex(tableIndexCreation.GetType())) {
+                    // Row-table local prefix bloom index (created with CREATE/ALTER TABLE or by the
+                    // local-index migrator). It has no impl table; the parent may be under this same
+                    // operation (CREATE), under-alter (ALTER ADD), or steady (migration) — so only
+                    // reject a foreign concurrent operation on the parent.
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId());
                     }

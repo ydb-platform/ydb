@@ -858,8 +858,11 @@ struct TKikimrTableMetadata : public TThrRefBase {
             Indexes.emplace_back(&index);
         }
 
+        // Keep ImplTables positionally aligned with Indexes (ImplTables[i] backs Indexes[i]),
+        // matching the fresh-load path. Local indexes (bloom filter, min-max, etc.) have no impl
+        // table, so their GetImplTables() is empty and their slot stays null.
         auto it = message->GetSecondaryGlobalIndexMetadata().begin();
-        ImplTables.reserve(indexesCount);
+        ImplTables.resize(indexesCount);
         for(int i = 0; i < indexesCount; ++i) {
             decltype(ImplTables)::value_type* implTable = nullptr;
             for (const auto& _ : Indexes[i].GetImplTables()) {
@@ -868,7 +871,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
                     (*implTable)->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
                     implTable = &(*implTable)->Next;
                 } else {
-                    implTable = &ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
+                    ImplTables[i] = MakeIntrusive<TKikimrTableMetadata>(&*it++);
+                    implTable = &ImplTables[i];
                 }
             }
         }
@@ -940,7 +944,12 @@ struct TKikimrTableMetadata : public TThrRefBase {
         }
 
         for(auto implTable: ImplTables) {
-            YQL_ENSURE(implTable);
+            // Local indexes (bloom filter, min-max, etc.) have no impl table: their ImplTables
+            // slot is null. Skip it; on deserialize the slot is reconstructed positionally from
+            // the index's (empty) GetImplTables().
+            if (!implTable) {
+                continue;
+            }
             do {
                 implTable->ToMessage(message->AddSecondaryGlobalIndexMetadata());
                 implTable = implTable->Next;

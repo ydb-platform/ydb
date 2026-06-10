@@ -393,7 +393,10 @@ public:
                 bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
                 YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->ImplTables.size());
                 for (auto implTable : res.Metadata->ImplTables) {
-                    YQL_ENSURE(implTable);
+                    // Local indexes (bloom filter, min-max, etc.) have no impl table.
+                    if (!implTable) {
+                        continue;
+                    }
                     do {
                         auto nextImplTable = implTable->Next;
                         auto& desc = SessionCtx->Tables().GetOrAddTable(implTable->Cluster, SessionCtx->GetDatabase(), implTable->Name);

@@ -349,6 +349,7 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
 
     modifyScheme->SetWorkingDir(pathPair.first);
     modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+    modifyScheme->SetFailedOnAlreadyExists(true);
 
     auto* tableDesc = modifyScheme->MutableAlterTable();
     tableDesc->SetName(pathPair.second);
@@ -396,9 +397,8 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
             for (const auto& col : index.index_columns()) {
                 indexConfig->AddKeyColumnNames(col);
             }
-            if (resolvedFpp > 0.0) {
-                indexConfig->MutableBloomFilterDescription()->SetFalsePositiveProbability(resolvedFpp);
-            }
+            indexConfig->MutableBloomFilterDescription()->SetFalsePositiveProbability(
+                resolvedFpp > 0.0 ? resolvedFpp : NTable::DefaultBloomFilterFpp);
         }
 
         bloomPrefixes[prefixLen] = resolvedFpp;

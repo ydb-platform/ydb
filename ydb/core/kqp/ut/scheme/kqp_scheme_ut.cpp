@@ -1791,6 +1791,202 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 2);
     }
 
+    Y_UNIT_TEST(DataShardBloomFilterIndexDropLast) {
+        // Dropping the *last* prefix bloom index makes ByKeyFilterPrefixes empty. The schemeshard
+        // clears its config and the alter still reaches the datashard, which must drop its engine
+        // filter (previously it kept a stale filter because an empty prefix list looked like
+        // "no change"). The table must remain fully queryable, and a bloom index can be re-added.
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        auto getPartitionConfig = [&]() {
+            return kikimr.GetTestClient().Ls("/Root/T")->Record
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+        auto execScheme = [&](const TString& q) {
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        execScheme(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/T` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1)
+            );
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(getPartitionConfig().ByKeyFilterPrefixesSize(), 1);
+
+        // Write data so the drop alter must actually be applied by the datashard engine.
+        {
+            auto r = queryClient.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (Key1, Key2, Value) VALUES
+                    (1u, 1u, "a"), (2u, 2u, "b"), (3u, 3u, "c");
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+        }
+
+        // Drop the only bloom index -> ByKeyFilterPrefixes becomes empty.
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T` DROP INDEX idx_bloom1;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(getPartitionConfig().ByKeyFilterPrefixesSize(), 0);
+
+        // Table stays correct after the engine filter is cleared.
+        {
+            auto r = queryClient.ExecuteQuery(R"(
+                SELECT Value FROM `/Root/T` WHERE Key1 = 2u AND Key2 = 2u;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+            CompareYson(R"([[["b"]]])", FormatResultSetYson(r.GetResultSet(0)));
+        }
+
+        // A bloom index can be re-added after the table had none (engine re-enables the filter).
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T` ADD INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1);
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(getPartitionConfig().ByKeyFilterPrefixesSize(), 1);
+    }
+
+    Y_UNIT_TEST(DataShardBloomFilterIndexCreateBadPrefix) {
+        // CREATE-time validation: bloom filter columns must be a left prefix of the primary key,
+        // because the named scheme object stores the columns while the engine prefix is length-only.
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto expectFail = [&](const TString& q) {
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        // Key2 alone is not a left prefix of (Key1, Key2).
+        expectFail(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Bad1` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bad LOCAL USING bloom_filter ON (Key2)
+            );
+        )");
+
+        // (Key2, Key1) is not a left prefix of (Key1, Key2).
+        expectFail(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Bad2` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bad LOCAL USING bloom_filter ON (Key2, Key1)
+            );
+        )");
+
+        // Two bloom indexes over the same PK prefix collapse to one engine prefix -> rejected.
+        expectFail(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Bad3` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_a LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_b LOCAL USING bloom_filter ON (Key1)
+            );
+        )");
+    }
+
+    Y_UNIT_TEST(DataShardBloomFilterIndexShowCreate) {
+        // SHOW CREATE TABLE lists each named row-table prefix bloom filter as a LOCAL index.
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/T` (
+                    Key1 Uint64,
+                    Key2 Uint64,
+                    Value String,
+                    PRIMARY KEY (Key1, Key2),
+                    INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                    INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto qSession = queryClient.GetSession().GetValueSync().GetSession();
+        auto showResult = qSession.ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/T`;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(showResult.GetStatus(), EStatus::SUCCESS, showResult.GetIssues().ToString());
+        UNIT_ASSERT(!showResult.GetResultSets().empty());
+
+        NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+        UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+        TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+
+        UNIT_ASSERT_C(createText.Contains("idx_bloom1") && createText.Contains("idx_bloom2"),
+            "SHOW CREATE should list both bloom indexes, got: " << createText);
+        UNIT_ASSERT_C(createText.Contains("LOCAL USING bloom_filter"),
+            "SHOW CREATE should render the bloom filter index clause, got: " << createText);
+    }
+
+    Y_UNIT_TEST(DataShardBloomFilterIndexFlagOff) {
+        // With EnableLocalIndexAsSchemeObject OFF, a row-table bloom filter index drives only the
+        // engine ByKeyFilterPrefixes (unchanged legacy behavior) and is NOT registered as a named
+        // TTableIndex scheme object, so DROP INDEX by name is rejected.
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/T` (
+                    Key1 Uint64,
+                    Key2 Uint64,
+                    Value String,
+                    PRIMARY KEY (Key1, Key2),
+                    INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Engine prefix present, but no TTableIndex scheme object child on the schemeshard.
+        auto pathDescr = kikimr.GetTestClient().Ls("/Root/T")->Record.GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(pathDescr.GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pathDescr.GetTable().TableIndexesSize(), 0);
+        for (const auto& child : pathDescr.GetChildren()) {
+            UNIT_ASSERT_VALUES_UNEQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // No scheme object => DROP INDEX by name cannot resolve it.
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/T` DROP INDEX idx_bloom1;
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     void CreateTableWithReadReplicas(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

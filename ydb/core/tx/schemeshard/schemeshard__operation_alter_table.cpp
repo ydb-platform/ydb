@@ -779,6 +779,101 @@ ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState:
     return obj.Release();
 }
 
+// Collects the names of the table's live local prefix bloom filter index children.
+static TVector<TString> CollectLocalBloomIndexNames(const TPath& path, TOperationContext& context) {
+    TVector<TString> names;
+    for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+        const auto& child = context.SS->PathsById.at(childPathId);
+        if (!child->IsTableIndex() || child->Dropped()) {
+            continue;
+        }
+        auto it = context.SS->Indexes.find(childPathId);
+        if (it != context.SS->Indexes.end()
+            && it->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+            names.push_back(childName);
+        }
+    }
+    return names;
+}
+
+// KEY_BLOOM_FILTER = DISABLED clears all ByKeyFilterPrefixes on the table, which removes the engine
+// backing of every named prefix bloom index. Drop those scheme objects together with the alter so
+// the catalog stays consistent with the engine. Returns nullopt when this alter isn't a disable.
+static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilterDisable(
+    TOperationId id, const TTxTransaction& tx, const TPath& path, TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    if (!alter.HasPartitionConfig()
+        || !alter.GetPartitionConfig().HasEnableFilterByKey()
+        || alter.GetPartitionConfig().GetEnableFilterByKey())
+    {
+        return std::nullopt;
+    }
+
+    const TVector<TString> bloomIndexNames = CollectLocalBloomIndexNames(path, context);
+    if (bloomIndexNames.empty()) {
+        return std::nullopt;
+    }
+
+    TVector<ISubOperation::TPtr> result;
+    result.push_back(CreateAlterTable(NextPartId(id, result), tx));
+    for (const auto& indexName : bloomIndexNames) {
+        AddDropIndex(result, id, path.Child(indexName));
+    }
+    return result;
+}
+
+// Row-table prefix bloom filter ADD INDEX (and migration of legacy ByKeyFilterPrefixes): the alter
+// carries named local indexes to register as TTableIndex scheme objects, optionally alongside a
+// partition-config (ByKeyFilterPrefixes) change. Decompose into the table alter (only when there is
+// a real table-level change) plus one CreateNewTableIndex sub-op per index. The engine filter is
+// driven by the alter's PartitionConfig; the index object is metadata. Returns nullopt when the
+// alter carries no local indexes.
+static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
+    TOperationId id, const TTxTransaction& tx, const TPath& path, const TString& name, TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    if (alter.AddLocalIndexesSize() == 0) {
+        return std::nullopt;
+    }
+
+    // Duplicate-column-set prevention: reject if a local bloom index over the same columns
+    // already exists on the table.
+    for (const auto& indexConfig : alter.GetAddLocalIndexes()) {
+        const TVector<TString> newKeys(indexConfig.GetKeyColumnNames().begin(), indexConfig.GetKeyColumnNames().end());
+        for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+            const auto& child = context.SS->PathsById.at(childPathId);
+            if (!child->IsTableIndex() || child->Dropped()) {
+                continue;
+            }
+            auto it = context.SS->Indexes.find(childPathId);
+            if (it != context.SS->Indexes.end()
+                && TTableIndexInfo::IsLocalIndex(it->second->Type)
+                && it->second->IndexKeys == newKeys) {
+                return TVector<ISubOperation::TPtr>{CreateReject(id, NKikimrScheme::EStatus::StatusSchemeError,
+                    TStringBuilder() << "Local bloom filter index over the same columns already exists on table " << name)};
+            }
+        }
+    }
+
+    TVector<ISubOperation::TPtr> result;
+    if (alter.HasPartitionConfig()) {
+        result.push_back(CreateAlterTable(NextPartId(id, result), tx));
+    }
+
+    for (const auto& indexConfig : alter.GetAddLocalIndexes()) {
+        auto scheme = TransactionTemplate(path.PathString(),
+            NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
+        scheme.SetFailOnExist(tx.GetFailOnExist());
+        // Internal so the generic create-index op accepts a steady/under-alter parent table.
+        scheme.SetInternal(true);
+        *scheme.MutableCreateTableIndex() = indexConfig;
+        result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
+    }
+
+    return result;
+}
+
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
@@ -808,76 +903,12 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    // KEY_BLOOM_FILTER = DISABLED clears all ByKeyFilterPrefixes on the table, which removes the
-    // engine backing of every named prefix bloom index. Drop those scheme objects together with
-    // the alter so the catalog stays consistent with the engine.
-    if (alter.HasPartitionConfig()
-        && alter.GetPartitionConfig().HasEnableFilterByKey()
-        && !alter.GetPartitionConfig().GetEnableFilterByKey())
-    {
-        TVector<TString> bloomIndexNames;
-        for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
-            const auto& child = context.SS->PathsById.at(childPathId);
-            if (!child->IsTableIndex() || child->Dropped()) {
-                continue;
-            }
-            auto it = context.SS->Indexes.find(childPathId);
-            if (it != context.SS->Indexes.end()
-                && it->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
-                bloomIndexNames.push_back(childName);
-            }
-        }
-        if (!bloomIndexNames.empty()) {
-            TVector<ISubOperation::TPtr> result;
-            result.push_back(CreateAlterTable(NextPartId(id, result), tx));
-            for (const auto& indexName : bloomIndexNames) {
-                AddDropIndex(result, id, path.Child(indexName));
-            }
-            return result;
-        }
+    if (auto result = DropLocalBloomIndexesOnFilterDisable(id, tx, path, context)) {
+        return std::move(*result);
     }
 
-    // Row-table prefix bloom filter ADD INDEX (and migration of legacy ByKeyFilterPrefixes):
-    // the alter carries named local indexes to register as TTableIndex scheme objects, optionally
-    // alongside a partition-config (ByKeyFilterPrefixes) change. Decompose into the table alter
-    // (only when there is a real table-level change) plus one CreateNewTableIndex sub-op per index.
-    // The engine filter is driven by the alter's PartitionConfig; the index object is metadata.
-    if (alter.AddLocalIndexesSize() > 0) {
-        // Duplicate-column-set prevention: reject if a local bloom index over the same columns
-        // already exists on the table (goal: prevent duplicate indexes with the same column set).
-        for (const auto& indexConfig : alter.GetAddLocalIndexes()) {
-            const TVector<TString> newKeys(indexConfig.GetKeyColumnNames().begin(), indexConfig.GetKeyColumnNames().end());
-            for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
-                const auto& child = context.SS->PathsById.at(childPathId);
-                if (!child->IsTableIndex() || child->Dropped()) {
-                    continue;
-                }
-                auto it = context.SS->Indexes.find(childPathId);
-                if (it != context.SS->Indexes.end()
-                    && TTableIndexInfo::IsLocalIndex(it->second->Type)
-                    && it->second->IndexKeys == newKeys) {
-                    return {CreateReject(id, NKikimrScheme::EStatus::StatusAlreadyExists,
-                        TStringBuilder() << "Local bloom filter index over the same columns already exists on table " << name)};
-                }
-            }
-        }
-
-        TVector<ISubOperation::TPtr> result;
-        if (alter.HasPartitionConfig()) {
-            result.push_back(CreateAlterTable(NextPartId(id, result), tx));
-        }
-
-        for (const auto& indexConfig : alter.GetAddLocalIndexes()) {
-            auto scheme = TransactionTemplate(path.PathString(),
-                NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
-            scheme.SetFailOnExist(tx.GetFailOnExist());
-            // Internal so the generic create-index op accepts a steady/under-alter parent table.
-            scheme.SetInternal(true);
-            *scheme.MutableCreateTableIndex() = indexConfig;
-            result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
-        }
-
-        return result;
+    if (auto result = AddLocalBloomIndexes(id, tx, path, name, context)) {
+        return std::move(*result);
     }
 
     if (path.IsCommonSensePath()) {

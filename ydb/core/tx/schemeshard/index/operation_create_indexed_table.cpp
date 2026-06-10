@@ -44,11 +44,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TIndexObjectCounts totalCounts;
     ui32 indexCount = indexedTable.IndexDescriptionSize();
     for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
-        if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDesc))) {
-            // Local indexes (e.g. row-table prefix bloom filter) create exactly one path
-            // (the index object itself) and no impl table / no extra shards.
-            continue;
-        }
         auto counts = GetIndexObjectCounts(indexDesc);
         totalCounts.IndexTableCount += counts.IndexTableCount;
         totalCounts.SequenceCount += counts.SequenceCount;

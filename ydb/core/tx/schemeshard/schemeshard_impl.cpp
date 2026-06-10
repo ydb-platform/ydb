@@ -18,6 +18,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
@@ -301,12 +302,13 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             }
 
             NKikimrSchemeOp::TIndexCreationConfig indexConfig;
-            TStringBuilder name;
-            name << "bloom_filter";
             for (ui32 i = 0; i < prefixLen; ++i) {
-                name << "_" << pkColumns[i];
                 indexConfig.AddKeyColumnNames(pkColumns[i]);
             }
+            // Legacy prefixes have no name. Use the same deterministic convention as the describe
+            // synthesis fallback (ydb_convert FillIndexDescriptionImpl): "idx_bloom_<prefixLen>".
+            // This keeps the name stable whether or not the prefix has been migrated yet.
+            const TString name = TStringBuilder() << "idx_bloom_" << prefixLen;
             if (tablePath->FindChild(name)) {
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CollectLocalIndexMigrations: skipping row bloom prefix " << prefixLen
@@ -316,9 +318,10 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             indexConfig.SetName(name);
             indexConfig.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
             indexConfig.SetState(NKikimrSchemeOp::EIndexStateReady);
-            if (prefix.HasFalsePositiveProbability()) {
-                indexConfig.MutableBloomFilterDescription()->SetFalsePositiveProbability(prefix.GetFalsePositiveProbability());
-            }
+            indexConfig.MutableBloomFilterDescription()->SetFalsePositiveProbability(
+                prefix.HasFalsePositiveProbability()
+                    ? prefix.GetFalsePositiveProbability()
+                    : NTable::DefaultBloomFilterFpp);
 
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CollectLocalIndexMigrations: adding row bloom index " << name << " from table " << workingDir);

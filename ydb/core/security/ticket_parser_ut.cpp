@@ -3315,7 +3315,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         ui16 kikimrPort = tp.GetPort(2134);
         ui16 idpHttpPort = tp.GetPort(18080);
 
-        const TString ISS = "http://[::1]:" + ToString(idpHttpPort);
+        const TString ISS = "https://[::1]:" + ToString(idpHttpPort);
         const TString DISC = ISS + "/.well-known/openid-configuration";
         const TString JWKS_URL = ISS + "/.well-known/jwks.json";
         const TString KID = "test-key-1";
@@ -3342,18 +3342,26 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
 
+        const TCertAndKey ca = GenerateCA(TProps::AsCA());
+        TTempFileHandle serverCertificateFile;
+        serverCertificateFile.Write(ca.Certificate.data(), ca.Certificate.size());
+        TTempFileHandle privateKeyFile;
+        privateKeyFile.Write(ca.PrivateKey.data(), ca.PrivateKey.size());
+
         TServer server(settings);
         TTestActorRuntime* runtime = server.GetRuntime();
         runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
         runtime->SetLogPriority(NKikimrServices::EXTERNAL_IDP_PROVIDER, NLog::PRI_TRACE);
 
-        // Start a mock HTTP server inside the actor system (same pattern as BlackBox mock)
         TActorId httpProxyId = runtime->Register(NHttp::CreateHttpProxy());
         TActorId serverId = runtime->AllocateEdgeActor();
-        runtime->Send(
-            new NActors::IEventHandle(httpProxyId, serverId, new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)),
-            0, true
-        );
+
+        auto* listeningPort = new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort);
+        listeningPort->Secure = true;
+        listeningPort->CertificateFile = serverCertificateFile.Name();
+        listeningPort->PrivateKeyFile = privateKeyFile.Name();
+        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId, listeningPort), 0, true);
+
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
@@ -3402,7 +3410,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         ui16 kikimrPort = tp.GetPort(2134);
         ui16 idpHttpPort = tp.GetPort(18080);
 
-        const TString ISS = "http://[::1]:" + ToString(idpHttpPort);
+        const TString ISS = "https://[::1]:" + ToString(idpHttpPort);
         const TString DISC = ISS + "/.well-known/openid-configuration";
         const TString JWKS_URL = ISS + "/.well-known/jwks.json";
         const TString KID = "test-key-1";
@@ -3417,8 +3425,8 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         authConfig.SetUseLoginProvider(false);
         authConfig.SetUseAccessService(false);
         authConfig.SetUseStaff(false);
-        authConfig.SetRefreshPeriod("1s");
-        authConfig.SetRefreshTime("2s");
+        authConfig.SetRefreshPeriod("100ms");
+        authConfig.SetRefreshTime("200ms");
 
         authConfig.SetExternalIdpAuthenticationDomain(DOM);
         auto* idpSettings = authConfig.MutableExternalIdpConfig();
@@ -3431,6 +3439,12 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
 
+        const TCertAndKey ca = GenerateCA(TProps::AsCA());
+        TTempFileHandle serverCertificateFile;
+        serverCertificateFile.Write(ca.Certificate.data(), ca.Certificate.size());
+        TTempFileHandle privateKeyFile;
+        privateKeyFile.Write(ca.PrivateKey.data(), ca.PrivateKey.size());
+
         TServer server(settings);
         TTestActorRuntime* runtime = server.GetRuntime();
         runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -3438,10 +3452,13 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
         TActorId httpProxyId = runtime->Register(NHttp::CreateHttpProxy());
         TActorId serverId = runtime->AllocateEdgeActor();
-        runtime->Send(
-            new NActors::IEventHandle(httpProxyId, serverId, new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)),
-            0, true
-        );
+
+        auto* listeningPort = new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort);
+        listeningPort->Secure = true;
+        listeningPort->CertificateFile = serverCertificateFile.Name();
+        listeningPort->PrivateKeyFile = privateKeyFile.Name();
+        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId, listeningPort), 0, true);
+
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
@@ -3477,7 +3494,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         UNIT_ASSERT(result->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "refreshuser@" + DOM);
 
-        Sleep(TDuration::Seconds(3));
+        Sleep(TDuration::MilliSeconds(300));
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
             new TEvTicketParser::TEvAuthorizeTicket(
@@ -3498,7 +3515,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         ui16 kikimrPort = tp.GetPort(2134);
         ui16 idpHttpPort = tp.GetPort(18080);
 
-        const TString ISS = "http://[::1]:" + ToString(idpHttpPort);
+        const TString ISS = "https://[::1]:" + ToString(idpHttpPort);
         const TString DISC = ISS + "/.well-known/openid-configuration";
         const TString JWKS_URL = ISS + "/.well-known/jwks.json";
         const TString KID = "test-key-1";
@@ -3525,6 +3542,12 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
 
+        const TCertAndKey ca = GenerateCA(TProps::AsCA());
+        TTempFileHandle serverCertificateFile;
+        serverCertificateFile.Write(ca.Certificate.data(), ca.Certificate.size());
+        TTempFileHandle privateKeyFile;
+        privateKeyFile.Write(ca.PrivateKey.data(), ca.PrivateKey.size());
+
         TServer server(settings);
         TTestActorRuntime* runtime = server.GetRuntime();
         runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -3532,10 +3555,13 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
         TActorId httpProxyId = runtime->Register(NHttp::CreateHttpProxy());
         TActorId serverId = runtime->AllocateEdgeActor();
-        runtime->Send(
-            new NActors::IEventHandle(httpProxyId, serverId, new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort)),
-            0, true
-        );
+
+        auto* listeningPort = new NHttp::TEvHttpProxy::TEvAddListeningPort(idpHttpPort);
+        listeningPort->Secure = true;
+        listeningPort->CertificateFile = serverCertificateFile.Name();
+        listeningPort->PrivateKeyFile = privateKeyFile.Name();
+        runtime->Send(new NActors::IEventHandle(httpProxyId, serverId, listeningPort), 0, true);
+
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 

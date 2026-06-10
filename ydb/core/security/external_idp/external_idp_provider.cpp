@@ -82,6 +82,10 @@ TString BuildDiscoveryUrl(TString issuer) {
     return TStringBuilder() << issuer << '/' << WELL_KNOWN_DISCOVERY_URI;
 }
 
+bool IsHttpsUrl(TStringBuf url) {
+    return url.starts_with("https://");
+}
+
 // returns a value in [50%, 100%] of its input
 TDuration ApplyDownwardJitter(const TDuration& jitter) {
     const ui64 half = jitter.MilliSeconds() / 2;
@@ -91,88 +95,89 @@ TDuration ApplyDownwardJitter(const TDuration& jitter) {
 }
 
 TDuration CalculateRetry(const TDuration& minPeriod, const TDuration& maxPeriod, ui64 attempt) {
-    const auto backoff = minPeriod + TDuration::Seconds(1ul << Min(attempt, 20ul));
+    const auto backoff = minPeriod + TDuration::Seconds(1ul << Min(attempt, 10ul));
     const auto clamped = Min(backoff, maxPeriod);
     return ApplyDownwardJitter(clamped);
 }
 
-NMonitoring::TBucketBounds ResponseTimeBuckets() {
+NMonitoring::TBucketBounds ResponseTimeBucketsMs() {
     static NMonitoring::TBucketBounds buckets = {0, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000};
     return buckets;
 }
 
-NMonitoring::TBucketBounds AuthProcessingTimeBuckets() {
+NMonitoring::TBucketBounds AuthProcessingTimeBucketsMs() {
     static NMonitoring::TBucketBounds buckets = {0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000};
     return buckets;
 }
 
+class TRecurringPeriod {
+public:
+    TRecurringPeriod() = default;
+    TRecurringPeriod(
+        const NKikimrProto::TExternalIdpConfig::TPeriodicSettings& settings,
+        TInstant scheduled,
+        NMonitoring::TDynamicCounterPtr counters
+    );
+
+    bool CanSendRequest(TInstant now) const;
+    bool IsSameRequest(NHttp::THttpOutgoingRequestPtr request) const;
+    void ResetBackoff();
+
+    TDuration OnRequestSending(TInstant now, NHttp::THttpOutgoingRequestPtr request);
+    void OnSuccessReceived(TInstant now);
+    void OnErrorReceived(TInstant now);
+
+    TString GetHtml() const;
+
+private:
+    void OnReceived(TInstant now);
+
+private:
+    TDuration SuccessRefreshPeriod{TDuration::Max()};
+    TDuration MinErrorRefreshPeriod{TDuration::Max()};
+    TDuration MaxErrorRefreshPeriod{TDuration::Max()};
+    TDuration RequestTimeout{TDuration::Zero()};
+
+    TInstant Scheduled{TInstant::Max()};
+    TInstant Started{TInstant::Zero()};
+    TInstant Ended{TInstant::Zero()};
+    ui64 RetryCount{0};
+
+    NHttp::THttpOutgoingRequestPtr InFlight{nullptr};
+
+    NMonitoring::THistogramPtr ResponseTime{nullptr};
+    NMonitoring::TDynamicCounters::TCounterPtr Successes{nullptr};
+    NMonitoring::TDynamicCounters::TCounterPtr Errors{nullptr};
+};
+
+class TJwksCache {
+public:
+    TJwksCache() = default;
+    TJwksCache(
+        const NKikimrProto::TExternalIdpConfig::TJwksCacheSettings& settings,
+        NMonitoring::TDynamicCounterPtr counters
+    );
+
+    bool IsStale(const TInstant& now) const;
+
+    size_t Count() const;
+    TMaybe<TString> Get(const TString& key) const;
+    void Update(const TInstant& now, THashMap<TString, TString> keys);
+
+    void Clear();
+
+    TString GetHtml(const TInstant& now) const;
+
+private:
+    THashMap<TString, TString> Keys;
+
+    TDuration Timeout{TDuration::Max()};
+    TInstant LastUpdate{TInstant::Zero()};
+
+    NMonitoring::TDynamicCounters::TCounterPtr KeyCount{nullptr};
+};
+
 class TExternalIdpProvider : public NActors::TActorBootstrapped<TExternalIdpProvider> {
-    class TRecurringPeriod {
-    public:
-        TRecurringPeriod() = default;
-        TRecurringPeriod(
-            const NKikimrProto::TExternalIdpConfig::TPeriodicSettings& settings,
-            TInstant scheduled,
-            NMonitoring::TDynamicCounterPtr counters
-        );
-
-        bool CanSendRequest(TInstant now) const;
-        bool IsSameRequest(NHttp::THttpOutgoingRequestPtr request) const;
-
-        TDuration OnRequestSending(TInstant now, NHttp::THttpOutgoingRequestPtr request);
-        void OnSuccessReceived(TInstant now);
-        void OnErrorReceived(TInstant now);
-
-        TString GetHtml() const;
-
-    private:
-        void OnReceived(TInstant now);
-
-    private:
-        TDuration SuccessRefreshPeriod{TDuration::Max()};
-        TDuration MinErrorRefreshPeriod{TDuration::Max()};
-        TDuration MaxErrorRefreshPeriod{TDuration::Max()};
-        TDuration RequestTimeout{TDuration::Zero()};
-
-        TInstant Scheduled{TInstant::Max()};
-        TInstant Started{TInstant::Zero()};
-        TInstant Ended{TInstant::Zero()};
-        ui64 RetryCount{0};
-
-        NHttp::THttpOutgoingRequestPtr InFlight{nullptr};
-
-        NMonitoring::THistogramPtr ResponseTime{nullptr};
-        NMonitoring::TDynamicCounters::TCounterPtr Successes{nullptr};
-        NMonitoring::TDynamicCounters::TCounterPtr Errors{nullptr};
-    };
-
-    class TJwksCache {
-    public:
-        TJwksCache() = default;
-        TJwksCache(
-            const NKikimrProto::TExternalIdpConfig::TJwksCacheSettings& settings,
-            NMonitoring::TDynamicCounterPtr counters
-        );
-
-        bool IsStale(const TInstant& now) const;
-
-        size_t Count() const;
-        TMaybe<TString> Get(const TString& key) const;
-        void Update(const TInstant& now, THashMap<TString, TString> keys);
-
-        void Clear();
-
-        TString GetHtml(const TInstant& now) const;
-
-    private:
-        THashMap<TString, TString> Keys;
-
-        TDuration Timeout{TDuration::Max()};
-        TInstant LastUpdate{TInstant::Zero()};
-
-        NMonitoring::TDynamicCounters::TCounterPtr KeyCount{nullptr};
-    };
-
 public:
     TExternalIdpProvider(const NKikimrProto::TExternalIdpConfig& config, const NActors::TActorId& httpProxyId);
 
@@ -229,7 +234,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CounterAuthFailed;
 };
 
-TExternalIdpProvider::TRecurringPeriod::TRecurringPeriod(
+TRecurringPeriod::TRecurringPeriod(
     const NKikimrProto::TExternalIdpConfig::TPeriodicSettings& settings,
     TInstant scheduled,
     NMonitoring::TDynamicCounterPtr counters)
@@ -238,22 +243,29 @@ TExternalIdpProvider::TRecurringPeriod::TRecurringPeriod(
     , MaxErrorRefreshPeriod{TDuration::Parse(settings.GetMaxErrorRefreshPeriod())}
     , RequestTimeout{TDuration::Parse(settings.GetRequestTimeout())}
     , Scheduled{scheduled}
-    , ResponseTime(counters->GetHistogram("ResponseTimeMs", NMonitoring::ExplicitHistogram(ResponseTimeBuckets())))
+    , ResponseTime(counters->GetHistogram("ResponseTimeMs", NMonitoring::ExplicitHistogram(ResponseTimeBucketsMs())))
     , Successes(counters->GetCounter("Successes", true))
     , Errors(counters->GetCounter("Errors", true))
 {}
 
-bool TExternalIdpProvider::TRecurringPeriod::CanSendRequest(TInstant now) const {
+bool TRecurringPeriod::CanSendRequest(TInstant now) const {
     return InFlight == nullptr && Scheduled < now;
 }
 
-bool TExternalIdpProvider::TRecurringPeriod::IsSameRequest(NHttp::THttpOutgoingRequestPtr request) const {
+bool TRecurringPeriod::IsSameRequest(NHttp::THttpOutgoingRequestPtr request) const {
     return InFlight != nullptr && InFlight == request;
 }
 
-TDuration TExternalIdpProvider::TRecurringPeriod::OnRequestSending(
-    TInstant now, NHttp::THttpOutgoingRequestPtr request)
-{
+void TRecurringPeriod::ResetBackoff() {
+    if (InFlight != nullptr) {
+        return;
+    }
+
+    RetryCount = 0;
+    Scheduled = TInstant::Zero();
+}
+
+TDuration TRecurringPeriod::OnRequestSending(TInstant now, NHttp::THttpOutgoingRequestPtr request) {
     Started = now;
     Ended = TInstant::Zero();
 
@@ -261,7 +273,7 @@ TDuration TExternalIdpProvider::TRecurringPeriod::OnRequestSending(
     return RequestTimeout;
 }
 
-void TExternalIdpProvider::TRecurringPeriod::OnSuccessReceived(TInstant now) {
+void TRecurringPeriod::OnSuccessReceived(TInstant now) {
     OnReceived(now);
 
     RetryCount = 0;
@@ -270,7 +282,7 @@ void TExternalIdpProvider::TRecurringPeriod::OnSuccessReceived(TInstant now) {
     Successes->Inc();
 }
 
-void TExternalIdpProvider::TRecurringPeriod::OnErrorReceived(TInstant now) {
+void TRecurringPeriod::OnErrorReceived(TInstant now) {
     OnReceived(now);
 
     ++RetryCount;
@@ -279,7 +291,7 @@ void TExternalIdpProvider::TRecurringPeriod::OnErrorReceived(TInstant now) {
     Errors->Inc();
 }
 
-TString TExternalIdpProvider::TRecurringPeriod::GetHtml() const {
+TString TRecurringPeriod::GetHtml() const {
     TStringBuilder html;
     html << "<div>";
 
@@ -309,40 +321,40 @@ TString TExternalIdpProvider::TRecurringPeriod::GetHtml() const {
     return html;
 }
 
-void TExternalIdpProvider::TRecurringPeriod::OnReceived(TInstant now) {
+void TRecurringPeriod::OnReceived(TInstant now) {
     Ended = now;
     InFlight = nullptr;
 
     ResponseTime->Collect((Ended - Started).MilliSeconds());
 }
 
-TExternalIdpProvider::TJwksCache::TJwksCache(
+TJwksCache::TJwksCache(
     const NKikimrProto::TExternalIdpConfig::TJwksCacheSettings& settings,
     NMonitoring::TDynamicCounterPtr counters)
     : Timeout{TDuration::Parse(settings.GetTimeout())}
     , KeyCount(counters->GetCounter("JwksKeys", false))
 {}
 
-bool TExternalIdpProvider::TJwksCache::IsStale(const TInstant& now) const {
+bool TJwksCache::IsStale(const TInstant& now) const {
     return LastUpdate + Timeout < now;
 }
 
-size_t TExternalIdpProvider::TJwksCache::Count() const {
+size_t TJwksCache::Count() const {
     return Keys.size();
 }
 
-TMaybe<TString> TExternalIdpProvider::TJwksCache::Get(const TString& key) const {
+TMaybe<TString> TJwksCache::Get(const TString& key) const {
     const auto it = Keys.find(key);
     return (it == Keys.end()) ? Nothing() : MakeMaybe(it->second);
 }
 
-void TExternalIdpProvider::TJwksCache::Update(const TInstant& now, THashMap<TString, TString> keys) {
+void TJwksCache::Update(const TInstant& now, THashMap<TString, TString> keys) {
     Keys = std::move(keys);
     LastUpdate = now;
     KeyCount->Set(static_cast<i64>(Keys.size()));
 }
 
-void TExternalIdpProvider::TJwksCache::Clear() {
+void TJwksCache::Clear() {
     if (Count() == 0) {
         return;
     }
@@ -351,7 +363,7 @@ void TExternalIdpProvider::TJwksCache::Clear() {
     KeyCount->Set(0);
 }
 
-TString TExternalIdpProvider::TJwksCache::GetHtml(const TInstant& now) const {
+TString TJwksCache::GetHtml(const TInstant& now) const {
     TStringBuilder html;
     html << "<div>";
 
@@ -409,9 +421,7 @@ void TExternalIdpProvider::Bootstrap(const TActorContext& ctx) {
             << " groups_claim_name=" << Config.GetGroupsClaimName()
     );
 
-    Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
-
-    Become(&TThis::StateWork);
+    Become(&TThis::StateWork, REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
 }
 
 void TExternalIdpProvider::StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
@@ -442,7 +452,7 @@ void TExternalIdpProvider::RegisterCounters(const TActorContext& ctx) {
 
     const auto authReq = Counters->GetSubgroup("component", "AuthRequest");
     CounterAuthProcessingTime = authReq->GetHistogram(
-        "ProcessingTimeMs", NMonitoring::ExplicitHistogram(AuthProcessingTimeBuckets())
+        "ProcessingTimeMs", NMonitoring::ExplicitHistogram(AuthProcessingTimeBucketsMs())
     );
     CounterAuthSuccess = authReq->GetCounter("Success", true);
     CounterAuthFailed = authReq->GetCounter("Failed", true);
@@ -453,6 +463,14 @@ void TExternalIdpProvider::RegisterFields(const TActorContext& ctx) {
 
     if (Config.HasIssuer()) {
         Config.SetIssuer(StripStringRight(Config.GetIssuer(), EqualsStripAdapter('/')));
+    }
+
+    if (Config.HasIssuer() && !Config.GetIssuer().empty() && !IsHttpsUrl(Config.GetIssuer())) {
+        BLOG_E(
+            "IdP issuer must use https:// scheme, refusing to fetch keys over plaintext;"
+            " disabling External IdP provider issuer=" << Config.GetIssuer()
+        );
+        Config.ClearIssuer();
     }
 
     if (const auto skewStr = Config.GetAllowedClockSkew(); !skewStr.empty()) {
@@ -638,11 +656,28 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     {
         const auto& claim = decoded->get_payload_claim(groupsClaim);
         if (claim.get_type() == jwt::claim::type::array) {
+            size_t skipped = 0;
             for (const auto& v : claim.as_array()) {
                 if (v.is<std::string>()) {
                     resp->Groups.push_back(TString{v.get<std::string>()});
+                } else {
+                    ++skipped;
                 }
             }
+            if (skipped > 0) {
+                BLOG_W(
+                    "Ignored non-string element(s) in groups claim"
+                        << " issuer=" << Config.GetIssuer()
+                        << " groups_claim_name=" << groupsClaim
+                        << " ignored=" << skipped
+                );
+            }
+        } else {
+            BLOG_W(
+                "Groups claim is not an array, no groups extracted"
+                    << " issuer=" << Config.GetIssuer()
+                    << " groups_claim_name=" << groupsClaim
+            );
         }
     }
 
@@ -700,9 +735,7 @@ void TExternalIdpProvider::StartJwksFetch(const TInstant& now) {
     Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request, timeout));
 }
 
-void TExternalIdpProvider::Handle(
-    NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev, const TActorContext& ctx)
-{
+void TExternalIdpProvider::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev, const TActorContext& ctx) {
     const auto now = ctx.Now();
     const auto* msg = ev->Get();
 
@@ -760,7 +793,16 @@ void TExternalIdpProvider::HandleDiscoveryResponse(
         return;
     }
 
-    JwksUrl = json[JWKS_URI].GetString();
+    const auto jwksUri = json[JWKS_URI].GetString();
+    if (!IsHttpsUrl(jwksUri)) {
+        BLOG_E(
+            "IdP issuer=" << Config.GetIssuer()
+                << " message=Discovery document '" << JWKS_URI << "' must use https:// scheme"
+                << " jwks_uri=" << jwksUri
+        );
+        return;
+    }
+    JwksUrl = jwksUri;
 
     BLOG_D("Discovery ok IdP issuer=" << Config.GetIssuer() << " jwks_uri=" << JwksUrl);
     isSuccess = true;
@@ -884,6 +926,8 @@ void TExternalIdpProvider::HandleWakeup(const TActorContext& ctx) {
 
     if (JwksCache.IsStale(now)) {
         JwksCache.Clear();
+        DiscoveryRefresh.ResetBackoff();
+        JwksRefresh.ResetBackoff();
     }
 
     Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());

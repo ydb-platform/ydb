@@ -609,6 +609,33 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAUTHORIZED);
     }
 
+    Y_UNIT_TEST_F(NonHttpsIssuerDisablesFetches, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        const TString httpIss = "http://idp.example.com";
+        const auto id = RegProvider(MakeConfig(httpIss));
+
+        const auto token = CreateJwt(keys, KID, httpIss, "u1", {});
+        SendAuth(id, "k1", token);
+
+        const auto r = WaitAuth();
+        UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST_F(NonHttpsJwksUriRejected, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        const auto id = RegProvider(MakeConfig(ISS));
+
+        const TString httpJwks = "http://idp.example.com/jwks.json";
+        auto d = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, d, "200", "OK", BuildDiscoveryJson(ISS, httpJwks));
+
+        const auto token = CreateJwt(keys, KID, ISS, "u1", {});
+        SendAuth(id, "k1", token);
+
+        const auto r = WaitAuth();
+        UNIT_ASSERT_EQUAL(r->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
+    }
+
     Y_UNIT_TEST_F(ConfiguredAudienceAccepted, TSetup) {
         const auto keys = GenerateRsaKeyPair();
         const auto id = RegProvider(MakeConfig(ISS, "my-client-id"));

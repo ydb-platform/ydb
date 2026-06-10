@@ -63,7 +63,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ### INDEX
 
-Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md), [полнотекстовые индексы](fulltext_index.md) и [Блум индексы](bloom_skip_index.md).
+Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md), [полнотекстовые индексы](fulltext_index.md) и [Блум-индексы](bloom_skip_index.md).
 
 ### PRIMARY KEY
 

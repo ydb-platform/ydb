@@ -101,7 +101,7 @@ TKeyValueState::TKeyValueState()
     Clear();
 }
 
-bool TKeyValueState::RejectNonExistentStorageChannelEnabled(const TActorContext& ctx) const {
+bool TKeyValueState::RejectNonExistentStorageChannelEnabled(const TActorContext& ctx) {
     return RejectNonExistentStorageChannel.Update(ctx.Now()) != 0;
 }
 

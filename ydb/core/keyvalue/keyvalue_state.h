@@ -306,7 +306,7 @@ protected:
 
     std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
 
-    bool RejectNonExistentStorageChannelEnabled(const TActorContext& ctx) const;
+    bool RejectNonExistentStorageChannelEnabled(const TActorContext& ctx);
 
 public:
     TKeyValueState();

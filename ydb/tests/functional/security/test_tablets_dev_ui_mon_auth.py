@@ -216,53 +216,77 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
     )
 
 
-def _schemeshard_page_access_matrix(
+def _schemeshard_endpoint_cases(endpoint_paths, token_statuses):
+    return [
+        (endpoint_path, token, expected_status)
+        for endpoint_path in endpoint_paths
+        for token, expected_status in token_statuses.items()
+    ]
+
+
+def _schemeshard_public_page_access_cases(
     tablet_id,
-    _pages=(
-        (
-            ('Main', ''),
-            ('TxList', 'Page=TxList'),
-            ('TxInfo', 'Page=TxInfo&TxId=0'),
-            ('PathInfo', 'Page=PathInfo&OwnerPathId=0&LocalPathId=0'),
-            ('ShardInfoByTabletId', 'Page=ShardInfoByTabletId&ShardID=0'),
-            ('ShardInfoByShardIdx', 'Page=ShardInfoByShardIdx&OwnerShardIdx=0&LocalShardIdx=0'),
-            ('BuildIndexInfo', 'Page=BuildIndexInfo&BuildIndexId=0'),
-        ),
-        (
-            ('Admin', 'Page=Admin'),
-            ('AdminRequest', 'Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1'),
-        ),
+    pages=(
+        ('Main', ''),
+        ('TxList', 'Page=TxList'),
+        ('TxInfo', 'Page=TxInfo&TxId=0'),
+        ('PathInfo', 'Page=PathInfo&OwnerPathId=0&LocalPathId=0'),
+        ('ShardInfoByTabletId', 'Page=ShardInfoByTabletId&ShardID=0'),
+        ('ShardInfoByShardIdx', 'Page=ShardInfoByShardIdx&OwnerShardIdx=0&LocalShardIdx=0'),
+        ('BuildIndexInfo', 'Page=BuildIndexInfo&BuildIndexId=0'),
     ),
 ):
-    public_pages, admin_only_pages = _pages
     q_base = f'TabletID={tablet_id}'
-    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
-    expected = {}
-    for _, query_suffix in public_pages:
+    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    cases = []
+    for _, query_suffix in pages:
         q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
-        expected[f'/tablets/app?{q}'] = monitoring_allowed_sids_ok
-    for _, query_suffix in admin_only_pages:
+        cases.extend(_schemeshard_endpoint_cases([f'/tablets/app?{q}'], monitoring_allowed))
+    return cases
+
+
+def _schemeshard_admin_page_access_cases(
+    tablet_id,
+    pages=(
+        ('Admin', 'Page=Admin'),
+        ('AdminRequest', 'Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1'),
+    ),
+):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, _, admin_allowed = tablet_devui_sid_matrix()
+    cases = []
+    for _, query_suffix in pages:
         q = f'{q_base}&{query_suffix}'
-        expected[f'/tablets/app?{q}'] = all_forbidden
-        expected[f'/tablets/app/secure?{q}'] = admin_allowed_sids_ok
-    return expected
+        cases.extend(_schemeshard_endpoint_cases([f'/tablets/app?{q}'], all_forbidden))
+        cases.extend(_schemeshard_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    return cases
 
 
-def _schemeshard_devui_mon_paths(tablet_id, secure_path_mode):
+def _schemeshard_monitoring_devui_cases(tablet_id):
     q = f'TabletID={tablet_id}'
-    all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
-    return {
-        f'/tablets/app?{q}': monitoring_allowed_sids_ok,
-        f'/tablets?{q}': monitoring_allowed_sids_ok,
-        f'/tablets/app?{q}&Page=Admin': tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden),
-        f'/tablets/app/secure?{q}&Page=Admin': admin_allowed_sids_ok,
-        f'/tablets/app?{q}&Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1': (
-            tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed_sids_ok, all_forbidden)
-        ),
-        f'/tablets/app/secure?{q}&Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1': (
-            admin_allowed_sids_ok
-        ),
-    }
+    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    return _schemeshard_endpoint_cases([f'/tablets/app?{q}', f'/tablets?{q}'], monitoring_allowed)
+
+
+def _schemeshard_admin_devui_cases(tablet_id, secure_path_mode):
+    q = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    admin_request = 'Page=AdminRequest&UpdateAccessDatabaseRights=1&UpdateAccessDatabaseRightsDryRun=1'
+    return (
+        _schemeshard_endpoint_cases([f'/tablets/app?{q}&Page=Admin'], expected_on_app)
+        + _schemeshard_endpoint_cases([f'/tablets/app/secure?{q}&Page=Admin'], admin_allowed)
+        + _schemeshard_endpoint_cases([f'/tablets/app?{q}&{admin_request}'], expected_on_app)
+        + _schemeshard_endpoint_cases([f'/tablets/app/secure?{q}&{admin_request}'], admin_allowed)
+    )
+
+
+def _schemeshard_new_action_cases(tablet_id, query_suffix, secure_path_mode):
+    expectations = tablet_devui_new_action_paths(tablet_id, query_suffix, secure_path_mode)
+    cases = []
+    for endpoint_path, token_statuses in expectations.items():
+        cases.extend(_schemeshard_endpoint_cases([endpoint_path], token_statuses))
+    return cases
 
 
 def _schemeshard_post_action_paths(tablet_id, action, extra_params='', admin_secure_status=200, page=None):
@@ -272,43 +296,26 @@ def _schemeshard_post_action_paths(tablet_id, action, extra_params='', admin_sec
     q = f'{q}&Action={action}'
     if extra_params:
         q = f'{q}&{extra_params}'
-    all_forbidden, _, admin_allowed_sids_ok = tablet_devui_sid_matrix()
-    secure_expected = dict(admin_allowed_sids_ok)
-    secure_expected['root@builtin'] = admin_secure_status
-    return {
-        f'/tablets/app?{q}': all_forbidden,
-        f'/tablets/app/secure?{q}': secure_expected,
-    }
+    return f'/tablets/app?{q}', f'/tablets/app/secure?{q}', admin_secure_status
 
 
-def test_schemeshard_tablet_devui_mon_paths_with_enforce_user_token(
-    ydb_cluster_with_enforce_user_token_and_schemeshard_tablet,
-):
-    tid = ydb_cluster_with_enforce_user_token_and_schemeshard_tablet.schemeshard_tablet_id
-    _test_endpoints(
-        ydb_cluster_with_enforce_user_token_and_schemeshard_tablet,
-        _schemeshard_devui_mon_paths(tid, secure_path_mode=False),
+def _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status=200):
+    all_forbidden, _, admin_allowed = tablet_devui_sid_matrix()
+    expected_on_secure = dict(admin_allowed)
+    expected_on_secure['root@builtin'] = admin_secure_status
+    return (
+        _schemeshard_endpoint_cases([legacy_path], all_forbidden)
+        + _schemeshard_endpoint_cases([secure_path], expected_on_secure)
     )
 
 
-def test_schemeshard_tablet_devui_mon_paths_with_secure_path_mode(
-    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
-):
-    tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet.schemeshard_tablet_id
-    _test_endpoints(
-        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
-        _schemeshard_devui_mon_paths(tid, secure_path_mode=True),
-    )
+def _schemeshard_token_desc(token):
+    return token if token is not None else 'null'
 
 
-def test_schemeshard_page_access_matrix_with_secure_path_mode(
-    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
-):
-    tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet.schemeshard_tablet_id
-    _test_endpoints(
-        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
-        _schemeshard_page_access_matrix(tid),
-    )
+def _schemeshard_mon_base_url(cluster):
+    node = cluster.nodes[1]
+    return f'https://{node.host}:{node.mon_port}'
 
 
 def _schemeshard_post_form_body(endpoint_path, post_data):
@@ -322,29 +329,87 @@ def _schemeshard_post_form_body(endpoint_path, post_data):
     return f'{query}&{post_data}'
 
 
-def _schemeshard_post_endpoints(cluster, endpoint_paths, post_data):
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
-    base_url = f'https://{host}:{mon_port}'
-    for endpoint_path, expected_statuses in endpoint_paths.items():
-        endpoint_url = f'{base_url}{endpoint_path}'
-        form_body = _schemeshard_post_form_body(endpoint_path, post_data)
-        for token, expected_status in expected_statuses.items():
-            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-            if token is not None:
-                headers['Authorization'] = token
-            response = requests.post(
-                endpoint_url,
-                headers=headers,
-                data=form_body,
-                verify=False,
-                allow_redirects=False,
-            )
-            token_desc = token if token is not None else 'null'
-            assert response.status_code == expected_status, (
-                f'Expected POST {endpoint_path} with token={token_desc} to return {expected_status}, '
-                f'got {response.status_code}'
-            )
+def _schemeshard_get_response(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    return requests.get(
+        f'{_schemeshard_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+
+
+def _schemeshard_get_status(cluster, endpoint_path, token=None):
+    return _schemeshard_get_response(cluster, endpoint_path, token).status_code
+
+
+def _schemeshard_post_status(cluster, endpoint_path, token=None, post_data=''):
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.post(
+        f'{_schemeshard_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        data=_schemeshard_post_form_body(endpoint_path, post_data),
+        verify=False,
+        allow_redirects=False,
+    )
+    return response.status_code
+
+
+def test_schemeshard_tablet_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_schemeshard_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_schemeshard_tablet
+    tid = cluster.schemeshard_tablet_id
+    cases = (
+        _schemeshard_monitoring_devui_cases(tid)
+        + _schemeshard_admin_devui_cases(tid, secure_path_mode=False)
+    )
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_schemeshard_tablet_devui_mon_paths_with_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
+    tid = cluster.schemeshard_tablet_id
+    cases = (
+        _schemeshard_monitoring_devui_cases(tid)
+        + _schemeshard_admin_devui_cases(tid, secure_path_mode=True)
+    )
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_schemeshard_page_access_matrix_with_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
+    tid = cluster.schemeshard_tablet_id
+    cases = (
+        _schemeshard_public_page_access_cases(tid)
+        + _schemeshard_admin_page_access_cases(tid)
+    )
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def test_schemeshard_post_force_drop_unsafe_with_secure_path_mode(
@@ -352,16 +417,21 @@ def test_schemeshard_post_force_drop_unsafe_with_secure_path_mode(
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    _schemeshard_post_endpoints(
-        cluster,
-        _schemeshard_post_action_paths(
-            tid,
-            'ForceDropUnsafe',
-            'OwnerPathId=1&LocalPathId=1',
-            admin_secure_status=400,
-        ),
+    post_data = 'OwnerPathId=1&LocalPathId=1'
+    legacy_path, secure_path, admin_secure_status = _schemeshard_post_action_paths(
+        tid,
+        'ForceDropUnsafe',
         'OwnerPathId=1&LocalPathId=1',
+        admin_secure_status=400,
     )
+    cases = _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_post_status(cluster, endpoint_path, token, post_data)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def test_schemeshard_post_split_one_to_one_with_secure_path_mode(
@@ -369,11 +439,18 @@ def test_schemeshard_post_split_one_to_one_with_secure_path_mode(
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    _schemeshard_post_endpoints(
-        cluster,
-        _schemeshard_post_action_paths(tid, 'SplitOneToOne', admin_secure_status=400),
-        'ShardID=1',
+    post_data = 'ShardID=1'
+    legacy_path, secure_path, admin_secure_status = _schemeshard_post_action_paths(
+        tid, 'SplitOneToOne', admin_secure_status=400,
     )
+    cases = _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_post_status(cluster, endpoint_path, token, post_data)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def test_schemeshard_new_post_action_is_admin_only_by_default(
@@ -381,11 +458,17 @@ def test_schemeshard_new_post_action_is_admin_only_by_default(
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    _schemeshard_post_endpoints(
-        cluster,
-        _schemeshard_post_action_paths(tid, 'FutureAction', admin_secure_status=400),
-        '',
+    legacy_path, secure_path, admin_secure_status = _schemeshard_post_action_paths(
+        tid, 'FutureAction', admin_secure_status=400,
     )
+    cases = _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_post_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def test_schemeshard_post_table_partitions_format_switch_with_secure_path_mode(
@@ -393,16 +476,21 @@ def test_schemeshard_post_table_partitions_format_switch_with_secure_path_mode(
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    _schemeshard_post_endpoints(
-        cluster,
-        _schemeshard_post_action_paths(
-            tid,
-            'TablePartitionsFormatSwitch',
-            'OwnerPathId=1&LocalPathId=1&format=shardidx',
-            admin_secure_status=400,
-        ),
+    post_data = 'OwnerPathId=1&LocalPathId=1&format=shardidx'
+    legacy_path, secure_path, admin_secure_status = _schemeshard_post_action_paths(
+        tid,
+        'TablePartitionsFormatSwitch',
         'OwnerPathId=1&LocalPathId=1&format=shardidx',
+        admin_secure_status=400,
     )
+    cases = _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_post_status(cluster, endpoint_path, token, post_data)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def test_schemeshard_post_table_partitions_format_sweep_with_secure_path_mode(
@@ -410,27 +498,31 @@ def test_schemeshard_post_table_partitions_format_sweep_with_secure_path_mode(
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
     tid = cluster.schemeshard_tablet_id
-    _schemeshard_post_endpoints(
-        cluster,
-        _schemeshard_post_action_paths(
-            tid,
-            'TablePartitionsFormatSweep',
-            page='Admin',
-            admin_secure_status=303,
-        ),
-        'Start=1&format=shardidx',
+    post_data = 'Start=1&format=shardidx'
+    legacy_path, secure_path, admin_secure_status = _schemeshard_post_action_paths(
+        tid,
+        'TablePartitionsFormatSweep',
+        page='Admin',
+        admin_secure_status=303,
     )
+    cases = _schemeshard_post_access_cases(legacy_path, secure_path, admin_secure_status)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_post_status(cluster, endpoint_path, token, post_data)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def test_schemeshard_table_partitions_format_sweep_form_uses_secure_path(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
     tid = cluster.schemeshard_tablet_id
-    url = f'https://{host}:{mon_port}/tablets/app/secure?TabletID={tid}&Page=Admin'
-    response = requests.get(url, headers={'Authorization': 'root@builtin'}, verify=False)
+    endpoint_path = f'/tablets/app/secure?TabletID={tid}&Page=Admin'
+    response = _schemeshard_get_response(cluster, endpoint_path, 'root@builtin')
+
     assert response.status_code == 200, response.text
     assert "action='app/secure?" in response.text or 'action="app/secure?' in response.text
     assert 'Action=TablePartitionsFormatSweep' in response.text
@@ -440,11 +532,10 @@ def test_schemeshard_admin_link_uses_secure_path(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
     tid = cluster.schemeshard_tablet_id
-    url = f'https://{host}:{mon_port}/tablets/app?TabletID={tid}'
-    response = requests.get(url, headers={'Authorization': 'monitoring@builtin'}, verify=False)
+    endpoint_path = f'/tablets/app?TabletID={tid}'
+    response = _schemeshard_get_response(cluster, endpoint_path, 'monitoring@builtin')
+
     assert response.status_code == 200, response.text
     assert 'app/secure?' in response.text
     assert 'Page=Admin' in response.text
@@ -454,14 +545,13 @@ def test_schemeshard_force_drop_unsafe_form_uses_secure_path(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
     tid = cluster.schemeshard_tablet_id
-    url = (
-        f'https://{host}:{mon_port}/tablets/app?TabletID={tid}'
+    endpoint_path = (
+        f'/tablets/app?TabletID={tid}'
         f'&Page=PathInfo&OwnerPathId={tid}&LocalPathId=1'
     )
-    response = requests.get(url, headers={'Authorization': 'monitoring@builtin'}, verify=False)
+    response = _schemeshard_get_response(cluster, endpoint_path, 'monitoring@builtin')
+
     assert response.status_code == 200, response.text
     assert "action='app/secure?" in response.text or 'action="app/secure?' in response.text
     assert 'Action=ForceDropUnsafe' in response.text
@@ -470,21 +560,31 @@ def test_schemeshard_force_drop_unsafe_form_uses_secure_path(
 def test_schemeshard_new_action_with_enforce_user_token(
     ydb_cluster_with_enforce_user_token_and_schemeshard_tablet,
 ):
-    tid = ydb_cluster_with_enforce_user_token_and_schemeshard_tablet.schemeshard_tablet_id
-    _test_endpoints(
-        ydb_cluster_with_enforce_user_token_and_schemeshard_tablet,
-        tablet_devui_new_action_paths(tid, 'Page=FuturePage', secure_path_mode=False),
-    )
+    cluster = ydb_cluster_with_enforce_user_token_and_schemeshard_tablet
+    tid = cluster.schemeshard_tablet_id
+    cases = _schemeshard_new_action_cases(tid, 'Page=FuturePage', secure_path_mode=False)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def test_schemeshard_new_action_with_enforce_user_token_and_secure_path_mode(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
 ):
-    tid = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet.schemeshard_tablet_id
-    _test_endpoints(
-        ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet,
-        tablet_devui_new_action_paths(tid, 'Page=FuturePage', secure_path_mode=True),
-    )
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_schemeshard_tablet
+    tid = cluster.schemeshard_tablet_id
+    cases = _schemeshard_new_action_cases(tid, 'Page=FuturePage', secure_path_mode=True)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _schemeshard_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_schemeshard_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
 
 
 def _graph_shard_devui_mon_paths(graph_shard_tablet_id, secure_path_mode):

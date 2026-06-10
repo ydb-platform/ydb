@@ -42,12 +42,11 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
 
 bool IsTabletDevUiAccessAllowed(
     const TAppData* appData,
-    bool securePathMode,
     TStringBuf pathInfo,
     const TString& userToken,
-    bool isPublicRequest)
+    bool isMonitoringDevUiRequest)
 {
-    if (!securePathMode || isPublicRequest) {
+    if (!appData->FeatureFlags.GetEnableTabletDevUiSecurePath() || isMonitoringDevUiRequest) {
         return true;
     }
     // Mutating handler requires BOTH `/app/secure` path (CGI dispatch can't bypass via `/app/`)

@@ -16,12 +16,6 @@
 
 #include <format>
 
-#if defined LOG_W
-#error log macro redefinition
-#endif
-
-#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[schemeshard__monitoring] " << stream)
-
 namespace std {
 
 // Inherit TString* formatters from std::string* ones.
@@ -185,52 +179,32 @@ const TCgi::TParam TCgi::Action = TStringBuf("Action");
 
 namespace {
 
-bool HasOnlySchemeShardDevUiParams(const TCgiParameters& cgi, std::initializer_list<TStringBuf> allowed) {
-    for (const auto& [name, _] : cgi) {
-        bool isAllowed = false;
-        for (TStringBuf allowedName : allowed) {
-            if (name == allowedName) {
-                isAllowed = true;
-                break;
-            }
-        }
-        if (!isAllowed) {
-            return false;
-        }
-    }
-    return true;
+bool IsSchemeShardDevUiMonitoringPage(TStringBuf page) {
+    return page == TCgi::TPages::MainPage
+        || page == TCgi::TPages::TransactionList
+        || page == TCgi::TPages::TransactionInfo
+        || page == TCgi::TPages::PathInfo
+        || page == TCgi::TPages::ShardInfoByTabletId
+        || page == TCgi::TPages::ShardInfoByShardIdx
+        || page == TCgi::TPages::BuildIndexInfo;
 }
 
-bool IsPublicSchemeShardDevUiRequest(const TCgiParameters& cgi, const TActorContext& ctx) {
+bool IsSchemeShardDevUiAdminRequest(const TCgiParameters& cgi, const TActorContext& ctx) {
     if (cgi.Has(TCgi::Action)) {
-        return false;
+        return true;
     }
 
     const TString& page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
+    if (page == TCgi::TPages::AdminPage || page == TCgi::TPages::AdminRequest) {
+        return true;
+    }
+    if (IsSchemeShardDevUiMonitoringPage(page)) {
+        return false;
+    }
 
-    if (page == TCgi::TPages::MainPage) {
-        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page});
-    }
-    if (page == TCgi::TPages::TransactionList) {
-        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page});
-    }
-    if (page == TCgi::TPages::TransactionInfo) {
-        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::TxId, TCgi::PartId});
-    }
-    if (page == TCgi::TPages::PathInfo) {
-        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::OwnerPathId, TCgi::LocalPathId});
-    }
-    if (page == TCgi::TPages::ShardInfoByTabletId) {
-        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::ShardID});
-    }
-    if (page == TCgi::TPages::ShardInfoByShardIdx) {
-        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::OwnerShardIdx, TCgi::LocalShardIdx});
-    }
-    if (page == TCgi::TPages::BuildIndexInfo) {
-        return HasOnlySchemeShardDevUiParams(cgi, {TCgi::TabletID, TCgi::Page, TCgi::BuildIndexId});
-    }
-    LOG_W("SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
-    return false;
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "SchemeShard DevUI request to unknown page: " << page << ", cgi: " << cgi.Print());
+    return true;
 }
 
 } // namespace
@@ -831,7 +805,8 @@ private:
         // to give user clear knowledge what parameters were.
         // Params in the body are the actually used ones, query parameters will be ignored
         // (see ydb/core/tablet/tablet_monitoring_proxy.cpp).
-        const TString actionUrl = TStringBuilder() << TabletDevUiAppPath() << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
             << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::ForceDropUnsafe)
             << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
             << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
@@ -860,7 +835,8 @@ private:
         // to give user clear knowledge what parameters were.
         // Params in the body are the actually used ones, query parameters will be ignored
         // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr))
-        const TString actionUrl = TStringBuilder() << TabletDevUiAppPath() << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
             << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::TablePartitionsFormatSwitch)
             << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
             << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
@@ -908,7 +884,8 @@ private:
         // to give user clear knowledge what parameters were.
         // Params in the body are the actually used ones, query parameters will be ignored
         // (see ydb/core/tablet/tablet_monitoring_proxy.cpp, TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr)).
-        const TString actionUrl = TStringBuilder() << TabletDevUiAppPath()
+        const TStringBuf appPath = TabletDevUiAppPath();
+        const TString actionUrl = TStringBuilder() << appPath
             << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
             << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
             << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::TablePartitionsFormatSweep)
@@ -1097,8 +1074,9 @@ private:
             TAG(TH3) {str << "SchemeShard main page:";}
 
             {
+                const TStringBuf appPath = TabletDevUiAppPath();
                 str << "<legend>";
-                str << "<a href='" << TabletDevUiAppPath() << "?"
+                str << "<a href='" << appPath << "?"
                     << TCgi::TabletID.AsCgiParam(Self->TabletID())
                     << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
                     << "'> Administration settings </a>";
@@ -2116,8 +2094,9 @@ private:
             }
 
             // make redirect with location relative to the original request url (path)
+            const TStringBuf appPath = TabletDevUiAppPath();
             TStringBuilder location;
-            location << TabletDevUiAppPath()
+            location << appPath
                 << "?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
                 << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
             ;
@@ -2142,13 +2121,11 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
         return true;
 
     const TCgiParameters& cgi = ev->Get()->Cgi();
-    const bool securePathMode = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath();
     if (!IsTabletDevUiAccessAllowed(
             AppData(),
-            securePathMode,
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            IsPublicSchemeShardDevUiRequest(cgi, ctx)))
+            !IsSchemeShardDevUiAdminRequest(cgi, ctx)))
     {
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

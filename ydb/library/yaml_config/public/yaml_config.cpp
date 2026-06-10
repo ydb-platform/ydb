@@ -467,7 +467,6 @@ TIncompatibilityRules TIncompatibilityRules::GetDefaultRules() {
         rules.AddRule(std::move(rule));
     };
     addRequiredLabelRule("branch");
-    addRequiredLabelRule("configuration_version");
     addRequiredLabelRule("dynamic");
     addRequiredLabelRule("node_host");
     addRequiredLabelRule("node_id");

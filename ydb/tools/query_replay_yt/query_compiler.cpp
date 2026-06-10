@@ -1,5 +1,8 @@
 #include "query_replay.h"
 
+#include "metadata.h"
+#include "plan_check.h"
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -30,83 +33,7 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
-
-
-struct TMetadataInfoHolder {
-    const THashMap<TString, NYql::TKikimrTableMetadataPtr> TableMetadata;
-    THashMap<TString, NYql::TKikimrTableMetadataPtr> Indexes;
-
-    explicit TMetadataInfoHolder(THashMap<TString,  NYql::TKikimrTableMetadataPtr>&& tableMetadata)
-        : TableMetadata(tableMetadata)
-    {
-        for (auto& [name, ptr] : TableMetadata) {
-            for (auto implTable : ptr->ImplTables) {
-                YQL_ENSURE(implTable);
-                do {
-                    auto nextImplTable = implTable->Next;
-                    Indexes.emplace(implTable->Name, std::move(implTable));
-                    implTable = std::move(nextImplTable);
-                } while (implTable);
-            }
-        }
-    }
-
-    THashMap<TString, NYql::TKikimrTableMetadataPtr>::const_iterator find(const TString& key) {
-        return TableMetadata.find(key);
-    }
-
-    const NYql::TKikimrTableMetadataPtr* FindPtr(const TString& key) const {
-        const auto* result = TableMetadata.FindPtr(key);
-        if (result != nullptr) {
-            return result;
-        }
-
-        return Indexes.FindPtr(key);
-    }
-
-    THashMap<TString, NYql::TKikimrTableMetadataPtr>::const_iterator begin() const {
-        return TableMetadata.begin();
-    }
-
-    THashMap<TString, NYql::TKikimrTableMetadataPtr>::const_iterator end() const {
-        return TableMetadata.end();
-    }
-};
-
-
-THashMap<TString, NYql::TKikimrTableMetadataPtr> ExtractStaticMetadata(const NJson::TJsonValue& data) {
-    EMetaSerializationType metaType = EMetaSerializationType::EncodedProto;
-    if (data.Has("table_meta_serialization_type")) {
-        metaType = static_cast<EMetaSerializationType>(data["table_meta_serialization_type"].GetUIntegerSafe());
-    }
-    THashMap<TString, NYql::TKikimrTableMetadataPtr> meta;
-
-    if (metaType == EMetaSerializationType::EncodedProto) {
-        static NJson::TJsonReaderConfig readerConfig;
-        NJson::TJsonValue tablemetajson;
-        TStringInput in(data["table_metadata"].GetStringSafe());
-        NJson::ReadJsonTree(&in, &readerConfig, &tablemetajson, false);
-        Y_ENSURE(tablemetajson.IsArray());
-        for (auto& node : tablemetajson.GetArray()) {
-            NKikimrKqp::TKqpTableMetadataProto proto;
-
-            TString decoded = Base64Decode(node.GetStringRobust());
-            Y_ENSURE(proto.ParseFromString(decoded));
-
-            NYql::TKikimrTableMetadataPtr ptr = MakeIntrusive<NYql::TKikimrTableMetadata>(&proto);
-            meta.emplace(proto.GetName(), ptr);
-        }
-    } else {
-        Y_ENSURE(data["table_metadata"].IsArray());
-        for (auto& node : data["table_metadata"].GetArray()) {
-            NKikimrKqp::TKqpTableMetadataProto proto;
-            NProtobufJson::Json2Proto(node.GetStringRobust(), proto);
-            NYql::TKikimrTableMetadataPtr ptr = MakeIntrusive<NYql::TKikimrTableMetadata>(&proto);
-            meta.emplace(proto.GetName(), ptr);
-        }
-    }
-    return meta;
-}
+using namespace NKikimr::NQueryReplay;
 
 
 class TStaticTableMetadataLoader: public NYql::IKikimrGateway::IKqpTableMetadataLoader, public NYql::IDbSchemeResolver {
@@ -296,95 +223,10 @@ private:
         AsyncCompileResult->Continue().Apply(callback);
     }
 
-    NJson::TJsonValue ExtractQueryPlan(const TString& plan) {
-        static NJson::TJsonReaderConfig readConfig;
-        TStringInput in(plan);
-        NJson::TJsonValue reply;
-        NJson::ReadJsonTree(&in, &readConfig, &reply, false);
-        return reply;
-    }
-
-    std::map<std::string, TTableStats> ExtractTableStats(const NJson::TJsonValue& rhs) {
-        std::map<std::string, TTableStats> result;
-
-        if (rhs.Has("tables")) {
-            for(const auto& table : rhs["tables"].GetArraySafe()) {
-                TString name = table["name"].GetStringSafe();
-                std::vector<TTableReadAccessInfo> reads;
-                std::vector<TTableWriteInfo> writes;
-
-                if (table.Has("reads")) {
-                    for(const auto& read: table["reads"].GetArraySafe()) {
-                        std::vector <std::string> columns;
-                        if (read.Has("columns")) {
-                            const auto tableMetadata = TableMetadata->FindPtr(name);
-                            Y_ENSURE(tableMetadata);
-                            const auto &keyColumnNames = tableMetadata->Get()->KeyColumnNames;
-                            std::unordered_set <std::string_view> keyColumns(keyColumnNames.begin(),
-                                                                             keyColumnNames.end());
-                            for (const auto &column : read["columns"].GetArraySafe()) {
-                                if (!keyColumns.contains(column.GetStringSafe())) {
-                                    columns.push_back(column.GetStringSafe());
-                                }
-                            }
-                            std::sort(columns.begin(), columns.end());
-                        }
-
-                        const auto &type = read["type"].GetStringSafe();
-                        i32 limit = -1;
-                        if (read.Has("limit") && read["limit"].IsInteger()) {
-                            limit = read["limit"].GetIntegerSafe();
-                        }
-
-                        bool probablyLookupScan = false;
-                        if (read.Has("lookup_by") && read.Has("scan_by")) {
-                            probablyLookupScan = true;
-                        }
-
-                        if (type == "Lookup") {
-                            if (probablyLookupScan) {
-                                reads.push_back(TTableReadAccessInfo{"Scan", limit, columns});
-                            } else {
-                                reads.push_back(TTableReadAccessInfo{"Lookup", limit, columns});
-                            }
-                        } else if (type == "MultiLookup") {
-                            reads.push_back(TTableReadAccessInfo{"Lookup", limit, columns});
-                        } else {
-                            reads.push_back(TTableReadAccessInfo({type, limit, columns}));
-                        }
-                    }
-
-                    std::sort(reads.begin(), reads.end());
-                }
-
-                if (table.Has("writes")) {
-                    for (const auto& write : table["writes"].GetArraySafe()) {
-                        std::vector<std::string> columns;
-                        if (write.Has("columns")) {
-                            const auto tableMetadata = TableMetadata->FindPtr(name);
-                            Y_ENSURE(tableMetadata);
-                            const auto& keyColumnNames = tableMetadata->Get()->KeyColumnNames;
-                            std::unordered_set<std::string_view> keyColumns(keyColumnNames.begin(), keyColumnNames.end());
-                            for (const auto& column : write["columns"].GetArraySafe()) {
-                                if (!keyColumns.contains(column.GetStringSafe())) {
-                                    columns.push_back(column.GetStringSafe());
-                                }
-                            }
-                            std::sort(columns.begin(), columns.end());
-                        }
-
-                        const auto& type = write["type"].GetStringSafe();
-                        writes.push_back(TTableWriteInfo{type, columns});
-                    }
-
-                    std::sort(writes.begin(), writes.end());
-                }
-
-                result.emplace(name, TTableStats{name, std::move(reads), std::move(writes)});
-            }
-        }
-
-        return result;
+    TTableMetadataLookup MetadataLookup() const {
+        return [this](const TString& name) {
+            return TableMetadata->FindPtr(name);
+        };
     }
 
     void WriteJsonData(const TString& fname, const NJson::TJsonValue& data) {
@@ -397,77 +239,6 @@ private:
         WriteJsonData("-repro.txt", ReplayDetails);
         WriteJsonData("-plan-lhs.txt", lhs);
         WriteJsonData("-plan-rhs.txt", rhs);
-    }
-
-    std::pair<TQueryReplayEvents::TCheckQueryPlanStatus, TString> OnTableOperationsMismatch(const TTableStats& oldEngineStats, const TTableStats& newEngineStats) {
-        Y_ENSURE(oldEngineStats.Name == newEngineStats.Name);
-        if (oldEngineStats.Reads.size() > newEngineStats.Reads.size()) {
-            return {TQueryReplayEvents::ExtraReadingOldEngine, TStringBuilder()
-                << "Extra reading in old engine plan for table " << oldEngineStats.Name};
-        }
-
-        if (oldEngineStats.Reads.size() < newEngineStats.Reads.size()) {
-            return {TQueryReplayEvents::ExtraReadingNewEngine, TStringBuilder()
-                << "Extra reading in new engine plan for table " << newEngineStats.Name};
-        }
-
-        for (size_t i = 0; i < oldEngineStats.Reads.size(); ++i) {
-            if (oldEngineStats.Reads[i].ReadType != newEngineStats.Reads[i].ReadType) {
-                return {TQueryReplayEvents::ReadTypesMismatch, TStringBuilder() << "Read types mismatch, old engine: "
-                    << ToString(oldEngineStats.Reads[i].ReadType) << ", new engine: " << ToString(newEngineStats.Reads[i].ReadType)};
-            }
-
-            if (oldEngineStats.Reads[i].PushedLimit != newEngineStats.Reads[i].PushedLimit) {
-                return {TQueryReplayEvents::ReadLimitsMismatch, TStringBuilder() << "Read limits mismatch, old engine: "
-                    << oldEngineStats.Reads[i].PushedLimit << ", new engine: " << newEngineStats.Reads[i].PushedLimit};
-            }
-
-            if (oldEngineStats.Reads[i].ReadColumns != newEngineStats.Reads[i].ReadColumns) {
-                return {TQueryReplayEvents::ReadColumnsMismatch, TStringBuilder() << "Read columns mismatch"};
-            }
-        }
-
-        if (oldEngineStats.Writes.size() > newEngineStats.Writes.size()) {
-            return {TQueryReplayEvents::ExtraWriting, TStringBuilder()
-                << "Extra write operation in old engine plan for table " << oldEngineStats.Name};
-        }
-
-        if (oldEngineStats.Writes.size() < newEngineStats.Writes.size()) {
-            return {TQueryReplayEvents::ExtraWriting, TStringBuilder()
-                << "Extra write operation in new engine plan for table " << newEngineStats.Name};
-        }
-
-        for (size_t i = 0; i < oldEngineStats.Writes.size(); ++i) {
-            if (oldEngineStats.Writes[i].WriteColumns != newEngineStats.Writes[i].WriteColumns) {
-                return {TQueryReplayEvents::WriteColumnsMismatch, TStringBuilder() << "Write columns mismatch"};
-            }
-        }
-
-        return {TQueryReplayEvents::UncategorizedPlanMismatch, ""};
-    }
-
-    std::pair<TQueryReplayEvents::TCheckQueryPlanStatus, TString> CheckQueryPlan(std::unique_ptr<TQueryReplayEvents::TEvCompileResponse>& ev,
-        const NJson::TJsonValue& newEnginePlan)
-    {
-        NJson::TJsonValue oldEnginePlan = ExtractQueryPlan(ReplayDetails["query_plan"].GetStringSafe());
-        const auto oldEngineStats = ExtractTableStats(oldEnginePlan);
-        ev->EngineTableStats = ExtractTableStats(newEnginePlan);
-
-        for (const auto& [table, stats] : oldEngineStats) {
-            auto it = ev->EngineTableStats.find(table);
-            if (it == ev->EngineTableStats.end()) {
-                WriteQueryMismatchInfo(oldEnginePlan, newEnginePlan);
-                return {TQueryReplayEvents::TableMissing,
-                    TStringBuilder() << "Table " << table << " not found in new engine plan"};
-            }
-
-            if (stats != it->second) {
-                WriteQueryMismatchInfo(oldEnginePlan, newEnginePlan);
-                return OnTableOperationsMismatch(stats, it->second);
-            }
-        }
-
-        return {TQueryReplayEvents::Success, ""};
     }
 
     void Reply(const Ydb::StatusIds::StatusCode& status, const TString& message) {
@@ -495,7 +266,16 @@ private:
         } else {
             Y_ENSURE(queryPlan);
             ev->Plan = *queryPlan;
-            std::tie(ev->Status, ev->Message) = CheckQueryPlan(ev, ExtractQueryPlan(*queryPlan));
+            const NJson::TJsonValue newEnginePlan = ParseQueryPlan(*queryPlan);
+            const NJson::TJsonValue oldEnginePlan = ParseQueryPlan(ReplayDetails["query_plan"].GetStringSafe());
+            std::tie(ev->Status, ev->Message) = CheckQueryPlans(
+                ReplayDetails["query_plan"].GetStringSafe(),
+                newEnginePlan,
+                MetadataLookup(),
+                &ev->EngineTableStats);
+            if (ev->Status != TQueryReplayEvents::Success) {
+                WriteQueryMismatchInfo(oldEnginePlan, newEnginePlan);
+            }
         }
 
         Send(Owner, ev.release());

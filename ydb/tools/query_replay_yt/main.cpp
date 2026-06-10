@@ -1,12 +1,8 @@
 #include "query_replay.h"
 
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/core/client/minikql_compile/mkql_compile_service.h>
-#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include "metadata.h"
+#include "plan_check.h"
+#include "replay_runner.h"
 
 #include <yt/cpp/mapreduce/interface/operation.h>
 #include <yt/cpp/mapreduce/interface/client.h>
@@ -17,7 +13,6 @@
 #include <library/cpp/logger/backend.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
-#include <util/string/split.h>
 #include <util/system/fs.h>
 #include <util/datetime/base.h>
 #include <exception>
@@ -51,76 +46,14 @@ TString TruncateOutputField(TString value, TStringBuf fieldName, TStringBuf quer
 
 } // anonymous namespace
 
-TVector<std::pair<TString, TString>> GetJobFiles(TVector<TString> udfs) {
-    TVector<std::pair<TString, TString>> result;
-
-    for(const TString& udf: udfs) {
-        TVector<TString> splitResult;
-        Split(udf.data(), "/", splitResult);
-        while(!splitResult.empty() && splitResult.back().empty()) {
-            splitResult.pop_back();
-        }
-
-        Y_ENSURE(!splitResult.empty());
-
-        result.push_back(std::make_pair(udf, splitResult.back()));
-    }
-
-    return result;
-}
-
 class TQueryReplayMapper
     : public NYT::IMapper<NYT::TTableReader<NYT::TNode>, NYT::TTableWriter<NYT::TNode>>
 {
-
-    THolder<NActors::TActorSystem> ActorSystem;
-    TAutoPtr<TLogBackend> LogBackend;
-    std::unique_ptr<NYql::NLog::YqlLoggerScope> YqlLogger;
-    TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    THolder<NKikimr::TAppData> AppData;
-    TIntrusivePtr<NKikimr::NScheme::TKikimrTypeRegistry> TypeRegistry;
-    TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
-    TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> ModuleResolverState;
-
-    NYql::IHTTPGateway::TPtr HttpGateway;
     TVector<TString> UdfFiles;
     ui32 ActorSystemThreadsCount = 5;
     NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
     bool Antlr4ParserIsAmbiguityError = false;
-
-public:
-    static TString GetFailReason(const TQueryReplayEvents::TCheckQueryPlanStatus& status) {
-        switch (status) {
-            case TQueryReplayEvents::CompileError:
-                return "compile_error";
-            case TQueryReplayEvents::CompileTimeout:
-                return "compile_timeout";
-            case TQueryReplayEvents::TableMissing:
-                return "table_missing";
-            case TQueryReplayEvents::ExtraReadingOldEngine:
-                return "extra_reading_old_engine";
-            case TQueryReplayEvents::ExtraReadingNewEngine:
-                return "extra_reading_new_engine";
-            case TQueryReplayEvents::ReadTypesMismatch:
-                return "read_types_mismatch";
-            case TQueryReplayEvents::ReadLimitsMismatch:
-                return "read_limits_mismatch";
-            case TQueryReplayEvents::ReadColumnsMismatch:
-                return "read_columns_mismatch";
-            case TQueryReplayEvents::ExtraWriting:
-                return "extra_writing";
-            case TQueryReplayEvents::WriteColumnsMismatch:
-                return "write_columns_mismatch";
-            case TQueryReplayEvents::UncategorizedPlanMismatch:
-                return "uncategorized_plan_mismatch";
-            case TQueryReplayEvents::MissingTableMetadata:
-                return "missing_table_metadata";
-            case TQueryReplayEvents::UncategorizedFailure:
-                return "uncategorized_failure";
-            default:
-                return "unspecified";
-        }
-    }
+    TQueryReplayRunner Runner;
 
 public:
     TQueryReplayMapper() = default;
@@ -129,73 +62,14 @@ public:
 
     TQueryReplayMapper(TVector<TString> udfFiles, ui32 actorSystemThreadsCount, bool antlr4ParserIsAmbiguityError,
         NActors::NLog::EPriority yqlLogPriority = NActors::NLog::EPriority::PRI_ERROR)
-        : UdfFiles(udfFiles)
+        : UdfFiles(std::move(udfFiles))
         , ActorSystemThreadsCount(actorSystemThreadsCount)
         , YqlLogPriority(yqlLogPriority)
         , Antlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError)
     {}
 
     void Start(NYT::TTableWriter<NYT::TNode>*) override {
-        YqlLogger = std::make_unique<NYql::NLog::YqlLoggerScope>(&Cerr);
-        NYql::NDq::SetYqlLogLevels(YqlLogPriority);
-
-        TypeRegistry.Reset(new NKikimr::NScheme::TKikimrTypeRegistry());
-        FunctionRegistry.Reset(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone());
-        NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
-        NKikimr::NMiniKQL::TUdfModuleRemappings remappings;
-        THashSet<TString> usedUdfPaths;
-
-        for(const auto& [realPath, udfPath]: GetJobFiles(UdfFiles)) {
-            if (usedUdfPaths.insert(udfPath).second) {
-                if (NFs::Exists(udfPath)) {
-                    FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
-                    continue;
-                }
-
-                if (NFs::Exists(realPath)) {
-                    FunctionRegistry->LoadUdfs(realPath, remappings, 0);
-                    continue;
-                }
-            }
-        }
-
-        AppData.Reset(new NKikimr::TAppData(0, 0, 0, 0, {}, TypeRegistry.Get(), FunctionRegistry.Get(), nullptr, nullptr));
-        AppData->Counters = MakeIntrusive<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
-        auto setup = BuildActorSystemSetup(ActorSystemThreadsCount);
-        ActorSystem.Reset(new TActorSystem(setup, AppData.Get()));
-        ActorSystem->Start();
-        ActorSystem->Register(NKikimr::NKqp::CreateKqpResourceManagerActor({}, nullptr));
-        ModuleResolverState = MakeIntrusive<NKikimr::NKqp::TModuleResolverState>();
-        HttpGateway = NYql::IHTTPGateway::Make();
-        Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
-    }
-
-    THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
-        TString queryType = json["query_type"].GetStringSafe();
-        if (queryType == "QUERY_TYPE_AST_SCAN" || queryType == "QUERY_TYPE_AST_DML") {
-            return nullptr;
-        }
-
-        if (queryType == "QUERY_TYPE_SQL_GENERIC_SCRIPT") {
-            return nullptr;
-        }
-
-        NJson::TJsonValue replayJson = std::move(json);
-
-        THolder<TQueryReplayEvents::TEvCompileResponse> replayResult;
-        {
-            NJson::TJsonValue firstCompileReplayJson = replayJson;
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, Antlr4ParserIsAmbiguityError));
-
-            auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
-                compileActorId,
-                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(firstCompileReplayJson))),
-                TDuration::Seconds(600));
-
-            replayResult.Reset(future.ExtractValueSync().Release());
-        }
-
-        return replayResult;
+        Runner.Init(UdfFiles, ActorSystemThreadsCount, Antlr4ParserIsAmbiguityError, YqlLogPriority);
     }
 
     void Do(NYT::TTableReader<NYT::TNode>* in, NYT::TTableWriter<NYT::TNode>* out) override {
@@ -209,13 +83,13 @@ public:
                 json.InsertValue(key, NJson::TJsonValue(child.AsString()));
             }
 
-            auto response = RunReplay(std::move(json));
+            auto response = Runner.RunReplay(std::move(json));
             if (response == nullptr)
                 continue;
 
             auto status = response.Get()->Status;
 
-            TString failReason = GetFailReason(status);
+            TString failReason = NKikimr::NQueryReplay::StatusToFailReason(status);
 
             if (failReason == "unspecified" || status == TQueryReplayEvents::MissingTableMetadata) {
                 continue;
@@ -251,7 +125,7 @@ public:
     }
 
     void Finish(NYT::TTableWriter<NYT::TNode>*) override {
-        ActorSystem->Stop();
+        Runner.Stop();
     }
 };
 
@@ -296,10 +170,10 @@ int main(int argc, const char** argv) {
 
     if (config.QueryFile) {
         Cerr << "Running in local mode for single query file: " << config.QueryFile << Endl;
-        auto fakeMapper = TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
-        fakeMapper.Start(nullptr);
+        TQueryReplayRunner runner;
+        runner.Init(config.UdfFiles, config.ActorSystemThreadsCount, config.Antlr4ParserIsAmbiguityError, config.YqlLogLevel);
         Y_DEFER {
-            fakeMapper.Finish(nullptr);
+            runner.Stop();
         };
 
         NJson::TJsonValue queryJson;
@@ -313,23 +187,26 @@ int main(int argc, const char** argv) {
             << "Database: " << queryJson["query_database"].GetStringSafe() << Endl
             << UnescapeC(queryJson["query_text"].GetStringSafe()) << Endl;
 
-        auto TableMetadata = ExtractStaticMetadata(queryJson);
+        auto tableMetadata = ExtractStaticMetadata(queryJson);
         Cerr << "Tables: " << Endl;
 
-	    for(auto& [name, meta]: TableMetadata) {
+        for (auto& [name, meta] : tableMetadata) {
             Cerr << "TableName: " << name << Endl;
             NKikimrKqp::TKqpTableMetadataProto protoDescription;
             meta->ToMessage(&protoDescription);
             Cerr << protoDescription.Utf8DebugString() << Endl;
         }
 
-        auto result = fakeMapper.RunReplay(std::move(queryJson));
-
-        auto status = result.Get()->Status;
-        TString failReason = TQueryReplayMapper::GetFailReason(status);
+        auto result = runner.RunReplay(std::move(queryJson));
+        if (!result) {
+            Cerr << "Query type is not supported for replay" << Endl;
+            return EXIT_FAILURE;
+        }
+        const auto status = result->Status;
+        const TString failReason = NKikimr::NQueryReplay::StatusToFailReason(status);
         Cerr << failReason << Endl;
-        Cerr << result.Get()->Message << Endl;
-        return 0;
+        Cerr << result->Message << Endl;
+        return status == TQueryReplayEvents::Success ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (config.Cluster.empty() || config.SrcPath.empty() || config.DstPath.empty()) {

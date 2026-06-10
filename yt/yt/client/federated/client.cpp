@@ -534,7 +534,7 @@ private:
 private:
     const TFederationConfigPtr Config_;
     const NConcurrency::TPeriodicExecutorPtr Executor_;
-    const TString LocalDatacenter_;
+    const std::string LocalDatacenter_;
 
     std::vector<TClientDescriptionPtr> UnderlyingClients_;
     IClientPtr ActiveClient_;

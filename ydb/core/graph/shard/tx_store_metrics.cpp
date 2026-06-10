@@ -1,6 +1,8 @@
 #include "shard_impl.h"
 #include "log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -17,12 +19,14 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_STORE_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxStoreMetrics::Execute");
+        YDB_LOG_DEBUG("TTxStoreMetrics::Execute",
+            {"LogPrefix", GetLogPrefix()});
         return Self->LocalBackend.StoreMetrics(txc, std::move(Data));
     }
 
     void Complete(const TActorContext&) override {
-        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxStoreMetrics::Complete");
+        YDB_LOG_DEBUG("TTxStoreMetrics::Complete",
+            {"LogPrefix", GetLogPrefix()});
     }
 };
 

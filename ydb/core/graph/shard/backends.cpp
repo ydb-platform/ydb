@@ -2,6 +2,8 @@
 #include "backends.h"
 #include "schema.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -129,7 +131,10 @@ double TBaseBackend::GetTimingForPercentile(double percentile, const TVector<ui6
 
 void TMemoryBackend::StoreMetrics(TMetricsData&& data) {
     if (!MetricsValues.empty() && MetricsValues.back().Timestamp >= data.Timestamp) {
-        ALOG_ERROR(NKikimrServices::GRAPH, GetLogPrefix() << "Invalid timestamp ordering for " << data.Timestamp << " and " << MetricsValues.back().Timestamp);
+        YDB_LOG_ERROR("Invalid timestamp ordering for and",
+            {"LogPrefix", GetLogPrefix()},
+            {"Timestamp", data.Timestamp},
+            {"MetricsValuesTimestamp", MetricsValues.back().Timestamp});
     }
     TMetricsRecord& record = MetricsValues.emplace_back();
     record.Timestamp = data.Timestamp;
@@ -144,7 +149,8 @@ void TMemoryBackend::StoreMetrics(TMetricsData&& data) {
         }
         record.Values[idx] = value;
     }
-    ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Stored metrics");
+    YDB_LOG_TRACE("Stored metrics",
+        {"LogPrefix", GetLogPrefix()});
 }
 
 void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrGraph::TEvMetricsResult& result) const {
@@ -205,7 +211,9 @@ void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrG
 
 void TMemoryBackend::ClearData(TInstant now, const TAggregateSettings& settings) {
     TInstant cutline = now - settings.PeriodToStart;
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Clear data to " << cutline.ToStringUpToSeconds());
+    YDB_LOG_DEBUG("Clear data to",
+        {"LogPrefix", GetLogPrefix()},
+        {"Cutline", cutline.ToStringUpToSeconds()});
     auto itCutLine = std::upper_bound(MetricsValues.begin(), MetricsValues.end(), cutline);
     size_t before = MetricsValues.size();
     MetricsValues.erase(MetricsValues.begin(), itCutLine);
@@ -214,23 +222,30 @@ void TMemoryBackend::ClearData(TInstant now, const TAggregateSettings& settings)
     } else {
         settings.StartTimestamp = {};
     }
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Cleared " << before - MetricsValues.size() << " logical rows");
+    YDB_LOG_DEBUG("Cleared logical rows",
+        {"LogPrefix", GetLogPrefix()},
+        {"Delta", before - MetricsValues.size()});
 }
 
 void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& settings) {
     const TInstant startTimestamp = TInstant::Seconds(settings.StartTimestamp.Seconds() / settings.SampleSize.Seconds() * settings.SampleSize.Seconds());
     const TInstant endTimestamp = now - settings.PeriodToStart;
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Downsample data from " << settings.StartTimestamp.ToStringUpToSeconds() << " to " << endTimestamp.ToStringUpToSeconds());
+    YDB_LOG_DEBUG("Downsample data from to",
+        {"LogPrefix", GetLogPrefix()},
+        {"StartTimestamp", settings.StartTimestamp.ToStringUpToSeconds()},
+        {"EndTimestamp", endTimestamp.ToStringUpToSeconds()});
 
     const auto itStart = std::lower_bound(MetricsValues.begin(), MetricsValues.end(), startTimestamp);
     if (itStart == MetricsValues.end()) {
-        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "StartTimestamp beyond the range");
+        YDB_LOG_TRACE("StartTimestamp beyond the range",
+            {"LogPrefix", GetLogPrefix()});
         return;
     }
 
     const auto itStop = std::upper_bound(MetricsValues.begin(), MetricsValues.end(), endTimestamp);
     if (itStop == MetricsValues.begin()) {
-        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "EndTimestamp beyond the range");
+        YDB_LOG_TRACE("EndTimestamp beyond the range",
+            {"LogPrefix", GetLogPrefix()});
         return;
     }
 
@@ -258,8 +273,11 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
             if (values.Timestamps.size() > 1) {
                 itEraseStop = it;
 
-                ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Normalizing " << values.Timestamps.size() << " values from " << values.Timestamps.front().Seconds()
-                    << " to " << values.Timestamps.back().Seconds());
+                YDB_LOG_TRACE("Normalizing values from to",
+                    {"LogPrefix", GetLogPrefix()},
+                    {"TimestampsCount", values.Timestamps.size()},
+                    {"FirstTimestamp", values.Timestamps.front().Seconds()},
+                    {"LastTimestamps", values.Timestamps.back().Seconds()});
                 NormalizeAndDownsample(values, 1);
             } else {
                 if (itEraseStart + 1 == it) {
@@ -268,7 +286,9 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
             }
 
             if (!values.Timestamps.empty()) {
-                ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Result time is " << values.Timestamps.front().Seconds());
+                YDB_LOG_TRACE("Result time is",
+                    {"LogPrefix", GetLogPrefix()},
+                    {"Timestamp", values.Timestamps.front().Seconds()});
                 if (it != itEraseStart) {
                     insertedValues.emplace_back(TMetricsRecord{values.Timestamps.front(), std::move(values.Values.front())});
                 }
@@ -299,7 +319,9 @@ void TMemoryBackend::DownsampleData(TInstant now, const TAggregateSettings& sett
         MetricsValues.emplace_back(std::move(val));
     }
 
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Downsampled " << before - MetricsValues.size() << " logical rows");
+    YDB_LOG_DEBUG("Downsampled logical rows",
+        {"LogPrefix", GetLogPrefix()},
+        {"Delta", before - MetricsValues.size()});
 }
 
 void TMemoryBackend::AggregateData(TInstant now, const TAggregateSettings& settings) {
@@ -321,12 +343,16 @@ bool TLocalBackend::StoreMetrics(NTabletFlatExecutor::TTransactionContext& txc, 
         if (itId == MetricsIndex.end()) {
             itId = MetricsIndex.emplace(name, MetricsIndex.size()).first;
             db.Table<Schema::MetricsIndex>().Key(name).Update<Schema::MetricsIndex::Id>(itId->second);
-            ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Metric " << name << " has id " << itId->second);
+            YDB_LOG_TRACE("Metric has id",
+                {"LogPrefix", GetLogPrefix()},
+                {"Name", name},
+                {"Id", itId->second});
         }
         ui64 id = itId->second;
         db.Table<Schema::MetricsValues>().Key(data.Timestamp.Seconds(), id).Update<Schema::MetricsValues::Value>(value);
     }
-    ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Stored metrics");
+    YDB_LOG_TRACE("Stored metrics",
+        {"LogPrefix", GetLogPrefix()});
     return true;
 }
 
@@ -349,7 +375,10 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
         }
     }
     TMetricsValues metricValues;
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Querying from " << minTime << " to " << maxTime);
+    YDB_LOG_DEBUG("Querying from to",
+        {"LogPrefix", GetLogPrefix()},
+        {"MinTime", minTime},
+        {"MaxTime", maxTime});
     auto rowset = db.Table<Schema::MetricsValues>().GreaterOrEqual(minTime).LessOrEqual(maxTime).Select();
     if (!rowset.IsReady()) {
         return false;
@@ -392,7 +421,9 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
 
 bool TLocalBackend::ClearData(NTabletFlatExecutor::TTransactionContext& txc, TInstant now, const TAggregateSettings& settings) {
     TInstant cutline = now - settings.PeriodToStart;
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Clear data to " << cutline.ToStringUpToSeconds());
+    YDB_LOG_DEBUG("Clear data to",
+        {"LogPrefix", GetLogPrefix()},
+        {"Сutline", cutline.ToStringUpToSeconds()});
     NIceDb::TNiceDb db(txc.DB);
     ui64 rows = 0;
     auto rowset = db.Table<Schema::MetricsValues>().LessOrEqual(cutline.Seconds()).Select();
@@ -414,14 +445,19 @@ bool TLocalBackend::ClearData(NTabletFlatExecutor::TTransactionContext& txc, TIn
             return false;
         }
     }
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Cleared " << rows << " logical rows");
+    YDB_LOG_DEBUG("Cleared logical rows",
+        {"LogPrefix", GetLogPrefix()},
+        {"Rows", rows});
     return true;
 }
 
 bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc, TInstant now, const TAggregateSettings& settings) {
     const TInstant startTimestamp = TInstant::Seconds(settings.StartTimestamp.Seconds() / settings.SampleSize.Seconds() * settings.SampleSize.Seconds());
     const TInstant endTimestamp = now - settings.PeriodToStart;
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Downsample data from " << startTimestamp.ToStringUpToSeconds() << " to " << endTimestamp.ToStringUpToSeconds());
+    YDB_LOG_DEBUG("Downsample data from to",
+        {"LogPrefix", GetLogPrefix()},
+        {"StartTimestamp", startTimestamp.ToStringUpToSeconds()},
+        {"EndTimestamp", endTimestamp.ToStringUpToSeconds()});
     NIceDb::TNiceDb db(txc.DB);
     ui64 rows = 0;
     auto rowset = db.Table<Schema::MetricsValues>().GreaterOrEqual(startTimestamp.Seconds()).LessOrEqual(endTimestamp.Seconds()).Select();
@@ -451,15 +487,22 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
                     ++rows;
                 }
 
-                ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Normalizing " << values.Timestamps.size() << " values from " << values.Timestamps.front().Seconds()
-                    << " to " << values.Timestamps.back().Seconds());
+                YDB_LOG_TRACE("Normalizing values from to",
+                    {"LogPrefix", GetLogPrefix()},
+                    {"Timestamps", values.Timestamps.size()},
+                    {"FirstTimestamp", values.Timestamps.front().Seconds()},
+                    {"SecondTimestamp", values.Timestamps.back().Seconds()});
                 NormalizeAndDownsample(values, 1);
             }
             if (!values.Timestamps.empty()) {
-                ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Result time is " << values.Timestamps.front().Seconds());
+                YDB_LOG_TRACE("Result time is",
+                    {"LogPrefix", GetLogPrefix()},
+                    {"Timestamp", values.Timestamps.front().Seconds()});
                 for (ui64 id : ids) {
                     if (!values.Values[id].empty()) {
-                        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Updating values with id " << id);
+                        YDB_LOG_TRACE("Updating values with id",
+                            {"LogPrefix", GetLogPrefix()},
+                            {"Id", id});
                         db.Table<Schema::MetricsValues>().Key(values.Timestamps.front().Seconds(), id).Update<Schema::MetricsValues::Value>(values.Values[id].front());
                     }
                 }
@@ -487,7 +530,9 @@ bool TLocalBackend::DownsampleData(NTabletFlatExecutor::TTransactionContext& txc
             return false;
         }
     }
-    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Downsampled " << rows << " logical rows");
+    YDB_LOG_DEBUG("Downsampled logical rows",
+        {"LogPrefix", GetLogPrefix()},
+        {"Rows", rows});
     return true;
 }
 

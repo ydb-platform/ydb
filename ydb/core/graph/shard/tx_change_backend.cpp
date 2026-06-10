@@ -2,6 +2,8 @@
 #include "log.h"
 #include "schema.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -17,14 +19,17 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_CHANGE_BACKEND; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxChangeBackend::Execute (" << static_cast<ui64>(Backend) << ")");
+        YDB_LOG_DEBUG("TTxChangeBackend::Execute",
+            {"LogPrefix", GetLogPrefix()},
+            {"Backend", static_cast<ui64>(Backend)});
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::State>().Key(TString("backend")).Update<Schema::State::ValueUI64>(static_cast<ui64>(Backend));
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxChangeBackend::Complete");
+        YDB_LOG_DEBUG("TTxChangeBackend::Complete",
+            {"LogPrefix", GetLogPrefix()});
     }
 };
 

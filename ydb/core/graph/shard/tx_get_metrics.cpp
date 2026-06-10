@@ -1,6 +1,8 @@
 #include "shard_impl.h"
 #include "log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -17,13 +19,18 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_GET_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxGetMetrics::Execute");
+        YDB_LOG_DEBUG("TTxGetMetrics::Execute",
+            {"LogPrefix", GetLogPrefix()});
         return Self->LocalBackend.GetMetrics(txc, Event->Get()->Record, Result);
     }
 
     void Complete(const TActorContext& ctx) override {
-        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "TTxGetMetric::Complete");
-        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "TxGetMetrics returned " << Result.TimeSize() << " points for request " << Event->Cookie);
+        YDB_LOG_DEBUG("TTxGetMetric::Complete",
+            {"LogPrefix", GetLogPrefix()});
+        YDB_LOG_TRACE("TxGetMetrics returned points for request",
+            {"LogPrefix", GetLogPrefix()},
+            {"TimeSize", Result.TimeSize()},
+            {"Cookie", Event->Cookie});
         ctx.Send(Event->Sender, new TEvGraph::TEvMetricsResult(std::move(Result)), 0, Event->Cookie);
     }
 };
@@ -33,7 +40,10 @@ void TGraphShard::ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr ev) {
         case EBackendType::Memory: {
             NKikimrGraph::TEvMetricsResult result;
             MemoryBackend.GetMetrics(ev->Get()->Record, result);
-            ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "GetMetrics returned " << result.TimeSize() << " points for request " << ev->Cookie);
+            YDB_LOG_TRACE("GetMetrics returned points for request",
+                {"LogPrefix", GetLogPrefix()},
+                {"TimeSize", result.TimeSize()},
+                {"Cookie", ev->Cookie});
             Send(ev->Sender, new TEvGraph::TEvMetricsResult(std::move(result)), 0, ev->Cookie);
             break;
         }

@@ -7,6 +7,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -51,11 +53,14 @@ public:
 
     void ResolveDatabase() {
         if (ResolveTimestamp && (ResolveTimestamp + RESOLVE_TIMEOUT > TActivationContext::Now())) {
-            ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "ResolveDatabase too soon");
+            YDB_LOG_TRACE("ResolveDatabase too soon",
+                {"LogPrefix", GetLogPrefix()});
             return; // too soon
         }
 
-        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "ResolveDatabase " << Database);
+        YDB_LOG_DEBUG("ResolveDatabase",
+            {"LogPrefix", GetLogPrefix()},
+            {"Database", Database});
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         request->DatabaseName = Database;
 
@@ -77,10 +82,13 @@ public:
     void ConnectShard() {
         if (GraphShardId) {
             if (ConnectTimestamp && (ConnectTimestamp + CONNECT_TIMEOUT > TActivationContext::Now())) {
-                ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "ConnectShard too soon");
+                YDB_LOG_TRACE("ConnectShard too soon",
+                    {"LogPrefix", GetLogPrefix()});
                 return; // too soon
             }
-            ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "ConnectToShard " << GraphShardId);
+            YDB_LOG_DEBUG("ConnectToShard",
+                {"LogPrefix", GetLogPrefix()},
+                {"GraphShardId", GraphShardId});
             IActor* pipeActor = NTabletPipe::CreateClient(TBase::SelfId(), GraphShardId, GetPipeClientConfig());
             GraphShardPipe = TBase::RegisterWithSameMailbox(pipeActor);
             ConnectTimestamp = TActivationContext::Now();
@@ -121,7 +129,9 @@ public:
 
     void DiscardOldRequests(TInstant now) {
         while (!RequestsInFlight.empty() && RequestsInFlight.front().Deadline <= now) {
-            ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() << "Discarding request with id " << RequestsInFlight.front().Id);
+            YDB_LOG_WARN("Discarding request with id",
+                {"LogPrefix", GetLogPrefix()},
+                {"RequestsId", RequestsInFlight.front().Id});
             TEvGraph::TEvMetricsResult* response = new TEvGraph::TEvMetricsResult();
             response->Record.SetError("Request timed out");
             Send(RequestsInFlight.front().Sender, response, 0, RequestsInFlight.front().Cookie);
@@ -131,23 +141,28 @@ public:
 
     void ResendRequests() {
         for (const TGetMetricsRequest& request : RequestsInFlight) {
-            ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Resending request " << request.Id);
+            YDB_LOG_TRACE("Resending request",
+                {"LogPrefix", GetLogPrefix()},
+                {"RequestId", request.Id});
             NTabletPipe::SendData(SelfId(), GraphShardPipe, new TEvGraph::TEvGetMetrics(request.Request), request.Id);
         }
     }
 
     void Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
-        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "TEvSendMetrics");
+        YDB_LOG_TRACE("TEvSendMetrics",
+            {"LogPrefix", GetLogPrefix()});
         if (GraphShardPipe) {
             NTabletPipe::SendData(SelfId(), GraphShardPipe, ev.Get()->Release());
         } else {
             ConnectShard();
-            ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "Dropped metrics");
+            YDB_LOG_TRACE("Dropped metrics",
+                {"LogPrefix", GetLogPrefix()});
         }
     }
 
     void Handle(TEvGraph::TEvGetMetrics::TPtr& ev) {
-        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "TEvGetMetrics");
+        YDB_LOG_TRACE("TEvGetMetrics",
+            {"LogPrefix", GetLogPrefix()});
         if (!GraphShardPipe) {
             ConnectShard();
         }
@@ -161,53 +176,78 @@ public:
             if (response.DomainDescription) {
                 if (response.DomainDescription->Description.GetProcessingParams().GetGraphShard() != 0) {
                     GraphShardId = response.DomainDescription->Description.GetProcessingParams().GetGraphShard();
-                    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Database " << Database << " resolved to shard " << GraphShardId);
+                    YDB_LOG_DEBUG("Database resolved to shard",
+                        {"LogPrefix", GetLogPrefix()},
+                        {"Database", Database},
+                        {"GraphShardId", GraphShardId});
                     ConnectShard();
                     return;
                 } else {
-                    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Error resolving database " << Database << " - no graph shard (switching to pumpkin mode)");
+                    YDB_LOG_DEBUG("Error resolving database - no graph shard (switching to pumpkin mode)",
+                        {"LogPrefix", GetLogPrefix()},
+                        {"Database", Database});
                     return Become(&TGraphService::StatePumpkin);
                 }
             }
-            ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() << "Error resolving database " << Database << " incomplete response");
+            YDB_LOG_WARN("Error resolving database incomplete response",
+                {"LogPrefix", GetLogPrefix()},
+                {"Database", Database});
         } else {
             if (!request->ResultSet.empty()) {
-                ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() << "Error resolving database " << Database << " error " << request->ResultSet.front().Status);
+                YDB_LOG_WARN("Error resolving database error",
+                    {"LogPrefix", GetLogPrefix()},
+                    {"Database", Database},
+                    {"Status", request->ResultSet.front().Status});
             } else {
-                ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() << "Error resolving database " << Database << " no response");
+                YDB_LOG_WARN("Error resolving database no response",
+                    {"LogPrefix", GetLogPrefix()},
+                    {"Database", Database});
             }
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status == NKikimrProto::OK) {
-            ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() << "Connected to shard " << GraphShardId);
+            YDB_LOG_DEBUG("Connected to shard",
+                {"LogPrefix", GetLogPrefix()},
+                {"GraphShardId", GraphShardId});
             ResendRequests();
         } else {
-            ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() << "Error connecting to shard " << GraphShardId << " error " << ev->Get()->Status);
+            YDB_LOG_WARN("Error connecting to shard error",
+                {"LogPrefix", GetLogPrefix()},
+                {"GraphShardId", GraphShardId},
+                {"Status", ev->Get()->Status});
             NTabletPipe::CloseClient(TBase::SelfId(), GraphShardPipe);
             GraphShardPipe = {};
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() << "Connection to shard was destroyed");
+        YDB_LOG_WARN("Connection to shard was destroyed",
+            {"LogPrefix", GetLogPrefix()});
         NTabletPipe::CloseClient(TBase::SelfId(), GraphShardPipe);
         GraphShardPipe = {};
     }
 
     void Handle(TEvGraph::TEvMetricsResult::TPtr& ev) {
         auto id(ev->Cookie);
-        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "TEvMetricsResult " << id);
+        YDB_LOG_TRACE("TEvMetricsResult",
+            {"LogPrefix", GetLogPrefix()},
+            {"Id", id});
         for (auto it = RequestsInFlight.begin(); it != RequestsInFlight.end(); ++it) {
             if (it->Id == id) {
-                ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "TEvMetricsResult found request " << id << " resending to " << it->Sender);
+                YDB_LOG_TRACE("TEvMetricsResult found request resending to",
+                    {"LogPrefix", GetLogPrefix()},
+                    {"Id", id},
+                    {"Sender", it->Sender});
                 Send(it->Sender, ev->Release().Release(), 0, it->Cookie);
                 RequestsInFlight.erase(it);
                 return;
             }
         }
-        ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() << "Couldn't find request with id " << id);
+        YDB_LOG_WARN("Couldn't find request with id",
+            {"LogPrefix", GetLogPrefix()},
+            {"Id", id});
     }
 
     void HandleTimeout() {
@@ -219,7 +259,8 @@ public:
     }
 
     void HandlePumpkin(TEvGraph::TEvGetMetrics::TPtr& ev) {
-        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() << "TEvGetMetrics(Pumpkin)");
+        YDB_LOG_TRACE("TEvGetMetrics(Pumpkin)",
+            {"LogPrefix", GetLogPrefix()});
         TEvGraph::TEvMetricsResult* response = new TEvGraph::TEvMetricsResult();
         response->Record.SetError("GraphShard is not enabled on the database");
         Send(ev->Sender, response, 0, ev->Cookie);

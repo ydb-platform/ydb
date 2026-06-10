@@ -357,13 +357,15 @@
 # doesn't support optional values
 (let percentile_traits_factory_raw (lambda '(list_type n) (block '(
     (let convert_into (lambda  '(value) (MatchType (ListItemType list_type)
-                                 'Interval (lambda '() (SafeCast value (DataType 'Double)) ) # TODO:YQL-14129 cast to Decimal
-                                 (lambda '() value) # TODO(YQL-21136): test Interval64
+                                 'Interval (lambda '() (SafeCast value (DataType 'Double)) )
+                                 'Interval64 (lambda '() (SafeCast value (DataType 'Double)) )
+                                 (lambda '() value)
                       ))
     )
     # Currently for Intervals: converts double value back to interval
     (let convert_out (lambda '(value) (MatchType (ListItemType list_type)
-                                 'Interval (lambda '() (Unwrap (StrictCast (ToIntegral value (DataType 'Int64)) (DataType 'Interval))) ) # TODO:YQL-14129 cast from Decimal
+                                 'Interval (lambda '() (Unwrap (StrictCast (ToIntegral value (DataType 'Int64)) (DataType 'Interval))) )
+                                 'Interval64 (lambda '() (Unwrap (StrictCast (ToIntegral value (DataType 'Int64)) (DataType 'Interval64))) )
                                  (lambda '() value)
                       ))
     )
@@ -622,8 +624,14 @@
     (let item_type (Apply remove_optional_type (ListItemType list_type)))
     (return (Apply simple_traits_factory_map list_type
         (lambda '(one two) (AggrAdd one two))
-        (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_interval_to_decimal value)) (lambda '() (WidenIntegral value))))
-        (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_decimal_to_interval value)) (lambda '() value)))
+        (lambda '(value) (MatchType item_type
+            'Interval (lambda '() (Apply convert_interval_to_decimal value))
+            'Interval64 (lambda '() (Apply convert_interval_to_decimal value))
+            (lambda '() (WidenIntegral value))))
+        (lambda '(value) (MatchType item_type
+            'Interval (lambda '() (Apply convert_decimal_to_interval value))
+            'Interval64 (lambda '() (Apply convert_decimal_to_interval64 value))
+            (lambda '() value)))
 ))))))
 (let checked_sum_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type checked_sum_traits_factory_raw)))
 (let bit_and_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_and_traits_factory_raw)))

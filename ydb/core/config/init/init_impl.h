@@ -1278,6 +1278,10 @@ public:
             ythrow yexception() << errors.front();
         }
 
+        if (const auto it = Labels.find("empty_domain_during_node_registration"); it != Labels.end()) {
+            AddLabelToAppConfig(it->first, it->second);
+        }
+
         Logger.Out() << "configured" << Endl;
     }
 
@@ -1395,7 +1399,6 @@ public:
         TString domainName = DeduceNodeDomain(cf, AppConfig);
 
         Labels["empty_domain_during_node_registration"] = domainName.empty() ? "true" : "false";
-        AddLabelToAppConfig("empty_domain_during_node_registration", Labels["empty_domain_during_node_registration"]);
 
         if (!cf.NodeHost) {
             cf.NodeHost = Env.FQDNHostName();

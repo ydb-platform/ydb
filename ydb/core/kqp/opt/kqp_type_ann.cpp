@@ -2952,23 +2952,45 @@ TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 bool IsSupportedJoinKind(const TString &joinKind) {
-    return joinKind == "Left" || joinKind == "Inner" || joinKind == "Cross";
+    return joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly" || 
+        joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly" || 
+        joinKind == "Inner" || joinKind == "Cross";
 }
 
 const TStructExprType* JoinResultType(const TTypeAnnotationNode* leftType, const TTypeAnnotationNode* rightType, TString joinKind, TExprContext& ctx) {
     auto leftItemType = leftType->Cast<TListExprType>()->GetItemType();
     auto rightItemType = rightType->Cast<TListExprType>()->GetItemType();
 
-    const bool rightSideColumnsNeedsOptional = joinKind == "Left";
-    TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+    const bool columnsNeedOptional = (joinKind == "Left" || joinKind == "Right");
+    const bool rightJoin = (joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly");
+    const bool semiOrOnlyJoin = (joinKind == "LeftSemi" || joinKind == "LeftOnly" || joinKind == "RightSemi" || joinKind == "RightOnly");
+    const bool isFullJoin = (joinKind == "Full");
+    
+    if (rightJoin) {
+        std::swap(leftItemType, rightItemType);
+    }
 
-    for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
-        if (item->GetItemType()->IsOptionalOrNull() || !rightSideColumnsNeedsOptional) {
+    TVector<const TItemExprType*> structItemTypes;
+    
+    for (const auto *item : leftItemType->Cast<TStructExprType>()->GetItems()){
+        if (item->GetItemType()->IsOptionalOrNull() || !isFullJoin) {
             structItemTypes.push_back(item);
         } else {
             auto colName = item->GetName();
             const TTypeAnnotationNode* colType = item->GetItemType();
             structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
+        }
+    }
+
+    if (!semiOrOnlyJoin) {
+        for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
+            if (item->GetItemType()->IsOptionalOrNull() || !columnsNeedOptional) {
+                structItemTypes.push_back(item);
+            } else {
+                auto colName = item->GetName();
+                const TTypeAnnotationNode* colType = item->GetItemType();
+                structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
+            }
         }
     }
     auto resultStructType = ctx.MakeType<TStructExprType>(structItemTypes);

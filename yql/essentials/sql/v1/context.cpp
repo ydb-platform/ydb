@@ -118,7 +118,6 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
-    , StrictWarningAsError(true)
 {
     if (settings.LangVer >= NYql::NFeature::GroupByExprAfterWhere.MinLangVer) {
         GroupByExprAfterWhere = true;
@@ -230,7 +229,7 @@ bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function
     bool isError;
     IOutputStream& out = MakeIssue(TSeverityIds::S_WARNING, code, pos, forceError, isError);
     message(out);
-    return !StrictWarningAsError || !isError;
+    return !isError;
 }
 
 IOutputStream& TContext::Info(NYql::TPosition pos) {

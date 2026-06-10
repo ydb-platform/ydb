@@ -355,6 +355,11 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     };
 
     // Initial stages.
+    // Expand aggregation.
+    TVector<std::unique_ptr<IRule>> expandAggregationRules;
+    expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
+
     // Inline join filters. FIXME: Move after inlining when adding support for more advanced decorelation
     TVector<std::unique_ptr<IRule>> joinFiltersInlineRules;
     joinFiltersInlineRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
@@ -391,6 +396,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    logicalStageRules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
 

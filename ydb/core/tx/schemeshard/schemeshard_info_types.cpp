@@ -816,6 +816,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
     }
 
+    if (op.HasIndexImplType()) {
+        alterData->TableDescriptionFull->SetIndexImplType(op.GetIndexImplType());
+    }
+
     if (source) {
         // key columns reorder or deletion is not supported
         const TVector<ui32>& oldColIds = source->KeyColumnIds;

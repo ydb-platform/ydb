@@ -17,13 +17,6 @@ protected:
     using TStatusCode = NWilson::NTraceProto::Status::StatusCode;
     using EStatusCode = NWilson::NTraceProto::Status;
 
-private:
-    // User of the library must provide the definition of this method
-    // See UT for implementation example
-    static TRetroSpan* DeserializeImpl(ui32 type, ui32 size, const void* data);
-
-    static TRetroSpan* Deserialize(const void* data);
-
 public:
     TRetroSpan(ui32 type, ui32 size);
     virtual ~TRetroSpan();
@@ -33,8 +26,6 @@ public:
 
     TRetroSpan& operator=(TRetroSpan&&) = default;
     TRetroSpan& operator=(const TRetroSpan&) = default;
-
-    static std::unique_ptr<TRetroSpan> DeserializeToUnique(const void* data);
 
     ui32 GetType() const;
     ui32 GetSize() const;

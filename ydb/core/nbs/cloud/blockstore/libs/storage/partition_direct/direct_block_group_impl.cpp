@@ -868,8 +868,12 @@ void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
                 self->LogTitle.GetWithTime().c_str(),
                 lsn,
                 self->PBufferConnections.size());
+
+            auto span = self->Service->CreteRootSpan(
+                "NbsPartition.BarrierEraseFromPBuffer");
+
             for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
-                self->DoBarrierEraseFromPBuffer(h, lsn, NWilson::TTraceId{});
+                self->DoBarrierEraseFromPBuffer(h, lsn, span.GetTraceId());
             }
         });
 }

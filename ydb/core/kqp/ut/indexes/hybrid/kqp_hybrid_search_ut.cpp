@@ -12,7 +12,7 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-TKikimrRunner MakeRunner() {
+TKikimrRunner MakeRunner(bool enableHybridSearch = true) {
     // Fix the kmeans-tree build sampling seed so the index tree is reproducible run-to-run (otherwise it
     // seeds from the tablet id). Combined with the exhaustive search probe in TargetDecl below, this makes
     // the vector branch fully deterministic. See gVectorIndexSeed in schemeshard_impl.h (tests only).
@@ -22,6 +22,9 @@ TKikimrRunner MakeRunner() {
     featureFlags.SetEnableFulltextIndex(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    // EnableHybridSearch is on by default; the explicit set both documents the dependency and lets
+    // DisabledByFlag exercise the off path.
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(enableHybridSearch);
     return TKikimrRunner(settings);
 }
 
@@ -111,12 +114,23 @@ void SetupDocs(TQueryClient& db) {
 }
 
 // The kmeans-tree search-probe pragma. Widens the probe to cover all clusters at every level
-// (clusters=2, levels=2) so the 4-doc vector branch is exhaustive: it returns all candidates ordered by
-// their true distance, deterministically, instead of an approximate subset that can vary run-to-run.
+// (clusters=2, levels=2 => up to 4 leaf clusters) so the 4-doc vector branch is exhaustive: it returns
+// all candidates ordered by their true distance, deterministically, instead of an approximate subset that
+// can vary run-to-run.
+//
+// This MUST be >= the number of leaf clusters (4 here), not just the per-level cluster count (2). At "2"
+// the probe prunes the far branch of the tree and drops the opposite-direction doc (doc3, vector
+// [10,250]), so the vector branch returns only {2,1,4}. The fusion then ranks doc3 below the
+// text-irrelevant doc2 -- giving [1,2,3,4] and defeating the "text-relevant docs lead" guarantee these
+// tests assert. With "4" the probe visits every cluster, doc3 is recovered, and the fused order is the
+// intended [1,3,2,4]. (The previous "2" only ever passed because an unordered-Top bug emitted rows in an
+// arbitrary order that coincidentally matched; once the order became deterministic the undersized probe
+// surfaced -- see FinalRankPreservesOrder.)
+//
 // PRAGMA must come before any DECLARE, which must come before any other statement -- so the prologue order
 // is always: pragma, [declare], $target.
 const TString SearchPragma = R"sql(
-    pragma ydb.KMeansTreeSearchTopSize = "2";
+    pragma ydb.KMeansTreeSearchTopSize = "4";
 )sql";
 
 const TString TargetExpr = R"sql(
@@ -175,6 +189,107 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
+    }
+
+    // Regression guard: the final RRF fusion stage must keep its sort, so the result rows come back
+    // ordered by the fused score and not merely as the correct top-N *set* in arbitrary order.
+    //
+    // The hybrid rewrite emits a TopSort (DESC by __ydb_hybrid_rrf) over the fused candidates wrapped in
+    // a projection. If that projection is a plain Map (instead of OrderedMap) the sorted constraint is
+    // dropped, and a downstream optimizer downgrades the TopSort to an unordered Top -- the final physical
+    // plan then collects via an unordered DqCnUnionAll/WideTop with no order-preserving merge. The exact-
+    // order assertions elsewhere (FusesBothBranches expects [1,3,2,4]) do not catch this because the tiny
+    // single-partition fixture happens to emit Top in sorted order. So assert on the plan shape directly.
+    //
+    // Fingerprint of the correct (ordered) plan: a TopSort keyed on __ydb_hybrid_rrf feeding a *descending*
+    // DqCnMerge. The buggy (unordered) plan has neither -- the only Merge in it is the ascending one from
+    // the per-branch vector lookup, and the final fusion uses WideTop over UnionAll.
+    Y_UNIT_TEST(FinalRankPreservesOrder) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+        auto res = db.ExecuteQuery(TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql", NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+
+        auto astOpt = res.GetStats()->GetAst();
+        UNIT_ASSERT(astOpt.has_value());
+        const TString ast = TString(*astOpt);
+
+        // The fused candidates must be re-ranked with a TopSort (not an order-dropping Top) ...
+        UNIT_ASSERT_C(ast.Contains("(TopSort (FlatMap") && ast.Contains("__ydb_hybrid_rrf"),
+            TStringBuilder() << "final RRF re-rank must be a TopSort over __ydb_hybrid_rrf "
+                << "(an unordered Top means OrderedMap regressed to Map); AST:\n" << ast);
+        // ... and collected through an order-preserving descending merge.
+        UNIT_ASSERT_C(ast.Contains("(DqCnMerge") && ast.Contains("'\"Desc\""),
+            TStringBuilder() << "final fused result must flow through a descending DqCnMerge so the "
+                << "RRF order survives to the result; AST:\n" << ast);
+    }
+
+    // Argument order is no longer significant: each branch is classified by inspecting the expression
+    // (a FullTextScore is a fulltext branch, a Knn distance/similarity is a vector branch), so writing the
+    // vector argument first fuses identically to the canonical fulltext-first order. RRF sums one term per
+    // branch, so the fused score -- and the result [1, 3, 2, 4] from FusesBothBranches -- is unchanged.
+    Y_UNIT_TEST(ArgumentOrderDoesNotMatter) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto forward = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql");
+        auto reversed = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(Knn::CosineDistance(Embedding, $target), FullTextScore(Text, "cats"))
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), forward);
+        UNIT_ASSERT_VALUES_EQUAL(forward, reversed);
+    }
+
+    // More than two branches fuse: a fulltext relevance branch plus two vector branches (cosine distance
+    // and cosine similarity over the same vector index). Each branch resolves its index independently and
+    // contributes one term to the per-document SUM. With (1, 1, 0) AS Weights the similarity branch is
+    // zeroed out, recovering the two-branch [1, 3, 2, 4] order and exercising N-length Weights parsing.
+    Y_UNIT_TEST(ThreeBranchFusion) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        for (const TString& mode : {TString("rrf"), TString("linear")}) {
+            auto keys = RunKeys(db, TargetDecl + Sprintf(R"sql(
+                SELECT Key FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, "cats"),
+                    Knn::CosineDistance(Embedding, $target),
+                    Knn::CosineSimilarity(Embedding, $target),
+                    "%s" AS Mode)
+                LIMIT 4;
+            )sql", mode.c_str()));
+            UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
+                TStringBuilder() << "three-branch fusion (" << mode << ") returns the full candidate union");
+            UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u,
+                TStringBuilder() << "a text-relevant doc must lead in three-branch fusion (" << mode << ")");
+        }
+
+        // Zeroing the third (similarity) branch via an N-length Weights tuple recovers the two-branch order.
+        auto weighted = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),
+                Knn::CosineDistance(Embedding, $target),
+                Knn::CosineSimilarity(Embedding, $target),
+                (1, 1, 0) AS Weights)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), weighted);
     }
 
     // Alternative fusion: weighted linear combination of scores instead of RRF, with and without min-max
@@ -423,12 +538,12 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         auto db = kikimr.GetQueryClient();
         SetupDocs(db);
 
-        // Arguments in the wrong order (vector first, fulltext second).
+        // A single scoring argument is not a hybrid query: there is nothing to fuse.
         UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
             SELECT Key FROM `/Root/Docs`
-            ORDER BY HybridRank(Knn::CosineDistance(Embedding, $target), FullTextScore(Text, "cats"))
+            ORDER BY HybridRank(FullTextScore(Text, "cats"))
             LIMIT 3;
-        )sql"), "reversed");
+        )sql"), "at least 2");
 
         // HybridRank nested inside a larger sort expression (would silently change the ordering).
         UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
@@ -437,13 +552,13 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql"), "must be the entire ORDER BY key");
 
-        // Weights tuple of the wrong arity.
+        // A per-branch override tuple (here Weights) must have exactly one entry per scoring argument.
         UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
             SELECT Key FROM `/Root/Docs`
             ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
                 (1, 2, 3) AS Weights)
             LIMIT 4;
-        )sql"), "Weights must be a tuple of two");
+        )sql"), "Weights has 3 entries but there are 2 scoring arguments");
 
         // An explicit index name that does not exist.
         UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
@@ -462,6 +577,21 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         )sql", TTxControl::NoTx(), params).ExtractValueSync();
         UNIT_ASSERT_C(limitResult.GetStatus() != EStatus::SUCCESS, "expected failure for a parameterised LIMIT");
         UNIT_ASSERT_STRING_CONTAINS(limitResult.GetIssues().ToString(), "requires a literal LIMIT");
+    }
+
+    // The TableServiceConfig.EnableHybridSearch kill-switch. It is on by default (so every other test
+    // exercises the enabled path); with it off, a HybridRank query must fail with a clear message rather
+    // than being rewritten.
+    Y_UNIT_TEST(DisabledByFlag) {
+        auto kikimr = MakeRunner(/*enableHybridSearch=*/false);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql"), "hybrid search is disabled");
     }
 
     // HybridRank needs both a fulltext relevance index and a vector index; missing either is an error.

@@ -4,10 +4,12 @@
 
 ```yql
 SELECT ...
-FROM TableName VIEW IndexName
+FROM documents VIEW json_idx
 WHERE <предикат на основе JSON_EXISTS / JSON_VALUE>
 ORDER BY ...
 ```
+
+В примере запроса выше `documents` - это имя таблицы, содержащей колонку типа Json или JsonDocument, а `json_idx` - имя созданного над этой колонкой JSON-индекса.
 
 Если предикат не поддерживается для выполнения через JSON-индекс, запрос с указанием выражения `VIEW` завершается ошибкой на этапе компиляции или планирования (сообщение вида «Failed to extract jsonpath tokens from the predicate»). Без выражения `VIEW` запрос с таким предикатом отрабатывает как обычное сканирование таблицы.
 
@@ -32,9 +34,9 @@ WHERE JSON_EXISTS(payload, '$.user.id');
 Также допустимы фильтры JsonPath внутри пути, методы JsonPath (`.type()`, `.size()`) и индексы массивов:
 
 ```yql
-SELECT sku_id
-FROM products VIEW attrs_json_idx
-WHERE JSON_EXISTS(attrs, '$.warehouses ? (@.stock > 0)');
+SELECT id, payload
+FROM documents VIEW json_idx
+WHERE JSON_EXISTS(payload, '$.user ? (@.id > 100)');
 ```
 
 ## JSON_VALUE
@@ -42,9 +44,9 @@ WHERE JSON_EXISTS(attrs, '$.warehouses ? (@.stock > 0)');
 [JSON_VALUE(doc, jsonpath RETURNING <type>)](../../builtins/json.md#json_value) извлекает скалярное значение по пути JsonPath и возвращает его в заданном типе. Для использования JSON-индекса секция `RETURNING <type>` обязательна:
 
 ```yql
-SELECT sku_id
-FROM products VIEW attrs_json_idx
-WHERE JSON_VALUE(attrs, '$.brand' RETURNING Utf8) = "ACME"u;
+SELECT id, payload
+FROM documents VIEW json_idx
+WHERE JSON_VALUE(payload, '$.user.name' RETURNING Utf8) = "Charlie"u;
 ```
 
 При проверке равенства в индекс попадает токен «путь + значение», что обеспечивает наибольшую селективность. При остальных сравнениях (`!=`, `<`, `>=`, `BETWEEN`, `IN` и др.) в индекс попадает токен пути, а итоговая точность сравнения обеспечивается пост-фильтром.
@@ -82,10 +84,10 @@ WHERE JSON_VALUE(attrs, '$.brand' RETURNING Utf8) = "ACME"u;
 `JSON_EXISTS` и `JSON_VALUE` над одной JSON-колонкой могут объединяться в одном `WHERE` операторами `AND` и `OR`:
 
 ```yql
-SELECT sku_id
-FROM products VIEW attrs_json_idx
-WHERE JSON_VALUE(attrs, '$.brand' RETURNING Utf8) = "ACME"u
-  AND JSON_VALUE(attrs, '$.price' RETURNING Double) BETWEEN 10.0 AND 100.0;
+SELECT id, payload
+FROM documents VIEW json_idx
+WHERE JSON_VALUE(payload, '$.user.name' RETURNING Utf8) = "Charlie"u
+  AND JSON_VALUE(payload, '$.user.id' RETURNING Int64) BETWEEN 100 AND 200;
 ```
 
 {% note info %}

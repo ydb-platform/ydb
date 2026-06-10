@@ -24,15 +24,12 @@ namespace NMVP::NSupportLinks {
 
 class TGrafanaDashboardSearchActor : public NActors::TActorBootstrapped<TGrafanaDashboardSearchActor> {
 public:
-    TGrafanaDashboardSearchActor(
-        TSupportLinkEntryConfig config,
-        TString grafanaEndpoint,
-        const ILinkSource::TLinkResolveInput& input,
-        const ILinkSource::TResolveContext& context)
+    TGrafanaDashboardSearchActor(TSupportLinkEntryConfig config, TString grafanaEndpoint, TResolvedParamBindings paramBindings, const ILinkSource::TLinkResolveInput& input, const ILinkSource::TResolveContext& context)
         : Config(std::move(config))
         , GrafanaEndpoint(std::move(grafanaEndpoint))
+        , ParamBindings(std::move(paramBindings))
         , ClusterInfo(input.ClusterInfo)
-        , RequestQueryParameters(BuildForwardedDashboardParameters(input.Identity, input.AdditionalRequestParams))
+        , RequestQueryParameters(BuildForwardedParameters(input.Identity, input.AdditionalRequestParams))
         , Context(context)
     {}
 
@@ -56,6 +53,7 @@ public:
 private:
     TSupportLinkEntryConfig Config;
     TString GrafanaEndpoint;
+    TResolvedParamBindings ParamBindings;
     THashMap<TString, TString> ClusterInfo;
     TCgiParameters RequestQueryParameters;
     ILinkSource::TResolveContext Context;
@@ -145,11 +143,7 @@ private:
                 continue;
             }
 
-            const TString resolvedUrl = BuildGrafanaDashboardUrl(
-                GrafanaEndpoint,
-                dashboardUrl,
-                ClusterInfo,
-                RequestQueryParameters);
+            const TString resolvedUrl = BuildGrafanaDashboardUrl(GrafanaEndpoint, dashboardUrl, ClusterInfo, RequestQueryParameters, ParamBindings);
             if (!resolvedUrl.empty()) {
                 Links.emplace_back(TResolvedLink{
                     .Title = std::move(title),
@@ -180,9 +174,10 @@ namespace NMVP::NSupportLinks {
 
 class TGrafanaDashboardSearchSource : public ILinkSource {
 public:
-    TGrafanaDashboardSearchSource(TSupportLinkEntryConfig config, TString grafanaEndpoint)
+    TGrafanaDashboardSearchSource(TSupportLinkEntryConfig config, TString grafanaEndpoint, TResolvedParamBindings paramBindings)
         : Config(std::move(config))
         , GrafanaEndpoint(std::move(grafanaEndpoint))
+        , ParamBindings(std::move(paramBindings))
     {}
 
     TResolveOutput Resolve(const ILinkSource::TLinkResolveInput& input, const ILinkSource::TResolveContext& context) const override {
@@ -193,6 +188,7 @@ public:
             new TGrafanaDashboardSearchActor(
                 Config,
                 GrafanaEndpoint,
+                ParamBindings,
                 input,
                 context),
             context.Owner);
@@ -202,6 +198,7 @@ public:
 private:
     TSupportLinkEntryConfig Config;
     TString GrafanaEndpoint;
+    TResolvedParamBindings ParamBindings;
 };
 
 inline void ValidateGrafanaDashboardSearchSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings) {
@@ -211,14 +208,13 @@ inline void ValidateGrafanaDashboardSearchSourceConfig(const TSupportLinkEntryCo
     if (TMVP::MetaDatabaseTokenName.empty()) {
         ythrow yexception() << "meta.meta_database_token_name is required for source=" << config.GetSource();
     }
+    ValidateResolvedParamBindings(ResolveParamBindings(config, BuildDefaultGrafanaDashboardParamBindings()), config);
 }
 
 inline std::shared_ptr<ILinkSource> MakeGrafanaDashboardSearchSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings) {
     ValidateGrafanaDashboardSearchSourceConfig(config, metaSettings);
-    return std::make_shared<TGrafanaDashboardSearchSource>(
-        std::move(config),
-        metaSettings.SupportLinks.GrafanaEndpoint
-    );
+    auto paramBindings = ResolveParamBindings(config, BuildDefaultGrafanaDashboardParamBindings());
+    return std::make_shared<TGrafanaDashboardSearchSource>(std::move(config), metaSettings.SupportLinks.GrafanaEndpoint, std::move(paramBindings));
 }
 
 } // namespace NMVP::NSupportLinks

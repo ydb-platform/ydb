@@ -620,7 +620,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleUpdateSig(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         const ui32 node = ev->Get()->NodeId;
-        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig node",
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig",
             {"RingGroup", RingGroupIndex},
             {"DisconnectedNode", node});
         MergeSigNodeError(node);
@@ -1261,7 +1261,7 @@ public:
     {}
 
     STATEFN(StateInit) {
-        YDB_LOG_TRACE("Proxy::StateInit ev",
+        YDB_LOG_TRACE("Proxy::StateInit",
             {"Type", ev->GetTypeRewrite()},
             {"Event", ev->ToString()});
 

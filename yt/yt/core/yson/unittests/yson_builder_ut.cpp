@@ -14,7 +14,7 @@ TEST(TYsonStringBuilderTest, Simple)
 {
     TYsonStringBuilder builder;
     builder->OnStringScalar("some_scalar");
-    ASSERT_EQ(builder.Flush().ToString(), TString{"\1\x16some_scalar"});
+    ASSERT_EQ(builder.Flush().ToString(), std::string{"\1\x16some_scalar"});
     ASSERT_TRUE(builder.IsEmpty());
 }
 
@@ -22,11 +22,11 @@ TEST(TYsonStringBuilderTest, Reusing)
 {
     TYsonStringBuilder builder;
     builder->OnStringScalar("some_scalar1");
-    ASSERT_EQ(builder.Flush().ToString(), TString{"\1\x18some_scalar1"});
+    ASSERT_EQ(builder.Flush().ToString(), std::string{"\1\x18some_scalar1"});
     ASSERT_TRUE(builder.IsEmpty());
 
     builder->OnStringScalar("some_scalar2");
-    ASSERT_EQ(builder.Flush().ToString(), TString{"\1\x18some_scalar2"});
+    ASSERT_EQ(builder.Flush().ToString(), std::string{"\1\x18some_scalar2"});
     ASSERT_TRUE(builder.IsEmpty());
 }
 
@@ -40,7 +40,7 @@ TEST(TYsonStringBuilderTest, Checkpoints)
     builder.RestoreCheckpoint(checkpoint);
     builder.RestoreCheckpoint(checkpoint);
 
-    ASSERT_EQ(builder.Flush().ToString(), TString{"\1\x16some_scalar"});
+    ASSERT_EQ(builder.Flush().ToString(), std::string{"\1\x16some_scalar"});
     ASSERT_TRUE(builder.IsEmpty());
 }
 
@@ -60,7 +60,7 @@ TEST(TYsonStringBuilderTest, MapCheckpoints)
 
     builder->OnEndMap();
 
-    ASSERT_EQ(builder.Flush().ToString(), TString{R"({"key1"=#;})"});
+    ASSERT_EQ(builder.Flush().ToString(), std::string{R"({"key1"=#;})"});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +88,7 @@ TEST(TYsonBuilderTest, Forwarding)
     builder.RestoreCheckpoint(checkpoint);
     builder->OnEndMap();
 
-    ASSERT_EQ(stringBuilder.Flush().ToString(), TString{R"({})"});
+    ASSERT_EQ(stringBuilder.Flush().ToString(), std::string{R"({})"});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

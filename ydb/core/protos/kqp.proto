@@ -193,6 +193,8 @@ message TIndexDescriptionProto {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
         NKikimrSchemeOp.TFulltextIndexDescription FulltextIndexDescription = 10;
+        NKikimrSchemeOp.TBloomFilter BloomFilterDescription = 11;
+        NKikimrSchemeOp.TBloomNGrammFilter BloomNGrammFilterDescription = 12;
     }
 };
 
@@ -843,6 +845,11 @@ message TKqpTableSinkIndexSettings {
     optional string IndexName = 9;
 }
 
+enum EInputRowFormat {
+    INPUT_ROW_FORMAT_FLAT = 0;
+    INPUT_ROW_FORMAT_STRUCT_OF_ROWS = 1;
+}
+
 message TKqpTableSinkSettings {
     enum EType {
         MODE_REPLACE = 0;
@@ -881,6 +888,7 @@ message TKqpTableSinkSettings {
     optional string UserSID = 26;
     optional bool NeedLookup = 27;
     optional bool SkipMissingRows = 28;
+    optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
 }
 
 message TReadVectorTopK {

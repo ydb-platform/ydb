@@ -29,6 +29,12 @@ using TRegionPtr = std::shared_ptr<TRegion>;
 class TDDiskDataCopier;
 using TDDiskDataCopierPtr = std::shared_ptr<TDDiskDataCopier>;
 
+class TWriteRequestBundle;
+using TWriteRequestBundlePtr = std::shared_ptr<TWriteRequestBundle>;
+
+struct IWriteClient;
+using IWriteClientWeakPtr = std::weak_ptr<IWriteClient>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

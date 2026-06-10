@@ -137,6 +137,15 @@ protected:
         RlNoResourceTag = 102,
     };
 
+    // See the comment on the call site in Bootstrap(): we re-arm the timeout wakeup in
+    // bounded chunks so the scheduler heap never holds a far-future entry per CA.
+    static constexpr TDuration TimeoutChunkSize = TDuration::Seconds(15);
+
+    void ScheduleNextTimeoutChunk(TDuration remaining) {
+        this->Schedule(Min(TimeoutChunkSize, remaining),
+            new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
+    }
+
 public:
     void Bootstrap() {
         try {
@@ -154,7 +163,12 @@ public:
 
             if (RuntimeSettings.Timeout) {
                 CA_LOG_D("Set execution timeout " << *RuntimeSettings.Timeout);
-                this->Schedule(*RuntimeSettings.Timeout, new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
+                // Schedule a chunked timeout wakeup instead of a single full-timeout one.
+                // A full-timeout Schedule (potentially many minutes/hours ahead) pins an entry
+                // in the actor system's scheduler heap per CA until it fires, even when the CA
+                // dies normally well before the deadline.
+                TimeoutDeadline = NActors::TActivationContext::Monotonic() + *RuntimeSettings.Timeout;
+                ScheduleNextTimeoutChunk(*RuntimeSettings.Timeout);
             }
 
             if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) {
@@ -1174,6 +1188,15 @@ protected:
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
+                // re-arm until the configured deadline has actually elapsed.
+                if (RuntimeSettings.Timeout) {
+                    const TMonotonic now = NActors::TActivationContext::Monotonic();
+                    if (now < TimeoutDeadline) {
+                        ScheduleNextTimeoutChunk(TimeoutDeadline - now);
+                        break;
+                    }
+                }
+
                 if (ComputeActorSpan) {
                     ComputeActorSpan.EndError(
                         TStringBuilder()
@@ -2739,6 +2762,7 @@ protected:
     TDuration InputTransformCpuTime;
 private:
     TInstant StartTime;
+    TMonotonic TimeoutDeadline;
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;

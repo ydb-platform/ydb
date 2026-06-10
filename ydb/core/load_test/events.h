@@ -76,6 +76,10 @@ struct TEvLoad {
         EvNbsRead,
         EvNbsReadResult,
         EvConfigureTablet,
+
+        // In-process (per-DBG worker actor -> proxy tablet): peer-connectivity
+        // readiness update so the tablet can answer GetSummary.
+        EvNbsDbgActorReady,
     };
 
     struct TEvLoadTestRequest : public TEventPB<TEvLoadTestRequest,
@@ -260,6 +264,19 @@ struct TEvLoad {
     struct TEvConfigureTablet : public TEventPB<TEvConfigureTablet,
         NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet, EvConfigureTablet>
     {};
+
+    // Per-DBG worker actor -> proxy tablet. Reports the worker's current
+    // primary persistent-buffer connectivity so the tablet can compute the
+    // ready-DBG prefix for GetSummary. Same node, so a local event.
+    struct TEvNbsDbgActorReady : public TEventLocal<TEvNbsDbgActorReady, EvNbsDbgActorReady> {
+        ui32 DbgIndex = 0;
+        ui32 PbConnectedCount = 0;
+        TEvNbsDbgActorReady() = default;
+        TEvNbsDbgActorReady(ui32 dbgIndex, ui32 pbConnectedCount)
+            : DbgIndex(dbgIndex)
+            , PbConnectedCount(pbConnectedCount)
+        {}
+    };
 };
 
 inline const TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(

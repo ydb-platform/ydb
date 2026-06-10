@@ -104,14 +104,14 @@ void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node) {
 
 } // namespace
 
-bool TestIssues(const NYql::TAstParseResult& parseRes, bool isStrictWarningAsError) {
+bool TestIssues(const NYql::TAstParseResult& parseRes) {
     bool isOk = parseRes.IsOk();
 
     const bool hasError = AnyOf(parseRes.Issues, [](const NYql::TIssue& issue) {
         return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR;
     });
 
-    if (parseRes.IsOk() && hasError && isStrictWarningAsError) {
+    if (parseRes.IsOk() && hasError) {
         Cerr << "Errors reported, but yql compiled result!" << Endl << Endl;
         isOk = false;
     }
@@ -452,7 +452,7 @@ int BuildAST(int argc, char** argv) {
                 (parseRes.ActualSyntaxType == NYql::ESyntaxType::YQLv1 &&
                  !res.Has("pg"));
 
-            bool hasError = !TestIssues(parseRes, /*isStrictWarningAsError=*/true);
+            bool hasError = !TestIssues(parseRes);
 
             if (hasError || !noDebug) {
                 parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);

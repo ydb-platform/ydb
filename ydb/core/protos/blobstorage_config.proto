@@ -147,7 +147,7 @@ message TDefineStoragePool {
         repeated uint32 GroupId = 1;
     }
 
-    uint64 BoxId = 1; // the box in which we are creating this storage pool
+    optional uint64 BoxId = 1; // the box in which we are creating this storage pool
     uint64 StoragePoolId = 2; // integer key unique to the box; if set to zero, Name is used for lookup
     string Name = 3; // user-friendly name
     string ErasureSpecies = 4; // name for erasure species of contained groups
@@ -174,7 +174,7 @@ message TDefineStoragePool {
 }
 
 message TReadStoragePool {
-    uint64 BoxId = 1; // use Max<ui64> to query all the pools
+    optional uint64 BoxId = 1; // use Max<ui64> to query all the pools
 
     // calculates intersection of names and ids
     repeated uint64 StoragePoolId = 2; // when empty, then query all the boxes

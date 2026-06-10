@@ -221,6 +221,10 @@ public:
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseBelatedHint();
 
+    // Registers a write as pending (lsn generated, data not in any PBuffer
+    // yet) so that the cleanup bound covers it from the moment of generation.
+    void RegisterInflightWrite(ui64 lsn, TBlockRange64 range);
+
     void WriteFinished(
         ui64 lsn,
         TBlockRange64 range,
@@ -258,6 +262,7 @@ public:
     [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
+    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
 

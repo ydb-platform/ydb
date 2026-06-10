@@ -78,7 +78,6 @@ struct TIndexDescription {
         std::optional<double> FalsePositiveProbability;
     };
 
-private:
     // Helper function to extract bloom filter description from NKikimrSchemeOp::TBloomFilter
     static TLocalBloomFilterDescription ExtractBloomFilterDescription(
         const NKikimrSchemeOp::TBloomFilter& bloomFilter) {
@@ -105,7 +104,6 @@ private:
         return desc;
     }
 
-public:
 
     enum class EType : ui32 {
         GlobalSync = 0,

@@ -1125,18 +1125,17 @@ incompatibility_overrides:
         };
         UNIT_ASSERT(rules.IsCompatible(missingBranch));
         
-        TMap<TString, TString> missingConfigVersion = {
+        TMap<TString, TString> missingRev = {
             {"branch", "main"},
             {"dynamic", "true"},
             {"node_host", "host1"},
             {"node_id", "1"},
-            {"rev", "123"},
             {"node_type", "storage"},
             {"tenant", "my_tenant"},
             {"flavour", "standard"},
             {"ydbcp", "true"}
         };
-        UNIT_ASSERT(!rules.IsCompatible(missingConfigVersion));
+        UNIT_ASSERT(!rules.IsCompatible(missingRev));
     }
     
     Y_UNIT_TEST(BuiltInRules_DisableAll) {

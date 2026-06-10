@@ -174,12 +174,18 @@ message StreamWriteMessage {
             }
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
             repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
-            
-            // Max sequence number for batch.
-            int64 max_seq_no = 9;
 
-            // Number of messages in batch. If not set or <= 1, that means that this message is not a batch.
-            int64 message_count = 10;
+            // Metadata of a batch of client messages packed into the data field.
+            message BatchMetadata {
+                // Sequence number of the first (minimal) message in the batch.
+                int64 first_seq_no = 1;
+
+                // Number of messages in batch. If not set or <= 1, that means that this message is not a batch.
+                int64 message_count = 2;
+            }
+
+            // Filled when the data field contains a batch of client messages.
+            BatchMetadata batch_metadata = 9;
 
             enum MessageFormat {
                 STANDARD = 0;
@@ -187,7 +193,7 @@ message StreamWriteMessage {
             }
 
             // Format of batched message payload in data field.
-            MessageFormat message_format = 11;
+            MessageFormat message_format = 10;
         }
     }
 

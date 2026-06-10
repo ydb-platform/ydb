@@ -128,6 +128,22 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
     config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
         .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
         .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
+    config.Opts->AddLongOption("batch-flush-interval", "Max time to accumulate messages before flushing one write batch. Zero disables this limit (ex. '0s', '10ms', '1s').")
+        .DefaultValue("1s")
+        .Hidden()
+        .StoreMappedResult(&Scenario.BatchFlushInterval, TDuration::Parse);
+    config.Opts->AddLongOption("batch-flush-size", "Max accumulated payload size before flushing one write batch. Not set means no size limit.")
+        .Optional()
+        .Hidden()
+        .StoreMappedResult(&Scenario.BatchFlushSizeBytes, &TCommandWorkloadTopicParams::StrToBytes);
+    config.Opts->AddLongOption("max-message-count", "Max number of logical messages packed into a single write block.")
+        .DefaultValue(1)
+        .Hidden()
+        .StoreResult(&Scenario.MaxMessageCount);
+    config.Opts->AddLongOption("message-format", "Write block payload format: standard or kafka-batch. Non-standard format is required when --max-message-count is greater than 1.")
+        .DefaultValue("standard")
+        .Hidden()
+        .StoreMappedResult(&Scenario.MessageFormat, &TCommandWorkloadTopicParams::StrToMessageFormat);
 
     Scenario.ConfigMetadataMonitoringOptions(config);
 
@@ -141,6 +157,7 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
     Scenario.EnsureRatesIsValid();
+    Scenario.EnsureBatchSettingsAreValid();
 }
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config)

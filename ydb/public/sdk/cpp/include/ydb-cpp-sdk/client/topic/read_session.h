@@ -162,10 +162,6 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     //! Maximum memory usage for read session.
     FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
 
-    //! Max number of messages in a single batch from server.
-    //! Values greater than 1 enable batching protocol (is_batching_supported in init).
-    FLUENT_SETTING_DEFAULT(uint64_t, MaxBatchSize, 1);
-
     //! Max message time lag. All messages older that now - MaxLag will be ignored.
     FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
 

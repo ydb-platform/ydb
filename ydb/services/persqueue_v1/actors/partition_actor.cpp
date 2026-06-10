@@ -512,8 +512,10 @@ bool FillBatchedData(
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
         const auto& r = res.GetResult(i);
         WTime = r.GetWriteTimestampMS();
-        AFL_ENSURE(r.GetOffset() >= ReadOffset);
         const ui64 messageCount = Max<ui64>(1, r.GetMessageCount());
+        // When reading from the middle of a batch, tablet returns the whole blob
+        // with base offset below ReadOffset; SDK skips already-committed records.
+        AFL_ENSURE(r.GetOffset() + static_cast<i64>(messageCount) > ReadOffset);
         ReadOffset = r.GetOffset() + messageCount;
         hasOffset = true;
 
@@ -604,13 +606,11 @@ bool FillBatchedData(
             auto* msgMeta = message->mutable_metadata_items();
             *msgMeta = (proto.GetMessageMeta());
             if (topicMessagesBatchingEnabled) {
-                if (r.GetMessageCount() > 1) {
-                    message->set_message_count(r.GetMessageCount());
-                }
-                if (r.GetMessageFormat() == NKikimrClient::KAFKA_BATCH) {
-                    message->set_message_format(
-                        Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::KAFKA_BATCH);
-                }
+                message->set_message_count(r.GetMessageCount());
+                message->set_message_format(
+                    r.GetMessageFormat() == NKikimrClient::KAFKA_BATCH
+                        ? Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::KAFKA_BATCH
+                        : Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::STANDARD);
             }
         }
         hasData = true;

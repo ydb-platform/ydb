@@ -173,48 +173,39 @@ static const ui64 WRITE_BLOCK_SIZE = 4_KB;
 
 TMaybe<TString> FillBatchFieldsFromTopicWriteMessage(
         const Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData& msg,
-        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite,
-        bool batchingEnabled)
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite)
 {
-    const i64 messageCountField = msg.message_count();
-    const i64 maxSeqNoField = msg.max_seq_no();
-    if (messageCountField == 0 && maxSeqNoField == 0) {
+    // Even a single message may be serialized in a non-standard format,
+    // so the format must be stored regardless of message count.
+    switch (msg.message_format()) {
+        case Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::STANDARD:
+            return Nothing();
+        case Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH:
+            cmdWrite.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+            break;
+        default:
+            return TString(TStringBuilder() << "unsupported message_format: " << static_cast<int>(msg.message_format()));
+    }
+
+    if (!msg.has_batch_metadata()) {
         return Nothing();
     }
 
-    if (!batchingEnabled) {
-        return TString("messages batching is not supported");
+    const auto& batchMeta = msg.batch_metadata();
+    const i64 messageCount = batchMeta.message_count();
+    if (messageCount < 0) {
+        return TString("message_count must be >= 0");
     }
-
-    if (messageCountField < 0) {
-        return TString("message_count must be >= 1");
-    }
-    if (maxSeqNoField != 0 && maxSeqNoField < msg.seq_no()) {
-        return TString("max_seq_no must be >= seq_no");
-    }
-
-    i64 messageCount = messageCountField;
-    if (messageCount <= 1 && maxSeqNoField >= msg.seq_no()) {
-        messageCount = maxSeqNoField - msg.seq_no() + 1;
-    }
-
-    // Even a single message may be serialized in a non-standard format,
-    // so the format must be stored regardless of message count.
-    if (msg.message_format() == Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH) {
-        cmdWrite.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+    if (batchMeta.first_seq_no() != 0 && batchMeta.first_seq_no() != msg.seq_no()) {
+        return TString("first_seq_no must be equal to seq_no of the batch message");
     }
 
     if (messageCount <= 1) {
         return Nothing();
     }
 
-    const i64 maxSeqNo = maxSeqNoField != 0 ? maxSeqNoField : msg.seq_no() + messageCount - 1;
-    if (maxSeqNo != msg.seq_no() + messageCount - 1) {
-        return TString("max_seq_no is inconsistent with message_count");
-    }
-
     cmdWrite.SetMessageCount(messageCount);
-    cmdWrite.SetMaxSeqNo(maxSeqNo);
+    cmdWrite.SetMaxSeqNo(msg.seq_no() + messageCount - 1);
     return Nothing();
 }
 
@@ -1303,7 +1294,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
 
-        if (const auto error = FillBatchFieldsFromTopicWriteMessage(msg, *w, IsTopicMessagesBatchingEnabled(ctx))) {
+        if (const auto error = FillBatchFieldsFromTopicWriteMessage(msg, *w)) {
             batchError = *error;
             return;
         }

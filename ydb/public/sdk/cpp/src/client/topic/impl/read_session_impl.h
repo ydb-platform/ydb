@@ -238,8 +238,7 @@ public:
         TPartitionData<UseMigrationProtocol>&& msg,
         TCallbackContextPtr<UseMigrationProtocol> cbContext,
         bool doDecompress,
-        i64 serverBytesSize = 0, // to increment read request bytes size
-        uint64_t maxBatchSize = 1
+        i64 serverBytesSize = 0 // to increment read request bytes size
     );
     ~TDataDecompressionInfo();
 
@@ -275,10 +274,6 @@ public:
 
     bool GetDoDecompress() const {
         return DoDecompress;
-    }
-
-    uint64_t GetMaxBatchSize() const {
-        return MaxBatchSize;
     }
 
     i64 GetServerBytesSize() const {
@@ -380,7 +375,6 @@ private:
     std::vector<TMessageMetaPtrVector> MessagesMeta;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
     bool DoDecompress;
-    uint64_t MaxBatchSize = 1;
     std::atomic<i64> ServerBytesSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)

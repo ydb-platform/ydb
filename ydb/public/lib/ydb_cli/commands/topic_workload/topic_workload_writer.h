@@ -43,6 +43,10 @@ namespace NYdb {
             ui32 KeyCount = 0;
             ui32 KeySeed = 0;
             std::optional<size_t> MaxMemoryUsageBytes = 15_MB;
+            TDuration BatchFlushInterval = TDuration::Seconds(1);
+            std::optional<ui64> BatchFlushSizeBytes;
+            ui32 MaxMessageCount = 1;
+            ui32 MessageFormat = static_cast<ui32>(NTopic::EMessageFormat::STANDARD);
         };
 
         struct TTopicWorkloadConfiguratorParams;

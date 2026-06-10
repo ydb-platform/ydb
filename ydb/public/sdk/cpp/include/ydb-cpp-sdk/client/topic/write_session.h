@@ -14,8 +14,8 @@
 
 namespace NYdb::inline Dev::NTopic {
 
-//! Format of batched message payload written to topic.
-enum class EBatchMessageFormat {
+//! Format of message payload written to topic.
+enum class EMessageFormat {
     STANDARD = 0,
     KAFKA_BATCH = 1,
 };
@@ -128,17 +128,16 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! but for no longer than BatchFlushInterval.
     //! Upon reaching FlushInterval or FlushSize limit, all messages will be written with one batch.
     //! Greatly increases performance for small messages.
-    //! Setting either value to zero means immediate write with no batching. (Unrecommended, especially for clients
-    //! sending small messages at high rate).
-    FLUENT_SETTING_OPTIONAL(TDuration, BatchFlushInterval);
+    //! Zero BatchFlushInterval or BatchFlushSizeBytes disables the corresponding limit (immediate flush).
+    FLUENT_SETTING_DEFAULT(TDuration, BatchFlushInterval, TDuration::Seconds(1));
     FLUENT_SETTING_OPTIONAL(uint64_t, BatchFlushSizeBytes);
 
     //! Max number of logical messages packed into a single write block.
-    //! Values greater than 1 require non-STANDARD BatchMessageFormat.
+    //! Values greater than 1 require non-STANDARD MessageFormat.
     FLUENT_SETTING_DEFAULT(uint32_t, MaxMessageCount, 1);
 
-    //! Format of batched message payload in write block data field.
-    FLUENT_SETTING_DEFAULT(EBatchMessageFormat, BatchMessageFormat, EBatchMessageFormat::STANDARD);
+    //! Format of message payload in write block data field.
+    FLUENT_SETTING_DEFAULT(EMessageFormat, MessageFormat, EMessageFormat::STANDARD);
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
 

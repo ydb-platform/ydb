@@ -56,6 +56,69 @@ TTopicSdkTestSetup CreateBatchingSetup() {
     return setup;
 }
 
+// Writes groups of messages as kafka batches: one tuple is {first seqno, message count, payload fill char}.
+void WriteKafkaBatchMessages(
+        TTopicClient& client,
+        const std::string& topicPath,
+        const std::string& producerId,
+        size_t dataSize,
+        ui64 maxBatchMessageCount,
+        const TVector<std::tuple<ui64, ui32, char>>& writes)
+{
+    TWriteSessionSettings writeSettings;
+    writeSettings.Path(topicPath)
+        .ProducerId(producerId)
+        .MessageGroupId(producerId)
+        .PartitionId(0)
+        .Codec(ECodec::RAW)
+        .MaxMessageCount(maxBatchMessageCount)
+        .MessageFormat(EMessageFormat::KAFKA_BATCH)
+        // Groups smaller than MaxMessageCount are flushed by this interval;
+        // writes within a group are fast enough to never split a group.
+        .BatchFlushInterval(TDuration::Seconds(1))
+        .BatchFlushSizeBytes(10_MB);
+
+    auto writeSession = client.CreateWriteSession(writeSettings);
+
+    std::optional<TContinuationToken> token;
+
+    for (const auto& [firstSeqNo, messageCount, fill] : writes) {
+        const ui64 lastSeqNo = firstSeqNo + messageCount - 1;
+        ui64 nextSeqNo = firstSeqNo;
+        THashSet<ui64> ackedSeqNos;
+
+        while (ackedSeqNos.size() < messageCount) {
+            if (token.has_value() && nextSeqNo <= lastSeqNo) {
+                TWriteMessage message(TString(dataSize, fill));
+                message.SeqNo(nextSeqNo++);
+                writeSession->Write(std::move(*token), std::move(message));
+                token.reset();
+                continue;
+            }
+
+            auto event = writeSession->GetEvent(true);
+            UNIT_ASSERT(event.has_value());
+            if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                token = std::move(ready->ContinuationToken);
+            } else if (auto* ack = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+                for (const auto& item : ack->Acks) {
+                    UNIT_ASSERT_C(
+                        item.State == TWriteSessionEvent::TWriteAck::EES_WRITTEN,
+                        TStringBuilder() << "Unexpected ack state: " << item.State);
+                    UNIT_ASSERT_C(
+                        item.SeqNo >= firstSeqNo && item.SeqNo <= lastSeqNo,
+                        TStringBuilder() << "Unexpected ack seqNo: " << item.SeqNo);
+                    ackedSeqNos.insert(item.SeqNo);
+                }
+            } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
+                UNIT_FAIL(TStringBuilder() << "Unexpected session close: " << closed->DebugString());
+            }
+        }
+    }
+
+    UNIT_ASSERT(writeSession->Close(TDuration::Seconds(5)));
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(WithSDK) {
@@ -1074,63 +1137,11 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             {9, 1, 'c'},
         };
 
-        TWriteSessionSettings writeSettings;
-        writeSettings.Path(setup.GetFullTopicPath())
-            .ProducerId(producerId)
-            .MessageGroupId(producerId)
-            .PartitionId(0)
-            .Codec(ECodec::RAW)
-            .MaxMessageCount(maxBatchMessageCount)
-            .BatchMessageFormat(EBatchMessageFormat::KAFKA_BATCH)
-            // Groups smaller than MaxMessageCount are flushed by this interval;
-            // writes within a group are fast enough to never split a group.
-            .BatchFlushInterval(TDuration::Seconds(1))
-            .BatchFlushSizeBytes(10_MB);
-
-        auto writeSession = client.CreateWriteSession(writeSettings);
-
-        std::optional<TContinuationToken> token;
-
-        for (const auto& [firstSeqNo, messageCount, fill] : writes) {
-            const ui64 lastSeqNo = firstSeqNo + messageCount - 1;
-            ui64 nextSeqNo = firstSeqNo;
-            THashSet<ui64> ackedSeqNos;
-
-            while (ackedSeqNos.size() < messageCount) {
-                if (token.has_value() && nextSeqNo <= lastSeqNo) {
-                    TWriteMessage message(TString(dataSize, fill));
-                    message.SeqNo(nextSeqNo++);
-                    writeSession->Write(std::move(*token), std::move(message));
-                    token.reset();
-                    continue;
-                }
-
-                auto event = writeSession->GetEvent(true);
-                UNIT_ASSERT(event.has_value());
-                if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-                    token = std::move(ready->ContinuationToken);
-                } else if (auto* ack = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-                    for (const auto& item : ack->Acks) {
-                        UNIT_ASSERT_C(
-                            item.State == TWriteSessionEvent::TWriteAck::EES_WRITTEN,
-                            TStringBuilder() << "Unexpected ack state: " << item.State);
-                        UNIT_ASSERT_C(
-                            item.SeqNo >= firstSeqNo && item.SeqNo <= lastSeqNo,
-                            TStringBuilder() << "Unexpected ack seqNo: " << item.SeqNo);
-                        ackedSeqNos.insert(item.SeqNo);
-                    }
-                } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected session close: " << closed->DebugString());
-                }
-            }
-        }
-
-        UNIT_ASSERT(writeSession->Close(TDuration::Seconds(5)));
+        WriteKafkaBatchMessages(client, setup.GetFullTopicPath(), producerId, dataSize, maxBatchMessageCount, writes);
 
         TReadSessionSettings readSettings;
         readSettings.ConsumerName(TEST_CONSUMER);
         readSettings.AppendTopics(TTopicReadSettings().Path(setup.GetFullTopicPath()));
-        readSettings.MaxBatchSize(maxBatchMessageCount);
         readSettings.Decompress(true);
 
         auto readSession = client.CreateReadSession(readSettings);
@@ -1160,10 +1171,6 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
         UNIT_ASSERT_VALUES_EQUAL(receivedMessages.size(), 9u);
 
-        SortBy(receivedMessages, [](const TMessage& message) {
-            return message.GetOffset();
-        });
-
         for (ui64 offset = 0; offset < 5; ++offset) {
             UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetOffset(), offset);
             UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetSeqNo(), offset + 1);
@@ -1179,6 +1186,117 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         UNIT_ASSERT_VALUES_EQUAL(receivedMessages[8].GetData(), TString(dataSize, 'c'));
 
         UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));
+    }
+
+    Y_UNIT_TEST(KafkaBatchCommitToMiddleOfBatch) {
+        TTopicSdkTestSetup setup = CreateBatchingSetup();
+        setup.GetRuntime().SetScheduledLimit(5000);
+
+        TTopicClient client(setup.MakeDriver());
+
+        const std::string producerId = "sourceid_batch_commit";
+        constexpr size_t dataSize = 16;
+        constexpr ui64 maxBatchMessageCount = 5;
+        constexpr ui64 totalMessages = 8;
+
+        // One full batch [0..4] and one smaller batch [5..7].
+        const TVector<std::tuple<ui64, ui32, char>> writes = {
+            {1, 5, 'a'},
+            {6, 3, 'b'},
+        };
+
+        WriteKafkaBatchMessages(client, setup.GetFullTopicPath(), producerId, dataSize, maxBatchMessageCount, writes);
+
+        // Commit to the middle of the first batch.
+        constexpr ui64 commitToOffset = 2;
+
+        TReadSessionSettings readSettings;
+        readSettings.ConsumerName(TEST_CONSUMER);
+        readSettings.AppendTopics(TTopicReadSettings().Path(setup.GetFullTopicPath()));
+        readSettings.Decompress(true);
+
+        // First session: read everything, commit only offsets [0, commitToOffset).
+        {
+            auto readSession = client.CreateReadSession(readSettings);
+
+            size_t messagesReceived = 0;
+            bool committed = false;
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            while ((messagesReceived < totalMessages || !committed) && TInstant::Now() < deadline) {
+                UNIT_ASSERT_C(readSession->WaitEvent().Wait(TDuration::Seconds(5)),
+                    "Read session event timeout");
+                auto event = readSession->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
+
+                if (auto* start = std::get_if<TStartPartitionEvent>(&*event)) {
+                    start->Confirm();
+                    continue;
+                }
+                if (auto* stop = std::get_if<TStopPartitionEvent>(&*event)) {
+                    stop->Confirm();
+                    continue;
+                }
+                if (auto* commit = std::get_if<TCommitOffsetAcknowledgementEvent>(&*event)) {
+                    if (commit->GetCommittedOffset() >= commitToOffset) {
+                        committed = true;
+                    }
+                    continue;
+                }
+                if (auto* data = std::get_if<TDataEvent>(&*event)) {
+                    for (auto& message : data->GetMessages()) {
+                        UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), messagesReceived);
+                        if (message.GetOffset() < commitToOffset) {
+                            message.Commit();
+                        }
+                        ++messagesReceived;
+                    }
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(messagesReceived, totalMessages);
+            UNIT_ASSERT_C(committed, "Commit acknowledgement was not received");
+            UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));
+        }
+
+        // Second session: reading must resume from the middle of the first batch.
+        {
+            auto readSession = client.CreateReadSession(readSettings);
+
+            TVector<TMessage> receivedMessages;
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            while (receivedMessages.size() < totalMessages - commitToOffset && TInstant::Now() < deadline) {
+                UNIT_ASSERT_C(readSession->WaitEvent().Wait(TDuration::Seconds(5)),
+                    "Read session event timeout");
+                auto event = readSession->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
+
+                if (auto* start = std::get_if<TStartPartitionEvent>(&*event)) {
+                    UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), commitToOffset);
+                    start->Confirm();
+                    continue;
+                }
+                if (auto* stop = std::get_if<TStopPartitionEvent>(&*event)) {
+                    stop->Confirm();
+                    continue;
+                }
+                if (auto* data = std::get_if<TDataEvent>(&*event)) {
+                    for (auto& message : data->GetMessages()) {
+                        receivedMessages.push_back(message);
+                    }
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages.size(), totalMessages - commitToOffset);
+
+            for (size_t i = 0; i < receivedMessages.size(); ++i) {
+                const ui64 offset = commitToOffset + i;
+                UNIT_ASSERT_VALUES_EQUAL(receivedMessages[i].GetOffset(), offset);
+                UNIT_ASSERT_VALUES_EQUAL(receivedMessages[i].GetSeqNo(), offset + 1);
+                UNIT_ASSERT_VALUES_EQUAL(receivedMessages[i].GetData(), TString(dataSize, offset < 5 ? 'a' : 'b'));
+            }
+
+            UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));
+        }
     }
 }
 } // namespace NKikimr

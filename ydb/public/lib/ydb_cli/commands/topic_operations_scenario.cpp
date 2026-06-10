@@ -53,6 +53,15 @@ void TTopicOperationsScenario::EnsureRatesIsValid() const
     Y_ENSURE_EX(BytesPerSec >= 0, TMisuseException() << "--bytes-per-sec should be non negative.");
 }
 
+void TTopicOperationsScenario::EnsureBatchSettingsAreValid() const
+{
+    Y_ENSURE_EX(MaxMessageCount > 0, TMisuseException() << "--max-message-count should be positive.");
+
+    if (MaxMessageCount > 1 && static_cast<NTopic::EMessageFormat>(MessageFormat) == NTopic::EMessageFormat::STANDARD) {
+        throw TMisuseException() << "--message-format should be non-standard when --max-message-count is greater than 1.";
+    }
+}
+
 TString TTopicOperationsScenario::GetReadOnlyTableName() const
 {
     return TableName + "-ro";
@@ -315,6 +324,10 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .KeyCount = KeyCount,
             .KeySeed = writerIdx,
             .MaxMemoryUsageBytes = ProducerMaxMemoryUsageBytes,
+            .BatchFlushInterval = BatchFlushInterval,
+            .BatchFlushSizeBytes = BatchFlushSizeBytes,
+            .MaxMessageCount = MaxMessageCount,
+            .MessageFormat = MessageFormat,
         };
 
         if (KeyedWrites) {

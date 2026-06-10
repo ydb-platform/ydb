@@ -34,8 +34,8 @@ using TTxId = std::pair<std::string_view, std::string_view>;
 using TTxIdOpt = std::optional<TTxId>;
 
 void ValidateWriteSessionSettings(const TWriteSessionSettings& settings) {
-    if (settings.MaxMessageCount_ > 1 && settings.BatchMessageFormat_ == EBatchMessageFormat::STANDARD) {
-        ythrow yexception() << "BatchMessageFormat must be set when MaxMessageCount > 1";
+    if (settings.MaxMessageCount_ > 1 && settings.MessageFormat_ == EMessageFormat::STANDARD) {
+        ythrow yexception() << "MessageFormat must be set when MaxMessageCount > 1";
     }
 }
 
@@ -130,8 +130,8 @@ TWriteSessionImpl::TWriteSessionImpl(
     , MaxBlockMessageCount(Settings.MaxMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
-            Settings.BatchFlushInterval_.value_or(TDuration::Zero()) ?
-                std::min(Settings.BatchFlushInterval_.value_or(TDuration::Seconds(1)) / 5, TDuration::MilliSeconds(100))
+            Settings.BatchFlushInterval_ != TDuration::Zero() ?
+                std::min(Settings.BatchFlushInterval_ / 5, TDuration::MilliSeconds(100))
                 :
                 TDuration::MilliSeconds(100)
     )
@@ -1438,7 +1438,7 @@ void TWriteSessionImpl::FlushWriteIfRequiredImpl() {
 
     if (!CurrentBatch.Empty() && !CurrentBatch.FlushRequested) {
         MessagesAcquired += static_cast<uint64_t>(CurrentBatch.Acquire());
-        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_.value_or(TDuration::Zero())
+        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_
             || CurrentBatch.CurrentSize >= Settings.BatchFlushSizeBytes_.value_or(0)
             || CurrentBatch.CurrentSize >= MaxBlockSize
             || CurrentBatch.Messages.size() >= MaxBlockMessageCount
@@ -1461,7 +1461,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
 
     Y_ABORT_UNLESS(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
 
-    if (Settings.BatchMessageFormat_ == EBatchMessageFormat::KAFKA_BATCH) {
+    if (Settings.MessageFormat_ == EMessageFormat::KAFKA_BATCH) {
         for (const auto& message : CurrentBatch.Messages) {
             if (message.Codec.has_value()) {
                 ythrow yexception() << "Pre-compressed messages are not supported with KAFKA_BATCH format";
@@ -1537,7 +1537,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
 
         // A single message is sent in the standard format: SendImpl routes
         // one-message blocks through SendStandardBlock without message_format.
-        if (Settings.BatchMessageFormat_ == EBatchMessageFormat::KAFKA_BATCH && block.MessageCount > 1) {
+        if (Settings.MessageFormat_ == EMessageFormat::KAFKA_BATCH && block.MessageCount > 1) {
             std::vector<std::string_view> payloads;
             std::vector<TInstant> createdAt;
             payloads.reserve(block.MessageCount);
@@ -1647,7 +1647,6 @@ void TWriteSessionImpl::SendKafkaBatch(
     }
 
     const auto& firstMessage = batchMessages.front();
-    const auto& lastMessage = batchMessages.back();
     auto* msgData = writeRequest->add_messages();
 
     if (firstMessage.Tx) {
@@ -1655,9 +1654,11 @@ void TWriteSessionImpl::SendKafkaBatch(
         writeRequest->mutable_tx()->set_session(firstMessage.Tx->SessionId);
     }
 
-    msgData->set_seq_no(GetSeqNoImpl(firstMessage.Id));
-    msgData->set_max_seq_no(GetSeqNoImpl(lastMessage.Id));
-    msgData->set_message_count(static_cast<i64>(block.MessageCount));
+    const ui64 firstSeqNo = GetSeqNoImpl(firstMessage.Id);
+    msgData->set_seq_no(static_cast<i64>(firstSeqNo));
+    auto* batchMeta = msgData->mutable_batch_metadata();
+    batchMeta->set_first_seq_no(static_cast<i64>(firstSeqNo));
+    batchMeta->set_message_count(static_cast<i64>(block.MessageCount));
     msgData->set_message_format(
         Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH);
     *msgData->mutable_created_at() =
@@ -1744,7 +1745,7 @@ void TWriteSessionImpl::SendImpl() {
             prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
 
-            const bool sendAsKafkaBatch = Settings.BatchMessageFormat_ == EBatchMessageFormat::KAFKA_BATCH
+            const bool sendAsKafkaBatch = Settings.MessageFormat_ == EMessageFormat::KAFKA_BATCH
                 && block.MessageCount > 1;
 
             if (sendAsKafkaBatch) {

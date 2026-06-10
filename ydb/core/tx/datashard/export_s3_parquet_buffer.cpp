@@ -64,6 +64,7 @@ private:
     ui64 GetBytesLimit() const { return MaxBytes; }
 
     static NBackup::IChecksum* CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
+    static std::shared_ptr<parquet::WriterProperties> CreateWriteProperties(const TS3ExportBufferSettings& settings);
 
     bool Flush(bool last);
 
@@ -98,8 +99,11 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(
     , MinBytes(settings.MinBytes)
     , ChecksumSettings(settings.ChecksumSettings)
     , Checksum(CreateChecksum(settings.ChecksumSettings))
+    , WriteProperties(CreateWriteProperties(settings))
     , OutStream(ICheckpointOutputStream::Create())
-{
+{}
+
+std::shared_ptr<parquet::WriterProperties> TS3ParquetExportBuffer::CreateWriteProperties(const TS3ExportBufferSettings& settings) {
     auto builder = std::make_unique<parquet::WriterProperties::Builder>();
     if (settings.CompressionSettings) {
         switch (settings.CompressionSettings->Algorithm) {
@@ -112,7 +116,7 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(
                 settings.CompressionSettings->CompressionLevel);
         }
     }
-    WriteProperties = builder->build();
+    return builder->build();
 }
 
 NBackup::IChecksum* TS3ParquetExportBuffer::CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {

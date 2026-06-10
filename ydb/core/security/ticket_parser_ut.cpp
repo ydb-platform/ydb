@@ -3378,6 +3378,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
+        runtime->DispatchEvents();
 
         auto jwtToken = CreateExternalIdpJwt(keys, KID, ISS, "testuser", {"/Root"}, {"admins", "devs"});
         TString bearerToken = "Bearer " + jwtToken;
@@ -3475,6 +3476,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
+        runtime->DispatchEvents();
 
         auto jwtToken = CreateExternalIdpJwt(keys, KID, ISS, "refreshuser", {"/Root"}, {}, std::chrono::seconds(90));
         TString bearerToken = "Bearer " + jwtToken;
@@ -3578,6 +3580,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
         HandleExternalIdpHttpRequest(runtime, serverId, discoveryJson, jwksJson);
+        runtime->DispatchEvents();
 
         auto now = std::chrono::system_clock::now();
         auto t = jwt::create()

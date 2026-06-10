@@ -67,7 +67,7 @@ PEERDIR(
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
-    yt/yql/providers/dq/clique_discovery
+    # yt/yql/providers/dq/clique_discovery
 )
 ENDIF()
 

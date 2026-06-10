@@ -16,7 +16,7 @@
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_clique.h>
 #ifndef _win_
-#include <yt/yql/providers/dq/clique_discovery/yql_dq_clique_endpoint_resolver.h>
+//#include <yt/yql/providers/dq/clique_discovery/yql_dq_clique_endpoint_resolver.h>
 #endif
 
 namespace NYql {
@@ -67,12 +67,12 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             std::move(hiddenAborter)
         );
 
-        state->Settings->CliqueValidator = [gatewaysConfig](const TString& cliqueValue) {
+/*        state->Settings->CliqueValidator = [gatewaysConfig](const TString& cliqueValue) {
 #ifndef _win_
             ValidateDqCliqueRef(gatewaysConfig, cliqueValue);
 #else
             ValidateDqCliqueYtCluster(gatewaysConfig, cliqueValue);
-#endif
+#endif*/
         };
 
         TDataProviderInfo info;

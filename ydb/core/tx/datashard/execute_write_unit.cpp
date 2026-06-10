@@ -308,12 +308,11 @@ public:
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    if (userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
-                        userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
-                        userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact) {
+                    if (userTable.TableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
+                        userTable.TableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
                         try {
                             userDb.InsertFulltext(fullTableId, key, ops, userCtx,
-                                userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+                                userTable.TableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance);
                         } catch (const TNotReadyTabletException&) {
                             // Simple alternative to complex precharge process: continue processing
                             // other rows to resolve more page faults in one pass

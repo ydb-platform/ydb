@@ -1566,7 +1566,6 @@ public:
         }
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
-        configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";
         configsDispatcherInitInfo.DebugInfo = TDebugInfo {
             .InitInfo = InitDebug.ConfigTransformInfo,
         };

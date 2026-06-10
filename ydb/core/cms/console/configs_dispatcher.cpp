@@ -5,6 +5,11 @@
 #include "http.h"
 #include "util.h"
 
+<<<<<<< HEAD
+=======
+#include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+>>>>>>> 172180913b7 (Make better config version check (#43081))
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/library/yaml_config/util.h>
 #include <ydb/library/yaml_config/yaml_config.h>
@@ -189,6 +194,7 @@ public:
     void Handle(TEvConsole::TEvGetNodeConfigurationVersionRequest::TPtr &ev);
     void Handle(TEvConfigsDispatcher::TEvGetStateRequest::TPtr &ev);
     void Handle(TEvConfigsDispatcher::TEvGetStorageYamlRequest::TPtr &ev);
+    void Handle(TEvNodeWardenStorageConfig::TPtr &ev);
 
     void ReplyMonJson(TActorId mailbox);
     
@@ -200,7 +206,14 @@ public:
         }
         return EConfigSource::DynamicConfig;
     }
-    
+
+    void UpdateConfigurationVersion(TString version) {
+        ConfigurationVersion = std::move(version);
+        const bool isV1 = *ConfigurationVersion == "v1";
+        *ConfigurationV1 = isV1 ? 1 : 0;
+        *ConfigurationV2 = isV1 ? 0 : 1;
+    }
+
     TConfigsDispatcherState GetState() const {
         TConfigsDispatcherState state;
         
@@ -211,10 +224,8 @@ public:
             state.ConfigSourceLabel = it->second;
         }
         
-        if (auto it = Labels.find("configuration_version"); it != Labels.end()) {
-            state.ConfigurationVersion = it->second;
-        }
-        
+        state.ConfigurationVersion = ConfigurationVersion.value_or("unknown");
+
         state.HasStorageYaml = !StartupStorageYaml.empty();
         state.StorageYamlSize = StartupStorageYaml.size();
         state.YamlConfigEnabled = YamlConfigEnabled;
@@ -245,6 +256,7 @@ public:
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
             hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
         default:
             EnqueueEvent(ev);
             break;
@@ -272,6 +284,7 @@ public:
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
             hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
             // Ignore these console requests until we get rid of persistent subscriptions-related code
             IgnoreFunc(TEvConsole::TEvAddConfigSubscriptionResponse);
             IgnoreFunc(TEvConsole::TEvGetNodeConfigResponse);
@@ -322,6 +335,12 @@ private:
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
     bool YamlConfigEnabled = false;
+<<<<<<< HEAD
+=======
+    // Unknown/deprecated fields detected in the resolved config (recomputed on each change).
+    NKikimrConsole::TYamlConfigUnknownFields ResolvedConfigUnknownFields;
+    std::optional<TString> ConfigurationVersion;
+>>>>>>> 172180913b7 (Make better config version check (#43081))
 
 };
 
@@ -355,13 +374,7 @@ void TConfigsDispatcher::Bootstrap()
     ConfigurationV1 = counters->GetCounter("ConfigurationV1", true);
     ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
 
-    if (Labels.contains("configuration_version")) {
-        if (Labels.at("configuration_version") == "v1") {
-            *ConfigurationV1 = 1;
-        } else {
-            *ConfigurationV2 = 1;
-        }
-    }
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
     auto commonClient = CreateConfigsSubscriber(
         SelfId(),
@@ -494,9 +507,7 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
     if (auto it = Labels.find("config_source"); it != Labels.end()) {
         response.InsertValue("config_source", it->second);
     }
-    if (auto it = Labels.find("configuration_version"); it != Labels.end()) {
-        response.InsertValue("configuration_version", it->second);
-    }
+    response.InsertValue("configuration_version", state.ConfigurationVersion);
     response.InsertValue("has_storage_yaml", state.HasStorageYaml);
     if (state.HasStorageYaml) {
         response.InsertValue("storage_yaml_size", static_cast<i64>(state.StorageYamlSize));
@@ -615,11 +626,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
             DIV_CLASS("alert alert-info") {
                 str << "<style>.alert-info { position: relative; z-index: 1020; }</style>" << Endl;
                 str << "<strong>Configuration version: </strong>";
-                if (Labels.contains("configuration_version")) {
-                    str << Labels.at("configuration_version");
-                } else {
-                    str << "unknown";
-                }
+                str << ConfigurationVersion.value_or("unknown");
             }
 
             DIV_CLASS("tab-left") {
@@ -1424,16 +1431,12 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &
     Send(ev->Sender, Response.Release());
 }
 
+void TConfigsDispatcher::Handle(TEvNodeWardenStorageConfig::TPtr &ev) {
+    UpdateConfigurationVersion(ev->Get()->SelfManagementEnabled ? "v2" : "v1");
+}
+
 void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeConfigurationVersionRequest::TPtr &ev) {
-    TString versionString = "unknown";
-    if (Labels.contains("configuration_version")) {
-        const TString& versionLabel = Labels.at("configuration_version");
-        if (versionLabel == "v1" || versionLabel == "v2") {
-            versionString = versionLabel;
-        } else {
-             BLOG_W("Unexpected value for 'configuration_version' label: " << versionLabel << ". Reporting 'unknown'.");
-        }
-    }
+    const TString versionString = ConfigurationVersion.value_or("unknown");
 
     auto response = std::make_unique<TEvConsole::TEvGetNodeConfigurationVersionResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);

@@ -27,9 +27,8 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
 // Check, caller must reply with HTTPFORBIDDEN when false.
 bool IsTabletDevUiAccessAllowed(
     const TAppData* appData,
-    bool securePathMode,
     TStringBuf pathInfo,
     const TString& userToken,
-    bool isPublicRequest);
+    bool isMonitoringDevUiRequest);
 
 } // namespace NKikimr

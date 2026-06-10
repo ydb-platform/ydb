@@ -213,6 +213,8 @@ ITransactionPtr TClient::AttachTransaction(
     req->set_ping_ancestors(options.PingAncestors);
     YT_OPTIONAL_SET_PROTO(req, pinger_address, options.PingerAddress);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     auto rsp = NConcurrency::WaitFor(req->Invoke())
         .ValueOrThrow();
 
@@ -362,6 +364,8 @@ TFuture<void> TClient::MountTable(
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -381,6 +385,8 @@ TFuture<void> TClient::UnmountTable(
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -397,6 +403,8 @@ TFuture<void> TClient::RemountTable(
 
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -415,6 +423,8 @@ TFuture<void> TClient::FreezeTable(
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -431,6 +441,8 @@ TFuture<void> TClient::UnfreezeTable(
 
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -467,6 +479,8 @@ TFuture<void> TClient::ReshardTable(
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -490,6 +504,8 @@ TFuture<void> TClient::ReshardTable(
 
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -573,6 +589,8 @@ TFuture<void> TClient::AlterTable(
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_transactional_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -607,6 +625,8 @@ TFuture<void> TClient::AlterTableReplica(
     }
 
     ToProto(req->mutable_mutating_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -728,6 +748,8 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
     req->set_path(path);
     ToProto(req->mutable_tablet_indexes(), tabletIndexes);
     req->set_request_errors(options.RequestErrors);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspGetTabletInfosPtr>& rspOrError) {
         const auto& rsp = rspOrError.ValueOrThrow();
@@ -1168,6 +1190,8 @@ TFuture<TCheckPermissionResponse> TClient::CheckPermission(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCheckPermissionPtr& rsp) {
         TCheckPermissionResponse response;
         static_cast<TCheckPermissionResult&>(response) = FromProto<TCheckPermissionResult>(rsp->result());
@@ -1281,6 +1305,8 @@ TFuture<NScheduler::TOperationId> TClient::StartOperation(
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_transactional_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartOperationPtr& rsp) {
         return FromProto<TOperationId>(rsp->operation_id());
     }));
@@ -1299,6 +1325,8 @@ TFuture<void> TClient::AbortOperation(
 
     YT_OPTIONAL_TO_PROTO(req, abort_message, options.AbortMessage);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -1315,6 +1343,8 @@ TFuture<void> TClient::SuspendOperation(
     req->set_abort_running_jobs(options.AbortRunningJobs);
     YT_OPTIONAL_TO_PROTO(req, reason, options.Reason);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -1329,6 +1359,8 @@ TFuture<void> TClient::ResumeOperation(
 
     NScheduler::ToProto(req, operationIdOrAlias);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -1342,6 +1374,8 @@ TFuture<void> TClient::CompleteOperation(
     SetTimeoutOptions(*req, options);
 
     NScheduler::ToProto(req, operationIdOrAlias);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -1359,6 +1393,8 @@ TFuture<void> TClient::UpdateOperationParameters(
     NScheduler::ToProto(req, operationIdOrAlias);
 
     req->set_parameters(ToProto(parameters));
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -1402,6 +1438,8 @@ TFuture<TOperation> TClient::GetOperation(
 
     req->set_include_runtime(options.IncludeRuntime);
     req->set_maximum_cypress_progress_age(ToProto(options.MaximumCypressProgressAge));
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetOperationPtr& rsp) {
         auto attributes = ConvertToAttributes(TYsonStringBuf(rsp->meta()));
@@ -1500,6 +1538,8 @@ TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
         req->set_type(NProto::ConvertJobStderrTypeToProto(*options.Type));
     }
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([req = req] (const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
         YT_VERIFY(rsp->Attachments().size() == 1);
         TGetJobStderrOptions options{.Limit = req->limit(), .Offset = req->offset()};
@@ -1566,6 +1606,8 @@ TFuture<TSharedRef> TClient::GetJobFailContext(
     NScheduler::ToProto(req, operationIdOrAlias);
     ToProto(req->mutable_job_id(), jobId);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobFailContextPtr& rsp) {
         YT_VERIFY(rsp->Attachments().size() == 1);
         return rsp->Attachments().front();
@@ -1589,6 +1631,8 @@ TFuture<std::vector<TJobTraceMeta>> TClient::ListJobTraces(
         req->set_per_process(*options.PerProcess);
     }
     req->set_limit(options.Limit);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListJobTracesPtr& rsp) {
         return FromProto<std::vector<TJobTraceMeta>>(rsp->traces());
@@ -1665,6 +1709,8 @@ TFuture<TListOperationsResult> TClient::ListOperations(
     req->set_enable_ui_mode(options.EnableUIMode);
 
     ToProto(req->mutable_master_read_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListOperationsPtr& rsp) {
         return FromProto<TListOperationsResult>(rsp->result());
@@ -1749,6 +1795,8 @@ TFuture<TListJobsResult> TClient::ListJobs(
 
     ToProto(req->mutable_master_read_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListJobsPtr& rsp) {
         return FromProto<TListJobsResult>(rsp->result());
     }));
@@ -1774,6 +1822,8 @@ TFuture<TYsonString> TClient::GetJob(
     } else {
         req->mutable_legacy_attributes()->set_all(true);
     }
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobPtr& rsp) {
         return TYsonString(rsp->info());
@@ -1893,6 +1943,8 @@ TFuture<TGetFileFromCacheResult> TClient::GetFileFromCache(
 
     ToProto(req->mutable_master_read_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetFileFromCachePtr& rsp) {
         return FromProto<TGetFileFromCacheResult>(rsp->result());
     }));
@@ -1917,6 +1969,8 @@ TFuture<TPutFileToCacheResult> TClient::PutFileToCache(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_master_read_options(), options);
     ToProto(req->mutable_mutating_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPutFileToCachePtr& rsp) {
         return FromProto<TPutFileToCacheResult>(rsp->result());
@@ -1981,6 +2035,8 @@ TFuture<std::vector<TColumnarStatistics>> TClient::GetColumnarStatistics(
 
     ToProto(req->mutable_transactional_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetColumnarStatisticsPtr& rsp) {
         return NYT::FromProto<std::vector<TColumnarStatistics>>(rsp->statistics());
     }));
@@ -2039,6 +2095,8 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
 
     ToProto(req->mutable_transactional_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
@@ -2354,6 +2412,8 @@ TFuture<void> TClient::SuspendCoordinator(
 
     ToProto(req->mutable_coordinator_cell_id(), coordinatorCellId);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -2367,6 +2427,8 @@ TFuture<void> TClient::ResumeCoordinator(
     SetTimeoutOptions(*req, options);
 
     ToProto(req->mutable_coordinator_cell_id(), coordinatorCellId);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }

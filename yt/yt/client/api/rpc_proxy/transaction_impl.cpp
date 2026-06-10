@@ -191,6 +191,7 @@ void TTransaction::Detach()
 
     auto req = Proxy_.DetachTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
     // Fire-and-forget.
     YT_UNUSED_FUTURE(req->Invoke());
 }
@@ -335,6 +336,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 ToProto(req->mutable_prerequisite_options(), options);
                 ToProto(req->mutable_mutating_options(), options);
                 req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
+                SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
                 return req->Invoke();
             }))
         .Apply(
@@ -1079,6 +1081,7 @@ TFuture<void> TTransaction::DoAbort(
 
     auto req = Proxy_.AbortTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
 
     req->Invoke().Subscribe(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspAbortTransactionPtr& rspOrError) {
@@ -1134,7 +1137,7 @@ TFuture<void> TTransaction::SendPing()
     auto req = Proxy_.PingTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
     req->set_ping_ancestors(PingAncestors_);
-    SetControlMultiplexingBandIfNeeded(*req);
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
 
     return req->Invoke().Apply(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspPingTransactionPtr& rspOrError) {
@@ -1344,13 +1347,6 @@ void TTransaction::SubscribeModificationsFlushed(const TModificationsFlushedHand
 void TTransaction::UnsubscribeModificationsFlushed(const TModificationsFlushedHandler& handler)
 {
     ModificationsFlushed_.Unsubscribe(handler);
-}
-
-void TTransaction::SetControlMultiplexingBandIfNeeded(NRpc::TClientRequest& req)
-{
-    if (Client_->GetOptions().EnableControlMultiplexingBand) {
-        req.SetMultiplexingBand(NRpc::EMultiplexingBand::Control);
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

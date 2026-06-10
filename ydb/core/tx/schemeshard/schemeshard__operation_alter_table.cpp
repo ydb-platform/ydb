@@ -796,9 +796,8 @@ static TVector<TString> CollectLocalBloomIndexNames(const TPath& path, TOperatio
     return names;
 }
 
-// KEY_BLOOM_FILTER = DISABLED clears all ByKeyFilterPrefixes on the table, which removes the engine
-// backing of every named prefix bloom index. Drop those scheme objects together with the alter so
-// the catalog stays consistent with the engine. Returns nullopt when this alter isn't a disable.
+// Disabling KEY_BLOOM_FILTER clears all ByKeyFilterPrefixes. Drop the corresponding
+// scheme objects together with the alter to keep the catalog consistent.
 static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilterDisable(
     TOperationId id, const TTxTransaction& tx, const TPath& path, TOperationContext& context)
 {
@@ -823,12 +822,8 @@ static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilter
     return result;
 }
 
-// Row-table prefix bloom filter ADD INDEX (and migration of legacy ByKeyFilterPrefixes): the alter
-// carries named local indexes to register as TTableIndex scheme objects, optionally alongside a
-// partition-config (ByKeyFilterPrefixes) change. Decompose into the table alter (only when there is
-// a real table-level change) plus one CreateNewTableIndex sub-op per index. The engine filter is
-// driven by the alter's PartitionConfig; the index object is metadata. Returns nullopt when the
-// alter carries no local indexes.
+// Decompose ADD INDEX for row-table prefix bloom filters into a table alter
+// (if there are table-level changes) plus one CreateNewTableIndex sub-op per index.
 static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
     TOperationId id, const TTxTransaction& tx, const TPath& path, const TString& name, TOperationContext& context)
 {

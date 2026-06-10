@@ -148,10 +148,9 @@ public:
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 if (internal && TTableIndexInfo::IsLocalIndex(tableIndexCreation.GetType())) {
-                    // Row-table local prefix bloom index (created with CREATE/ALTER TABLE or by the
-                    // local-index migrator). It has no impl table; the parent may be under this same
-                    // operation (CREATE), under-alter (ALTER ADD), or steady (migration) — so only
-                    // reject a foreign concurrent operation on the parent.
+                    // Local indexes have no impl table. The parent may be under this same
+                    // operation (CREATE/ALTER) or steady (migration), so only reject
+                    // foreign concurrent operations.
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId());
                     }

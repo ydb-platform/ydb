@@ -305,9 +305,8 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             for (ui32 i = 0; i < prefixLen; ++i) {
                 indexConfig.AddKeyColumnNames(pkColumns[i]);
             }
-            // Legacy prefixes have no name. Use the same deterministic convention as the describe
-            // synthesis fallback (ydb_convert FillIndexDescriptionImpl): "idx_bloom_<prefixLen>".
-            // This keeps the name stable whether or not the prefix has been migrated yet.
+            // Legacy prefixes have no name. Use a deterministic convention
+            // "idx_bloom_<prefixLen>" to keep the name stable.
             const TString name = TStringBuilder() << "idx_bloom_" << prefixLen;
             if (tablePath->FindChild(name)) {
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

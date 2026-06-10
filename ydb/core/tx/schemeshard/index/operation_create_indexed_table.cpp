@@ -135,9 +135,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         const auto& indexName = indexDescription.GetName();
 
         if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDescription))) {
-            // Local indexes (e.g. row-table prefix bloom filter) have no impl table and no
-            // impl columns. Column validation (e.g. PK-prefix) is done in KQP; here we only
-            // enforce a valid, unique index name and reserve it in the bookkeeping map.
+            // Local indexes have no impl table. Column validation is done in KQP;
+            // here we only enforce a valid, unique index name.
             TPath indexPath = baseTablePath.Child(indexName);
             TString msg = "invalid table index name: ";
             if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
@@ -330,9 +329,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
 
         if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDescription))) {
-            // Local index (e.g. row-table prefix bloom filter) has no impl table: the actual
-            // filter is driven by the table's PartitionConfig (ByKeyFilterPrefixes); the index
-            // object created above is the catalog metadata.
+            // Local index (e.g. row-table prefix bloom filter) has no impl table
             continue;
         }
 

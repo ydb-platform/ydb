@@ -39,8 +39,7 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
         case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
         case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
         case NKikimrSchemeOp::EIndexTypeLocalMinMax: {
-            // Local indexes (e.g. row-table prefix bloom filter) create only the index object
-            // itself: no impl table, no extra shards.
+            // Local indexes create only the index object itself: no impl table, no extra shards.
             res.IndexTableCount = 0;
             break;
         }

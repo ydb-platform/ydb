@@ -514,9 +514,8 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
         }
     }
 
-    // The generic drop path (ESchemeOpDropIndex) only targets row tables (mainTablePath.IsTable()
-    // above). The only local index on a row table is the prefix bloom filter, whose engine backing
-    // is a ByKeyFilterPrefix in the table's partition config.
+    // The generic drop path only targets row tables. The only local index on a row table
+    // is the prefix bloom filter, backed by ByKeyFilterPrefix in the partition config.
     bool isPrefixBloomIndex = false;
     ui32 droppedPrefixLen = 0;
     if (auto it = context.SS->Indexes.find(indexPath.Base()->PathId); it != context.SS->Indexes.end()) {
@@ -527,9 +526,8 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
     TVector<ISubOperation::TPtr> result;
 
     if (isPrefixBloomIndex) {
-        // Row-table prefix bloom filter: no impl table and no datashard secondary index. Removing
-        // the matching ByKeyFilterPrefix from the main table's partition config (and propagating it
-        // to datashards) is modeled as a normal table alter.
+        // Row-table prefix bloom filter has no impl table. Removing the matching ByKeyFilterPrefix
+        // from the main table's partition config is modeled as a normal table alter.
         auto mainTableAltering = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
         auto* alter = mainTableAltering.MutableAlterTable();
         alter->SetName(mainTablePath.LeafName());

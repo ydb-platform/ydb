@@ -16,7 +16,8 @@ permissions:
 jobs:
   ydbdoc-review:
     if: |
-      github.event.label.name == 'doc_translate' 
+      github.event.label.name == 'doc_translate'
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     concurrency:
       group: ydbdoc-review-${{ github.event.pull_request.number }}

@@ -1,6 +1,4 @@
-# doc_verify на translation PR (ветка в upstream или в fork).
-# QA = тот же пайплайн, что после doc_translate (@v0.1.0).
-# Repair-коммит в head-ветку PR (после фикса push URL в action).
+# doc_verify на translation PR (same-repo only; fork PRs skip PAT-backed steps).
 
 name: ydbdoc-review (doc_verify label)
 
@@ -16,7 +14,9 @@ permissions:
 
 jobs:
   ydbdoc-verify:
-    if: github.event.label.name == 'doc_verify'
+    if: |
+      github.event.label.name == 'doc_verify'
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     concurrency:
       group: ydbdoc-verify-${{ github.event.pull_request.number }}

@@ -60,12 +60,12 @@ protected:
 
         LevelSegment->AssignedSstId = SstId;
 
-        auto ratio = MakeIntrusive<NHullComp::TSstRatio>();
+        auto ratio = MakeIntrusive<NHullComp::TSstRatio>(info.CTime);
         ratio->IndexItemsTotal = ratio->IndexItemsKeep = info.Items;
         ratio->IndexBytesTotal = ratio->IndexBytesKeep = info.IdxTotalSize;
         ratio->InplacedDataTotal = ratio->InplacedDataKeep = 0;
         ratio->HugeDataTotal = ratio->HugeDataKeep = 0;
-        LevelSegment->StorageRatio.Set(ratio);
+        LevelSegment->StorageRatio.Set(ratio, info.CTime);
 
         TIdxDiskPlaceHolder placeHolder(SstId);
         placeHolder.Info = info;

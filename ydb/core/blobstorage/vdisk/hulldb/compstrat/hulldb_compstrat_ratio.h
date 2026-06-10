@@ -90,12 +90,12 @@ namespace NKikimr {
             }
 
             static TDuration GetInitialRecalculationAge(const TLevelSstPtr &p, TDuration calcPeriod) {
-                const ui64 calcPeriodUs = calcPeriod.MicroSeconds();
-                if (!calcPeriodUs) {
+                const ui64 calcPeriodSeconds = calcPeriod.Seconds();
+                if (!calcPeriodSeconds) {
                     return calcPeriod;
                 }
 
-                return TDuration::MicroSeconds(IntHash(GetSstId(p)) % calcPeriodUs);
+                return TDuration::Seconds(IntHash(GetSstId(p)) % calcPeriodSeconds);
             }
 
             static TInstant GetInitialCalculationTime(const TLevelSstPtr &p, TInstant startTime, TDuration calcPeriod) {
@@ -108,17 +108,24 @@ namespace NKikimr {
             }
 
             static TInstant GetCalculationTime(const TLevelSstPtr &p, TInstant startTime, TDuration calcPeriod) {
+                TInstant calculationTime = p.SstPtr->StorageRatio.GetCalculationTime();
+                if (calculationTime != TInstant::Zero()) {
+                    return calculationTime;
+                }
+
                 TSstRatioPtr ratio = p.SstPtr->StorageRatio.Get();
+                const TInstant initialCalculationTime = GetInitialCalculationTime(p, startTime, calcPeriod);
                 if (!ratio) {
-                    return TInstant::Zero();
+                    p.SstPtr->StorageRatio.SetCalculationTime(initialCalculationTime);
+                    return initialCalculationTime;
                 }
 
                 if (ratio->Time == TInstant::Zero()) {
                     ratio = MakeIntrusive<TSstRatio>(*ratio);
-                    ratio->Time = GetInitialCalculationTime(p, startTime, calcPeriod);
-                    p.SstPtr->StorageRatio.Set(ratio);
+                    ratio->Time = initialCalculationTime;
                 }
 
+                p.SstPtr->StorageRatio.Set(ratio, ratio->Time);
                 return ratio->Time;
             }
 
@@ -151,7 +158,7 @@ namespace NKikimr {
                 for (const auto &x : vec) {
                     if (startTime >= x.NextCalculationTime) {
                         TSstRatioPtr newRatio = CalculateSstRatio(x.LevelSstPtr.SstPtr, startTime);
-                        x.LevelSstPtr.SstPtr->StorageRatio.Set(newRatio);
+                        x.LevelSstPtr.SstPtr->StorageRatio.Set(newRatio, newRatio->Time);
                         stat.SstsChecked++;
                     } else {
                         stat.BreakedActualRatio = true;

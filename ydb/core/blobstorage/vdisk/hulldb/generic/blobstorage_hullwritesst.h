@@ -676,12 +676,12 @@ namespace NKikimr {
             LevelSegment->AssignedSstId = SstId;
 
             // fill in storage ratio
-            auto ratio = MakeIntrusive<NHullComp::TSstRatio>();
+            auto ratio = MakeIntrusive<NHullComp::TSstRatio>(info.CTime);
             ratio->IndexItemsTotal = ratio->IndexItemsKeep = info.Items;
             ratio->IndexBytesTotal = ratio->IndexBytesKeep = info.IdxTotalSize;
             ratio->InplacedDataTotal = ratio->InplacedDataKeep = info.InplaceDataTotalSize;
             ratio->HugeDataTotal = ratio->HugeDataKeep = info.HugeDataTotalSize;
-            LevelSegment->StorageRatio.Set(ratio);
+            LevelSegment->StorageRatio.Set(ratio, info.CTime);
 
             // write out place holder
             TIdxDiskPlaceHolder placeHolder(SstId);

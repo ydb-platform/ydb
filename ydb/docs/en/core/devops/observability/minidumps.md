@@ -58,7 +58,7 @@ The `ydbd` process environment is not passed to the script, so any parameters it
 
 {% note warning %}
 
-The script is run in the context of the crashed process, from a signal handler. It must be as lightweight as possible at startup; heavy processing (uploading the dump, symbolization, alerting) should be delegated to separate processes launched by the script.
+The script is launched from the crashed process's signal handler via fork/exec. The signal handler blocks until the script exits, so the script should complete quickly. Heavy processing (uploading the dump, symbolization, alerting) should be delegated to background processes that the script spawns before exiting.
 
 {% endnote %}
 

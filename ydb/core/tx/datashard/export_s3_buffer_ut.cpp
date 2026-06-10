@@ -88,7 +88,7 @@ public:
     }
 
     // Tests impl
-    void TestMinBufferSize(ui64 minBufferSize, EDataFormat dataFormat) {
+    void TestMinBufferSize(EDataFormat dataFormat, ui64 minBufferSize) {
         for (ui32 i = 0; i < 10000; ++i) {
             UNIT_ASSERT(CollectKeyValue(dataFormat, i, TString("v") * 20));
             NExportScan::IBuffer::TStats stats;
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             .WithMinBytes(minBufferSize)
             .WithMaxBytes(1'000'000);
 
-        TestMinBufferSize(minBufferSize, dataFormat);
+        TestMinBufferSize(dataFormat, minBufferSize);
     }
 
     Y_UNIT_TEST(MinBufferSizeSmall, EDataFormat) {
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             .WithMinBytes(minBufferSize)
             .WithMaxBytes(1'000'000);
 
-        TestMinBufferSize(minBufferSize, dataFormat);
+        TestMinBufferSize(dataFormat, minBufferSize);
     }
 
     Y_UNIT_TEST(MinBufferSizeWithCompression, EDataFormat) {
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             .WithMinBytes(minBufferSize)
             .WithMaxBytes(1'000'000);
 
-        TestMinBufferSize(minBufferSize, dataFormat);
+        TestMinBufferSize(dataFormat, minBufferSize);
     }
 
     Y_UNIT_TEST(MinBufferSizeWithCompressionAndEncryption, EDataFormat) {
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             .WithMinBytes(minBufferSize)
             .WithMaxBytes(1'000'000);
 
-        TestMinBufferSize(minBufferSize, dataFormat);
+        TestMinBufferSize(dataFormat, minBufferSize);
     }
 }
 

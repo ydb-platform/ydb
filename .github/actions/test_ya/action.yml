@@ -149,6 +149,10 @@ runs:
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
 
+        export TELEGRAM_BOT_TOKEN_FILE=$(mktemp)
+        echo -n "${{ inputs.telegram_ydbot_token }}" > $TELEGRAM_BOT_TOKEN_FILE
+        echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
+
     - name: ya build and test
       id: build
       shell: bash
@@ -447,17 +451,15 @@ runs:
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
-          set +x
           GH_ALERTS_TG_LOGINS='${{ inputs.telegram_alert_logins }}' \
           .github/scripts/report_ram_analyzer.py \
             --report-file "$CURRENT_REPORT" \
             --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
             --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
             --ram-usage-file ram_usage.txt \
-            --bot-token '${{ inputs.telegram_ydbot_token }}' \
+            --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
             --chat-id '${{ inputs.telegram_alert_chat }}' \
             --memory-threshold 97 || true
-          set -x
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

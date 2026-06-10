@@ -462,7 +462,8 @@ private:
             Counters,
             dbCounters,
             ev->Sender,
-            ctx);
+            ctx,
+            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
 
         if (request.Uid) {
             if (compileResult) {
@@ -751,6 +752,10 @@ private:
     void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution, bool isWarmupCompilation) {
         if (QueryCache->FindByUid(compileResult->Uid, false)) {
             QueryCache->Replace(compileResult);
+            // Warmup re-validated an already-cached entry: keep client hit attribution.
+            if (isWarmupCompilation) {
+                QueryCache->MarkWarmupInsert(compileResult->Uid);
+            }
         } else if (keepInCache) {
             if (compileResult->Query) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert query into compile cache, queryId: " << compileResult->Query->SerializeToString());
@@ -766,6 +771,9 @@ private:
                     Counters->CompileQueryCacheEvicted->Inc();
                 };
             }
+            if (isWarmupCompilation) {
+                QueryCache->MarkWarmupInsert(compileResult->Uid);
+            }
         }
     }
 
@@ -775,9 +783,16 @@ private:
         YQL_ENSURE(queryAst.Ast->Root);
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by ast, queryId: " << compileRequest.Query.SerializeToString()
             << ", ast: " << queryAst.Ast->Root->ToString());
-        auto compileResult = QueryCache->FindByAst(compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache);
 
-        if (!compileRequest.FindInCache || HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
+        auto compileResult = QueryCache->FindByAst(
+            compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
+            compileRequest.CompileSettings.IsWarmupCompilation
+                ? EWarmupAttributionMode::Warmup
+                : EWarmupAttributionMode::Client,
+            Counters,
+            compileRequest.TempTablesState);
+
+        if (!compileRequest.FindInCache) {
             compileResult = nullptr;
         }
 
@@ -864,7 +879,9 @@ private:
         if (QueryCache->FindByQuery(query, keepInCache)) {
             return false;
         }
-        if (compileResult->GetAst() && QueryCache->FindByAst(query, *compileResult->GetAst(), keepInCache)) {
+        if (compileResult->GetAst() && QueryCache->FindByAst(
+                query, *compileResult->GetAst(), keepInCache,
+                EWarmupAttributionMode::None, /*counters=*/nullptr)) {
             return false;
         }
         auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, compileResult->CompilationDuration ,std::move(query), compileResult->QueryAst,
@@ -1225,6 +1242,68 @@ void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) 
     }
 }
 
+// Must be called under Lock, only after SID / TempTables rejection checks passed.
+namespace {
+
+// Drops entry on temp-table clash; returns whether an entry existed before the
+// drop so callers can distinguish a rejected hit from a true miss.
+bool RejectOnTempTableClash(
+    TKqpCompileResult::TConstPtr& compileResult,
+    const TKqpTempTablesState::TConstPtr& tempTablesState)
+{
+    const bool hadEntry = static_cast<bool>(compileResult);
+    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
+        compileResult = nullptr;
+    }
+    return hadEntry;
+}
+
+} // anonymous namespace
+
+void TKqpQueryCache::AccountWarmupHitImpl(
+    const TKqpCompileResult::TConstPtr& compileResult,
+    EWarmupAttributionMode mode,
+    const TIntrusivePtr<TKqpCounters>& counters)
+{
+    switch (mode) {
+        case EWarmupAttributionMode::None:
+            return;
+        case EWarmupAttributionMode::Warmup:
+            // Warmup raced a client that already cached this uid -- still
+            // mark so a later client hit is attributed.
+            if (!AtomicGet(WarmupWindowClosedAtomic)) {
+                WarmupPendingHitUids.insert(compileResult->Uid);
+                AtomicSet(WarmupHasPendingAtomic, 1);
+            }
+            return;
+        case EWarmupAttributionMode::Client: {
+            if (WarmupAccountingIsNoopFast()) {
+                return;
+            }
+            if (TryConsumeWarmupHitImpl(compileResult->Uid)) {
+                Y_ABORT_UNLESS(counters, "Client warmup attribution requires counters");
+                counters->WarmupHitsInWindow->Inc();
+                counters->WarmupSavedCompileMs->Add(compileResult->CompilationDuration.MilliSeconds());
+            }
+            return;
+        }
+    }
+}
+
+// Must be called under Lock. For true misses only (rejected hits filter out earlier).
+void TKqpQueryCache::AccountWarmupMissImpl(
+    EWarmupAttributionMode mode,
+    const TIntrusivePtr<TKqpCounters>& counters)
+{
+    if (mode != EWarmupAttributionMode::Client || WarmupAccountingIsNoopFast()) {
+        return;
+    }
+    if (ShouldCountWarmupMissImpl()) {
+        Y_ABORT_UNLESS(counters, "Client warmup attribution requires counters");
+        counters->WarmupMissesInWindow->Inc();
+    }
+}
+
 // find by either uid or query
 TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     const TMaybe<TString>& uid,
@@ -1235,7 +1314,8 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     TIntrusivePtr<TKqpCounters> counters,
     TKqpDbCountersPtr& dbCounters,
     const TActorId& sender,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    EWarmupAttributionMode warmupAttribution)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1246,9 +1326,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
         counters->ReportCompileRequestGet(dbCounters);
 
         auto compileResult = FindByUidImpl(*uid, promote);
-        if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-            compileResult = nullptr;
-        }
+        const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
@@ -1259,6 +1337,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
                     << ", sender: " << sender
                     << ", queryUid: " << *uid);
 
+                AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
                 return compileResult;
             } else {
                 LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
@@ -1269,6 +1348,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
             }
         }
 
+        // hadEntry => uid was present but rejected (SID / TempTables) -- not a true miss.
+        if (!hadEntry) {
+            AccountWarmupMissImpl(warmupAttribution, counters);
+        }
         return nullptr;
     }
 
@@ -1283,9 +1366,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by queryId, queryId: "
         << query->SerializeToString());
     auto compileResult = FindByQueryImpl(*query, promote);
-    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-        return nullptr;
-    }
+    const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
     if (compileResult) {
         counters->ReportQueryCacheHit(dbCounters, true);
@@ -1293,7 +1374,12 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
             << ", sender: " << sender
             << ", queryUid: " << compileResult->Uid);
 
+        AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
         return compileResult;
+    }
+
+    if (!hadEntry) {
+        AccountWarmupMissImpl(warmupAttribution, counters);
     }
 
     // note, we don't report cache miss, because it's up to caller to decide what to do:
@@ -1305,7 +1391,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     const TKqpQueryId& query,
     const NYql::TAstParseResult& ast,
-    bool promote)
+    bool promote,
+    EWarmupAttributionMode warmupAttribution,
+    TIntrusivePtr<TKqpCounters> counters,
+    TKqpTempTablesState::TConstPtr tempTablesState)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1314,7 +1403,13 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
         return nullptr;
     }
 
-    return FindByUidImpl(*uid, promote);
+    auto compileResult = FindByUidImpl(*uid, promote);
+    RejectOnTempTableClash(compileResult, tempTablesState);
+
+    if (compileResult) {
+        AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
+    }
+    return compileResult;
 }
 
 TVector<TKqpQueryCacheSnapshot::TEntry> TKqpQueryCache::GetSnapshot() const {
@@ -1345,6 +1440,44 @@ void TKqpQueryCache::Clear() {
     AstIndex.clear();
     ByteSize = 0;
     Snapshot.Clear();
+    WarmupPendingHitUids.clear();
+    WarmupWindowStart = TInstant::Zero();
+    WarmupWindowOpened = false;
+    AtomicSet(WarmupWindowClosedAtomic, 0);
+    AtomicSet(WarmupHasPendingAtomic, 0);
+}
+
+void TKqpQueryCache::MarkWarmupInsert(const TString& uid) {
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return;
+    }
+    TGuard<TAdaptiveLock> guard(Lock);
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return;
+    }
+    WarmupPendingHitUids.insert(uid);
+    AtomicSet(WarmupHasPendingAtomic, 1);
+}
+
+bool TKqpQueryCache::RefreshWarmupWindowStateImpl() {
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return false;
+    }
+    if (!WarmupWindowOpened) {
+        if (WarmupPendingHitUids.empty()) {
+            return false;
+        }
+        WarmupWindowOpened = true;
+        WarmupWindowStart = TAppData::TimeProvider->Now();
+        return true;
+    }
+    if (TAppData::TimeProvider->Now() - WarmupWindowStart >= WarmupObservationWindow) {
+        WarmupWindowOpened = false;
+        AtomicSet(WarmupWindowClosedAtomic, 1);
+        WarmupPendingHitUids.clear();
+        return false;
+    }
+    return true;
 }
 
 void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResult) {

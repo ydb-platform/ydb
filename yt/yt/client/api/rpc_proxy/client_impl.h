@@ -567,7 +567,7 @@ public:
 
     TFuture<NQueryTrackerClient::TQueryId> StartQuery(
         NQueryTrackerClient::EQueryEngine engine,
-        const TString& query,
+        const std::string& query,
         const TStartQueryOptions& options) override;
 
     TFuture<void> AbortQuery(

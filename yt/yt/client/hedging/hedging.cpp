@@ -241,7 +241,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const std::string&, const TIssueTokenOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const std::string&, const std::string&, const TRevokeTokenOptions&));
     UNSUPPORTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const std::string&, const TListUserTokensOptions&));
-    UNSUPPORTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const TString&, const TStartQueryOptions&));
+    UNSUPPORTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const std::string&, const TStartQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortQuery, (NQueryTrackerClient::TQueryId, const TAbortQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<TQueryResult>, GetQueryResult, (NQueryTrackerClient::TQueryId, i64, const TGetQueryResultOptions&));
     UNSUPPORTED_METHOD(TFuture<IUnversionedRowsetPtr>, ReadQueryResult, (NQueryTrackerClient::TQueryId, i64, const TReadQueryResultOptions&));

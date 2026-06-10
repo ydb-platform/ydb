@@ -10,6 +10,9 @@ namespace NKikimr {
     TString MaskTicket(TStringBuf token);
     TString MaskTicket(const TString& token);
 
+    TString SanitizeTicket(TStringBuf token);
+    TString SanitizeTicket(const TString& token);
+
     TString MaskIAMTicket(const TString& token);
 
     TString MaskNebiusTicket(const TString& token);

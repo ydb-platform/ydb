@@ -355,13 +355,18 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     };
 
     // Initial stages.
+    // Expand aggregation.
+    TVector<std::unique_ptr<IRule>> expandAggregationRules;
+    expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
+
     // Inline join filters. FIXME: Move after inlining when adding support for more advanced decorelation
     TVector<std::unique_ptr<IRule>> joinFiltersInlineRules;
     joinFiltersInlineRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     joinFiltersInlineRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline join filters", std::move(joinFiltersInlineRules)));
 
-    // Predicate pull-up stage.
+    // Predicate pull-up and subplan inlining and decorelation stages.
     TVector<std::unique_ptr<IRule>> filterPullUpRules;
     filterPullUpRules.emplace_back(std::make_unique<TPullUpCorrelatedFilterRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));
@@ -375,7 +380,13 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     TVector<std::unique_ptr<IRule>> inlineSimpleSubPlanStageRules;
     inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
+    inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineGenericInExistsSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline in/exists subplans", std::move(inlineSimpleSubPlanStageRules)));
+
+    // Rewrite all right joins into left joins
+    TVector<std::unique_ptr<IRule>> rewriteRightJoinsStageRules;
+    rewriteRightJoinsStageRules.emplace_back(std::make_unique<TRewriteRightJoinRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Rewrite right joins", std::move(rewriteRightJoinsStageRules)));
 
     // Normalize aliases and simple maps before the broader logical rewrites start.
     TVector<std::unique_ptr<IRule>> mapAliasRules;
@@ -390,6 +401,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    logicalStageRules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
 

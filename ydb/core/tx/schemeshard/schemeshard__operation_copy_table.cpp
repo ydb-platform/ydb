@@ -757,6 +757,7 @@ public:
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
+            .EnableDetailedMetrics = true,
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
@@ -1066,6 +1067,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                 case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                     // no specialized index description
                     Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
@@ -1076,6 +1078,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                     *operation->MutableFulltextIndexDescription() =
                         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
                     break;

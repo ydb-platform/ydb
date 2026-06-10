@@ -486,6 +486,49 @@ Y_UNIT_TEST_SUITE(Transfer)
         CheckCommittedOffset(false);
     }
 
+    void CheckCommittedOffsetEmptyBatch(bool local)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    $json = CAST($x._data AS JSON);
+                    return IF (JSON_EXISTS($json, "$.update"), [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ], []);
+                };
+        )", MainTestCase::CreateTransferSettings::WithLocalTopic(local));
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckCommittedOffset(0, 1);
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(CheckCommittedOffsetEmptyBatch_Local) {
+        CheckCommittedOffsetEmptyBatch(true);
+    }
+
+    Y_UNIT_TEST(CheckCommittedOffsetEmptyBatch_Remote) {
+        CheckCommittedOffsetEmptyBatch(false);
+    }
+
     Y_UNIT_TEST(DropTransfer)
     {
         MainTestCase testCase;

@@ -111,6 +111,15 @@ TString MaskTicket(const TString& token) {
     return MaskTicket(TStringBuf(token));
 }
 
+// Same as the default branch of TTokenRecordBase::GetSanitizedTicket() for opaque tokens.
+TString SanitizeTicket(TStringBuf token) {
+    return MaskTicket(token);
+}
+
+TString SanitizeTicket(const TString& token) {
+    return SanitizeTicket(TStringBuf(token));
+}
+
 TString MaskIAMTicket(const TString& token) {
     static constexpr TStringBuf hiddenValue = "*** hidden ***";
     static constexpr TStringBuf id = "t1";

@@ -6429,10 +6429,6 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
-    if (!Ctx_.EnsureAvailable(Ctx_.Pos(), NYql::NFeature::YqlSelect)) {
-        return nullptr;
-    }
-
     TNodeResult result = std::unexpected(ESQLError::Basic);
     {
         Ctx_.SetYqlSelectMode(mode);
@@ -6440,7 +6436,21 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
             Ctx_.SetYqlSelectMode(prevMode);
         };
 
-        result = yqlSelect();
+        bool isAnyIncompatiblePragma = false;
+        for (const auto& [prefix, pragma] : Ctx_.Scoped->ActivePragmas) {
+            if (IsYqlSelectCompatiblePragma(prefix, pragma)) {
+                continue;
+            }
+
+            UnsupportedYqlSelect(Ctx_, TStringBuilder() << "Pragma '" << pragma << "'");
+            isAnyIncompatiblePragma = true;
+        }
+
+        if (!isAnyIncompatiblePragma) {
+            result = yqlSelect();
+        } else {
+            result = std::unexpected(ESQLError::UnsupportedYqlSelect);
+        }
     }
 
     if (result) {

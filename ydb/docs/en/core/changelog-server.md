@@ -31,9 +31,9 @@ Release date: June 5, 2026.
 
 ## Version 25.3 {#25-3}
 
-### Version 25.3.1.25 {#25-3-1-25}
+### Version 25.3.1.27 {#25-3-1-27}
 
-Release date: April 3, 2026.
+Release date: May 20, 2026.
 
 #### Functionality
 
@@ -46,6 +46,9 @@ Release date: April 3, 2026.
 
 #### Bug Fixes
 
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one who is not a member of a group allowed to access {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (LDAP search filter injection; special characters are now escaped per RFC 2254).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/33758) an issue that caused a server-side session leak.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/36926) an issue where, in rare cases, reads from a table could block its deletion.
 * [Fixed ](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
 * [Fixed behavior ](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18088) nconsistent results in some read-write transactions — conflicting writes no longer overwrite uncommitted changes.
@@ -62,12 +65,13 @@ Release date: April 3, 2026.
 
 ## Version 25.2 {#25-2}
 
-### Version 25.2.1.24 {#25-2-1-24}
+### Version 25.2.1.26 {#25-2-1-26}
 
-Release date: January 28, 2026.
+Release date: May 12, 2026.
 
 #### Bug Fixes
 
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one not in a group with access to {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (injection into the LDAP user search filter; added escaping of special characters per RFC 2254).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/25112) an [issue](https://github.com/ydb-platform/ydb/issues/23858) where [tablet](./concepts/glossary.md#tablet) deletion might get stuck
 * [Fixed](https://github.com/ydb-platform/ydb/pull/25145) an [issue](https://github.com/ydb-platform/ydb/issues/20866) that caused an error when changing a table's follower
 * Fixed a couple of [changefeed](./concepts/glossary.md#changefeed) related issues:
@@ -116,9 +120,9 @@ Release date: September 21, 2025.
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.4.7 {#25-1-4-7}
+### Version 25.1.4.18 {#25-1-4-18}
 
-Release date: September 15, 2025.
+Release date: May 12, 2026.
 
 #### Functionality
 
@@ -141,6 +145,7 @@ Release date: September 15, 2025.
 
 #### Bug fixes
 
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one not in a group with access to {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (injection into the LDAP user search filter; added escaping of special characters per RFC 2254).
 * [Added support](https://github.com/ydb-platform/ydb/pull/21918) for a new kind of change record in asynchronous replication — `reset` record (in addition to `update` & `erase` records).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/21836) an [issue](https://github.com/ydb-platform/ydb/issues/21814) where a replication instance with an unspecified `COMMIT_INTERVAL` option caused the process to crash.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/21652) rare errors when reading from a topic during partition balancing.

@@ -497,7 +497,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const std::string&, const TIssueTokenOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const std::string&, const std::string&, const TRevokeTokenOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const std::string&, const TListUserTokensOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const TString&, const TStartQueryOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const std::string&, const TStartQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AbortQuery, (NQueryTrackerClient::TQueryId, const TAbortQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IUnversionedRowsetPtr>, ReadQueryResult, (NQueryTrackerClient::TQueryId, i64, const TReadQueryResultOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TQuery>, GetQuery, (NQueryTrackerClient::TQueryId, const TGetQueryOptions&));

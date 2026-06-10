@@ -60,6 +60,15 @@ void ThrowUnimplemented(const TString& method)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetControlMultiplexingBandIfEnabled(NRpc::TClientRequest& req, const TConnectionConfigPtr& config)
+{
+    if (config->EnableControlMultiplexingBand) {
+        req.SetMultiplexingBand(NRpc::EMultiplexingBand::Control);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NProto {
 
 using NYT::ToProto;

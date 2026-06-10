@@ -6346,7 +6346,6 @@ Y_UNIT_TEST(WarnForAggregationBySelectAlias) {
 
 Y_UNIT_TEST(WarnForAggregationBySelectAliasAsErrorStrict) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.Flags.emplace("StrictWarningAsError");
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
             PRAGMA Warning("error", "*");
@@ -11774,6 +11773,7 @@ Y_UNIT_TEST(DeduplicationSameSource) {
 } // Y_UNIT_TEST_SUITE(Aggregation)
 
 Y_UNIT_TEST_SUITE(AggregationPhases) {
+
 Y_UNIT_TEST(TwoArg) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::AggPhases.MinLangVer;
@@ -11789,7 +11789,7 @@ Y_UNIT_TEST(TwoArg) {
 
 Y_UNIT_TEST(SingleArg) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::NFeature::AggPhases.MaxLangVer;
+    settings.LangVer = NYql::NFeature::AggPhases.MinLangVer;
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         SELECT AvgIf(a) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k WITH CombineState;
@@ -11798,6 +11798,18 @@ Y_UNIT_TEST(SingleArg) {
 
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
+
+Y_UNIT_TEST(Distinct) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::AggPhases.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Avg(DISTINCT a) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k WITH CombineState;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Distinct is not supported with aggregation phases");
+}
+
 } // Y_UNIT_TEST_SUITE(AggregationPhases)
 
 Y_UNIT_TEST_SUITE(Watermarks) {
@@ -14927,6 +14939,60 @@ Y_UNIT_TEST(AnsiCurrentRow) {
     check("", /*      */ "rows", "up", "uf", {});
     check("ORDER BY ts", "range", "up", "c", {"AnsiCurrentRow"});
     check("", /*      */ "rows", "up", "uf", {"AnsiCurrentRow"});
+}
+
+Y_UNIT_TEST(PragmaSupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiCurrentRow;
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(PragmaUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA SimpleColumns;
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: Pragma 'simplecolumns'");
+}
+
+Y_UNIT_TEST(PragmaUnsupportedBefore) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA SimpleColumns;
+        PRAGMA YqlSelect = 'force';
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: Pragma 'simplecolumns'");
+}
+
+Y_UNIT_TEST(PragmaUnsupportedAuto) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        PRAGMA SimpleColumns;
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

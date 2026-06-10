@@ -1,3 +1,5 @@
+#include "sql2yql.h"
+
 #include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <yql/essentials/sql/v1/context.h>
@@ -428,9 +430,48 @@ try {
     return valueBuilder->NewString(TString(e.what()));
 }
 
+using TSql2YqlResult = TTuple<
+    /*IsOk=*/bool,
+    /*Issues=*/TListType<char*>>;
+
+SIMPLE_UDF(TSql2Yql, TSql2YqlResult(
+                         TAutoMap<char*> /* query */,
+                         TAutoMap<char*> /* langversion */,
+                         TAutoMap<char*> /* gateways */))
+try {
+    NYqlLangModule::TSql2YqlInput input = {
+        .Query = TString(args[0].AsStringRef()),
+        .LangVersion = TString(args[1].AsStringRef()),
+        .GatewaysCfg = TString(args[2].AsStringRef()),
+    };
+
+    NYqlLangModule::TSql2YqlOutput output = NYqlLangModule::Sql2Yql(input);
+
+    auto listBuilder = valueBuilder->NewListBuilder();
+    for (const auto& issue : output.Issues) {
+        listBuilder->Add(valueBuilder->NewString(issue));
+    }
+
+    TUnboxedValue* items;
+    auto tuple = valueBuilder->NewArray(2, items);
+    items[0] = TUnboxedValuePod(output.IsOk);
+    items[1] = listBuilder->Build();
+    return tuple;
+} catch (...) {
+    auto listBuilder = valueBuilder->NewListBuilder();
+    listBuilder->Add(valueBuilder->NewString(CurrentExceptionMessage()));
+
+    TUnboxedValue* items;
+    auto tuple = valueBuilder->NewArray(2, items);
+    items[0] = TUnboxedValuePod(false);
+    items[1] = listBuilder->Build();
+    return tuple;
+}
+
 SIMPLE_MODULE(TYqlLangModule,
               TObfuscate,
               TRuleFreq,
-              TTestSyntax);
+              TTestSyntax,
+              TSql2Yql);
 
 REGISTER_MODULES(TYqlLangModule);

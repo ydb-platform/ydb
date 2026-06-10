@@ -6,6 +6,7 @@
 #include "util.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
@@ -24,10 +25,12 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
+#include <util/string/subst.h>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
 #error log macro definition clash
@@ -215,6 +218,7 @@ public:
     void Handle(TEvConsole::TEvGetNodeConfigurationVersionRequest::TPtr &ev);
     void Handle(TEvConfigsDispatcher::TEvGetStateRequest::TPtr &ev);
     void Handle(TEvConfigsDispatcher::TEvGetStorageYamlRequest::TPtr &ev);
+    void Handle(TEvNodeWardenStorageConfig::TPtr &ev);
 
     void ReplyMonJson(TActorId mailbox);
     
@@ -226,7 +230,14 @@ public:
         }
         return EConfigSource::DynamicConfig;
     }
-    
+
+    void UpdateConfigurationVersion(TString version) {
+        ConfigurationVersion = std::move(version);
+        const bool isV1 = *ConfigurationVersion == "v1";
+        *ConfigurationV1 = isV1 ? 1 : 0;
+        *ConfigurationV2 = isV1 ? 0 : 1;
+    }
+
     TConfigsDispatcherState GetState() const {
         TConfigsDispatcherState state;
         
@@ -237,10 +248,8 @@ public:
             state.ConfigSourceLabel = it->second;
         }
         
-        if (auto it = Labels.find("configuration_version"); it != Labels.end()) {
-            state.ConfigurationVersion = it->second;
-        }
-        
+        state.ConfigurationVersion = ConfigurationVersion.value_or("unknown");
+
         state.HasStorageYaml = !StartupStorageYaml.empty();
         state.StorageYamlSize = StartupStorageYaml.size();
         state.YamlConfigEnabled = YamlConfigEnabled;
@@ -273,6 +282,7 @@ public:
             hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
             // A fan-out may begin in StateInit and must keep draining here too.
             hFuncTraced(TEvPrivate::TEvProcessSendQueue, Handle);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
         default:
             EnqueueEvent(ev);
             break;
@@ -300,6 +310,7 @@ public:
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
             hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
             // Ignore these console requests until we get rid of persistent subscriptions-related code
             IgnoreFunc(TEvConsole::TEvAddConfigSubscriptionResponse);
             IgnoreFunc(TEvConsole::TEvGetNodeConfigResponse);
@@ -362,6 +373,9 @@ private:
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
     bool YamlConfigEnabled = false;
+    // Unknown/deprecated fields detected in the resolved config (recomputed on each change).
+    NKikimrConsole::TYamlConfigUnknownFields ResolvedConfigUnknownFields;
+    std::optional<TString> ConfigurationVersion;
 
 };
 
@@ -400,13 +414,7 @@ void TConfigsDispatcher::Bootstrap()
     // buckets 256B..16MB
     ConfigPayloadBytes = counters->GetHistogram("ConfigPayloadBytes", NMonitoring::ExponentialHistogram(17, 2, 256));
 
-    if (Labels.contains("configuration_version")) {
-        if (Labels.at("configuration_version") == "v1") {
-            *ConfigurationV1 = 1;
-        } else {
-            *ConfigurationV2 = 1;
-        }
-    }
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
     auto commonClient = CreateConfigsSubscriber(
         SelfId(),
@@ -565,11 +573,28 @@ TConfigsDispatcher::TSubscriber::TPtr TConfigsDispatcher::FindSubscriber(TActorI
     return nullptr;
 }
 
+static NJson::TJsonValue UnknownFieldsToJsonArray(const NKikimrConsole::TYamlConfigUnknownFields& fields) {
+    NProtobufJson::TProto2JsonConfig cfg;
+    cfg.SetFieldNameMode(NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense);
+
+    NJson::TJsonValue array(NJson::JSON_ARRAY);
+    for (const auto& f : fields.GetFields()) {
+        NJson::TJsonValue item;
+        NProtobufJson::Proto2Json(f, item, cfg);
+        array.AppendValue(std::move(item));
+    }
+    return array;
+}
+
 NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 {
     NKikimrConfig::TAppConfig newYamlProtoConfig = {};
 
+    ResolvedConfigUnknownFields.Clear();
+
     try {
+        auto unknownFieldsCollector = MakeSimpleShared<NYamlConfig::TBasicUnknownFieldsCollector>();
+
         NYamlConfig::ResolveAndParseYamlConfig(
             MainYamlConfig,
             VolatileYamlConfigs,
@@ -577,7 +602,17 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             newYamlProtoConfig,
             DatabaseYamlConfig,
             &ResolvedYamlConfig,
-            &ResolvedJsonConfig);
+            &ResolvedJsonConfig,
+            unknownFieldsCollector);
+
+        const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+        for (const auto& [path, info] : unknownFieldsCollector->GetUnknownKeys()) {
+            auto *f = ResolvedConfigUnknownFields.AddFields();
+            f->SetPath(path);
+            f->SetName(info.first);
+            f->SetProto(info.second);
+            f->SetDeprecated(deprecatedPaths.contains(path));
+        }
     } catch (const yexception& ex) {
         BLOG_ERROR("Got invalid config from console error# " << ex.what());
     }
@@ -617,15 +652,15 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
 
     response.InsertValue("yaml_config", MainYamlConfig);
     response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
+
+    response.InsertValue("unknown_fields", UnknownFieldsToJsonArray(ResolvedConfigUnknownFields));
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
     
     auto state = GetState();
     if (auto it = Labels.find("config_source"); it != Labels.end()) {
         response.InsertValue("config_source", it->second);
     }
-    if (auto it = Labels.find("configuration_version"); it != Labels.end()) {
-        response.InsertValue("configuration_version", it->second);
-    }
+    response.InsertValue("configuration_version", state.ConfigurationVersion);
     response.InsertValue("has_storage_yaml", state.HasStorageYaml);
     if (state.HasStorageYaml) {
         response.InsertValue("storage_yaml_size", static_cast<i64>(state.StorageYamlSize));
@@ -694,8 +729,22 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                 str << "{'nodeName':'" << node.Host << "'}, ";
             }
 
-            str << "];" << Endl
-                << "</script>" << Endl
+            str << "];" << Endl;
+
+            // path/name/proto come from user-uploaded YAML keys, so emitting them raw into a JS
+            // string literal would allow breaking out of the string or injecting script. JSON
+            // encoding escapes that; we additionally escape "</" so a value cannot terminate the
+            // surrounding <script> block prematurely.
+            {
+                NJson::TJsonValue unknownFieldsJson = UnknownFieldsToJsonArray(ResolvedConfigUnknownFields);
+                TStringStream unknownFieldsStream;
+                NJson::WriteJson(&unknownFieldsStream, &unknownFieldsJson, {});
+                TString unknownFieldsStr = unknownFieldsStream.Str();
+                SubstGlobal(unknownFieldsStr, "</", "<\\/");
+                str << "var unknownFields = " << unknownFieldsStr << ";" << Endl;
+            }
+
+            str << "</script>" << Endl
                 << "<script src='../cms/ext/fuse.min.js'></script>" << Endl
                 << "<script src='../cms/common.js'></script>" << Endl
                 << "<script src='../cms/ext/fuzzycomplete.min.js'></script>" << Endl
@@ -739,11 +788,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
             DIV_CLASS("alert alert-info") {
                 str << "<style>.alert-info { position: relative; z-index: 1020; }</style>" << Endl;
                 str << "<strong>Configuration version: </strong>";
-                if (Labels.contains("configuration_version")) {
-                    str << Labels.at("configuration_version");
-                } else {
-                    str << "unknown";
-                }
+                str << ConfigurationVersion.value_or("unknown");
             }
 
             DIV_CLASS("tab-left") {
@@ -984,6 +1029,10 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                 str << "No storage config available. This is normal for non-seed-nodes initialization." << Endl;
                                 str << "</div>" << Endl;
                             }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("resolved-unknown-fields", "Unknown fields") {
+                            TAG_ATTRS(TDiv, {{"id", "resolved-unknown-fields-list"}, {"class", "unknown-fields-list"}}) { }
                         }
                         str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("resolved-yaml-config", "Resolved YAML config") {
@@ -1599,16 +1648,12 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &
     Send(ev->Sender, Response.Release());
 }
 
+void TConfigsDispatcher::Handle(TEvNodeWardenStorageConfig::TPtr &ev) {
+    UpdateConfigurationVersion(ev->Get()->SelfManagementEnabled ? "v2" : "v1");
+}
+
 void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeConfigurationVersionRequest::TPtr &ev) {
-    TString versionString = "unknown";
-    if (Labels.contains("configuration_version")) {
-        const TString& versionLabel = Labels.at("configuration_version");
-        if (versionLabel == "v1" || versionLabel == "v2") {
-            versionString = versionLabel;
-        } else {
-             BLOG_W("Unexpected value for 'configuration_version' label: " << versionLabel << ". Reporting 'unknown'.");
-        }
-    }
+    const TString versionString = ConfigurationVersion.value_or("unknown");
 
     auto response = std::make_unique<TEvConsole::TEvGetNodeConfigurationVersionResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);

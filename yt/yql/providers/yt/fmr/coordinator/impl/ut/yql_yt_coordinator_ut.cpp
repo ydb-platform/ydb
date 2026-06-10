@@ -455,6 +455,39 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         auto listResponse3 = coordinator->ListSessions({}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(listResponse3.SessionIds.size(), 0);
     }
+
+    Y_UNIT_TEST(WaitForOperationsCompletedBeforeTimeout) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        auto worker = setup.GetFmrWorker(coordinator);
+
+        auto waitResponse = coordinator->WaitForOperations({
+            .OperationIds = {operationId},
+            .Timeout = TDuration::Seconds(10),
+        }).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations[0].OperationId, operationId);
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations[0].Status, EOperationStatus::Completed);
+    }
+
+    Y_UNIT_TEST(WaitForOperationsTimeoutWithNoWorker) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        // No worker started — operation stays in Accepted, timeout should elapse.
+        auto waitResponse = coordinator->WaitForOperations({
+            .OperationIds = {operationId},
+            .Timeout = TDuration::Seconds(1),
+        }).GetValueSync();
+
+        UNIT_ASSERT(waitResponse.FinalizedOperations.empty());
+    }
 }
 
 } // namespace NYql::NFmr

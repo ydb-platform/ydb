@@ -63,6 +63,13 @@ class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
+class TInlineGenericInExistsSubplanRule : public ISimplifiedRule {
+  public:
+    TInlineGenericInExistsSubplanRule() : ISimplifiedRule("Inline generic in or exists subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
 /**
  * Inline join filters
  */
@@ -73,6 +80,39 @@ class TInlineJoinFiltersRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
+/**
+ * Rewrite right join into left join
+ * Swap arguments and rearrange join conditions
+ */
+class TRewriteRightJoinRule : public ISimplifiedRule {
+  public:
+    TRewriteRightJoinRule() : ISimplifiedRule("Rewrite right join", ERuleProperties::RequireParents ) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Remove a left join when the right side cannot change left-side row multiplicity
+ * and no right-side output is used above the join.
+ */
+class TEliminateLeftJoinRule : public ISimplifiedRule {
+  public:
+    TEliminateLeftJoinRule() : ISimplifiedRule("Eliminate left join", ERuleProperties::RequireParents | ERuleProperties::RequireMetadata | ERuleProperties::RequireLiveness) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Expand distinct aggregation.
+ */
+class TExpandDistinctAggregationRule: public ISimplifiedRule {
+public:
+    TExpandDistinctAggregationRule()
+        : ISimplifiedRule("Expand distinct aggregation rule", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+    }
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
 
 /***
  * Fuse two consequtive filters

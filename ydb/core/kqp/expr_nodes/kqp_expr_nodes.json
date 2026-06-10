@@ -848,6 +848,14 @@
             ]
         },
         {
+            "Name": "TKqpStreamEnumerate",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpStreamEnumerate"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOpRead",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},
@@ -950,12 +958,13 @@
             ]
         },
         {
-            "Name": "TKqpOpUnionAll",
+            "Name": "TKqpOpSetOp",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpUnionAll"},
+            "Match": {"Type": "Callable", "Name": "KqpOpSetOp"},
             "Children": [
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
-                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"}
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "SetOp", "Type": "TCoAtom"}
             ]
         },
         {
@@ -1017,7 +1026,8 @@
             "Children": [
                 {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Distinct", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

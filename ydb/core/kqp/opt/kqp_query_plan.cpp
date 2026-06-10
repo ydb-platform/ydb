@@ -803,7 +803,9 @@ private:
                 auto literal = TString(query.Cast<TCoDataCtor>().Literal());
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance);
 
                 auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
                 for(const auto& column: readColumns) {
@@ -844,7 +846,8 @@ private:
 
         std::vector<TString> tokens;
         if (settings.Tokens) {
-            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson ||
+                indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact);
 
             for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
                 auto pair = token.Cast<TExprList>();
@@ -1311,6 +1314,15 @@ private:
             operatorId = Visit(maybeReadRanges.Cast(), planNode);
         } else if (auto maybeLookup = TMaybeNode<TKqlLookupTableBase>(node)) {
             operatorId = Visit(maybeLookup.Cast(), planNode);
+        } else if (node->IsCallable({"Map", "FlatMap", "OrderedMap", "OrderedFlatMap"}) && node->ChildrenSize() >= 2
+            && FindNode(node->ChildPtr(1), [](const TExprNode::TPtr& n) {
+                   auto udf = TMaybeNode<TCoUdf>(n);
+                   return udf && udf.Cast().MethodName().Value().StartsWith("HybridSearch.");
+               })) {
+            // The Reciprocal Rank Fusion step uniquely identifies a hybrid-search (HybridRank) query.
+            TOperator op;
+            op.Properties["Name"] = "HybridSearch";
+            operatorId = AddOperator(planNode, "HybridSearch", std::move(op));
         } else if (auto maybeFilter = TMaybeNode<TCoFilterBase>(node)) {
             operatorId = Visit(maybeFilter.Cast(), planNode);
         } else if (auto maybeMapJoin = TMaybeNode<TCoMapJoinCore>(node)) {

@@ -1,4 +1,5 @@
-# doc_verify на translation PR (same-repo only; fork PRs skip PAT-backed steps).
+# doc_verify на translation PR (ветка в upstream или в fork).
+# QA = тот же пайплайн, что после doc_translate (@v0.1.0).
 
 name: ydbdoc-review (doc_verify label)
 
@@ -14,9 +15,7 @@ permissions:
 
 jobs:
   ydbdoc-verify:
-    if: |
-      github.event.label.name == 'doc_verify'
-      && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.label.name == 'doc_verify'
     runs-on: ubuntu-latest
     concurrency:
       group: ydbdoc-verify-${{ github.event.pull_request.number }}
@@ -43,6 +42,23 @@ jobs:
           YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
           YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
-          # YDBOT_TOKEN so verify repair commits trigger PR-check on synchronize.
-          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  trigger-verify-ci:
+    needs: ydbdoc-verify
+    if: ${{ !cancelled() && needs.ydbdoc-verify.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger PR-check on translation PR
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['ok-to-test'],
+            });
+            core.info(`Added ok-to-test to translation PR #${prNumber}`);

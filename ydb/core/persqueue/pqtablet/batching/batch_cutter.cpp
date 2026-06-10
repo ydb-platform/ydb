@@ -5,7 +5,55 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
+
+#include <util/generic/yexception.h>
+#include <util/stream/mem.h>
+#include <util/stream/output.h>
+#include <util/stream/zlib.h>
+
 namespace NKikimr::NPQ::NBatching {
+namespace {
+
+NPersQueueCommon::ECodec ToDataChunkCodec(NKafka::ECompressionType compressionType) {
+    switch (compressionType) {
+        case NKafka::ECompressionType::GZIP:
+            return NPersQueueCommon::GZIP;
+        case NKafka::ECompressionType::ZSTD:
+            return NPersQueueCommon::ZSTD;
+        default:
+            return NPersQueueCommon::RAW;
+    }
+}
+
+TString CompressPayload(TStringBuf data, NPersQueueCommon::ECodec codec) {
+    if (codec == NPersQueueCommon::RAW) {
+        return TString(data);
+    }
+
+    TString result;
+    TStringOutput output(result);
+    switch (codec) {
+        case NPersQueueCommon::GZIP: {
+            TZLibCompress gzip(&output, ZLib::GZip);
+            gzip.Write(data.data(), data.size());
+            gzip.Finish();
+            output.Finish();
+            return result;
+        }
+        case NPersQueueCommon::ZSTD: {
+            TZstdCompress zstd(&output);
+            zstd.Write(data.data(), data.size());
+            zstd.Finish();
+            output.Finish();
+            return result;
+        }
+        default:
+            ythrow yexception() << "unsupported message codec: " << static_cast<int>(codec);
+    }
+}
+
+} // namespace
 
 TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const ui64 readStartOffset) const {
     const NKikimrPQClient::TDataChunk dataChunk = NKikimr::GetDeserializedData(readResult.GetData());
@@ -13,12 +61,14 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
         return {readResult};
     }
 
-    Y_ENSURE(!dataChunk.HasCodec() || dataChunk.GetCodec() == NPersQueueCommon::RAW);
+    Y_ENSURE((!dataChunk.HasCodec() || dataChunk.GetCodec() == NPersQueueCommon::RAW) && readResult.GetUncompressedSize() == 0);
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     if (batch.Records.empty()) {
         return {readResult};
     }
+
+    const auto codec = ToDataChunkCodec(batch.CompressionType());
 
     TVector<TReadResult> result;
     result.reserve(batch.Records.size());
@@ -38,9 +88,10 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
         item.ClearUncompressedSize();
 
         NKikimrPQClient::TDataChunk itemChunk = dataChunk;
-        itemChunk.SetCodec(NPersQueueCommon::RAW);
+        itemChunk.SetCodec(codec);
         if (record.Value) {
-            itemChunk.SetData(TString(record.Value->data(), record.Value->size()));
+            const TString value(record.Value->data(), record.Value->size());
+            itemChunk.SetData(CompressPayload(value, codec));
         } else {
             itemChunk.ClearData();
         }

@@ -23,12 +23,6 @@ void EnsureSupportedCompressionType(ECompressionType compressionType) {
     }
 }
 
-void EnsureValidRecordBatchRecordsCount(TKafkaInt32 recordsCount) {
-    if (recordsCount < 0) {
-        ythrow yexception() << "non-nullable field records was serialized as null";
-    }
-}
-
 TString DecompressRecordBatchPayload(TStringBuf data, ECompressionType compressionType) {
     EnsureSupportedCompressionType(compressionType);
     if (compressionType == ECompressionType::NONE) {
@@ -75,6 +69,12 @@ TString CompressRecordBatchPayload(TStringBuf data, ECompressionType compression
         }
         default:
             ythrow yexception() << "unsupported Kafka record batch compression type: " << static_cast<int>(compressionType);
+    }
+}
+
+void EnsureValidRecordBatchRecordsCount(TKafkaInt32 recordsCount) {
+    if (recordsCount < 0) {
+        ythrow yexception() << "non-nullable field records was serialized as null";
     }
 }
 
@@ -724,4 +724,5 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
     batch.Write(writable, version);
     return buffer.AsString();
 }
+
 } // namespace NKafka

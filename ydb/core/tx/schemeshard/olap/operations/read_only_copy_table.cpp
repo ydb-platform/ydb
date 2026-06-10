@@ -575,7 +575,7 @@ public:
             shardInfo.CurrentTxId = OperationId.GetTxId();
             context.DbChanges.PersistShard(shardIdx);
 
-            context.SS->SharedShards[shardIdx].insert(dstPathId);
+            context.SS->SharedShards[shardIdx][dstPathId] = InvalidTxId;
             context.DbChanges.PersistSharedShard(shardIdx, dstPathId);
         }
 

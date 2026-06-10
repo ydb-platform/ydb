@@ -299,9 +299,9 @@ private:
                     context.OnComplete.DeleteShard(shardIdx);
                 } else {
                     // Owner, there are dependents - we transfer ownership
-                    // Ownership is transferred to the next PathId in sort order
+                    // Ownership is transferred to the next PathId in the shared set
                     AFL_VERIFY(!sharedIt->second.empty());
-                    const auto newOwner = *sharedIt->second.begin();
+                    const auto newOwner = sharedIt->second.begin()->first;
                     shardInfo.PathId = newOwner;
                     context.SS->PersistShardPathId(db, shardIdx, newOwner);
                     context.SS->PathsById.at(newOwner)->IncShardsInside();
@@ -439,8 +439,22 @@ public:
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
 
-                context.SS->ShardInfos[shardIdx].CurrentTxId = opTxId;
-                context.SS->PersistShardTx(db, shardIdx, opTxId);
+                auto& shardInfo = context.SS->ShardInfos[shardIdx];
+                if (shardInfo.PathId == path.Base()->PathId) {
+                    // We are the owner of this shard - set LastTxId on the shard itself
+                    shardInfo.CurrentTxId = opTxId;
+                    context.SS->PersistShardTx(db, shardIdx, opTxId);
+                } else {
+                    // We are a sharer (not the owner) - set LastTxId on our SharedShards entry
+                    auto sharedIt = context.SS->SharedShards.find(shardIdx);
+                    Y_VERIFY_S(sharedIt != context.SS->SharedShards.end(),
+                        "SharedShards entry not found for shardIdx " << shardIdx);
+                    auto pathIt = sharedIt->second.find(path.Base()->PathId);
+                    Y_VERIFY_S(pathIt != sharedIt->second.end(),
+                        "SharedShards entry not found for pathId " << path.Base()->PathId);
+                    pathIt->second = opTxId;
+                    context.SS->PersistSharedShardTx(db, shardIdx, path.Base()->PathId, opTxId);
+                }
             }
         } else {
             auto storePathId = tableInfo->GetOlapStorePathIdVerified();

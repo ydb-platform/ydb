@@ -9623,6 +9623,11 @@
                 "ColumnId": 3,
                 "ColumnName": "LocalPathId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LastTxId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -9631,7 +9636,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

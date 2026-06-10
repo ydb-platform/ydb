@@ -2383,9 +2383,10 @@ struct Schema : NIceDb::Schema {
         struct ShardIdx : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
         struct OwnerPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct LastTxId : Column<4, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<ShardIdx, OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId, LastTxId>;
     };
 
     // Per-sub-op tracking for incremental restore. Each row is created when a

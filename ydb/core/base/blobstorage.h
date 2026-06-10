@@ -1086,13 +1086,7 @@ struct TEvBlobStorage {
         const ETactic Tactic;
         const bool IssueKeepFlag = false;
         const bool IgnoreBlock = false;
-<<<<<<< HEAD
-=======
-        const bool AlreadyEncrypted = false; // when set to true, no encryption is required
-        const bool ReduceInterpileTraffic = false;
-        const bool IsZeroEntry = false;
         const bool FailOnSlowDown = false; // when set, fail the request with ERROR/"SlowDown" instead of retrying
->>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
@@ -1105,13 +1099,7 @@ struct TEvBlobStorage {
             ETactic Tactic = TacticDefault;
             bool IssueKeepFlag = false;
             bool IgnoreBlock = false;
-<<<<<<< HEAD
-=======
-            bool AlreadyEncrypted = false;
-            bool ReduceInterpileTraffic = false;
-            bool IsZeroEntry = false;
             bool FailOnSlowDown = false;
->>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
@@ -1123,13 +1111,7 @@ struct TEvBlobStorage {
             , Tactic(origin.Tactic)
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
-<<<<<<< HEAD
-=======
-            , AlreadyEncrypted(origin.AlreadyEncrypted)
-            , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
-            , IsZeroEntry(origin.IsZeroEntry)
             , FailOnSlowDown(origin.FailOnSlowDown)
->>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             , ExtraBlockChecks(origin.ExtraBlockChecks)
             , ExternalRelevanceWatcher(origin.ExternalRelevanceWatcher)
         {}

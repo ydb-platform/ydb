@@ -25,10 +25,10 @@ std::string GetAuthInfo(TDbDriverStatePtr p) {
             throw TAuthenticationError("token is incorrect, illegal characters found");
         }
         return token;
-    } catch (const TAuthenticationError& e) {
+    } catch (const TYdbException& e) {
         throw e;
     } catch (const std::exception& e) {
-        throw TAuthenticationError(TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what());
+        throw TYdbException(TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what());
     }
 }
 

@@ -136,7 +136,7 @@ private:
         settings.ProducerId = sessionSettings.ProducerId_;
         settings.Meta = sessionSettings.Meta_.Fields;
 
-        if (sessionSettings.DeduplicationEnabled_ && !settings.ProducerId) {
+        if (sessionSettings.DeduplicationEnabled_.value_or(false) && !settings.ProducerId) {
             settings.ProducerId = CreateGuidAsString();
         }
 
@@ -333,7 +333,7 @@ public:
     TLocalTopicWriteSession(const TLocalTopicSessionSettings& localSettings, const TWriteSessionSettings& sessionSettings)
         : TBase(localSettings)
         , Counters(SetupCounters(sessionSettings))
-        , DeduplicationEnabled(sessionSettings.DeduplicationEnabled_.value_or(true))
+        , DeduplicationEnabled(sessionSettings.DeduplicationEnabled_.value_or(!sessionSettings.ProducerId_.empty()))
         , ValidateSeqNo(sessionSettings.ValidateSeqNo_)
     {
         ValidateSettings(sessionSettings);
@@ -498,6 +498,7 @@ private:
             .CredentialsProvider = CredentialsProvider,
             .Counters = Counters,
         }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        WaitEvent(); // Request continuation token
     }
 
     void UseAutoSeqNo() {

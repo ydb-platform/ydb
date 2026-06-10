@@ -980,7 +980,7 @@ def getsourcefile(object):
     # return a filename found in the linecache even if it doesn't exist on disk
     if filename in linecache.cache:
         return filename
-    if os.path.exists(filename):
+    if os.path.isabs(filename) and os.path.exists(filename):
         return filename
     # only return a non-existent filename if the module has a PEP 302 loader
     module = getmodule(object, filename)
@@ -1027,10 +1027,10 @@ def getmodule(object, _filename=None):
                 # Have already mapped this module, so skip it
                 continue
             _filesbymodname[modname] = f
-            f = getabsfile(module)
-            # Always map to the name the module knows itself by
-            modulesbyfile[f] = modulesbyfile[
-                os.path.realpath(f)] = module.__name__
+            absfile = getabsfile(module)
+            modulesbyfile[absfile] = module.__name__
+            if os.path.isabs(f):
+                modulesbyfile[os.path.realpath(absfile)] = module.__name__
     if file in modulesbyfile:
         return sys.modules.get(modulesbyfile[file])
     # Check the main module

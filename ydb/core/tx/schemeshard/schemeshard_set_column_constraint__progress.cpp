@@ -6,6 +6,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
 
+#include <ydb/core/protos/set_column_constraint.pb.h>
+
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 
@@ -361,11 +363,21 @@ public:
             return true;
         }
 
+        // There is a scenario where, even when using a pipe,
+        // we may send a TEvValidateRowConditionRequest to a DataShard twice.
+        // As a result, we may receive two responses.
+        // Therefore, we should ignore extra responses so that
+        // `DoneValidationShards` does not end up containing duplicates.
+        if (!operationInfo.InProgressValidationShards.contains(shardIdx)) {
+            LOG_N("TTxReplyValidateRowCondition: superfluous shard event, id# " << BuildId
+                << ", shardIdx# " << shardIdx);
+            return true;
+        }
+
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
+        shardStatus.ValidateStatus = record.GetStatus();
 
-        if (record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::DONE) {
-            shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::DONE;
-
+        if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
                 operationInfo.ValidationFailed = true;
@@ -384,12 +396,10 @@ public:
 
             Progress(BuildId);
 
-        } else if (record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR ||
-                   record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+        } else if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST) {
             LOG_E("TTxReplyValidateRowCondition: error on shard# " << shardIdx
                 << ", status# " << record.GetStatus());
 
-            shardStatus.Status = record.GetStatus();
             operationInfo.ValidationFailed = true;
 
             for (const auto& issue : record.GetIssues()) {
@@ -408,7 +418,6 @@ public:
         } else {
             LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
                 << " still in progress, status# " << record.GetStatus());
-            shardStatus.Status = record.GetStatus();
             // todo: persist shard status
         }
 
@@ -431,7 +440,68 @@ public:
     }
 };
 
-}
+struct TTxReplyRetrySetColumnConstraint : public TSchemeShard::TIndexBuilder::TTxBase
+{
+private:
+    TTabletId ShardId;
+
+public:
+    explicit TTxReplyRetrySetColumnConstraint(TSelf* self, TIndexBuildId operationId, TTabletId shardId)
+        : TTxBase(self, operationId, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
+        , ShardId(shardId)
+    {}
+
+    bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
+        const auto& shardIdx = Self->GetShardIdx(ShardId);
+
+        LOG_N("TTxReplyRetrySetColumnConstraint: PipeRetry"
+            << ", id# " << BuildId
+            << ", shardId# " << ShardId
+            << ", shardIdx# " << shardIdx);
+
+        auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
+        if (!operationInfoPtr) {
+            LOG_I("TTxReplyRetrySetColumnConstraint: operation not found, id# " << BuildId);
+            return true;
+        }
+
+        auto& operationInfo = *operationInfoPtr->get();
+
+        if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validating) {
+            LOG_I("TTxReplyRetrySetColumnConstraint: superfluous event, id# " << BuildId
+                << ", state# " << ToString(operationInfo.OperationState));
+            return true;
+        }
+
+        if (!operationInfo.ValidationShards.contains(shardIdx)) {
+            LOG_I("TTxReplyRetrySetColumnConstraint: shard not found in ValidationShards"
+                << ", id# " << BuildId
+                << ", shardIdx# " << shardIdx);
+            return true;
+        }
+
+        if (operationInfo.InProgressValidationShards.erase(shardIdx)) {
+            operationInfo.ToValidateShards.emplace_front(shardIdx);
+
+            Self->SetColumnConstraintPipes.Close(BuildId, ShardId, ctx);
+
+            Progress(BuildId);
+        }
+
+        return true;
+    }
+
+    void DoComplete(const TActorContext& /*ctx*/) override {}
+
+    void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
+        TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
+    {
+        LOG_E("TTxReplyRetrySetColumnConstraint: OnUnhandledException"
+            ", id# " << BuildId << ", exception: " << exc.what());
+    }
+};
+
+} // NSetColumnConstraint
 
 using namespace NTabletFlatExecutor;
 
@@ -654,6 +724,10 @@ public:
 
 ITransaction* TSchemeShard::CreateTxSetColumnConstraintProgress(TIndexBuildId operationId) {
     return new TIndexBuilder::TTxProgressSetColumnConstraint(this, operationId);
+}
+
+ITransaction* TSchemeShard::CreatePipeRetrySetColumnConstraint(TIndexBuildId operationId, TTabletId tabletId) {
+    return new NSetColumnConstraint::TTxReplyRetrySetColumnConstraint(this, operationId, tabletId);
 }
 
 ITransaction* TSchemeShard::CreateTxReplyAllocateSetColumnConstraint(

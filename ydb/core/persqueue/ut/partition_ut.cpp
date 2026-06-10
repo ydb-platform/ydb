@@ -4226,6 +4226,7 @@ TReadInfo MakeReadInfoForAddBlobsFromBodyTest(
         partNo,
         messageCountLimit,
         byteSizeLimit,
+        true, // readToBlobEnd
         ui64{0},
         readTimestampMs,
         TDuration::Zero(),

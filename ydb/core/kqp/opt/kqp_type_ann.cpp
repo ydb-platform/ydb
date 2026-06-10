@@ -2952,23 +2952,45 @@ TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 bool IsSupportedJoinKind(const TString &joinKind) {
-    return joinKind == "Left" || joinKind == "Inner" || joinKind == "Cross";
+    return joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly" || 
+        joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly" || 
+        joinKind == "Inner" || joinKind == "Cross";
 }
 
 const TStructExprType* JoinResultType(const TTypeAnnotationNode* leftType, const TTypeAnnotationNode* rightType, TString joinKind, TExprContext& ctx) {
     auto leftItemType = leftType->Cast<TListExprType>()->GetItemType();
     auto rightItemType = rightType->Cast<TListExprType>()->GetItemType();
 
-    const bool rightSideColumnsNeedsOptional = joinKind == "Left";
-    TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+    const bool columnsNeedOptional = (joinKind == "Left" || joinKind == "Right");
+    const bool rightJoin = (joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly");
+    const bool semiOrOnlyJoin = (joinKind == "LeftSemi" || joinKind == "LeftOnly" || joinKind == "RightSemi" || joinKind == "RightOnly");
+    const bool isFullJoin = (joinKind == "Full");
+    
+    if (rightJoin) {
+        std::swap(leftItemType, rightItemType);
+    }
 
-    for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
-        if (item->GetItemType()->IsOptionalOrNull() || !rightSideColumnsNeedsOptional) {
+    TVector<const TItemExprType*> structItemTypes;
+    
+    for (const auto *item : leftItemType->Cast<TStructExprType>()->GetItems()){
+        if (item->GetItemType()->IsOptionalOrNull() || !isFullJoin) {
             structItemTypes.push_back(item);
         } else {
             auto colName = item->GetName();
             const TTypeAnnotationNode* colType = item->GetItemType();
             structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
+        }
+    }
+
+    if (!semiOrOnlyJoin) {
+        for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
+            if (item->GetItemType()->IsOptionalOrNull() || !columnsNeedOptional) {
+                structItemTypes.push_back(item);
+            } else {
+                auto colName = item->GetName();
+                const TTypeAnnotationNode* colType = item->GetItemType();
+                structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
+            }
         }
     }
     auto resultStructType = ctx.MakeType<TStructExprType>(structItemTypes);
@@ -3012,25 +3034,48 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateOpUnionAll(const TExprNode::TPtr& input, TExprContext& ctx) {
-    auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
-    auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
+TStatus AnnotateOpSetOp(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto leftInputType = input->ChildPtr(TKqpOpSetOp::idx_LeftInput)->GetTypeAnn();
+    auto rightInputType = input->ChildPtr(TKqpOpSetOp::idx_RightInput)->GetTypeAnn();
     auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto leftItems = leftStructType->GetItems();
     auto rightItems = rightStructType->GetItems();
-    Y_ENSURE(leftItems.size() == rightItems.size(), "Invalid number of fields for Union all.");
+    Y_ENSURE(leftItems.size() == rightItems.size(), "Invalid number of fields for set operation.");
 
-    TVector<const TItemExprType*> newItemTypes;
-    for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
-        if (leftItems[i]->GetItemType()->IsOptionalOrNull()) {
-            newItemTypes.push_back(leftItems[i]);
-        } else {
-            newItemTypes.push_back(rightItems[i]);
+    const TTypeAnnotationNode* resultType;
+
+    TString setOp = TString(input->ChildPtr(TKqpOpSetOp::idx_SetOp)->Content());
+
+    if (setOp == "union" || setOp == "union_all") {
+        TVector<const TItemExprType*> newItemTypes;
+        for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
+            if (leftItems[i]->GetItemType()->IsOptionalOrNull()) {
+                newItemTypes.push_back(leftItems[i]);
+            } else {
+                newItemTypes.push_back(rightItems[i]);
+            }
         }
+        resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    }
+    else if (setOp == "intersect" || setOp == "intersect_all") {
+        TVector<const TItemExprType*> newItemTypes;
+        for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
+            auto itemType = leftItems[i]->GetItemType();
+            if (itemType->IsOptionalOrNull() && !rightItems[i]->GetItemType()->IsOptionalOrNull()) {
+                auto nonOptType = ETypeAnnotationKind::Optional == itemType->GetKind() ? itemType->Cast<TOptionalExprType>()->GetItemType() : itemType;
+                newItemTypes.push_back(ctx.MakeType<TItemExprType>(leftItems[i]->GetName(), nonOptType));
+            } else {
+                newItemTypes.push_back(leftItems[i]);
+            }
+        }
+        resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    } else if (setOp == "except" || setOp == "except_all") {
+        resultType = leftInputType;
+    } else {
+        Y_ENSURE(false, TStringBuilder() << "Illegal set operator: " << setOp);
     }
 
-    auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
     input->SetTypeAnn(resultType);
 
     return TStatus::Ok;
@@ -3243,7 +3288,7 @@ public:
         AddHandler({TKqpOpFilter::CallableName()}, Hndl(&AnnotateOpFilter));
         AddHandler({TKqpOpJoinFilter::CallableName()}, Hndl(&AnnotateOpJoinFilter));
         AddHandler({TKqpOpJoin::CallableName()}, Hndl(&AnnotateOpJoin));
-        AddHandler({TKqpOpUnionAll::CallableName()}, Hndl(&AnnotateOpUnionAll));
+        AddHandler({TKqpOpSetOp::CallableName()}, Hndl(&AnnotateOpSetOp));
         AddHandler({TKqpOpLimit::CallableName()}, Hndl(&AnnotateOpLimit));
         AddHandler({TKqpOpSortElement::CallableName()}, Hndl(&AnnotateOpSortElement));
         AddHandler({TKqpOpSort::CallableName()}, Hndl(&AnnotateOpSort));

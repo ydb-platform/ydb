@@ -34,6 +34,7 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
         TTabletTypes::Hive,
         TTabletTypes::GraphShard,
         TTabletTypes::PersQueue,
+        TTabletTypes::SchemeShard,
     };
 
     return std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end()
@@ -42,12 +43,11 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
 
 bool IsTabletDevUiAccessAllowed(
     const TAppData* appData,
-    bool securePathMode,
     TStringBuf pathInfo,
     const TString& userToken,
-    bool isPublicRequest)
+    bool isMonitoringDevUiRequest)
 {
-    if (!securePathMode || isPublicRequest) {
+    if (!appData->FeatureFlags.GetEnableTabletDevUiSecurePath() || isMonitoringDevUiRequest) {
         return true;
     }
     // Mutating handler requires BOTH `/app/secure` path (CGI dispatch can't bypass via `/app/`)

@@ -333,10 +333,8 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     }
 
     const auto& cgi = ev->Get()->Cgi();
-    const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
     if (!IsTabletDevUiAccessAllowed(
             AppData(ctx),
-            securePathMode,
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
             IsPublicPersQueueDevUiRequest(cgi)))

@@ -392,6 +392,15 @@ namespace {
         return TWarmupTestEnv{kikimr, runtime, isThreadLocked, 0, params.NodeCount, params.UserSids, expectedUniqueCount};
     }
 
+    TVector<ui32> CollectNodeIds(TWarmupTestEnv& env) {
+        TVector<ui32> nodeIds;
+        nodeIds.reserve(env.NodeCount);
+        for (ui32 i = 0; i < env.NodeCount; ++i) {
+            nodeIds.push_back(env.Runtime.GetNodeId(i));
+        }
+        return nodeIds;
+    }
+
     TEvKqpWarmupComplete::TPtr RunWarmup(TWarmupTestEnv& env, const TKqpWarmupConfig& config,
             TDuration timeout, bool waitBootstrap = false) {
         auto warmupEdge = env.Runtime.AllocateEdgeActor(env.NodeId);
@@ -404,7 +413,8 @@ namespace {
             env.Runtime.DispatchEvents(opts, TDuration::Seconds(1));
         }
 
-        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge, new TEvStartWarmup(env.NodeCount)), env.NodeId);
+        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
+            new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
         return env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, timeout);
     }
 
@@ -588,6 +598,8 @@ namespace {
             UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
             UNIT_ASSERT_C(warmupComplete->Get()->Success,
                 "Warmup should succeed with empty cache: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("No queries to warm up"),
+                "Message should indicate empty cache: " << warmupComplete->Get()->Message);
             UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
                 "No entries should be loaded from empty cache");
         }
@@ -818,7 +830,7 @@ namespace {
             }
 
             env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
-                new TEvStartWarmup(env.NodeCount)), env.NodeId);
+                new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
             auto warmupComplete = env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
                 warmupEdge, warmupActorConfig.HardDeadline + TDuration::Seconds(5));
 
@@ -862,7 +874,7 @@ namespace {
             }
 
             env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
-                new TEvStartWarmup(env.NodeCount)), env.NodeId);
+                new TEvStartWarmup(env.NodeCount, CollectNodeIds(env))), env.NodeId);
             auto warmupComplete = env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(
                 warmupEdge, warmupActorConfig.HardDeadline + TDuration::Seconds(1));
 
@@ -979,6 +991,7 @@ namespace {
         }
 
         Y_UNIT_TEST(WarmupUnavailableSysview) {
+            // All peers UNAVAILABLE: warmup fails AND PeerScanWarnings bumps once per failing peer.
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.UserSids = {"user0"};
@@ -986,6 +999,9 @@ namespace {
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+            const i64 warningsBefore = counters.CompileCacheViewPeerScanWarnings->Val();
 
             // The warmup actor spawns two concurrent actors that both query .sys/compile_cache_queries,
             // generating TEvListQueryCacheQueriesRequest: TFetchCacheActor and TFetchTruncatedCountActor.
@@ -1017,8 +1033,21 @@ namespace {
                 "Warmup should fail when sysview is unavailable: " << warmupComplete->Get()->Message);
             UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("Fetch failed"),
                 "Message should indicate fetch failure: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(sysviewRequestCount.load() >= 1,
+
+            // Truncated-count fetch is async — drain it so its SkipCurrentNode
+            // events land before we compare counter to intercept count.
+            env.Runtime.SimulateSleep(TDuration::Seconds(1));
+
+            const ui32 intercepted = sysviewRequestCount.load();
+            UNIT_ASSERT_C(intercepted >= 1,
                 "At least one sysview request should have been intercepted");
+
+            const i64 warningsAfter = counters.CompileCacheViewPeerScanWarnings->Val();
+            const i64 delta = warningsAfter - warningsBefore;
+            UNIT_ASSERT_VALUES_EQUAL_C(delta, static_cast<i64>(intercepted),
+                "CompileCacheView/PeerScanWarnings must increment exactly once per failing"
+                " peer scan event (intercepted=" << intercepted << ", delta=" << delta
+                << ", before=" << warningsBefore << ", after=" << warningsAfter << ")");
         }
         Y_UNIT_TEST(WarmupPgSyntaxQueriesSkipped) {
             TWarmupTestParams params;
@@ -1490,6 +1519,30 @@ namespace {
                 "WarmupMissesInWindow must not change when window is not open");
             UNIT_ASSERT_VALUES_EQUAL_C(counters.WarmupSavedCompileMs->Val(), savedMsBefore,
                 "WarmupSavedCompileMs must not change when window is not open");
+        }
+
+        Y_UNIT_TEST(CompileCacheViewPeerScanWarningsCounterClean) {
+            // Sanity check: when every peer responds cleanly, the counter must NOT move.
+            TWarmupTestParams params;
+            params.UserSids = {"user0"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+            const i64 warningsBefore = counters.CompileCacheViewPeerScanWarnings->Val();
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup must succeed: " << warmupComplete->Get()->Message);
+
+            const i64 warningsAfter = counters.CompileCacheViewPeerScanWarnings->Val();
+            UNIT_ASSERT_VALUES_EQUAL_C(warningsAfter, warningsBefore,
+                "CompileCacheView/PeerScanWarnings must stay flat on clean scan"
+                << " (before=" << warningsBefore << ", after=" << warningsAfter << ")");
         }
 
     } // Y_UNIT_TEST_SUITE(KqpWarmup)

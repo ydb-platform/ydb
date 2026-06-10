@@ -58,6 +58,7 @@ struct TScopedState: public TThrRefBase {
     bool WarnUntypedStringLiterals = false;
     bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
+    THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> ActivePragmas;
 
     struct TLocal {
         TVector<std::pair<TString, TDeferredAtom>> UsedClusters;

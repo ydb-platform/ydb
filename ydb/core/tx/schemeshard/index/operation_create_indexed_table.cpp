@@ -156,7 +156,9 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
                 if (!context.SS->EnableFulltextIndex) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
                 }
@@ -166,7 +168,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalJson: {
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact: {
                 if (!context.SS->EnableJsonIndex) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "JSON index support is disabled")};
                 }
@@ -324,6 +327,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
         const auto indexType = GetIndexType(indexDescription);
+        bool compact = false;
         switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -373,6 +377,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                compact = true;
+                [[fallthrough]];
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
                 NKikimrSchemeOp::TTableDescription userIndexDesc;
@@ -380,10 +388,16 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType)));
+                result.push_back(createIndexImplTable(compact
+                    ? CalcFulltextCompactImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                        userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType)
+                    : CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                        indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType)));
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+                compact = true;
+                [[fallthrough]];
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
                 NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 4) {
@@ -393,8 +407,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType)));
+                result.push_back(createIndexImplTable(compact
+                    ? CalcFulltextCompactImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                        userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType)
+                    : CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                        indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType)));
                 result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
                 result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
                 result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));

@@ -272,7 +272,10 @@ struct TReadMatch {
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
             if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
                 || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                || indexDesc->Type == TIndexDescription::EType::GlobalJson) {
+                || indexDesc->Type == TIndexDescription::EType::GlobalJson
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance
+                || indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact) {
                 return {};
             }
 
@@ -289,7 +292,10 @@ struct TReadMatch {
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
             if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
                 || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                || indexDesc->Type == TIndexDescription::EType::GlobalJson) {
+                || indexDesc->Type == TIndexDescription::EType::GlobalJson
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance
+                || indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact) {
                 return {};
             }
 
@@ -328,7 +334,9 @@ struct TReadMatch {
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
         if (indexDesc->Type != TIndexDescription::EType::GlobalFulltextPlain
-            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
+            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance
+            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextCompact
+            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextCompactRelevance) {
             return {};
         }
 
@@ -344,7 +352,8 @@ struct TReadMatch {
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
         YQL_ENSURE(tableDesc.Metadata);
         auto [_, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
-        if (indexDesc->Type != TIndexDescription::EType::GlobalJson) {
+        if (indexDesc->Type != TIndexDescription::EType::GlobalJson &&
+            indexDesc->Type != TIndexDescription::EType::GlobalJsonCompact) {
             return {};
         }
 
@@ -1879,7 +1888,9 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     YQL_ENSURE(tableDesc.Metadata);
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
     if (indexDesc->Type != TIndexDescription::EType::GlobalFulltextPlain
-        && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
+        && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance
+        && indexDesc->Type != TIndexDescription::EType::GlobalFulltextCompact
+        && indexDesc->Type != TIndexDescription::EType::GlobalFulltextCompactRelevance) {
         return {};
     }
 
@@ -1995,7 +2006,8 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
 
     THashSet<TString> jsonIndexedColumns;
     for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
-        if (indexInfo.Type != TIndexDescription::EType::GlobalJson) {
+        if (indexInfo.Type != TIndexDescription::EType::GlobalJson &&
+            indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
             continue;
         }
 
@@ -2016,7 +2028,8 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
 
     std::optional<TString> selectedIndex;
     for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
-        if (indexInfo.Type != TIndexDescription::EType::GlobalJson) {
+        if (indexInfo.Type != TIndexDescription::EType::GlobalJson &&
+            indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
             continue;
         }
 
@@ -2072,7 +2085,8 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
     YQL_ENSURE(tableDesc.Metadata);
 
     auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
-    if (indexDesc->Type != TIndexDescription::EType::GlobalJson) {
+    if (indexDesc->Type != TIndexDescription::EType::GlobalJson &&
+        indexDesc->Type != TIndexDescription::EType::GlobalJsonCompact) {
         return {};
     }
 

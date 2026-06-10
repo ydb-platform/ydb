@@ -90,7 +90,7 @@ static void SerializeSuppressableAccessTrackingOptions(TNode* node, const TSuppr
 }
 
 template <typename T>
-static void SerializePrerequisiteOptions(TNode* node, const TPrerequisiteOptions<T>& options)
+static void SerializePrerequisiteTransactionsOptions(TNode* node, const TPrerequisiteTransactionsOptions<T>& options)
 {
     if (!options.PrerequisiteTransactionIds_.empty()) {
         auto& txIds = (*node)["prerequisite_transaction_ids"] = TNode::CreateList();
@@ -98,21 +98,32 @@ static void SerializePrerequisiteOptions(TNode* node, const TPrerequisiteOptions
             txIds.Add(GetGuidAsString(txId));
         }
     }
+}
 
+template <typename T>
+static void SerializePrerequisiteRevisionsOptions(TNode* node, const TPrerequisiteRevisionsOptions<T>& options)
+{
     if (!options.PrerequisiteRevisions_.empty()) {
         auto& revisions = (*node)["prerequisite_revisions"] = TNode::CreateList();
         for (const auto& revisionConfig : options.PrerequisiteRevisions_) {
             if (!revisionConfig.Path_) {
-                ythrow TApiUsageError() << "Path for TPrerequisiteRevisionOptions must be explicitly specified";
+                ythrow TApiUsageError() << "Path for TPrerequisiteRevision must be explicitly specified";
             }
             if (!revisionConfig.Revision_) {
-                ythrow TApiUsageError() << "Revision for TPrerequisiteRevisionOptions must be explicitly specified";
+                ythrow TApiUsageError() << "Revision for TPrerequisiteRevision must be explicitly specified";
             }
             revisions.Add(TNode()
                 ("path", *revisionConfig.Path_)
                 ("revision", *revisionConfig.Revision_));
         }
     }
+}
+
+template <typename T>
+static void SerializePrerequisiteOptions(TNode* node, const TPrerequisiteOptions<T>& options)
+{
+    SerializePrerequisiteTransactionsOptions(node, options);
+    SerializePrerequisiteRevisionsOptions(node, options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -127,6 +138,7 @@ TNode SerializeParamsForCreate(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializePrerequisiteOptions(&result, options);
     result["recursive"] = options.Recursive_;
     result["type"] = ToString(type);
     result["ignore_existing"] = options.IgnoreExisting_;
@@ -147,6 +159,7 @@ TNode SerializeParamsForRemove(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializePrerequisiteOptions(&result, options);
     result["recursive"] = options.Recursive_;
     result["force"] = options.Force_;
     return result;
@@ -163,6 +176,7 @@ TNode SerializeParamsForExists(
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     return result;
 }
 
@@ -197,6 +211,7 @@ TNode SerializeParamsForSet(
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     result["recursive"] = options.Recursive_;
     if (options.Force_) {
         result["force"] = *options.Force_;
@@ -214,6 +229,7 @@ TNode SerializeParamsForMultisetAttributes(
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.Force_) {
         result["force"] = *options.Force_;
     }
@@ -231,6 +247,7 @@ TNode SerializeParamsForList(
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.MaxSize_) {
         result["max_size"] = *options.MaxSize_;
     }
@@ -249,6 +266,7 @@ TNode SerializeParamsForCopy(
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result["source_path"] = AddPathPrefix(sourcePath, pathPrefix);
     result["destination_path"] = AddPathPrefix(destinationPath, pathPrefix);
     result["recursive"] = options.Recursive_;
@@ -269,6 +287,7 @@ TNode SerializeParamsForMove(
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result["source_path"] = AddPathPrefix(sourcePath, pathPrefix);
     result["destination_path"] = AddPathPrefix(destinationPath, pathPrefix);
     result["recursive"] = options.Recursive_;
@@ -289,6 +308,7 @@ TNode SerializeParamsForLink(
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     result["target_path"] = AddPathPrefix(targetPath, pathPrefix);
     result["link_path"] = AddPathPrefix(linkPath, pathPrefix);
     result["recursive"] = options.Recursive_;
@@ -310,6 +330,7 @@ TNode SerializeParamsForLock(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializePrerequisiteOptions(&result, options);
     result["mode"] = ToString(mode);
     result["waitable"] = options.Waitable_;
     if (options.AttributeKey_) {
@@ -325,11 +346,12 @@ TNode SerializeParamsForUnlock(
     const TTransactionId& transactionId,
     const TString& pathPrefix,
     const TYPath& path,
-    const TUnlockOptions& /*options*/)
+    const TUnlockOptions& options)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    SerializePrerequisiteOptions(&result, options);
     return result;
 }
 
@@ -1084,10 +1106,13 @@ TNode SerializeParamsForAbortTransaction(const TTransactionId& transactionId)
     return result;
 }
 
-TNode SerializeParamsForCommitTransaction(const TTransactionId& transactionId)
+TNode SerializeParamsForCommitTransaction(
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options)
 {
     TNode result;
     SetTransactionIdParam(&result, transactionId);
+    SerializePrerequisiteOptions(&result, options);
     return result;
 }
 
@@ -1099,6 +1124,7 @@ TNode SerializeParamsForStartTransaction(
     TNode result;
 
     SetTransactionIdParam(&result, parentTransactionId);
+    SerializePrerequisiteTransactionsOptions(&result, options);
     result["timeout"] = static_cast<i64>((options.Timeout_.GetOrElse(txTimeout).MilliSeconds()));
     if (options.Deadline_) {
         result["deadline"] = ToString(options.Deadline_);

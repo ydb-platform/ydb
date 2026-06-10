@@ -342,6 +342,7 @@ void TPQTabletFixture::SetUp(NUnitTest::TTestContext&)
     Finalizer.ConstructInPlace(*Ctx);
 
     Ctx->Prepare();
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTabletDevUiSecurePath(true);
     Ctx->Runtime->SetScheduledLimit(5'000);
 }
 

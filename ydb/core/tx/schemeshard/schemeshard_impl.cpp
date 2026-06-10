@@ -3054,7 +3054,8 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceLocalPathId>(txState.SourcePathId.LocalPathId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceOwnerId>(txState.SourcePathId.OwnerId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::NeedUpdateObject>(txState.NeedUpdateObject),
-                NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive)
+                NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive),
+                NIceDb::TUpdate<Schema::TxInFlightV2::LoadSplitLineage>(txState.LoadSplitLineage)
                 );
 
     for (const auto& shardOp : txState.Shards) {
@@ -6271,6 +6272,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
         HFuncTraced(TEvPrivate::TEvPeriodicTableStatsParsed, Handle);
+        HFuncTraced(TEvPrivate::TEvRevisitSplitMerge, Handle);
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
@@ -6337,6 +6339,9 @@ void TSchemeShard::DeleteSplitOp(TOperationId operationId, TTxState& txState) {
     TTableInfo::TPtr tableInfo = *Tables.FindPtr(txState.TargetPathId);
     Y_ABORT_UNLESS(tableInfo);
     tableInfo->FinishSplitMergeOp(operationId);
+
+    // A split/merge slot just freed -- let the fair scheduler hand it to a waiting table (edge-triggered).
+    ScheduleSplitMergeRevisit(TActivationContext::AsActorContext());
 }
 
 bool TSchemeShard::ShardIsUnderSplitMergeOp(const TShardIdx& idx) const {
@@ -8783,7 +8788,9 @@ void TSchemeShard::ApplySplitMerge(
     TTableInfo::TPtr tableInfo,
     TVector<TTableShardInfo>&& dstPartitions,
     const TVector<TShardIdx>& removedShards,
-    ui64 splitStartIdx
+    ui64 splitStartIdx,
+    bool trackSplitMergeDemand,
+    bool loadSplitLineage
 ) {
     const TInstant now = AppData()->TimeProvider->Now();
     if (!tableInfo->IsBackup) {
@@ -8801,7 +8808,8 @@ void TSchemeShard::ApplySplitMerge(
         }
     }
 
-    tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx, now);
+    tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx, now,
+        trackSplitMergeDemand, loadSplitLineage);
 
     // report TTableInfo::VerifyConsistency() time
     TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);

@@ -1737,6 +1737,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        optional uint64 EnableSplitMergeFairScheduling = 20 [(ControlOptions) = {
+            Description: "Enables cross-table fair (round-robin) scheduling of deferred split/merge operations on slot-free. Requires the EnableSplitMergeDemandTracking feature flag. Off falls back to stats-arrival order.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTCMallocControls {

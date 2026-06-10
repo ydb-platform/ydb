@@ -279,12 +279,19 @@ public:
         ui64 partitionsSkipped = 0;
         ui64 partitionsRewritten = 0;
 
+        // Whether this op deepens the by-load split lineage: set at Propose from the
+        // request and persisted with the tx state (TxInFlightV2), so it survives reboot.
+        // Absent (pre-upgrade or non-by-load ops) means false.
+        const bool loadSplitLineage = txState->LoadSplitLineage;
+        // Tx-level snapshot of the feature flag (AppData() global, as used elsewhere in schemeshard).
+        const bool trackSplitMergeDemand = AppData()->FeatureFlags.GetEnableSplitMergeDemandTracking();
+
         if (tableInfo->PartitionsInShardIdxFormat) {
             // O(k) fast path: touch only src/dst rows in TablePartitionsByShardIdx.
             const auto kAdded = newShardsIdx.size();
 
             context.SS->PersistTablePartitioningByShardIdxDelete(db, tableId, tableInfo, allSrcShardIdxs);
-            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
+            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx, trackSplitMergeDemand, loadSplitLineage);
             context.SS->PersistTablePartitioningByShardIdxInsert(db, tableId, tableInfo, srcFirstIdx, kAdded);
             context.SS->PersistTablePartitioningVersion(db, tableId, tableInfo);
 
@@ -296,7 +303,7 @@ public:
             ui64 splitStartIdx = AppData()->FeatureFlags.GetEnableSplitMergePartialPersistence() ? srcFirstIdx : 0;
 
             context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo, splitStartIdx);
-            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
+            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx, trackSplitMergeDemand, loadSplitLineage);
             context.SS->PersistTablePartitioning(db, tableId, tableInfo, splitStartIdx);
             context.SS->PersistAllTablePartitionStats(db, tableId, tableInfo, splitStartIdx);
 
@@ -1068,6 +1075,9 @@ public:
         txState.State = op.State;
         txState.Shards = std::move(op.Shards);
         txState.SplitDescription = std::move(op.SplitDescription);
+        // LoadSplitLineage is internal-only: ignore it in client (non-internal) proposes so
+        // external callers cannot deepen the by-load lineage of their partitions.
+        txState.LoadSplitLineage = Transaction.GetInternal() && info.GetLoadSplitLineage();
         context.OnComplete.ActivateTx(OperationId);
 
         for (const auto& shard : txState.Shards) {

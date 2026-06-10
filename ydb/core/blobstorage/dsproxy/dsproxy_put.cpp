@@ -497,9 +497,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             Done = true;
             return true;
         }
-        if (RandomNumber<ui32>(1000) == 1) {
-            NRetroTracing::DemandTrace(Span.GetTraceId());
-        }
         return false;
     }
 

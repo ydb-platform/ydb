@@ -97,8 +97,8 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
         alter
             .AddTable("me", table)
-            .AddColumn(1, "name", 1, ETypes::String, false, false, false)
-            .AddColumn(1, "salt", 2, ETypes::Uint64, false, false, false)
+            .AddColumn(1, "name", 1, ETypes::String, false, false)
+            .AddColumn(1, "salt", 2, ETypes::Uint64, false, false)
             .AddColumnToKey(1, 1)
             .AddColumnToKey(1, 2);
 
@@ -253,9 +253,9 @@ Y_UNIT_TEST_SUITE(Bloom) {
             TAlter alter;
             alter
                 .AddTable("me", 1)
-                .AddColumn(1, "name", 1, ETypes::String, false, false, false)
-                .AddColumn(1, "salt", 2, ETypes::Uint64, false, false, false)
-                .AddColumn(1, "sub",  3, ETypes::String, false, false, false)
+                .AddColumn(1, "name", 1, ETypes::String, false, false)
+                .AddColumn(1, "salt", 2, ETypes::Uint64, false, false)
+                .AddColumn(1, "sub",  3, ETypes::String, false, false)
                 .AddColumnToKey(1, 1)
                 .AddColumnToKey(1, 2)
                 .AddColumnToKey(1, 3);
@@ -336,9 +336,9 @@ Y_UNIT_TEST_SUITE(Bloom) {
             TAlter alter;
             alter
                 .AddTable("me", 1)
-                .AddColumn(1, "name", 1, ETypes::String, false, false, false)
-                .AddColumn(1, "salt", 2, ETypes::Uint64, false, false, false)
-                .AddColumn(1, "sub",  3, ETypes::String, false, false, false)
+                .AddColumn(1, "name", 1, ETypes::String, false, false)
+                .AddColumn(1, "salt", 2, ETypes::Uint64, false, false)
+                .AddColumn(1, "sub",  3, ETypes::String, false, false)
                 .AddColumnToKey(1, 1)
                 .AddColumnToKey(1, 2)
                 .AddColumnToKey(1, 3);
@@ -386,9 +386,9 @@ Y_UNIT_TEST_SUITE(Bloom) {
             TAlter alter;
             alter
                 .AddTable("me", 1)
-                .AddColumn(1, "name", 1, ETypes::String, false, false, false)
-                .AddColumn(1, "salt", 2, ETypes::Uint64, false, false, false)
-                .AddColumn(1, "sub",  3, ETypes::String, false, false, false)
+                .AddColumn(1, "name", 1, ETypes::String, false, false)
+                .AddColumn(1, "salt", 2, ETypes::Uint64, false, false)
+                .AddColumn(1, "sub",  3, ETypes::String, false, false)
                 .AddColumnToKey(1, 1)
                 .AddColumnToKey(1, 2)
                 .AddColumnToKey(1, 3);
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
             TAlter alter;
 
             auto name = Sprintf("sub_%04u", col);
-            alter.AddColumn(1, name, col, ETypes::String, false, false, false);
+            alter.AddColumn(1, name, col, ETypes::String, false, false);
             alter.AddColumnToKey(1, col);
             if (col > 10) {
                 alter.SetByKeyFilterPrefixes(1, {TBloomPrefix{col}}); /* enable bloom on full key */

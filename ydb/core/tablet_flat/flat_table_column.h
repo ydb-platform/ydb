@@ -16,7 +16,7 @@ namespace NTable {
         TColumn() = default;
 
         TColumn(const TString& name, TTag tag, NScheme::TTypeInfo type,
-            const TString& typeMod, bool notNull = false, bool setNotNullInProgress = false, bool isSensitive = false)
+            const TString& typeMod, bool notNull = false, bool isSensitive = false, bool setNotNullInProgress = false)
             : Id(tag)
             , PType(type)
             , PTypeMod(typeMod)

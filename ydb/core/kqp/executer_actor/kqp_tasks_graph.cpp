@@ -335,7 +335,313 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
     );
 }
 
+<<<<<<< HEAD
 void TKqpTasksGraph::FillKqpTasksGraphStages() {
+=======
+void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
+    if (task.ComputeActorId) {
+        ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
+    }
+}
+
+void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
+    meta->SetTablePath(stageInfo.Meta.TablePath);
+    meta->MutableTableId()->SetTableId(stageInfo.Meta.TableId.PathId.LocalPathId);
+    meta->MutableTableId()->SetOwnerId(stageInfo.Meta.TableId.PathId.OwnerId);
+    meta->SetSchemaVersion(stageInfo.Meta.TableId.SchemaVersion);
+    meta->SetSysViewInfo(stageInfo.Meta.TableId.SysViewInfo);
+    meta->SetTableKind((ui32)stageInfo.Meta.TableKind);
+}
+
+void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto::TDqTask& taskDesc) {
+    if (task.Meta.ScanTask || (stageInfo.Meta.IsSysView() && task.Meta.Reads.Defined())) {
+        NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
+
+        FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
+        if (stageInfo.Meta.TableConstInfo->SysViewInfo) {
+            *protoTaskMeta.MutableTable()->MutableSysViewDescription() = *stageInfo.Meta.TableConstInfo->SysViewInfo;
+        }
+
+        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+
+        for (const auto& keyColumnName : tableInfo->KeyColumns) {
+            const auto& keyColumn = tableInfo->Columns.at(keyColumnName);
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn.Type, keyColumn.TypeMod);
+            protoTaskMeta.AddKeyColumnTypes(columnType.TypeId);
+            *protoTaskMeta.AddKeyColumnTypeInfos() = columnType.TypeInfo ?
+                *columnType.TypeInfo :
+                NKikimrProto::TTypeInfo();
+        }
+
+        for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
+            protoTaskMeta.AddSkipNullKeys(skipNullKey);
+        }
+
+        switch (tableInfo->TableKind) {
+            case ETableKind::Unknown:
+            case ETableKind::External:
+            case ETableKind::SysView: {
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+                break;
+            }
+            case ETableKind::Datashard: {
+                if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
+                } else {
+                    protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+                }
+                break;
+            }
+            case ETableKind::Olap: {
+                protoTaskMeta.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
+                break;
+            }
+        }
+
+        if (!task.Meta.Reads->empty()) {
+            protoTaskMeta.SetReverse(task.Meta.ReadInfo.IsReverse());
+            protoTaskMeta.SetOptionalSorting((ui32)task.Meta.ReadInfo.GetSorting());
+            protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
+            if (task.Meta.HasEnableShardsSequentialScan()) {
+                protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());
+            }
+            protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
+
+            for (auto&& i : task.Meta.ReadInfo.GroupByColumnNames) {
+                protoTaskMeta.AddGroupByColumnNames(i.data(), i.size());
+            }
+
+            for (const auto& columnType : task.Meta.ReadInfo.ResultColumnsTypes) {
+                auto* protoResultColumn = protoTaskMeta.AddResultColumns();
+                protoResultColumn->SetId(0);
+                auto protoColumnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnType, "");
+                protoResultColumn->SetType(protoColumnType.TypeId);
+                if (protoColumnType.TypeInfo) {
+                    *protoResultColumn->MutableTypeInfo() = *protoColumnType.TypeInfo;
+                }
+            }
+
+            if (tableInfo->TableKind == ETableKind::Olap) {
+                auto* olapProgram = protoTaskMeta.MutableOlapProgram();
+                auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stageInfo, task);
+
+                olapProgram->SetProgram(task.Meta.ReadInfo.OlapProgram.Program);
+
+                olapProgram->SetParametersSchema(schema);
+                olapProgram->SetParameters(parameters);
+            } else {
+                YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
+            }
+
+            for (const auto& column : task.Meta.Reads->front().Columns) {
+                auto* protoColumn = protoTaskMeta.AddColumns();
+                protoColumn->SetId(column.Id);
+                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, "");
+                protoColumn->SetType(columnType.TypeId);
+                if (columnType.TypeInfo) {
+                    *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
+                }
+                protoColumn->SetName(column.Name);
+            }
+        }
+
+        for (const auto& read : *task.Meta.Reads) {
+            auto* protoReadMeta = protoTaskMeta.AddReads();
+            protoReadMeta->SetShardId(read.ShardId);
+            read.Ranges.SerializeTo(protoReadMeta);
+
+            YQL_ENSURE((int) read.Columns.size() == protoTaskMeta.GetColumns().size());
+            for (ui64 i = 0; i < read.Columns.size(); ++i) {
+                YQL_ENSURE(read.Columns[i].Id == protoTaskMeta.GetColumns()[i].GetId());
+                YQL_ENSURE(read.Columns[i].Type.GetTypeId() == protoTaskMeta.GetColumns()[i].GetType());
+            }
+        }
+
+
+        taskDesc.MutableMeta()->PackFrom(protoTaskMeta);
+    }
+}
+
+void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf::TUnboxedValue value) {
+    if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::Data) {
+        LOG_W("Cannot append parameter value to token, unexpected type: " << static_cast<int>(type->GetKind()));
+        return;
+    }
+
+    auto dataSlot = static_cast<NKikimr::NMiniKQL::TDataType*>(type)->GetDataSlot();
+    if (!dataSlot) {
+        LOG_W("Cannot append parameter value to token: no data slot");
+        return;
+    }
+
+    switch (*dataSlot) {
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8:
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::String, value.AsStringRef());
+            break;
+
+        case NUdf::EDataSlot::Bool:
+            NJsonIndex::AppendJsonIndexLiteral(token,
+                value.Get<bool>() ? NBinaryJson::EEntryType::BoolTrue : NBinaryJson::EEntryType::BoolFalse);
+            break;
+
+        case NUdf::EDataSlot::Int8: {
+            double num = static_cast<double>(value.Get<i8>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Int16: {
+            double num = static_cast<double>(value.Get<i16>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Int32: {
+            double num = static_cast<double>(value.Get<i32>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Int64: {
+            auto intValue = value.Get<i64>();
+            if (intValue > NJsonIndex::MaxSupportedInt || intValue < -NJsonIndex::MaxSupportedInt) {
+                break;
+            }
+            double num = static_cast<double>(intValue);
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Uint8: {
+            double num = static_cast<double>(value.Get<ui8>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Uint16: {
+            double num = static_cast<double>(value.Get<ui16>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Uint32: {
+            double num = static_cast<double>(value.Get<ui32>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Uint64: {
+            auto uintValue = value.Get<ui64>();
+            if (uintValue > static_cast<ui64>(NJsonIndex::MaxSupportedInt)) {
+                break;
+            }
+            double num = static_cast<double>(uintValue);
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Float: {
+            double num = static_cast<double>(value.Get<float>());
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        case NUdf::EDataSlot::Double: {
+            double num = value.Get<double>();
+            NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Number, {}, &num);
+            break;
+        }
+
+        default:
+            LOG_W("Cannot append parameter value to token, unexpected data slot: " << static_cast<int>(*dataSlot));
+    }
+}
+
+TString ResolveFullTextQueryToken(const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token,
+    const TStageInfo& stageInfo)
+{
+    TString fullToken = token.GetToken();
+    if (token.GetParamName().empty()) {
+        return fullToken;
+    }
+
+    auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
+    if (!paramPtr) {
+        LOG_W("Failed to get parameter value for token: " << token.GetParamName());
+        return fullToken;
+    }
+
+    auto [type, value] = *paramPtr;
+    AppendMKQLValueToToken(fullToken, type, std::move(value));
+    return fullToken;
+}
+
+TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TQueryToken& token,
+    const TStageInfo& stageInfo)
+{
+    const TString baseToken = token.GetToken();
+    if (token.GetParamName().empty()) {
+        return {baseToken};
+    }
+
+    auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
+    if (!paramPtr) {
+        LOG_W("Failed to get parameter value for token: " << token.GetParamName());
+        return {baseToken};
+    }
+
+    auto [type, value] = *paramPtr;
+    TVector<TString> result;
+
+    if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
+        NUdf::TUnboxedValue item;
+        auto* itemType = static_cast<NKikimr::NMiniKQL::TListType*>(type)->GetItemType();
+        auto iter = value.GetListIterator();
+        while (iter.Next(item)) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, itemType, std::move(item));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple) {
+        auto* tupleType = static_cast<NKikimr::NMiniKQL::TTupleType*>(type);
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, tupleType->GetElementType(i), value.GetElement(i));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Dict) {
+        auto* dictType = static_cast<NKikimr::NMiniKQL::TDictType*>(type);
+        auto* keyType = dictType->GetKeyType();
+        NUdf::TUnboxedValue key;
+        auto iter = value.GetKeysIterator();
+        while (iter.Next(key)) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, keyType, std::move(key));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else {
+        return {ResolveFullTextQueryToken(token, stageInfo)};
+    }
+
+    return result.empty() ? TVector<TString>{baseToken} : result;
+}
+
+void AddQueryPathParam(TKqpTasksGraph::TTaskType& task, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext) {
+    if (!userRequestContext || !userRequestContext->IsStreamingQuery) {
+        return;
+    }
+
+    const auto& queryPath = userRequestContext->StreamingQueryPath
+        ? userRequestContext->StreamingQueryPath
+        : "default";
+    task.Meta.TaskParams.emplace("query_path", queryPath);
+}
+
+} // anonymous namespace
+
+void TKqpTasksGraph::FillStages() {
+>>>>>>> 5a1303820f8 (YQ-5380 disabled local topics deduplication (#43082))
     for (size_t txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);
 
@@ -2496,11 +2802,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
 
-        TString queryPath = "default";
-        if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-            queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
-        }
-        task.Meta.TaskParams.emplace("query_path", queryPath);
+        AddQueryPathParam(task, GetMeta().UserRequestContext);
         if (externalSource.GetType() == "PqSource" && i == 0) {   // Only first task will check partition count.
             task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
         }
@@ -3041,11 +3343,7 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
             // "fq.restart_count"
         }
     }
-    TString queryPath = "default";
-    if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-        queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
-    }
-    task.Meta.TaskParams.emplace("query_path", queryPath);
+    AddQueryPathParam(task, GetMeta().UserRequestContext);
 
     auto& output = task.Outputs[sink.GetOutputIndex()];
     output.Type = TTaskOutputType::Sink;

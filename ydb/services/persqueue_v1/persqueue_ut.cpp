@@ -8832,5 +8832,101 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
 
     }
+
+    Y_UNIT_TEST(ReadCommitMaxOffsetWithGaps) {
+        NPersQueue::TTestServer server;
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        /*NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        wSettings.DirectWriteToPartition(false);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+        for (int i = 1; i <= 10; ++i) {
+            auto res = writer->Write("Message_" + ToString(i), i);
+            UNIT_ASSERT(res);
+        }
+        auto res = writer->Close();
+        UNIT_ASSERT(res);
+        */
+
+        auto write = [&](TRequestWritePQ& writeRequest, const TString& data, const TMaybe<i64>& writeOffset = {}) {
+            NKikimrPQClient::TDataChunk dataChunk;
+            dataChunk.SetCreateTime(42);
+            dataChunk.SetSeqNo(++writeRequest.SeqNo);
+            dataChunk.SetData(data);
+
+            TString serialized;
+            UNIT_ASSERT(dataChunk.SerializeToString(&serialized));
+            server.AnnoyingClient->WriteToPQ(writeRequest, serialized, "", NMsgBusProxy::MSTATUS_OK, NMsgBusProxy::MSTATUS_OK, writeOffset);
+        };
+
+        TRequestWritePQ writeRequest = {topicFullName, 0, NPQ::NSourceIdEncoding::Decode("srcId"), 0};
+        // write 10 messages
+        for (ui64 i = 1; i <= 10; ++i) {
+            write(writeRequest, "Message_" + ToString(i));
+        }
+
+        // write one message with offset gap - offset = 20
+        write(writeRequest, "Message_21", 20);
+        //  write the rest
+        for (ui64 i = 22; i <= 30; ++i) {
+            write(writeRequest, "Message_" + ToString(i));
+        }
+
+        {
+            // set max offset in the gap - should get back messages 8, 9, 10
+            std::optional<ui64> readOffset = 7;
+            std::optional<ui64> commitOffset = 3;
+            std::optional<ui64> maxOffset = 12; //inclusive
+            NYdb::NTopic::TReadSessionSettings rSettings;
+            rSettings.ConsumerName("debug").AppendTopics({topicFullName});
+            auto readSession = topicClient.CreateReadSession(rSettings);
+
+            auto ev = readSession->GetEvent(true);
+            UNIT_ASSERT(ev.has_value());
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            UNIT_ASSERT(spsEv);
+            spsEv->Confirm(readOffset, commitOffset, maxOffset);
+            ev = readSession->GetEvent(true);
+            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
+            UNIT_ASSERT(dataEv);
+            const auto& messages = dataEv->GetMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_8");
+            UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_9");
+            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_10");
+
+            UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
+        }
+
+        {
+            // set read offset before the gap, max offset after the gap - should get back messages 10, 21, 22
+            std::optional<ui64> readOffset = 9;
+            std::optional<ui64> commitOffset = 3;
+            std::optional<ui64> maxOffset = 21; //inclusive
+            NYdb::NTopic::TReadSessionSettings rSettings;
+            rSettings.ConsumerName("debug").AppendTopics({topicFullName});
+            auto readSession = topicClient.CreateReadSession(rSettings);
+
+            auto ev = readSession->GetEvent(true);
+            UNIT_ASSERT(ev.has_value());
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            UNIT_ASSERT(spsEv);
+            spsEv->Confirm(readOffset, commitOffset, maxOffset);
+            ev = readSession->GetEvent(true);
+            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
+            UNIT_ASSERT(dataEv);
+            const auto& messages = dataEv->GetMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_10");
+            UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_21");
+            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_22");
+
+            UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
+        }
+
+    }
 }
 }

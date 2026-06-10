@@ -78,6 +78,14 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
+[JSON-индекс](../../../../dev/json-indexes.md):
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX json_idx GLOBAL SYNC USING json
+  ON (metadata);
+```
+
 ## Изменение параметров индекса {#alter-index}
 
 Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные]({{ concept_secondary_index }}#sync) или [асинхронные]({{ concept_secondary_index }}#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.

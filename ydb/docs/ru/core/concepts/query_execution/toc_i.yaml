@@ -11,6 +11,8 @@ items:
     href: vector_search.md
   - name: Полнотекстовый поиск
     href: fulltext_search.md
+  - name: Поиск по JSON
+    href: json_search.md
   - name: Федеративные запросы
     include:
       path: federated_query/toc_p.yaml

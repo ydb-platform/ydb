@@ -9,17 +9,13 @@ using namespace NKikimr::NDataShard;
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace Tests;
 
-// Datashard-level coverage for the bloom filter logic in TUserTable::ApplyConfig/ApplyAlter
-// (datashard_user_table.cpp). These tests boot a real datashard, drive CREATE/ALTER/DROP through
-// SQL, and read the shard's OWN persisted table description via TEvGetInfoRequest (built from
-// TUserTable::GetSchema) — i.e. exactly what ApplyConfig/ApplyAlter wrote, not the schemeshard view.
+// Datashard-level coverage for bloom filter logic
 Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
 
     std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> CreateServer() {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
-        serverSettings.FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -57,11 +53,9 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
         return out;
     }
 
+    // Verify that ByKeyFilterPrefixes tracks CREATE/ALTER ADD INDEX/DROP INDEX.
+    // In particular, dropping the LAST prefix must clear the filter entirely.
     Y_UNIT_TEST(PrefixesUpdatedOnAlter) {
-        // The engine ByKeyFilterPrefixes the shard persists must track CREATE / ALTER ADD INDEX /
-        // DROP INDEX. In particular, dropping the LAST prefix must clear the filter entirely — the
-        // delta carries no explicit bloom field in that case, and before the fix it was ignored,
-        // leaving a stale filter on the shard until restart.
         auto [runtime, server, sender] = CreateServer();
 
         UNIT_ASSERT_VALUES_EQUAL(
@@ -103,11 +97,9 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
         UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{1}));
     }
 
+    // Verify that whole-key KEY_BLOOM_FILTER coexists with prefix blooms,
+    // survives dropping shorter prefixes, and is cleared by KEY_BLOOM_FILTER=DISABLED.
     Y_UNIT_TEST(FullKeyCoexistsWithPrefix) {
-        // The EnableFilterByKey (whole-key KEY_BLOOM_FILTER) branch: the whole-key filter is unified
-        // into the engine prefix list as an entry of length == number of key columns, and must
-        // coexist with shorter prefix blooms, survive dropping the last shorter prefix, and be
-        // cleared by KEY_BLOOM_FILTER=DISABLED.
         auto [runtime, server, sender] = CreateServer();
 
         // (Key1, Key2) primary key => whole-key bloom has prefix length 2.
@@ -150,9 +142,8 @@ Y_UNIT_TEST_SUITE(DataShardBloomFilter) {
         UNIT_ASSERT_VALUES_EQUAL(ShardBloomPrefixLengths(runtime, shard), (TVector<ui32>{1, 2}));
     }
 
+    // Verify that per-prefix false-positive probability reaches the shard.
     Y_UNIT_TEST(FppPropagatedToShard) {
-        // The per-prefix false-positive probability resolved by ApplyConfig/ApplyAlter
-        // (explicit value, or NTable::DefaultBloomFilterFpp when unspecified) must reach the shard.
         auto [runtime, server, sender] = CreateServer();
 
         UNIT_ASSERT_VALUES_EQUAL(

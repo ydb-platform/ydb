@@ -249,5 +249,77 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         ui64 txId = 10;
         ProposeSchemaTxFail(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, srcPathId, 1), ++txId);
     }
+
+    // Verifies that CopyTable and DropTable use independent per-path seq_no tracking.
+    Y_UNIT_TEST(CopyAndDropIndependentSeqNo) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit data to srcPathId so that copy has something to work with
+        std::vector<ui64> writeIds;
+        {
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+        }
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        // CopyTable: src=1 -> dst=2, round=5 (high round for path 2)
+        const ui64 copyDstPathId = 2;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, copyDstPathId, 5), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // DropTable: path=2, round=1 (lower round than the CopyTable's round=5 for same path — should fail)
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::DropTableTxBody(copyDstPathId, 1), ++txId);
+
+        // CopyTable: src=1 -> dst=3, round=1 (low round, but for a NEW path 3 — should succeed
+        // because path 3 has no prior seq_no, despite path 2 having had round=5)
+        const ui64 copyDstPathId2 = 3;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, copyDstPathId2, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // Verify data is readable from both copies
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, copyDstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, copyDstPathId2, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+
+        // DropTable on path 2 with round=6 should succeed (higher round than CopyTable's round=5)
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(copyDstPathId, 6), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // DropTable on path 3 with round=2 should still succeed (independent from path 2's round=6)
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(copyDstPathId2, 2), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // Verify source table (path 1) is still readable after all copies and drops
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+    }
 }
 }   // namespace NKikimr

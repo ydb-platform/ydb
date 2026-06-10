@@ -129,7 +129,7 @@ private:
     std::atomic<bool> TerminationFlag_ = false;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
-    THashMap<std::pair<TString, TGuid>, TTestBusPtr> RequestToBus_;
+    THashMap<std::pair<std::string, TGuid>, TTestBusPtr> RequestToBus_;
 
     void HandleRequestResult(
         const std::string& address,

@@ -174,6 +174,33 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
                     for row in result_sets[0].rows:
                         assert row["cnt"] is not None
 
+    def _assert_describe_indexes(self, table_name, expected):
+        if not self._use_sql_index_syntax:
+            return
+        path = self._table_path(table_name)
+
+        def callee(session):
+            return session.describe_table(path)
+
+        with ydb.SessionPool(self.driver, size=1) as pool:
+            desc = pool.retry_operation_sync(callee)
+        by_name = {idx.name: idx for idx in desc.indexes}
+        for name, columns in expected.items():
+            assert name in by_name, f"DescribeTable: missing index {name!r} on {table_name!r}"
+            idx = by_name[name]
+            assert list(idx.index_columns) == list(columns), (
+                f"DescribeTable: index {name!r} columns {list(idx.index_columns)!r}, expected {list(columns)!r}"
+            )
+            assert idx.status == ydb.IndexStatus.READY, f"DescribeTable: index {name!r} status {idx.status!r}"
+
+    def _check_describe_bloom_tables(self):
+        self._assert_describe_indexes("olap_bloom", {self.index_bloom_name: ("resource_id",)})
+        self._assert_describe_indexes("olap_ngram", {self.index_ngram_name: ("resource_id",)})
+        self._assert_describe_indexes(
+            "olap_both",
+            {self.index_bloom_name: ("uid",), self.index_ngram_name: ("resource_id",)},
+        )
+
     def test_bloom_index(self):
         table_bloom = "olap_bloom"
         table_ngram = "olap_ngram"
@@ -195,7 +222,10 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
         for table in (table_bloom, table_ngram, table_both):
             self._request_compaction_and_wait(table)
 
+        self._check_describe_bloom_tables()
+
         for _ in self.roll():
+            self._check_describe_bloom_tables()
             self._do_queries(self._get_queries(table_bloom))
             self._do_queries(self._get_queries(table_ngram))
             self._do_queries(self._get_queries(table_both))

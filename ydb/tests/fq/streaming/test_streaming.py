@@ -1024,7 +1024,7 @@ LIMIT 1"""
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
-    @pytest.mark.parametrize("kikimr", [{"checkpointing_period_ms": "20000"}], indirect=["kikimr"])
+    @pytest.mark.parametrize("kikimr", [{"checkpointing_period_ms": "30000"}], indirect=["kikimr"])
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
     def test_deduplication(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:

@@ -18,7 +18,8 @@ class TestYdbWorkload(StressFixture):
             erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_streaming_queries": True
+                "enable_streaming_queries": True,
+                "enable_topics_sql_io_operations": True,
             },
             additional_log_configs={
                 'KQP_COMPUTE': LogLevels.DEBUG,

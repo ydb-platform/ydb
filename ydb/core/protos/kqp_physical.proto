@@ -406,6 +406,9 @@ enum EKqpFullTextIndexType {
     EKqpFullTextPlain = 0;
     EKqpFullTextRelevance = 1;
     EKqpFullTextJson = 2;
+    EKqpFullTextCompact = 3;
+    EKqpFullTextCompactRelevance = 4;
+    EKqpFullTextJsonCompact = 5;
 }
 
 message TKqpFullTextSource {

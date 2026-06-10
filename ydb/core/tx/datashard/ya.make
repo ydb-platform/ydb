@@ -317,6 +317,7 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
+    ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange

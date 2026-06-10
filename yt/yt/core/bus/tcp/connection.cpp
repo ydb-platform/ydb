@@ -474,7 +474,7 @@ void TConnection::ResolveAddress()
 
         EndpointHostName_ = hostName;
 
-        TAddressResolver::Get()->Resolve(TString(hostName)).Subscribe(
+        TAddressResolver::Get()->Resolve(std::string(hostName)).Subscribe(
             BIND(&TConnection::OnAddressResolveFinished, MakeStrong(this))
                 .Via(Poller_->GetInvoker()));
     }
@@ -1314,9 +1314,9 @@ bool TConnection::OnHandshakePacketReceived()
             .EndMap());
 
     YT_LOG_DEBUG("Handshake received (PeerConnectionId: %v, PeerEncryptionMode: %v, PeerVerificationMode: %v, MultiplexingBand: %v)",
-        PeerAttributes_->Get<TString>("peer_connection_id"),
-        PeerAttributes_->Get<TString>("peer_encryption_mode"),
-        PeerAttributes_->Get<TString>("peer_verification_mode"),
+        PeerAttributes_->Get<std::string>("peer_connection_id"),
+        PeerAttributes_->Get<std::string>("peer_encryption_mode"),
+        PeerAttributes_->Get<std::string>("peer_verification_mode"),
         optionalMultiplexingBand);
 
     if (ConnectionType_ == EConnectionType::Server && optionalMultiplexingBand) {

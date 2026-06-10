@@ -129,6 +129,18 @@ Y_UNIT_TEST(EnclosingFunctionName) {
     }
 }
 
+Y_UNIT_TEST(EnclosingFunctionNameUtf8) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+    TString query = R"sql(
+        USE example; --абвгдабвгда
+        FROM (SELECT a FROM # . RANGE(           ));
+    )sql";
+
+    TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+    UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, Nothing());
+}
+
 Y_UNIT_TEST(SimpleSelectFrom) {
     IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
     {

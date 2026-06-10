@@ -1,18 +1,18 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: aiohappyeyeballs
-Version: 2.6.1
+Version: 2.6.2
 Summary: Happy Eyeballs for asyncio
 License: PSF-2.0
+License-File: LICENSE
 Author: J. Nick Koston
 Author-email: nick@koston.org
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Natural Language :: English
 Classifier: Operating System :: OS Independent
 Classifier: Topic :: Software Development :: Libraries
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12

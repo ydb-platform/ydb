@@ -61,6 +61,8 @@ items:
     href: debug.md
   - name: Включить логирование
     href: debug-logs.md
+  - name: Экспорт логов в OpenTelemetry
+    href: debug-logs-otel.md
   - name: Подключить метрики в Prometheus
     href: debug-prometheus.md
   - name: Трассировка с OpenTelemetry

@@ -1254,13 +1254,21 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltextPlain;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalFulltextCompact;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalFulltextPlain;
+                }
             } else if (type == "globalFulltextRelevance") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalFulltextCompactRelevance;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+                }
             } else if (type == "globalJson") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
@@ -1270,7 +1278,11 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index is not supported on column tables"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalJson;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalJsonCompact;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalJson;
+                }
             } else if (type == "localBloomFilter") {
                 if (meta->StoreType == EStoreType::Column &&
                     !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
@@ -1354,7 +1366,9 @@ private:
                         break;
                     }
                     case TIndexDescription::EType::GlobalFulltextPlain:
-                    case TIndexDescription::EType::GlobalFulltextRelevance: {
+                    case TIndexDescription::EType::GlobalFulltextRelevance:
+                    case TIndexDescription::EType::GlobalFulltextCompact:
+                    case TIndexDescription::EType::GlobalFulltextCompactRelevance: {
                         NKikimr::NFulltext::FillSetting(
                             *fulltextIndexDescription.MutableSettings(),
                             nameLower, value.StringValue(), error);
@@ -1392,6 +1406,7 @@ private:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
                 case TIndexDescription::EType::GlobalJson:
+                case TIndexDescription::EType::GlobalJsonCompact:
                     // no specialized index description
                     // no settings validation
                     break;
@@ -1404,16 +1419,10 @@ private:
                     specializedIndexDescription = std::move(vectorIndexKmeansTreeDescription);
                     break;
                 }
-                case TIndexDescription::EType::GlobalFulltextPlain: {
-                    TString error;
-                    if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-                    specializedIndexDescription = std::move(fulltextIndexDescription);
-                    break;
-                }
-                case TIndexDescription::EType::GlobalFulltextRelevance: {
+                case TIndexDescription::EType::GlobalFulltextPlain:
+                case TIndexDescription::EType::GlobalFulltextRelevance:
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance: {
                     TString error;
                     if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));

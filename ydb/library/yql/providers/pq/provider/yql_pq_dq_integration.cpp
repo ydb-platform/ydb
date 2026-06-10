@@ -156,13 +156,15 @@ public:
             const auto& pqReadTopic = maybePqReadTopic.Cast();
             YQL_ENSURE(pqReadTopic.Ref().GetTypeAnn(), "No type annotation for node " << pqReadTopic.Ref().Content());
 
+            const auto pqTopic = pqReadTopic.Topic();
+
             const auto rowType = pqReadTopic.Ref().GetTypeAnn()
                 ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()
                 ->GetItemType()->Cast<TStructExprType>();
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
             const auto token = "cluster:default_" + clusterName;
 
-            const auto& typeItems = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
+            const auto& typeItems = pqTopic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
             const auto pos = read->Pos();
 
             TExprNode::TListType colNames;
@@ -178,6 +180,9 @@ public:
                 return {};
             }
             const auto settings = maybeSettings.Cast();
+            const bool useSharedReading = AnyOf(settings, [](const TCoNameValueTuple& setting) {
+                return Name(setting) == SharedReading && FromString<bool>(Value(setting));
+            });
 
             const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
 
@@ -206,7 +211,7 @@ public:
             TExprBase result = Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
-                    .Topic(pqReadTopic.Topic())
+                    .Topic(pqTopic)
                     .Columns(std::move(columnNames))
                     .Settings(settings)
                     .Token<TCoSecureParam>()
@@ -225,7 +230,7 @@ public:
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done();
 
-            if (maybeWatermark && "advanced" == wrSettings.WatermarksMode.GetOrElse("disable")) {
+            if (maybeWatermark && "advanced" == wrSettings.WatermarksMode.GetOrElse("disable") && !useSharedReading) {
                 const auto watermark = maybeWatermark.Cast();
 
                 auto watermarkSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
@@ -239,19 +244,38 @@ public:
                         watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
                     }
                 }
+                for (const auto& nameValue : pqTopic.Props()) {
+                    if (const auto name = nameValue.Name().Value();
+                        FederatedClustersProp == name) {
+                        watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
+                    }
+                }
                 const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
 
                 result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
                     .Input(result)
                     .WatermarkExtractor(watermark)
-                    .PartitionIdExtractor<TCoLambda>()
+                    .PartitionKeyExtractor<TCoLambda>()
                         .Args({"arg"})
-                        .Body<TCoMember>()
-                            .Struct("arg")
-                            .Name().Build("_yql_sys_partition_id")
+                        .Body<TCoAsStruct>()
+                            .Add<TCoNameValueTuple>()
+                                .Name<TCoAtom>().Build("cluster")
+                                .Value<TCoMember>()
+                                    .Struct("arg")
+                                    .Name().Build("_yql_sys_cluster")
+                                    .Build()
+                                .Build()
+                            .Add<TCoNameValueTuple>()
+                                .Name<TCoAtom>().Build("partition_id")
+                                .Value<TCoMember>()
+                                    .Struct("arg")
+                                    .Name().Build("_yql_sys_partition_id")
+                                    .Build()
+                                .Build()
                             .Build()
                         .Build()
                     .WatermarkSettings(watermarkSettings.Ptr())
+                    .PartitionKeys<TCoVoid>().Build()
                     .Done();
             }
 
@@ -657,10 +681,6 @@ private:
         }
     }
 
-    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
-        return clusterConfiguration->SharedReading && (format == "json_each_row"sv || format == "raw"sv);
-    }
-
 public:
     TMaybeNode<TCoNameValueTupleList> BuildTopicReadSettings(
         const TPqReadTopic& pqReadTopic,
@@ -855,7 +875,7 @@ public:
 
         if (const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
             watermarksMode != "disable" && maybeWatermark) {
-            Add(props, WatermarksEnableSetting, ToString("default" == watermarksMode), pos, ctx);
+            Add(props, WatermarksEnableSetting, ToString("default" == watermarksMode || useSharedReading), pos, ctx);
             Add(props, WatermarksGranularityUsSetting,
                 ToString(watermarksGranularityUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs)).MicroSeconds())), pos, ctx);
             Add(props, WatermarksLateArrivalDelayUsSetting,

@@ -3,29 +3,27 @@
 #include <ydb/library/actors/core/log.h>
 
 #define LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << "Watermarks. " << s)
 #define LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << "Watermarks. " << s)
 #define LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
+    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, GetLogPrefix() << "Watermarks. " << s)
 #define LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
+    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << "Watermarks. " << s)
 #define LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << "Watermarks. " << s)
 
 namespace NYql::NDq {
 
 using namespace NActors;
 
 TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters)
-    : LogPrefix(logPrefix)
-    , Impl(logPrefix, counters)
+    : Impl(logPrefix, counters)
 {
 }
 
 TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TDqComputeActorWatermarks& parent, bool)
-    : LogPrefix(parent.LogPrefix)
-    , Impl(parent.Impl, true)
+    : Impl(parent.Impl, true)
     , NotifyHandler(parent.NotifyHandler)
 {
 }
@@ -145,9 +143,12 @@ void TDqComputeActorWatermarks::PopPendingWatermark() {
     PendingWatermark = Nothing();
 }
 
+[[nodiscard]] const TString& TDqComputeActorWatermarks::GetLogPrefix() const {
+    return Impl.GetLogPrefix();
+}
+
 void TDqComputeActorWatermarks::SetLogPrefix(const TString& logPrefix) {
     Impl.SetLogPrefix(logPrefix);
-    LogPrefix = logPrefix;
 }
 
 void TDqComputeActorWatermarks::Out(IOutputStream& str) const {

@@ -1736,11 +1736,16 @@ public:
         return "";
     }
 
-    void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx, TDqComputeActorWatermarks* watermarksTracker) override
-    {
+    void Prepare(
+        const TDqTaskSettings& task,
+        const TDqTaskRunnerMemoryLimits& memoryLimits,
+        const IDqTaskRunnerExecutionContext& execCtx,
+        TDqComputeActorWatermarks* watermarksTracker,
+        TDqSourceWatermarkTracker<TPartitionKey>* sourceWatermarksTracker
+    ) override {
         Y_UNUSED(execCtx);
         Y_UNUSED(watermarksTracker);
+        Y_UNUSED(sourceWatermarksTracker);
         Y_ABORT_UNLESS(Task.GetId() == task.GetId());
         try {
             auto result = Delegate->Prepare(memoryLimits);

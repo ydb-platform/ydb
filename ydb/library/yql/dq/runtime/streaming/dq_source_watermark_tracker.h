@@ -11,7 +11,7 @@
 namespace NYql::NDq {
 
 template <typename TPartitionKey>
-struct TDqSourceWatermarkTracker {
+class TDqSourceWatermarkTracker {
 public:
     TDqSourceWatermarkTracker(
         TDuration granularity,
@@ -27,28 +27,59 @@ public:
         , Impl_(logPrefix, counters)
     {}
 
+    TDqSourceWatermarkTracker(
+        const TString& logPrefix,
+        const ::NMonitoring::TDynamicCounterPtr& counters = {})
+        : Impl_(logPrefix, counters)
+    {}
+
+    void SetSettings(
+        TDuration granularity,
+        bool idlePartitionsEnabled,
+        TDuration lateArrivalDelay,
+        TDuration idleTimeout
+    ) {
+        Granularity_ = granularity;
+        IdlePartitionsEnabled_ = idlePartitionsEnabled;
+        LateArrivalDelay_ = lateArrivalDelay;
+        IdleTimeout_ = idleTimeout;
+    }
+
+    using TNotifyHandler = std::function<void(TInstant)>;
+
+    void SetNotifyHandler(TNotifyHandler notifyHandler) {
+        NotifyHandler_ = std::move(notifyHandler);
+    }
+
+    void SetLogPrefix(const TString& logPrefix) {
+        Impl_.SetLogPrefix(logPrefix);
+    }
+
     [[nodiscard]] TMaybe<TInstant> NotifyNewPartitionTime(
         const TPartitionKey& partitionKey,
         TInstant partitionTime,
         TInstant systemTime
     ) {
         const auto watermark = ToDiscreteTime(partitionTime - LateArrivalDelay_);
-        return Impl_.NotifyNewWatermark(partitionKey, watermark, ToNextDiscreteTime(systemTime)).first;
+        return Impl_.NotifyNewWatermark(partitionKey, watermark, systemTime).first;
     }
 
     bool RegisterPartition(const TPartitionKey& partitionKey, TInstant systemTime) {
-        return Impl_.RegisterInput(partitionKey, ToNextDiscreteTime(systemTime), IdlePartitionsEnabled_ ? IdleTimeout_ : TDuration::Max());
+        return Impl_.RegisterInput(partitionKey, systemTime, IdlePartitionsEnabled_ ? IdleTimeout_ : TDuration::Max());
     }
 
     [[nodiscard]] TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
-        return Impl_.HandleIdleness(ToDiscreteTime(systemTime));
+        return Impl_.HandleIdleness(systemTime);
     }
 
     // returns time for idleness check that should be scheduled now
     [[nodiscard]] TMaybe<TInstant> PrepareIdlenessCheck(TInstant systemTime) {
         if (auto nextCheck = Impl_.GetNextIdlenessCheckAt()) {
-            auto notifyTime = ToNextDiscreteTime(Max(*nextCheck, systemTime));
+            auto notifyTime = Max(*nextCheck, systemTime);
             if (Impl_.AddScheduledIdlenessCheck(notifyTime)) {
+                if (NotifyHandler_) {
+                    NotifyHandler_(notifyTime);
+                }
                 return notifyTime;
             }
         }
@@ -72,17 +103,14 @@ private:
         return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity_.MicroSeconds());
     }
 
-    TInstant ToNextDiscreteTime(TInstant time) const {
-        return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity_.MicroSeconds()) + Granularity_;
-    }
-
 private:
-    const TDuration Granularity_;
-    const bool IdlePartitionsEnabled_;
-    const TDuration LateArrivalDelay_;
-    const TDuration IdleTimeout_;
+    TDuration Granularity_;
+    bool IdlePartitionsEnabled_;
+    TDuration LateArrivalDelay_;
+    TDuration IdleTimeout_;
 
     TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
+    TNotifyHandler NotifyHandler_;
 };
 
 } // namespace NYql::NDq

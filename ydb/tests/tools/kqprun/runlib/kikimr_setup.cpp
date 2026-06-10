@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/grpc/server/actors/logger.h>
+#include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
@@ -89,7 +90,10 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     serverSettings.SetComputationFactory(settings.ComputationFactory);
     serverSettings.SetYtGateway(settings.YtGateway);
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-    serverSettings.SetDqTaskTransformFactory(NYql::CreateYtDqTaskTransformFactory(true));
+    serverSettings.SetDqTaskTransformFactory(NYql::CreateCompositeTaskTransformFactory({
+        NYql::NDq::CreatePqDqTaskTransformFactory(),
+        NYql::CreateYtDqTaskTransformFactory(true),
+    }));
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
     serverSettings.SetVerbose(verbosity);
     serverSettings.SetNeedStatsCollectors(true);

@@ -356,7 +356,7 @@ public:
             } else if (callable.GetType()->GetName() == "MultiHoppingCore") {
                 return WrapMultiHoppingCore(callable, ctx, Watermark);
             } else if (callable.GetType()->GetName() == "DqWatermarkGenerator") {
-                return WrapDqWatermarkGenerator(callable, ctx, Watermark);
+                return WrapDqWatermarkGenerator(callable, ctx, Watermark, SourceWatermarksTracker);
             }
             return nullptr;
         };
@@ -579,9 +579,11 @@ public:
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx,
-        TDqComputeActorWatermarks* watermarksTracker) override
-    {
+        TDqComputeActorWatermarks* watermarksTracker,
+        TDqSourceWatermarkTracker<TPartitionKey>* sourceWatermarksTracker
+    ) override {
         WatermarksTracker = watermarksTracker;
+        SourceWatermarksTracker = sourceWatermarksTracker;
         TaskId = task.GetId();
         StageId = task.GetStageId();
         LangVer = task.GetProgram().GetLangVer();
@@ -1280,6 +1282,7 @@ private:
     std::optional<TAllocatedHolder> AllocatedHolder;
     NKikimr::NMiniKQL::TWatermark Watermark;
     TDqComputeActorWatermarks* WatermarksTracker = nullptr;
+    TDqSourceWatermarkTracker<TPartitionKey>* SourceWatermarksTracker = nullptr;
 
     bool TaskHasEffects = false;
 

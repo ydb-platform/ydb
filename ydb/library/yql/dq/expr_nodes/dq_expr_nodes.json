@@ -366,10 +366,11 @@
       "Base": "TCallable",
       "Match": {"Type": "Callable", "Name": "DqPhyWatermarkGenerator"},
       "Children": [
-        {"Index": 0, "Name": "Input",                "Type": "TExprBase"},
-        {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"},
-        {"Index": 2, "Name": "PartitionIdExtractor", "Type": "TCoLambda"},
-        {"Index": 3, "Name": "WatermarkSettings",    "Type": "TCoNameValueTupleList"}
+        {"Index": 0, "Name": "Input",                 "Type": "TExprBase"},
+        {"Index": 1, "Name": "WatermarkExtractor",    "Type": "TCoLambda"},
+        {"Index": 2, "Name": "PartitionKeyExtractor", "Type": "TCoLambda"},
+        {"Index": 3, "Name": "WatermarkSettings",     "Type": "TCoNameValueTupleList"},
+        {"Index": 4, "Name": "PartitionKeys",         "Type": "TExprBase"}
       ]
     }
     ]

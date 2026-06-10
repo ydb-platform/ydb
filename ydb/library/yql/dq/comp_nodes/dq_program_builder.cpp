@@ -190,19 +190,21 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
 TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
     TRuntimeNode input,
     const TUnaryLambda& watermarkExtractor,
-    const TUnaryLambda& partitionIdExtractor,
-    TArrayRef<std::string_view> watermarkSettings
+    const TUnaryLambda& partitionKeyExtractor,
+    TConstArrayRef<std::pair<std::string_view, std::string_view>> watermarkSettings,
+    TRuntimeNode partitionKeys
 ) {
     auto returnType = AS_TYPE(TStreamType, input);
     auto itemType = returnType->GetItemType();
 
     const auto itemArg = Arg(itemType);
     const auto watermark = watermarkExtractor(itemArg);
-    const auto partitionId = partitionIdExtractor(itemArg);
+    const auto partitionKey = partitionKeyExtractor(itemArg);
 
     TRuntimeNode::TList watermarkSettingItems;
-    for (const auto& setting : watermarkSettings) {
-        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(setting));
+    for (const auto& [name, value] : watermarkSettings) {
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(value));
     }
     const auto watermarkSettingsNode = NewList(NewDataType(NUdf::EDataSlot::String), watermarkSettingItems);
 
@@ -210,8 +212,9 @@ TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
     callableBuilder.Add(input);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(watermark);
-    callableBuilder.Add(partitionId);
+    callableBuilder.Add(partitionKey);
     callableBuilder.Add(watermarkSettingsNode);
+    callableBuilder.Add(partitionKeys);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

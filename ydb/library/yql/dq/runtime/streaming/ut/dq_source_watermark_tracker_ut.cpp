@@ -202,26 +202,47 @@ Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
     }
 
     Y_UNIT_TEST(IdleNextCheckAt) {
-#if 0 // TODO replace with something working
+        auto tracker = InitTrackerWithIdleness();
+        std::vector<TInstant> scheduledChecks;
+        tracker.SetNotifyHandler([&](TInstant checkTime) {
+            scheduledChecks.push_back(checkTime);
+        });
+
+        UNIT_ASSERT(tracker.RegisterPartition(0, TInstant::Seconds(10)));
+        UNIT_ASSERT(tracker.RegisterPartition(1, TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(10'500)));
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(20), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(std::vector<TInstant>{TInstant::Seconds(20)}, scheduledChecks);
+
+        UNIT_ASSERT(!tracker.ProcessIdlenessCheck(TInstant::MilliSeconds(19'999)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::MilliSeconds(19'999)));
+
+        UNIT_ASSERT(tracker.ProcessIdlenessCheck(TInstant::Seconds(20)));
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(20)));
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::MilliSeconds(20'500), tracker.PrepareIdlenessCheck(TInstant::Seconds(20)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(20)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            std::vector<TInstant>({TInstant::Seconds(20), TInstant::MilliSeconds(20'500)}),
+            scheduledChecks
+        );
+    }
+
+    Y_UNIT_TEST(ActivityExtendsOnlyActivePartitionDeadline) {
         auto tracker = InitTrackerWithIdleness();
 
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(10));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(15), actual);
-        }
-        for (auto i = 10; i < 15; ++i) {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(i));
-            UNIT_ASSERT_VALUES_EQUAL_C(TInstant::Seconds(15), actual, i);
-        }
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(15));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(20), actual);
-        }
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(20));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(25), actual);
-        }
-#endif
+        UNIT_ASSERT(tracker.RegisterPartition(0, TInstant::Seconds(10)));
+        UNIT_ASSERT(tracker.RegisterPartition(1, TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            Nothing(),
+            tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(10'500))
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(20)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::MilliSeconds(20'499)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::MilliSeconds(20'500)));
     }
 }
 

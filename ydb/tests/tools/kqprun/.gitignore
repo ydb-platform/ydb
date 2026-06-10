@@ -9,6 +9,7 @@ udfs
 *.json
 *.log
 *.old
+*.sh
 *.sql
 *.svg
 *.txt

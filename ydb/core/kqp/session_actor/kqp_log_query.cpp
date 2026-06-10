@@ -43,7 +43,6 @@ TString SafeExtractQueryText(const TKqpQueryState& state) {
 struct TCompletedFields {
     TStringBuf Database;
     TStringBuf DatabaseId;
-    ui64 SchemeShardId = 0;
     TStringBuf TraceId;
     TStringBuf QueryId;
     TString Action;
@@ -65,9 +64,6 @@ void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
     }
     if (!f.DatabaseId.empty()) {
         json.WriteKey("database_id").WriteString(f.DatabaseId);
-    }
-    if (f.SchemeShardId) {
-        json.WriteKey("schemeshard_id").WriteULongLong(f.SchemeShardId);
     }
     if (!f.TraceId.empty()) {
         json.WriteKey("trace_id").WriteString(f.TraceId);
@@ -183,19 +179,6 @@ TString GetRequestId(const TKqpQueryState& state) {
     return ToString(state.ProxyRequestId);
 }
 
-// SchemeShard tablet id that owns the queried tables. For a dedicated database
-// this is the database's own SchemeShard, so it changes when the database is
-// dropped and recreated under the same path — unlike the path-based database_id.
-// Empty for queries that touch no tables (e.g. SELECT 1).
-ui64 GetSchemeShardId(const TKqpQueryState& state) {
-    for (const auto& [tableId, _] : state.TableVersions) {
-        if (tableId.PathId.OwnerId) {
-            return tableId.PathId.OwnerId;
-        }
-    }
-    return 0;
-}
-
 bool IsLogPriorityEnabled(NActors::NLog::EPriority prio) {
     return IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, prio, NKikimrServices::KQP_REQUEST, 0ull);
 }
@@ -249,7 +232,6 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
 
         TCompletedFields fields;
         fields.Database = state.Database;
-        fields.SchemeShardId = GetSchemeShardId(state);
         if (userCtx) {
             fields.DatabaseId = userCtx->DatabaseId;
             fields.TraceId = userCtx->TraceId;

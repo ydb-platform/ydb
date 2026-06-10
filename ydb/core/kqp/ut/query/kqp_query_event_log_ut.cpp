@@ -445,14 +445,8 @@ Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {
         "metadata@system failed query must log a completed envelope at WARN");
 }
 
-// A streaming query over real tables must report:
-//   * results_size > 0 — bytes pushed to the client over the stream are
-//     accounted, not just the (empty) ExecuteQuery payload;
-//   * schemeshard_id > 0 — the SchemeShard tablet id owning the touched
-//     tables. For a dedicated database this is the database's own
-//     SchemeShard, so it distinguishes a dropped+recreated database from
-//     the old one even when the path is identical (table-less queries
-//     like SELECT 1 omit this field).
+// Streaming query over real tables must report results_size > 0 — bytes
+// pushed to the client are accounted, not just the empty ExecuteQuery payload.
 Y_UNIT_TEST(StreamingBigResultReportsResultsSize) {
     TStringStream logStream;
     size_t logStart = 0;
@@ -490,17 +484,11 @@ Y_UNIT_TEST(StreamingBigResultReportsResultsSize) {
         const auto status = req["status"].GetStringSafe("");
         const auto durationUs = req["duration_us"].GetUIntegerSafe(0);
         const auto resultsSize = req["results_size"].GetUIntegerSafe(0);
-        const auto schemeShardId = req["schemeshard_id"].GetUIntegerSafe(0);
         Cerr << "EightShard^3 cross-join: status=" << status
              << " duration_us=" << durationUs
-             << " results_size=" << resultsSize
-             << " schemeshard_id=" << schemeShardId << Endl;
+             << " results_size=" << resultsSize << Endl;
         UNIT_ASSERT_C(resultsSize > 0,
             TStringBuilder() << "results_size must be > 0, got " << resultsSize);
-        UNIT_ASSERT_C(req.Has("schemeshard_id"),
-            TStringBuilder() << "schemeshard_id field expected for a table query: " << e.RawLine);
-        UNIT_ASSERT_C(schemeShardId > 0,
-            TStringBuilder() << "schemeshard_id must be a positive tablet id, got " << schemeShardId);
         found = true;
     }
     UNIT_ASSERT_C(found, "completed envelope for big cross-join must be present");

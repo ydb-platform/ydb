@@ -238,7 +238,6 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
             break;
         case TExportToS3Settings::EFormat::YDB_DUMP:
         case TExportToS3Settings::EFormat::UNSPECIFIED:
-        default:
             // YdbDump format - empty message
             request.mutable_settings()->mutable_ydb_dump();
             break;

@@ -87,7 +87,7 @@ private:
     std::shared_ptr<arrow::Schema> Schema;
     std::shared_ptr<ICheckpointOutputStream> OutStream;
     std::unique_ptr<parquet::arrow::FileWriter> ArrowWriter;
-    NArrow::TArrowBatchBuilder BatchBuilder;
+    std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
 }; // TS3ParquetExportBuffer
 
 TS3ParquetExportBuffer::TS3ParquetExportBuffer(
@@ -153,7 +153,8 @@ void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32>& tags) {
     Schema.swap(schemaRes.ValueOrDie());
 
     arrow::Status status;
-    if (!(status = BatchBuilder.Start(ydbColumns, Schema)).ok()) {
+    BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>();
+    if (!(status = BatchBuilder->Start(ydbColumns, Schema)).ok()) {
         ErrorString = TStringBuilder() << "Failed to start batch builder: " << status.message();
         return;
     }
@@ -166,12 +167,12 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow& row) {
         return false;
     }
 
-    auto bytesBefore = BatchBuilder.Bytes();
-    BatchBuilder.AddRow(*row);
-    BytesRead += BatchBuilder.Bytes() - bytesBefore;
+    auto bytesBefore = BatchBuilder->Bytes();
+    BatchBuilder->AddRow(*row);
+    BytesRead += BatchBuilder->Bytes() - bytesBefore;
     Rows++;
 
-    if (BatchBuilder.Rows() >= ParquetRowGroupSize) {
+    if (BatchBuilder->Rows() >= ParquetRowGroupSize) {
         return Flush(false);
     }
 
@@ -203,6 +204,10 @@ IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer
 }
 
 bool TS3ParquetExportBuffer::Flush(bool last) {
+    if (!ErrorString.empty()) {
+        return false;
+    }
+
     arrow::Status status;
 
     if (!ArrowWriter) {
@@ -220,9 +225,9 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
         }
     }
 
-    if (BatchBuilder.Rows() != 0) {
+    if (BatchBuilder->Rows() != 0) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-        auto batch = BatchBuilder.FlushBatch(true, false);
+        auto batch = BatchBuilder->FlushBatch(true, false);
         batches.push_back(batch);
         auto tableResult = arrow::Table::FromRecordBatches(batches);
         if (!tableResult.ok()) {
@@ -251,7 +256,9 @@ void TS3ParquetExportBuffer::Clear() {
     Rows = 0;
     BytesRead = 0;
     ErrorString.clear();
-    BatchBuilder.FlushBatch(true, false);
+    if (BatchBuilder) {
+        BatchBuilder->FlushBatch(true, false);
+    }
     ArrowWriter.reset();
     auto newOutStream = ICheckpointOutputStream::Create();
     OutStream.swap(newOutStream);

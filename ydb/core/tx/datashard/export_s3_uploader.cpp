@@ -789,7 +789,7 @@ public:
         switch (s3Settings.GetFormatCase()) {
             case NKikimrSchemeOp::TS3Settings::FORMAT_NOT_SET:
             case NKikimrSchemeOp::TS3Settings::kYdbDump:
-                return EDataFormat::Invalid; // YdbDump format doesn't use the DataFormat field
+                return EDataFormat::Csv;
             case NKikimrSchemeOp::TS3Settings::kParquet:
                 return EDataFormat::Parquet;
         }

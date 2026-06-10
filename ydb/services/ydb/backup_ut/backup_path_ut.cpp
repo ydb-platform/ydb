@@ -38,7 +38,6 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
     TExportSettings MakeExportParquetSettings(TS3BackupTestFixture& f, const TString& sourcePath) {
         return f.MakeExportSettings(sourcePath, "Prefix")
             .Format(NYdb::NExport::TExportToS3Settings::EFormat::PARQUET);
-        
     }
 
     TImportSettings MakeImportSettings(TS3BackupTestFixture& f, const TString& dstPath) {

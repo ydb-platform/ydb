@@ -397,11 +397,11 @@ namespace NKikimr::NDDisk {
         if (auto it = PersistentBufferWriteInflightsByRecord.find({creds.TabletId, creds.Generation, lsn}); it != PersistentBufferWriteInflightsByRecord.end()) {
             Y_ABORT_UNLESS(!it->second.empty());
 
-            auto inflightIt = PersistentBufferDiskOperationInflight.find(*it->second.begin());
+            auto inflightIt = PersistentBufferDiskOperationInflight.find(std::get<0>(*it->second.begin()));
             Y_ABORT_UNLESS(inflightIt != PersistentBufferDiskOperationInflight.end());
             auto& inflight = inflightIt->second;
 
-            if (!checkIsSameRequest(inflight)) {
+            if (!checkIsSameRequest(inflight.Records[std::get<1>(*it->second.begin())])) {
                 return false;
             }
 
@@ -417,13 +417,13 @@ namespace NKikimr::NDDisk {
 
             auto opCookie = NextCookie++;
             auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
-            inflightRecord = {
+            inflightRecord.Records.push_back({
                 .Sender = ev.Sender,
                 .Cookie = ev.Cookie,
                 .Session = ev.InterconnectSession,
                 .Span = std::move(span),
-            };
-            it->second.emplace_back(opCookie);
+            });
+            it->second.emplace_back(opCookie, 0u);
             return false;
         }
         return true;
@@ -433,9 +433,11 @@ namespace NKikimr::NDDisk {
         STLOG_D("TDDiskActor::ProcessPersistentBufferBatchWrite", (evs.size(), evs.size()));
         std::vector<TEvWritePersistentBuffer::TPtr> evsToWrite;
         evsToWrite.reserve(evs.size());
+        // ui32 sectorsCnt = 1;
         for (auto ev : evs) {
             if (PreprocessPersistentBufferWrite(*ev)) {
                 evsToWrite.push_back(ev);
+                // sectorsCnt += selector.Size / SectorSize;
             }
         }
         // TODO make batch write
@@ -579,27 +581,30 @@ namespace NKikimr::NDDisk {
         auto eraseCnt = inflight.OperationCookies.erase(partCookie);
         Y_ABORT_UNLESS(eraseCnt == 1);
 
-        auto it = PersistentBuffers.find({inflight.TabletId, inflight.Generation});
+        Y_ABORT_UNLESS(inflight.Records.size() == 1);
+        auto& inflightRecord = inflight.Records[0];
+
+        auto it = PersistentBuffers.find({inflightRecord.TabletId, inflightRecord.Generation});
         if (it == PersistentBuffers.end()) {
             inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD;
         } else {
-            auto recordIt = it->second.Records.find(inflight.Lsn);
+            auto recordIt = it->second.Records.find(inflightRecord.Lsn);
             if (recordIt == it->second.Records.end()) {
                 inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD;
             } else {
                 auto& pr = recordIt->second;
-                inflight.DataParts.emplace(partCookie, std::move(ev->Get()->Data));
+                inflightRecord.DataParts.emplace(partCookie, std::move(ev->Get()->Data));
                 if (inflight.OperationCookies.empty()) {
-                    if (inflight.PartsCount == 0 || inflight.DataParts.size() != inflight.PartsCount
+                    if (inflightRecord.PartsCount == 0 || inflightRecord.DataParts.size() != inflightRecord.PartsCount
                         || inflight.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
                         inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD;
                         ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
                     } else {
-                        pr.Data = std::move(inflight.JoinData(SectorSize));
+                        pr.Data = std::move(inflightRecord.JoinData(SectorSize));
                         PersistentBufferInMemoryCacheSize += pr.Size;
                         *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
 
-                        auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(inflight.TabletId, inflight.Generation, inflight.Lsn);
+                        auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(inflightRecord.TabletId, inflightRecord.Generation, inflightRecord.Lsn);
                         Y_ABORT_UNLESS(inserted2);
                         ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
                     }
@@ -616,57 +621,67 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie) {
         auto eraseCnt = inflight.OperationCookies.erase(partCookie);
         Y_ABORT_UNLESS(eraseCnt == 1);
-        inflight.Span.Event("Part written");
 
         if (inflight.OperationCookies.empty()) {
-            Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
+            ui32 size = 0;
+            for (auto& record : inflight.Records) {
+                size += record.Size;
+            }
+            Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, size,
                 HPMilliSecondsFloat(HPNow() - inflight.StartTs));
             if (!inflight.ErrorMessage) {
-                auto& buffer = PersistentBuffers[{inflight.TabletId, inflight.Generation}];
-                auto [it, inserted] = buffer.Records.try_emplace(inflight.Lsn);
-                TPersistentBuffer::TRecord& pr = it->second;
-                Y_ABORT_UNLESS(inflight.DataParts.size() == 1 && inflight.PartsCount == 1);
-                Y_ABORT_UNLESS(inserted);
-                pr = {
-                    .OffsetInBytes = inflight.OffsetInBytes,
-                    .Size = (ui32)inflight.DataParts.begin()->second.size(),
-                    .Sectors = std::move(inflight.Sectors),
-                    .VChunkIndex = inflight.VChunkIndex,
-                    .Timestamp = TInstant::Now()
-                };
-                auto& pbh = PersistentBufferHeaders[{pr.Sectors[0].ChunkIdx, pr.Sectors[0].SectorIdx}];
-                pbh.insert({inflight.TabletId, inflight.Generation, inflight.Lsn});
+                for (auto& record : inflight.Records) {
+                    auto& buffer = PersistentBuffers[{record.TabletId, record.Generation}];
+                    auto [it, inserted] = buffer.Records.try_emplace(record.Lsn);
+                    TPersistentBuffer::TRecord& pr = it->second;
+                    Y_ABORT_UNLESS(record.DataParts.size() == 1 && record.PartsCount == 1);
+                    Y_ABORT_UNLESS(inserted);
+                    pr = {
+                        .OffsetInBytes = record.OffsetInBytes,
+                        .Size = (ui32)record.Size,
+                        .Sectors = std::move(record.Sectors),
+                        .VChunkIndex = record.VChunkIndex,
+                        .Timestamp = TInstant::Now()
+                    };
+                    auto& pbh = PersistentBufferHeaders[{pr.Sectors[0].ChunkIdx, pr.Sectors[0].SectorIdx}];
+                    pbh.insert({record.TabletId, record.Generation, record.Lsn});
 
-                buffer.Size += pr.Size;
-                pr.Data = std::move(inflight.DataParts.begin()->second);
-                PersistentBufferInMemoryCacheSize += pr.Size;
-                *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
-                auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(inflight.TabletId, inflight.Generation, inflight.Lsn);
-                Y_ABORT_UNLESS(inserted2);
+                    buffer.Size += pr.Size;
+                    pr.Data = std::move(record.DataParts.begin()->second);
+                    PersistentBufferInMemoryCacheSize += pr.Size;
+                    *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
+                    auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(record.TabletId, record.Generation, record.Lsn);
+                    Y_ABORT_UNLESS(inserted2);
+                }
                 SanitizePersistentBufferInMemoryCache();
             } else {
                 PersistentBufferSpaceAllocator.Free(inflight.OccupiedSectors);
             }
-            auto it = PersistentBufferWriteInflightsByRecord.find({inflight.TabletId, inflight.Generation, inflight.Lsn});
-            Y_ABORT_UNLESS(it != PersistentBufferWriteInflightsByRecord.end());
-            Y_ABORT_UNLESS(!it->second.empty());
-            auto status = inflight.Status;
-            auto errorMessage = inflight.ErrorMessage;
-            for (ui64 replyCookie : it->second) {
-                auto replyIt = PersistentBufferDiskOperationInflight.find(replyCookie);
-                Y_ABORT_UNLESS(replyIt != PersistentBufferDiskOperationInflight.end());
-                auto& replyInflight = replyIt->second;
-                auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
-                    status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
-                auto h = std::make_unique<IEventHandle>(replyInflight.Sender, SelfId(), replyEv.release(), 0, replyInflight.Cookie);
-                if (replyInflight.Session) {
-                    h->Rewrite(TEvInterconnect::EvForward, replyInflight.Session);
+
+            for (auto& record : inflight.Records) {
+                auto it = PersistentBufferWriteInflightsByRecord.find({record.TabletId, record.Generation, record.Lsn});
+                Y_ABORT_UNLESS(it != PersistentBufferWriteInflightsByRecord.end());
+                Y_ABORT_UNLESS(!it->second.empty());
+                auto status = inflight.Status;
+                auto errorMessage = inflight.ErrorMessage;
+                for (auto [replyCookie, pos] : it->second) {
+                    auto replyIt = PersistentBufferDiskOperationInflight.find(replyCookie);
+                    Y_ABORT_UNLESS(replyIt != PersistentBufferDiskOperationInflight.end());
+                    auto& replyInflight = replyIt->second;
+                    for (auto& record : replyInflight.Records) {
+                        auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
+                            status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
+                        auto h = std::make_unique<IEventHandle>(record.Sender, SelfId(), replyEv.release(), 0, record.Cookie);
+                        if (record.Session) {
+                            h->Rewrite(TEvInterconnect::EvForward, record.Session);
+                        }
+                        TActivationContext::Send(h.release());
+                        record.Span.End();
+                    }
+                    PersistentBufferDiskOperationInflight.erase(replyIt);
                 }
-                TActivationContext::Send(h.release());
-                replyInflight.Span.End();
-                PersistentBufferDiskOperationInflight.erase(replyIt);
+                PersistentBufferWriteInflightsByRecord.erase(it);
             }
-            PersistentBufferWriteInflightsByRecord.erase(it);
             *Counters.PersistentBuffer.TotalBytes =
                 (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
         }
@@ -675,28 +690,30 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie, bool resultStatus) {
         auto eraseCnt = inflight.OperationCookies.erase(partCookie);
         Y_ABORT_UNLESS(eraseCnt == 1);
-        inflight.Span.Event("Part erased");
+        Y_ABORT_UNLESS(inflight.Records.size() == 1);
+        auto& inflightRecord = inflight.Records.front();
+        inflightRecord.Span.Event("Part erased");
         if (resultStatus) {
             ClearPersistentBufferRecords(inflight, partCookie);
         }
         if (inflight.OperationCookies.empty()) {
-            Counters.Interface.ErasePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
+            Counters.Interface.ErasePersistentBuffer.Reply(!inflight.ErrorMessage, inflightRecord.Size,
                 HPMilliSecondsFloat(HPNow() - inflight.StartTs));
 
             if (!inflight.ErrorMessage) {
-                PersistentBufferSpaceAllocator.Free(inflight.Sectors);
+                PersistentBufferSpaceAllocator.Free(inflightRecord.Sectors);
             } else {
                 PersistentBufferSpaceAllocator.Free(inflight.OccupiedSectors);
             }
 
             auto replyEv = std::make_unique<TEvErasePersistentBufferResult>(
                 inflight.Status, inflight.ErrorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
-            auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
-            if (inflight.Session) {
-                h->Rewrite(TEvInterconnect::EvForward, inflight.Session);
+            auto h = std::make_unique<IEventHandle>(inflightRecord.Sender, SelfId(), replyEv.release(), 0, inflightRecord.Cookie);
+            if (inflightRecord.Session) {
+                h->Rewrite(TEvInterconnect::EvForward, inflightRecord.Session);
             }
             TActivationContext::Send(h.release());
-            inflight.Span.End();
+            inflightRecord.Span.End();
             PersistentBufferDiskOperationInflight.erase(opCookie);
 
             *Counters.PersistentBuffer.TotalBytes =
@@ -721,10 +738,12 @@ namespace NKikimr::NDDisk {
             inflight.ErrorMessage = ev->Get()->ErrorMessage;
         }
         if (ev->Get()->IsErase) {
+            Y_ABORT_UNLESS(inflight.Records.size() == 1);
+            auto& inflightRecord = inflight.Records[0];
             auto itErase = inflight.Erases.find(partCookie);
             Y_ABORT_UNLESS(itErase != inflight.Erases.end());
             for (auto& e : itErase->second) {
-                auto it = PersistentBufferEraseInflightsByRecord.find(TPersistentBufferRecordId{inflight.TabletId, e.Generation, e.Lsn});
+                auto it = PersistentBufferEraseInflightsByRecord.find(TPersistentBufferRecordId{inflightRecord.TabletId, e.Generation, e.Lsn});
                 if (it == PersistentBufferEraseInflightsByRecord.end()) {
                     continue;
                 }
@@ -830,24 +849,29 @@ namespace NKikimr::NDDisk {
         auto opCookie = NextCookie++;
         auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
         inflightRecord = {
+
+            .OccupiedSectors = sectors,
+            .StartTs = HPNow(),
+        };
+        inflightRecord.Records.push_back({
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,
             .Session = ev->InterconnectSession,
             .Span = std::move(span),
-
             .TabletId = creds.TabletId,
             .Generation = creds.Generation,
             .VChunkIndex = selector.VChunkIndex,
             .Lsn = lsn,
             .OffsetInBytes = selector.OffsetInBytes,
             .Size = selector.Size,
-            .Sectors = sectors,
             .DataParts = {{0, std::move(payload)}},
             .PartsCount = 1,
-            .OccupiedSectors = std::move(sectors),
-            .StartTs = HPNow(),
-        };
-        PersistentBufferWriteInflightsByRecord[TPersistentBufferRecordId{creds.TabletId, creds.Generation, lsn}].emplace_back(opCookie);
+            .Sectors = std::move(sectors),
+        });
+        PersistentBufferWriteInflightsByRecord[TPersistentBufferRecordId{creds.TabletId, creds.Generation, lsn}].emplace_back(
+            opCookie,
+            inflightRecord.Records.size() - 1
+        );
 
         // TODO: make uring to call flush just once
         for(auto& [chunkIdx, offset, data] : parts) {
@@ -859,7 +883,7 @@ namespace NKikimr::NDDisk {
             partOp->SetCookie(opCookie);
             partOp->SetPartCookie(cookie);
             partOp->PrepareWrite(std::move(data), diskOffset, chunkIdx, offset);
-            inflightRecord.Span.Event(
+            inflightRecord.Records[0].Span.Event(
 #if defined(__linux__)
                 UringRouter ? "DirectUringOp" :
 #endif
@@ -998,6 +1022,10 @@ namespace NKikimr::NDDisk {
 
         ui64 operationCookie = NextCookie++;
         auto [inflightIt, inserted] = PersistentBufferDiskOperationInflight.try_emplace(operationCookie, TPersistentBufferDiskOperationInFlight{
+            .StartTs = HPNow(),
+        });
+        Y_ABORT_UNLESS(inserted);
+        inflightIt->second.Records.push_back({
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,
             .Session = ev->InterconnectSession,
@@ -1010,9 +1038,7 @@ namespace NKikimr::NDDisk {
             .OffsetInBytes = selector.OffsetInBytes,
             .Size = selector.Size,
             .PartsCount = 0,
-            .StartTs = HPNow(),
         });
-        Y_ABORT_UNLESS(inserted);
         pr.ReadInflight.insert(operationCookie);
         if (pr.ReadInflight.size() > 1) {
             return;
@@ -1038,7 +1064,7 @@ namespace NKikimr::NDDisk {
                     auto offset = DiskFormat->Offset(pr.Sectors[first].ChunkIdx, 0, dataOffset);
                     op->PrepareRead(size, offset, pr.Sectors[first].ChunkIdx, dataOffset);
                     DirectUringOp(op);
-                    inflightIt->second.PartsCount++;
+                    inflightIt->second.Records[0].PartsCount++;
                     first = sectorIdx;
                 }
             }
@@ -1058,22 +1084,24 @@ namespace NKikimr::NDDisk {
             auto inflightIt = PersistentBufferDiskOperationInflight.find(inflightCookie);
             Y_ABORT_UNLESS(inflightIt != PersistentBufferDiskOperationInflight.end());
             auto& inflight = inflightIt->second;
+            Y_ABORT_UNLESS(inflight.Records.size() == 1);
+            auto& inflightRecord = inflight.Records[0];
             TRope data;
             if (pr.Data) {
-                data = std::move(TrimData(pr.Data, pr.OffsetInBytes, pr.Size, inflight.OffsetInBytes, inflight.Size));
+                data = std::move(TrimData(pr.Data, pr.OffsetInBytes, pr.Size, inflightRecord.OffsetInBytes, inflightRecord.Size));
             }
             auto replyEv = std::make_unique<TEvReadPersistentBufferResult>(status, errorMessage,
                 pr.VChunkIndex, pr.OffsetInBytes, pr.Size, std::move(data));
-            auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
-            if (inflight.Session) {
-                h->Rewrite(TEvInterconnect::EvForward, inflight.Session);
+            auto h = std::make_unique<IEventHandle>(inflightRecord.Sender, SelfId(), replyEv.release(), 0, inflightRecord.Cookie);
+            if (inflightRecord.Session) {
+                h->Rewrite(TEvInterconnect::EvForward, inflightRecord.Session);
             }
             TActivationContext::Send(h.release());
 
             const bool ok = (status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            Counters.Interface.ReadPersistentBuffer.Reply(ok, inflight.Size,
+            Counters.Interface.ReadPersistentBuffer.Reply(ok, inflightRecord.Size,
                 HPMilliSecondsFloat(HPNow() - inflight.StartTs));
-            inflight.Span.End();
+            inflightRecord.Span.End();
             PersistentBufferDiskOperationInflight.erase(inflightIt);
         }
         pr.ReadInflight.clear();
@@ -1084,17 +1112,19 @@ namespace NKikimr::NDDisk {
         auto inflightIt = PersistentBufferDiskOperationInflight.find(operationCookie);
         Y_ABORT_UNLESS(inflightIt != PersistentBufferDiskOperationInflight.end());
         auto& inflight = inflightIt->second;
+        Y_ABORT_UNLESS(inflight.Records.size() == 1);
+        auto& inflightRecord = inflight.Records[0];
 
         auto replyEv = std::make_unique<TEvReadPersistentBufferResult>(inflight.Status, inflight.ErrorMessage);
-        auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
-        if (inflight.Session) {
-            h->Rewrite(TEvInterconnect::EvForward, inflight.Session);
+        auto h = std::make_unique<IEventHandle>(inflightRecord.Sender, SelfId(), replyEv.release(), 0, inflightRecord.Cookie);
+        if (inflightRecord.Session) {
+            h->Rewrite(TEvInterconnect::EvForward, inflightRecord.Session);
         }
         TActivationContext::Send(h.release());
 
-        Counters.Interface.ReadPersistentBuffer.Reply(false, inflight.Size,
+        Counters.Interface.ReadPersistentBuffer.Reply(false, inflightRecord.Size,
             HPMilliSecondsFloat(HPNow() - inflight.StartTs));
-        inflight.Span.End();
+        inflightRecord.Span.End();
         PersistentBufferDiskOperationInflight.erase(inflightIt);
     }
 
@@ -1149,7 +1179,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    TRope TDDiskActor::TPersistentBufferDiskOperationInFlight::JoinData(ui32 sectorSize) {
+    TRope TDDiskActor::TPersistentBufferDiskOperationInFlight::TRecord::JoinData(ui32 sectorSize) {
         Y_ABORT_UNLESS(DataParts.size() == PartsCount && PartsCount > 0);
         while (DataParts.size() > 1) {
             auto first = DataParts.begin();
@@ -1175,21 +1205,23 @@ namespace NKikimr::NDDisk {
             .Attribute("tablet_id", static_cast<long>(creds.TabletId)));
         const ui64 barrierEraseCookie = NextCookie++;
         auto [inflightRecord, inserted] = PersistentBufferDiskOperationInflight.try_emplace(barrierEraseCookie, TPersistentBufferDiskOperationInFlight{
+            .StartTs = HPNow(),
+        });
+        Y_ABORT_UNLESS(inserted);
+        inflightRecord->second.Records.push_back({
             .Sender = queryEv.Sender,
             .Cookie = queryEv.Cookie,
             .Session = queryEv.InterconnectSession,
             .Span = std::move(span),
             .TabletId = creds.TabletId,
-            .StartTs = HPNow(),
         });
-        Y_ABORT_UNLESS(inserted);
 
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(1);
         Y_ABORT_UNLESS(sectors.size() == 1);
         auto [oldChunkIdx, oldSectorIdx, barrier] = PersistentBufferBarriersManager.MoveBarrier(creds.TabletId, creds.Generation, lsn, sectors[0]);
 
         if (oldChunkIdx != Max<ui32>()) {
-            inflightRecord->second.Sectors.push_back({.ChunkIdx = oldChunkIdx, .SectorIdx = oldSectorIdx});
+            inflightRecord->second.Records[0].Sectors.push_back({.ChunkIdx = oldChunkIdx, .SectorIdx = oldSectorIdx});
         }
         const ui64 cookie = NextCookie++;
         inflightRecord->second.OperationCookies.insert(cookie);
@@ -1224,12 +1256,14 @@ namespace NKikimr::NDDisk {
         const ui64 batchEraseCookie = NextCookie++;
 
         auto [inflightRecord, inserted] = PersistentBufferDiskOperationInflight.try_emplace(batchEraseCookie, TPersistentBufferDiskOperationInFlight{
+            .StartTs = HPNow(),
+        });
+        inflightRecord->second.Records.push_back({
             .Sender = queryEv.Sender,
             .Cookie = queryEv.Cookie,
             .Session = queryEv.InterconnectSession,
             .Span = std::move(span),
             .TabletId = creds.TabletId,
-            .StartTs = HPNow(),
         });
         Y_ABORT_UNLESS(inserted);
 
@@ -1286,17 +1320,19 @@ namespace NKikimr::NDDisk {
         const ui64 fastEraseCookie = NextCookie++;
 
         auto [inflightRecord, inserted] = PersistentBufferDiskOperationInflight.try_emplace(fastEraseCookie, TPersistentBufferDiskOperationInFlight{
+            .StartTs = HPNow(),
+        });
+        Y_ABORT_UNLESS(inserted);
+        inflightRecord->second.Records.push_back({
             .Sender = queryEv.Sender,
             .Cookie = queryEv.Cookie,
             .Session = queryEv.InterconnectSession,
             .Span = std::move(span),
             .TabletId = creds.TabletId,
-            .StartTs = HPNow(),
         });
-        Y_ABORT_UNLESS(inserted);
 
         if (fastErase.OldChunkIdx != Max<ui32>()) {
-            inflightRecord->second.Sectors.push_back({.ChunkIdx = fastErase.OldChunkIdx, .SectorIdx = fastErase.OldSectorIdx});
+            inflightRecord->second.Records[0].Sectors.push_back({.ChunkIdx = fastErase.OldChunkIdx, .SectorIdx = fastErase.OldSectorIdx});
         }
         const ui64 cookie = NextCookie++;
         inflightRecord->second.OperationCookies.insert(cookie);
@@ -1316,7 +1352,7 @@ namespace NKikimr::NDDisk {
         partOp->SetPartCookie(cookie);
         partOp->SetIsErase(true);
         partOp->PrepareWrite(std::move(headerRope), diskOffset, fastErase.ChunkIdx, chunkOffset);
-        inflightRecord->second.Span.Event(
+        inflightRecord->second.Records[0].Span.Event(
 #if defined(__linux__)
             UringRouter ? "DirectUringOp" :
 #endif
@@ -1327,12 +1363,14 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie) {
         auto erases = inflight.Erases.find(partCookie);
         Y_ABORT_UNLESS(erases != inflight.Erases.end());
+        Y_ABORT_UNLESS(inflight.Records.size() == 1);
+        auto& inflightRecord = *inflight.Records.begin();
         for (auto& e : erases->second) {
             auto generation = e.Generation;
             auto lsn = e.Lsn;
-            STLOG_T("TDDiskActor::ClearPersistentBufferRecords", (tabletId, inflight.TabletId), (lsn, lsn), (generation, generation));
+            STLOG_T("TDDiskActor::ClearPersistentBufferRecords", (tabletId, inflightRecord.TabletId), (lsn, lsn), (generation, generation));
 
-            const auto it = PersistentBuffers.find({inflight.TabletId, generation});
+            const auto it = PersistentBuffers.find({inflightRecord.TabletId, generation});
             if (it == PersistentBuffers.end()) {
                 continue;
             }
@@ -1342,12 +1380,12 @@ namespace NKikimr::NDDisk {
                 continue;
             }
             TPersistentBuffer::TRecord& pr = jt->second;
-            SanitizePersistentBufferInMemoryCache(inflight.TabletId, generation, lsn, pr);
+            SanitizePersistentBufferInMemoryCache(inflightRecord.TabletId, generation, lsn, pr);
 
             auto pbhIt = PersistentBufferHeaders.find({pr.Sectors[0].ChunkIdx, pr.Sectors[0].SectorIdx});
             Y_ABORT_UNLESS(pbhIt != PersistentBufferHeaders.end());
             auto& pbh = pbhIt->second;
-            pbh.erase({inflight.TabletId, generation, lsn});
+            pbh.erase({inflightRecord.TabletId, generation, lsn});
             if (pbh.empty()) {
                 PersistentBufferHeaders.erase(pbhIt);
                 PersistentBufferSpaceAllocator.Free(pr.Sectors);

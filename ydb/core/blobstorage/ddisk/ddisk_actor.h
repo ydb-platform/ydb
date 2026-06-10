@@ -712,33 +712,39 @@ namespace NKikimr::NDDisk {
         };
 
         struct TPersistentBufferDiskOperationInFlight {
-            TActorId Sender;
-            ui64 Cookie;
-            TActorId Session;
+            struct TRecord {
+                TActorId Sender;
+                ui64 Cookie;
+                TActorId Session;
+                NWilson::TSpan Span;
 
-            NWilson::TSpan Span;
+                ui64 TabletId;
+                ui32 Generation;
+                ui64 VChunkIndex;
+                ui64 Lsn;
+                ui32 OffsetInBytes;
+                ui32 Size;
+
+                std::map<ui64, TRope> DataParts;
+                ui32 PartsCount;
+                std::vector<TPersistentBufferSectorInfo> Sectors;
+
+                TRope JoinData(ui32 sectorSize);
+            };
+
+            std::vector<TRecord> Records;
+
             std::unordered_set<ui64> OperationCookies;
-
-            ui64 TabletId;
-            ui32 Generation;
-            ui64 VChunkIndex;
-            ui64 Lsn;
-            ui32 OffsetInBytes;
-            ui32 Size;
-            std::vector<TPersistentBufferSectorInfo> Sectors;
 
             // map operationCookie to <lsn, generation> pairs that were erased by this operation
             std::unordered_map<ui64, std::vector<TEraseLsnId>> Erases;
 
-            std::map<ui64, TRope> DataParts;
-            ui32 PartsCount;
+
             std::vector<TPersistentBufferSectorInfo> OccupiedSectors;
             NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
             std::optional<TString> ErrorMessage = std::nullopt;
 
             NHPTimer::STime StartTs{};
-
-            TRope JoinData(ui32 sectorSize);
         };
 
         struct TPersistentBufferEraseInflight {
@@ -748,7 +754,9 @@ namespace NKikimr::NDDisk {
 
         std::unordered_map<TPersistentBufferLocation, std::unordered_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
-        std::unordered_map<TPersistentBufferRecordId, std::vector<ui64>> PersistentBufferWriteInflightsByRecord;
+
+        // map record to operation cookie + record in inflight position
+        std::unordered_map<TPersistentBufferRecordId, std::vector<std::tuple<ui64, ui32>>> PersistentBufferWriteInflightsByRecord;
         std::unordered_map<TPersistentBufferRecordId, TPersistentBufferEraseInflight> PersistentBufferEraseInflightsByRecord;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;

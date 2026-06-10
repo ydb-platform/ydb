@@ -38,7 +38,7 @@ ALTER TABLE documents DROP INDEX json_idx
 
 Функции и выражения для работы с JSON в предикатах:
 
-* [Функции для работы с JSON](../yql/reference/builtins/json.md) — `JSON_EXISTS`, `JSON_VALUE`, `JSON_QUERY`;
+* [Функции для работы с JSON](../yql/reference/builtins/json.md) — `JSON_EXISTS` и `JSON_VALUE`;
 * [JsonPath](../yql/reference/builtins/json.md#jsonpath) — язык запросов для обращения к значениям внутри JSON.
 
 Готовые сценарии использования собраны в разделе [рецептов поиска по JSON-документам](../recipes/json-search/index.md).

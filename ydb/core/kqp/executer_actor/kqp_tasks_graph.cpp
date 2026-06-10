@@ -281,17 +281,6 @@ NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType ReadTypeToProto(co
     YQL_ENSURE(false, "Invalid read type in task meta.");
 }
 
-TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpReadOlapRanges::EReadType& type) {
-    switch (type) {
-        case NKqpProto::TKqpPhyOpReadOlapRanges::ROWS:
-            return TTaskMeta::TReadInfo::EReadType::Rows;
-        case NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS:
-            return TTaskMeta::TReadInfo::EReadType::Blocks;
-        default:
-            YQL_ENSURE(false, "Invalid read type from TKqpPhyOpReadOlapRanges protobuf.");
-    }
-}
-
 void AddQueryPathParam(TKqpTasksGraph::TTaskType& task, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext) {
     if (!userRequestContext || !userRequestContext->IsStreamingQuery) {
         return;

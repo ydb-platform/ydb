@@ -46,6 +46,15 @@ ui64 GetLogicalMessageCount(i64 messageCountField) {
     return 1;
 }
 
+i64 GetReadMessageCountField(
+    const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& messageData)
+{
+    if (messageData.has_batch_metadata()) {
+        return messageData.batch_metadata().message_count();
+    }
+    return 0;
+}
+
 std::string KafkaBytesToString(const TKafkaBytes& bytes) {
     if (!bytes) {
         return {};
@@ -1366,7 +1375,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                     firstOffset = messageData.offset();
                 }
                 currentOffset = messageData.offset();
-                const ui64 logicalMessageCount = GetLogicalMessageCount(messageData.message_count());
+                const ui64 logicalMessageCount = GetLogicalMessageCount(GetReadMessageCountField(messageData));
                 desiredOffset = Max(desiredOffset, currentOffset + static_cast<i64>(logicalMessageCount));
                 partitionStream->UpdateMaxReadOffset(currentOffset + static_cast<i64>(logicalMessageCount) - 1);
                 const i64 messageSize = static_cast<i64>(messageData.data().size());
@@ -2873,7 +2882,7 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
             if constexpr (UseMigrationProtocol) {
                 ++messagesCount;
             } else {
-                messagesCount += static_cast<i64>(GetLogicalMessageCount(messageData.message_count()));
+                messagesCount += static_cast<i64>(GetLogicalMessageCount(GetReadMessageCountField(messageData)));
             }
         }
     }
@@ -3094,7 +3103,7 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
 
     if constexpr (!UseMigrationProtocol) {
         const auto& messageMeta = Parent->GetMessageMeta(Batch, Message);
-        const i64 messageCountField = messageData.message_count();
+        const i64 messageCountField = GetReadMessageCountField(messageData);
         const bool expandBatch = Parent->GetDoDecompress()
             && messageData.message_format() == Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::KAFKA_BATCH;
 
@@ -3327,7 +3336,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
 
             ++messagesProcessed;
             if constexpr (!UseMigrationProtocol) {
-                messagesProcessed += GetLogicalMessageCount(data.message_count()) - 1;
+                messagesProcessed += GetLogicalMessageCount(GetReadMessageCountField(data)) - 1;
             }
             dataProcessed += static_cast<i64>(data.data().size());
             minOffset = Min(minOffset, static_cast<i64>(data.offset()));

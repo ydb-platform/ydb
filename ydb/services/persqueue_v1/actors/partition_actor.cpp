@@ -615,8 +615,10 @@ bool FillBatchedData(
             auto* msgMeta = message->mutable_metadata_items();
             *msgMeta = (proto.GetMessageMeta());
             
-            message->set_message_count(r.GetMessageCount());
             message->set_message_format(ToTopicReadMessageFormat(r.GetMessageFormat()));
+            if (r.GetMessageCount() > 1) {
+                message->mutable_batch_metadata()->set_message_count(r.GetMessageCount());
+            }
         }
         hasData = true;
     }

@@ -428,11 +428,18 @@ message StreamReadMessage {
                 KAFKA_BATCH = 1;
             }
 
-            // Number of messages in batch. If not set or <= 1, that means that this message is not a batch.
-            int64 message_count = 9;
+            // Format of message payload in data field.
+            MessageFormat message_format = 9;
 
-            // Format of batched message payload in data field.
-            MessageFormat message_format = 10;
+            // Metadata of a batch of client messages packed into the data field.
+            message BatchMetadata {
+                // Number of messages in batch. If not set or <= 1, that means that this message is not a batch.
+                int64 message_count = 1;
+            }
+
+            // Present when several logical messages are packed into data.
+            // May be absent for single-message reads even with non-STANDARD message_format.
+            optional BatchMetadata batch_metadata = 10;
         }
 
         // Representation of sequence of client messages from one write session.

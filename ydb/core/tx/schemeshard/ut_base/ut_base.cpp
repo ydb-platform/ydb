@@ -6934,11 +6934,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(RowTableLocalBloomIndexMigration) {
-        // Mirrors TOlap::LocalIndexMigration for row tables: a table created with the flag OFF has
-        // legacy nameless ByKeyFilterPrefixes and no scheme objects; enabling
-        // EnableLocalIndexAsSchemeObject and restarting the schemeshard makes the LocalIndexMigrator
-        // synthesize a named TTableIndex per prefix. Engine prefixes are untouched; migration is
-        // idempotent across a second restart.
+        // Tests migration of legacy nameless ByKeyFilterPrefixes to named TTableIndex
+        // scheme objects. Migration should be idempotent and leave engine prefixes untouched.
         TTestBasicRuntime runtime;
         TTestEnvOptions options;
         TTestEnv env(runtime, options);
@@ -6948,9 +6945,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             return DescribePath(runtime, "/MyRoot/Table", true)
                 .GetPathDescription().GetTable();
         };
-        // Row-table local bloom indexes are reported inline under Table.TableIndexes (not as the
-        // generic Children list, unlike OLAP column tables). Assert the migrated set matches the
-        // legacy prefixes: idx_bloom_1 over (Key1) and idx_bloom_2 over (Key1, Key2), both ready.
+        // Assert the migrated set matches the legacy prefixes: idx_bloom_1 over (Key1)
+        // and idx_bloom_2 over (Key1, Key2).
         auto checkMigratedBloomIndexes = [&]() {
             const auto table = getTable();
             THashMap<TString, TVector<TString>> keysByName;
@@ -6967,7 +6963,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(keysByName.at("idx_bloom_2"), (TVector<TString>{"Key1", "Key2"}));
         };
 
-        // Two PK columns and two legacy prefixes (length 1 and 2) — no named indexes specified.
+        // Two PK columns and two legacy prefixes (length 1 and 2) - no named indexes specified.
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "Key1" Type: "Uint64"}
@@ -6998,9 +6994,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(RowTableLocalBloomIndexConsistentCopy) {
-        // Consistent copy of a row table that has a prefix bloom filter scheme object must carry
-        // the named TTableIndex child to the copy (using the generic index op, not the OLAP one),
-        // keeping it consistent with the copied engine ByKeyFilterPrefixes.
+        // Consistent copy of a row table must carry the prefix bloom filter scheme object
+        // to the copy, keeping it consistent with the engine ByKeyFilterPrefixes.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
@@ -7078,8 +7073,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(RowTableLocalBloomIndexCopyTable) {
-        // Single CopyTable of a row table with a prefix bloom filter scheme object must carry the
-        // named TTableIndex child (generic index op path) and the engine ByKeyFilterPrefix.
+        // CopyTable of a row table must carry the prefix bloom filter scheme object
+        // and the engine ByKeyFilterPrefix.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
@@ -7101,8 +7096,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(RowTableLocalBloomIndexMoveTable) {
-        // Moving (renaming) a whole row table keeps its prefix bloom filter scheme object child and
-        // the engine ByKeyFilterPrefix consistent at the new location.
+        // Moving a row table keeps its prefix bloom filter scheme object and
+        // engine ByKeyFilterPrefix consistent.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
@@ -7125,8 +7120,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(RowTableLocalBloomIndexMoveIndex) {
-        // Renaming a row-table prefix bloom filter index (mirrors TOlap::MoveColumnTableLocalIndex):
-        // the scheme object is renamed; the engine ByKeyFilterPrefix (length-only) is unaffected.
+        // Renaming a row-table prefix bloom filter index renames the scheme object;
+        // the engine ByKeyFilterPrefix is unaffected.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
@@ -7150,6 +7145,76 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // Move non-existent index -> error; move to an existing name without overwrite -> error.
         TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "non_existent", "something", false,
             {NKikimrScheme::StatusPathDoesNotExist});
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexCreate) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_1",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexDropIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            IndexName: "idx_bloom_1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 0);
+    }
+
+    Y_UNIT_TEST(RowTableLocalBloomIndexDisableFilter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        CreateRowTableWithBloomIndex(runtime, env, txId, "Table");
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+                EnableFilterByKey: false
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 0);
     }
 
     Y_UNIT_TEST(CreatePersQueueGroup) { //+

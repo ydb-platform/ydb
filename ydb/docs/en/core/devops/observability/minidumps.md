@@ -6,7 +6,6 @@ Unlike a system [core dump](https://en.wikipedia.org/wiki/Core_dump), a minidump
 
 - takes up significantly less space;
 - is collected by its own signal handler and does not depend on the host's `ulimit` and `core_pattern` settings;
-- is written out-of-process, which makes it possible to obtain a dump even when the heap is corrupted and collecting a full core dump is unreliable;
 - can be automatically passed to an external script for post-processing (uploading, symbolization, alerting).
 
 {% note info %}

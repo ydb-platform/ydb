@@ -49,7 +49,7 @@ jobs:
     if: ${{ !cancelled() && needs.ydbdoc-verify.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger PR-check on translation PR
+      - name: Trigger PR-check and docs rebuild on translation PR
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
@@ -59,6 +59,8 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              labels: ['ok-to-test'],
+              labels: ['ok-to-test', 'rebuild_docs'],
             });
-            core.info(`Added ok-to-test to translation PR #${prNumber}`);
+            core.info(
+              `Added ok-to-test and rebuild_docs to translation PR #${prNumber}`
+            );

@@ -13,6 +13,7 @@
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -40,6 +41,12 @@ using ECodec = std::conditional_t<UseMigrationProtocol, Ydb::PersQueue::V1::Code
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
 static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
+
+bool IsTopicMessagesBatchingEnabled(const TActorContext& /*ctx*/) {
+    return HasAppData()
+        && AppData()->FeatureFlags.GetEnableTopicMessagesBatching()
+        && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
+}
 
 template <bool UseMigrationProtocol>
 ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {

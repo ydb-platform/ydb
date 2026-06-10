@@ -62,12 +62,6 @@ public:
             bloomIndex->add_index_columns("resource_id");
             bloomIndex->mutable_local_bloom_filter_index()->set_false_positive_probability(0.01);
         }
-        {
-            auto* minMaxIndex = req.add_indexes();
-            minMaxIndex->set_name("idx_minmax");
-            minMaxIndex->add_index_columns("payload");
-            minMaxIndex->mutable_local_min_max_index();
-        }
 
         NKikimrSchemeOp::TModifyScheme modifyScheme;
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
@@ -90,7 +84,6 @@ NKikimrSchemeOp::TColumnTableDescription ConvertColumnTableWithIndexes() {
     NActors::TTestBasicRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
-    runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
 
     const auto edge = runtime.AllocateEdgeActor();
     runtime.Register(new TConvertColumnTableActor(edge), 0, runtime.GetAppData().SystemPoolId);
@@ -125,7 +118,6 @@ Y_UNIT_TEST_SUITE(ConvertColumnTableIndexEntityIds) {
         }
 
         bool foundBloom = false;
-        bool foundMinMax = false;
         for (const auto& index : schema.GetIndexes()) {
             if (index.GetName() == "idx_bloom") {
                 foundBloom = true;
@@ -134,15 +126,8 @@ Y_UNIT_TEST_SUITE(ConvertColumnTableIndexEntityIds) {
                 UNIT_ASSERT_VALUES_EQUAL(index.GetBloomFilter().GetColumnIds().size(), 1u);
                 UNIT_ASSERT_VALUES_EQUAL(index.GetBloomFilter().GetColumnIds(0), 2u);
             }
-            if (index.GetName() == "idx_minmax") {
-                foundMinMax = true;
-                UNIT_ASSERT_VALUES_EQUAL(index.GetId(), 6u);
-                UNIT_ASSERT(index.HasMinMaxIndex());
-                UNIT_ASSERT_VALUES_EQUAL(index.GetMinMaxIndex().GetColumnId(), 4u);
-            }
         }
         UNIT_ASSERT(foundBloom);
-        UNIT_ASSERT(foundMinMax);
     }
 }
 

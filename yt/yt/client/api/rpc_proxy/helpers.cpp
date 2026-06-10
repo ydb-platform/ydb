@@ -52,7 +52,7 @@ void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceP
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ThrowUnimplemented(const TString& method)
+void ThrowUnimplemented(const std::string& method)
 {
     THROW_ERROR_EXCEPTION("%Qv method is not implemented in RPC proxy",
         method);
@@ -1354,7 +1354,7 @@ void FromProto(
     const NProto::TMultiTablePartition& protoMultiTablePartition)
 {
     for (const auto& range : protoMultiTablePartition.table_ranges()) {
-        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<TString>(range)));
+        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<std::string>(range)));
     }
 
     if (protoMultiTablePartition.has_aggregate_statistics()) {
@@ -2741,9 +2741,9 @@ TIntrusivePtr<NApi::IRowset<TTypeErasedRow>> DeserializeRowset(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SortByRegexes(std::vector<TString>& values, const std::vector<NRe2::TRe2Ptr>& regexes)
+void SortByRegexes(std::vector<std::string>& values, const std::vector<NRe2::TRe2Ptr>& regexes)
 {
-    auto valueToRank = [&] (const TString& value) -> size_t {
+    auto valueToRank = [&] (const std::string& value) -> size_t {
         for (size_t index = 0; index < regexes.size(); ++index) {
             if (NRe2::TRe2::FullMatch(NRe2::StringPiece(value), *regexes[index])) {
                 return index;

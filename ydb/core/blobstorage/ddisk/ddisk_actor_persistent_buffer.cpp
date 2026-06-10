@@ -1294,6 +1294,10 @@ namespace NKikimr::NDDisk {
 
             auto zeroingData = TRcBuf::UninitializedPageAligned(SectorSize);
             memset(zeroingData.GetDataMut(), 0, SectorSize);
+            memcpy(
+                zeroingData.GetDataMut(),
+                TPersistentBufferHeader::PersistentBufferHeaderSignature,
+                sizeof(TPersistentBufferHeader::PersistentBufferHeaderSignature));
 
             // Batched headers does not allow to zeroing header. Now we should do zero data sector
             auto chunkOffset = pr.Sectors[1].SectorIdx * SectorSize;

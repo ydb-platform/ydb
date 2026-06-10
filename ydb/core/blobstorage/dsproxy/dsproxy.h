@@ -233,7 +233,7 @@ public:
         if (ParentSpan) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
-                parentTraceId.GetTimeToLive()), ParentSpan.GetName());
+                    parentTraceId.GetTimeToLive()), params.TypeSpecific.Name);
             ParentSpan.GetWilsonSpanPtr()->Link(Span.GetTraceId());
             Span.GetWilsonSpanPtr()->Attribute("GroupId", Info->GroupID.GetRawId());
             Span.GetWilsonSpanPtr()->Attribute("RestartCounter", RestartCounter);

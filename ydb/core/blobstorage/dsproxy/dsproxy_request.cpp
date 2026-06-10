@@ -1014,7 +1014,7 @@ namespace NKikimr {
                 }
 
                 if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
-                    wilsonSpan->EndError(errorReason);
+                    wilsonSpan->EndError(std::move(errorReason));
                 } else if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
                     retroSpan->EndError();
                 }

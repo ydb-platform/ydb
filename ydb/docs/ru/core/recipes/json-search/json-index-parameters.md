@@ -97,10 +97,10 @@ WHERE JSON_VALUE(
 
 Для всех трёх способов поддерживаются параметры со следующими типами: `Int8` … `Int64`, `Uint8` … `Uint64`, `Float`, `Double`, `Bytes` (`String`), `Text` (`Utf8`), `Bool`.
 
-Подробнее о типах см. в [{#T}](../../dev/json-indexes.md#parameters).
+Подробнее о типах см. в [{#T}](../../dev/json-indexes.md#json-value).
 
 ## Подробнее
 
 * [{#T}](json-index-quickstart.md) — базовый сценарий использования JSON-индекса.
-* [Передача параметров в предикаты JSON-индекса](../../dev/json-indexes.md#parameters) — детальное описание всех вариантов.
+* [Передача параметров в предикаты JSON-индекса](../../dev/json-indexes.md#json-value) — детальное описание всех вариантов.
 * [JsonPath](../../yql/reference/builtins/json.md#jsonpath) — синтаксис языка JsonPath.

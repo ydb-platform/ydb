@@ -6,7 +6,7 @@
 
 {% endnote %}
 
-JSON-индексы — это специализированный тип [вторичного индекса](../concepts/glossary.md#secondary-index), который ускоряет фильтрацию строк таблицы по условиям, накладываемым на содержимое колонок типа `Json` и `JsonDocument`. Индекс задействуется, если в предикате `WHERE` используются функции [JSON_EXISTS](../yql/reference/builtins/json.md) и [JSON_VALUE](../yql/reference/builtins/json.md) с выражениями [JsonPath](../yql/reference/builtins/json.md#jsonpath). В отличие от традиционных вторичных индексов, оптимизированных для поиска по равенству или диапазону отдельных колонок таблицы, JSON-индекс работает с произвольными путями внутри JSON-документа.
+JSON-индексы — это специализированный тип [полнотекстового индекса](../concepts/glossary.md#fulltext-index), который ускоряет фильтрацию строк таблицы по условиям, накладываемым на содержимое колонок типа `Json` и `JsonDocument`. Индекс задействуется, если в предикате `WHERE` используются функции [JSON_EXISTS](../yql/reference/builtins/json.md) и [JSON_VALUE](../yql/reference/builtins/json.md) с выражениями [JsonPath](../yql/reference/builtins/json.md#jsonpath). В отличие от традиционных вторичных индексов, оптимизированных для поиска по равенству или диапазону отдельных колонок таблицы, JSON-индекс работает с произвольными путями внутри JSON-документа.
 
 Общее описание поиска по JSON и устройства инвертированного индекса по путям JSON-документа см. в разделе [{#T}](../concepts/query_execution/json_search.md).
 
@@ -35,7 +35,7 @@ JSON-индекс является [глобальным синхронным](.
 Удаление JSON-индексов выполняется через [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#drop-index):
 
 ```yql
-ALTER TABLE `Documents` DROP INDEX `json_idx`;
+ALTER TABLE documents DROP INDEX json_idx
 ```
 
 Синтаксис запроса с явным указанием JSON-индекса:
@@ -192,7 +192,7 @@ WHERE JSON_VALUE(JSON_VALUE(doc, '$.a' RETURNING Utf8), '$.b' RETURNING Utf8) = 
 
 {% note info %}
 
-Для проверки «значение равно `false`» или «путь отсутствует / равен `null`» используйте JsonPath внутри `JSON_EXISTS`, например `JSON_EXISTS(doc, '$.k == false')` или `JSON_EXISTS(doc, '$.k ? (@ == null)')`, а не `JSON_VALUE(...) IS NULL`.
+Для проверки «значение равно `false`» или «значение равно `null`» используйте фильтр JsonPath внутри `JSON_EXISTS`, например `JSON_EXISTS(doc, '$.k ? (@ == false)')` или `JSON_EXISTS(doc, '$.k ? (@ == null)')`, а не `JSON_VALUE(...) IS NULL`.
 
 {% endnote %}
 

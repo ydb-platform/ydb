@@ -38,7 +38,7 @@ public:
     arrow::Status Close() override = 0;
     bool closed() const override = 0;
     arrow::Result<int64_t> Tell() const override = 0;
-    arrow::Status Write(const void *data, int64_t nbytes) override = 0;
+    arrow::Status Write(const void* data, int64_t nbytes) override = 0;
     using arrow::io::Writable::Write;
 
     virtual TBuffer Checkpoint() = 0;
@@ -50,11 +50,11 @@ class TS3ParquetExportBuffer : public NExportScan::IBuffer {
     using TTagToIndex = THashMap<ui32, ui32>; // index in IScan::TRow
 
 public:
-    explicit TS3ParquetExportBuffer(TS3ExportBufferSettings &&settings);
+    explicit TS3ParquetExportBuffer(TS3ExportBufferSettings&& settings);
 
-    void ColumnsOrder(const TVector<ui32> &tags) override;
-    bool Collect(const NTable::IScan::TRow &row) override;
-    IEventBase *PrepareEvent(bool last, NExportScan::IBuffer::TStats &stats) override;
+    void ColumnsOrder(const TVector<ui32>& tags) override;
+    bool Collect(const NTable::IScan::TRow& row) override;
+    IEventBase* PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) override;
     void Clear() override;
     bool IsFilled() const override;
     TString GetError() const override;
@@ -63,7 +63,7 @@ private:
     ui64 GetRowsLimit() const { return RowsLimit; }
     ui64 GetBytesLimit() const { return MaxBytes; }
 
-    static NBackup::IChecksum *CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings> &settings);
+    static NBackup::IChecksum* CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
 
     bool Flush(bool last);
 
@@ -90,7 +90,7 @@ private:
 }; // TS3ParquetExportBuffer
 
 TS3ParquetExportBuffer::TS3ParquetExportBuffer(
-    TS3ExportBufferSettings &&settings)
+    TS3ExportBufferSettings&& settings)
     : Columns(std::move(settings.Columns))
     , ParquetRowGroupSize(settings.ParquetRowGroupSize)
     , RowsLimit(settings.MaxRows)
@@ -115,7 +115,7 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(
     WriteProperties = builder->build();
 }
 
-NBackup::IChecksum *TS3ParquetExportBuffer::CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings> &settings) {
+NBackup::IChecksum* TS3ParquetExportBuffer::CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {
     if (settings) {
         switch (settings->ChecksumType) {
         case TS3ExportBufferSettings::TChecksumSettings::EChecksumType::Sha256:
@@ -125,12 +125,12 @@ NBackup::IChecksum *TS3ParquetExportBuffer::CreateChecksum(const TMaybe<TS3Expor
     return nullptr;
 }
 
-void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32> &tags) {
+void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32>& tags) {
     Y_ENSURE(tags.size() == Columns.size());
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> ydbColumns;
     std::set<std::string> notNullColumns;
-    for (const auto &tag : tags) {
+    for (const auto& tag : tags) {
         auto it = Columns.find(tag);
         Y_ENSURE(it != Columns.end());
         auto column = it->second;
@@ -143,21 +143,21 @@ void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32> &tags) {
 
     auto schemaRes = NArrow::MakeArrowSchema(ydbColumns, notNullColumns);
     if (!schemaRes.ok()) {
-        ErrorString = (TStringBuilder() << "Failed to make arrow schema: " << schemaRes.status().message());
+        ErrorString = TStringBuilder() << "Failed to make arrow schema: " << schemaRes.status().message();
         return;
     }
     Schema.swap(schemaRes.ValueOrDie());
 
     arrow::Status status;
     if (!(status = BatchBuilder.Start(ydbColumns, Schema)).ok()) {
-        ErrorString = (TStringBuilder() << "Failed to start batch builder: " << status.message());
+        ErrorString = TStringBuilder() << "Failed to start batch builder: " << status.message();
         return;
     }
 
     ArrowWriter.reset();
 }
 
-bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow &row) {
+bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow& row) {
     if (!ErrorString.empty()) {
         return false;
     }
@@ -174,7 +174,7 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow &row) {
     return true;
 }
 
-IEventBase *TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats &stats) {
+IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) {
     stats.Rows = Rows;
     stats.BytesRead = BytesRead;
 
@@ -211,7 +211,7 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
                     arrowProps, &ArrowWriter))
             .ok()) {
 
-            ErrorString = (TStringBuilder() << "Failed to open parquet file writer: " << status.message());
+            ErrorString = TStringBuilder() << "Failed to open parquet file writer: " << status.message();
             return false;
         }
     }
@@ -222,20 +222,20 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
         batches.push_back(batch);
         auto tableResult = arrow::Table::FromRecordBatches(batches);
         if (!tableResult.ok()) {
-            ErrorString = (TStringBuilder() << "Failed to make table from batches: " << tableResult.status().message());
+            ErrorString = TStringBuilder() << "Failed to make table from batches: " << tableResult.status().message();
             return false;
         };
 
         auto table = tableResult.ValueOrDie();
         if (!(status = ArrowWriter->WriteTable(*table, table->num_rows())).ok()) {
-            ErrorString = (TStringBuilder() << "Failed to write table to parquet file: " << status.message());
+            ErrorString = TStringBuilder() << "Failed to write table to parquet file: " << status.message();
             return false;
         }
     }
 
     if (last) {
         if (!(status = ArrowWriter->Close()).ok()) {
-            ErrorString = (TStringBuilder() << "Failed to close parquet file writer: " << status.message());
+            ErrorString = TStringBuilder() << "Failed to close parquet file writer: " << status.message();
             return false;
         }
     }
@@ -277,7 +277,7 @@ public:
 
     arrow::Result<int64_t> Tell() const override { return TotalWritten_; }
 
-    arrow::Status Write(const void *data, int64_t nbytes) override {
+    arrow::Status Write(const void* data, int64_t nbytes) override {
         Buffer_.Append((const char *)(data), nbytes);
         TotalWritten_ += nbytes;
         return arrow::Status::OK();
@@ -305,7 +305,7 @@ std::shared_ptr<ICheckpointOutputStream> ICheckpointOutputStream::Create() {
 
 } // anonymous namespace
 
-NExportScan::IBuffer *CreateS3ParquetExportBuffer(TS3ExportBufferSettings &&settings) {
+NExportScan::IBuffer* CreateS3ParquetExportBuffer(TS3ExportBufferSettings&& settings) {
     return new TS3ParquetExportBuffer(std::move(settings));
 }
 

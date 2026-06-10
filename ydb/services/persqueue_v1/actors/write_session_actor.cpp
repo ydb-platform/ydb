@@ -1302,9 +1302,15 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         payloadSize += w->GetData().size() + w->GetSourceId().size();
 
         ui64 currMetadataSize = 0;
+        const bool isBatch = w->HasMessageCount() && w->GetMessageCount() > 1;
         for (const auto& metaItem : msg.metadata_items()) {
             if (metaItem.key() == PARTITION_KEY_META_KEY) {
-                w->SetChoosePartitionKey(metaItem.value());
+                if (isBatch) {
+                    auto* partitionKey = w->AddPartitionKeys();
+                    partitionKey->SetKey(metaItem.value());
+                } else {
+                    w->SetChoosePartitionKey(metaItem.value());
+                }
             }
             currMetadataSize += metaItem.key().size() + metaItem.value().size();
         }

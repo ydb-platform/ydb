@@ -33,6 +33,20 @@ namespace {
 using TTxId = std::pair<std::string_view, std::string_view>;
 using TTxIdOpt = std::optional<TTxId>;
 
+static constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
+
+using TProtoMessageFormat = Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::MessageFormat;
+
+TProtoMessageFormat ToProtoMessageFormat(EMessageFormat format) {
+    switch (format) {
+        case EMessageFormat::STANDARD:
+            return Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::STANDARD;
+        case EMessageFormat::KAFKA_BATCH:
+            return Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH;
+    }
+    ythrow yexception() << "unsupported message format: " << static_cast<int>(format);
+}
+
 void ValidateWriteSessionSettings(const TWriteSessionSettings& settings) {
     if (settings.MaxMessageCount_ > 1 && settings.MessageFormat_ == EMessageFormat::STANDARD) {
         ythrow yexception() << "MessageFormat must be set when MaxMessageCount > 1";
@@ -1625,13 +1639,14 @@ bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRe
     return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().Tx);
 }
 
-void TWriteSessionImpl::SendKafkaBatch(
+void TWriteSessionImpl::SendBatchBlock(
         const TBlock& block,
         Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest)
 {
     Y_ABORT_UNLESS(Lock.IsLocked());
     Y_ABORT_UNLESS(writeRequest);
     Y_ABORT_UNLESS(block.MessageCount > 1);
+    Y_ABORT_UNLESS(Settings.MessageFormat_ != EMessageFormat::STANDARD);
 
     if (!BatchingSupported) {
         ThrowFatalError("Server does not support messages batching");
@@ -1659,8 +1674,7 @@ void TWriteSessionImpl::SendKafkaBatch(
     auto* batchMeta = msgData->mutable_batch_metadata();
     batchMeta->set_first_seq_no(static_cast<i64>(firstSeqNo));
     batchMeta->set_message_count(static_cast<i64>(block.MessageCount));
-    msgData->set_message_format(
-        Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH);
+    msgData->set_message_format(ToProtoMessageFormat(Settings.MessageFormat_));
     *msgData->mutable_created_at() =
         ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(firstMessage.CreatedAt.MilliSeconds());
 
@@ -1668,6 +1682,16 @@ void TWriteSessionImpl::SendKafkaBatch(
         auto* pair = msgData->add_metadata_items();
         pair->set_key(TStringType{k});
         pair->set_value(TStringType{v});
+    }
+    for (size_t i = 1; i < batchMessages.size(); ++i) {
+        for (auto& [k, v] : batchMessages[i].MessageMeta) {
+            if (k != PARTITION_KEY_META_KEY) {
+                continue;
+            }
+            auto* pair = msgData->add_metadata_items();
+            pair->set_key(TStringType{k});
+            pair->set_value(TStringType{v});
+        }
     }
 
     msgData->set_uncompressed_size(static_cast<i64>(block.OriginalSize));
@@ -1745,11 +1769,11 @@ void TWriteSessionImpl::SendImpl() {
             prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
 
-            const bool sendAsKafkaBatch = Settings.MessageFormat_ == EMessageFormat::KAFKA_BATCH
+            const bool sendAsBatchBlock = Settings.MessageFormat_ != EMessageFormat::STANDARD
                 && block.MessageCount > 1;
 
-            if (sendAsKafkaBatch) {
-                SendKafkaBatch(block, writeRequest);
+            if (sendAsBatchBlock) {
+                SendBatchBlock(block, writeRequest);
             } else {
                 SendStandardBlock(block, writeRequest);
             }

@@ -405,7 +405,7 @@ private:
     uint64_t GetSeqNoImpl(uint64_t id);
     uint64_t GetIdImpl(uint64_t seqNo);
     void SendImpl();
-    void SendKafkaBatch(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
+    void SendBatchBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
     void SendStandardBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues);

@@ -22,7 +22,7 @@ If the directory is not set by either method, the built-in Breakpad is not activ
 
 {% note info %}
 
-The specified directory must exist before the process starts; {{ ydb-short-name }} does not create it automatically. If the directory is missing at crash time, the minidump write will not be performed.
+The specified directory must exist before the process starts; {{ ydb-short-name }} does not create it automatically. If the directory is missing at crash time, the minidump will not be written.
 
 {% endnote %}
 
@@ -64,7 +64,7 @@ The `ydbd` process environment is not passed to the script, so any parameters it
 
 {% note warning %}
 
-The script is launched from the crashed process's signal handler via fork/exec. The signal handler blocks until the script exits, so the script should complete quickly. Heavy processing (uploading the dump, symbolization, alerting) should be delegated to background processes that the script spawns before exiting.
+The script is launched from the crashed process's signal handler via `fork`/`exec`. The signal handler blocks until the script exits, so the script should complete quickly. Heavy processing (uploading the dump, symbolization, alerting) should be delegated to background processes that the script spawns before exiting.
 
 {% endnote %}
 

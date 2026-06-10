@@ -695,8 +695,6 @@
     auto producer = topicClient.CreateProducer(producerSettings);
     ```
 
-    Подробный пример см. в [репозитории ydb-platform/ydb](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
-
   {% endlist %}
 
 - Go
@@ -874,11 +872,14 @@
     `Write` ставит сообщение во внутренний буфер, `Flush` дожидается доставки накопленных данных на сервер, `Close` завершает работу продюсера.
 
     ```cpp
-    producer->Write(NYdb::NTopic::TWriteMessage("user-42", "order-created"));
+    auto messageData = std::string("order-created");
+    // Первый аргумент — ключ партиционирования; SDK выберет партицию по ключу.
+    NYdb::NTopic::TWriteMessage writeMessage("user-42", messageData);
+    producer->Write(std::move(writeMessage));
     producer->Flush().GetValueSync();
     ```
 
-    Подробный пример с обработкой статусов, ретраями и закрытием продюсера см. в [репозитории ydb-platform/ydb](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
+    Подробный пример см. в [репозитории ydb-platform/ydb](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
 
   {% endlist %}
 

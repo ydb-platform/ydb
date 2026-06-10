@@ -175,6 +175,14 @@ message StreamWriteMessage {
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
             repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
 
+            enum MessageFormat {
+                STANDARD = 0;
+                KAFKA_BATCH = 1;
+            }
+
+            // Format of message payload in data field.
+            MessageFormat message_format = 9;
+
             // Metadata of a batch of client messages packed into the data field.
             message BatchMetadata {
                 // Sequence number of the first (minimal) message in the batch.
@@ -184,16 +192,9 @@ message StreamWriteMessage {
                 int64 message_count = 2;
             }
 
-            // Filled when the data field contains a batch of client messages.
-            BatchMetadata batch_metadata = 9;
-
-            enum MessageFormat {
-                STANDARD = 0;
-                KAFKA_BATCH = 1;
-            }
-
-            // Format of batched message payload in data field.
-            MessageFormat message_format = 10;
+            // Present when several logical messages are packed into data.
+            // May be absent for single-message writes even with non-STANDARD message_format.
+            optional BatchMetadata batch_metadata = 10;
         }
     }
 

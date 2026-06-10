@@ -481,6 +481,17 @@ i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
     return 0;
 }
 
+Topic::StreamReadMessage::ReadResponse::MessageData::MessageFormat ToTopicReadMessageFormat(
+        NKikimrClient::EMessageFormat format)
+{
+    switch (format) {
+        case NKikimrClient::STANDARD:
+            return Topic::StreamReadMessage::ReadResponse::MessageData::STANDARD;
+        case NKikimrClient::KAFKA_BATCH:
+            return Topic::StreamReadMessage::ReadResponse::MessageData::KAFKA_BATCH;
+    }
+}
+
 template<typename TReadResponse>
 bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
@@ -605,10 +616,7 @@ bool FillBatchedData(
             *msgMeta = (proto.GetMessageMeta());
             
             message->set_message_count(r.GetMessageCount());
-            message->set_message_format(
-                r.GetMessageFormat() == NKikimrClient::KAFKA_BATCH
-                    ? Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::KAFKA_BATCH
-                    : Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::STANDARD);
+            message->set_message_format(ToTopicReadMessageFormat(r.GetMessageFormat()));
         }
         hasData = true;
     }

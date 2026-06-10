@@ -368,7 +368,8 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
             for (auto& index : mainTableDesc.Metadata->Indexes) {
                 if (index.Type != TIndexDescription::EType::GlobalAsync
                     && index.Type != TIndexDescription::EType::GlobalJson
-                    && index.State == TIndexDescription::EIndexState::Ready)
+                    && index.State == TIndexDescription::EIndexState::Ready
+                    && !index.GetImplTables().empty())
                 {
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(index.Name).first->Name);
 

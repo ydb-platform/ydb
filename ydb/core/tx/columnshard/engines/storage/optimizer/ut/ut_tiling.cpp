@@ -382,6 +382,14 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Candidates.size(), 0);
 
+        // Keep one last-level compaction candidate pending so the useful metric stays non-zero-level and
+        // the planner remains REGULAR. Without it the planner goes BORED (no work to do) and promotes
+        // portions ignoring their timers, which would break the "no movement before timer" checks below.
+        // It overlaps a single baseline (measure 1) and is removed before the removal-cleanup section.
+        tiling.AddPortion(MakePortion(200, 0, 9, 1000));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(200).Level, 1);
+        UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(200));
+
         // Wide portion overlaps all 4 baselines → measure=4.
         // With K=2: 1*2<=4 → L2, 2*2<=4 → L3, 4*2<=4? no. So measuredLevel=3.
         tiling.AddPortion(MakePortion(100, 0, 309, 1000));
@@ -427,12 +435,17 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT(tiling.LastLevel.CandidateIds.contains(100));
         // Width on LastLevel must equal current measure of the portion (overlaps 4 baselines).
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.at(100), 4);
-        // Wide portion has measure=4 → enters Candidates, not Portions.
-        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Candidates.size(), 1);
+        // Wide portion has measure=4 → enters Candidates, not Portions; candidate 200 (kept to keep the
+        // planner busy) is the second candidate.
+        UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Candidates.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 4);
         // No timer entry left for L1.
         UNIT_ASSERT(!tiling.InsertTimeByPortionId.contains(100));
         UNIT_ASSERT_VALUES_EQUAL(tiling.PortionsByTime.size(), 0);
+
+        // Drop the busy-keeping candidate; the remaining checks exercise removal bookkeeping for 100.
+        tiling.RemovePortion(MakePortion(200, 0, 9, 1000));
+        UNIT_ASSERT(!tiling.LastLevel.CandidateIds.contains(200));
 
         // Further ticks are no-ops.
         tiling.PromoteExpiredPortions(tick2 + TDuration::Seconds(600));
@@ -653,6 +666,7 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
 
         // Nothing to compact -> bored.
         UNIT_ASSERT(!tiling.GetNextOptimizationTask(NeverLocked()));
+        tiling.DoActualize(insertTime);
         UNIT_ASSERT(tiling.State == TTestTiling::EState::BORED);
 
         // Bored actualize promotes the wide portion despite the timer not being expired.
@@ -664,6 +678,8 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         tiling.AddPortion(MakePortion(200, 0, 9, 1000));
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(200).Level, 1);
         UNIT_ASSERT(tiling.GetNextOptimizationTask(NeverLocked()));
+        tiling.DoActualize(insertTime);
+        Cerr << tiling.GetNextOptimizationTask(NeverLocked())->Priority.DebugString() << "#";
         UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
     }
 
@@ -680,6 +696,12 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(100).Level, 3);
         UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
         const TInstant insertTime = tiling.InsertTimeByPortionId.at(100);
+
+        // Keep a pending last-level compaction so the planner never goes bored (which would promote the
+        // wide portion immediately, ignoring its timer).
+        tiling.AddPortion(MakePortion(200, 0, 9, 1000));
+        UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(200).Level, 1);
+        UNIT_ASSERT(tiling.GetNextOptimizationTask(NeverLocked()));
 
         // Before the promote time elapses: no movement.
         tiling.DoActualize(insertTime + TDuration::Seconds(30));

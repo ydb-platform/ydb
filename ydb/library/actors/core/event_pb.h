@@ -218,12 +218,8 @@ namespace NActors {
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-<<<<<<< HEAD
-                    Y_ABORT("Failed to parse protobuf event type %" PRIu32 " class %s", TEventType, TypeName(ev->Record).data());
-=======
                     Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record) <<
                             " size# " << size << " hexDump# " << HexEncode(input->GetString()));
->>>>>>> 99b7c31e937 (Add event HexDump to the output of ENSURE assertion about event deserialization (#32450))
                 }
             }
             ev->CachedByteSize = input->GetSize();

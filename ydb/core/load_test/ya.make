@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/columnshard
     ydb/core/tx/datashard
+    ydb/core/util
     ydb/library/workload/abstract
     ydb/library/workload/kv
     ydb/library/workload/stock

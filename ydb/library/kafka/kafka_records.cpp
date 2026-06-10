@@ -2,6 +2,8 @@
 
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <limits>
+
 #include <util/stream/mem.h>
 #include <util/stream/str.h>
 #include <util/stream/zlib.h>
@@ -723,6 +725,15 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
     TKafkaWritable writable(buffer);
     batch.Write(writable, version);
     return buffer.AsString();
+}
+
+ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record) {
+    if (batch.ProducerId >= 0) {
+        Y_ENSURE(batch.BaseSequence >= 0, "idempotent kafka batch has negative BaseSequence");
+        return (static_cast<ui64>(batch.BaseSequence) + recordIndex)
+            % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1);
+    }
+    return static_cast<ui64>(batch.BaseOffset) + record.OffsetDelta;
 }
 
 } // namespace NKafka

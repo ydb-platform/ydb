@@ -62,15 +62,18 @@ TReadResult MakeKafkaBatchReadResult(
     TString payload,
     NPersQueueCommon::ECodec codec = NPersQueueCommon::RAW,
     ui64 uncompressedSize = 0,
-    NKikimrPQClient::TDataChunk::EChunkType chunkType = NKikimrPQClient::TDataChunk::REGULAR)
+    NKikimrPQClient::TDataChunk::EChunkType chunkType = NKikimrPQClient::TDataChunk::REGULAR,
+    ui64 seqNo = 100)
 {
     NKikimrPQClient::TDataChunk chunk;
     chunk.SetChunkType(chunkType);
     chunk.SetCodec(codec);
     chunk.SetData(std::move(payload));
+    chunk.SetSeqNo(seqNo);
 
     TReadResult readResult;
     readResult.SetOffset(10);
+    readResult.SetSeqNo(seqNo);
     readResult.SetMessageCount(2);
     readResult.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
     readResult.SetData(SerializeDataChunk(std::move(chunk)));
@@ -108,6 +111,8 @@ void AssertKafkaBatchCut(
 
     UNIT_ASSERT_VALUES_EQUAL(cut[0].GetOffset(), 10u);
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetOffset(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetSeqNo(), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetSeqNo(), 11u);
     UNIT_ASSERT_VALUES_EQUAL(cut[0].GetMessageCount(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetMessageCount(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(cut[0].GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
@@ -124,6 +129,8 @@ void AssertKafkaBatchCut(
     const auto chunk1 = NKikimr::GetDeserializedData(cut[1].GetData());
     UNIT_ASSERT_VALUES_EQUAL(chunk0.GetCodec(), expectedCodec);
     UNIT_ASSERT_VALUES_EQUAL(chunk1.GetCodec(), expectedCodec);
+    UNIT_ASSERT_VALUES_EQUAL(chunk0.GetSeqNo(), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(chunk1.GetSeqNo(), 11u);
     UNIT_ASSERT_VALUES_EQUAL(DecompressPayload(chunk0.GetData(), expectedCodec), "value0");
     UNIT_ASSERT_VALUES_EQUAL(DecompressPayload(chunk1.GetData(), expectedCodec), "value1");
 }

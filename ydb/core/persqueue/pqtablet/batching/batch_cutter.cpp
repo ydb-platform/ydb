@@ -81,13 +81,16 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
         }
 
         const auto& record = batch.Records[i];
+        const ui64 seqNo = NKafka::GetRecordSeqNo(batch, i, record);
         TReadResult item = readResult;
         item.SetOffset(offset);
+        item.SetSeqNo(seqNo);
         item.SetMessageCount(1);
         item.SetMessageFormat(NKikimrClient::STANDARD);
         item.ClearUncompressedSize();
 
         NKikimrPQClient::TDataChunk itemChunk = dataChunk;
+        itemChunk.SetSeqNo(seqNo);
         itemChunk.SetCodec(codec);
         if (record.Value) {
             const TString value(record.Value->data(), record.Value->size());

@@ -402,7 +402,7 @@ Y_UNIT_TEST(KafkaBatchReadWithoutBatchSupportIsCut) {
     for (ui32 i = 0; i < values.size(); ++i) {
         const auto& msg = readResult.GetResult(i);
         UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), i);
-        UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u + i);
         UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
         NKikimrPQClient::TDataChunk dataChunk;
@@ -416,9 +416,11 @@ Y_UNIT_TEST(KafkaBatchReadWithoutBatchSupportIsCut) {
 void AssertKafkaBatchCutMessage(
     const NKikimrClient::TCmdReadResult::TResult& msg,
     ui64 expectedOffset,
+    ui64 expectedSeqNo,
     const TString& expectedValue)
 {
     UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), expectedOffset);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), expectedSeqNo);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
     UNIT_ASSERT(!msg.HasUncompressedSize());
@@ -450,8 +452,8 @@ Y_UNIT_TEST(KafkaBatchReadFromMiddleOfBatchIsCut) {
 
     const auto readResult = CmdReadAndGetResult(readSettings, tc);
     UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 2u);
-    AssertKafkaBatchCutMessage(readResult.GetResult(0), 1, values[1]);
-    AssertKafkaBatchCutMessage(readResult.GetResult(1), 2, values[2]);
+    AssertKafkaBatchCutMessage(readResult.GetResult(0), 1, 2, values[1]);
+    AssertKafkaBatchCutMessage(readResult.GetResult(1), 2, 3, values[2]);
 }
 
 Y_UNIT_TEST(KafkaBatchReadGzipCompressedBatchIsCut) {
@@ -475,7 +477,7 @@ Y_UNIT_TEST(KafkaBatchReadGzipCompressedBatchIsCut) {
     const auto readResult = CmdReadAndGetResult(readSettings, tc);
     UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), values.size());
     for (ui32 i = 0; i < values.size(); ++i) {
-        AssertKafkaBatchCutMessage(readResult.GetResult(i), i, values[i]);
+        AssertKafkaBatchCutMessage(readResult.GetResult(i), i, 1u + i, values[i]);
     }
 }
 

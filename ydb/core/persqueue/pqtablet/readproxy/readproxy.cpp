@@ -107,16 +107,16 @@ private:
             auto proxyEvent = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
             proxyEvent->Response->CopyFrom(responseRecord);
 
-            ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext(
-                Request.GetPartitionRequest().GetCmdRead().GetClientId(),
-                0,
-                InitialReadOffset,
-                0,
-                proxyEvent->Response->ByteSize(),
-                false,
-                TActorId{},
-                SelfId(),
-                std::move(proxyEvent))));
+            ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
+                .User = Request.GetPartitionRequest().GetCmdRead().GetClientId(),
+                .Destination = 0,
+                .Offset = InitialReadOffset,
+                .PartNo = 0,
+                .Size = static_cast<ui64>(proxyEvent->Response->ByteSize()),
+                .IsInternal = false,
+                .ReplyTo = TActorId{},
+                .ResponseActor = SelfId(),
+                .Event = std::move(proxyEvent)}));
             return;
         }
 

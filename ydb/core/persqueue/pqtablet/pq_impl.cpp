@@ -3069,7 +3069,7 @@ void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
     CacheActor = ctx.RegisterWithSameMailbox(new TPQCacheProxy(ctx.SelfID, TabletID()));
-    BatchProcessorActor = ctx.RegisterWithSameMailbox(NBatching::CreateBatchProcessor(TabletID(), ctx.SelfID));
+    BatchProcessorActor = ctx.Register(NBatching::CreateBatchProcessor(TabletID(), ctx.SelfID));
 
     SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
 

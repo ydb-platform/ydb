@@ -9,30 +9,6 @@
 namespace NKikimr::NPQ::NBatching {
 
 struct TReadProcessingContext {
-    TReadProcessingContext() = default;
-
-    TReadProcessingContext(
-        TString user,
-        ui64 destination,
-        ui64 offset,
-        ui16 partNo,
-        ui64 size,
-        bool isInternal,
-        const NActors::TActorId& replyTo,
-        const NActors::TActorId& responseActor,
-        THolder<NActors::IEventBase> event)
-        : User(std::move(user))
-        , Destination(destination)
-        , Offset(offset)
-        , PartNo(partNo)
-        , Size(size)
-        , IsInternal(isInternal)
-        , ReplyTo(replyTo)
-        , ResponseActor(responseActor)
-        , Event(std::move(event))
-    {
-    }
-
     TString User;
     ui64 Destination = 0;
     ui64 Offset = 0;
@@ -62,7 +38,7 @@ struct TEvProcessBatchResult : public NActors::TEventLocal<TEvProcessBatchResult
     TReadProcessingContext Context;
 };
 
-class TBatchProcessor : public TBaseTabletActor<TBatchProcessor> {
+class TBatchProcessor : public TBaseTabletActor<TBatchProcessor>, private TConstantLogPrefix {
 public:
     TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId);
 
@@ -71,15 +47,12 @@ public:
     void Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
 
-    const TString& GetLogPrefix() const override;
-
 private:
     STFUNC(StateWork);
 
     NActors::TActorId GetOrCreateConsumerProcessor(const TString& user);
 
 private:
-    TString LogPrefix;
     THashMap<TString, NActors::TActorId> ConsumerProcessors;
 };
 

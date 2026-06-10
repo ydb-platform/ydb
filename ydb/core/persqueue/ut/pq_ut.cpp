@@ -417,7 +417,8 @@ void AssertKafkaBatchCutMessage(
     const NKikimrClient::TCmdReadResult::TResult& msg,
     ui64 expectedOffset,
     ui64 expectedSeqNo,
-    const TString& expectedValue)
+    const TString& expectedValue,
+    NPersQueueCommon::ECodec expectedCodec = NPersQueueCommon::RAW)
 {
     UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), expectedOffset);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), expectedSeqNo);
@@ -428,8 +429,19 @@ void AssertKafkaBatchCutMessage(
     NKikimrPQClient::TDataChunk dataChunk;
     Y_ENSURE(dataChunk.ParseFromString(msg.GetData()));
     UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetChunkType()), static_cast<ui32>(NKikimrPQClient::TDataChunk::REGULAR));
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetCodec()), static_cast<ui32>(NPersQueueCommon::RAW));
-    UNIT_ASSERT_VALUES_EQUAL(dataChunk.GetData(), expectedValue);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetCodec()), static_cast<ui32>(expectedCodec));
+
+    TString actualValue;
+    if (expectedCodec == NPersQueueCommon::RAW) {
+        actualValue = dataChunk.GetData();
+    } else if (expectedCodec == NPersQueueCommon::GZIP) {
+        TMemoryInput input(dataChunk.GetData().data(), dataChunk.GetData().size());
+        TZLibDecompress gzip(&input, ZLib::GZip);
+        actualValue = gzip.ReadAll();
+    } else {
+        ythrow yexception() << "unsupported expected codec in test: " << static_cast<int>(expectedCodec);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(actualValue, expectedValue);
 }
 
 Y_UNIT_TEST(KafkaBatchReadFromMiddleOfBatchIsCut) {
@@ -477,7 +489,7 @@ Y_UNIT_TEST(KafkaBatchReadGzipCompressedBatchIsCut) {
     const auto readResult = CmdReadAndGetResult(readSettings, tc);
     UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), values.size());
     for (ui32 i = 0; i < values.size(); ++i) {
-        AssertKafkaBatchCutMessage(readResult.GetResult(i), i, 1u + i, values[i]);
+        AssertKafkaBatchCutMessage(readResult.GetResult(i), i, 1u + i, values[i], NPersQueueCommon::GZIP);
     }
 }
 

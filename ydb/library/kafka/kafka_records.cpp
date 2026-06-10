@@ -729,7 +729,6 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
 
 ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record) {
     if (batch.ProducerId >= 0) {
-        Y_ENSURE(batch.BaseSequence >= 0, "idempotent kafka batch has negative BaseSequence");
         return (static_cast<ui64>(batch.BaseSequence) + recordIndex)
             % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1);
     }

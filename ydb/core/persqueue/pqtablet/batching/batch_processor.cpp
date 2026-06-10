@@ -8,12 +8,7 @@ namespace NKikimr::NPQ::NBatching {
 
 TBatchProcessor::TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
-    , LogPrefix(TStringBuilder() << "BatchProcessor " << TabletId << ": ")
 {
-}
-
-const TString& TBatchProcessor::GetLogPrefix() const {
-    return LogPrefix;
 }
 
 void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
@@ -23,7 +18,10 @@ void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
 NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& user) {
     auto [it, inserted] = ConsumerProcessors.emplace(user, NActors::TActorId{});
     if (inserted) {
-        it->second = RegisterWithSameMailbox(CreateConsumerBatchProcessor(TabletId, TabletActorId, user));
+        it->second = Register(
+            CreateConsumerBatchProcessor(TabletId, TabletActorId, user),
+            NActors::TMailboxType::HTSwap,
+            AppData()->BatchPoolId);
     }
     return it->second;
 }

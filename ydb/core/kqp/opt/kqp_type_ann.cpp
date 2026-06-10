@@ -2954,14 +2954,14 @@ TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 bool IsSupportedJoinKind(const TString &joinKind) {
     return joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly" || 
         joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly" || 
-        joinKind == "Inner" || joinKind == "Cross";
+        joinKind == "Inner" || joinKind == "Cross" || joinKind == "Full";
 }
 
 const TStructExprType* JoinResultType(const TTypeAnnotationNode* leftType, const TTypeAnnotationNode* rightType, TString joinKind, TExprContext& ctx) {
     auto leftItemType = leftType->Cast<TListExprType>()->GetItemType();
     auto rightItemType = rightType->Cast<TListExprType>()->GetItemType();
 
-    const bool columnsNeedOptional = (joinKind == "Left" || joinKind == "Right");
+    const bool columnsNeedOptional = (joinKind == "Left" || joinKind == "Right" || joinKind == "Full");
     const bool rightJoin = (joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly");
     const bool semiOrOnlyJoin = (joinKind == "LeftSemi" || joinKind == "LeftOnly" || joinKind == "RightSemi" || joinKind == "RightOnly");
     const bool isFullJoin = (joinKind == "Full");

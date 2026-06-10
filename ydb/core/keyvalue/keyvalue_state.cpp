@@ -2804,7 +2804,10 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THo
                 str << "KeyValue# " << TabletId
                     << " Write storage_channel# " << storageChannel
                     << " doesn't exist Marker# KV99";
-                return {true, str.Str()};
+                TString msg = str.Str();
+                ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx, msg,
+                    NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST, intermediate, nullptr);
+                return {true, msg};
             }
             storageChannelIdx = BLOB_CHANNEL;
             ALOG_INFO(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
@@ -3090,11 +3093,9 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
         DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);
         Y_ABORT_UNLESS(intermediate->RefCountsIncr.empty());
 
-        if (!intermediate->IsReplied) {
-            ReplyError(ctx, result.ErrorMsg, NMsgBusProxy::MSTATUS_ERROR,
-                NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST, intermediate);
-        }
-
+        ALOG_ERROR(NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                << " PrepareExecuteTransactionRequest return flase, Marker# KV73"
+                << " Submsg# " << result.ErrorMsg);
         return false;
     }
 

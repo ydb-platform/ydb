@@ -3350,6 +3350,99 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
         CheckScriptExecutionsCount(1, 0);
     }
+
+    Y_UNIT_TEST_TWIN_F(StreamingQueryWithCdcReading, UseLocalTopics, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(UseLocalTopics);
+
+        constexpr char outputTopic[] = "outputTopicName";
+        CreateTopic(outputTopic, std::nullopt, UseLocalTopics);
+
+        constexpr char outPqSource[] = "outSourceName";
+        CreatePqSource(outPqSource);
+
+        constexpr char inputPqSource[] = "inputSourceName";
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "{pq_location}",
+                    DATABASE_NAME = "{pq_database_name}",
+                    AUTH_METHOD = "NONE"
+                );
+            )sql",
+            "pq_source"_a = inputPqSource,
+            "pq_location"_a = GetInternalDriver()->GetConfig().GetEndpoint(),
+            "pq_database_name"_a = GetInternalDriver()->GetConfig().GetDatabase()
+        ));
+
+        constexpr char tableName[] = "tableName";
+        ExecQuery(fmt::format(R"sql(
+            CREATE TABLE `{t}` (
+                id String NOT NULL,
+                val Int64 NOT NULL,
+                PRIMARY KEY (id)
+            );
+        )sql", "t"_a = tableName));
+
+        constexpr char changefeedName[] = "changelog";
+        ExecQuery(fmt::format(R"sql(
+            ALTER TABLE `{t}` ADD CHANGEFEED `{c}` WITH (
+                MODE = 'NEW_AND_OLD_IMAGES',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = Interval('PT1H')
+            );
+        )sql", "t"_a = tableName, "c"_a = changefeedName));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"sql(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $messages = SELECT
+                    Unwrap(Yson::ConvertTo(
+                        Data, Struct<
+                            newImage: Struct<val: Int64>,
+                            oldImage: Yson?,
+                            key: Tuple<String>
+                        >
+                    )) AS Parsed
+                FROM {input_source}`{table}/{changefeed}`
+                WITH (
+                    FORMAT = json_as_string,
+                    SCHEMA (
+                        Data Json
+                    )
+                );
+
+                INSERT INTO {output_source}`{output_name}`
+                SELECT
+                    ToBytes(Unwrap(Yson2::SerializeJson(Yson::From(AsStruct(
+                        String::Base64Decode(Parsed.key.0) AS id,
+                        Parsed.newImage.val AS val
+                    )))))
+                FROM $messages
+                WHERE Parsed.oldImage IS NULL
+            END DO;)sql",
+            "table"_a = tableName,
+            "changefeed"_a = changefeedName,
+            "output_name"_a = outputTopic,
+            "input_source"_a = UseLocalTopics ? TStringBuilder() : TStringBuilder() << inputPqSource << ".",
+            "output_source"_a = UseLocalTopics ? TStringBuilder() : TStringBuilder() << outPqSource << ".",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"sql(
+            UPSERT INTO `{t}`(id, val) VALUES ("X", 42);
+            UPSERT INTO `{t}`(id, val) VALUES ("X", 13);
+        )sql", "t"_a = tableName));
+
+        ReadTopicMessage(outputTopic, R"({"id":"X","val":42})", TInstant::Now() - TDuration::Seconds(100), UseLocalTopics);
+    }
 }
 
 } // namespace NKikimr::NKqp

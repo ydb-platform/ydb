@@ -199,27 +199,32 @@ namespace NKikimr {
 
 namespace {
 
-    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
-        auto wrapper = grpcServersWrapper.lock();
-        if (!wrapper) {
-            return;
-        }
-        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
-            return;
-        }
-        if (isDisabled) {
-            wrapper->IsDisabled.store(true, std::memory_order_release);
-        }
-        TGuard<TMutex> guard = wrapper->Guard();
-        for (auto& [name, server] : wrapper->Servers) {
-            if (!server) {
-                continue;
-            }
-            server->Stop();
-        }
-        wrapper->Servers.clear();
+void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
+    auto wrapper = grpcServersWrapper.lock();
+    if (!wrapper) {
+        return;
     }
+
+    if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (isDisabled) {
+        wrapper->IsDisabled.store(true, std::memory_order_release);
+    }
+
+    TGuard<TMutex> guard = wrapper->Guard();
+    for (auto& [_, server] : wrapper->Servers) {
+        if (!server) {
+            continue;
+        }
+        server->Stop();
+    }
+
+    wrapper->Servers.clear();
 }
+
+} // anonymous namespace
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
@@ -2544,4 +2549,4 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
     return 0;
 }
 
-} // NKikimr
+} // namespace NKikimr

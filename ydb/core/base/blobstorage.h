@@ -1105,13 +1105,7 @@ struct TEvBlobStorage {
             ETactic Tactic = TacticDefault;
             bool IssueKeepFlag = false;
             bool IgnoreBlock = false;
-<<<<<<< HEAD
-=======
-            bool AlreadyEncrypted = false;
-            bool ReduceInterpileTraffic = false;
-            bool IsZeroEntry = false;
             bool FailOnSlowDown = false;
->>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
@@ -1123,13 +1117,7 @@ struct TEvBlobStorage {
             , Tactic(origin.Tactic)
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
-<<<<<<< HEAD
-=======
-            , AlreadyEncrypted(origin.AlreadyEncrypted)
-            , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
-            , IsZeroEntry(origin.IsZeroEntry)
             , FailOnSlowDown(origin.FailOnSlowDown)
->>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             , ExtraBlockChecks(origin.ExtraBlockChecks)
             , ExternalRelevanceWatcher(origin.ExternalRelevanceWatcher)
         {}
@@ -1142,13 +1130,7 @@ struct TEvBlobStorage {
             , Tactic(parameters.Tactic)
             , IssueKeepFlag(parameters.IssueKeepFlag)
             , IgnoreBlock(parameters.IgnoreBlock)
-<<<<<<< HEAD
-=======
-            , AlreadyEncrypted(parameters.AlreadyEncrypted)
-            , ReduceInterpileTraffic(parameters.ReduceInterpileTraffic)
-            , IsZeroEntry(parameters.IsZeroEntry)
             , FailOnSlowDown(parameters.FailOnSlowDown)
->>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());

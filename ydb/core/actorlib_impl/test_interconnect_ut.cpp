@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
 
         void OnConnect(const NActors::TActorContext &ctx) noexcept {
-            YDB_LOG_CTX_NOTICE(ctx, "Node connected.");
+            YDB_LOG_NOTICE_CTX(ctx, "Node connected");
             Become(&TThis::StateFunc);
             for (ui64 i = 0; i < Counter; ++i) {
                 ctx.Send(Peer, new TEvents::TEvPing, 0, i);
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
             if (++Responses == Counter) {
                Send(Edge, new TEvents::TEvWakeup);
-               YDB_LOG_NOTICE("Done.");
+               YDB_LOG_NOTICE("Done");
             }
         }
 

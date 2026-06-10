@@ -118,6 +118,21 @@ TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, const TInfoUnitSet& r
     return res;
 }
 
+TVector<TInfoUnit> IUSetUnion(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
+    TVector<TInfoUnit> res;
+    for (const auto& unit : left) {
+        if (std::find(res.begin(), res.end(), unit) == res.end()) {
+            res.push_back(unit);
+        }
+    }
+    for (const auto& unit : right) {
+        if (std::find(res.begin(), res.end(), unit) == res.end()) {
+            res.push_back(unit);
+        }
+    }
+    return res;
+}
+
 bool IUIsSubset(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     return IUSetDiff(left, right).empty();
 }

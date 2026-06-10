@@ -562,12 +562,13 @@ void TRpcRawClient::AbortTransaction(
 
 void TRpcRawClient::CommitTransaction(
     TMutationId& mutationId,
-    const TTransactionId& transactionId)
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options)
 {
     auto traceContextGuard = CreateTraceContext("RpcRawClient.CommitTransaction");
 
     auto tx = Clients_.Light->AttachTransaction(YtGuidFromUtilGuid(transactionId));
-    WaitAndProcess(tx->Commit(SerializeOptionsForCommitTransaction(mutationId)));
+    WaitAndProcess(tx->Commit(SerializeOptionsForCommitTransaction(mutationId, options)));
 }
 
 TOperationId TRpcRawClient::StartOperation(

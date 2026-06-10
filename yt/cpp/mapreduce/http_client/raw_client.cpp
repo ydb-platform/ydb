@@ -337,11 +337,12 @@ void THttpRawClient::AbortTransaction(
 
 void THttpRawClient::CommitTransaction(
     TMutationId& mutationId,
-    const TTransactionId& transactionId)
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options)
 {
     THttpHeader header("POST", "commit_tx");
     header.AddMutationId();
-    header.MergeParameters(NRawClient::SerializeParamsForCommitTransaction(transactionId));
+    header.MergeParameters(NRawClient::SerializeParamsForCommitTransaction(transactionId, options));
     RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 

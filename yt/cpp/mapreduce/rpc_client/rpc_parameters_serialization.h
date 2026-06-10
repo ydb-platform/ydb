@@ -113,7 +113,9 @@ NApi::TTransactionStartOptions SerializeOptionsForStartTransaction(
 
 NApi::TTransactionAbortOptions SerializeOptionsForAbortTransaction(TMutationId& mutationId);
 
-NApi::TTransactionCommitOptions SerializeOptionsForCommitTransaction(TMutationId& mutationId);
+NApi::TTransactionCommitOptions SerializeOptionsForCommitTransaction(
+    TMutationId& mutationId,
+    const TCommitTransactionOptions& options);
 
 NApi::TStartOperationOptions SerializeOptionsForStartOperation(
     TMutationId& mutationId,

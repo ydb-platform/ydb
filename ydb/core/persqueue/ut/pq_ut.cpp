@@ -2168,6 +2168,58 @@ Y_UNIT_TEST(TestPQRead) {
     });
 }
 
+Y_UNIT_TEST(TestPQReadWithoutReadToBlobEnd) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
+
+        activeZone = false;
+        TVector<std::pair<ui64, TString>> data;
+
+        ui32 pp =  4 + 8 + 2 + 9 + 100 + 40; //pp is for size of meta
+        TString tmp{1_MB - pp - 2, '-'};
+        char k = 0;
+        for (ui32 i = 0; i < 26_MB;) { //3 full blobs and 2 in head
+            TString ss = "";
+            ss += k;
+            ss += tmp;
+            ss += char((i + 1) % 256);
+            ++k;
+            data.push_back({i + 1, ss});
+            i += ss.size() + pp;
+        }
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
+        PQGetPartInfo(0, 26, tc);
+
+        CmdReadWithoutReadToBlobEnd(0, 26, Max<i32>(), Max<i32>(), 0, true, tc);
+
+        CmdReadWithoutReadToBlobEnd(0, 0, Max<i32>(), Max<i32>(), 25, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 0, 10, 100_MB, 10, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 9, 1, 100_MB, 1, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 23, 3, 100_MB, 3, false, tc);
+
+        CmdReadWithoutReadToBlobEnd(0, 3, 1000, 511_KB, 1, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 3, 1000, 1_KB, 1, false, tc); //at least one message will be readed always
+        CmdReadWithoutReadToBlobEnd(0, 25, 1000, 1_KB, 1, false, tc); //at least one message will be readed always, from head
+
+        // activeZone = true;
+        CmdReadWithoutReadToBlobEnd(0, 9, 1000, 3_MB, 3, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 9, 1000, 3_MB - 10_KB, 2, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 25, 1000, 512_KB, 1, false, tc); //from head
+        CmdReadWithoutReadToBlobEnd(0, 24, 1000, 512_KB, 1, false, tc); //from head
+
+        CmdReadWithoutReadToBlobEnd(0, 23, 1000, 98_MB, 3, false, tc);
+    });
+}
+
 
 Y_UNIT_TEST(TestPQSmallRead) {
     TTestContext tc;

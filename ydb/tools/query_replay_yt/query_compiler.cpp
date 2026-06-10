@@ -31,6 +31,37 @@ using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+std::string NormalizeWriteType(const std::string& writeType) {
+    std::string base = writeType;
+    if (base.size() > 5 && base.substr(0, 5) == "Multi") {
+        base = base.substr(5);
+    }
+    if (base == "Replace") {
+        return "Upsert";
+    }
+    return base;
+}
+
+bool WriteTypesEquivalent(const std::string& lhs, const std::string& rhs) {
+    return NormalizeWriteType(lhs) == NormalizeWriteType(rhs);
+}
+
+bool TableStatsEquivalent(const TTableStats& lhs, const TTableStats& rhs) {
+    if (lhs.Name != rhs.Name || lhs.Reads != rhs.Reads || lhs.Writes.size() != rhs.Writes.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < lhs.Writes.size(); ++i) {
+        if (lhs.Writes[i].WriteColumns != rhs.Writes[i].WriteColumns) {
+            return false;
+        }
+        if (!WriteTypesEquivalent(lhs.Writes[i].WriteType, rhs.Writes[i].WriteType)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 struct TMetadataInfoHolder {
     const THashMap<TString, NYql::TKikimrTableMetadataPtr> TableMetadata;
@@ -441,6 +472,11 @@ private:
             if (oldEngineStats.Writes[i].WriteColumns != newEngineStats.Writes[i].WriteColumns) {
                 return {TQueryReplayEvents::WriteColumnsMismatch, TStringBuilder() << "Write columns mismatch"};
             }
+
+            if (!WriteTypesEquivalent(oldEngineStats.Writes[i].WriteType, newEngineStats.Writes[i].WriteType)) {
+                return {TQueryReplayEvents::WriteTypesMismatch, TStringBuilder() << "Write types mismatch, old engine: "
+                    << oldEngineStats.Writes[i].WriteType << ", new engine: " << newEngineStats.Writes[i].WriteType};
+            }
         }
 
         return {TQueryReplayEvents::UncategorizedPlanMismatch, ""};
@@ -461,7 +497,7 @@ private:
                     TStringBuilder() << "Table " << table << " not found in new engine plan"};
             }
 
-            if (stats != it->second) {
+            if (!TableStatsEquivalent(stats, it->second)) {
                 WriteQueryMismatchInfo(oldEnginePlan, newEnginePlan);
                 return OnTableOperationsMismatch(stats, it->second);
             }

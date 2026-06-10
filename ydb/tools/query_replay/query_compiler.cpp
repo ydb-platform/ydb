@@ -71,8 +71,33 @@ struct TTableReadAccessInfo {
 
 enum EWriteType : ui32 {
     Upsert = 1,
-    Erase = 2
+    Erase = 2,
+    Replace = 3,
 };
+
+TString ToString(EWriteType writeType) {
+    switch (writeType) {
+        case Upsert:
+            return "upsert";
+        case Erase:
+            return "erase";
+        case Replace:
+            return "replace";
+        default:
+            return "unknown";
+    }
+}
+
+EWriteType NormalizeWriteType(EWriteType writeType) {
+    if (writeType == Replace) {
+        return Upsert;
+    }
+    return writeType;
+}
+
+bool WriteTypesEquivalent(EWriteType lhs, EWriteType rhs) {
+    return NormalizeWriteType(lhs) == NormalizeWriteType(rhs);
+}
 
 struct TTableWriteInfo {
     EWriteType WriteType;
@@ -100,6 +125,23 @@ struct TTableStats {
         return std::tie(Name, Reads, Writes) < std::tie(other.Name, other.Reads, other.Writes);
     }
 };
+
+bool TableStatsEquivalent(const TTableStats& lhs, const TTableStats& rhs) {
+    if (lhs.Name != rhs.Name || lhs.Reads != rhs.Reads || lhs.Writes.size() != rhs.Writes.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < lhs.Writes.size(); ++i) {
+        if (lhs.Writes[i].WriteColumns != rhs.Writes[i].WriteColumns) {
+            return false;
+        }
+        if (!WriteTypesEquivalent(lhs.Writes[i].WriteType, rhs.Writes[i].WriteType)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 struct TMetadataInfoHolder {
     const THashMap<TString, NYql::TKikimrTableMetadataPtr> TableMetadata;
@@ -425,6 +467,8 @@ private:
                         const auto& type = write["type"].GetStringSafe();
                         if (type == "Upsert" || type == "MultiUpsert") {
                             writes.push_back(TTableWriteInfo{EWriteType::Upsert, columns});
+                        } else if (type == "Replace" || type == "MultiReplace") {
+                            writes.push_back(TTableWriteInfo{EWriteType::Replace, columns});
                         } else if (type == "Erase" || type == "MultiErase") {
                             writes.push_back(TTableWriteInfo{EWriteType::Erase, columns});
                         }
@@ -494,6 +538,12 @@ private:
             if (oldEngineStats.Writes[i].WriteColumns != newEngineStats.Writes[i].WriteColumns) {
                 return {TQueryReplayEvents::WriteColumnsMismatch, TStringBuilder() << "Write columns mismatch"};
             }
+
+            if (!WriteTypesEquivalent(oldEngineStats.Writes[i].WriteType, newEngineStats.Writes[i].WriteType)) {
+                return {TQueryReplayEvents::WriteTypesMismatch, TStringBuilder() << "Write types mismatch, old engine: "
+                    << ToString(oldEngineStats.Writes[i].WriteType) << ", new engine: "
+                    << ToString(newEngineStats.Writes[i].WriteType)};
+            }
         }
 
         return {TQueryReplayEvents::UncategorizedPlanMismatch, ""};
@@ -512,7 +562,7 @@ private:
                     TStringBuilder() << "Table " << table << " not found in new engine plan"};
             }
 
-            if (stats != it->second) {
+            if (!TableStatsEquivalent(stats, it->second)) {
                 WriteQueryMismatchInfo(oldEnginePlan, newEnginePlan);
                 return OnTableOperationsMismatch(stats, it->second);
             }

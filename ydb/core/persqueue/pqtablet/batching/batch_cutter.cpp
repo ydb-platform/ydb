@@ -5,21 +5,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
-#include <util/generic/yexception.h>
-
 namespace NKikimr::NPQ::NBatching {
-namespace {
-
-void EnsureRawDataChunk(const NKikimrPQClient::TDataChunk& dataChunk, const TReadResult& readResult) {
-    if (dataChunk.HasCodec() && dataChunk.GetCodec() != NPersQueueCommon::RAW) {
-        ythrow yexception() << "kafka batch data chunk must have RAW codec, got: " << dataChunk.GetCodec();
-    }
-    if (readResult.GetUncompressedSize() != 0) {
-        ythrow yexception() << "kafka batch read result must not have UncompressedSize";
-    }
-}
-
-} // namespace
 
 TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const ui64 readStartOffset) const {
     const NKikimrPQClient::TDataChunk dataChunk = NKikimr::GetDeserializedData(readResult.GetData());
@@ -27,7 +13,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
         return {readResult};
     }
 
-    EnsureRawDataChunk(dataChunk, readResult);
+    Y_ENSURE(!dataChunk.HasCodec() || dataChunk.GetCodec() == NPersQueueCommon::RAW);
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     if (batch.Records.empty()) {
         return {readResult};

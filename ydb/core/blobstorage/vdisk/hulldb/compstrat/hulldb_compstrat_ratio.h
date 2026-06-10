@@ -121,11 +121,10 @@ namespace NKikimr {
                 }
 
                 if (ratio->Time == TInstant::Zero()) {
-                    ratio = MakeIntrusive<TSstRatio>(*ratio);
-                    ratio->Time = initialCalculationTime;
+                    return TInstant::Zero();
                 }
 
-                p.SstPtr->StorageRatio.Set(ratio, ratio->Time);
+                p.SstPtr->StorageRatio.SetCalculationTime(ratio->Time);
                 return ratio->Time;
             }
 

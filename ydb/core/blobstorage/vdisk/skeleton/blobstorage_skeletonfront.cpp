@@ -128,7 +128,9 @@ namespace NKikimr {
                 , Trace(std::move(trace))
                 , InternalMessageId(internalMessageId)
             {
-                Span.Attribute("QueueName", std::move(name));
+                if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                    wilsonSpan->Attribute("QueueName", std::move(name));
+                }
                 Ev->TraceId = Span.GetTraceId();
             }
         };

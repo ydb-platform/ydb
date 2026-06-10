@@ -243,10 +243,10 @@ public:
         } else if (ParentSpan.GetRetroSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage,
-                    parentTraceId.GetTimeToLive(), true), "DSProxy.RTX", NWilson::EFlags::AUTO_END);
+                    parentTraceId.GetTimeToLive(), true), "DSProxy.Retro", NWilson::EFlags::AUTO_END);
         } else {
-            Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
-                    "DSProxy.RTX");
+            // Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
+            //         "DSProxy.Retro");
         }
 
         Y_ABORT_UNLESS(CostModel);

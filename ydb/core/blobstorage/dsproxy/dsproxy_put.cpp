@@ -473,6 +473,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
+            // NRetroTracing::DemandTrace(Span.GetTraceId());
             STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",
                     (LongRequestThreshold, LongRequestThreshold),
                     (GroupId, Info->GroupID),
@@ -492,9 +493,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {
-            if (RandomNumber<ui32>(1000) == 0) {
-                NRetroTracing::DemandTrace(Span.GetTraceId());
-            }
             PassAway();
             Done = true;
             return true;

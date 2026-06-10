@@ -480,7 +480,6 @@ private:
 
     bool DirectRead;
     bool AutoPartitioningSupport;
-    bool TopicMessagesBatchingEnabled = false;
 };
 
 }

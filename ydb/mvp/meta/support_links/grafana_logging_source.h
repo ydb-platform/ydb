@@ -16,6 +16,7 @@
 namespace NMVP::NSupportLinks {
 
 inline constexpr TStringBuf GRAFANA_LOGGING_DEFAULT_URL = "/explore";
+inline constexpr TStringBuf GRAFANA_LOGGING_DEFAULT_BUCKET = "ydb";
 
 inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(const NHttp::TUrlParameters& requestQueryParameters) {
     TVector<std::pair<TString, TString>> bindings;
@@ -66,7 +67,6 @@ inline NJson::TJsonValue BuildGrafanaLoggingPanesJson(const TString& datasource,
 inline bool TryBuildGrafanaLoggingUrl(
     TStringBuf grafanaEndpoint,
     TStringBuf url,
-    TStringBuf bucket,
     const THashMap<TString, TString>& clusterInfo,
     const NHttp::TUrlParameters& requestQueryParameters,
     TString& resolvedUrl,
@@ -94,7 +94,7 @@ inline bool TryBuildGrafanaLoggingUrl(
 
     TVector<std::pair<TString, TString>> bindings = BuildGrafanaLoggingBindings(requestQueryParameters);
     bindings.emplace_back("__workspace__", workspaceIt->second);
-    bindings.emplace_back("__bucket__", bucket);
+    bindings.emplace_back("__bucket__", TString(GRAFANA_LOGGING_DEFAULT_BUCKET));
 
     TCgiParameters queryParameters;
     queryParameters.InsertUnescaped("schemaVersion", "1");
@@ -113,11 +113,10 @@ namespace NMVP {
 
 class TGrafanaLoggingSource : public ILinkSource {
 public:
-    TGrafanaLoggingSource(TString sourceName, TString title, TString url, TString bucket, TString grafanaEndpoint)
+    TGrafanaLoggingSource(TString sourceName, TString title, TString url, TString grafanaEndpoint)
         : SourceName(std::move(sourceName))
         , Title(std::move(title))
         , Url(std::move(url))
-        , Bucket(std::move(bucket))
         , GrafanaEndpoint(std::move(grafanaEndpoint))
     {}
 
@@ -131,7 +130,6 @@ public:
         if (!NSupportLinks::TryBuildGrafanaLoggingUrl(
                 GrafanaEndpoint,
                 Url,
-                Bucket,
                 input.ClusterInfo,
                 input.UrlParameters,
                 resolvedUrl,
@@ -155,7 +153,6 @@ private:
     TString SourceName;
     TString Title;
     TString Url;
-    TString Bucket;
     TString GrafanaEndpoint;
 };
 
@@ -177,7 +174,6 @@ inline std::shared_ptr<ILinkSource> MakeGrafanaLoggingSource(TSupportLinkEntryCo
         config.GetSource(),
         config.GetTitle(),
         config.GetUrl(),
-        config.GetBucket(),
         metaSettings.SupportLinks.GrafanaEndpoint
     );
 }

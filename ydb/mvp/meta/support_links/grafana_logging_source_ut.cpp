@@ -26,12 +26,6 @@ NMVP::TSupportLinkEntryConfig MakeConfig(TStringBuf url = TStringBuf()) {
     return config;
 }
 
-NMVP::TSupportLinkEntryConfig MakeConfigWithBucket(TStringBuf bucket, TStringBuf url = TStringBuf()) {
-    NMVP::TSupportLinkEntryConfig config = MakeConfig(url);
-    config.SetBucket(TString(bucket));
-    return config;
-}
-
 NHttp::TUrlParametersBuilder MakeUrlParameters(TStringBuf query) {
     NHttp::TUrlParametersBuilder builder;
     for (TStringBuf param = query.NextTok('&'); !param.empty(); param = query.NextTok('&')) {
@@ -191,24 +185,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
             result.Links[0].Url,
             "https://grafana.example.net/explore",
             "{database=\"/new/db\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
-            "ds-42"
-        );
-    }
-
-    Y_UNIT_TEST(ResolveUsesBucketOverrideFromConfig) {
-        TGrafanaLoggingTestContext context;
-        context.Config = MakeConfigWithBucket("custom-bucket");
-        context.ClusterInfo["k8s_namespace"] = "ydb-common";
-        context.ClusterInfo["datasource_logging"] = "ds-42";
-        context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
-        auto result = context.Resolve();
-
-        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0u);
-        AssertPanesQuery(
-            result.Links[0].Url,
-            "https://grafana.example.net/explore",
-            "{database=\"/new/db\", __workspace__=\"ydb-common\", __bucket__=\"custom-bucket\"}",
             "ds-42"
         );
     }

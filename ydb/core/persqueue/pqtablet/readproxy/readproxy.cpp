@@ -9,6 +9,8 @@
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NPQ {
 
 using namespace NActors;
@@ -16,12 +18,9 @@ using namespace NActors;
 namespace {
 
 bool HasBatchMessages(const NKikimrClient::TCmdReadResult& readResult) {
-    for (const auto& result : readResult.GetResult()) {
-        if (result.GetMessageFormat() != NKikimrClient::STANDARD) {
-            return true;
-        }
-    }
-    return false;
+    return AnyOf(readResult.GetResult(), [](const auto& result) {
+        return result.GetMessageFormat() != NKikimrClient::STANDARD;
+    });
 }
 
 } // namespace
@@ -63,10 +62,6 @@ public:
     }
 
 private:
-    void DieWithCleanup(const TActorContext& ctx) {
-        Die(ctx);
-    }
-
     void SendResponse(const TActorContext& ctx, bool isDirectRead, const NKikimrClient::TCmdReadResult& readResult,
                       const NKikimrClient::TPersQueuePartitionResponse& partitionResponse)
     {
@@ -94,7 +89,7 @@ private:
             );
         }
         ctx.Send(Sender, Response.Release());
-        DieWithCleanup(ctx);
+        PassAway();
     }
 
     void TryProcessBatchOrSendResponse(const TActorContext& ctx, bool isDirectRead,
@@ -142,7 +137,7 @@ private:
 
             Response->Record.CopyFrom(record);
             ctx.Send(Sender, Response.Release());
-            DieWithCleanup(ctx);
+            PassAway();
             return;
         }
         AFL_ENSURE(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
@@ -360,7 +355,7 @@ private:
 
         Response->Record.CopyFrom(*proxyResponse->Response);
         ctx.Send(Sender, Response.Release());
-        DieWithCleanup(ctx);
+        PassAway();
     }
 
     STFUNC(StateFunc) {

@@ -195,10 +195,10 @@ struct TIndexDescription {
                 SpecializedIndexDescription = message->GetFulltextIndexDescription();
                 break;
             case EType::LocalBloomFilter:
-                    SpecializedIndexDescription = TLocalBloomFilterDescription{};
+                SpecializedIndexDescription = TLocalBloomFilterDescription{};
                 break;
             case EType::LocalBloomNgramFilter:
-                    SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
+                SpecializedIndexDescription = TLocalBloomNgramFilterDescription{};
                 break;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(Type));
@@ -219,7 +219,7 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalFulltextPlain;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
                 return TIndexDescription::EType::GlobalFulltextRelevance;
-                        default:
+            default:
                 YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
     }

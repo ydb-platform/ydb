@@ -689,7 +689,6 @@
     auto producerSettings = NYdb::NTopic::TProducerSettings()
         .Path("my-topic")
         .ProducerIdPrefix("my-producer")
-        .MessageGroupId("orders-group")
         .PartitionChooserStrategy(NYdb::NTopic::EPartitionChooserStrategy::Bound);
 
     auto producer = topicClient.CreateProducer(producerSettings);

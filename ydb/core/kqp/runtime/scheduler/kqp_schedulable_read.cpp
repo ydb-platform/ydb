@@ -90,7 +90,7 @@ TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
 
     if (AvailableQuotaMs >= static_cast<i64>(expectedQuotaMs)) {
         // Quota is available, but TryIncreaseUsage() failed (fair-share exhausted) -
-        // retry using exponencial delays.
+        // retry using exponential delays.
         const auto maxRetries = std::bit_width(expectedQuotaMs) - 1;
         if (FairShareRetryCount >= maxRetries) {
             return expectedQuota + RandomDuration(TDuration::MilliSeconds(expectedQuotaMs >> 2)); // jitter +0..25% of expected quota

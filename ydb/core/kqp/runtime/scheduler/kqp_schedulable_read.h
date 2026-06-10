@@ -13,7 +13,7 @@ struct TSchedulableRead : TSchedulableTask {
     void ReturnQuota(NHPTimer::STime elapsedCycles = 0);
 
     // Estimate delay until quota becomes available.
-    // Must be called right after TryConsumeQuota fails (refill already done).
+    // Must be called only after refilling is already done, i.e. TryConsumeQuota or HasAvailableQuota fails.
     TDuration EstimateQuotaDelay(TDuration expectedQuota) const;
 
     // Non-consuming availability check: refills the bucket and reports whether any

@@ -579,6 +579,8 @@ public:
         // TODO: looks kind of ugly: we assume that cells in rowState are stored in array
         TDbTupleRef value(ColumnTypes.data(), (*rowState).data(), ColumnTypes.size());
 
+        BytesSinceLastCheck += EstimateSize(value.Cells());
+
         // note that if user requests key columns then they will be in
         // rowValues and we don't have to add rowKey columns
         if (State.VectorTopK) {
@@ -591,7 +593,7 @@ public:
         return EReadStatus::Done;
     }
 
-    bool PrechargeKey(
+    NTable::TPrechargeResult PrechargeKey(
         TTransactionContext& txc,
         const TSerializedCellVec& keyCells)
     {
@@ -599,10 +601,10 @@ public:
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
             auto minKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
             auto maxKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, false);
-            return Precharge(txc.DB, minKey, maxKey, State.Reverse).Ready;
+            return Precharge(txc.DB, minKey, maxKey, State.Reverse);
         } else {
             auto key = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
-            return Precharge(txc.DB, key, key, State.Reverse).Ready;
+            return Precharge(txc.DB, key, key, State.Reverse);
         }
     }
 
@@ -640,7 +642,9 @@ public:
                 if (txc.Env.MissingReferencesSize()) {
                     ready = false;
 
-                    prechargedRowsSize += EstimateSize(*rowState);
+                    const ui64 rowSize = EstimateSize(*rowState);
+                    prechargedRowsSize  += rowSize;
+                    BytesSinceLastCheck += rowSize;
                 }
 
                 prechargedCount++;
@@ -669,14 +673,14 @@ public:
             if (!(queryIndex < State.Request->Keys.size())) {
                 break;
             }
-            if (!PrechargeKey(txc, State.Request->Keys[queryIndex])) {
+            auto result = PrechargeKey(txc, State.Request->Keys[queryIndex]);
+            if (!result.Ready) {
                 ready = false;
             }
             --rowsLeft;
 
-            // Precharging one key can be significantly more expensive than reading a single user row,
-            // so we cannot wait MinRowsPerCheck iterations before checking elapsed time.
-            RowsSinceLastCheck += MinRowsPerCheck;
+            ++RowsSinceLastCheck;
+            BytesSinceLastCheck += result.BytesPrecharged;
             if (ShouldStop()) {
                 break;
             }
@@ -3864,9 +3868,11 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
 
     // If the resource-pool read quota is exhausted, avoid opening a no-op read
     // transaction (which still pays tablet executor / redo-confirm overhead) and
-    // just reschedule the continue after the estimated delay. ReadContinuePending
-    // stays true so ReadAck won't schedule a duplicate continue.
+    // just reschedule the continue after the estimated delay.
+    // Explicitly set ReadContinuePending so ReadAck won't schedule a duplicate
+    // continue regardless of what may have cleared the flag before this point.
     if (state.SchedulableRead && !state.SchedulableRead->HasAvailableQuota()) {
+        state.ReadContinuePending = true;
         ctx.Schedule(
             state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
             new TEvDataShard::TEvReadContinue(localReadId));

@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     // A plain key read with PoolId set must succeed when quota is available.
     //
     // For the leader (WithFollower=false):
-    //   additionally verifies that a zero-quota pool returns OVERLOADED, proving
+    //   additionally verifies that a zero-quota pool returns PRECONDITION_FAILED, proving
     //   that quota IS actively enforced.
     //
     // For the follower (WithFollower=true):
@@ -252,8 +252,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
                 "Follower must bypass quota even for a zero-quota pool");
         } else {
             // Leader enforces the quota — must reject the read.
-            UNIT_ASSERT_VALUES_EQUAL_C(zeroResult->Record.GetStatus().GetCode(), Ydb::StatusIds::OVERLOADED,
-                "Leader must return OVERLOADED for a zero-quota pool, proving quota is enforced");
+            UNIT_ASSERT_VALUES_EQUAL_C(zeroResult->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED,
+                "Leader must return PRECONDITION_FAILED for a zero-quota pool, proving quota is enforced");
         }
     }
 
@@ -289,6 +289,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(rowsReceived, kRows);
     }
 
+<<<<<<< HEAD
     // When the pool's ReadLimit is 0 ms (quota permanently exhausted):
     //   leader  → OVERLOADED
     //   follower → SUCCESS (quota bypass)
@@ -324,6 +325,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
         }
     }
 
+=======
+>>>>>>> 9ec6e2ef7ca (Improve the datashard performance when using Read qouta (#42748))
     // Tight quota (5 ms/s) on the leader: continuations must retry internally
     // rather than returning OVERLOADED to the client.
     // This scenario only applies to the leader; followers are always quota-free.

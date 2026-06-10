@@ -833,7 +833,7 @@
 
   {% list tabs %}
 
-  - IWriteSession
+  - IWriteSession (низкоуровневое API)
 
     Работа с объектом `IWriteSession` устроена как обработка цикла событий с тремя типами событий: `TReadyToAcceptEvent`, `TAcksEvent` и `TSessionClosedEvent`.
 
@@ -866,9 +866,11 @@
     }
     ```
 
-  - IProducer
+  - IProducer (высокоуровневое API)
 
-    `Write` ставит сообщение во внутренний буфер, `Flush` дожидается доставки накопленных данных на сервер, `Close` завершает работу продюсера.
+    `TProducerSettings` наследует `TWriteSessionSettings`, поэтому буферизация, отправка и переподключение устроены так же, как у `IWriteSession`: `Write` кладёт сообщение во внутренний буфер, отправка на сервер идёт в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Продюсер переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку, пока это возможно, в соответствии с `RetryPolicy`. При неустранимой ошибке продюсер закрывается; статус и причину можно получить из результата `Write` или `Flush`.
+
+    `Flush` дожидается доставки накопленных данных на сервер, `Close` завершает работу продюсера и сбрасывает буфер.
 
     ```cpp
     auto messageData = std::string("order-created");

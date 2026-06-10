@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    bulk_upsert_retry_operation.cpp
     out.cpp
     proto_accessor.cpp
     table.cpp

@@ -82,21 +82,23 @@ TEST(BulkUpsert, RetryOverheadOnHappyPath) {
         return settings;
     }();
 
-    auto runIterations = [&](const std::string& table, const TBulkUpsertSettings& settings, size_t iterations) {
-        TDuration total;
+    auto runInterleavedIterations = [&](size_t iterations) {
+        TDuration noRetryTotal;
+        TDuration withRetryTotal;
         for (size_t i = 0; i < iterations; ++i) {
-            total += MeasureBulkUpsertWallTime(
-                client, table, i, static_cast<uint32_t>(i * kPerfBatchSize), settings, kPerfBatchSize);
+            const uint32_t offset = static_cast<uint32_t>(i * kPerfBatchSize);
+            noRetryTotal += MeasureBulkUpsertWallTime(
+                client, tableNoRetry, i, offset, noRetrySettings, kPerfBatchSize);
+            withRetryTotal += MeasureBulkUpsertWallTime(
+                client, tableWithRetry, i, offset, withRetrySettings, kPerfBatchSize);
         }
-        return total;
+        return std::make_pair(noRetryTotal, withRetryTotal);
     };
 
     try {
-        runIterations(tableNoRetry, noRetrySettings, kWarmupIterations);
-        runIterations(tableWithRetry, withRetrySettings, kWarmupIterations);
+        runInterleavedIterations(kWarmupIterations);
 
-        const TDuration noRetryTime = runIterations(tableNoRetry, noRetrySettings, kMeasuredIterations);
-        const TDuration withRetryTime = runIterations(tableWithRetry, withRetrySettings, kMeasuredIterations);
+        const auto [noRetryTime, withRetryTime] = runInterleavedIterations(kMeasuredIterations);
 
         const double ratio = static_cast<double>(withRetryTime.MicroSeconds())
             / static_cast<double>(noRetryTime.MicroSeconds());

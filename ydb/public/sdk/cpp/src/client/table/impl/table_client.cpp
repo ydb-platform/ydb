@@ -1171,18 +1171,16 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
 }
 
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
-    auto* retryState = settings.RetryRowsState_;
-    const bool useInternalArena = retryState != nullptr && !settings.Arena_;
-
     Ydb::Table::BulkUpsertRequest* request = nullptr;
     std::unique_ptr<Ydb::Table::BulkUpsertRequest> holder;
+    std::shared_ptr<Ydb::Table::BulkUpsertRequest> retryHolder;
 
-    if (settings.Arena_) {
+    if (settings.RetryRowsState_) {
+        retryHolder = std::make_shared<Ydb::Table::BulkUpsertRequest>(
+            MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings));
+        request = retryHolder.get();
+    } else if (settings.Arena_) {
         request = MakeOperationRequestOnArena<Ydb::Table::BulkUpsertRequest>(settings, settings.Arena_);
-    } else if (useInternalArena) {
-        request = MakeOperationRequestOnArena<Ydb::Table::BulkUpsertRequest>(
-            settings, retryState->EnsureArena());
-        retryState->SetRequest(request);
     } else {
         holder = std::make_unique<Ydb::Table::BulkUpsertRequest>(MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings));
         request = holder.get();
@@ -1206,23 +1204,23 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     auto obs = MakeObservation("BulkUpsert");
 
     auto promise = NewPromise<TBulkUpsertResult>();
-    auto stateHolder = settings.RetryRowsStateHolder_;
+    auto retryState = settings.RetryRowsState_;
 
-    auto extractor = [promise, obs, retryState, stateHolder, request](
+    auto extractor = [promise, obs, retryState, retryHolder](
         google::protobuf::Any* any, TPlainStatus status) mutable
     {
         Y_UNUSED(any);
-        if (retryState && request && !retryState->HasBackup()
+        if (retryState && retryHolder && !retryState->HasBackup()
             && !status.Ok() && NRetry::IsRetryableBulkUpsertFailure(status.Status, true))
         {
-            retryState->CreateBackup(*request);
+            retryState->CreateBackup(*retryHolder);
         }
         obs->End(status.Status, status.Endpoint);
         TBulkUpsertResult val(TStatus(std::move(status)));
         promise.SetValue(std::move(val));
     };
 
-    if (settings.Arena_ || useInternalArena) {
+    if (settings.Arena_ || retryHolder) {
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
             request,
             extractor,

@@ -9,7 +9,6 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_settings.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/bulk_upsert_retry_state.h>
-#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/bulk_upsert_retry_operation.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -1639,10 +1638,31 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
     }
 
     auto state = std::make_shared<NRetry::TBulkUpsertRetryState>();
-    state->ConsumeRows(std::move(rows));
+    auto opSettings = settings;
+    opSettings.RetryRowsState_ = state;
 
-    return NRetry::RunUnaryWithRetry(*this, retrySettings,
-        NRetry::TBulkUpsertRetryOperation(this, table, std::move(state), settings));
+    return Impl_->BulkUpsert(table, std::move(rows), opSettings).Apply(
+        [this, table, settings, retrySettings, state](const TAsyncBulkUpsertResult& f) {
+            const auto result = f.GetValue();
+            if (result.IsSuccess()
+                || !NRetry::IsRetryableBulkUpsertFailure(result.GetStatus(), retrySettings.Idempotent_)) {
+                return NThreading::MakeFuture(result);
+            }
+            Y_ABORT_UNLESS(state->HasBackup());
+
+            auto remaining = retrySettings;
+            remaining.MaxRetries(retrySettings.MaxRetries_ - 1);
+
+            return NRetry::RunUnaryWithRetry(*this, remaining,
+                [this, table, state, settings](TDuration timeout) {
+                    auto op = settings;
+                    op.RetryRowsState_.reset();
+                    if (timeout != TDuration::Max()) {
+                        op.ClientTimeout(timeout);
+                    }
+                    return Impl_->BulkUpsert(table, state->GetBackupCopy(), op);
+                });
+        });
 }
 
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataFormat format,

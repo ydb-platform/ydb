@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -16,7 +17,7 @@ namespace NKikimr {
         struct TItem {
             std::unique_ptr<IEventHandle> Ev;
             ui64 Size = 0;
-            NWilson::TSpan Span;
+            TLazyRetroSpan Span;
 
             TItem() = default;
 

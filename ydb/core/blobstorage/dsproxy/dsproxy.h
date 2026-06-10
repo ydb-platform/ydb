@@ -246,7 +246,7 @@ public:
                     parentTraceId.GetTimeToLive(), true), "DSProxy.RTX", NWilson::EFlags::AUTO_END);
         } else {
             Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
-                                  "DSProxy.RTX", NWilson::EFlags::AUTO_END);
+                    "DSProxy.RTX");
         }
 
         Y_ABORT_UNLESS(CostModel);

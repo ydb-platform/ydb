@@ -22,8 +22,6 @@ message TMetaConfig {
             repeated string Tag = 4;
             // Grafana folder UID filters (for source=grafana/dashboard/search).
             repeated string Folder = 5;
-            // Bucket override for source=grafana/logging.
-            optional string Bucket = 6 [default = "ydb"];
         }
         // Support links resolved for cluster entity.
         repeated TSupportLinkEntry Cluster = 1;

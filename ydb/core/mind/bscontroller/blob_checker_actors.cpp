@@ -386,7 +386,7 @@ private:
             }
         }
 
-        for (std::multimap<TMonotonic, TGroupId>& scheduled : { CheckOrder, OutgoingRequests }) {
+        auto eraseDeleted = [](td::multimap<TMonotonic, TGroupId>& scheduled) {
             for (auto it = scheduled.begin(); it != scheduled.end(); ) {
                 if (deletedGroups.contains(it->second)) {
                     it = scheduled.erase(it);
@@ -395,6 +395,8 @@ private:
                 }
             }
         }
+        eraseDeleted(CheckOrder);
+        eraseDeleted(OutgoingRequests);
     }
 
     void SendRequest(TGroupId groupId) {

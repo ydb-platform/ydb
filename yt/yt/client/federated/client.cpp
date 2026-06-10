@@ -66,10 +66,10 @@ public:
         const std::string& query,
         const TSelectRowsOptions& options = {}) override;
 
-    void ModifyRows(
+    void FutureModifyRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
-        TSharedRange<TRowModification> modifications,
+        TSharedRange<NFuture::TRowModification> modifications,
         const TModifyRowsOptions& options) override;
 
     using TQueueTransactionMixin::AdvanceQueueConsumer;
@@ -584,13 +584,13 @@ TRANSACTION_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, con
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
 TRANSACTION_METHOD_IMPL(bool, NodeExists, (const NYPath::TYPath&, const TNodeExistsOptions&));
 
-void TTransaction::ModifyRows(
+void TTransaction::FutureModifyRows(
     const NYPath::TYPath& path,
     NTableClient::TNameTablePtr nameTable,
-    TSharedRange<TRowModification> modifications,
+    TSharedRange<NFuture::TRowModification> modifications,
     const TModifyRowsOptions& options)
 {
-    Underlying_->ModifyRows(path, nameTable, modifications, options);
+    Underlying_->FutureModifyRows(path, nameTable, modifications, options);
 }
 
 TFuture<TTransactionFlushResult> TTransaction::Flush()

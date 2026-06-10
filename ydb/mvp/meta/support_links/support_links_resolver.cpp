@@ -24,7 +24,7 @@ TSupportLinksResolver::TSupportLinksResolver(TParams params)
         Sources.reserve(Sources.size() + linkConfigs.size());
         SourceIdentities.reserve(SourceIdentities.size() + linkConfigs.size());
         for (const auto& linkConfig : linkConfigs) {
-            Sources.push_back(params.LinkSourceFactory(linkConfig, *params.Settings));
+            Sources.push_back(params.LinkSourceFactory(linkConfig, identity.Type, *params.Settings));
             SourceIdentities.push_back(identity);
         }
     }

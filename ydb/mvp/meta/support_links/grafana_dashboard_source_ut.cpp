@@ -9,8 +9,6 @@
 
 namespace {
 
-using EEntityType = NMVP::NSupportLinks::EEntityType;
-
 NMVP::TMetaSettings MakeMetaSettings(TStringBuf grafanaEndpoint) {
     NMVP::TMetaSettings settings;
     settings.SupportLinks.GrafanaEndpoint = TString(grafanaEndpoint);
@@ -51,9 +49,12 @@ void AssertSingleResolvedLink(const NMVP::TResolveOutput& result, TStringBuf exp
 struct TGrafanaDashboardTestContext {
     NMVP::TSupportLinkEntryConfig Config;
     NMVP::TMetaSettings Settings;
+    NMVP::NSupportLinks::EEntityType EntityType = NMVP::NSupportLinks::EEntityType::Database;
     THashMap<TString, TString> ClusterInfo;
     NHttp::TUrlParametersBuilder UrlParameters;
-    EEntityType EntityType;
+    TCgiParameters AdditionalRequestParams;
+    NMVP::NSupportLinks::TEntityIdentity Identity;
+    NMVP::NSupportLinks::ILinkSource::TLinkResolveInput Input;
     NActors::TActorId Owner;
     NActors::TActorId HttpProxyId;
     NMVP::NSupportLinks::ILinkSource::TResolveContext Context;
@@ -62,7 +63,12 @@ struct TGrafanaDashboardTestContext {
         : Config(ParseGrafanaDashboardConfig(url))
         , Settings(MakeMetaSettings("https://grafana.example.net"))
         , UrlParameters("")
-        , EntityType(EEntityType::Cluster)
+        , AdditionalRequestParams("")
+        , Input{
+            .ClusterInfo = ClusterInfo,
+            .AdditionalRequestParams = AdditionalRequestParams,
+            .Identity = Identity,
+        }
         , Owner(1, "ow")
         , HttpProxyId(2, "hp")
         , Context{
@@ -73,7 +79,7 @@ struct TGrafanaDashboardTestContext {
     {}
 
     std::shared_ptr<NMVP::NSupportLinks::ILinkSource> CreateSource() const {
-        return NMVP::NSupportLinks::MakeGrafanaDashboardSource(Config, Settings);
+        return NMVP::NSupportLinks::MakeGrafanaDashboardSource(Config, EntityType, Settings);
     }
 
     void SetDefaultClusterInfo() {
@@ -81,14 +87,10 @@ struct TGrafanaDashboardTestContext {
         ClusterInfo["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
     }
 
-    NMVP::TResolveOutput Resolve() const {
-        const TCgiParameters additionalRequestParams = NMVP::NSupportLinks::BuildAdditionalRequestParameters(UrlParameters);
-        const auto identity = NMVP::NSupportLinks::BuildEntityIdentity(EntityType, UrlParameters);
-        return CreateSource()->Resolve(NMVP::NSupportLinks::ILinkSource::TLinkResolveInput{
-            .ClusterInfo = ClusterInfo,
-            .AdditionalRequestParams = additionalRequestParams,
-            .Identity = identity,
-        }, Context);
+    NMVP::TResolveOutput Resolve() {
+        Identity = NMVP::NSupportLinks::BuildEntityIdentity(EntityType, UrlParameters);
+        AdditionalRequestParams = NMVP::NSupportLinks::BuildAdditionalRequestParameters(UrlParameters);
+        return CreateSource()->Resolve(Input, Context);
     }
 };
 
@@ -118,53 +120,56 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         TGrafanaDashboardTestContext context;
         context.SetDefaultClusterInfo();
         context.UrlParameters = MakeUrlParameters("cluster=ydb-global&database=root_test");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(result.Links[0].Title, "CPU");
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global&var-database=root_test"
+            "https://grafana.example.net/d/cpu?var-cluster=ydb-global&var-database=root_test"
         );
     }
 
-    Y_UNIT_TEST(ResolveSkipsMissingDatasource) {
+    Y_UNIT_TEST(ResolveSkipsMissingDatasourceInAdditionalParams) {
         TGrafanaDashboardTestContext context;
-        context.ClusterInfo["k8s_namespace"] = "ydb-workspace";
+        auto* datasource = context.Config.AddLinkParameterMappings();
+        datasource->SetParameter("ds");
+        datasource->SetFromClusterInfo("datasource");
         context.UrlParameters = MakeUrlParameters("cluster=ydb-global&database=%2Froot%2Ftest");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-cluster=ydb-global&var-database=/root/test"
+            "https://grafana.example.net/d/cpu?var-cluster=ydb-global&var-database=/root/test"
         );
     }
 
-    Y_UNIT_TEST(ResolveSkipsEmptyDatasource) {
+    Y_UNIT_TEST(ResolveSkipsEmptyDatasourceInAdditionalParams) {
         TGrafanaDashboardTestContext context;
-        context.ClusterInfo["k8s_namespace"] = "ydb-workspace";
+        auto* datasource = context.Config.AddLinkParameterMappings();
+        datasource->SetParameter("ds");
+        datasource->SetFromClusterInfo("datasource");
         context.ClusterInfo["datasource"] = "";
         context.UrlParameters = MakeUrlParameters("cluster=ydb-global&database=%2Froot%2Ftest");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-cluster=ydb-global&var-database=/root/test"
+            "https://grafana.example.net/d/cpu?var-cluster=ydb-global&var-database=/root/test"
         );
     }
 
-    Y_UNIT_TEST(ResolveSkipsMissingWorkspace) {
+    Y_UNIT_TEST(ResolveSkipsMissingWorkspaceInAdditionalParams) {
         TGrafanaDashboardTestContext context;
-        context.ClusterInfo["datasource"] = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63";
+        auto* workspace = context.Config.AddLinkParameterMappings();
+        workspace->SetParameter("workspace");
+        workspace->SetFromClusterInfo("k8s_namespace");
         context.UrlParameters = MakeUrlParameters("cluster=ydb-global");
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global"
+            "https://grafana.example.net/d/cpu?var-cluster=ydb-global"
         );
     }
 
@@ -173,12 +178,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         context.Settings = MakeMetaSettings("");
         context.SetDefaultClusterInfo();
         context.UrlParameters = MakeUrlParameters("database=root");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://external.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-database=root"
+            "https://external.example.net/d/cpu?var-database=root"
         );
     }
 
@@ -186,12 +190,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         TGrafanaDashboardTestContext context("https://external.example.net/d/cpu");
         context.SetDefaultClusterInfo();
         context.UrlParameters = MakeUrlParameters("database=root");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://external.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-database=root"
+            "https://external.example.net/d/cpu?var-database=root"
         );
     }
 
@@ -200,12 +203,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         context.Settings = MakeMetaSettings("https://grafana.example.net/");
         context.SetDefaultClusterInfo();
         context.UrlParameters = MakeUrlParameters("database=root");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-database=root"
+            "https://grafana.example.net/d/cpu?var-database=root"
         );
     }
 
@@ -213,12 +215,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         TGrafanaDashboardTestContext context("d/cpu");
         context.SetDefaultClusterInfo();
         context.UrlParameters = MakeUrlParameters("database=root");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-database=root"
+            "https://grafana.example.net/d/cpu?var-database=root"
         );
     }
 
@@ -227,12 +228,11 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         context.Settings = MakeMetaSettings("https://grafana.example.net/");
         context.SetDefaultClusterInfo();
         context.UrlParameters = MakeUrlParameters("database=root");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-database=root"
+            "https://grafana.example.net/d/cpu?var-database=root"
         );
     }
 
@@ -240,25 +240,30 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         TGrafanaDashboardTestContext context;
         context.SetDefaultClusterInfo();
         context.UrlParameters = MakeUrlParameters("database=root%26x%3Dy");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-database=root%26x%3Dy"
+            "https://grafana.example.net/d/cpu?var-database=root%26x%3Dy"
         );
     }
 
-    Y_UNIT_TEST(ResolveSkipsForeignIdentityParametersButKeepsAdditionalParameters) {
+    Y_UNIT_TEST(ResolveAppliesRequestAndAdditionalParamOverrides) {
         TGrafanaDashboardTestContext context;
         context.SetDefaultClusterInfo();
-        context.EntityType = EEntityType::Host;
-        context.UrlParameters = MakeUrlParameters("cluster=ydb-global&node=ignored-node&custom_label=kept&host=storage-1.example.net");
+        auto* database = context.Config.AddLinkParameterMappings();
+        database->SetParameter("db_path");
+        database->SetFromRequest("database");
+        auto* workspace = context.Config.AddLinkParameterMappings();
+        workspace->SetParameter("workspace");
+        workspace->SetFromClusterInfo("custom_namespace");
+        context.ClusterInfo["custom_namespace"] = "custom-workspace";
+        context.UrlParameters = MakeUrlParameters("cluster=ydb-global&database=%2Froot%2Ftest");
         auto result = context.Resolve();
 
         AssertSingleResolvedLink(
             result,
-            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global&var-host=storage-1.example.net&var-custom_label=kept"
+            "https://grafana.example.net/d/cpu?var-workspace=custom-workspace&var-cluster=ydb-global&var-db_path=/root/test"
         );
     }
 }

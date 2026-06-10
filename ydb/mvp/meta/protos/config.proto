@@ -12,6 +12,17 @@ message TMetaConfig {
 
     message TSupportLinksConfig {
         message TSupportLinkEntry {
+            message TLinkParameterMapping {
+                // Target parameter name in the generated link.
+                optional string Parameter = 1;
+                // Request parameter name used as the mapping source.
+                optional string FromRequest = 2;
+                // Cluster info column name used as the mapping source.
+                optional string FromClusterInfo = 3;
+                // Constant value used as the mapping source.
+                optional string StaticValue = 4;
+            }
+
             // Link source identifier (for example: grafana/dashboard/search).
             optional string Source = 1;
             // Optional display name shown in UI.
@@ -22,15 +33,32 @@ message TMetaConfig {
             repeated string Tag = 4;
             // Grafana folder UID filters (for source=grafana/dashboard/search).
             repeated string Folder = 5;
+            // Optional full override for generated link parameters.
+            // When omitted, source defaults are used.
+            repeated TLinkParameterMapping LinkParameterMappings = 6;
         }
-        // Support links resolved for cluster entity.
+
+        message TByEntityConfig {
+            // Support links resolved for cluster entity.
+            repeated TSupportLinkEntry Cluster = 1;
+            // Support links resolved for database entity.
+            repeated TSupportLinkEntry Database = 2;
+            // Support links resolved for node entity.
+            repeated TSupportLinkEntry Node = 3;
+            // Support links resolved for host entity.
+            repeated TSupportLinkEntry Host = 4;
+        }
+
+        // Deprecated, Support links resolved for cluster entity.
         repeated TSupportLinkEntry Cluster = 1;
-        // Support links resolved for database entity.
+        // Deprecated, Support links resolved for database entity.
         repeated TSupportLinkEntry Database = 2;
-        // Support links resolved for node entity.
+        // Deprecated, Support links resolved for node entity.
         repeated TSupportLinkEntry Node = 3;
-        // Support links resolved for host entity.
+        // Deprecated, Support links resolved for host entity.
         repeated TSupportLinkEntry Host = 4;
+        // Preferred support links config grouped by entity type.
+        optional TByEntityConfig ByEntity = 5;
     }
 
     optional string MetaApiEndpoint = 1;

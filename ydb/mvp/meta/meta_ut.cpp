@@ -21,6 +21,11 @@ static NMvp::NMeta::TMetaAppConfig ParseConfig(const TString& yaml) {
     return appConfig;
 }
 
+static NMVP::TMetaSettings BuildSettings(const TString& yaml) {
+    const auto appConfig = ParseConfig(yaml);
+    return NMVP::BuildMetaSettings(appConfig.GetMeta(), appConfig.GetGeneric().GetAccessServiceType());
+}
+
 Y_UNIT_TEST_SUITE(MetaConfigurationValidation) {
     static NMVP::TMVP MakeTestMvp() {
         const char* argv[] = {"mvp_test"};
@@ -172,6 +177,87 @@ meta:
             yexception,
             "unsupported support_links source: unknown/source"
         );
+    }
+
+    Y_UNIT_TEST(RejectsUnsupportedRequestParamOverrideForEntity) {
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  grafana:
+    endpoint: "https://grafana.example.net"
+  support_links:
+    cluster:
+      - source: "grafana/dashboard"
+        title: "Cluster Overview"
+        url: "/d/cluster/overview"
+        link_parameter_mappings:
+          - parameter: "database"
+            from_request: "database"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        auto mvp = MakeTestMvp();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "link_parameter_mappings.from_request=database is not supported for entity=cluster and source=grafana/dashboard"
+        );
+    }
+
+    Y_UNIT_TEST(AcceptsSupportLinksByEntityConfig) {
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  grafana:
+    endpoint: "https://grafana.example.net"
+  support_links:
+    by_entity:
+      cluster:
+        - source: "grafana/dashboard"
+          title: "Cluster Overview"
+          url: "/d/cluster/overview"
+)";
+
+        const auto settings = BuildSettings(yaml);
+        UNIT_ASSERT_VALUES_EQUAL(settings.SupportLinks.ClusterLinks.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(settings.SupportLinks.ClusterLinks[0].GetSource(), "grafana/dashboard");
+    }
+
+    Y_UNIT_TEST(ByEntityClusterOverridesLegacyClusterAndLegacyDatabaseIsFallback) {
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  grafana:
+    endpoint: "https://grafana.example.net"
+  support_links:
+    cluster:
+      - source: "grafana/dashboard"
+        title: "Legacy Cluster"
+        url: "/d/legacy/cluster"
+    database:
+      - source: "grafana/dashboard"
+        title: "Legacy Database"
+        url: "/d/legacy/database"
+    by_entity:
+      cluster:
+        - source: "grafana/dashboard"
+          title: "ByEntity Cluster"
+          url: "/d/by-entity/cluster"
+)";
+
+        const auto settings = BuildSettings(yaml);
+        UNIT_ASSERT_VALUES_EQUAL(settings.SupportLinks.ClusterLinks.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(settings.SupportLinks.ClusterLinks[0].GetTitle(), "ByEntity Cluster");
+        UNIT_ASSERT_VALUES_EQUAL(settings.SupportLinks.DatabaseLinks.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(settings.SupportLinks.DatabaseLinks[0].GetTitle(), "Legacy Database");
     }
 
 }

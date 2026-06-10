@@ -36,10 +36,19 @@ public:
     virtual TResolveOutput Resolve(const TLinkResolveInput& input, const TResolveContext& context) const = 0;
 };
 
-using TLinkSourceFactory = std::shared_ptr<ILinkSource> (*)(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings);
+using TLinkSourceFactory = std::shared_ptr<ILinkSource> (*)(
+    TSupportLinkEntryConfig config,
+    EEntityType entityType,
+    const TMetaSettings& metaSettings);
 
 void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const TMetaSettings& metaSettings);
-void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings);
-std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings);
+void ValidateLinkSourceConfig(
+    const TSupportLinkEntryConfig& config,
+    EEntityType entityType,
+    const TMetaSettings& metaSettings);
+std::shared_ptr<ILinkSource> MakeLinkSource(
+    TSupportLinkEntryConfig config,
+    EEntityType entityType,
+    const TMetaSettings& metaSettings);
 
 } // namespace NMVP::NSupportLinks

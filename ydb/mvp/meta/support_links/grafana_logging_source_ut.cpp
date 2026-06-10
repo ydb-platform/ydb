@@ -10,8 +10,6 @@
 
 namespace {
 
-using EEntityType = NMVP::NSupportLinks::EEntityType;
-
 NMVP::TMetaSettings MakeMetaSettings(TStringBuf grafanaEndpoint) {
     NMVP::TMetaSettings settings;
     settings.SupportLinks.GrafanaEndpoint = TString(grafanaEndpoint);
@@ -47,9 +45,12 @@ NJson::TJsonValue ParseJson(TStringBuf body) {
 struct TGrafanaLoggingTestContext {
     NMVP::TSupportLinkEntryConfig Config;
     NMVP::TMetaSettings Settings;
+    NMVP::NSupportLinks::EEntityType EntityType = NMVP::NSupportLinks::EEntityType::Database;
     THashMap<TString, TString> ClusterInfo;
     NHttp::TUrlParametersBuilder UrlParameters;
-    EEntityType EntityType;
+    TCgiParameters AdditionalRequestParams;
+    NMVP::NSupportLinks::TEntityIdentity Identity;
+    NMVP::NSupportLinks::ILinkSource::TLinkResolveInput Input;
     NActors::TActorId Owner;
     NActors::TActorId HttpProxyId;
     NMVP::NSupportLinks::ILinkSource::TResolveContext Context;
@@ -58,7 +59,12 @@ struct TGrafanaLoggingTestContext {
         : Config(MakeConfig(url))
         , Settings(MakeMetaSettings("https://grafana.example.net"))
         , UrlParameters("")
-        , EntityType(EEntityType::Cluster)
+        , AdditionalRequestParams("")
+        , Input{
+            .ClusterInfo = ClusterInfo,
+            .AdditionalRequestParams = AdditionalRequestParams,
+            .Identity = Identity,
+        }
         , Owner(1, "ow")
         , HttpProxyId(2, "hp")
         , Context{
@@ -69,17 +75,13 @@ struct TGrafanaLoggingTestContext {
     {}
 
     std::shared_ptr<NMVP::NSupportLinks::ILinkSource> CreateSource() const {
-        return NMVP::NSupportLinks::MakeGrafanaLoggingSource(Config, Settings);
+        return NMVP::NSupportLinks::MakeGrafanaLoggingSource(Config, EntityType, Settings);
     }
 
-    NMVP::TResolveOutput Resolve() const {
-        const TCgiParameters additionalRequestParams = NMVP::NSupportLinks::BuildAdditionalRequestParameters(UrlParameters);
-        const auto identity = NMVP::NSupportLinks::BuildEntityIdentity(EntityType, UrlParameters);
-        return CreateSource()->Resolve(NMVP::NSupportLinks::ILinkSource::TLinkResolveInput{
-            .ClusterInfo = ClusterInfo,
-            .AdditionalRequestParams = additionalRequestParams,
-            .Identity = identity,
-        }, Context);
+    NMVP::TResolveOutput Resolve() {
+        Identity = NMVP::NSupportLinks::BuildEntityIdentity(EntityType, UrlParameters);
+        AdditionalRequestParams = NMVP::NSupportLinks::BuildAdditionalRequestParameters(UrlParameters);
+        return CreateSource()->Resolve(Input, Context);
     }
 };
 
@@ -130,7 +132,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "cd868168-09d4-4ece-82db-e646130697e5";
         context.UrlParameters = MakeUrlParameters("database=%2Froot%2Ftenant");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -147,7 +148,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         TGrafanaLoggingTestContext context("https://external.example.net/explore");
         context.ClusterInfo["datasource_logging"] = "ds-42";
         context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -164,7 +164,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";
         context.UrlParameters = MakeUrlParameters("custom_label=new-value&database=%2Fnew%2Fdb");
-        context.EntityType = EEntityType::Database;
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -177,11 +176,10 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         );
     }
 
-    Y_UNIT_TEST(ResolveSkipsForeignIdentityParametersAndAdditionalParameters) {
+    Y_UNIT_TEST(ResolveUsesDefaultClusterAndDatabaseRequestParameters) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";
-        context.UrlParameters = MakeUrlParameters("cluster=test-cluster&node=ignored-node&custom_label=kept&host=storage-1.example.net");
-        context.EntityType = EEntityType::Host;
+        context.UrlParameters = MakeUrlParameters("cluster=ydb-global&custom_label=ignored&database=%2Fnew%2Fdb");
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -189,16 +187,15 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{cluster=\"test-cluster\", host=\"storage-1.example.net\"}",
+            "{cluster=\"ydb-global\", database=\"/new/db\"}",
             "ds-42"
         );
     }
 
-    Y_UNIT_TEST(ResolveDoesNotRequireWorkspace) {
+    Y_UNIT_TEST(ResolveDoesNotRequireAdditionalParams) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";
-        context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
-        context.EntityType = EEntityType::Database;
+        context.UrlParameters = MakeUrlParameters("cluster=ydb-global");
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
@@ -206,7 +203,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{database=\"/new/db\"}",
+            "{cluster=\"ydb-global\"}",
             "ds-42"
         );
     }
@@ -227,6 +224,45 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
             context.CreateSource(),
             yexception,
             "query parameters are not supported in url for source=grafana/logging"
+        );
+    }
+
+    Y_UNIT_TEST(ResolveAppliesRequestParamOverrides) {
+        TGrafanaLoggingTestContext context;
+        context.ClusterInfo["datasource_logging"] = "ds-42";
+        auto* database = context.Config.AddLinkParameterMappings();
+        database->SetParameter("db_path");
+        database->SetFromRequest("database");
+        context.UrlParameters = MakeUrlParameters("cluster=ydb-global&database=%2Fnew%2Fdb");
+        auto result = context.Resolve();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0u);
+        AssertPanesQuery(
+            result.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{db_path=\"/new/db\"}",
+            "ds-42"
+        );
+    }
+
+    Y_UNIT_TEST(ResolveAddsConfiguredAdditionalParams) {
+        TGrafanaLoggingTestContext context;
+        context.ClusterInfo["custom_namespace"] = "custom-workspace";
+        context.ClusterInfo["datasource_logging"] = "ds-42";
+        auto* additionalParam = context.Config.AddLinkParameterMappings();
+        additionalParam->SetParameter("workspace");
+        additionalParam->SetFromClusterInfo("custom_namespace");
+        context.UrlParameters = MakeUrlParameters("cluster=ydb-global");
+        auto result = context.Resolve();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0u);
+        AssertPanesQuery(
+            result.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{cluster=\"ydb-global\", workspace=\"custom-workspace\"}",
+            "ds-42"
         );
     }
 }

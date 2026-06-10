@@ -24,29 +24,37 @@ meta:
     endpoint: https://grafana.example.net
 
   support_links:
-    cluster:
-      - source: grafana/dashboard
-        title: Cluster Overview
-        url: /d/ydb_cluster/overview
-      - source: grafana/dashboard/search
-        tag:
-          - ui-cluster
-        folder:
-          - 8a91d4c7-2e5b-4f13-9c6a-1b7e52d4f8a1
-    database:
-      - source: grafana/dashboard
-        title: Database Overview
-        url: /d/ydb_database/overview
-      - source: grafana/logging
-        title: Database Logs
-      - source: grafana/dashboard/search
-        tag:
-          - ui-database
-        folder:
-          - 8a91d4c7-2e5b-4f13-9c6a-1b7e52d4f8a1
-    node:
-      - source: grafana/logging
-        title: Node Logs
-    host:
-      - source: grafana/logging
-        title: Host Logs
+    by_entity:
+      cluster:
+        - source: grafana/dashboard
+          title: Cluster Overview
+          url: /d/ydb_cluster/overview
+        - source: grafana/dashboard/search
+          tag:
+            - ui-cluster
+          folder:
+            - 8a91d4c7-2e5b-4f13-9c6a-1b7e52d4f8a1
+      database:
+        - source: grafana/dashboard
+          title: Database Overview
+          url: /d/ydb_database/overview
+        - source: grafana/logging
+          title: Database Logs
+          link_parameter_mappings:
+            - parameter: db
+              from_request: database
+            - parameter: __workspace__
+              from_cluster_info: k8s_namespace
+            - parameter: __bucket__
+              static_value: ydb
+        - source: grafana/dashboard/search
+          tag:
+            - ui-database
+          folder:
+            - 8a91d4c7-2e5b-4f13-9c6a-1b7e52d4f8a1
+      node:
+        - source: grafana/logging
+          title: Node Logs
+      host:
+        - source: grafana/logging
+          title: Host Logs

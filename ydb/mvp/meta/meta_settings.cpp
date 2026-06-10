@@ -7,6 +7,65 @@
 
 namespace NMVP {
 
+namespace {
+
+void CopyEffectiveEntityLinks(
+    google::protobuf::RepeatedPtrField<TSupportLinkEntryConfig>* destination,
+    const google::protobuf::RepeatedPtrField<TSupportLinkEntryConfig>& preferredLinks,
+    const google::protobuf::RepeatedPtrField<TSupportLinkEntryConfig>& legacyLinks)
+{
+    const auto& sourceLinks = preferredLinks.empty() ? legacyLinks : preferredLinks;
+    for (const auto& link : sourceLinks) {
+        *destination->Add() = link;
+    }
+}
+
+void CopyEntityLinks(
+    google::protobuf::RepeatedPtrField<TSupportLinkEntryConfig>* destination,
+    const google::protobuf::RepeatedPtrField<TSupportLinkEntryConfig>& sourceLinks)
+{
+    for (const auto& link : sourceLinks) {
+        *destination->Add() = link;
+    }
+}
+
+void CopyResolvedEntityLinks(
+    TVector<TSupportLinkEntryConfig>& destination,
+    const google::protobuf::RepeatedPtrField<TSupportLinkEntryConfig>& sourceLinks)
+{
+    destination.reserve(sourceLinks.size());
+    for (const auto& link : sourceLinks) {
+        destination.push_back(link);
+    }
+}
+
+TSupportLinksConfig BuildEffectiveSupportLinksConfig(const TSupportLinksConfig& rawConfig) {
+    TSupportLinksConfig effectiveConfig;
+
+    const auto* byEntity = rawConfig.HasByEntity() ? &rawConfig.GetByEntity() : nullptr;
+
+    CopyEffectiveEntityLinks(
+        effectiveConfig.MutableCluster(),
+        byEntity ? byEntity->GetCluster() : rawConfig.GetCluster(),
+        rawConfig.GetCluster());
+    CopyEffectiveEntityLinks(
+        effectiveConfig.MutableDatabase(),
+        byEntity ? byEntity->GetDatabase() : rawConfig.GetDatabase(),
+        rawConfig.GetDatabase());
+    CopyEffectiveEntityLinks(
+        effectiveConfig.MutableNode(),
+        byEntity ? byEntity->GetNode() : rawConfig.GetNode(),
+        rawConfig.GetNode());
+    CopyEffectiveEntityLinks(
+        effectiveConfig.MutableHost(),
+        byEntity ? byEntity->GetHost() : rawConfig.GetHost(),
+        rawConfig.GetHost());
+
+    return effectiveConfig;
+}
+
+} // namespace
+
 TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EAccessServiceType accessServiceType) {
     TMetaSettings settings;
     settings.MetaApiEndpoint = config.GetMetaApiEndpoint();
@@ -25,24 +84,12 @@ TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EA
     }
 
     if (config.HasSupportLinks()) {
-        const auto& supportLinks = config.GetSupportLinks();
+        const TSupportLinksConfig supportLinks = BuildEffectiveSupportLinksConfig(config.GetSupportLinks());
         NSupportLinks::ValidateSupportLinksConfig(supportLinks, settings);
-        settings.SupportLinks.ClusterLinks.reserve(supportLinks.GetCluster().size());
-        for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
-            settings.SupportLinks.ClusterLinks.push_back(supportLinks.GetCluster(i));
-        }
-        settings.SupportLinks.DatabaseLinks.reserve(supportLinks.GetDatabase().size());
-        for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
-            settings.SupportLinks.DatabaseLinks.push_back(supportLinks.GetDatabase(i));
-        }
-        settings.SupportLinks.NodeLinks.reserve(supportLinks.GetNode().size());
-        for (int i = 0; i < supportLinks.GetNode().size(); ++i) {
-            settings.SupportLinks.NodeLinks.push_back(supportLinks.GetNode(i));
-        }
-        settings.SupportLinks.HostLinks.reserve(supportLinks.GetHost().size());
-        for (int i = 0; i < supportLinks.GetHost().size(); ++i) {
-            settings.SupportLinks.HostLinks.push_back(supportLinks.GetHost(i));
-        }
+        CopyResolvedEntityLinks(settings.SupportLinks.ClusterLinks, supportLinks.GetCluster());
+        CopyResolvedEntityLinks(settings.SupportLinks.DatabaseLinks, supportLinks.GetDatabase());
+        CopyResolvedEntityLinks(settings.SupportLinks.NodeLinks, supportLinks.GetNode());
+        CopyResolvedEntityLinks(settings.SupportLinks.HostLinks, supportLinks.GetHost());
     }
 
     return settings;

@@ -35,12 +35,6 @@ NKikimrSchemeOp::TColumnTableSchema MakeLegacyOverlappingSchemaProto() {
                 ColumnId: 2
             }
         }
-        Indexes {
-            Id: 3
-            Name: "idx_minmax"
-            ClassName: "MIN_MAX"
-            MinMaxIndex { ColumnId: 2 }
-        }
     )";
     Y_ABORT_UNLESS(google::protobuf::TextFormat::ParseFromString(text, &schemaProto));
     schemaProto.MutableColumns(0)->SetTypeId(NScheme::NTypeIds::Timestamp);

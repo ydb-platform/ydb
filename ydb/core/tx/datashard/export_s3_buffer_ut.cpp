@@ -82,7 +82,7 @@ public:
         row.Set(0, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(k));
         row.Set(1, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(v.data(), v.size()));
         for (ui32 tag = 2; tag < Columns.size(); ++tag) {
-            row.Set(tag, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(100000*tag+k));
+            row.Set(tag, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(100000 * tag + k));
         }
         auto buffer = Buffer(dataFormat);
         auto res = buffer->Collect(row);

@@ -49,7 +49,6 @@ jobs:
           # YDBOT_TOKEN (not GITHUB_TOKEN) so translation PR creation and labels
           # trigger downstream workflows (PR-check, docs rebuild), same as backport.
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-          GITHUB_PUSH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
 
       - name: Trigger docs rebuild for translation PR

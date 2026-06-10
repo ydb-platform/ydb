@@ -45,5 +45,4 @@ jobs:
           YDBDOC_REPO_PATH: ${{ github.workspace }}
           # YDBOT_TOKEN so verify repair commits trigger PR-check on synchronize.
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-          GITHUB_PUSH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-        
+

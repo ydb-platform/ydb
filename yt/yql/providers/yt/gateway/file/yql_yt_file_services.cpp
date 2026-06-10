@@ -24,13 +24,11 @@ TYtFileServices::TYtFileServices(
     TFileStoragePtr fileStorage,
     const TString& tmpDir,
     bool keepTempTables,
-    const THashMap<TString, TString>& dirMapping,
-    const THashMap<TString, TString>& secureParams
+    const THashMap<TString, TString>& dirMapping
 )
     : FunctionRegistry_(registry)
     , TablesMapping_(mapping)
     , TablesDirMapping_(dirMapping)
-    , SecureParams_(secureParams)
     , TmpDir_(tmpDir)
     , KeepTempTables_(keepTempTables)
 {

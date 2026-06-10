@@ -454,7 +454,6 @@ public:
                     TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                         Services_->GetFunctionRegistry()->SupportsSizedAllocators());
                     alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                    options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
                     auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
@@ -788,7 +787,6 @@ public:
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
@@ -1307,7 +1305,6 @@ private:
         TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
             Services_->GetFunctionRegistry()->SupportsSizedAllocators());
         alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-        options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
         auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
@@ -1390,7 +1387,6 @@ private:
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,

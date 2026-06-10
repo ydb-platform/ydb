@@ -22,10 +22,9 @@ public:
     ~TYtFileServices();
 
     static TPtr Make(const NKikimr::NMiniKQL::IFunctionRegistry* registry, const THashMap<TString, TString>& mapping = {},
-        TFileStoragePtr fileStorage = {}, const TString& tmpDir = {}, bool keepTempTables = false, const THashMap<TString, TString>& dirMapping = {},
-        const THashMap<TString, TString>& secureParams = {})
+        TFileStoragePtr fileStorage = {}, const TString& tmpDir = {}, bool keepTempTables = false, const THashMap<TString, TString>& dirMapping = {})
     {
-        return new TYtFileServices(registry, mapping, fileStorage, tmpDir.empty() ? GetSystemTempDir() : tmpDir, keepTempTables, dirMapping, secureParams);
+        return new TYtFileServices(registry, mapping, fileStorage, tmpDir.empty() ? GetSystemTempDir() : tmpDir, keepTempTables, dirMapping);
     }
 
     const NKikimr::NMiniKQL::IFunctionRegistry* GetFunctionRegistry() const {
@@ -57,10 +56,6 @@ public:
         return FileStorage_;
     }
 
-    const THashMap<TString, TString>& GetSecureParams() const {
-        return SecureParams_;
-    }
-
 private:
     TYtFileServices(
         const NKikimr::NMiniKQL::IFunctionRegistry* registry,
@@ -68,15 +63,13 @@ private:
         TFileStoragePtr fileStorage,
         const TString& tmpDir,
         bool keepTempTables,
-        const THashMap<TString, TString>& dirMapping,
-        const THashMap<TString, TString>& secureParams
+        const THashMap<TString, TString>& dirMapping
     );
 
     TFileStoragePtr FileStorage_;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     THashMap<TString, TString> TablesMapping_; // [cluster].[name] -> [file path]
     THashMap<TString, TString> TablesDirMapping_; // [cluster] -> [dir path]
-    THashMap<TString, TString> SecureParams_;
     TString TmpDir_;
     bool KeepTempTables_;
 

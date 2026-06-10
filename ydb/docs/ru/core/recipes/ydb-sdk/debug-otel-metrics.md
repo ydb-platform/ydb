@@ -16,11 +16,20 @@
 | Имя                                  | Тип         | Единица     | Описание                                                              |
 |--------------------------------------|-------------|-------------|-----------------------------------------------------------------------|
 | `ydb.query.session.create_time`      | Histogram   | `s`         | Длительность создания новой сессии.                                   |
-| `ydb.query.session.pending_requests` | Counter     | `{request}` | Количество запросов на получение сессии, попавших в очередь ожидания. |
-| `ydb.query.session.timeouts`         | Counter     | `{timeout}` | Количество таймаутов при ожидании свободной сессии.                   |
+| `ydb.query.session.pending_requests` | Counter     | `{request}` | Монотонный счётчик запросов на получение сессии, попавших в очередь ожидания, с момента создания пула. |
+| `ydb.query.session.timeouts`         | Counter     | `{timeout}` | Монотонный счётчик таймаутов при ожидании свободной сессии, с момента создания пула.                   |
 | `ydb.query.session.count`            | Gauge       | `{session}` | Текущее количество сессий в пуле, разделённое по состояниям.          |
 | `ydb.query.session.min`              | Gauge       | `{session}` | Настроенный минимальный размер пула сессий.                           |
 | `ydb.query.session.max`              | Gauge       | `{session}` | Настроенный максимальный размер пула сессий.                          |
+
+### Дополнительные метрики (JavaScript) {#js-metrics}
+
+В [JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk) пакет `@ydbjs/telemetry` дополнительно публикует метрики повторных попыток:
+
+| Имя                   | Тип       | Единица     | Описание                                                        |
+|-----------------------|-----------|-------------|-----------------------------------------------------------------|
+| `ydb.retry.attempts`  | Counter   | `{attempt}` | Количество попыток повторного выполнения операции с тегом исхода. |
+| `ydb.retry.duration`  | Histogram | `s`         | Суммарная длительность цикла повторных попыток, включая backoff.  |
 
 ## Атрибуты {#attributes}
 
@@ -260,11 +269,8 @@
   sdk.start()
 
   // Должно быть вызвано ДО создания Driver: пакет подписывается на
-  // diagnostics_channel события SDK и преобразует их в OTel spans и metrics.
-  const instrumentation = register({
-      captureQueryText: false,
-      emitAcquireSessionSpan: false,
-  })
+  // diagnostics_channel события SDK и преобразует их в OTel metrics.
+  const instrumentation = register()
 
   const driver = new Driver(process.env.YDB_CONNECTION_STRING)
   await driver.ready()
@@ -277,7 +283,7 @@
   await sdk.shutdown()
   ```
 
-  Метрики экспортируются тем же пакетом `@ydbjs/telemetry`, что и трассировка. Он подписывается на события `node:diagnostics_channel` из `@ydbjs/core`, `@ydbjs/query`, `@ydbjs/auth` и `@ydbjs/retry` и публикует OTel-инструменты, включая `ydb.client.operation.duration`, `ydb.retry.attempts`, `ydb.retry.duration` и метрики пула сессий. Подробнее см. [репозиторий JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk).
+  Пакет `@ydbjs/telemetry` подписывается на события `node:diagnostics_channel` из `@ydbjs/core`, `@ydbjs/query`, `@ydbjs/auth` и `@ydbjs/retry` и публикует метрики из [списка выше](#metrics-list) и [дополнительные метрики JavaScript SDK](#js-metrics). Длительность операций экспортируется как `db.client.operation.duration` (семантические конвенции OpenTelemetry), а не `ydb.client.operation.duration`. Текущее число ожидающих сессию запросов — gauge `ydb.query.session.acquire.pending`, а не counter `ydb.query.session.pending_requests`. Подробнее см. [репозиторий JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk).
 
 - Rust
 

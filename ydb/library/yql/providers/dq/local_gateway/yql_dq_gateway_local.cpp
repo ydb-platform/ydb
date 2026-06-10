@@ -44,15 +44,15 @@ public:
         TString localAddress = "::1";
 
         NDqs::TServiceNodeConfig config = {
-            nodeId,
-            localAddress,
-            hostName,
-            static_cast<ui16>(interconnectPort.Addr.GetPort()),
-            static_cast<ui16>(grpcPort.Addr.GetPort()),
-            0, // mbus
-            interconnectPort.Socket.Get()->Release(),
-            grpcPort.Socket.Get()->Release(),
-            1
+            .NodeId = nodeId,
+            .InterconnectAddress = localAddress,
+            .GrpcHostname = hostName,
+            .Port = static_cast<ui16>(interconnectPort.Addr.GetPort()),
+            .GrpcPort = static_cast<ui16>(grpcPort.Addr.GetPort()),
+            .MbusPort = 0,
+            .Socket = interconnectPort.Socket.Get()->Release(),
+            .GrpcSocket = grpcPort.Socket.Get()->Release(),
+            .MaxNodeId = 1,
         };
 
         ServiceNode = MakeHolder<TServiceNode>(

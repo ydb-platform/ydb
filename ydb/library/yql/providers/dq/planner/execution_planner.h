@@ -103,8 +103,7 @@ namespace NYql::NDqs {
             NActors::TActorId executerID,
             NActors::TActorId resultID,
             const TTypeAnnotationNode* typeAnn,
-            TLangVersion langver,
-            TRuntimeSettings::TConstPtr runtimeSettings);
+            TLangVersion langver);
 
         TVector<NDqProto::TDqTask>& GetTasks() override;
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
@@ -120,7 +119,6 @@ namespace NYql::NDqs {
         TVector<NDqProto::TDqTask> Tasks;
         const TTypeAnnotationNode* TypeAnn;
         const TLangVersion LangVer;
-        const TRuntimeSettings::TConstPtr RuntimeSettings;
     };
 
     // Execution planner for Graph

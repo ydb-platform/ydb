@@ -25,7 +25,8 @@ namespace NYql::NDqs {
     public:
         TDqsGrpcService(NActors::TActorSystem& system,
                         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-                        const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories);
+                        const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
+                        NActors::TActorId workerManagerActorId);
 
         void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
 
@@ -37,6 +38,7 @@ namespace NYql::NDqs {
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
         TDqTaskPreprocessorFactoryCollection DqTaskPreprocessorFactories;
+        NActors::TActorId WorkerManagerActorId;
         TMutex Mutex;
         NThreading::TPromise<void> Promise;
         std::atomic<ui64> RunningRequests;

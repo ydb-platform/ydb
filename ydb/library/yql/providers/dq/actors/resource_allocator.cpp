@@ -85,7 +85,10 @@ private:
             Fail((ui64)-1, "GWM Disconnected");
         })
         hFunc(TEvents::TEvUndelivered, [this](TEvents::TEvUndelivered::TPtr& ev) {
-            Fail(ev->Cookie, "Undelivered");
+            Fail(ev->Cookie, TStringBuilder()
+                << "Undelivered: sender: " << ev->Sender
+                << ", reason: " << ev->Get()->Reason
+                << ", source type: " << ev->Get()->SourceType);
         })
     })
 
@@ -299,7 +302,7 @@ private:
                 QueryStat.GetCounterName("Actor", {{"ClusterName", maybeRequestInfo->second.ClusterName}}, "CreateFailTimeUs"),
                 delta);
         }
-        TString message = "Disconnected from worker: `" + workerInfo + "', reason: " + reason;
+        TString message = "Disconnected from worker: `" + workerInfo + "`, reason: " + reason;
         YQL_CLOG(ERROR, ProviderDq) << message;
         auto response = MakeHolder<TEvAllocateWorkersResponse>(message, NYql::NDqProto::StatusIds::UNAVAILABLE);
         QueryStat.FlushCounters(response->Record);

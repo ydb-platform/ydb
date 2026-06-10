@@ -1,7 +1,17 @@
 #include "yql_dq_settings.h"
+#include "yql_dq_clique.h"
 #include <util/string/split.h>
 
 namespace NYql {
+
+namespace {
+
+TString ParseDqCliquePragmaValue(const TString& value) {
+    ParseDqCliqueRef(value);
+    return value;
+}
+
+} // namespace
 
 TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, DataSizePerJob);
@@ -124,6 +134,13 @@ TDqConfiguration::TDqConfiguration() {
         });
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, Scheduler);
+    REGISTER_SETTING(*this, Clique)
+        .Parser([](const TString& v) { return ParseDqCliquePragmaValue(v); })
+        .Validator([this](const TString&, const TString& value) {
+            if (CliqueValidator) {
+                CliqueValidator(value);
+            }
+        });
 }
 
 } // namespace NYql

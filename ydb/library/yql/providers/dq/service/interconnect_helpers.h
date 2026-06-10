@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/yson/node/node.h>
@@ -32,6 +33,9 @@ struct TServiceNodeConfig {
     TNameserverFactory NameserverFactory = [](const TIntrusivePtr<NActors::TTableNameserverSetup>& setup) {
         return CreateNameserverTable(setup);
     };
+    // If set, gRPC service routes worker-manager messages to this actor ID.
+    // If empty (default), MakeWorkerManagerActorID(NodeId) is used (LWM).
+    TMaybe<NActors::TActorId> WorkerManagerActorId;
 };
 
 std::tuple<TString, TString> GetLocalAddress(const TString* hostname = nullptr, int family = AF_INET6);

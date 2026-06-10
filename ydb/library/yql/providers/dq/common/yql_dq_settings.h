@@ -14,6 +14,8 @@
 #include <util/generic/size_literals.h>
 #include <util/random/random.h>
 
+#include <functional>
+
 namespace NYql {
 
 struct TDqSettings {
@@ -161,6 +163,8 @@ public:
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
     NCommon::TConfSetting<TString, Static> Scheduler;
+    // Target DQ clique for remote graph execution (pragma dq.Clique).
+    NCommon::TConfSetting<TString, Static> Clique;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -286,6 +290,8 @@ struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher 
 
     TDqConfiguration();
     TDqConfiguration(const TDqConfiguration&) = delete;
+
+    std::function<void(const TString& cliqueValue)> CliqueValidator;
 
     template <class TProtoConfig, typename TFilter>
     void Init(const TProtoConfig& config, const TFilter& filter) {

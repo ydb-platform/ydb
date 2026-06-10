@@ -791,6 +791,10 @@ TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port) {
     return new TDqGateway(host, port, "", "");
 }
 
+TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port, const TString& vanillaJobPath, const TString& vanillaJobMd5) {
+    return new TDqGateway(host, port, vanillaJobPath, vanillaJobMd5);
+}
+
 TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config) {
     return new TDqGateway("localhost", config.GetPort(),
         config.GetYtBackends()[0].GetVanillaJobLite(),

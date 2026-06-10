@@ -38,11 +38,13 @@ private:
 
     TOptimizationPriority(const i64 level, const i64 levelWeight)
         : Level(level)
-        , InternalLevelWeight(levelWeight) {}
+        , InternalLevelWeight(levelWeight)
+    {
+    }
 
 public:
-
     TOptimizationPriority() = default;
+
     void Mul(const ui32 kff) {
         InternalLevelWeight *= kff;
     }
@@ -81,8 +83,7 @@ public:
     // tiebreak trips almost immediately), this keeps the ceiling internally consistent and yields a
     // headroom that is proportional to the current backlog.
     TOptimizationPriority IncPercent(const ui32 percent) const {
-        return TOptimizationPriority(
-            Level + Level * (i64)percent / 100, InternalLevelWeight + InternalLevelWeight * (i64)percent / 100);
+        return TOptimizationPriority(Level + Level * (i64)percent / 100, InternalLevelWeight + InternalLevelWeight * (i64)percent / 100);
     }
 
     TOptimizationPriority Dec() const {

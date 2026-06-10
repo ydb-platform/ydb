@@ -65,7 +65,10 @@ struct ICompactionUnit {
     virtual std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const = 0;
 
-    virtual void DoActualize(const TInstant /*currentInstant*/) { return; };
+    virtual void DoActualize(const TInstant /*currentInstant*/) {
+        return;
+    };
+
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
 
 protected:

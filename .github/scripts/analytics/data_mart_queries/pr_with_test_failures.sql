@@ -67,20 +67,22 @@ SELECT
     pr.merged_by_url AS pr_merged_by_url,
     pr.info AS pr_info,
     pr.exported_at AS pr_exported_at,
-    CASE 
-        WHEN pr.merged = 1 THEN 'merged'
-        WHEN pr.state = 'OPEN' THEN 'open'
-        WHEN pr.state = 'CLOSED' THEN 'closed'
-        ELSE COALESCE(pr.state, 'unknown')
-    END AS pr_status,
+    CAST(
+        CASE
+            WHEN pr.merged = 1 THEN 'merged'
+            WHEN pr.state = 'OPEN' THEN 'open'
+            WHEN pr.state = 'CLOSED' THEN 'closed'
+            ELSE COALESCE(pr.state, 'unknown')
+        END AS String
+    ) AS pr_status,
     COALESCE(block.is_pr_blocked_by_tests_in_last_run_and_try, 0) AS is_pr_blocked_by_tests_in_last_run_and_try,
-    block.last_run_url AS last_run_url,
-    COALESCE(t.build_type, block.build_type, CAST("" AS Utf8)) AS build_type,
-    COALESCE(t.full_name, CAST("" AS Utf8)) AS full_name,
+    CAST(block.last_run_url AS String) AS last_run_url,
+    CAST(COALESCE(t.build_type, block.build_type, CAST("" AS String)) AS String) AS build_type,
+    CAST(COALESCE(t.full_name, CAST("" AS String)) AS String) AS full_name,
     t.suite_folder AS suite_folder,
     t.test_name AS test_name,
     COALESCE(t.job_id, 0UL) AS job_id,
-    t.run_url AS run_url,
+    CAST(t.run_url AS String) AS run_url,
     COALESCE(t.last_run_timestamp, Timestamp("1970-01-01T00:00:00.000000Z")) AS last_run_timestamp,
     t.branch AS branch,
     t.status_description AS status_description,

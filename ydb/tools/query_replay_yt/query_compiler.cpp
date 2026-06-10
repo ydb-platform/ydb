@@ -31,6 +31,14 @@ using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+std::string NormalizePlanWriteType(TStringBuf type) {
+    std::string normalized(type);
+    if (normalized.size() > 5 && normalized.substr(0, 5) == "Multi") {
+        normalized = normalized.substr(5);
+    }
+    return normalized;
+}
+
 struct TMetadataInfoHolder {
     const THashMap<TString, NYql::TKikimrTableMetadataPtr> TableMetadata;
     THashMap<TString, NYql::TKikimrTableMetadataPtr> Indexes;
@@ -373,7 +381,7 @@ private:
                         }
 
                         const auto& type = write["type"].GetStringSafe();
-                        writes.push_back(TTableWriteInfo{type, columns});
+                        writes.push_back(TTableWriteInfo{NormalizePlanWriteType(type), columns});
                     }
 
                     std::sort(writes.begin(), writes.end());

@@ -77,11 +77,11 @@ enum EWriteType : ui32 {
 
 TString ToString(EWriteType writeType) {
     switch (writeType) {
-        case Upsert:
+        case EWriteType::Upsert:
             return "upsert";
-        case Erase:
+        case EWriteType::Erase:
             return "erase";
-        case Replace:
+        case EWriteType::Replace:
             return "replace";
         default:
             return "unknown";

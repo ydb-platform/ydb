@@ -1,7 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 #include <ydb/public/sdk/cpp/tests/common/iam_mocks/iam_grpc_mock_server.h>
-#include <ydb/public/sdk/cpp/tests/common/iam_mocks/iam_test_keys.h>
 
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.pb.h>

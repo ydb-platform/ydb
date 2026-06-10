@@ -12,12 +12,10 @@ using namespace NYdb::NTest;
 
 namespace {
 
-constexpr const char* kMockMetadataToken = "root@builtin";
-
 class TMetadataFixture : public ::testing::Test {
 protected:
     void SetUp() override {
-        Server_.SetResponse(HTTP_OK, MakeTokenResponse(kMockMetadataToken, 3600));
+        Server_.SetResponse(HTTP_OK, MakeTokenResponse(kMockRootBuiltinToken, 3600));
     }
 
     TMetadataServer Server_;
@@ -29,7 +27,7 @@ TEST_F(TMetadataFixture, Metadata_NoArgCreateProvider) {
     auto factory = CreateIamCredentialsProviderFactory(MakeMetadataParams(Server_.Port));
     auto provider = factory->CreateProvider();
 
-    EXPECT_EQ(provider->GetAuthInfo(), kMockMetadataToken);
+    EXPECT_EQ(provider->GetAuthInfo(), kMockRootBuiltinToken);
     EXPECT_GE(Server_.GetRequestCount(), 1);
     AssertMetadataRequestShape(Server_);
 }
@@ -39,7 +37,7 @@ TEST_F(TMetadataFixture, Metadata_ViaFacilityDefault) {
     auto facility = std::make_shared<TSimpleCoreFacility>();
     auto provider = factory->CreateProvider(facility);
 
-    EXPECT_EQ(provider->GetAuthInfo(), kMockMetadataToken);
+    EXPECT_EQ(provider->GetAuthInfo(), kMockRootBuiltinToken);
     EXPECT_GE(Server_.GetRequestCount(), 1);
     AssertMetadataRequestShape(Server_);
 }
@@ -58,7 +56,7 @@ TEST_F(TMetadataFixture, Metadata_PreflightThenDriver) {
 
     // Mirrors CreateFromEnvironment metadata preflight in helpers.cpp.
     auto preflightProvider = factory->CreateProvider();
-    EXPECT_EQ(preflightProvider->GetAuthInfo(), kMockMetadataToken);
+    EXPECT_EQ(preflightProvider->GetAuthInfo(), kMockRootBuiltinToken);
 
     const int countAfterPreflight = Server_.GetRequestCount();
     AssertMetadataRequestShape(Server_);

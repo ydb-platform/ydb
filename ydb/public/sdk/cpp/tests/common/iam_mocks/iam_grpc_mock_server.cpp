@@ -30,12 +30,6 @@ int TIamTokenServiceStub::GetRequestCount() const {
     return RequestCount_;
 }
 
-void TIamTokenServiceStub::ResetRequestCount() {
-    std::lock_guard lock(Lock_);
-    RequestCount_ = 0;
-    HasLastRequest_ = false;
-}
-
 yandex::cloud::iam::v1::CreateIamTokenRequest TIamTokenServiceStub::GetLastRequest() const {
     std::lock_guard lock(Lock_);
     return LastRequest_;

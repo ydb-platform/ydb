@@ -47,7 +47,6 @@ public:
     void SetStrictMode(bool strict);
 
     int GetRequestCount() const;
-    void ResetRequestCount();
     TMetadataRequestInfo GetLastRequest() const;
     bool HasLastRequest() const;
 

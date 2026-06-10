@@ -28,7 +28,6 @@ public:
         yandex::cloud::iam::v1::CreateIamTokenResponse* response) override;
 
     int GetRequestCount() const;
-    void ResetRequestCount();
     yandex::cloud::iam::v1::CreateIamTokenRequest GetLastRequest() const;
     bool HasLastRequest() const;
 

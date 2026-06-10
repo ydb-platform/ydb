@@ -2,7 +2,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
 #include <ydb/public/sdk/cpp/tests/common/iam_mocks/iam_grpc_mock_server.h>
-#include <ydb/public/sdk/cpp/tests/common/iam_mocks/iam_test_keys.h>
 
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.pb.h>
@@ -79,56 +78,6 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactor
     done.get();
 
     iamService.Release();
-    server.Stop();
-}
-
-TEST(GrpcIamCredentialsProvider, NoArgCreateProviderBackwardCompat) {
-    TBlockingIamTokenService iamService;
-    TBlockingIamReleaseGuard releaseGuard(iamService);
-    TIamGrpcServer server(&iamService);
-    ASSERT_TRUE(server.Start());
-
-    iamService.Release();
-
-    TIamOAuth params = MakeOAuthParams(server.Endpoint());
-
-    auto factory = std::make_shared<TIamOAuthCredentialsProviderFactory<
-        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
-
-    auto work = [&factory]() -> std::string {
-        auto provider = factory->CreateProvider();
-        return provider->GetAuthInfo();
-    };
-
-    std::future<std::string> done = std::async(std::launch::async, work);
-    ASSERT_EQ(done.wait_for(std::chrono::seconds(20)), std::future_status::ready)
-        << "no-arg CreateProvider() path must produce a token and tear down cleanly";
-    EXPECT_EQ(done.get(), "released-token");
-
-    server.Stop();
-}
-
-TEST(GrpcIamCredentialsProvider, NoArgCreateProviderBackwardCompatJwt) {
-    TBlockingIamTokenService iamService;
-    TBlockingIamReleaseGuard releaseGuard(iamService);
-    TIamGrpcServer server(&iamService);
-    ASSERT_TRUE(server.Start());
-
-    iamService.Release();
-
-    auto factory = std::make_shared<TIamJwtCredentialsProviderFactory<
-        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(MakeJwtParams(server.Endpoint()));
-
-    auto work = [&factory]() -> std::string {
-        auto provider = factory->CreateProvider();
-        return provider->GetAuthInfo();
-    };
-
-    std::future<std::string> done = std::async(std::launch::async, work);
-    ASSERT_EQ(done.wait_for(std::chrono::seconds(20)), std::future_status::ready)
-        << "no-arg CreateProvider() path must produce a token and tear down cleanly";
-    EXPECT_EQ(done.get(), "released-token");
-
     server.Stop();
 }
 

@@ -56,4 +56,13 @@ bool IsAuthError(const TStatus& status) {
     return code == EStatus::CLIENT_UNAUTHENTICATED || code == EStatus::UNAUTHORIZED;
 }
 
+void AssertAuthFailure(TCredentialsProviderFactoryPtr factory, const char* context) {
+    TDriver driver(MakeDriverConfig(std::move(factory)));
+    const auto status = RunSelect1Status(driver);
+    ASSERT_FALSE(status.IsSuccess())
+        << "Expected auth failure with " << context << ", but query succeeded. "
+        << "Recipe must set YDB_ENFORCE_USER_TOKEN_REQUIREMENT=true.";
+    EXPECT_TRUE(IsAuthError(status)) << status.GetIssues().ToString();
+}
+
 } // namespace NYdb::NTest

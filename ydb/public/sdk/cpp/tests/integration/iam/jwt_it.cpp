@@ -14,12 +14,10 @@ using namespace NYdb::NTest;
 
 namespace {
 
-constexpr const char* kMockIamToken = "root@builtin";
-
 class TJwtIamFixture : public ::testing::Test {
 protected:
     void SetUp() override {
-        Stub_.SetResponseToken(kMockIamToken);
+        Stub_.SetResponseToken(kMockRootBuiltinToken);
         ASSERT_TRUE(Server_.Start());
     }
 
@@ -47,13 +45,20 @@ protected:
     TIamGrpcServer Server_{&Stub_};
 };
 
+TString WriteJwtKeyToTempFile(TTempDir& tempDir) {
+    const TString keyPath = tempDir.Path() / "sa-key.json";
+    TFileOutput out(keyPath);
+    out.Write(MakeJwtKeyFileContent());
+    return keyPath;
+}
+
 } // namespace
 
 TEST_F(TJwtIamFixture, JwtParams_NoArgCreateProvider) {
     auto factory = CreateIamJwtParamsCredentialsProviderFactory(MakeJwtContentParams());
     auto provider = factory->CreateProvider();
 
-    EXPECT_EQ(provider->GetAuthInfo(), kMockIamToken);
+    EXPECT_EQ(provider->GetAuthInfo(), kMockRootBuiltinToken);
     ASSERT_TRUE(Stub_.HasLastRequest());
     AssertIamJwt(Stub_.GetLastRequest().jwt());
 }
@@ -70,27 +75,19 @@ TEST_F(TJwtIamFixture, JwtParams_DriverUsesMockIamToken) {
 
 TEST_F(TJwtIamFixture, JwtFile_NoArgCreateProvider) {
     TTempDir tempDir;
-    const TString keyPath = tempDir.Path() / "sa-key.json";
-    {
-        TFileOutput out(keyPath);
-        out.Write(MakeJwtKeyFileContent());
-    }
+    const TString keyPath = WriteJwtKeyToTempFile(tempDir);
 
     auto factory = CreateIamJwtFileCredentialsProviderFactory(MakeJwtFileParams(keyPath));
     auto provider = factory->CreateProvider();
 
-    EXPECT_EQ(provider->GetAuthInfo(), kMockIamToken);
+    EXPECT_EQ(provider->GetAuthInfo(), kMockRootBuiltinToken);
     ASSERT_TRUE(Stub_.HasLastRequest());
     AssertIamJwt(Stub_.GetLastRequest().jwt());
 }
 
 TEST_F(TJwtIamFixture, JwtFile_DriverUsesMockIamToken) {
     TTempDir tempDir;
-    const TString keyPath = tempDir.Path() / "sa-key.json";
-    {
-        TFileOutput out(keyPath);
-        out.Write(MakeJwtKeyFileContent());
-    }
+    const TString keyPath = WriteJwtKeyToTempFile(tempDir);
 
     auto factory = CreateIamJwtFileCredentialsProviderFactory(MakeJwtFileParams(keyPath));
     TDriver driver(MakeDriverConfig(factory));

@@ -91,12 +91,6 @@ int TMetadataServer::GetRequestCount() const {
     return RequestCount_;
 }
 
-void TMetadataServer::ResetRequestCount() {
-    std::lock_guard lock(Lock_);
-    RequestCount_ = 0;
-    HasLastRequest_ = false;
-}
-
 TMetadataRequestInfo TMetadataServer::GetLastRequest() const {
     std::lock_guard lock(Lock_);
     return LastRequest_;

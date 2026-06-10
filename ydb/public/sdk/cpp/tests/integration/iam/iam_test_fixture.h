@@ -6,11 +6,14 @@
 
 namespace NYdb::NTest {
 
+inline constexpr const char* kMockRootBuiltinToken = "root@builtin";
+
 TDriverConfig MakeDriverConfig(TCredentialsProviderFactoryPtr factory);
 
 TStatus RunSelect1Status(TDriver& driver);
 void RunSelect1ExpectSuccess(TDriver& driver);
 
 bool IsAuthError(const TStatus& status);
+void AssertAuthFailure(TCredentialsProviderFactoryPtr factory, const char* context);
 
 } // namespace NYdb::NTest

@@ -12,12 +12,11 @@ using namespace NYdb::NTest;
 namespace {
 
 constexpr const char* kOAuthToken = "unit-test-oauth-token";
-constexpr const char* kMockIamToken = "root@builtin";
 
 class TOAuthIamFixture : public ::testing::Test {
 protected:
     void SetUp() override {
-        Stub_.SetResponseToken(kMockIamToken);
+        Stub_.SetResponseToken(kMockRootBuiltinToken);
         ASSERT_TRUE(Server_.Start());
     }
 
@@ -32,7 +31,7 @@ TEST_F(TOAuthIamFixture, OAuth_NoArgCreateProvider) {
         MakeOAuthParams(Server_.Endpoint(), kOAuthToken));
 
     auto provider = factory->CreateProvider();
-    EXPECT_EQ(provider->GetAuthInfo(), kMockIamToken);
+    EXPECT_EQ(provider->GetAuthInfo(), kMockRootBuiltinToken);
     ASSERT_TRUE(Stub_.HasLastRequest());
     EXPECT_EQ(Stub_.GetLastRequest().yandex_passport_oauth_token(), kOAuthToken);
 }
@@ -54,16 +53,16 @@ TEST_F(TOAuthIamFixture, OAuth_RefreshUsesCachedToken) {
         MakeOAuthParams(Server_.Endpoint(), kOAuthToken));
 
     auto provider = factory->CreateProvider();
-    EXPECT_EQ(provider->GetAuthInfo(), kMockIamToken);
+    EXPECT_EQ(provider->GetAuthInfo(), kMockRootBuiltinToken);
 
     const int countBefore = Stub_.GetRequestCount();
-    EXPECT_EQ(provider->GetAuthInfo(), kMockIamToken);
+    EXPECT_EQ(provider->GetAuthInfo(), kMockRootBuiltinToken);
     EXPECT_EQ(Stub_.GetRequestCount(), countBefore);
 }
 
 TEST(OAuth_WithFacility, ReturnsTokenFromMock) {
     TIamTokenServiceStub stub;
-    stub.SetResponseToken(kMockIamToken);
+    stub.SetResponseToken(kMockRootBuiltinToken);
     TIamGrpcServer server(&stub);
     ASSERT_TRUE(server.Start());
 
@@ -72,7 +71,7 @@ TEST(OAuth_WithFacility, ReturnsTokenFromMock) {
     auto facility = std::make_shared<TSimpleCoreFacility>();
     auto provider = factory->CreateProvider(facility);
 
-    EXPECT_EQ(provider->GetAuthInfo(), kMockIamToken);
+    EXPECT_EQ(provider->GetAuthInfo(), kMockRootBuiltinToken);
     ASSERT_TRUE(stub.HasLastRequest());
     EXPECT_EQ(stub.GetLastRequest().yandex_passport_oauth_token(), kOAuthToken);
 }

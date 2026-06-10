@@ -171,12 +171,14 @@ namespace NKikimr::NYmq::V1 {
         virtual TRequest* GetRequest(TSqsRequest&) = 0;
         virtual THolder<TReplyCallback> CreateReplyCallback() = 0;
 
-    protected:
+    private:
         const TString FolderId;
         const TString CloudId;
         const TString UserSid;
         const TString RequestId;
         const TString SecurityToken;
+
+    protected:
         const TString SourceAddress;
     };
 
@@ -1095,7 +1097,7 @@ namespace NKikimr::NYmq::V1 {
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
             result->SetSourceAddress(SourceAddress);
             for (const auto& key: GetProtoRequest()->Gettag_keys()) {
-                requestHolder.MutableUntagQueue()->AddTagKeys(key);
+                result->AddTagKeys(key);
             }
             return result;
         }

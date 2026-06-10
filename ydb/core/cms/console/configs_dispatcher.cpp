@@ -132,20 +132,16 @@ private:
         std::optional<TYamlVersion> YamlVersion;
 
         // Config update which is currently delivered to subscribers.
-        // Record carries metadata only; the config lives in UpdateInProcessConfig.
         THolder<TEvConsole::TEvConfigNotificationRequest> UpdateInProcess = nullptr;
         TIntrusiveConstPtr<TEvConsole::TSharedAppConfig> UpdateInProcessConfig = nullptr;
         NKikimrConfig::TConfigVersion UpdateInProcessConfigVersion;
         ui64 UpdateInProcessCookie;
         std::optional<TYamlVersion> UpdateInProcessYamlVersion;
-        // When the current in-flight update started, for fan-out completion latency.
         TInstant UpdateInProcessStartedAt;
 
-        // Subscribers who didn't respond yet to the latest config update. Populated
-        // upfront, so the update can't complete while sends still wait in SendQueue.
+        // Populated upfront so an update can't complete while sends still wait in SendQueue.
         THashSet<TActorId> SubscribersToUpdate;
 
-        // Deliveries of the in-flight update still waiting in SendQueue.
         ui32 PendingEnqueuedSends = 0;
 
     };
@@ -180,7 +176,6 @@ public:
 
     void SendUpdateToSubscriber(TSubscription::TPtr subscription, TActorId subscriber);
 
-    // Paced delivery of config notifications (see TConfigsDispatcherConfig knobs).
     const NKikimrConfig::TConfigsDispatcherConfig& GetDispatcherPacingConfig() const;
     void ProcessSendQueue();
     void ScheduleSendQueueProcessing();
@@ -276,8 +271,7 @@ public:
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
             hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
-            // Paced notification delivery (a fan-out may begin in StateInit and must
-            // keep draining instead of stalling until the next StateWork activation).
+            // A fan-out may begin in StateInit and must keep draining here too.
             hFuncTraced(TEvPrivate::TEvProcessSendQueue, Handle);
         default:
             EnqueueEvent(ev);
@@ -312,7 +306,6 @@ public:
             // Pretend we got this
             hFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
             hFuncTraced(TEvConsole::TEvGetNodeConfigurationVersionRequest, Handle);
-            // Paced notification delivery
             hFuncTraced(TEvPrivate::TEvProcessSendQueue, Handle);
         default:
             break;
@@ -334,7 +327,6 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV1;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV2;
-    // Notification fan-out observability (see Bootstrap).
     ::NMonitoring::TDynamicCounters::TCounterPtr SendQueueDepth;
     ::NMonitoring::THistogramPtr FanOutCompletionMs;
     ::NMonitoring::THistogramPtr ConfigPayloadBytes;
@@ -354,7 +346,6 @@ private:
     THashMap<TDynBitMap, TSubscription::TPtr> SubscriptionsByKinds;
     THashMap<TActorId, TSubscriber::TPtr> Subscribers;
 
-    // A single pending delivery of a subscription's in-flight update.
     struct TSendQueueItem {
         TSubscription::TPtr Subscription;
         TActorId Subscriber;
@@ -403,13 +394,10 @@ void TConfigsDispatcher::Bootstrap()
     StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
     ConfigurationV1 = counters->GetCounter("ConfigurationV1", true);
     ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
-    // Current send-queue backlog (gauge): leading saturation indicator for paced fan-out.
     SendQueueDepth = counters->GetCounter("SendQueueDepth", false);
-    // End-to-end fan-out latency: config update received -> all subscribers acked. The
-    // config-staleness SLI. Buckets ~1ms..~8.7min (powers of two). Aggregatable across the
-    // fleet via histogram_quantile over summed buckets.
+    // buckets ~1ms..~8.7min
     FanOutCompletionMs = counters->GetHistogram("FanOutCompletionMs", NMonitoring::ExponentialHistogram(20, 2, 1));
-    // Delivered config payload size in bytes. Buckets 256B..16MB (powers of two).
+    // buckets 256B..16MB
     ConfigPayloadBytes = counters->GetHistogram("ConfigPayloadBytes", NMonitoring::ExponentialHistogram(17, 2, 256));
 
     if (Labels.contains("configuration_version")) {
@@ -475,8 +463,6 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
         notification->Record.MutableConfig()->CopyFrom(*subscription->UpdateInProcessConfig);
     }
 
-    // Record.ShortDebugString() omits the config for shared deliveries (it lives in
-    // SharedConfig, not the record), so log the effective config explicitly there.
     BLOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
                 << ": " << notification->Record.ShortDebugString()
                 << (notification->SharedConfig
@@ -1302,9 +1288,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
         bool hasAffectedKinds = false;
 
-        // Set when an in-flight update with deliveries still waiting in SendQueue is
-        // cancelled below: a replacement must be sent even if the new config matches
-        // CurrentConfig, since some subscribers already applied the cancelled one.
+        // Set when a partially-sent update is cancelled below: resend even if the new
+        // config equals CurrentConfig, since some subscribers already applied the old one.
         bool cancelledPendingUnsent = false;
 
         if (subscription->Yaml && YamlConfigEnabled) {
@@ -1359,8 +1344,6 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                 UpdateYamlVersion(subscription);
             }
 
-            // Completion is gated on the full recipient snapshot, including
-            // deliveries still waiting in SendQueue.
             subscription->PendingEnqueuedSends = subscription->Subscribers.size();
             for (const auto &[subscriber, updates] : subscription->Subscribers) {
                 Y_UNUSED(updates);
@@ -1375,7 +1358,6 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         }
     }
 
-    // First batch inline; the remainder is drained in subsequent activations.
     ProcessSendQueue();
 
     if (CurrentStateFunc() == &TThis::StateInit) {
@@ -1584,7 +1566,6 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
     subscription->SubscribersToUpdate.erase(ev->Sender);
 
     if (subscription->SubscribersToUpdate.empty()) {
-        // Full fan-out done: every subscriber acked the in-flight update.
         FanOutCompletionMs->Collect((Now() - subscription->UpdateInProcessStartedAt).MilliSeconds());
         subscription->CurrentConfig.Config = *subscription->UpdateInProcessConfig;
         subscription->CurrentConfig.Version = subscription->UpdateInProcessConfigVersion;

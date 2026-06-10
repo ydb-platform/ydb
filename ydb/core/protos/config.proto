@@ -1147,10 +1147,9 @@ message TSqsConfig {
 }
 
 message TConfigsDispatcherConfig {
-    // Max per-subscriber config notifications sent in one actor activation;
-    // 0 means unlimited.
+    // Max notifications sent per actor activation; 0 = unlimited.
     optional uint32 NotificationsBatchSize = 1 [default = 10];
-    // Delay between notification batches; 0 means just yield between batches.
+    // Delay between notification batches, ms; 0 = yield only.
     optional uint32 NotificationsBatchDelayMs = 2 [default = 0];
 }
 

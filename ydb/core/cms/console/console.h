@@ -307,25 +307,14 @@ namespace TEvConsole {
     struct TEvConfigNotificationRequest : public TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest> {
         using TBase = TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest>;
 
-        // Set for local deliveries instead of an inline Record config. When set, Record
-        // holds metadata only and Record.GetConfig() is EMPTY -- always read the config
-        // through GetConfig(). The configs dispatcher delivers via this shared payload by
-        // default (TEvSetConfigSubscriptionRequest::UseSharedConfig); a subscriber that
-        // must mutate the config inline opts out with UseSharedConfig = false.
-        //
-        // The shared payload lives only in this process and is intentionally NOT part of
-        // the serialized Record. Shipping a shared-config notification over interconnect
-        // (or into storage) would silently drop the config, so serialization is forbidden
-        // and aborts loudly below rather than failing silently downstream.
+        // When set, read the config via GetConfig() (Record.GetConfig() is EMPTY). Local-only
+        // and never serialized; opt out with UseSharedConfig = false to mutate inline.
         TIntrusiveConstPtr<TSharedAppConfig> SharedConfig;
 
         const NKikimrConfig::TAppConfig& GetConfig() const { return SharedConfig ? *SharedConfig : Record.GetConfig(); }
 
-        // A shared-config delivery is local-only and carries no inline config to serialize,
-        // so report it as non-serializable: the interconnect then refuses to ship it
-        // (logged as undeliverable) instead of silently transmitting an empty config. The
-        // serializers below additionally hard-abort to catch any code that force-serializes
-        // it despite this.
+        // Local-only: report non-serializable so a stray cross-node send is refused rather
+        // than silently shipped with an empty config (the serializers below also abort).
         bool IsSerializable() const override {
             return !SharedConfig && TBase::IsSerializable();
         }

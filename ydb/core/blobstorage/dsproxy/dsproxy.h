@@ -230,16 +230,20 @@ public:
         , ForceGroupGeneration(params.Common.ForceGroupGeneration)
         , DoSendDeathNote(params.Common.DoSendDeathNote)
     {
-        if (ParentSpan) {
+        if (NWilson::TSpan* parentWilsonSpan = ParentSpan.GetWilsonSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
                     parentTraceId.GetTimeToLive()), params.TypeSpecific.Name);
-            ParentSpan.GetWilsonSpanPtr()->Link(Span.GetTraceId());
-            Span.GetWilsonSpanPtr()->Attribute("GroupId", Info->GroupID.GetRawId());
-            Span.GetWilsonSpanPtr()->Attribute("RestartCounter", RestartCounter);
-            Span.GetWilsonSpanPtr()->Attribute("database", AppData()->TenantName);
-            Span.GetWilsonSpanPtr()->Attribute("storagePool", Info->GetStoragePoolName());
-            params.Common.Event->ToSpan(*Span.GetWilsonSpanPtr());
+            parentWilsonSpan->Link(Span.GetTraceId());
+
+            // if for extra safety
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("GroupId", Info->GroupID.GetRawId());
+                wilsonSpan->Attribute("RestartCounter", RestartCounter);
+                wilsonSpan->Attribute("database", AppData()->TenantName);
+                wilsonSpan->Attribute("storagePool", Info->GetStoragePoolName());
+                params.Common.Event->ToSpan(*wilsonSpan);
+            }
         } else if (ParentSpan.GetRetroSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage,

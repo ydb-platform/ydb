@@ -264,6 +264,7 @@ class RollingUpgradeAndDowngradeFixture:
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags = kwargs.pop("extra_feature_flags", {})
         extra_feature_flags = copy.copy(extra_feature_flags)
+        assert isinstance(extra_feature_flags, list), "Feature flags must be list"
         extra_feature_flags.append("suppress_compatibility_check")
         # We want to drain tablets before stopping, to prevent "Failed to resolve tablet: 72075186224037909 after several retries"
         # By default draining is not enabled to faster tests

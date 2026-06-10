@@ -123,7 +123,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
 
     Y_UNIT_TEST(ResolveBuildsDefaultExploreUrlFromScratch) {
         TGrafanaLoggingTestContext context;
-        context.ClusterInfo["k8s_namespace"] = "ydb-common";
         context.ClusterInfo["datasource_logging"] = "cd868168-09d4-4ece-82db-e646130697e5";
         context.UrlParameters = MakeUrlParameters("database=%2Froot%2Ftenant");
         auto result = context.Resolve();
@@ -133,14 +132,13 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{database=\"/root/tenant\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "{database=\"/root/tenant\"}",
             "cd868168-09d4-4ece-82db-e646130697e5"
         );
     }
 
     Y_UNIT_TEST(ResolveBuildsAbsoluteExploreUrlFromScratch) {
         TGrafanaLoggingTestContext context("https://external.example.net/explore");
-        context.ClusterInfo["k8s_namespace"] = "ydb-common";
         context.ClusterInfo["datasource_logging"] = "ds-42";
         context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
         auto result = context.Resolve();
@@ -150,14 +148,13 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://external.example.net/explore",
-            "{database=\"/new/db\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "{database=\"/new/db\"}",
             "ds-42"
         );
     }
 
     Y_UNIT_TEST(ResolveUsesDatabaseRequestParameter) {
         TGrafanaLoggingTestContext context;
-        context.ClusterInfo["k8s_namespace"] = "ydb-common";
         context.ClusterInfo["datasource_logging"] = "ds-42";
         context.UrlParameters = MakeUrlParameters("custom_label=new-value&database=%2Fnew%2Fdb");
         auto result = context.Resolve();
@@ -167,14 +164,13 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{database=\"/new/db\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "{database=\"/new/db\"}",
             "ds-42"
         );
     }
 
     Y_UNIT_TEST(ResolveSkipsRequestParametersOtherThanDatabase) {
         TGrafanaLoggingTestContext context;
-        context.ClusterInfo["k8s_namespace"] = "ydb-common";
         context.ClusterInfo["datasource_logging"] = "ds-42";
         context.UrlParameters = MakeUrlParameters("cluster=ignored-cluster&custom_label=ignored&database=%2Fnew%2Fdb");
         auto result = context.Resolve();
@@ -184,25 +180,29 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         AssertPanesQuery(
             result.Links[0].Url,
             "https://grafana.example.net/explore",
-            "{database=\"/new/db\", __workspace__=\"ydb-common\", __bucket__=\"ydb\"}",
+            "{database=\"/new/db\"}",
             "ds-42"
         );
     }
 
-    Y_UNIT_TEST(ResolveReturnsErrorWhenWorkspaceMissing) {
+    Y_UNIT_TEST(ResolveDoesNotRequireWorkspace) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";
+        context.UrlParameters = MakeUrlParameters("database=%2Fnew%2Fdb");
         auto result = context.Resolve();
 
-        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(result.Errors[0].Source, "grafana/logging");
-        UNIT_ASSERT_VALUES_EQUAL(result.Errors[0].Message, "k8s_namespace is required in cluster info for source=grafana/logging");
+        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0u);
+        AssertPanesQuery(
+            result.Links[0].Url,
+            "https://grafana.example.net/explore",
+            "{database=\"/new/db\"}",
+            "ds-42"
+        );
     }
 
     Y_UNIT_TEST(ResolveReturnsErrorWhenDatasourceMissing) {
         TGrafanaLoggingTestContext context;
-        context.ClusterInfo["k8s_namespace"] = "ydb-common";
         auto result = context.Resolve();
 
         UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 0u);

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "grafana_dashboard_common.h"
 #include "source_common.h"
 
 #include <ydb/mvp/meta/support_links/source.h>
@@ -16,7 +15,6 @@
 namespace NMVP::NSupportLinks {
 
 inline constexpr TStringBuf GRAFANA_LOGGING_DEFAULT_URL = "/explore";
-inline constexpr TStringBuf GRAFANA_LOGGING_DEFAULT_BUCKET = "ydb";
 
 inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(const NHttp::TUrlParameters& requestQueryParameters) {
     TVector<std::pair<TString, TString>> bindings;
@@ -80,12 +78,6 @@ inline bool TryBuildGrafanaLoggingUrl(
         return false;
     }
 
-    const auto workspaceIt = clusterInfo.find(TString(NSupportLinks::GRAFANA_WORKSPACE_KEY));
-    if (workspaceIt == clusterInfo.end() || workspaceIt->second.empty()) {
-        errorMessage = "k8s_namespace is required in cluster info for source=grafana/logging";
-        return false;
-    }
-
     const auto datasourceIt = clusterInfo.find("datasource_logging");
     if (datasourceIt == clusterInfo.end() || datasourceIt->second.empty()) {
         errorMessage = "datasource_logging is required in cluster info for source=grafana/logging";
@@ -93,8 +85,6 @@ inline bool TryBuildGrafanaLoggingUrl(
     }
 
     TVector<std::pair<TString, TString>> bindings = BuildGrafanaLoggingBindings(requestQueryParameters);
-    bindings.emplace_back("__workspace__", workspaceIt->second);
-    bindings.emplace_back("__bucket__", TString(GRAFANA_LOGGING_DEFAULT_BUCKET));
 
     TCgiParameters queryParameters;
     queryParameters.InsertUnescaped("schemaVersion", "1");

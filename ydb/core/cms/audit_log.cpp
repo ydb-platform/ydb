@@ -11,9 +11,8 @@
 namespace NKikimr::NCms {
 
 void AuditLog(const TString& component, const TString& message, const TActorContext& ctx) {
-    YDB_LOG_NOTICE_CTX(ctx, "[AuditLog]",
-        {"component", component},
-        {"message", message});
+    YDB_LOG_NOTICE_CTX(ctx, "[AuditLog] " << message,
+        {"component", component});
 }
 
 void AuditLog(const TString& component, const IEventBase* request, const IEventBase* response, const TActorContext& ctx) {

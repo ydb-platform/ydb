@@ -339,11 +339,11 @@ namespace NYql::NDq {
             for (int i = 0; i < batch->num_columns(); ++i) {
                 const auto& columnName = batch->schema()->field(i)->name();
                 const auto ix = fieldNameOrder[columnName];
-                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)));
+                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)), NYql::DefaultDatumValidationMode);
             }
 
             structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
-                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())));
+                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())), NYql::DefaultDatumValidationMode);
             value = structObj;
 
             buffer.emplace_back(std::move(value));

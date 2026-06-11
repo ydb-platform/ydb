@@ -196,7 +196,7 @@ public:
                 NKikimr::NMiniKQL::TUnboxedValueVector outputValues;
                 outputValues.reserve(block.size());
                 for (auto& datum : block) {
-                    outputValues.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
+                    outputValues.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum), NYql::EDatumValidationMode::None));
                 }
                 TBlockSerializer<fast>::WidePush(outputValues.data(), outputValues.size());
             }

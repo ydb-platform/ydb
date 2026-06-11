@@ -633,14 +633,14 @@ struct TTestContext {
                 result.ArraysSize += column->Size;
             }
 
-            result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(column->Datum)));
+            result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(column->Datum), NYql::DefaultDatumTestValidationMode));
             result.BlockReaders.emplace_back(std::move(column->BlockReader));
             columnTypes.emplace_back(column->Type);
         }
 
         auto lengtDatum = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(numberRows));
         result.ScalarsSize += GetScalarDatumSize(lengtDatum);
-        result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(lengtDatum)));
+        result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(lengtDatum), NYql::DefaultDatumTestValidationMode));
         columnTypes.emplace_back(TBlockType::Create(TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv), TBlockType::EShape::Scalar, TypeEnv));
 
         result.Type = TMultiType::Create(columnTypes.size(), columnTypes.data(), TypeEnv);

@@ -271,9 +271,9 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             i64 rows = Output_.SizeTuples();
             TVector<arrow::Datum> arrowOutput = Output_.FlushAndApplyRenames();
             for (int colIndex = 0; colIndex < Output_.Columns(); ++colIndex) {
-                output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]));
+                output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]), Ctx_->RuntimeSettings.DatumValidation.Get());
             }
-            output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
+            output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)), Ctx_->RuntimeSettings.DatumValidation.Get());
 
             MKQL_ENSURE(Output_.SizeTuples() == 0, "something left after flush??");
             return NYql::NUdf::EFetchStatus::Ok;

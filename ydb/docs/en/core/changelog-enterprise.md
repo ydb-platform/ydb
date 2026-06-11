@@ -2,6 +2,22 @@
 
 ## Version 25.2 {#25-2}
 
+### Version 25.2.1.ent.13 {#25-2-1-ent-13}
+
+Release date: June 12, 2026.
+
+#### Performance
+
+* [Reduced](https://github.com/ydb-platform/ydb/pull/32880) memory consumption when processing queries with the `TopSort` operation (`SELECT ... ORDER BY x LIMIT n`).
+* Added an optimization that filters rows by secondary index columns before accessing the main table, reducing the number of read operations.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/issues/24779) the `Unexpected end of buffer, Handle(): requirement chunkSize <= Buffer.size() failed` error that caused crashes in dynamic nodes.
+* Resolved several potential hang scenarios during query execution when using `StreamIndexLookup` index access.
+* Fixed a bug where the query limit was not applied to the index table, causing it to read far more records than necessary.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/39557) an issue in the account filtering logic during LDAP-based authentication.
+
 ### Version 25.2.1.ent.4 {#24-2-1-ent-4}
 
 Release date: February 12, 2026.

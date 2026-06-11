@@ -1,6 +1,5 @@
 #include "service_operation.h"
 #include "operation_helpers.h"
-#include "rpc_analyze_operation_base.h"
 #include "rpc_operation_request_base.h"
 
 #include <ydb/core/grpc_services/base/base.h>
@@ -155,7 +154,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         config.RetryPolicy = {.RetryLimitCount = 3};
         SAPipeClient_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), saTabletId, config));
         NTabletPipe::SendData(SelfId(), SAPipeClient_,
-            new NStat::TEvStatistics::TEvAnalyzeOpForgetRequest(GetDatabaseName(), AnalysisOperationId_));
+            new NStat::TEvStatistics::TEvAnalyzeOpForgetRequest(GetDatabaseName(), AnalyzeOperationId_));
     }
 
     void Handle(NStat::TEvStatistics::TEvAnalyzeOpForgetResponse::TPtr& ev) {
@@ -272,7 +271,7 @@ public:
                     return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR,
                         "ANALYZE long-running operation is disabled");
                 }
-                if (!TryGetUlidId(OperationId, AnalysisOperationId_)) {
+                if (!TryGetUlidId(OperationId, AnalyzeOperationId_)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
                 ResolveStatisticsAggregatorForForget();
@@ -315,7 +314,7 @@ public:
 private:
     TOperationId OperationId;
     ui64 RawOperationId = 0;
-    TString AnalysisOperationId_;
+    TString AnalyzeOperationId_;
     TActorId SAPipeClient_;
 
     static constexpr ui64 SANav1Cookie = 100;

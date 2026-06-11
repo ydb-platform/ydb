@@ -1,7 +1,6 @@
 #include "service_operation.h"
 
 #include "operation_helpers.h"
-#include "rpc_analyze_operation_base.h"
 #include "rpc_backup_base.h"
 #include "rpc_export_base.h"
 #include "rpc_import_base.h"
@@ -172,7 +171,7 @@ class TGetOperationRPC
         config.RetryPolicy = {.RetryLimitCount = 3};
         SAPipeClient_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), saTabletId, config));
         NTabletPipe::SendData(SelfId(), SAPipeClient_,
-            new NStat::TEvStatistics::TEvAnalyzeOpGetRequest(GetDatabaseName(), AnalysisOperationId_));
+            new NStat::TEvStatistics::TEvAnalyzeOpGetRequest(GetDatabaseName(), AnalyzeOperationId_));
     }
 
     void Handle(NStat::TEvStatistics::TEvAnalyzeOpGetResponse::TPtr& ev, const TActorContext& ctx) {
@@ -224,7 +223,7 @@ public:
                 if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
                     return ReplyWithStatus(StatusIds::UNSUPPORTED);
                 }
-                if (!TryGetUlidId(OperationId_, AnalysisOperationId_)) {
+                if (!TryGetUlidId(OperationId_, AnalyzeOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }
                 ResolveStatisticsAggregatorForAnalyze();
@@ -500,7 +499,7 @@ private:
 
     TOperationId OperationId_;
     ui64 RawOperationId_ = 0;
-    TString AnalysisOperationId_;   // 16-byte binary ULID for ANALYZE ops
+    TString AnalyzeOperationId_;   // 16-byte binary ULID for ANALYZE ops
     TActorId PipeActorId_;
     TActorId SAPipeClient_;
 

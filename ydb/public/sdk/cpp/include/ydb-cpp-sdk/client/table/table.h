@@ -611,11 +611,8 @@ public:
     struct TMetadata {
         EAnalyzeState State = EAnalyzeState::Unspecified;
         float Progress = 0;
-        std::vector<std::string> Paths;
-        uint32_t TablesTotal = 0;
-        uint32_t TablesDone = 0;
-        uint32_t ShardsTotal = 0;
-        uint32_t ShardsDone = 0;
+        std::vector<std::string> Paths;           // All paths covered by this analyze.
+        std::vector<std::string> InProgressPaths; // Subset of Paths currently being traversed
     };
 
     const TMetadata& Metadata() const;

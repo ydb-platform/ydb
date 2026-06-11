@@ -184,15 +184,14 @@ void ToOperation(const NKikimrAnalyzeOp::TAnalyzeOperation& op, Ydb::Operations:
     }
 
     Ydb::Table::AnalyzeMetadata metadata;
+    metadata.set_state(op.GetState());
+    metadata.set_progress(op.GetProgress());
     for (const auto& path : op.GetPaths()) {
         metadata.add_paths(path);
     }
-    metadata.set_state(op.GetState());
-    metadata.set_progress(op.GetProgress());
-    metadata.set_tables_total(op.GetTablesTotal());
-    metadata.set_tables_done(op.GetTablesDone());
-    metadata.set_shards_total(op.GetShardsTotal());
-    metadata.set_shards_done(op.GetShardsDone());
+    for (const auto& path : op.GetInProgressPaths()) {
+        metadata.add_in_progress_paths(path);
+    }
 
     operation->mutable_metadata()->PackFrom(metadata);
 }

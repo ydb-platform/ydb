@@ -208,8 +208,8 @@ Y_UNIT_TEST(AnalyzeOperationsLifecycle) {
         const auto& meta = op.Metadata();
         UNIT_ASSERT_VALUES_EQUAL(meta.State, NYdb::NTable::EAnalyzeState::Done);
         UNIT_ASSERT_DOUBLES_EQUAL(meta.Progress, 100.0f, 0.1f);
-        UNIT_ASSERT_GE(meta.TablesTotal, 1u);
-        UNIT_ASSERT_VALUES_EQUAL(meta.TablesDone, meta.TablesTotal);
+        UNIT_ASSERT_GE(meta.Paths.size(), 1u);
+        UNIT_ASSERT(meta.InProgressPaths.empty());
     }
 
     // Get by ID matches

@@ -13,12 +13,9 @@ message TAnalyzeOperation {
     optional Ydb.Table.AnalyzeState.State State = 4;
     optional float Progress = 5;
     repeated string Paths = 6;
-    optional uint32 TablesTotal = 7;
-    optional uint32 TablesDone = 8;
-    optional uint32 ShardsTotal = 9;
-    optional uint32 ShardsDone = 10;
-    optional string DatabaseName = 11;
-    repeated Ydb.Issue.IssueMessage Issues = 12;
+    repeated string InProgressPaths = 7;
+    optional string DatabaseName = 8;
+    repeated Ydb.Issue.IssueMessage Issues = 9;
 }
 
 message TEvListRequest {

@@ -1047,26 +1047,19 @@ void TStatisticsAggregator::FillAnalyzeOperationProto(
         NYql::IssueToMessage(issue, proto.AddIssues());
     }
 
-    // Aggregate shard counters across tables.
-    const ui32 tablesTotal = op.Tables.size();
-    ui32 tablesDone = 0;
     ui64 shardsTotalSum = 0;
     ui64 shardsDoneSum = 0;
-
     for (const auto& t : op.Tables) {
         proto.AddPaths(t.Path);
         shardsTotalSum += t.ShardsTotal;
         shardsDoneSum  += t.ShardsDone;
-        if (t.Status == TForceTraversalTable::EStatus::TraversalFinished) {
-            ++tablesDone;
+        const bool inProgress =
+            t.Status != TForceTraversalTable::EStatus::None &&
+            t.Status != TForceTraversalTable::EStatus::TraversalFinished;
+        if (inProgress && state == Ydb::Table::AnalyzeState::STATE_IN_PROGRESS) {
+            proto.AddInProgressPaths(t.Path);
         }
     }
-
-    proto.SetTablesTotal(tablesTotal);
-    proto.SetTablesDone(tablesDone);
-    constexpr ui64 kMaxU32 = std::numeric_limits<ui32>::max();
-    proto.SetShardsTotal(static_cast<ui32>(std::min(shardsTotalSum, kMaxU32)));
-    proto.SetShardsDone(static_cast<ui32>(std::min(shardsDoneSum, kMaxU32)));
 
     if (state == Ydb::Table::AnalyzeState::STATE_DONE) {
         proto.SetProgress(100.0f);

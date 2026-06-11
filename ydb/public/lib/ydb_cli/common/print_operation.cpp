@@ -314,23 +314,21 @@ namespace {
     }
 
     TPrettyTable MakeTable(const NYdb::NTable::TAnalyzeOperation&) {
-        return TPrettyTable({"id", "ready", "status", "state", "progress", "tables_done/total", "shards_done/total", "paths"});
+        return TPrettyTable({"id", "ready", "status", "state", "progress", "paths", "in_progress"});
     }
 
     void PrettyPrint(const NYdb::NTable::TAnalyzeOperation& operation, TPrettyTable& table) {
         const auto& status = operation.Status();
         const auto& metadata = operation.Metadata();
 
-        TStringBuilder shards;
-        if (metadata.ShardsTotal > 0) {
-            shards << metadata.ShardsDone << "/" << metadata.ShardsTotal;
-        }
-
-        TStringBuilder paths;
-        for (size_t i = 0; i < metadata.Paths.size(); ++i) {
-            if (i) paths << ";";
-            paths << metadata.Paths[i];
-        }
+        auto joinPaths = [](const std::vector<std::string>& v) {
+            TStringBuilder out;
+            for (size_t i = 0; i < v.size(); ++i) {
+                if (i) out << ";";
+                out << v[i];
+            }
+            return out;
+        };
 
         auto& row = table.AddRow();
         row
@@ -339,9 +337,8 @@ namespace {
             .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
             .Column(3, metadata.State)
             .Column(4, FloatToString(metadata.Progress, PREC_POINT_DIGITS, 2) + "%")
-            .Column(5, TStringBuilder() << metadata.TablesDone << "/" << metadata.TablesTotal)
-            .Column(6, shards)
-            .Column(7, paths);
+            .Column(5, joinPaths(metadata.Paths))
+            .Column(6, joinPaths(metadata.InProgressPaths));
 
         TStringBuilder freeText;
         AppendIssues(status, freeText);

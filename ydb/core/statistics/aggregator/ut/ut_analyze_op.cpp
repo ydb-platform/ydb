@@ -62,8 +62,7 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             const auto& entry = result.GetEntries(i);
             if (entry.GetOperationId() == opId) {
                 found = true;
-                UNIT_ASSERT_VALUES_EQUAL(entry.GetTablesTotal(), 1);
-                UNIT_ASSERT_GE(entry.PathsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(entry.PathsSize(), 1);
                 break;
             }
         }
@@ -228,10 +227,12 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         UNIT_ASSERT_VALUES_EQUAL_C(op.GetState(),
             Ydb::Table::AnalyzeState::STATE_IN_PROGRESS,
             "Expected STATE_IN_PROGRESS while analyze is mid-flight");
-        UNIT_ASSERT_VALUES_EQUAL(op.GetShardsTotal(), kShardCount);
-        UNIT_ASSERT_VALUES_EQUAL(op.GetShardsDone(), 2);
-        // 2 / 4 = 50%
+        // Internally the SA stored shardsDone=2 out of shardsTotal=4 → 50% progress.
+        // The shard counters are not part of the public API; only progress is.
         UNIT_ASSERT_DOUBLES_EQUAL(op.GetProgress(), 50.0f, 0.01f);
+        // The active table appears in InProgressPaths while traversal is running.
+        UNIT_ASSERT_VALUES_EQUAL(op.InProgressPathsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetInProgressPaths(0), tableInfo.Path);
     }
 
     Y_UNIT_TEST(ForgetTerminal) {

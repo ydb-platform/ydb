@@ -230,13 +230,9 @@ TAnalyzeOperation::TAnalyzeOperation(TStatus &&status, Ydb::Operations::Operatio
     GetProto().metadata().UnpackTo(&metadata);
     Metadata_.State = static_cast<EAnalyzeState>(metadata.state());
     Metadata_.Progress = metadata.progress();
-    for (const auto& p : metadata.paths()) {
-        Metadata_.Paths.push_back(p);
-    }
-    Metadata_.TablesTotal = metadata.tables_total();
-    Metadata_.TablesDone = metadata.tables_done();
-    Metadata_.ShardsTotal = metadata.shards_total();
-    Metadata_.ShardsDone = metadata.shards_done();
+    Metadata_.Paths.assign(metadata.paths().begin(), metadata.paths().end());
+    Metadata_.InProgressPaths.assign(metadata.in_progress_paths().begin(),
+                                     metadata.in_progress_paths().end());
 }
 
 const TAnalyzeOperation::TMetadata& TAnalyzeOperation::Metadata() const {

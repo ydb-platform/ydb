@@ -1111,13 +1111,11 @@ message AnalyzeState {
 }
 
 message AnalyzeMetadata {
-    repeated string paths = 1;
-    optional AnalyzeState.State state = 2;
-    optional float progress = 3;
-    optional uint32 tables_total = 4;
-    optional uint32 tables_done = 5;
-    optional uint32 shards_total = 6;
-    optional uint32 shards_done = 7;
+
+    repeated string paths = 1;             // All table paths covered by this analyze operation.
+    repeated string in_progress_paths = 2; // Tables currently being traversed
+    optional AnalyzeState.State state = 3;
+    optional float progress = 4;
 }
 
 // Alter table with given path

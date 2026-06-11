@@ -244,7 +244,7 @@ void TKafkaSaslAuthActor::SendResponse() {
     responseToClient->AuthBytes = ToRawBytes(responseToClient->AuthBytesStr);
     responseToClient->ErrorMessage = "";
 
-    KAFKA_LOG_D("Authentication first step finished."
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Authentication first step finished."
                     << " FirstServerMessage='" << AuthResponse << "'");
 
     auto evResponse = std::make_unique<TEvKafka::TEvResponse>(CorrelationId, responseToClient, EKafkaErrors::NONE_ERROR);
@@ -265,7 +265,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         TStringBuilder authenticationFailureReason;
         authenticationFailureReason << (errorMessage ? " " + errorMessage : "")
             << (details ? " " + details : "");
-        KAFKA_LOG_ERROR("Authentication failure." << authenticationFailureReason);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Authentication failure." << authenticationFailureReason);
         const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
         TStringBuilder responseErrorMessage;
         responseErrorMessage << "Authentication failure.";
@@ -278,7 +278,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::FAILED, evResponse, errorMessage);
         Send(Context->ConnectionId, authResult);
     } else {
-        KAFKA_LOG_D("Authentication success. Database='" << DatabasePath << "', "
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Authentication success. Database='" << DatabasePath << "', "
                                       << "FolderId='" << FolderId << "', "
                                       << "ServiceAccountId='" << ServiceAccountId << "', "
                                       << "DatabaseId='" << DatabaseId << "', "

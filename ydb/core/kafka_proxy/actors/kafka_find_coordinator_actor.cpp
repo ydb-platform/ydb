@@ -34,7 +34,7 @@ void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 p
     TFindCoordinatorResponseData::TPtr response = std::make_shared<TFindCoordinatorResponseData>();
 
     for (auto coordinatorKey: Message->CoordinatorKeys) {
-        KAFKA_LOG_I("FIND_COORDINATOR incoming request for group# " << coordinatorKey);
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "FIND_COORDINATOR incoming request for group# " << coordinatorKey);
 
         TFindCoordinatorResponseData::TCoordinator coordinator;
         coordinator.ErrorCode = NONE_ERROR;
@@ -51,7 +51,7 @@ void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 p
     response->Port = port;
     response->NodeId = nodeId;
 
-    KAFKA_LOG_D("FIND_COORDINATOR response. Host#: " << host << ", Port#: " << port << ", NodeId# " << nodeId);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "FIND_COORDINATOR response. Host#: " << host << ", Port#: " << port << ", NodeId# " << nodeId);
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
     Die(ctx);
@@ -61,7 +61,7 @@ void TKafkaFindCoordinatorActor::SendResponseFailAndDie(EKafkaErrors error, cons
     TFindCoordinatorResponseData::TPtr response = std::make_shared<TFindCoordinatorResponseData>();
 
     for (auto coordinatorKey: Message->CoordinatorKeys) {
-        KAFKA_LOG_CRIT("FIND_COORDINATOR request failed. Reason# " << message);
+        LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "FIND_COORDINATOR request failed. Reason# " << message);
 
         TFindCoordinatorResponseData::TCoordinator coordinator;
         coordinator.ErrorCode = error;

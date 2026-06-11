@@ -11,7 +11,7 @@
 #include "actors/actors.h"
 #include "kafka_connection.h"
 #include "kafka_events.h"
-#include <ydb/library/kafka/kafka_log_impl.h>
+#include <ydb/library/kafka/kafka_log.h>
 #include "kafka_metrics.h"
 
 namespace NKafka {
@@ -126,11 +126,11 @@ public:
 
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-        KAFKA_LOG_I("incoming connection opened " << Address);
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "incoming connection opened " << Address);
     }
 
     void PassAway() override {
-        KAFKA_LOG_D("PassAway");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "PassAway");
 
         ConnectionEstablished = false;
         if (ProduceActorId) {
@@ -149,7 +149,7 @@ public:
 
 protected:
     void LogEvent(IEventHandle& ev) {
-        KAFKA_LOG_T("Received event: " << ev.GetTypeName());
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received event: " << ev.GetTypeName());
     }
 
     void SetNonBlock() noexcept {
@@ -157,7 +157,7 @@ protected:
     }
 
     void Shutdown() {
-        KAFKA_LOG_D("Shutdown");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Shutdown");
 
         PendingRequests.clear();
         PendingRequestsQueue.clear();
@@ -168,7 +168,7 @@ protected:
     }
 
     ssize_t SocketSend(const void* data, size_t size) {
-        KAFKA_LOG_T("SocketSend Size=" << size);
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "SocketSend Size=" << size);
         return Socket->Send(data, size);
     }
 
@@ -241,7 +241,7 @@ protected:
             HFunc(TEvKafka::TEvResponse, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-                KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }
     }
 
@@ -397,12 +397,12 @@ protected:
     }
 
     bool ProcessRequest(const TActorContext& ctx) {
-        KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
         auto apiKeyNameIt = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey));
         if (apiKeyNameIt == EApiKeyNames.end()) {
-            KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
             PassAway();
             return false;
         }
@@ -418,7 +418,7 @@ protected:
         }
 
         if (IsTransactionalApiKey(Request->Header.RequestApiKey) && !TransactionsEnabled()) {
-            KAFKA_LOG_ERROR("Transactional API keys are not enabled. To enable them set \"EnableKafkaTransactions\" feature flag to true in cluster configuration.");
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Transactional API keys are not enabled. To enable them set \"EnableKafkaTransactions\" feature flag to true in cluster configuration.");
             PassAway();
             return false;
         }
@@ -524,7 +524,7 @@ protected:
                 break;
 
             default:
-                KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
                 PassAway();
                 return false;
         }
@@ -545,7 +545,7 @@ protected:
 
     void Handle(TEvKafka::TEvReadSessionInfo::TPtr readInfo, const TActorContext& /*ctx*/) {
         auto r = readInfo->Get();
-        KAFKA_LOG_D("Initializing GroupId=" << r->GroupId);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Initializing GroupId=" << r->GroupId);
         Context->GroupId = r->GroupId;
     }
 
@@ -557,7 +557,7 @@ protected:
             if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
                 MtlsAuthStage = AUTH_FAILED;
             }
-            KAFKA_LOG_ERROR(event->Error);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << event->Error);
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
             CloseConnection = true;
             return;
@@ -569,7 +569,7 @@ protected:
             responseToClient->ErrorCode = kafkaError;
             TString errorMessage = TStringBuilder() << Context->SaslMechanism << " authentication mechanism is disabled, because mTLS flag is on. Turn of mTLS in configuration to use this mechanism.";
             responseToClient->ErrorMessage = errorMessage;
-            KAFKA_LOG_D(errorMessage);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << errorMessage);
 
             std::shared_ptr<TEvKafka::TEvResponse> errorResponse = std::make_shared<TEvKafka::TEvResponse>(event->ClientResponse->CorrelationId, responseToClient, kafkaError);
             Reply(event->ClientResponse->CorrelationId, errorResponse->Response, kafkaError, ctx);
@@ -588,7 +588,7 @@ protected:
         Context->IsServerless = event->IsServerless;
         Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
 
-        KAFKA_LOG_D("Authentication successful. SID=" << Context->UserToken->GetUserSID());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Authentication successful. SID=" << Context->UserToken->GetUserSID());
         if (Context->SaslMechanism != "MTLS") {
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {
@@ -607,7 +607,7 @@ protected:
 
             auto errorResponse = std::make_shared<TEvKafka::TEvResponse>(event->ClientResponse->CorrelationId, responseToClient, kafkaError);
             TString errorMessage = TStringBuilder() << event->SaslMechanism << " authentication mechanism is disabled, because mTLS flag is on. Turn of mTLS in configuration to use this mechanism.";
-            KAFKA_LOG_D(errorMessage);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << errorMessage);
             Reply(event->ClientResponse->CorrelationId, errorResponse->Response, kafkaError, ctx);
             CloseConnection = true;
             return;
@@ -616,7 +616,7 @@ protected:
         Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
-            KAFKA_LOG_ERROR(event->Error);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << event->Error);
             CloseConnection = true;
             return;
         }
@@ -636,7 +636,7 @@ protected:
     void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx) {
         auto it = PendingRequests.find(correlationId);
         if (it == PendingRequests.end()) {
-            KAFKA_LOG_ERROR("Unexpected correlationId " << correlationId);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Unexpected correlationId " << correlationId);
             return;
         }
 
@@ -651,7 +651,7 @@ protected:
     }
 
     void OnRequestProcessed(const Msg::TPtr& request) {
-        KAFKA_LOG_T("Request with correlationId " << request->Header.CorrelationId << " processed. Erasing it from PendingRequests and PendingRequestsQueue");
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Request with correlationId " << request->Header.CorrelationId << " processed. Erasing it from PendingRequests and PendingRequestsQueue");
         InflightSize -= request->ExpectedSize;
         PendingRequests.erase(request->Header.CorrelationId);
         PendingRequestsQueue.pop_front();
@@ -660,9 +660,9 @@ protected:
     bool ProcessReplyQueue(const TActorContext& ctx) {
         while(!PendingRequestsQueue.empty()) {
             auto& request = PendingRequestsQueue.front();
-            KAFKA_LOG_T("Processing reply queue for request with correlationId " << request->Header.CorrelationId);
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Processing reply queue for request with correlationId " << request->Header.CorrelationId);
             if (request->Response.get() == nullptr) {
-                KAFKA_LOG_T("Response for request with correlationId " << request->Header.CorrelationId << " is empty.");
+                LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Response for request with correlationId " << request->Header.CorrelationId << " is empty.");
                 break;
             }
 
@@ -681,7 +681,7 @@ protected:
     }
 
     bool Reply(const TRequestHeaderData* header, const TApiMessage* reply, const TString method, const TInstant requestStartTime, EKafkaErrors errorCode, const TActorContext& ctx) {
-        KAFKA_LOG_T("Building reply for method " << method << " and correlationId " << header->CorrelationId << " with error code: " << errorCode);
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Building reply for method " << method << " and correlationId " << header->CorrelationId << " with error code: " << errorCode);
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
 
@@ -706,16 +706,16 @@ protected:
             // PollerReady means that poller polled socket ready status
             if (res == -EAGAIN || res == -EWOULDBLOCK) {
                 RetryingWriteToSocket = true;
-                KAFKA_LOG_D("Socket is busy. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size() <<  ". Waiting for PollerReady event");
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Socket is busy. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size() <<  ". Waiting for PollerReady event");
                 RequestPoller();
                 return false;
             } else if (res < 0) {
                 ythrow yexception() << "Error during flush of the written to socket data. Error code: " << strerror(-res) << " (" << res << ")";
             } else {
-                KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
             }
         } catch(const yexception& e) {
-            KAFKA_LOG_ERROR("error on processing response: ApiKey=" << reply->ApiKey()
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "error on processing response: ApiKey=" << reply->ApiKey()
                                                      << ", Version=" << version
                                                      << ", CorrelationId=" << header->CorrelationId
                                                      << ", Error=" <<  e.what());
@@ -730,7 +730,7 @@ protected:
         if (IsSslRequired && !IsSslActive) {
             int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds);
             if (res < 0) {
-                KAFKA_LOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "connection closed - error in UpgradeToSecure: " << strerror(-res));
                 PassAway();
                 return false;
             }
@@ -740,7 +740,7 @@ protected:
     }
 
     bool DoRead(const TActorContext& ctx) {
-        KAFKA_LOG_T("DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
         for (;;) {
             while (Demand) {
                 ssize_t received = 0;
@@ -750,11 +750,11 @@ protected:
                 } else if (-res == EINTR) {
                     continue;
                 } else if (!res) {
-                    KAFKA_LOG_I("connection closed");
+                    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "connection closed");
                     PassAway();
                     return false;
                 } else if (res < 0) {
-                    KAFKA_LOG_I("connection closed - error in recv: " << strerror(-res));
+                    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "connection closed - error in recv: " << strerror(-res));
                     PassAway();
                     return false;
                 }
@@ -775,18 +775,18 @@ protected:
                     case SIZE_PREPARE:
                         NormalizeNumber(Request->ExpectedSize);
                         if (Request->ExpectedSize < 0) {
-                            KAFKA_LOG_ERROR("Wrong message size. Size: " << Request->ExpectedSize);
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Wrong message size. Size: " << Request->ExpectedSize);
                             PassAway();
                             return false;
                         }
                         if ((ui64)Request->ExpectedSize > Context->Config.GetMaxMessageSize()) {
-                            KAFKA_LOG_ERROR("message is big. Size: " << Request->ExpectedSize << ". MaxSize: "
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "message is big. Size: " << Request->ExpectedSize << ". MaxSize: "
                                                                      << Context->Config.GetMaxMessageSize());
                             PassAway();
                             return false;
                         }
                         if (static_cast<size_t>(Request->ExpectedSize) < HeaderSize) {
-                            KAFKA_LOG_ERROR("message is small. Size: " << Request->ExpectedSize);
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "message is small. Size: " << Request->ExpectedSize);
                             PassAway();
                             return false;
                         }
@@ -798,12 +798,12 @@ protected:
                     case INFLIGHT_CHECK:
                         if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
                             // Allow only one message to be processed at a time for non-authenticated users
-                            KAFKA_LOG_ERROR("DoRead: failed inflight check: there are " << PendingRequestsQueue.size() << " pending requests and user is not authnicated.  Only one paraller request is allowed for a non-authenticated user.");
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "DoRead: failed inflight check: there are " << PendingRequestsQueue.size() << " pending requests and user is not authnicated.  Only one paraller request is allowed for a non-authenticated user.");
                             return true;
                         }
                         if (InflightSize + Request->ExpectedSize > Context->Config.GetMaxInflightSize()) {
                             // We limit the size of processed messages so as not to exceed the size of available memory
-                            KAFKA_LOG_ERROR("DoRead: failed inflight check: InflightSize + Request->ExpectedSize=" << InflightSize + Request->ExpectedSize << " > Context->Config.GetMaxInflightSize=" << Context->Config.GetMaxInflightSize());
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "DoRead: failed inflight check: InflightSize + Request->ExpectedSize=" << InflightSize + Request->ExpectedSize << " > Context->Config.GetMaxInflightSize=" << Context->Config.GetMaxInflightSize());
                             return true;
                         }
                         InflightSize += Request->ExpectedSize;
@@ -812,7 +812,7 @@ protected:
                         [[fallthrough]];
 
                     case HEADER_READ:
-                        KAFKA_LOG_T("start read header. ExpectedSize=" << Request->ExpectedSize);
+                        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "start read header. ExpectedSize=" << Request->ExpectedSize);
 
                         Request->Buffer->Resize(HeaderSize);
                         Demand = TReadDemand(Request->Buffer->Data(), HeaderSize);
@@ -830,12 +830,12 @@ protected:
                         NormalizeNumber(Request->CorrelationId);
 
                         if (PendingRequests.contains(Request->CorrelationId)) {
-                            KAFKA_LOG_ERROR("CorrelationId " << Request->CorrelationId << " already processing");
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "CorrelationId " << Request->CorrelationId << " already processing");
                             PassAway();
                             return false;
                         }
                         if (!Context->Authenticated() && RequireAuthentication(static_cast<EApiKey>(Request->ApiKey))) {
-                            KAFKA_LOG_ERROR("unauthenticated request: ApiKey=" << Request->ApiKey);
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "unauthenticated request: ApiKey=" << Request->ApiKey);
                             PassAway();
                             return false;
                         }
@@ -845,7 +845,7 @@ protected:
                         [[fallthrough]];
 
                     case MESSAGE_READ:
-                        KAFKA_LOG_T("start read new message. ExpectedSize=" << Request->ExpectedSize);
+                        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "start read new message. ExpectedSize=" << Request->ExpectedSize);
 
                         Request->Buffer->Resize(Request->ExpectedSize);
                         Demand = TReadDemand(Request->Buffer->Data() + HeaderSize, Request->ExpectedSize - HeaderSize);
@@ -856,10 +856,10 @@ protected:
                     case MESSAGE_PROCESS:
                         Request->StartTime = TInstant::Now();
                         if constexpr (DEBUG_ENABLED) {
-                            KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId
+                            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId
                                 << ", Data=" << Hex(Request->Buffer->Begin(), Request->Buffer->End()));
                         } else {
-                            KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);
+                            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);
                         }
 
                         TKafkaReadable readable(*Request->Buffer);
@@ -871,7 +871,7 @@ protected:
                             Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
                             Request->Message->Read(readable, Request->ApiVersion);
                         } catch(const yexception& e) {
-                            KAFKA_LOG_ERROR("error on processing message: ApiKey=" << Request->ApiKey
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "error on processing message: ApiKey=" << Request->ApiKey
                                                                     << ", Version=" << Request->ApiVersion
                                                                     << ", CorrelationId=" << Request->CorrelationId
                                                                     << ", Error=" <<  e.what());
@@ -882,7 +882,7 @@ protected:
                         Step = SIZE_READ;
 
                         if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable() && MtlsAuthStage != MtlsAuthStages::AUTH_SUCCESSFUL) {
-                            KAFKA_LOG_D("Mtls authentication was not successful.");
+                            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Mtls authentication was not successful.");
                             return false;
                         }
 
@@ -910,14 +910,14 @@ protected:
                     if (sslHandshakeResult != SslHandshakeErrors::ERROR_WANT_READ &&
                         sslHandshakeResult != SslHandshakeErrors::ERROR_WANT_WRITE &&
                         sslHandshakeResult != SslHandshakeErrors::ERROR_NONE) {
-                        KAFKA_LOG_D("Error in ssl handshake, ssl ErrorCode=" << sslHandshakeResult);
+                        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Error in ssl handshake, ssl ErrorCode=" << sslHandshakeResult);
                         PassAway();
                         return;
                     }
                     if (sslHandshakeResult == SslHandshakeErrors::ERROR_NONE) {
                         TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
                         if (!cert) {
-                            KAFKA_LOG_ERROR("No cert was received from client during ssl handshake for mTLS authentication.");
+                            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "No cert was received from client during ssl handshake for mTLS authentication.");
                             PassAway();
                             return;
                         }
@@ -943,7 +943,7 @@ protected:
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
                 if (passed >= InactivityTimeout) {
-                    KAFKA_LOG_D("connection closed by inactivity timeout");
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "connection closed by inactivity timeout");
                     return PassAway(); // timeout
                 } else {
                     Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -951,21 +951,21 @@ protected:
             }
         }
         if (event->Get()->Write && !BufferedWriter.Empty()) {
-            KAFKA_LOG_D("Retrying flush. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size());
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Retrying flush. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size());
             ssize_t res = BufferedWriter.flush();
             if (res == -EAGAIN || res == -EWOULDBLOCK) {
-                KAFKA_LOG_D("Socket is busy during retry. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size() <<  ". Waiting for PollerReady event");
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Socket is busy during retry. Buffer queue size: " << BufferedWriter.GetBuffersDeque().size() <<  ". Waiting for PollerReady event");
                 RequestPoller();
                 return;
             } else if (res < 0) {
-                KAFKA_LOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res) << ". Buffer queue size: " << BufferedWriter.GetBuffersDeque().size());
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "connection closed - error in FlushOutput: " << strerror(-res) << ". Buffer queue size: " << BufferedWriter.GetBuffersDeque().size());
                 PassAway();
                 return;
             } else if (res > 0 && BufferedWriter.Empty()) { // we successfuly retried sending the response
                 RetryingWriteToSocket = false;
                 auto& request = PendingRequestsQueue.front();
                 auto& header = request->Header;
-                KAFKA_LOG_D("Sent reply (after retry): ApiKey=" << header.RequestApiKey << ", Version=" << header.RequestApiVersion << ", Correlation=" << header.CorrelationId);
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sent reply (after retry): ApiKey=" << header.RequestApiKey << ", Version=" << header.RequestApiVersion << ", Correlation=" << header.CorrelationId);
                 OnRequestProcessed(request);
                 ProcessReplyQueue(ctx);
 
@@ -976,7 +976,7 @@ protected:
         }
 
         if (CloseConnection && BufferedWriter.Empty()) {
-            KAFKA_LOG_D("connection closed");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "connection closed");
             return PassAway();
         }
 
@@ -1003,7 +1003,7 @@ protected:
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-                KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }
     }
 };

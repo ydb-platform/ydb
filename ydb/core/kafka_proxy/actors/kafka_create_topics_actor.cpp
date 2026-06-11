@@ -58,7 +58,7 @@ NActors::IActor* CreateKafkaCreateTopicsActor(
 }
 
 void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    KAFKA_LOG_D(InputLogMessage());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << InputLogMessage());
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);
@@ -168,7 +168,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
 
-    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status));
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status));
 
     EKafkaErrors status;
     switch(eventPtr->Status) {

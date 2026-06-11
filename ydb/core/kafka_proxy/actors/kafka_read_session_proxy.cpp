@@ -19,14 +19,14 @@ template<bool handlePending, typename TRequest>
 void KafkaReadSessionProxyActor::DoHandle(TRequest& ev, const TString& event) {
     if constexpr (handlePending) {
         if (Context->ReadSession.PendingBalancingMode.has_value()) {
-            KAFKA_LOG_D("DoHandle " << event << " with pending balance mode");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "DoHandle " << event << " with pending balance mode");
             auto response = CreateChangeResponse(*ev->Get()->Request);
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(ev->Get()->CorrelationId, response, EKafkaErrors::REBALANCE_IN_PROGRESS));
             return;
         }
     }
 
-    KAFKA_LOG_D("DoHandle " << event);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "DoHandle " << event);
     switch (Context->ReadSession.BalancingMode) {
         case EBalancingMode::Native:
             Register(new TKafkaBalancerActor(Context, 0, ev->Get()->CorrelationId, ev->Get()->Request));
@@ -40,10 +40,10 @@ void KafkaReadSessionProxyActor::DoHandle(TRequest& ev, const TString& event) {
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
-    KAFKA_LOG_D("Handle TEvKafka::TEvJoinGroupRequest");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Handle TEvKafka::TEvJoinGroupRequest");
     Context->ReadSession.BalancingMode = Context->ReadSession.PendingBalancingMode.value_or(GetBalancingMode(*ev->Get()->Request));
     Context->ReadSession.PendingBalancingMode.reset();
-    KAFKA_LOG_D("Balancing mode: " << Context->ReadSession.BalancingMode);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Balancing mode: " << Context->ReadSession.BalancingMode);
 
     DoHandle<false>(ev, "TEvKafka::TEvJoinGroupRequest");
 }
@@ -61,7 +61,7 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvLeaveGroupRequest::TPtr& ev
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
-    KAFKA_LOG_D("Handle TEvKafka::TEvFetchRequest");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Handle TEvKafka::TEvFetchRequest");
     Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
 }
 

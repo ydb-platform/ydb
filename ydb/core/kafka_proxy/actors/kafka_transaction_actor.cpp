@@ -22,7 +22,7 @@ if (!ProducerInRequestIsValid(ev->Get()->Request)) { \
 namespace NKafka {
 
     void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext&){
-        KAFKA_LOG_D("Received ADD_PARTITIONS_TO_TXN request");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received ADD_PARTITIONS_TO_TXN request");
         VALIDATE_PRODUCER_IN_REQUEST(TAddPartitionsToTxnResponseData);
 
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
@@ -37,13 +37,13 @@ namespace NKafka {
     // in YDB Topics we store offsets in table and do not need this extra action.
     // Thus we can just ignore this request.
     void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext&) {
-        KAFKA_LOG_D("Received ADD_OFFSETS_TO_TXN request");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received ADD_OFFSETS_TO_TXN request");
         VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
         SendOkResponse<TAddOffsetsToTxnResponseData>(ev);
     }
 
     void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext&) {
-        KAFKA_LOG_D("Received TXN_OFFSET_COMMIT request");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received TXN_OFFSET_COMMIT request");
         VALIDATE_PRODUCER_IN_REQUEST(TTxnOffsetCommitResponseData);
 
         // save offsets for future use
@@ -79,7 +79,7 @@ namespace NKafka {
     7. Close KQP session, send to coordinator TEvTransactionActorDied, die.
     */
     void TTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D("Received END_TXN request");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received END_TXN request");
         VALIDATE_PRODUCER_IN_REQUEST(TEndTxnResponseData);
 
         bool txnAborted = !ev->Get()->Request->Committed;
@@ -103,7 +103,7 @@ namespace NKafka {
     }
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D("KQP session created");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "KQP session created");
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
             Die(ctx);
@@ -116,9 +116,9 @@ namespace NKafka {
     }
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D("Received query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
         if (auto error = GetErrorFromYdbResponse(ev)) {
-            KAFKA_LOG_W(error);
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
             Die(ctx);
             return;
@@ -141,12 +141,12 @@ namespace NKafka {
 
     void TTransactionActor::StartKqpSession(const TActorContext& ctx) {
         Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
-        KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending create session request to KQP for database " << DatabasePath);
         Kqp->SendCreateSessionRequest(ctx);
     }
 
     void TTransactionActor::SendToKqpValidationRequests(const TActorContext& ctx) {
-        KAFKA_LOG_D("Sending select request to KQP for database " << DatabasePath);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending select request to KQP for database " << DatabasePath);
         Kqp->SendYqlRequest(
             GetYqlWithTablesNames(),
             BuildSelectParams(),
@@ -170,9 +170,9 @@ namespace NKafka {
     template<class ErrorResponseType, class EventType>
     void TTransactionActor::SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
         if (errorMessage) {
-            KAFKA_LOG_W("Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
         } else {
-            KAFKA_LOG_W("Sending fail response with error code: " << errorCode);
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending fail response with error code: " << errorCode);
         }
 
         auto response = NKafkaTransactions::BuildResponse<ErrorResponseType>(evHandle->Get()->Request, errorCode);
@@ -182,14 +182,14 @@ namespace NKafka {
     template<class ResponseType, class EventType>
     void TTransactionActor::SendOkResponse(TAutoPtr<TEventHandle<EventType>>& evHandle) {
         auto& kafkaRequest = evHandle->Get()->Request;
-        KAFKA_LOG_D("Sending OK response to " << evHandle->Get()->ConnectionId << " with correlationId " << evHandle->Get()->CorrelationId << " and transactionalId " << TransactionalId);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending OK response to " << evHandle->Get()->ConnectionId << " with correlationId " << evHandle->Get()->CorrelationId << " and transactionalId " << TransactionalId);
         std::shared_ptr<ResponseType> response = NKafkaTransactions::BuildResponse<ResponseType>(kafkaRequest, EKafkaErrors::NONE_ERROR);
         Send(evHandle->Get()->ConnectionId, new TEvKafka::TEvResponse(evHandle->Get()->CorrelationId, response, EKafkaErrors::NONE_ERROR));
     }
 
     // helper methods
     void TTransactionActor::Die(const TActorContext &ctx) {
-        KAFKA_LOG_D("Dying.");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Dying.");
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }
@@ -294,7 +294,7 @@ namespace NKafka {
         int expectedResultsSize = OffsetsToCommit.empty() ? 1 : 2; // if there were no consumer in transactions we do not send request to consumer table
         if (expectedResultsSize != resultsSize) {
             TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected " << expectedResultsSize << ", got " << resultsSize << ".";
-            KAFKA_LOG_W(error);
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
@@ -306,13 +306,13 @@ namespace NKafka {
             producerState = ParseProducerState(response);
         } catch (const yexception& y) {
             TString error = TStringBuilder() << "Error parsing producer state response from KQP. Reason: " << y.what();
-            KAFKA_LOG_W(error);
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
         }
         if (auto error = GetErrorInProducerState(producerState)) {
-            KAFKA_LOG_W(error);
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
             Die(ctx);
             return;
@@ -322,28 +322,28 @@ namespace NKafka {
             // parse and validate consumers
             std::unordered_map<TString, i32> consumerGenerationsByName = ParseConsumersGenerations(response);
             if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
-                KAFKA_LOG_W(error);
+                LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << error);
                 SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
                 Die(ctx);
                 return;
             }
         }
 
-        KAFKA_LOG_D("Validated producer and consumers states. Everything is alright, adding kafka operations to transaction.");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Validated producer and consumers states. Everything is alright, adding kafka operations to transaction.");
         auto kqpTxnId = response.Record.GetResponse().GetTxMeta().id();
         // finally everything is valid and we can add kafka operations to transaction and attempt to commit
         SendAddKafkaOperationsToTxRequest(kqpTxnId);
     }
 
     void TTransactionActor::HandleAddKafkaOperationsResponse(const TString& kqpTransactionId, const TActorContext& ctx) {
-        KAFKA_LOG_D("Successfully added kafka operations to transaction. Committing transaction.");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Successfully added kafka operations to transaction. Committing transaction.");
         Kqp->SetTxId(kqpTransactionId);
         Kqp->CommitTx(++KqpCookie, ctx);
         LastSentToKqpRequest = EKafkaTxnKqpRequests::COMMIT;
     }
 
     void TTransactionActor::HandleCommitResponse(const TActorContext& ctx) {
-        KAFKA_LOG_D("Successfully committed transaction. Sending ok and dying.");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Successfully committed transaction. Sending ok and dying.");
         SendOkResponse<TEndTxnResponseData>(EndTxnRequestPtr);
         Die(ctx);
     }

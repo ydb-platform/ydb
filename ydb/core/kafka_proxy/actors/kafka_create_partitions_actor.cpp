@@ -223,7 +223,7 @@ public:
             databaseName)
         , PartionsNumber(partitionsNumber)
     {
-        KAFKA_LOG_D(
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << 
             "Create partitions actor. DatabaseName: " << databaseName <<
             ". TopicPath: " << TopicPath <<
             ". PartitionsNumber: " << PartionsNumber);
@@ -257,7 +257,7 @@ NActors::IActor* CreateKafkaCreatePartitionsActor(
 }
 
 void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    KAFKA_LOG_D(InputLogMessage());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << InputLogMessage());
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);

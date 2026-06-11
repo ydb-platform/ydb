@@ -64,7 +64,7 @@ void TKafkaListOffsetsActor::HandleMissingTopicName(const TListOffsetsRequestDat
 }
 
 TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestData::TListOffsetsTopic& topic, const NActors::TActorContext&) {
-    KAFKA_LOG_D("ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user " << GetUsernameOrAnonymous(Context));
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user " << GetUsernameOrAnonymous(Context));
 
     TEvKafka::TGetOffsetsRequest offsetsRequest;
     offsetsRequest.Topic = NormalizePath(Context->DatabasePath, topic.Name.value());
@@ -85,7 +85,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
 
     Y_DEBUG_ABORT_UNLESS(it != TopicsRequestsInfo.end());
     if (it == TopicsRequestsInfo.end()) {
-        KAFKA_LOG_CRIT("ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring.");
+        LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring.");
         return RespondIfRequired(ctx);
     }
 
@@ -104,7 +104,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             auto it = responseFromPQPartitionsMap.find(partitionRequestInfo.PartitionId);
             if (it == responseFromPQPartitionsMap.end()) {
-                KAFKA_LOG_CRIT("ListOffsets actor: partition not found. Expect malformed/incompled reply");
+                LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "ListOffsets actor: partition not found. Expect malformed/incompled reply");
                 continue;
             }
             auto& responseFromPQPartition = it->second;

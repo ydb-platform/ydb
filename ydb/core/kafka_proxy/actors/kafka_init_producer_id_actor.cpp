@@ -60,7 +60,7 @@ namespace NKafka {
                 return;
             }
             Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
-            KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Bootstrapping actor for transactional producer. Sending init table request to KQP.");
             if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
                 Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             } else {
@@ -86,7 +86,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
-        KAFKA_LOG_D("Received TEvManagerPrepared. Sending create session request to KQP.");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received TEvManagerPrepared. Sending create session request to KQP.");
         Kqp->SendCreateSessionRequest(ctx);
     }
 
@@ -102,7 +102,7 @@ namespace NKafka {
 
     void TKafkaInitProducerIdActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         if (ev->Cookie != KqpReqCookie) {
-            KAFKA_LOG_CRIT(TStringBuilder() << "Unexpected cookie in TEvQueryResponse. Expected: " << KqpReqCookie << ", Actual: " << ev->Cookie << ".");
+            LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Unexpected cookie in TEvQueryResponse. Expected: " << KqpReqCookie << ", Actual: " << ev->Cookie << ".");
             SendResponseFail(EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to send request to producer_state table");
             Die(ctx);
             return;
@@ -112,7 +112,7 @@ namespace NKafka {
         auto status = record.GetYdbStatus();
         if (status == Ydb::StatusIds::ABORTED) {
             if (CurrentTxAbortRetryNumber < TX_ABORT_RETRY_MAX_COUNT) {
-                KAFKA_LOG_ERROR(TStringBuilder() << "Retry after tx aborted. CurrentTxAbortRetryNumber# " << static_cast<int>(CurrentTxAbortRetryNumber));
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Retry after tx aborted. CurrentTxAbortRetryNumber# " << static_cast<int>(CurrentTxAbortRetryNumber));
                 RequestFullRetry(ctx);
                 return;
             }
@@ -150,7 +150,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::Die(const TActorContext& ctx) {
-        KAFKA_LOG_D("Pass away.");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Pass away.");
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }
@@ -158,13 +158,13 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::StartTxProducerInitCycle(const TActorContext& ctx) {
-        KAFKA_LOG_D("Beginning transaction");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Beginning transaction");
         Kqp->BeginTransaction(++KqpReqCookie, ctx);
         LastSentToKqpRequest = EInitProducerIdKqpRequests::BEGIN_TRANSACTION;
     }
 
     void TKafkaInitProducerIdActor::HandleQueryResponseFromKqp(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-        KAFKA_LOG_D("Handle kqp response for " << GetAsStr(LastSentToKqpRequest) << " request");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Handle kqp response for " << GetAsStr(LastSentToKqpRequest) << " request");
 
         try {
             switch (LastSentToKqpRequest) {
@@ -184,7 +184,7 @@ namespace NKafka {
                     SendInsertRequest(ctx);
                     break;
                 default:
-                    KAFKA_LOG_ERROR("Unknown EInitProducerIdKqpRequests");
+                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Unknown EInitProducerIdKqpRequests");
                     Die(ctx);
                     break;
             }
@@ -275,14 +275,14 @@ namespace NKafka {
 
     // send responses methods
     void TKafkaInitProducerIdActor::SendResponseFail(EKafkaErrors error, const TString& message) {
-        KAFKA_LOG_ERROR(TStringBuilder() << "request failed. reason# " << message);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "request failed. reason# " << message);
         auto response = std::make_shared<TInitProducerIdResponseData>();
         response->ErrorCode = error;
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, error));
     }
 
     void TKafkaInitProducerIdActor::SendSuccessfullResponseForTxProducer(const TProducerState& producerState, const TActorContext& ctx) {
-        KAFKA_LOG_D("Sending succesfull response for transactional producer");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending succesfull response for transactional producer");
         auto response = std::make_shared<TInitProducerIdResponseData>();
         response->ErrorCode = EKafkaErrors::NONE_ERROR;
         response->ProducerId = producerState.ProducerId;
@@ -293,7 +293,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::SendSaveTxnProducerStateRequest(const TProducerState& producerState) {
-        KAFKA_LOG_D("Sending save txn producer state request");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending save txn producer state request");
 
         Send(NKafka::MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvSaveTxnProducerRequest(
             producerState.TransactionalId,

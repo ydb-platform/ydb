@@ -105,7 +105,7 @@ void TKafkaDescribeTopicActor::HandleCacheNavigateResponse(NKikimr::TEvTxProxySc
 
 void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
-    KAFKA_LOG_D(InputLogMessage());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << InputLogMessage());
 
 
     THashSet<TString> requestedTopics{};

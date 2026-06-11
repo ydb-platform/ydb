@@ -57,7 +57,7 @@ private:
     void Die(const TActorContext& ctx) override;
 
     STATEFN(StateWork) {
-        KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received event: " << (*ev.Get()).GetTypeName());
         switch (ev->GetTypeRewrite()) {
             HFunc(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);

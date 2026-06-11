@@ -53,7 +53,7 @@ public:
         , CleanupPolicy(cleanupPolicy)
         , TimestampType(timestampType)
     {
-        KAFKA_LOG_D("Alter configs actor. DatabaseName: " << databaseName << ". TopicPath: " << TopicPath);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Alter configs actor. DatabaseName: " << databaseName << ". TopicPath: " << TopicPath);
     };
 
     ~TAlterConfigsActor() = default;
@@ -117,7 +117,7 @@ NActors::IActor* CreateKafkaAlterConfigsActor(
 
 void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
-    KAFKA_LOG_D(InputLogMessage());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << InputLogMessage());
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);
@@ -267,7 +267,7 @@ void TKafkaAlterConfigsActor::ProcessValidateOnly(const NActors::TActorContext& 
         response->Responses.push_back(responseResource);
     }
 
-    KAFKA_LOG_D("KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId == " << CorrelationId);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId == " << CorrelationId);
     Send(Context->ConnectionId,
         new TEvKafka::TEvResponse(CorrelationId, response, NONE_ERROR));
     Die(ctx);

@@ -1879,8 +1879,9 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     nbsTabletTrim($("#nbs-run-duration").val())) || 0;
                 const delayBeforeSec = parseInt(
                     nbsTabletTrim($("#nbs-run-delay-before").val())) || 0;
-                const readRatioPct = parseInt(
-                    nbsTabletTrim($("#nbs-run-read-ratio").val()) || "0") || 0;
+                const disableReplication = $("#nbs-run-disable-replication").is(":checked");
+                const readRatioPct = disableReplication ? 0 : (parseInt(
+                    nbsTabletTrim($("#nbs-run-read-ratio").val()) || "0") || 0);
                 const showReads = readRatioPct > 0;
 
                 nbsTabletRenderDetailSkeleton(sweepValues, trials, showReads);

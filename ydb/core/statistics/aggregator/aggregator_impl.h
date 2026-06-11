@@ -462,6 +462,13 @@ private:
     TForceTraversalOperation* ForceTraversalOperation(const TString& operationId);
     void DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db);
 
+    // ForceTraversals now retains terminal entries as 7-day history; the "INFLIGHT"
+    // counters must exclude them so monitoring/alerts based on those counters remain
+    // accurate.
+    size_t InflightForceTraversalCount() const;
+    void RecalcForceTraversalsInflightSizeCounter();
+    void RecalcForceTraversalInflightMaxTimeCounter(TInstant now);
+
     TForceTraversalTable* ForceTraversalTable(const TString& operationId, const TPathId& pathId);
     TForceTraversalTable* CurrentForceTraversalTable();
     void UpdateForceTraversalTableStatus(const TForceTraversalTable::EStatus status, const TString& operationId, TStatisticsAggregator::TForceTraversalTable& table, NIceDb::TNiceDb& db);

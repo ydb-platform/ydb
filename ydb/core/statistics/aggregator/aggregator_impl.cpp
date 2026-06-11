@@ -978,8 +978,34 @@ void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operati
             db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
         }
         ForceTraversals.remove_if([operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
-        TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(ForceTraversals.size());
+        RecalcForceTraversalsInflightSizeCounter();
     }
+}
+
+size_t TStatisticsAggregator::InflightForceTraversalCount() const {
+    size_t n = 0;
+    for (const auto& op : ForceTraversals) {
+        if (!IsTerminalAnalyzeState(op.State)) {
+            ++n;
+        }
+    }
+    return n;
+}
+
+void TStatisticsAggregator::RecalcForceTraversalsInflightSizeCounter() {
+    TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE]
+        .Set(InflightForceTraversalCount());
+}
+
+void TStatisticsAggregator::RecalcForceTraversalInflightMaxTimeCounter(TInstant now) {
+    TDuration time = TDuration::Zero();
+    for (const auto& op : ForceTraversals) {
+        if (!IsTerminalAnalyzeState(op.State)) {
+            time = now - op.CreatedAt;
+            break; // first non-terminal is the oldest (list is insertion-ordered)
+        }
+    }
+    TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
 }
 
 void TStatisticsAggregator::MarkForceTraversalOperationFinished(
@@ -1014,6 +1040,9 @@ void TStatisticsAggregator::MarkForceTraversalOperationFinished(
         NIceDb::TUpdate<Schema::ForceTraversalOperations::State>(static_cast<ui64>(state)),
         NIceDb::TUpdate<Schema::ForceTraversalOperations::EndTime>(endTime.GetValue())
     );
+
+    // The op transitions from in-flight to history; the inflight counter shrinks.
+    RecalcForceTraversalsInflightSizeCounter();
 }
 
 void TStatisticsAggregator::FillAnalyzeOperationProto(

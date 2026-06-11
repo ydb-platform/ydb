@@ -120,7 +120,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         }
 
         Self->ForceTraversals.emplace_back(operation);
-        Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(Self->ForceTraversals.size());
+        Self->RecalcForceTraversalsInflightSizeCounter();
 
         db.Table<Schema::ForceTraversalOperations>().Key(operationId).Update(
             NIceDb::TUpdate<Schema::ForceTraversalOperations::OperationId>(operationId),

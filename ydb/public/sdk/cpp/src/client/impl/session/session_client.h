@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace NYdb::inline Dev {
 
 class TKqpSessionCommon;

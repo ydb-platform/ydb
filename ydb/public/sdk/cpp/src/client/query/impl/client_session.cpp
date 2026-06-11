@@ -1,4 +1,5 @@
 #include "client_session.h"
+#include "session_state_handler.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
@@ -76,26 +77,15 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
     auto resp = std::make_shared<Ydb::Query::SessionState>();
     ptr->Read(resp.get(), [resp, ptr, client, holder](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         switch (grpcStatus.GRpcStatusCode) {
-            case grpc::StatusCode::OK:
-                if (resp->has_session_shutdown()) {
-                    auto impl = holder->TrySharedOwning();
-                    if (impl) {
-                        impl->MarkIdle();
-                    }
+            case grpc::StatusCode::OK: {
+                auto impl = holder->TrySharedOwning();
+                if (HandleAttachSessionState(*resp, impl, client.lock()) == EAttachStreamReadAction::Continue) {
                     StartAsyncRead(ptr, client, holder);
-                } else if (resp->has_node_shutdown()) {
-                    auto impl = holder->TrySharedOwning();
-                    if (impl) {
-                        if (auto sessionClient = client.lock()) {
-                            sessionClient->PessimizeNode(impl->GetEndpointKey().GetNodeId());
-                        }
-                        impl->CloseFromServer(client);
-                        holder->Release();
-                    }
-                } else {
-                    StartAsyncRead(ptr, client, holder);
+                } else if (impl) {
+                    holder->Release();
                 }
                 break;
+            }
             default: {
                 auto impl = holder->TrySharedOwning();
                 if (impl) {

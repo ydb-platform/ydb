@@ -72,7 +72,7 @@ runs:
         telegram_alert_chat: ${{ fromJSON(inputs.vars).GH_ALERTS_TG_CHAT || '' }}
 
     - name: Coverage gate
-      if: steps.build.outputs.status != 'failed' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: steps.build.outputs.success == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}

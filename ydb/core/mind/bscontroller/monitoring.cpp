@@ -914,7 +914,7 @@ void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInf
     }
 }
 
-bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
+bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) {
     if (!Executor() || !Executor()->GetStats().IsActive) {
         return false;
     }

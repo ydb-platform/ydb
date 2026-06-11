@@ -66,16 +66,16 @@ private:
     void HandleInit(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
         YDB_LOG_DEBUG("HandleInit TEvWorker::TEvHandshake",
-            {"LogPrefix", GetLogPrefix()},
-            {"Worker", Worker});
+            {"logPrefix", GetLogPrefix()},
+            {"worker", Worker});
 
         Send(PQTablet, CreateGetOffsetRequest().Release());
     }
 
     void HandleInit(TEvPersQueue::TEvResponse::TPtr& ev) {
         YDB_LOG_DEBUG("HandleInit",
-            {"LogPrefix", GetLogPrefix()},
-            {"Event", ev->Get()->ToString()});
+            {"logPrefix", GetLogPrefix()},
+            {"event", ev->Get()->ToString()});
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
@@ -86,8 +86,8 @@ private:
                 || !record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
             // Retry via worker
             YDB_LOG_WARN("HandleInit unexpected response,",
-                {"LogPrefix", GetLogPrefix()},
-                {"Leaving", ev->Get()->ToString()});
+                {"logPrefix", GetLogPrefix()},
+                {"leaving", ev->Get()->ToString()});
             Y_ABORT_UNLESS(Worker, "Worker is always set before any PQ response: the offset request is only sent from the handshake handler");
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
@@ -117,8 +117,8 @@ private:
 
     void Handle(TEvWorker::TEvPoll::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"LogPrefix", GetLogPrefix()},
-            {"Event", ev->Get()->ToString()});
+            {"logPrefix", GetLogPrefix()},
+            {"event", ev->Get()->ToString()});
 
         Offset = SentOffset;
         // TODO: commit offset to PQ
@@ -137,8 +137,8 @@ private:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("Handle",
-            {"LogPrefix", GetLogPrefix()},
-            {"Event", ev->Get()->ToString()});
+            {"logPrefix", GetLogPrefix()},
+            {"event", ev->Get()->ToString()});
 
         TString error;
         if (!NPQ::BasicCheck(record, error)) {
@@ -167,7 +167,7 @@ private:
 
     void Leave(TEvWorker::TEvGone::EStatus status) {
         YDB_LOG_INFO("Leave",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         Send(Worker, new TEvWorker::TEvGone(status));
         PassAway();
     }

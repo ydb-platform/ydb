@@ -82,35 +82,14 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   go get github.com/ydb-platform/ydb-go-sdk-otel
   ```
 
-<<<<<<< HEAD
-    ```go
-     package main
-=======
   Configure `TracerProvider` and pass the adapter to `ydb.Open`:
->>>>>>> 253c78f6185 (Translation of PR 39667 (#41026))
 
   ```go
   package main
 
-<<<<<<< HEAD
-   func main() {
-       ...
-       tracerProvider := otelTrace.NewTracerProvider(
-           // WithBatcher registers the exporter with the TracerProvider.
-           // The exporter must implement the SpanExporter interface.
-           // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
-           otelTrace.WithBatcher(exp),
-           // WithResource attaches metadata (like service name and environment) to all spans
-           // created by this TracerProvider. Use resource.NewWithAttributes with standard
-           // semantic keys such as semconv.ServiceNameKey.
-           otelTrace.WithResource(resource.NewWithAttributes(res)),
-       )
-       defer tracerProvider.Shutdown(ctx)
-=======
   import (
       "context"
       "os"
->>>>>>> 253c78f6185 (Translation of PR 39667 (#41026))
 
       "go.opentelemetry.io/otel"
       "go.opentelemetry.io/otel/attribute"
@@ -118,29 +97,9 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
       "go.opentelemetry.io/otel/sdk/resource"
       sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-<<<<<<< HEAD
-       // Create a root span.
-       ctx, span := tracerProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
-       defer span.End()
-
-       // If you want to see otel-trace-id in the logs,
-       // it’s important to connect the adapters in a specific order — first otel, then logger.
-       db, err := ydb.Open(ctx,
-           os.Getenv("YDB_CONNECTION_STRING"),
-           ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
-           ydbZap.WithTraces(logger, trace.DetailsAll),
-       )
-       if err != nil {
-           panic(err)
-       }
-       defer db.Close(ctx)
-       ...
-   }
-=======
       "github.com/ydb-platform/ydb-go-sdk/v3"
       ydbOtel "github.com/ydb-platform/ydb-go-sdk-otel"
   )
->>>>>>> 253c78f6185 (Translation of PR 39667 (#41026))
 
   func main() {
       ctx := context.Background()
@@ -162,74 +121,6 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
       defer tp.Shutdown(ctx)
       otel.SetTracerProvider(tp)
 
-<<<<<<< HEAD
-         // If you want to see otel-trace-id in the logs,
-         // it’s important to connect the adapters in a specific order — first otel, then logger.
-         db, err := ydb.Open(ctx,
-             os.Getenv("YDB_CONNECTION_STRING"),
-             ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
-             ydbZap.WithTraces(logger, trace.DetailsAll),
-         )
-         if err != nil {
-             panic(err)
-         }
-         defer db.Close(ctx)
-         ...
-     }
-
-    ```
-
-  - database/sql
-
-    ```go
-     package main
-
-   func main() {
-       ...
-       tracerProvider := otelTrace.NewTracerProvider(
-           // WithBatcher registers the exporter with the TracerProvider.
-           // The exporter must implement the SpanExporter interface.
-           // You can use any OpenTelemetry exporter (Jaeger, Zipkin, etc).
-           otelTrace.WithBatcher(exp),
-           // WithResource attaches metadata (like service name and environment) to all spans
-           // created by this TracerProvider. Use resource.NewWithAttributes with standard
-           // semantic keys such as semconv.ServiceNameKey.
-           otelTrace.WithResource(resource.NewWithAttributes(res)),
-       )
-       defer tracerProvider.Shutdown(ctx)
-
-         "github.com/ydb-platform/ydb-go-sdk/v3"
-         "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-
-       // Create a root span.
-       ctx, span := traceProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
-       defer span.End()
-
-       // If you want to see otel-trace-id in the logs,
-       // it’s important to connect the adapters in a specific order — first otel, then logger.
-       nativeDriver, err := ydb.Open(ctx,
-           os.Getenv("YDB_CONNECTION_STRING"),
-           ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
-           ydbZap.WithTraces(logger, trace.DetailsAll),
-       )
-       if err != nil {
-           panic(err)
-       }
-       defer nativeDriver.Close(ctx)
-
-       connector, err := ydb.Connector(nativeDriver)
-       if err != nil {
-           panic(err)
-       }
-       db := sql.OpenDB(connector)
-       defer db.Close()
-       ...
-   }
-
-    ```
-
-  {% endlist %}
-=======
       db, err := ydb.Open(ctx,
           os.Getenv("YDB_CONNECTION_STRING"),
           ydbOtel.WithTraces(
@@ -242,7 +133,6 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
       defer db.Close(ctx)
   }
   ```
->>>>>>> 253c78f6185 (Translation of PR 39667 (#41026))
 
 - Python
 
@@ -410,8 +300,6 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   TDriver driver(driverConfig);
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   Install `@ydbjs/telemetry` along with the OpenTelemetry Node SDK and the OTLP exporter:
@@ -452,5 +340,4 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   ```bash
   node --import @opentelemetry/sdk-node/register --import @ydbjs/telemetry/register your-app.js
   ```
->>>>>>> 253c78f6185 (Translation of PR 39667 (#41026))
 {% endlist %}

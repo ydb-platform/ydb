@@ -936,6 +936,14 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     .replace(/"/g, "\\\"");
             }
 
+            function nbsRunScaleLsns(factor) {
+                const inp = $("#nbs-run-max-inflight-lsns");
+                const v = parseInt(inp.val(), 10);
+                if (!isNaN(v) && v >= 1) {
+                    inp.val(factor >= 1 ? v * factor : Math.max(1, Math.floor(v * factor)));
+                }
+            }
+
             function nbsRunDisableReplicationChanged(cb) {
                 const readRatio = $("#nbs-run-read-ratio");
                 if (cb.checked) {
@@ -1157,6 +1165,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         read_write_size_kib:     nbsTabletTrim($("#nbs-run-size-kib").val()) || "4",
                         sequential:              $("#nbs-run-sequential").is(":checked") ? "1" : "0",
                         num_dbg_to_use:          nbsTabletTrim($("#nbs-run-num-dbg").val()) || "0",
+                        max_inflight_lsns:       nbsTabletTrim($("#nbs-run-max-inflight-lsns").val()) || "4096",
                         disable_replication:     $("#nbs-run-disable-replication").is(":checked") ? "1" : "0"
                     };
                     $.ajax({
@@ -2098,6 +2107,22 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                         <div class='form-group'>
                                             <label for='nbs-run-num-dbg'>NumDirectBlockGroupsToUse (0=all):</label>
                                             <input id='nbs-run-num-dbg' class='form-control' type='number' min='0' step='1' value='0' />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-max-inflight-lsns'>MaxInflightLsns:</label>
+                                            <div class='input-group'>
+                                                <span class='input-group-btn'>
+                                                    <button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(0.5)' title='Halve'>&divide;2</button>
+                                                </span>
+                                                <input id='nbs-run-max-inflight-lsns' class='form-control' type='number' min='1' step='1' value='4096' />
+                                                <span class='input-group-btn'>
+                                                    <button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(2)' title='Double'>&times;2</button>
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <ydb/library/kafka/kafka_messages_int.h>
+#include "kafka_consumer_protocol.h"
 
 namespace NKafka {
 

@@ -95,11 +95,36 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
-    // Check if proposal is outdated
-    if (seqNo < lastSeqNo) {
-        auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId " << GetTxId()
-                                             << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo " << lastSeqNo;
-        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+    // Independent seq no for CopyTable and DropTable
+    std::optional<ui64> targetPathId;
+    switch (SchemaTxBody.TxBody_case()) {
+        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+            targetPathId = SchemaTxBody.GetDropTable().GetPathId();
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
+            targetPathId = SchemaTxBody.GetCopyTable().GetDstPathId();
+            break;
+        default:
+            break;
+    }
+
+    if (targetPathId) {
+        // For path-specific operations, check SeqNo against the per-path SeqNo
+        auto pathSeqNoIt = owner.LastSchemaSeqNoByPath.find(*targetPathId);
+        if (pathSeqNoIt != owner.LastSchemaSeqNoByPath.end() && seqNo < pathSeqNoIt->second) {
+            auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId "
+                                                 << GetTxId() << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo "
+                                                 << pathSeqNoIt->second << " pathId " << *targetPathId;
+            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+        }
+    } else {
+        // For shard-wide operations, use the global SeqNo check
+        if (seqNo < lastSeqNo) {
+            auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId "
+                                                 << GetTxId() << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo "
+                                                 << lastSeqNo;
+            return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_CHANGED, errorMessage);
+        }
     }
 
     switch (SchemaTxBody.TxBody_case()) {
@@ -180,6 +205,10 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     }
 
     owner.UpdateSchemaSeqNo(seqNo, txc);
+    // Update per-path SeqNo for path-specific operations
+    if (targetPathId) {
+        owner.LastSchemaSeqNoByPath[*targetPathId] = seqNo;
+    }
     return TProposeResult();
 }
 

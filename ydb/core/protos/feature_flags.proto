@@ -319,4 +319,5 @@ message TFeatureFlags {
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
+    optional bool EnableCompactFulltextIndex = 280 [default = false];
 }

@@ -27,6 +27,8 @@ TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op);
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, const TInfoUnitSet& right);
+TVector<TInfoUnit> IUSetUnion(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
+
 bool IUIsSubset(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 
 template <class T> void AddUnique(TVector<T>& toAdd, TVector<T>& target) {

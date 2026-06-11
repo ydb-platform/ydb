@@ -53,7 +53,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadSom
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.ReadOnlyOneByOne
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.ReadOnlySlay
-ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.RestartAndReadOnlyConsecutive
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestGarbageCollect
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestReads
@@ -91,8 +90,8 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery19
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery20
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentChannels
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentTasks
-ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
 ydb/core/kqp/ut/channels Channels20.InstantFinish1n
+ydb/core/kqp/ut/data_integrity unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
@@ -113,8 +112,6 @@ ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YDB_PERF
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpOlapScheme.DropColumnAfterAdd
 ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal
-ydb/core/kqp/ut/scheme KqpOlapTypes.PgFloat4Column
-ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
@@ -150,33 +147,18 @@ ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Date
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Decimal
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Double
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int16
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int32
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int64
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int8
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Utf8_LongValue
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.DropColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Attributes
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_CreateTimestamp
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_MessageGroupId
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Partition
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_ProducerId
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_SeqNo
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_WriteTimestamp
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingJsonMessage
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTable
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTableOtherType
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_DifferentBatch
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_OneBatch
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.BaseScenario_Local
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional unittest.sole chunk
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Int64
+ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Uuid
 ydb/core/transfer/ut/row_table Transfer_RowTable.DropColumn
 ydb/core/transfer/ut/row_table Transfer_RowTable.MessageField_CreateTimestamp
 ydb/core/transfer/ut/row_table Transfer_RowTable.ProcessingCDCMessage
@@ -185,10 +167,10 @@ ydb/core/tx/columnshard/backup/iscan/ut IScan.MultiExport
 ydb/core/tx/columnshard/backup/iscan/ut IScan.UploaderExport
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideThenStopTenantAndForceDeleteSubDomain-AlterDatabaseCreateHiveFirst-false
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.CreateDummyTabletsInDifferentDomains
-ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_describe_column_table_local_index
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
+ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.CreateTopicWithNameEqDB
 ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.MessageWriteBurstDefaultsToSpeed
 ydb/services/persqueue_v1/actors/schema/pqv1/ut CreateTopic_PQv1API.SharedConsumer
@@ -204,6 +186,7 @@ ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[resta
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_in_memory.py.TestInMemoryMixedCluster.test_in_memory_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_in_memory.py.TestInMemoryRolling.test_in_memory_rolling[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_prestable-26-3_to_prestable-26-3]
@@ -251,7 +234,6 @@ ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_restart_idempotency
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_stop_idempotency
 ydb/tests/functional/api test_read_table.py.TestReadTableWithTabletKills.test_read_table_async_simple[read_table]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
-ydb/tests/functional/backup Backup.UuidValue
 ydb/tests/functional/benchmarks_init py3test.[test_generator.py */*] chunk
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_parts
@@ -274,6 +256,7 @@ ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution
 ydb/tests/functional/nbs py3test.sole chunk
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_vhost_unaligned_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
@@ -768,6 +751,7 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
 ydb/tests/functional/tpc/medium/tpch py3test.[test_decimal.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py */*] chunk
+ydb/tests/functional/tpc/medium/tpch py3test.[test_s1.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_s_float.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[10]
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[11]
@@ -932,6 +916,7 @@ ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumn
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_2_compression-algorithm=zstd,level=2-2]
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_7_compression-algorithm=zstd,level=7-2]
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_create_with_compression[lz4_compression-algorithm=lz4-1]
+ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_create_with_compression[zstd_14_compression-algorithm=zstd,level=14-2]
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_create_with_compression[zstd_compression-algorithm=zstd-2]
 ydb/tests/olap/min_max_index test_min_max_index.py.TestYdbMinMaxIndex.test_minmax_index_unsupported_type[JsonDocument-json_document]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test_multi[many_tables]
@@ -945,6 +930,7 @@ ydb/tests/stress/cdc/tests py3test.sole chunk
 ydb/tests/stress/cdc/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/ctas/tests py3test.sole chunk
 ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/federated_queries/tests py3test.sole chunk
 ydb/tests/stress/federated_queries/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
@@ -955,6 +941,7 @@ ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[column]
 ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[row]
 ydb/tests/stress/kv_volume/tests py3test.sole chunk
 ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v1-ydb/tests/stress/kv_volume/tests/configs/common_channel_read.textproto]
+ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v1-ydb/tests/stress/kv_volume/tests/configs/inline_channel_read.textproto]
 ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v2-ydb/tests/stress/kv_volume/tests/configs/common_channel_read.textproto]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
@@ -986,7 +973,6 @@ ydb/tests/stress/show_create/view/tests py3test.sole chunk
 ydb/tests/stress/show_create/view/tests test_workload.py.TestYdbWorkload.test_show_create_view_workload[30-None]
 ydb/tests/stress/show_create/view/tests test_workload.py.TestYdbWorkload.test_show_create_view_workload[30-test_scv]
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
-ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[column]
 ydb/tests/stress/streaming/tests py3test.sole chunk
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/system_tablet_backup/tests py3test.sole chunk

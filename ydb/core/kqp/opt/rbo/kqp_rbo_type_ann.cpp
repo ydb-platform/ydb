@@ -418,6 +418,9 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
         rightItemTypes = AddOptional(rightItemTypes, ctx);
     } else if (join->JoinKind == "Right") {
         leftItemTypes = AddOptional(leftItemTypes, ctx);
+    } else if (join->JoinKind == "Full") {
+        leftItemTypes = AddOptional(leftItemTypes, ctx);
+        rightItemTypes = AddOptional(rightItemTypes, ctx);
     }
 
     structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());

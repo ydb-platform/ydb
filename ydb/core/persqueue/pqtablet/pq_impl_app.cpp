@@ -35,33 +35,22 @@ namespace {
         return tx.State == NKikimrPQ::TTransaction_EState_WAIT_RS;
     }
 
-    bool IsKnownPublicPersQueueDevUiParam(TStringBuf name) {
-        return name == "TabletID"
-            || name == "kv"
-            || name == "consumer"
-            || name == "partitionId"
-            || name == "TxId";
-    }
-
-    bool IsPublicPersQueueDevUiRequest(const TCgiParameters& cgi) {
-        if (cgi.Has("SendReadSet") || cgi.Has("action")) {
+    bool IsPersQueueDevUiAdminRequest(const TCgiParameters& cgi) {
+        if (cgi.Has("SendReadSet")) {
+            return true;
+        }
+        if (cgi.Has("action")) {
+            return true;
+        }
+        if (cgi.Has("kv")
+            || (cgi.Has("consumer") && cgi.Has("partitionId"))
+            || cgi.Has("TxId")
+            || (!cgi.Has("consumer") && !cgi.Has("partitionId")))
+        {
             return false;
         }
-        for (const auto& [name, _] : cgi) {
-            if (!IsKnownPublicPersQueueDevUiParam(name)) {
-                return false;
-            }
-        }
-        if (cgi.Has("kv")) {
-            return true;
-        }
-        if (cgi.Has("consumer") && cgi.Has("partitionId")) {
-            return true;
-        }
-        if (cgi.Has("TxId")) {
-            return true;
-        }
-        return !cgi.Has("consumer") && !cgi.Has("partitionId");
+        PQ_LOG_W("PersQueue DevUI request to unknown page, cgi: " << cgi.Print());
+        return true;
     }
 
 }
@@ -337,7 +326,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
             AppData(ctx),
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            IsPublicPersQueueDevUiRequest(cgi)))
+            IsPersQueueDevUiAdminRequest(cgi)))
     {
         ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

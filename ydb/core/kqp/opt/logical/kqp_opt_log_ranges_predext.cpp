@@ -152,7 +152,8 @@ TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOpt
 
     for (auto& indexInfo : mainTableDesc.Metadata->Indexes) {
         if (indexInfo.Type == TIndexDescription::EType::GlobalAsync
-            || indexInfo.Type == TIndexDescription::EType::GlobalJson) {
+            || indexInfo.Type == TIndexDescription::EType::GlobalJson
+            || indexInfo.Type == TIndexDescription::EType::GlobalJsonCompact) {
             continue;
         }
 
@@ -368,6 +369,7 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
             for (auto& index : mainTableDesc.Metadata->Indexes) {
                 if (index.Type != TIndexDescription::EType::GlobalAsync
                     && index.Type != TIndexDescription::EType::GlobalJson
+                    && index.Type != TIndexDescription::EType::GlobalJsonCompact
                     && index.State == TIndexDescription::EIndexState::Ready)
                 {
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(index.Name).first->Name);

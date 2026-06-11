@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -357,7 +358,16 @@ public:
                 }
 
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
-                    addTable(source.GetFullTextSource().GetTable());
+                    const auto& fullText = source.GetFullTextSource();
+                    addTable(fullText.GetTable());
+                    // The compiled plan also pins each index impl table's (dict/docs/stats/posting)
+                    // schema version, and those advance independently of the main table (e.g. on
+                    // build finalize). Track them too, otherwise a cached plan with a stale impl-table
+                    // version is never invalidated and every read fails with SCHEME_ERROR until the
+                    // plan is evicted.
+                    for (const auto& indexTable : fullText.GetIndexTables()) {
+                        addTable(indexTable.GetTable());
+                    }
                 }
             }
 
@@ -596,7 +606,8 @@ public:
         const TGUCSettings::TPtr& gUCSettingsPtr,
         TIntrusivePtr<TKqpCounters>& counters,
         const TActorId& sender,
-        TKqpTransactionContext* txCtx = nullptr);
+        TKqpTransactionContext* txCtx = nullptr,
+        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);

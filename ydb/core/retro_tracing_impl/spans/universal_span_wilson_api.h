@@ -1,7 +1,7 @@
 #pragma once
 
 #include "named_span.h"
-#include <ydb/library/actors/retro_tracing/universal_span.h>
+#include <ydb/library/actors/retro_tracing/span/universal_span.h>
 
 namespace NKikimr {
 

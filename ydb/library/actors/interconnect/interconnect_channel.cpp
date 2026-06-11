@@ -156,7 +156,9 @@ namespace NActors {
                         TDuration duration = NActors::TlsActivationContext->Now() - event.EnqueueTime;
                         Metrics->UpdateIcQueueTimeHistogram(duration.MicroSeconds());
                     }
-                    event.Span && event.Span.Event("FeedBuf:INITIAL");
+                    if (NWilson::TSpan* wilsonSpan = event.Span.GetWilsonSpanPtr()) {
+                        wilsonSpan->Event("FeedBuf:INITIAL");
+                    }
                     UseRdmaForCurrentEvent = false;
                     RdmaCredsBuffer.Clear();
                     RdmaCredPartPos = 0;

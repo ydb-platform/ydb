@@ -27,6 +27,12 @@ namespace NKikimr::NDDisk {
             ui32 ChunkIdx = Max<ui32>();
             ui32 SectorIdx = Max<ui32>();
             ui64 HeaderLsn = 0;
+            ui32 Generation = 0;
+        };
+
+        struct TBarrierLocation {
+            ui32 BarrierIdx;
+            ui32 Position;
         };
 
         ui64 PersistentBufferUniqueId;
@@ -37,23 +43,25 @@ namespace NKikimr::NDDisk {
         std::unordered_map<ui64, TErase> Erases;
 
         std::vector<TEraseBarrier> PersistentBufferBarriers;
-        std::unordered_map<ui64, std::tuple<ui32, ui32>> PersistentBufferBarriersLocation;
-        std::vector<std::tuple<ui32, ui32>> PersistentBufferBarrierHoles;
+        std::unordered_map<ui64, TBarrierLocation> PersistentBufferBarriersLocation;
+
+        std::vector<TBarrierLocation> PersistentBufferBarrierHoles;
         ui32 FreeBarrierPosition = 0;
 
         void Initialize(ui64 uniqueId, ui32 nodeId, ui32 pdiskId, ui32 slotId);
         bool CanMoveBarrier(ui64 tabletId, ui32 barriersLimit);
-        ui64 GetBarrier(ui64 tabletId) const;
+        TPersistentBufferBarrierRecord GetBarrier(ui64 tabletId) const;
         std::unordered_map<ui64, ui64> GetBarriers() const;
-        std::tuple<ui32, ui32, TEraseBarrier&> MoveBarrier(ui64 tabletId, ui64 lsn, const TPersistentBufferSectorInfo& newSector);
-        void RestoreBarriers(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator);
+        std::tuple<ui32, ui32, TEraseBarrier&> MoveBarrier(ui64 tabletId, ui32 generation, ui64 lsn, const TPersistentBufferSectorInfo& newSector);
+        void RestoreBarriers(std::map<TPersistentBufferId, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator);
         bool AddBarrier(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);
 
         bool Compact(std::vector<ui64>& oldLsns, std::vector<ui64>& newLsns, TPersistentBufferFastErases& header);
         std::vector<ui64> Uncompact(const ui8* data, bool isCompact);
+        bool CanFastErase(ui64 tabletId, ui32 generation);
         ui32 GetErasesCount(ui64 tabletId);
-        std::optional<TFastErase> Erase(ui64 tabletId, std::vector<ui64>& lsns, TPersistentBufferSpaceAllocator& allocator);
+        std::optional<TFastErase> Erase(ui64 tabletId, ui32 generation, std::vector<ui64>& lsns, TPersistentBufferSpaceAllocator& allocator);
         bool AddErase(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);
-        void RestoreErases(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator);
+        void RestoreErases(std::map<TPersistentBufferId, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator);
     };
 }

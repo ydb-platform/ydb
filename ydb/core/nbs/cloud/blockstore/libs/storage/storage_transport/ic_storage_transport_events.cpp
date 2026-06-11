@@ -24,7 +24,12 @@ TEvTransportPrivate::TWriteToDDisk::~TWriteToDDisk()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
-TEvTransportPrivate::TEraseFromPBuffer::~TEraseFromPBuffer()
+TEvTransportPrivate::TBatchEraseFromPBuffer::~TBatchEraseFromPBuffer()
+{
+    Y_ABORT_UNLESS(Promise.IsReady());
+}
+
+TEvTransportPrivate::TBarrierEraseFromPBuffer::~TBarrierEraseFromPBuffer()
 {
     Y_ABORT_UNLESS(Promise.IsReady());
 }

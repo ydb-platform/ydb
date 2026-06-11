@@ -22,6 +22,33 @@ NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
 }
 
+NKikimrPQClient::TDataChunk MakeDataChunk(const TKafkaRecord& record) {
+    NKikimrPQClient::TDataChunk proto;
+    proto.set_codec(NPersQueueCommon::RAW);
+
+    for (const auto& header : record.Headers) {
+        auto meta = proto.AddMessageMeta();
+        if (header.Key) {
+            meta->set_key(static_cast<const char*>(header.Key->data()), header.Key->size());
+        }
+        if (header.Value) {
+            meta->set_value(static_cast<const char*>(header.Value->data()), header.Value->size());
+        }
+    }
+
+    if (record.Key) {
+        auto meta = proto.AddMessageMeta();
+        meta->set_key("__key");
+        meta->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
+    }
+
+    if (record.Value) {
+        proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
+    }
+
+    return proto;
+}
+
 TString TKafkaProduceActor::LogPrefix() {
     TStringBuilder sb;
     sb << "TKafkaProduceActor " << SelfId() << " State: ";
@@ -307,26 +334,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
     for (ui64 batchIndex = 0; batchIndex < batch->Records.size(); ++batchIndex) {
         const auto& record = batch->Records[batchIndex];
 
-        NKikimrPQClient::TDataChunk proto;
-        proto.set_codec(NPersQueueCommon::RAW);
-        for(auto& h : record.Headers) {
-            auto res = proto.AddMessageMeta();
-            if (h.Key) {
-                res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
-            }
-            if (h.Value) {
-                res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
-            }
-        }
-
-        if (record.Key) {
-            auto res = proto.AddMessageMeta();
-            res->set_key("__key");
-            res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
-        }
-        if (record.Value) {
-            proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
-        }
+        NKikimrPQClient::TDataChunk proto = MakeDataChunk(record);
 
         TString str;
         bool res = proto.SerializeToString(&str);

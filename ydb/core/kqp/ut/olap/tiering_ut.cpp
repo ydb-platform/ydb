@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
@@ -619,6 +620,58 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
+    }
+
+    Y_UNIT_TEST_DUO(MinMaxIndexInheritsTiering, InheritPortionStorage) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        {
+            auto alterQuery = InheritPortionStorage ? 
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MIN_MAX,
+                    FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": true, "column_name": "level"}`);
+                )" : 
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MIN_MAX,
+                    FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": false, "column_name": "level"}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        tieringHelper.WriteSampleData();
+
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(10));
+        csController->WaitActualization(TDuration::Seconds(10));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        // After tiering: index chunks must follow the portion to the external tier if inherit_portion_storage is set to true, and stay in BS otherwise
+        {
+            auto selectQuery = TStringBuilder() << R"(
+                SELECT *
+                FROM `)" << DEFAULT_TABLE_PATH << R"(/.sys/primary_index_stats`
+                WHERE Activity == 1 AND EntityName == "index_minmax_level"
+            )";
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_GT(rows.size(), 0);
+            for (auto& row : rows) {
+                if (InheritPortionStorage) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), DEFAULT_TIER_PATH);
+                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), "__DEFAULT");
+                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(TieringBoolToS3) {

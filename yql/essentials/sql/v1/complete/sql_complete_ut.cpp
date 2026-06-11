@@ -1350,6 +1350,13 @@ Y_UNIT_TEST(ColumnsAtSimpleSelect) {
     {
         TVector<TCandidate> expected = {
             {.Kind = ColumnName, .Content = "Age"},
+            {.Kind = ColumnName, .Content = "Name"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(3, engine, "SELECT x . # FROM example.`/people` AS x"), expected);
+    }
+    {
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "Age"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT x.a# FROM example.`/people` AS x"), expected);
     }
@@ -2031,6 +2038,21 @@ Y_UNIT_TEST(ColumnAtSubqueryExpresson) {
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[1]), expected);
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[2]), expected);
     UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[3]), expected);
+}
+
+Y_UNIT_TEST(YQL_21293) {
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TString input = R"sql(
+        SELECT # 1 FROM example.`/people`;
+    )sql";
+
+    TVector<TCandidate> expected = {
+        {.Kind = Keyword, .Content = "ALL"},
+        {.Kind = Keyword, .Content = "BITCAST()", .CursorShift = 1},
+    };
+
+    UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, input), expected);
 }
 
 Y_UNIT_TEST(ColumnAfterAs) {

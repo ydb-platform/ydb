@@ -46,6 +46,7 @@ check-running-allowed
 
 ### Phase 3 — Rollout (follow-up)
 
+- [ ] Manual debug: **Actions → Run and debug tests** → `use_sharding=true`, inspect shard plan in job summary
 - [ ] Pilot on internal PR with `pr_check_shard_count: 2`
 - [ ] Compare wall-clock vs monolith (YDB `pr_check_job_runs_scatter`)
 - [ ] Tune shard count, optional durations CSV from analytics
@@ -69,7 +70,7 @@ Shards never retry. Aggregate posts `test_relwithdebinfo` (try1 green via `publi
 
 ## Enable pilot
 
-Add to repository variable `CHECKS_SWITCH` JSON:
+**PR-check (after merge):** add to `CHECKS_SWITCH`:
 
 ```json
 {
@@ -77,6 +78,8 @@ Add to repository variable `CHECKS_SWITCH` JSON:
   "pr_check_shard_count": 2
 }
 ```
+
+**Manual debug (before merge):** GitHub Actions → **Run and debug tests** → set `use_sharding=true`, `shard_count=2`, `test_targets=ydb/` (or your path). Shard plan table appears in the **Plan test shards** job summary.
 
 ## Risks / open questions
 

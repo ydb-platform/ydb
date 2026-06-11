@@ -144,7 +144,7 @@ WHERE
 
 ## Запись в топик {#topic-write}
 
-### Простая запись {#simple-write}
+### Запись одного сообщения {#simple-write}
 
 ```yql
 INSERT INTO

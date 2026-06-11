@@ -288,6 +288,8 @@ jobs:
           python3 -m pip install pyyaml --quiet
           python3 .github/scripts/tests/sharding/extract_tests_from_graph.py graph/graph.json \
             -o /tmp/tests.txt
+          test_count=$(wc -l < /tmp/tests.txt)
+          echo "Extracted $test_count tests"
           python3 .github/scripts/tests/sharding/split_test_shards.py \
             --tests-file /tmp/tests.txt \
             --shard-count "$SHARD_COUNT" \
@@ -301,7 +303,17 @@ jobs:
           done
           mkdir -p shard_plan_out/shard_filters
           cp /tmp/shard_plan.json shard_plan_out/
+          cp /tmp/tests.txt shard_plan_out/
           cp /tmp/shard_filters/*.yaml shard_plan_out/shard_filters/
+          plan_title="Shard plan (PR #${{ github.event.number }}, relwithdebinfo)"
+          python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
+            /tmp/shard_plan.json \
+            --title "$plan_title" \
+            -o shard_plan_out/shard_plan_summary.md
+          python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
+            /tmp/shard_plan.json \
+            --title "$plan_title" \
+            >> "$GITHUB_STEP_SUMMARY"
           echo "shard_ids=$(jq -c '[.shards[].id]' /tmp/shard_plan.json)" >> "$GITHUB_OUTPUT"
       - name: Upload shard plan
         uses: actions/upload-artifact@v4
@@ -423,7 +435,26 @@ jobs:
             "${reports[@]}"
           python3 .github/scripts/tests/fail-checker.py merged/try_1_report.json \
             --output_path merged/failed_count.txt || true
-          echo "failed_count=$(cat merged/failed_count.txt)" >> "$GITHUB_OUTPUT"
+          failed_count=$(cat merged/failed_count.txt)
+          merged_test_count=$(jq '[.results[] | select(.type=="test")] | length' merged/try_1_report.json)
+          echo "failed_count=$failed_count" >> "$GITHUB_OUTPUT"
+          echo "shard_count=${#reports[@]}" >> "$GITHUB_OUTPUT"
+          {
+            echo "commit=${{ needs.check-running-allowed.outputs.commit_sha }}"
+            echo "shard_reports=${#reports[@]}"
+            echo "failed_tests=$failed_count"
+            echo "merged_test_rows=$merged_test_count"
+          } > merged/meta.txt
+          echo "## Merged try 1" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Shards: ${#reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Failed tests: $failed_count" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload aggregate debug artifacts
+        if: always() && steps.merge.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-rwdi-aggregate-debug
+          path: merged/
+          retention-days: 3
       - name: Prepare s3cmd
         if: steps.merge.outputs.failed_count == '0' || fromJSON(steps.merge.outputs.failed_count) >= 500
         uses: ./.github/actions/s3cmd

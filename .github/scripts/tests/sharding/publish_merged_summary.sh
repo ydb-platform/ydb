@@ -15,6 +15,9 @@ cp "$REPORT_PATH" "$PUBLIC_DIR/try_1/report.json"
 
 touch "$SUMMARY_LINKS"
 : > "$SUMMARY_LINKS"
+if [[ -n "$PUBLIC_DIR_URL" ]]; then
+  echo "00 [Merged test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
+fi
 
 export GITHUB_HEAD_SHA="${ORIGINAL_HEAD:-$STATUS_SHA}"
 
@@ -39,7 +42,11 @@ if [[ -n "${S3_BUCKET_PATH:-}" ]]; then
   s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
 fi
 
-if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]] && [[ -f "$SUMMARY_LINKS" ]]; then
+  cat "$SUMMARY_LINKS" | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin if l.strip()], key=lambda a: (int(a[0]), a))]))' >> "$GITHUB_STEP_SUMMARY"
+fi
+
+if [[ "${SKIP_GITHUB_PUBLISH:-}" != "1" ]] && [[ -n "${GITHUB_TOKEN:-}" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
   cat "$PUBLIC_DIR/summary_text.txt" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color "$(cat "$PUBLIC_DIR/summary_color.txt")"
 fi
 
@@ -50,7 +57,7 @@ else
   testmessage="The check has been failed"
 fi
 
-if [[ -n "$STATUS_SHA" ]]; then
+if [[ "${SKIP_GITHUB_PUBLISH:-}" != "1" ]] && [[ -n "$STATUS_SHA" ]]; then
   curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST \
     -H "Accept: application/vnd.github+json" \
     -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -59,4 +66,6 @@ if [[ -n "$STATUS_SHA" ]]; then
     -d "{\"state\":\"${teststatus}\",\"description\":\"${testmessage}\",\"context\":\"test_${BUILD_PRESET}\"}"
 fi
 
-.github/scripts/tests/fail-checker.py "$REPORT_PATH"
+if [[ "${SKIP_FAIL_CHECK:-}" != "1" ]]; then
+  .github/scripts/tests/fail-checker.py "$REPORT_PATH"
+fi

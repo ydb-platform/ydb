@@ -98,6 +98,7 @@ Shards never retry. `merge_rwdi` runs `publish_merged_summary.sh` when try1 is g
 
 - **Shards:** GitHub artifact `shard_<id>.json`; S3 under `shard_<id>/try_1/` (logs, ya-test.html).
 - **Merge try1 green / ≥500 fails:** `publish_merged_summary.sh` → PR comment + `test_relwithdebinfo` at default S3 path (`.../x86-64/try_1/`).
+- **Debug merge:** same script with `SKIP_GITHUB_PUBLISH=1` → job summary table + [Merged test artifacts](S3) link; raw JSON in artifact `debug-shard-aggregate-<run_id>`.
 - **Merge retry:** `generate-summary.py` inside `test_ya` on `retry_rwdi`.
 - **Merge gate:** `fail-checker.py` + `#shard reports == shard_count` before publish/retry.
 

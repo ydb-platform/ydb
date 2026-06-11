@@ -417,9 +417,14 @@ jobs:
           ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
           sparse-checkout: |
             .github/actions
+            .github/config
             .github/scripts/tests/sharding
             .github/scripts/tests/fail-checker.py
             .github/scripts/tests/generate-summary.py
+            .github/scripts/tests/get_test_history.py
+            .github/scripts/tests/error_type_utils.py
+            .github/scripts/tests/templates
+            .github/scripts/analytics/testowners_utils.py
             .github/scripts/tests/comment-pr.py
             .github/scripts/Indexer
       - name: Download shard reports

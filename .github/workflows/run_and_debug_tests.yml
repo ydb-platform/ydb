@@ -335,8 +335,16 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sharding_branch }}
           sparse-checkout: |
+            .github/actions
+            .github/config
             .github/scripts/tests/sharding
             .github/scripts/tests/fail-checker.py
+            .github/scripts/tests/generate-summary.py
+            .github/scripts/tests/get_test_history.py
+            .github/scripts/tests/error_type_utils.py
+            .github/scripts/tests/templates
+            .github/scripts/analytics/testowners_utils.py
+            .github/scripts/Indexer
       - name: Download shard reports
         uses: actions/download-artifact@v4
         with:
@@ -378,6 +386,45 @@ jobs:
           echo "## Merged try 1" >> "$GITHUB_STEP_SUMMARY"
           echo "- Shards: ${#reports[@]}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Failed tests: $failed_count" >> "$GITHUB_STEP_SUMMARY"
+      - name: Setup ydb access
+        if: steps.merge.outcome == 'success'
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Prepare S3 folder prefix
+        if: steps.merge.outcome == 'success'
+        shell: bash
+        run: |
+          branch="${{ needs.prepare.outputs.sharding_branch }}"
+          sanitized="${branch//[^a-zA-Z0-9-]/-}"
+          echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
+      - name: Prepare s3cmd
+        if: steps.merge.outcome == 'success'
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ${{ env.folder_prefix }}
+          build_preset: relwithdebinfo
+      - name: Install publish dependencies
+        if: steps.merge.outcome == 'success'
+        run: python3 -m pip install ydb ydb[yc] codeowners humanize plotly jinja2 pyyaml --quiet
+      - name: Publish merged try1 report
+        if: steps.merge.outcome == 'success'
+        env:
+          BUILD_PRESET: relwithdebinfo
+          BRANCH_NAME: ${{ needs.prepare.outputs.sharding_branch }}
+          PUBLIC_DIR: tmp/results
+          PUBLIC_DIR_URL: ${{ env.S3_URL_PREFIX }}
+          S3_BUCKET_PATH: ${{ env.S3_BUCKET_PATH }}
+          SKIP_GITHUB_PUBLISH: "1"
+          SKIP_FAIL_CHECK: "1"
+        run: |
+          set -eux
+          bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/try_1_report.json
       - name: Upload aggregate debug artifacts
         if: always() && steps.merge.outcome == 'success'
         uses: actions/upload-artifact@v4

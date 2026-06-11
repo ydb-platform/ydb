@@ -11,9 +11,9 @@
 /.cursorindexingignore-personal @ydb-platform/ai-reviewers
 
 /.github/ @ydb-platform/ci
-# Docs-related workflows are owned by the docs team and don't require CI review
-/.github/workflows/docs_* @ydb-platform/docs
-/.github/workflows/ydbdoc-* @ydb-platform/docs
+# Docs-related workflows have no owner: no code owner review required
+/.github/workflows/docs_*
+/.github/workflows/ydbdoc-*
 # Mute lists have no owner: no code owner review required
 /.github/config/muted_ya*
 /.github/docker @ydb-platform/appteam

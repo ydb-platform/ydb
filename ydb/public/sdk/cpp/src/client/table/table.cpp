@@ -1640,9 +1640,10 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
     auto state = std::make_shared<NRetry::TBulkUpsertRetryState>();
     auto opSettings = settings;
     opSettings.RetryRowsState_ = state;
+    const auto startedAt = TInstant::Now();
 
     return Impl_->BulkUpsert(table, std::move(rows), opSettings).Apply(
-        [this, table, settings, retrySettings, state](const TAsyncBulkUpsertResult& f) {
+        [this, table, settings, retrySettings, state, startedAt](const TAsyncBulkUpsertResult& f) {
             const auto result = f.GetValue();
             if (result.IsSuccess()
                 || !NRetry::IsRetryableBulkUpsertFailure(result.GetStatus(), retrySettings.Idempotent_)) {
@@ -1650,8 +1651,16 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
             }
             Y_ABORT_UNLESS(state->HasBackup());
 
+            const auto elapsed = TInstant::Now() - startedAt;
+            if (retrySettings.MaxTimeout_ != TDuration::Max() && elapsed >= retrySettings.MaxTimeout_) {
+                return NThreading::MakeFuture(result);
+            }
+
             auto remaining = retrySettings;
             remaining.MaxRetries(retrySettings.MaxRetries_ - 1);
+            if (retrySettings.MaxTimeout_ != TDuration::Max()) {
+                remaining.MaxTimeout(retrySettings.MaxTimeout_ - elapsed);
+            }
 
             return NRetry::RunUnaryWithRetry(*this, remaining,
                 [this, table, state, settings](TDuration timeout) {

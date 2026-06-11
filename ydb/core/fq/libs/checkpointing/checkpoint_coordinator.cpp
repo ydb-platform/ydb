@@ -60,10 +60,10 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
     YDB_LOG_DEBUG("TEvReadyState, streaming disposition, state load mode, checkpointing period",
-        {"CoordinatorId", CoordinatorId},
-        {"StreamingDisposition", StreamingDisposition},
-        {"StateLoadMode", FederatedQuery::StateLoadMode_Name(StateLoadMode)},
-        {"CheckpointingPeriod", Settings.GetCheckpointingPeriod()});
+        {"coordinatorId", CoordinatorId},
+        {"streamingDisposition", StreamingDisposition},
+        {"stateLoadMode", FederatedQuery::StateLoadMode_Name(StateLoadMode)},
+        {"checkpointingPeriod", Settings.GetCheckpointingPeriod()});
     ControlId = ev->Sender;
 
     for (const auto& task : ev->Get()->Tasks) {
@@ -98,15 +98,15 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
     }
 
     YDB_LOG_DEBUG("AllActors, ActorsToTrigger, ActorsToNotify, ActorsToWaitFor",
-        {"CoordinatorId", CoordinatorId},
-        {"Count", AllActors.size()},
-        {"ActorsToTriggerCount", ActorsToTrigger.size()},
-        {"ActorsToNotifyCount", ActorsToNotify.size()},
-        {"ActorsToWaitForCount", ActorsToWaitFor.size()});
+        {"coordinatorId", CoordinatorId},
+        {"count", AllActors.size()},
+        {"actorsToTriggerCount", ActorsToTrigger.size()},
+        {"actorsToNotifyCount", ActorsToNotify.size()},
+        {"actorsToWaitForCount", ActorsToWaitFor.size()});
 
     if (ActorsToTrigger.empty()) {
         YDB_LOG_DEBUG("No ingress tasks, coordinator was disabled",
-            {"CoordinatorId", CoordinatorId});
+            {"coordinatorId", CoordinatorId});
         StartAllTasks();
         return;
     }
@@ -114,7 +114,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());
 
     YDB_LOG_DEBUG("Send TEvRegisterCoordinatorRequest",
-        {"CoordinatorId", CoordinatorId});
+        {"coordinatorId", CoordinatorId});
     Send(StorageProxy, new TEvCheckpointStorage::TEvRegisterCoordinatorRequest(CoordinatorId), IEventHandle::FlagTrackDelivery);
 }
 
@@ -132,23 +132,23 @@ void TCheckpointCoordinator::UpdateInProgressMetric() {
 
 void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoordinatorResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Got TEvRegisterCoordinatorResponse;",
-        {"CoordinatorId", CoordinatorId},
-        {"Issues", ev->Get()->Issues.ToOneLineString()});
+        {"coordinatorId", CoordinatorId},
+        {"issues", ev->Get()->Issues.ToOneLineString()});
     const auto& issues = ev->Get()->Issues;
     if (issues) {
         YDB_LOG_ERROR("",
-            {"CoordinatorId", CoordinatorId},
-            {"Error", "StorageError: can't register in storage: " + issues.ToOneLineString()});
+            {"coordinatorId", CoordinatorId},
+            {"error", "StorageError: can't register in storage: " + issues.ToOneLineString()});
         ++*Metrics.StorageError;
         OnInternalError("Can't register in storage", issues);
         return;
     }
 
     YDB_LOG_DEBUG("Successfully registered in storage",
-        {"CoordinatorId", CoordinatorId});
+        {"coordinatorId", CoordinatorId});
     YDB_LOG_INFO("Send TEvNewCheckpointCoordinator to actor(s)",
-        {"CoordinatorId", CoordinatorId},
-        {"AllActorsCount", AllActors.size()});
+        {"coordinatorId", CoordinatorId},
+        {"allActorsCount", AllActors.size()});
     for (const auto& [actor, transport] : AllActors) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinator(CoordinatorId.Generation, CoordinatorId.GraphId));
     }
@@ -157,9 +157,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
     if (needCheckpointMetadata) {
         const bool loadGraphDescription = StateLoadMode == FederatedQuery::StateLoadMode::EMPTY && StreamingDisposition.has_from_last_checkpoint(); // Continue mode
         YDB_LOG_INFO("Send TEvGetCheckpointsMetadataRequest; state load; load",
-            {"CoordinatorId", CoordinatorId},
-            {"Mode", FederatedQuery::StateLoadMode_Name(StateLoadMode)},
-            {"Graph", loadGraphDescription});
+            {"coordinatorId", CoordinatorId},
+            {"mode", FederatedQuery::StateLoadMode_Name(StateLoadMode)},
+            {"graph", loadGraphDescription});
         Send(StorageProxy,
             new TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest(
                 CoordinatorId.GraphId,
@@ -197,14 +197,14 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
     const auto event = ev->Get();
     const auto& checkpoints = event->Checkpoints;
     YDB_LOG_DEBUG("Got TEvGetCheckpointsMetadataResponse",
-        {"CoordinatorId", CoordinatorId});
+        {"coordinatorId", CoordinatorId});
     Y_ABORT_UNLESS(!PendingRestoreCheckpoint);
 
     if (event->Issues) {
         ++*Metrics.StorageError;
         YDB_LOG_ERROR("",
-            {"CoordinatorId", CoordinatorId},
-            {"Error", "StorageError: can't get checkpoints to restore: " + event->Issues.ToOneLineString()});
+            {"coordinatorId", CoordinatorId},
+            {"error", "StorageError: can't get checkpoints to restore: " + event->Issues.ToOneLineString()});
         OnInternalError("Can't get checkpoints to restore", event->Issues);
         return;
     }
@@ -226,7 +226,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
     ++*Metrics.StartedFromEmptyCheckpoint;
     CheckpointIdGenerator = std::make_unique<TCheckpointIdGenerator>(CoordinatorId);
     YDB_LOG_INFO("Found no checkpoints to restore from, creating a 'zero' checkpoint",
-        {"CoordinatorId", CoordinatorId});
+        {"coordinatorId", CoordinatorId});
     InitingZeroCheckpoint = true;
     InitCheckpoint();
     ScheduleNextCheckpoint();
@@ -234,8 +234,8 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
 
 void TCheckpointCoordinator::RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint) {
     YDB_LOG_INFO("Will restore from checkpoint",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpoint.CheckpointId});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpoint.CheckpointId});
     PendingRestoreCheckpoint = TPendingRestoreCheckpoint(checkpoint.CheckpointId, checkpoint.Status == ECheckpointStatus::PendingCommit, ActorsToWaitForSet);
     ++*Metrics.RestoredFromSavedCheckpoint;
     for (const auto& [actor, transport] : ActorsToWaitFor) {
@@ -247,14 +247,14 @@ void TCheckpointCoordinator::RestoreFromOwnCheckpoint(const TCheckpointMetadata&
 void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint) {
     RestoringFromForeignCheckpoint = true;
     YDB_LOG_INFO("Will try to restore streaming offsets from checkpoint",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpoint.CheckpointId});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpoint.CheckpointId});
     if (!checkpoint.Graph) {
         ++*Metrics.StorageError;
         const TString message = TStringBuilder() << "StorageError: can't get graph params from checkpoint " << checkpoint.CheckpointId;
         YDB_LOG_INFO("",
-            {"CoordinatorId", CoordinatorId},
-            {"Message", message});
+            {"coordinatorId", CoordinatorId},
+            {"message", message});
         OnInternalError(message);
         return;
     }
@@ -270,8 +270,8 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
 
     if (issues) {
         YDB_LOG_INFO("",
-            {"CoordinatorId", CoordinatorId},
-            {"Issues", issues.ToOneLineString()});
+            {"coordinatorId", CoordinatorId},
+            {"issues", issues.ToOneLineString()});
     }
 
     if (!result) {
@@ -282,9 +282,9 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     }
 
     YDB_LOG_INFO("Going to restore offsets from foreign checkpoint for tasks",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpoint.CheckpointId},
-        {"PlanSize", plan.size()});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpoint.CheckpointId},
+        {"planSize", plan.size()});
 
     PendingRestoreCheckpoint = TPendingRestoreCheckpoint(checkpoint.CheckpointId, false, ActorsToWaitForSet);
     ++*Metrics.RestoredStreamingOffsetsFromCheckpoint;
@@ -293,17 +293,17 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         if (actorIdIt == TaskIdToActor.end()) {
             const TString msg = TStringBuilder() << "ActorId for task id " << taskId << " was not found";
             YDB_LOG_ERROR("",
-                {"CoordinatorId", CoordinatorId},
-                {"Msg", msg});
+                {"coordinatorId", CoordinatorId},
+                {"msg", msg});
             OnInternalError(msg);
             return;
         }
         const auto transportIt = ActorsToWaitFor.find(actorIdIt->second);
         if (transportIt != ActorsToWaitFor.end()) {
             YDB_LOG_DEBUG("Restore offsets from foreign checkpoint for task",
-                {"CoordinatorId", CoordinatorId},
-                {"CheckpointId", checkpoint.CheckpointId},
-                {"TaskId", taskId});
+                {"coordinatorId", CoordinatorId},
+                {"checkpointId", checkpoint.CheckpointId},
+                {"taskId", taskId});
             transportIt->second->EventsQueue.Send(
                 new NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpoint(
                     checkpoint.CheckpointId.SeqNo,
@@ -325,25 +325,25 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
     const auto& status = record.GetStatus();
     const TString& statusName = NYql::NDqProto::TEvRestoreFromCheckpointResult_ERestoreStatus_Name(status);
     YDB_LOG_DEBUG("Got TEvRestoreFromCheckpointResult;",
-        {"CoordinatorId", CoordinatorId},
-        {"Checkpoint", checkpoint},
-        {"TaskId", record.GetTaskId()},
-        {"Status", statusName},
-        {"Issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
+        {"coordinatorId", CoordinatorId},
+        {"checkpoint", checkpoint},
+        {"taskId", record.GetTaskId()},
+        {"status", statusName},
+        {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
 
     if (!PendingRestoreCheckpoint) {
         YDB_LOG_ERROR("Got TEvRestoreFromCheckpointResult but has no PendingRestoreCheckpoint",
-            {"CoordinatorId", CoordinatorId},
-            {"Checkpoint", checkpoint});
+            {"coordinatorId", CoordinatorId},
+            {"checkpoint", checkpoint});
         OnInternalError("Got TEvRestoreFromCheckpointResult but has no PendingRestoreCheckpoint");
         return;
     }
 
     if (PendingRestoreCheckpoint->CheckpointId != checkpoint) {
         YDB_LOG_ERROR("Got TEvRestoreFromCheckpointResult event with unexpected",
-            {"CoordinatorId", CoordinatorId},
-            {"Checkpoint", checkpoint},
-            {"Expected", PendingRestoreCheckpoint->CheckpointId});
+            {"coordinatorId", CoordinatorId},
+            {"checkpoint", checkpoint},
+            {"expected", PendingRestoreCheckpoint->CheckpointId});
         OnInternalError("Got unexpected checkpoint");
         return;
     }
@@ -351,9 +351,9 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
     if (status != NYql::NDqProto::TEvRestoreFromCheckpointResult_ERestoreStatus_OK) {
         auto msg = TStringBuilder() << "Can't restore: " << statusName << ", " << NYql::IssuesFromMessageAsString(record.GetIssues());
         YDB_LOG_ERROR("",
-            {"CoordinatorId", CoordinatorId},
-            {"Checkpoint", checkpoint},
-            {"Msg", msg});
+            {"coordinatorId", CoordinatorId},
+            {"checkpoint", checkpoint},
+            {"msg", msg});
         ++*Metrics.RestoringError;
         OnError(NYql::NDqProto::StatusIds::ABORTED, msg, {});
         return;
@@ -361,9 +361,9 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
 
     PendingRestoreCheckpoint->Acknowledge(ev->Sender);
     YDB_LOG_DEBUG("Task state restored, need more acks",
-        {"CoordinatorId", CoordinatorId},
-        {"Checkpoint", checkpoint},
-        {"NotYetAcknowledgedCount", PendingRestoreCheckpoint->NotYetAcknowledgedCount()});
+        {"coordinatorId", CoordinatorId},
+        {"checkpoint", checkpoint},
+        {"notYetAcknowledgedCount", PendingRestoreCheckpoint->NotYetAcknowledgedCount()});
 
     if (PendingRestoreCheckpoint->GotAllAcknowledges()) {
         if (PendingInit) {
@@ -372,9 +372,9 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
 
         if (PendingRestoreCheckpoint->CommitAfterRestore) {
             YDB_LOG_INFO("State restored, send TEvCommitState to actor(s)",
-                {"CoordinatorId", CoordinatorId},
-                {"Checkpoint", checkpoint},
-                {"ActorsToNotifyCount", ActorsToNotify.size()});
+                {"coordinatorId", CoordinatorId},
+                {"checkpoint", checkpoint},
+                {"actorsToNotifyCount", ActorsToNotify.size()});
             PendingCommitCheckpoints.emplace(checkpoint, TPendingCheckpoint(ActorsToNotifySet, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT));
             UpdateInProgressMetric();
             for (const auto& [actor, transport] : ActorsToNotify) {
@@ -396,8 +396,8 @@ void TCheckpointCoordinator::InitCheckpoint() {
     Y_ABORT_UNLESS(CheckpointIdGenerator);
     const auto nextCheckpointId = CheckpointIdGenerator->NextId();
     YDB_LOG_INFO("Registering new checkpoint in storage",
-        {"CoordinatorId", CoordinatorId},
-        {"NextCheckpointId", nextCheckpointId});
+        {"coordinatorId", CoordinatorId},
+        {"nextCheckpointId", nextCheckpointId});
 
     auto checkpointType = NYql::NDqProto::CHECKPOINT_TYPE_INCREMENT_OR_SNAPSHOT;
     if (++CheckpointingSnapshotRotationIndex > CheckpointingSnapshotRotationPeriod) {
@@ -422,14 +422,14 @@ void TCheckpointCoordinator::InitCheckpoint() {
 
 void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvScheduleCheckpointing::TPtr&) {
     YDB_LOG_DEBUG("Got TEvScheduleCheckpointing",
-        {"CoordinatorId", CoordinatorId});
+        {"coordinatorId", CoordinatorId});
     ScheduleNextCheckpoint();
     const auto checkpointsInFly = PendingCheckpoints.size() + PendingCommitCheckpoints.size();
     if (checkpointsInFly >= Settings.GetMaxInflight() || (InitingZeroCheckpoint && !FailedZeroCheckpoint)) {
         YDB_LOG_WARN("Skip schedule checkpoint event since inflight checkpoint limit exceeded",
-            {"CoordinatorId", CoordinatorId},
-            {"Current", checkpointsInFly},
-            {"Limit", Settings.GetMaxInflight()});
+            {"coordinatorId", CoordinatorId},
+            {"current", checkpointsInFly},
+            {"limit", Settings.GetMaxInflight()});
         Metrics.SkippedDueToInFlightLimit->Inc();
         ++SkippedDueToInFlightLimitCounter;
         return;
@@ -444,14 +444,14 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
     const auto& checkpointId = ev->Get()->CheckpointId;
     const auto& issues = ev->Get()->Issues;
     YDB_LOG_DEBUG("Got TEvCreateCheckpointResponse",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId});
 
     auto cancelCheckpoint = [&](const TString& str) {
         YDB_LOG_ERROR("",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId},
-            {"Str", str});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId},
+            {"str", str});
         PendingCheckpoints.erase(checkpointId);
         FailedZeroCheckpoint = InitingZeroCheckpoint;
         UpdateInProgressMetric();
@@ -485,9 +485,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
         const auto it = PendingCheckpoints.find(checkpointId);
         if (it == PendingCheckpoints.end()) {
             YDB_LOG_ERROR("Unknown checkpoint",
-                {"CoordinatorId", CoordinatorId},
-                {"CheckpointId", checkpointId},
-                {"Response", checkpointId});
+                {"coordinatorId", CoordinatorId},
+                {"checkpointId", checkpointId},
+                {"response", checkpointId});
             return;
         }
         auto& checkpoint = it->second;
@@ -499,9 +499,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
 
 void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId, NYql::NDqProto::ECheckpointType type) {
     YDB_LOG_INFO("Checkpoint successfully created, going to inject barriers to actor(s)",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId},
-        {"ActorsToTriggerCount", ActorsToTrigger.size()});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId},
+        {"actorsToTriggerCount", ActorsToTrigger.size()});
     for (const auto& [toTrigger, transport] : ActorsToTrigger) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, type));
     }
@@ -512,7 +512,7 @@ void TCheckpointCoordinator::InjectCheckpoint(const TCheckpointId& checkpointId,
 void TCheckpointCoordinator::StartAllTasks() {
     if (!GraphIsRunning) {
         YDB_LOG_INFO("Send TEvRun to all actors",
-            {"CoordinatorId", CoordinatorId});
+            {"coordinatorId", CoordinatorId});
         for (const auto& [actor, transport] : AllActors) {
             transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
         }
@@ -533,11 +533,11 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
     TCheckpointId checkpointId(checkpointProto.GetGeneration(), checkpointProto.GetId());
 
     YDB_LOG_DEBUG("Got TEvSaveTaskStateResult; task",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId},
-        {"TaskId", proto.GetTaskId()},
-        {"Status", statusName},
-        {"Size", proto.GetStateSizeBytes()});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId},
+        {"taskId", proto.GetTaskId()},
+        {"status", statusName},
+        {"size", proto.GetStateSizeBytes()});
 
     const auto it = PendingCheckpoints.find(checkpointId);
     if (it == PendingCheckpoints.end()) {
@@ -548,28 +548,28 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
     if (status == NYql::NDqProto::TEvSaveTaskStateResult::OK) {
         checkpoint.Acknowledge(ev->Sender, proto.GetStateSizeBytes());
         YDB_LOG_DEBUG("Task state saved, need more acks",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId},
-            {"NotYetAcknowledgedCount", checkpoint.NotYetAcknowledgedCount()});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId},
+            {"notYetAcknowledgedCount", checkpoint.NotYetAcknowledgedCount()});
     } else {
         checkpoint.Abort(ev->Sender);
         YDB_LOG_ERROR("StorageError: can't save node state, aborting checkpoint",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId});
         ++*Metrics.StorageError;
     }
     if (checkpoint.GotAllAcknowledges()) {
         if (checkpoint.GetStats().Aborted) {
             YDB_LOG_ERROR("Got all acks for aborted checkpoint, aborting in storage",
-                {"CoordinatorId", CoordinatorId},
-                {"CheckpointId", checkpointId});
+                {"coordinatorId", CoordinatorId},
+                {"checkpointId", checkpointId});
             CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod;  // Next checkpoint is snapshot.
             Send(StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"), IEventHandle::FlagTrackDelivery);
             FailedZeroCheckpoint = InitingZeroCheckpoint;
         } else {
             YDB_LOG_INFO("Got all acks, changing checkpoint status to 'PendingCommit'",
-                {"CoordinatorId", CoordinatorId},
-                {"CheckpointId", checkpointId});
+                {"coordinatorId", CoordinatorId},
+                {"checkpointId", checkpointId});
             Send(StorageProxy, new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, checkpoint.GetStats().StateSize), IEventHandle::FlagTrackDelivery);
             if (InitingZeroCheckpoint) {
                 Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
@@ -582,21 +582,21 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
     const auto& checkpointId = ev->Get()->CheckpointId;
     const auto issues = ev->Get()->Issues;
     YDB_LOG_DEBUG("Got TEvSetCheckpointPendingCommitStatusResponse",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId});
     const auto it = PendingCheckpoints.find(checkpointId);
     if (it == PendingCheckpoints.end()) {
         YDB_LOG_WARN("Got TEvSetCheckpointPendingCommitStatusResponse for checkpoint but it is not in PendingCheckpoints",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId});
         return;
     }
 
     if (issues) {
         YDB_LOG_ERROR("StorageError: can't change checkpoint status",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId},
-            {"Issues", issues.ToString()});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId},
+            {"issues", issues});
         ++*Metrics.StorageError;
         PendingCheckpoints.erase(it);
         FailedZeroCheckpoint = InitingZeroCheckpoint;
@@ -604,9 +604,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
     }
 
     YDB_LOG_INFO("Checkpoint status changed to 'PendingCommit', committing states to actor(s)",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId},
-        {"ActorsToNotifyCount", ActorsToNotify.size()});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId},
+        {"actorsToNotifyCount", ActorsToNotify.size()});
     PendingCommitCheckpoints.emplace(checkpointId, TPendingCheckpoint(ActorsToNotifySet, it->second.GetType(), it->second.GetStats()));
     PendingCheckpoints.erase(it);
     UpdateInProgressMetric();
@@ -623,28 +623,28 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvStateCommi
     const auto& checkpointPb = ev->Get()->Record.GetCheckpoint();
     TCheckpointId checkpointId(checkpointPb.GetGeneration(), checkpointPb.GetId());
     YDB_LOG_DEBUG("Got TEvStateCommitted;",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId},
-        {"Task", ev->Get()->Record.GetTaskId()});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId},
+        {"task", ev->Get()->Record.GetTaskId()});
     const auto it = PendingCommitCheckpoints.find(checkpointId);
     if (it == PendingCommitCheckpoints.end()) {
         YDB_LOG_WARN("Got TEvStateCommitted for checkpoint but it is not in PendingCommitCheckpoints",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId});
         return;
     }
 
     auto& checkpoint = it->second;
     checkpoint.Acknowledge(ev->Sender);
     YDB_LOG_DEBUG("State committed, need more acks",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId},
-        {"Sender", ev->Sender.ToString()},
-        {"NotYetAcknowledgedCount", checkpoint.NotYetAcknowledgedCount()});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId},
+        {"sender", ev->Sender},
+        {"notYetAcknowledgedCount", checkpoint.NotYetAcknowledgedCount()});
     if (checkpoint.GotAllAcknowledges()) {
         YDB_LOG_INFO("Got all acks, changing checkpoint status to 'Completed'",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId});
         const auto& stats = checkpoint.GetStats();
         auto durationMs = (TInstant::Now() - stats.CreatedAt).MilliSeconds();
         Metrics.LastCheckpointBarrierDeliveryTimeMillis->Set(durationMs);
@@ -657,10 +657,10 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvState::TPt
     auto& state = ev->Get()->Record;
     ui64 taskId = state.GetTaskId();
     YDB_LOG_DEBUG("Got TEvState from, task id",
-        {"CoordinatorId", CoordinatorId},
-        {"Sender", ev->Sender},
-        {"TaskId", taskId},
-        {"State", state.GetState()});
+        {"coordinatorId", CoordinatorId},
+        {"sender", ev->Sender},
+        {"taskId", taskId},
+        {"state", state.GetState()});
 
     if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
         FinishedTasks.insert(taskId);
@@ -670,14 +670,13 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvState::TPt
 void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCompleteCheckpointResponse::TPtr& ev) {
     const auto& checkpointId = ev->Get()->CheckpointId;
     YDB_LOG_DEBUG("Got TEvCompleteCheckpointResponse",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId});
     const auto it = PendingCommitCheckpoints.find(checkpointId);
     if (it == PendingCommitCheckpoints.end()) {
         YDB_LOG_WARN("Got TEvCompleteCheckpointResponse but related checkpoint is not in progress;",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId},
-            {"CheckpointId", checkpointId});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId});
         return;
     }
     const auto& issues = ev->Get()->Issues;
@@ -690,14 +689,14 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCompleteCheck
         Metrics.CheckpointSizeBytes->Collect(stats.StateSize);
         ++*Metrics.Completed;
         YDB_LOG_INFO("Checkpoint completed",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId});
     } else {
         ++*Metrics.StorageError;
         YDB_LOG_ERROR("StorageError: can't change checkpoint status",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId},
-            {"Issues'", issues.ToString()});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId},
+            {"issues'", issues});
     }
     PendingCommitCheckpoints.erase(it);
     UpdateInProgressMetric();
@@ -706,19 +705,19 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCompleteCheck
 void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvAbortCheckpointResponse::TPtr& ev) {
     const auto& checkpointId = ev->Get()->CheckpointId;
     YDB_LOG_DEBUG("Got TEvAbortCheckpointResponse",
-        {"CoordinatorId", CoordinatorId},
-        {"CheckpointId", checkpointId});
+        {"coordinatorId", CoordinatorId},
+        {"checkpointId", checkpointId});
     const auto& issues = ev->Get()->Issues;
     if (issues) {
         YDB_LOG_ERROR("StorageError: can't abort",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId},
-            {"Checkpoint", issues.ToString()});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId},
+            {"checkpoint", issues});
         ++*Metrics.StorageError;
     } else {
         YDB_LOG_WARN("Checkpoint aborted",
-            {"CoordinatorId", CoordinatorId},
-            {"CheckpointId", checkpointId});
+            {"coordinatorId", CoordinatorId},
+            {"checkpointId", checkpointId});
         ++*Metrics.Aborted;
     }
     PendingCheckpoints.erase(checkpointId);
@@ -737,8 +736,8 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRe
 
 void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     YDB_LOG_INFO("Handle disconnected node",
-        {"CoordinatorId", CoordinatorId},
-        {"NodeId", ev->Get()->NodeId});
+        {"coordinatorId", CoordinatorId},
+        {"nodeId", ev->Get()->NodeId});
 
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
@@ -747,8 +746,8 @@ void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeDisconnecte
 
 void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     YDB_LOG_DEBUG("Handle connected node",
-        {"CoordinatorId", CoordinatorId},
-        {"NodeId", ev->Get()->NodeId});
+        {"coordinatorId", CoordinatorId},
+        {"nodeId", ev->Get()->NodeId});
 
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
@@ -764,13 +763,13 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) 
     auto it = TaskIds.find(ev->Sender);
     if (it != TaskIds.end() && FinishedTasks.contains(it->second)) {
         YDB_LOG_DEBUG("Ignore undelivered from finished CAs",
-            {"CoordinatorId", CoordinatorId});
+            {"coordinatorId", CoordinatorId});
         return;
     }
 
-    YDB_LOG_DEBUG("",
-        {"CoordinatorId", CoordinatorId},
-        {"Message", message});
+    YDB_LOG_DEBUG("Dump coordinatorId, message",
+        {"coordinatorId", CoordinatorId},
+        {"message", message});
     if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
         actorIt->second->EventsQueue.HandleUndelivered(ev);
     }
@@ -779,7 +778,7 @@ void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) 
 
 void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&) {
     YDB_LOG_DEBUG("Got TEvRunGraph",
-        {"CoordinatorId", CoordinatorId});
+        {"coordinatorId", CoordinatorId});
     Y_DEBUG_ABORT_UNLESS(InitingZeroCheckpoint);
     Y_DEBUG_ABORT_UNLESS(!FailedZeroCheckpoint);
     InitingZeroCheckpoint = false;
@@ -788,7 +787,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointCoordinator::TEvRunGraph:
 
 void TCheckpointCoordinator::PassAway() {
     YDB_LOG_DEBUG("PassAway",
-        {"CoordinatorId", CoordinatorId});
+        {"coordinatorId", CoordinatorId});
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }

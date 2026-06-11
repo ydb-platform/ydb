@@ -225,10 +225,10 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         if (Info->ClusterStateGeneration < clusterStateGeneration ||
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             YDB_LOG_DEBUG("StateStorageProxy TEvNodeWardenNotifyConfigMismatch",
-                {"Info->ClusterStateGeneration", Info->ClusterStateGeneration},
-                {"clusterStateGeneration", clusterStateGeneration},
-                {"Info->ClusterStateGuid", Info->ClusterStateGuid},
-                {"clusterStateGuid", clusterStateGuid});
+                {"clusterStateGeneration", Info->ClusterStateGeneration},
+                {"msgGeneration", clusterStateGeneration},
+                {"clusterStateGuid", Info->ClusterStateGuid},
+                {"msgGuid", clusterStateGuid});
             if (NotifyRingGroupProxy) {
                 Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid), 0, SourceCookie);
             }
@@ -620,7 +620,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleUpdateSig(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         const ui32 node = ev->Get()->NodeId;
-        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig node",
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig",
             {"ringGroup", RingGroupIndex},
             {"disconnectedNode", node});
         MergeSigNodeError(node);

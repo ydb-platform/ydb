@@ -10,7 +10,6 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>

@@ -10,14 +10,14 @@
 
 namespace {
 
-    std::shared_ptr<NMVP::ILinkSource> MakeTestLinkSource(NMVP::TSupportLinkEntryConfig config, const NMVP::TMetaSettings& settings) {
+    std::shared_ptr<NMVP::NSupportLinks::ILinkSource> MakeTestLinkSource(NMVP::TSupportLinkEntryConfig config, const NMVP::TMetaSettings& settings) {
         if (config.GetSource() == "mock/sync") {
             return NMVP::NTest::MakeMockLinkSourceSync(std::move(config));
         }
         if (config.GetSource() == "mock/async") {
             return NMVP::NTest::MakeMockLinkSourceAsync(std::move(config));
         }
-        return NMVP::MakeLinkSource(std::move(config), settings);
+        return NMVP::NSupportLinks::MakeLinkSource(std::move(config), settings);
     }
 
 } // namespace
@@ -42,12 +42,14 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
             Send(SelfId(), new NMVP::THandlerActorYdb::TEvPrivate::TEvDataQueryResult(std::move(Result)));
         }
 
-        std::unique_ptr<NMVP::TSupportLinksResolver> CreateSupportLinksResolver() override {
-            return std::make_unique<NMVP::TSupportLinksResolver>(NMVP::TSupportLinksResolver::TParams{
-                .EntityTypes = EntityTypes,
+        std::unique_ptr<NMVP::NSupportLinks::TSupportLinksResolver> CreateSupportLinksResolver() override {
+            return std::make_unique<NMVP::NSupportLinks::TSupportLinksResolver>(NMVP::NSupportLinks::TSupportLinksResolver::TParams{
                 .Settings = &Settings,
-                .ClusterInfo = ClusterInfo,
-                .UrlParameters = Request.Parameters.UrlParameters,
+                .RequestContext = {
+                    .Identities = EntityIdentities,
+                    .ClusterInfo = ClusterInfo,
+                    .AdditionalRequestParams = AdditionalRequestParams,
+                },
                 .Owner = SelfId(),
                 .HttpProxyId = HttpProxyId,
                 .LinkSourceFactory = MakeTestLinkSource,
@@ -67,14 +69,6 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
             Settings.SupportLinks.DatabaseLinks.reserve(config.GetDatabase().size());
             for (int i = 0; i < config.GetDatabase().size(); ++i) {
                 Settings.SupportLinks.DatabaseLinks.push_back(config.GetDatabase(i));
-            }
-            Settings.SupportLinks.NodeLinks.reserve(config.GetNode().size());
-            for (int i = 0; i < config.GetNode().size(); ++i) {
-                Settings.SupportLinks.NodeLinks.push_back(config.GetNode(i));
-            }
-            Settings.SupportLinks.HostLinks.reserve(config.GetHost().size());
-            for (int i = 0; i < config.GetHost().size(); ++i) {
-                Settings.SupportLinks.HostLinks.push_back(config.GetHost(i));
             }
         }
 
@@ -158,50 +152,6 @@ columns {
         cluster->SetSource(TString(source));
         cluster->SetTitle("mock");
         cluster->SetUrl("mock://source");
-        return cfg;
-    }
-
-    static NMVP::TSupportLinksConfig MakeNodeConfig(TStringBuf source) {
-        NMVP::TSupportLinksConfig cfg;
-        auto* node = cfg.AddNode();
-        node->SetSource(TString(source));
-        node->SetTitle("mock");
-        node->SetUrl("mock://source");
-        return cfg;
-    }
-
-    static NMVP::TSupportLinksConfig MakeHostConfig(TStringBuf source) {
-        NMVP::TSupportLinksConfig cfg;
-        auto* host = cfg.AddHost();
-        host->SetSource(TString(source));
-        host->SetTitle("mock");
-        host->SetUrl("mock://source");
-        return cfg;
-    }
-
-    static NMVP::TSupportLinksConfig MakeClusterDatabaseNodeAndHostConfig(TStringBuf source) {
-        NMVP::TSupportLinksConfig cfg;
-
-        auto* cluster = cfg.AddCluster();
-        cluster->SetSource(TString(source));
-        cluster->SetTitle("mock");
-        cluster->SetUrl("mock://source");
-
-        auto* database = cfg.AddDatabase();
-        database->SetSource(TString(source));
-        database->SetTitle("mock");
-        database->SetUrl("mock://source");
-
-        auto* node = cfg.AddNode();
-        node->SetSource(TString(source));
-        node->SetTitle("mock");
-        node->SetUrl("mock://source");
-
-        auto* host = cfg.AddHost();
-        host->SetSource(TString(source));
-        host->SetTitle("mock");
-        host->SetUrl("mock://source");
-
         return cfg;
     }
 
@@ -298,82 +248,6 @@ columns {
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
         AssertMockResponse(response->Response->Body);
-    }
-
-    Y_UNIT_TEST(UsesNodeLinksWhenNodeIsRequested) {
-        TTestActorRuntime runtime;
-        TAutoPtr<NActors::IEventHandle> handle;
-
-        auto sender = runtime.AllocateEdgeActor();
-        TSupportLinksTestContext context(MakeNodeConfig("mock/sync"));
-
-        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&node=static-1");
-        auto result = MakeClusterInfoResult();
-        context.RegisterGet(runtime, sender, request, std::move(result));
-
-        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
-        AssertMockResponse(response->Response->Body);
-    }
-
-    Y_UNIT_TEST(UsesHostLinksWhenHostIsRequested) {
-        TTestActorRuntime runtime;
-        TAutoPtr<NActors::IEventHandle> handle;
-
-        auto sender = runtime.AllocateEdgeActor();
-        TSupportLinksTestContext context(MakeHostConfig("mock/sync"));
-
-        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&host=storage-1.example.net");
-        auto result = MakeClusterInfoResult();
-        context.RegisterGet(runtime, sender, request, std::move(result));
-
-        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
-        AssertMockResponse(response->Response->Body);
-    }
-
-    Y_UNIT_TEST(NodeAndHostLinksAreCombinedWithoutMixingClusterOrDatabaseLinks) {
-        TTestActorRuntime runtime;
-        TAutoPtr<NActors::IEventHandle> handle;
-
-        auto sender = runtime.AllocateEdgeActor();
-        TSupportLinksTestContext context(MakeClusterDatabaseNodeAndHostConfig("mock/sync"));
-
-        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&node=static-1&host=storage-1.example.net");
-        auto result = MakeClusterInfoResult();
-        context.RegisterGet(runtime, sender, request, std::move(result));
-
-        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
-        NJson::TJsonReaderConfig jsonReaderConfig;
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(response->Response->Body, &jsonReaderConfig, &json));
-        UNIT_ASSERT(json.Has("links"));
-        UNIT_ASSERT_VALUES_EQUAL(json["links"].GetArray().size(), 4);
-        UNIT_ASSERT(!json.Has("errors"));
-    }
-
-    Y_UNIT_TEST(ReturnsBadRequestWhenDatabaseIsSpecifiedTogetherWithNodeOrHost) {
-        TTestActorRuntime runtime;
-        TAutoPtr<NActors::IEventHandle> handle;
-
-        auto sender = runtime.AllocateEdgeActor();
-        TSupportLinksTestContext context(MakeClusterDatabaseNodeAndHostConfig("mock/sync"));
-
-        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test&node=static-1");
-        auto result = MakeClusterInfoResult();
-        context.RegisterGet(runtime, sender, request, std::move(result));
-
-        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "400");
-
-        NJson::TJsonReaderConfig jsonReaderConfig;
-        NJson::TJsonValue json;
-        UNIT_ASSERT(NJson::ReadJsonTree(response->Response->Body, &jsonReaderConfig, &json));
-        UNIT_ASSERT(json.Has("errors"));
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "meta");
-        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("Parameter 'database' must not be specified together with 'node' or 'host'"));
     }
 
     Y_UNIT_TEST(ReturnsEmptyLinksForValidRequestWhenNoSupportLinksConfigured) {

@@ -5,17 +5,7 @@
 
 #include <util/generic/yexception.h>
 
-namespace NMVP {
-
-namespace {
-
-void ValidateSingleSourceOnlyLogging(TStringBuf sectionName, const TSupportLinkEntryConfig& config) {
-    if (config.GetSource() != "grafana/logging") {
-        ythrow yexception() << "only source=grafana/logging is supported in support_links." << sectionName;
-    }
-}
-
-} // namespace
+namespace NMVP::NSupportLinks {
 
 void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const TMetaSettings& metaSettings) {
     for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
@@ -25,19 +15,9 @@ void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const T
         ValidateLinkSourceConfig(supportLinks.GetDatabase(i), metaSettings);
     }
     for (int i = 0; i < supportLinks.GetNode().size(); ++i) {
-        if (supportLinks.GetNode(i).GetSource().empty()) {
-            ValidateLinkSourceConfig(supportLinks.GetNode(i), metaSettings);
-            continue;
-        }
-        ValidateSingleSourceOnlyLogging("node", supportLinks.GetNode(i));
         ValidateLinkSourceConfig(supportLinks.GetNode(i), metaSettings);
     }
     for (int i = 0; i < supportLinks.GetHost().size(); ++i) {
-        if (supportLinks.GetHost(i).GetSource().empty()) {
-            ValidateLinkSourceConfig(supportLinks.GetHost(i), metaSettings);
-            continue;
-        }
-        ValidateSingleSourceOnlyLogging("host", supportLinks.GetHost(i));
         ValidateLinkSourceConfig(supportLinks.GetHost(i), metaSettings);
     }
 }
@@ -79,4 +59,4 @@ std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config, cons
     ythrow yexception() << "unsupported support_links source: " << config.GetSource();
 }
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

@@ -228,7 +228,7 @@ void TMVP::InitMeta() {
     RegisterMetaHandler(
         httpIncomingProxyId,
         "/meta/support_links",
-        ActorSystem.Register(new NMVP::TMetaSupportLinksHandlerActor(HttpProxyId, MetaLocation, MetaSettings)), 2
+        ActorSystem.Register(new NMVP::TMetaSupportLinksHandlerActor(HttpProxyId, MetaLocation, MetaSettings))
     );
 
     RegisterMetaHandler(

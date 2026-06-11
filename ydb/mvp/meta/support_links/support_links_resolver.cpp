@@ -1,82 +1,46 @@
 #include "support_links_resolver.h"
 
+#include "entity.h"
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 
 #include <util/generic/yexception.h>
 #include <utility>
 
-namespace NMVP {
-
-namespace {
-
-struct TBuiltSource {
-    std::shared_ptr<ILinkSource> Source;
-    TSupportLinksResolver::EEntityType EntityType = TSupportLinksResolver::EEntityType::Cluster;
-};
-
-const TVector<TSupportLinkEntryConfig>& GetLinkConfigs(
-    const TSupportLinksSettings& settings,
-    TSupportLinksResolver::EEntityType entityType)
-{
-    switch (entityType) {
-        case TSupportLinksResolver::EEntityType::Cluster:
-            return settings.ClusterLinks;
-        case TSupportLinksResolver::EEntityType::Database:
-            return settings.DatabaseLinks;
-        case TSupportLinksResolver::EEntityType::Node:
-            return settings.NodeLinks;
-        case TSupportLinksResolver::EEntityType::Host:
-            return settings.HostLinks;
-    }
-    ythrow yexception() << "unsupported support links entity type";
-}
-
-TVector<TBuiltSource> BuildSources(const TSupportLinksResolver::TParams& params) {
-    if (!params.Settings) {
-        ythrow yexception() << "support links settings are required";
-    }
-    TVector<TBuiltSource> linkSources;
-    for (const auto entityType : params.EntityTypes) {
-        const auto& linkConfigs = GetLinkConfigs(params.Settings->SupportLinks, entityType);
-        for (const auto& linkConfig : linkConfigs) {
-            linkSources.push_back(TBuiltSource{
-                .Source = params.LinkSourceFactory(linkConfig, *params.Settings),
-                .EntityType = entityType,
-            });
-        }
-    }
-    return linkSources;
-}
-
-} // namespace
+namespace NMVP::NSupportLinks {
 
 TSupportLinksResolver::TSupportLinksResolver(TParams params)
-    : ClusterInfo(std::move(params.ClusterInfo))
-    , UrlParameters(std::move(params.UrlParameters))
+    : ClusterInfo(std::move(params.RequestContext.ClusterInfo))
+    , AdditionalRequestParams(std::move(params.RequestContext.AdditionalRequestParams))
     , Owner(std::move(params.Owner))
     , HttpProxyId(std::move(params.HttpProxyId))
 {
-    TVector<TBuiltSource> builtSources = BuildSources(params);
-    Sources.reserve(builtSources.size());
-    SourceEntityTypes.reserve(builtSources.size());
-    for (auto& builtSource : builtSources) {
-        Sources.push_back(std::move(builtSource.Source));
-        SourceEntityTypes.push_back(builtSource.EntityType);
+    if (!params.Settings) {
+        ythrow yexception() << "support links settings are required";
+    }
+    for (const auto& identity : params.RequestContext.Identities) {
+        const auto& linkConfigs = GetEntityLinkConfigs(params.Settings->SupportLinks, identity.Type);
+        Sources.reserve(Sources.size() + linkConfigs.size());
+        SourceIdentities.reserve(SourceIdentities.size() + linkConfigs.size());
+        for (const auto& linkConfig : linkConfigs) {
+            Sources.push_back(params.LinkSourceFactory(linkConfig, *params.Settings));
+            SourceIdentities.push_back(identity);
+        }
     }
 }
 
-ILinkSource::TLinkResolveInput TSupportLinksResolver::MakeResolveInput() const {
+ILinkSource::TLinkResolveInput TSupportLinksResolver::MakeResolveInput(size_t place) const {
     return ILinkSource::TLinkResolveInput{
         .ClusterInfo = ClusterInfo,
-        .UrlParameters = UrlParameters,
+        .AdditionalRequestParams = AdditionalRequestParams,
+        .Identity = SourceIdentities[place],
     };
 }
 
 ILinkSource::TResolveContext TSupportLinksResolver::MakeResolveContext(size_t place) const {
     return ILinkSource::TResolveContext{
         .Place = place,
-        .EntityType = SourceEntityTypes[place],
         .Owner = Owner,
         .HttpProxyId = HttpProxyId,
     };
@@ -90,7 +54,7 @@ void TSupportLinksResolver::ResetState() {
 }
 
 TResolveOutput TSupportLinksResolver::ResolveSource(size_t place) const {
-    return Sources[place]->Resolve(MakeResolveInput(), MakeResolveContext(place));
+    return Sources[place]->Resolve(MakeResolveInput(place), MakeResolveContext(place));
 }
 
 void TSupportLinksResolver::SaveSourceOutput(size_t place, TResolveOutput sourceOutput) {
@@ -98,7 +62,7 @@ void TSupportLinksResolver::SaveSourceOutput(size_t place, TResolveOutput source
     SourceOutputs[place] = std::move(sourceOutput);
 }
 
-void TSupportLinksResolver::ApplySourceResponse(size_t place, const NSupportLinks::TEvPrivate::TEvSourceResponse& response) {
+void TSupportLinksResolver::ApplySourceResponse(size_t place, const TEvPrivate::TEvSourceResponse& response) {
     TResolveOutput& slot = SourceOutputs[place];
     slot.Links = response.Links;
     slot.Errors.insert(slot.Errors.end(), response.Errors.begin(), response.Errors.end());
@@ -112,7 +76,7 @@ void TSupportLinksResolver::HandleSourceTimeout(size_t place, NActors::TActorSys
         Owner,
         new NActors::TEvents::TEvPoisonPill()));
     SourceActors[place].Clear();
-    sourceOutput.Errors.emplace_back(NSupportLinks::TSupportError{
+    sourceOutput.Errors.emplace_back(TSupportError{
         .Source = sourceOutput.Name,
         .Message = "Timeout while resolving support links source"
     });
@@ -127,7 +91,7 @@ void TSupportLinksResolver::Start() {
     }
 }
 
-void TSupportLinksResolver::OnSourceResponse(const NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr& event) {
+void TSupportLinksResolver::OnSourceResponse(const TEvPrivate::TEvSourceResponse::TPtr& event) {
     const auto* msg = event->Get();
     if (msg->Place >= SourceOutputs.size()) {
         return;
@@ -158,4 +122,4 @@ const TVector<TResolveOutput>& TSupportLinksResolver::GetSourceOutput() const {
     return SourceOutputs;
 }
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

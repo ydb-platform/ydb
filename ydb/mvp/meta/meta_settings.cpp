@@ -7,36 +7,6 @@
 
 namespace NMVP {
 
-namespace {
-
-void ValidateGrafanaLoggingLabel(TStringBuf name, TStringBuf value, bool isSet) {
-    if (isSet && value.empty()) {
-        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.grafana.logging.labels." << name << " must be non-empty";
-    }
-}
-
-void ApplyGrafanaLoggingSettings(
-    const NMvp::NMeta::TMetaConfig::TGrafanaConfig& grafanaConfig,
-    TSupportLinksSettings& supportLinksSettings)
-{
-    if (!grafanaConfig.HasLogging() || !grafanaConfig.GetLogging().HasLabels()) {
-        return;
-    }
-
-    const auto& labels = grafanaConfig.GetLogging().GetLabels();
-    ValidateGrafanaLoggingLabel("cluster", labels.GetCluster(), labels.HasCluster());
-    ValidateGrafanaLoggingLabel("database", labels.GetDatabase(), labels.HasDatabase());
-    ValidateGrafanaLoggingLabel("node", labels.GetNode(), labels.HasNode());
-    ValidateGrafanaLoggingLabel("host", labels.GetHost(), labels.HasHost());
-
-    supportLinksSettings.GrafanaLogging.ClusterLabel = labels.GetCluster();
-    supportLinksSettings.GrafanaLogging.DatabaseLabel = labels.GetDatabase();
-    supportLinksSettings.GrafanaLogging.NodeLabel = labels.GetNode();
-    supportLinksSettings.GrafanaLogging.HostLabel = labels.GetHost();
-}
-
-} // namespace
-
 TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EAccessServiceType accessServiceType) {
     TMetaSettings settings;
     settings.MetaApiEndpoint = config.GetMetaApiEndpoint();
@@ -52,12 +22,11 @@ TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EA
 
     if (config.HasGrafana()) {
         settings.SupportLinks.GrafanaEndpoint = config.GetGrafana().GetEndpoint();
-        ApplyGrafanaLoggingSettings(config.GetGrafana(), settings.SupportLinks);
     }
 
     if (config.HasSupportLinks()) {
         const auto& supportLinks = config.GetSupportLinks();
-        ValidateSupportLinksConfig(supportLinks, settings);
+        NSupportLinks::ValidateSupportLinksConfig(supportLinks, settings);
         settings.SupportLinks.ClusterLinks.reserve(supportLinks.GetCluster().size());
         for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
             settings.SupportLinks.ClusterLinks.push_back(supportLinks.GetCluster(i));

@@ -98,7 +98,7 @@ class MetaSupportLinksEnv(BaseHttpEnv):
         super().__init__(meta_service)
         self.meta_service = meta_service
 
-    def get_support_links(self, cluster_name=None, database=None, node=None, host=None):
+    def get_support_links(self, cluster_name=None, database=None, node=None, host=None, extra_params=None):
         params = {}
         if cluster_name is not None:
             params["cluster"] = cluster_name
@@ -108,19 +108,33 @@ class MetaSupportLinksEnv(BaseHttpEnv):
             params["node"] = node
         if host is not None:
             params["host"] = host
+        if extra_params:
+            params.update(extra_params)
         return self.get(
             "/meta/support_links",
             params=params,
             timeout=10,
         )
 
-    def get_ok_support_links_payload(self, cluster_name=None, database=None, node=None, host=None):
-        response = self.get_support_links(cluster_name=cluster_name, database=database, node=node, host=host)
+    def get_ok_support_links_payload(self, cluster_name=None, database=None, node=None, host=None, extra_params=None):
+        response = self.get_support_links(
+            cluster_name=cluster_name,
+            database=database,
+            node=node,
+            host=host,
+            extra_params=extra_params,
+        )
         assert response.status_code == 200, response.text
         return response.json()
 
-    def get_bad_request_support_links_payload(self, cluster_name=None, database=None, node=None, host=None):
-        response = self.get_support_links(cluster_name=cluster_name, database=database, node=node, host=host)
+    def get_bad_request_support_links_payload(self, cluster_name=None, database=None, node=None, host=None, extra_params=None):
+        response = self.get_support_links(
+            cluster_name=cluster_name,
+            database=database,
+            node=node,
+            host=host,
+            extra_params=extra_params,
+        )
         assert response.status_code == 400, response.text
         return response.json()
 

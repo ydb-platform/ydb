@@ -57,9 +57,6 @@ runs:
         case "$BUILD_PRESET" in
           relwithdebinfo)
             ;;
-          profile)
-            folder+="-profile"
-            ;;
           debug)
             folder+="-debug"
             ;;

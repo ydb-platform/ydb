@@ -1187,6 +1187,7 @@ private:
                             return TMaybe<TInstant>{};
                         }
                     }();
+                    Cerr << (TStringBuilder() << TInstant::Now() << " [TODO][" << StageId << "][" << TaskId << "] Got new output watermark: " << watermark << "\n");
                     if (watermark) {
                         NDqProto::TWatermark watermarkRequest;
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());

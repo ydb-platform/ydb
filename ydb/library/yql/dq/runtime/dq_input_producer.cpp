@@ -167,6 +167,14 @@ private:
             auto& input = Inputs[currentIndex];
             if (input->Pop(Batch, Watermark)) {
                 InputKey = InputKeys[currentIndex];
+                Cerr << (TStringBuilder()
+                    << TInstant::Now()
+                    << " [TODO] Got new input watermark: " << Watermark
+                    << ", inputId: " << InputKey.InputId
+                    << ", isChannel: " << InputKey.IsChannel
+                    << ", currentIndex: " << currentIndex
+                    << ", alive: " << Alive
+                    << "\n");
                 return NUdf::EFetchStatus::Ok;
             }
             if (input->IsFinished()) {

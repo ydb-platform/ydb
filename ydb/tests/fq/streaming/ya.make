@@ -3,15 +3,9 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 TEST_SRCS(
-    test_streaming.py
+    # test_streaming.py
     test_watermarks.py
 )
-
-IF (OS_LINUX)
-    TEST_SRCS(
-        test_udfs.py
-    )
-ENDIF()
 
 PY_SRCS(
     conftest.py

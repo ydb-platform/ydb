@@ -131,16 +131,6 @@ public:
         Impl.PauseByCheckpoint();
     }
 
-    void AddWatermark(TInstant watermark) override {
-        DeserializeAllData();
-        Impl.AddWatermark(watermark);
-    }
-
-    void PauseByWatermark(TInstant watermark) override {
-        DeserializeAllData();
-        Impl.PauseByWatermark(watermark);
-    }
-
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         if (Impl.Empty() && !Impl.IsPaused()) {
             DeserializeAllData();
@@ -188,14 +178,6 @@ public:
 
     bool IsPausedByCheckpoint() const override {
         return Impl.IsPausedByCheckpoint();
-    }
-
-    void ResumeByWatermark(TInstant watermark) override {
-        Impl.ResumeByWatermark(watermark);
-    }
-
-    bool IsPausedByWatermark() const override {
-        return Impl.IsPausedByWatermark();
     }
 
     void Finish() override {

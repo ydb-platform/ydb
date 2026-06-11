@@ -88,7 +88,7 @@ jobs:
           fi
       - name: Send Telegram notification
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.YDBOT_TELEGRAM_BOT_TOKEN }}
         run: |
           BUILD_TARGET="${{ inputs.build-target || 'ydb/apps/ydb' }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

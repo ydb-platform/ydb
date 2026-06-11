@@ -15,20 +15,42 @@ using namespace NPrivate;
 
 namespace {
 
-bool NodeHasQLCompatibleType(const TExprNode::TPtr& node, bool allowOptional) {
+TMaybe<EDataSlot> GetQLCompatibleDataSlot(const TExprNode::TPtr& node, bool allowOptional) {
     bool isOptional = false;
     const TDataExprType* dataType = nullptr;
     if (!IsDataOrOptionalOfData(node->GetTypeAnn(), isOptional, dataType)) {
-        return false;
+        return {};
     }
     if (!allowOptional && isOptional) {
-        return false;
+        return {};
     }
     if (!dataType) {
-        return false;
+        return {};
     }
     const auto dataSlot = dataType->GetSlot();
-    return IsDataTypeNumeric(dataSlot) || dataSlot == EDataSlot::Bool || dataSlot == EDataSlot::String || dataSlot == EDataSlot::Utf8;
+    if (IsDataTypeNumeric(dataSlot) || dataSlot == EDataSlot::Bool || dataSlot == EDataSlot::String || dataSlot == EDataSlot::Utf8) {
+        return {dataSlot};
+    }
+    return {};
+}
+
+bool NodeHasQLCompatibleType(const TExprNode::TPtr& node, bool allowOptional) {
+    return GetQLCompatibleDataSlot(node, allowOptional).Defined();
+}
+
+bool ComparisonHasQLCompatibleType(const TExprNode::TPtr& left, const TExprNode::TPtr& right, bool allowOptional) {
+    const auto dataSlotLeft = GetQLCompatibleDataSlot(left, allowOptional);
+    if (!dataSlotLeft) {
+        return false;
+    }
+    const auto dataSlotRight = GetQLCompatibleDataSlot(right, allowOptional);
+    if (!dataSlotRight) {
+        return false;
+    }
+    return *dataSlotLeft == *dataSlotRight
+        || IsDataTypeIntegral(*dataSlotLeft) && IsDataTypeIntegral(*dataSlotRight)
+        || IsDataTypeFloat(*dataSlotLeft) && IsDataTypeFloat(*dataSlotRight)
+        || IsDataTypeString(*dataSlotLeft) && IsDataTypeString(*dataSlotRight);
 }
 
 TExprNode::TPtr ConvertQLConst(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, bool allowOptional) {
@@ -62,6 +84,9 @@ TExprNode::TPtr ConvertQLMember(const TExprNode::TPtr& node, const TExprNode::TP
 
 TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, const TExprNode::TPtr& newRowArg, TExprContext& ctx, bool allowOptional) {
     YQL_ENSURE(node->ChildrenSize() == 2);
+    if (!ComparisonHasQLCompatibleType(node->ChildPtr(0), node->ChildPtr(1), allowOptional)) {
+        return nullptr;
+    }
     TExprNode::TPtr childLeft;
     TExprNode::TPtr childRight;
     if (childLeft = ConvertQLMember(node->ChildPtr(0), rowArg, newRowArg, ctx, allowOptional)) {
@@ -133,8 +158,25 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ExtractQLFilters(TExprB
     }
 
     const auto section = opMap.Input().Item(0).Cast<TYtSection>();
-    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::QLFilter)) {
+    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::UserSchema | EYtSettingType::UserColumns)) {
         return node;
+    }
+
+    for (const auto& path : section.Paths()) {
+        const TYtPath ytPath(path);
+        if (!ytPath.QLFilter().Maybe<TCoVoid>()) {
+            return node;
+        }
+        const auto tableInfo = TYtTableBaseInfo::Parse(ytPath.Table());
+        if (!tableInfo->RowSpec || !tableInfo->RowSpec->StrictSchema) {
+            return node;
+        }
+        if (tableInfo->Meta && tableInfo->Meta->Attrs.contains("schema_mode") && tableInfo->Meta->Attrs["schema_mode"] == "weak") {
+            return node;
+        }
+        if (NYql::HasAnySetting(tableInfo->Settings.Ref(), EYtSettingType::UserSchema | EYtSettingType::UserColumns)) {
+            return node;
+        }
     }
 
     const auto flatMap =  GetFlatMapOverInputStream(opMap.Mapper());
@@ -192,16 +234,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ExtractQLFilters(TExprB
 
     auto newPaths = section.Paths().Ref().ChildrenList();
     for (auto& path : newPaths) {
-        YQL_ENSURE(path->IsCallable("YtPath"));
-        TYtPath ytPath(path);
-        YQL_ENSURE(ytPath.QLFilter().Maybe<TCoVoid>());
         path = Build<TYtPath>(ctx, path->Pos())
-            .InitFrom(ytPath)
+            .InitFrom(TYtPath(path))
             .QLFilter(qlFilter)
             .Done().Ptr();
     }
-    auto newSection = ctx.ChangeChild(section.Ref(), TYtSection::idx_Settings, NYql::AddSetting(section.Settings().Ref(), EYtSettingType::QLFilter, {}, ctx));
-    newSection = ctx.ChangeChild(*newSection, TYtSection::idx_Paths, ctx.NewList(section.Paths().Pos(), std::move(newPaths)));
+    auto newSection = ctx.ChangeChild(section.Ref(), TYtSection::idx_Paths, ctx.NewList(section.Paths().Pos(), std::move(newPaths)));
     auto newSectionList = Build<TYtSectionList>(ctx, opMap.Input().Pos())
         .Add(newSection)
         .Done().Ptr();

@@ -72,13 +72,16 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
             if (!context.SS->EnableFulltextIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
             }
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalJson: {
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact: {
             if (!context.SS->EnableJsonIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "JSON index support is disabled")};
             }
@@ -184,6 +187,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     };
 
     const auto indexType = GetIndexType(indexDesc);
+    bool compact = false;
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -227,6 +231,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            compact = true;
+            [[fallthrough]];
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
             NKikimrSchemeOp::TTableDescription indexTableDesc;
@@ -234,12 +242,18 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
+            auto implTableDesc = compact
+                ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
+                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
+                : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
+                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            compact = true;
+            [[fallthrough]];
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
             NKikimrSchemeOp::TTableDescription indexTableDesc, docsTableDesc, dictTableDesc, statsTableDesc;
             if (indexDesc.IndexImplTableDescriptionsSize() == 4) {
@@ -249,8 +263,11 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
             }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
+            auto implTableDesc = compact
+                ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
+                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
+                : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
+                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));

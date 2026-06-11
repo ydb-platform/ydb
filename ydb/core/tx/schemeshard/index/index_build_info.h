@@ -49,9 +49,21 @@ struct TIndexBuildShardStatus {
     }
 };
 
-// TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
+struct TValidateColumnConstraintShardStatus : TIndexBuildShardStatus {
+    NKikimrSetColumnConstraint::EValidateStatus ValidateStatus = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
+};
+
+// TODO(???) [thank you, mbkkt]
+// Separate it to 4 classes:
+// > TBuildColumnsInfo
+// > TBuildSecondaryInfo
+// > TBuildVectorInfo
+// > TSetColumnConstraintOperationInfo
+// with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
+
+    virtual ~TIndexBuildInfo() = default;
 
     enum class EState: ui32 {
         Invalid = 0,
@@ -621,6 +633,8 @@ public:
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }
+                case NKikimrSchemeOp::TIndexCreationConfig::kBloomFilterDescription:
+                case NKikimrSchemeOp::TIndexCreationConfig::kBloomNGrammFilterDescription:
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
                     break;
@@ -710,12 +724,29 @@ public:
         return BuildKind == EBuildKind::BuildFulltext;
     }
 
+    bool IsBuildFulltextRelevance() const {
+        return BuildKind == EBuildKind::BuildFulltext && (
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+    }
+
+    bool IsBuildFulltextCompact() const {
+        return BuildKind == EBuildKind::BuildFulltext && (
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
+            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+    }
+
     bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
 
     bool IsBuildColumns() const {
         return BuildKind == EBuildKind::BuildColumns;
+    }
+
+    virtual bool IsSetColumnConstraint() const {
+        return false;
     }
 
     bool IsPreparing() const {
@@ -738,7 +769,7 @@ public:
                State == EState::Unlocking;
     }
 
-    bool IsDone() const {
+    virtual bool IsDone() const {
         return State == EState::Done;
     }
 
@@ -835,6 +866,49 @@ public:
 
 };
 
+struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
+    enum class EOperationState: ui32 {
+        Invalid = 0,
+        Locking = 10,
+        LockingNullWrites = 20,
+        Validating = 30,
+        Finishing = 40,
+        Unlocking = 60,
+        Done = 200
+    };
+
+    EOperationState OperationState = EOperationState::Invalid;
+    std::vector<std::string> NotNullColumns;
+
+    TTxId LockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool LockNullWritesTxDone = false;
+
+    TTxId UnlockNullWritesTxId = TTxId();
+    NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
+    bool UnlockNullWritesTxDone = false;
+
+    THashMap<TShardIdx, TValidateColumnConstraintShardStatus> ValidationShards;
+
+    TDeque<TShardIdx> ToValidateShards;
+    THashSet<TShardIdx> InProgressValidationShards;
+    TVector<TShardIdx> DoneValidationShards;
+
+    TTxId ValidationSnapshotTxId = TTxId();
+    TStepId ValidationSnapshotStep = TStepId();
+
+    constexpr static ui32 MaxInProgressValidationShards = 10;
+
+    bool ValidationFailed = false;  // true if any shard found NULL values
+
+    bool IsDone() const override {
+        return OperationState == EOperationState::Done;
+    }
+
+    bool IsSetColumnConstraint() const override {
+        return true;
+    }
+};
 
 }
 

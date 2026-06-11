@@ -38,7 +38,7 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
 
 void TEraseRequestExecutor::Run()
 {
-    auto future = DirectBlockGroup->EraseFromPBuffer(
+    auto future = DirectBlockGroup->BatchEraseFromPBuffer(
         VChunkConfig.GetVChunkIndex(),
         Host,
         Hint.Segments,

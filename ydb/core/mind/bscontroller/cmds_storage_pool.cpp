@@ -5,8 +5,12 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status) {
         TBoxId boxId = cmd.GetBoxId();
-        if (!boxId && Boxes.Get().size() == 1) {
-            boxId = Boxes.Get().begin()->first;
+        if (!cmd.HasBoxId()) {
+            if (Boxes.Get().size() == 1) {
+                boxId = Boxes.Get().begin()->first;
+            } else {
+                throw TExError() << "BoxId is required when there is not exactly one box";
+            }
         }
 
         ui64 storagePoolId = cmd.GetStoragePoolId();
@@ -183,7 +187,16 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadStoragePool& cmd, TStatus& status) {
-        const bool queryAllBoxes = cmd.GetBoxId() == Max<TBoxId>();
+        const bool queryAllBoxes = cmd.HasBoxId() && cmd.GetBoxId() == Max<TBoxId>();
+
+        TBoxId boxId = cmd.GetBoxId();
+        if (!queryAllBoxes && !cmd.HasBoxId()) {
+            if (Boxes.Get().size() == 1) {
+                boxId = Boxes.Get().begin()->first;
+            } else {
+                throw TExError() << "BoxId is required when there is not exactly one box";
+            }
+        }
 
         // create set of allowed storage pool ids to query
         const auto& ids = cmd.GetStoragePoolId();
@@ -193,7 +206,7 @@ namespace NKikimr::NBsController {
                 throw TExError() << "StoragePoolId may only be specified when BoxId is defined";
             } else {
                 for (const auto storagePoolId : ids) {
-                    storagePoolIds.emplace(cmd.GetBoxId(), storagePoolId);
+                    storagePoolIds.emplace(boxId, storagePoolId);
                 }
             }
         }
@@ -202,9 +215,9 @@ namespace NKikimr::NBsController {
         THashSet<TString> nameSet(names.begin(), names.end());
 
         // calculate lower and upper bounds for search
-        const TBoxStoragePoolId since(queryAllBoxes ? Min<Schema::BoxStoragePool::BoxId::Type>() : cmd.GetBoxId(),
+        const TBoxStoragePoolId since(queryAllBoxes ? Min<Schema::BoxStoragePool::BoxId::Type>() : boxId,
             Min<Schema::BoxStoragePool::StoragePoolId::Type>());
-        const TBoxStoragePoolId till(queryAllBoxes ? Max<Schema::BoxStoragePool::BoxId::Type>() : cmd.GetBoxId(),
+        const TBoxStoragePoolId till(queryAllBoxes ? Max<Schema::BoxStoragePool::BoxId::Type>() : boxId,
             Max<Schema::BoxStoragePool::StoragePoolId::Type>());
 
         // iterate through subset and add only requested entities

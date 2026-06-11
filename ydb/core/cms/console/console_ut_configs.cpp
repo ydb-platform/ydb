@@ -708,6 +708,38 @@ config:
     cluster_name: cluster1
 )";
 
+const TString YAML_CONFIG_WITH_UNKNOWN = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: cluster1
+  unknown_field_for_test: 42
+)";
+
+const TString YAML_CONFIG_WITH_UNKNOWN_IN_SELECTOR = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: cluster1
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+selector_config:
+- description: selector with unknown
+  selector:
+    test: true
+  config:
+    unknown_in_selector: 7
+)";
+
 const TString YAML_CONFIG_2 = R"(
 ---
 metadata:
@@ -1227,12 +1259,16 @@ void DoReplaceYamlConfig(TTenantTestRuntime &runtime,
                          const TString &yaml,
                          Ydb::StatusIds::StatusCode expectedCode,
                          const TString &errorSubstring = {},
-                         bool allowAbsentDatabase = false)
+                         bool allowAbsentDatabase = false,
+                         bool allowUnknownFields = false)
 {
     auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
     event->Record.MutableRequest()->set_config(yaml);
     if (allowAbsentDatabase) {
         event->Record.MutableRequest()->set_allow_absent_database(true);
+    }
+    if (allowUnknownFields) {
+        event->Record.MutableRequest()->set_allow_unknown_fields(true);
     }
     runtime.SendToConsole(event);
 
@@ -1281,6 +1317,104 @@ void DoEnsureDatabaseConfigReplacedWith(TTenantTestRuntime &runtime, const TStri
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
+    // Unit test for the unknown/deprecated -> proto conversion helper.
+    Y_UNIT_TEST(BuildYamlConfigUnknownFieldsHelper) {
+        TMap<TString, std::pair<TString, TString>> unknown{
+            {"/config/foo", {"foo", "NKikimrConfig.TAppConfig"}},
+        };
+        TMap<TString, std::pair<TString, TString>> deprecated{
+            {"/config/old", {"old", "NKikimrConfig.TAppConfig"}},
+        };
+
+        NKikimrConsole::TYamlConfigUnknownFields out;
+        BuildYamlConfigUnknownFields(unknown, deprecated, out);
+
+        UNIT_ASSERT_VALUES_EQUAL(out.FieldsSize(), 2u);
+        THashMap<TString, NKikimrConsole::TYamlConfigUnknownField> byName;
+        for (const auto& f : out.GetFields()) {
+            byName[f.GetName()] = f;
+        }
+        UNIT_ASSERT_C(byName.contains("foo"), "missing unknown field 'foo'");
+        UNIT_ASSERT_VALUES_EQUAL(byName.at("foo").GetPath(), "/config/foo");
+        UNIT_ASSERT_VALUES_EQUAL(byName.at("foo").GetProto(), "NKikimrConfig.TAppConfig");
+        UNIT_ASSERT_VALUES_EQUAL(byName.at("foo").GetDeprecated(), false);
+        UNIT_ASSERT_C(byName.contains("old"), "missing deprecated field 'old'");
+        UNIT_ASSERT_VALUES_EQUAL(byName.at("old").GetDeprecated(), true);
+    }
+
+    // Uploading a config with an unknown field (allow_unknown_fields) caches it and
+    // GetAllConfigs returns it.
+    Y_UNIT_TEST(YamlConfigUnknownFieldsRoundTrip) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        DoReplaceYamlConfig(runtime, YAML_CONFIG_WITH_UNKNOWN, Ydb::StatusIds::SUCCESS,
+            /* errorSubstring = */ {}, /* allowAbsentDatabase = */ false, /* allowUnknownFields = */ true);
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        const auto& unknown = response->Record.GetMainConfigUnknownFields();
+        UNIT_ASSERT_VALUES_EQUAL(unknown.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetName(), "unknown_field_for_test");
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetDeprecated(), false);
+    }
+
+    // The cached unknown fields are persisted and survive a console tablet restart
+    // (no re-validation needed on load).
+    Y_UNIT_TEST(YamlConfigUnknownFieldsSurviveReboot) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        DoReplaceYamlConfig(runtime, YAML_CONFIG_WITH_UNKNOWN, Ydb::StatusIds::SUCCESS,
+            /* errorSubstring = */ {}, /* allowAbsentDatabase = */ false, /* allowUnknownFields = */ true);
+
+        GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        const auto& unknown = response->Record.GetMainConfigUnknownFields();
+        UNIT_ASSERT_VALUES_EQUAL(unknown.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetName(), "unknown_field_for_test");
+    }
+
+    // A clean config yields no unknown fields.
+    Y_UNIT_TEST(YamlConfigNoUnknownFieldsWhenClean) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        DoReplaceYamlConfig(runtime, YAML_CONFIG_1, Ydb::StatusIds::SUCCESS);
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetMainConfigUnknownFields().size(), 0);
+    }
+
+    // An unknown field nested inside a selector_config entry is reported with a path that
+    // pinpoints the selector, so the UI can highlight it and its parents in the editable YAML.
+    Y_UNIT_TEST(YamlConfigUnknownFieldsInSelectorHaveSelectorPath) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        DoReplaceYamlConfig(runtime, YAML_CONFIG_WITH_UNKNOWN_IN_SELECTOR, Ydb::StatusIds::SUCCESS,
+            /* errorSubstring = */ {}, /* allowAbsentDatabase = */ false, /* allowUnknownFields = */ true);
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        const auto& unknown = response->Record.GetMainConfigUnknownFields();
+        UNIT_ASSERT_VALUES_EQUAL(unknown.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetName(), "unknown_in_selector");
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetPath(), "/selector_config/0/config/unknown_in_selector");
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetDeprecated(), false);
+    }
+
     Y_UNIT_TEST(TestAddConfigItem) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();

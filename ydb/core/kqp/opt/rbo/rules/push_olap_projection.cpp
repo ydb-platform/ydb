@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
 #include <ydb/core/kqp/opt/physical/predicate_collector.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
@@ -10,17 +11,6 @@ namespace {
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
-
-TString GetColName(const TString& colName, bool stripAliasPrefix = true) {
-    if (!stripAliasPrefix)
-        return colName;
-
-    auto it = colName.find(".");
-    if (it != TString::npos) {
-        return colName.substr(it + 1);
-    }
-    return colName;
-}
 
 bool IsSuitableToPushProjectionToColumnTables(const TIntrusivePtr<IOperator>& input) {
     if (input->Kind != EOperator::Map) {
@@ -62,7 +52,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
     // Iterate over map elements and try to find an expression to push down to column shard.
     for (ui32 mapIndex = 0; mapIndex < mapElements.size(); ++mapIndex) {
         const auto& mapElement = mapElements[mapIndex];
-        if (!mapElement.IsRename()) {
+        if (!mapElement.IsColumnAccess()) {
             const auto lambda = TCoLambda(mapElement.GetExpression().Node);
             const auto& arg = lambda.Args().Arg(0).Ref();
             auto body = lambda.Body().Ptr();
@@ -90,7 +80,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
             const auto& [colName, projection, replace, olapOperation] = projectionCandidates[projectionIndex++];
             Y_ENSURE(colName.find("__kqp_olap_projection") == TString::npos, "Multiple projections for same column is not supported");
             if (!notSuitableToPushMembers.count(colName)) {
-                olapOperationsForProjections.emplace_back(GetColName(colName), olapOperation);
+                olapOperationsForProjections.emplace_back(NOpt::GetOlapColumnName(colName, /*stripAliasPrefix=*/true), olapOperation);
                 // Replace old expression with new.
                 auto oldLambda = TCoLambda(mapElement.GetExpression().Node);
                 // clang-format off
@@ -155,7 +145,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
 
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newLambda, read->Limit,
                                           read->Ranges, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
-    return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements, map->Project, map->Ordered);
+    return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements, map->Ordered);
 }
 
 } // namespace NKikimr::NKqp

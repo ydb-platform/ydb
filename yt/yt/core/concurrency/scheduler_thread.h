@@ -44,11 +44,6 @@ protected:
     TClosure BeginExecuteImpl(bool dequeued, TEnqueuedAction* action);
 
 private:
-    TCpuInstant LastMaintenanceInstant_ = 0;
-
-    void MaybeRunMaintenance(TCpuInstant now);
-    void RunMaintenance();
-
     void StartEpilogue() override;
     void StopPrologue() override;
     void StopEpilogue() override;

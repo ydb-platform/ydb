@@ -393,6 +393,10 @@ public:
         }
 
         void FinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+            // It means that we had already processed this event (e.g. after tablet restart)
+            if (Status == EStatus::ReplySent) {
+                return;
+            }
             AFL_VERIFY(!IsFail());
             SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeFinishedOnExecute);
             AFL_VERIFY(IsAsync() || StartedAsync);

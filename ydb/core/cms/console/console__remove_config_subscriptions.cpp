@@ -18,8 +18,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveConfigSubscriptions",
-            {"Execute", rec.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveConfigSubscriptions",
+            {"execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -43,7 +43,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveConfigSubscriptions Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveConfigSubscriptions Complete");
 
         Y_ABORT_UNLESS(Response);
         if (!Self->PendingSubscriptionModifications.IsEmpty()) {
@@ -53,7 +53,7 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            YDB_LOG_CTX_TRACE(ctx, "Send",
+            YDB_LOG_TRACE_CTX(ctx, "Send",
                 {"TEvRemoveConfigSubscriptionsResponse", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }

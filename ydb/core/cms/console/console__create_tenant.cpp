@@ -29,8 +29,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot create",
-            {"Tenant", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot create",
+            {"tenant", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -70,7 +70,7 @@ public:
         auto &token = Request->Get()->Record.GetUserToken();
         auto &peer = Request->Get()->Record.GetPeerName();
 
-        YDB_LOG_CTX_DEBUG(ctx, "",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump TTxCreateTenant",
             {"TTxCreateTenant", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvCreateTenantResponse;
@@ -103,9 +103,9 @@ public:
 
         if (Self->Config.TenantsQuota
             && Self->Tenants.size() >= Self->Config.TenantsQuota) {
-            YDB_LOG_CTX_NOTICE(ctx, "Tenants quota is exceeded",
-                {"Tenants", Self->Tenants.size()},
-                {"TenantsQuota", Self->Config.TenantsQuota});
+            YDB_LOG_NOTICE_CTX(ctx, "Tenants quota is exceeded",
+                {"tenants", Self->Tenants.size()},
+                {"tenantsQuota", Self->Config.TenantsQuota});
             Self->Counters.Inc(COUNTER_TENANTS_QUOTA_EXCEEDED);
             return Error(Ydb::StatusIds::UNAVAILABLE,
                          "Tenants quota is exceeded", ctx);
@@ -364,9 +364,9 @@ public:
         Tenant->TxId = ctx.Now().GetValue();
         Tenant->Generation = 1;
 
-        YDB_LOG_CTX_DEBUG(ctx, "Add tenant",
-            {"Path", path},
-            {"TxId", Tenant->TxId});
+        YDB_LOG_DEBUG_CTX(ctx, "Add tenant",
+            {"path", path},
+            {"txId", Tenant->TxId});
 
         Self->DbAddTenant(Tenant, txc, ctx);
 
@@ -376,7 +376,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxCreateTenant Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCreateTenant Complete");
 
         Y_ABORT_UNLESS(Response);
 
@@ -384,8 +384,8 @@ public:
             Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                                COUNTER_CREATE_RESPONSES);
 
-        YDB_LOG_CTX_TRACE(ctx, "",
-            {"Send", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Dump send",
+            {"send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

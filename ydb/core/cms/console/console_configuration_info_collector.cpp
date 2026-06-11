@@ -19,7 +19,7 @@ TConfigurationInfoCollector::TConfigurationInfoCollector(TActorId replyToActorId
 
 void TConfigurationInfoCollector::Bootstrap() {
     YDB_LOG_DEBUG("Starting configuration info collection",
-        {"Marker", "CIG1"});
+        {"marker", "CIG1"});
     Become(&TThis::StateWork);
     RequestNodeList();
     Schedule(Timeout, new TEvPrivate::TEvTimeout());
@@ -33,7 +33,7 @@ void TConfigurationInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev
     auto &nodes = ev->Get()->Nodes;
     if (nodes.empty()) {
         YDB_LOG_DEBUG("Received empty node list from NameService",
-            {"Marker", "CIG2"});
+            {"marker", "CIG2"});
         ReplyAndDie();
         return;
     }
@@ -70,9 +70,9 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
             V2NodesList.push_back(nodeId);
         } else {
             YDB_LOG_DEBUG("Received unknown configuration version",
-                {"Marker", "CIG3"},
-                {"Version", record.GetVersion()},
-                {"FromNodeId", nodeId});
+                {"marker", "CIG3"},
+                {"version", record.GetVersion()},
+                {"fromNodeId", nodeId});
             UnknownNodes++;
             UnknownNodesList.push_back(nodeId);
         }
@@ -82,17 +82,17 @@ void TConfigurationInfoCollector::Handle(TEvConsole::TEvGetNodeConfigurationVers
         }
     } else {
         YDB_LOG_WARN("Received unexpected TEvGetNodeConfigurationVersionResponse",
-            {"Marker", "CIG4"},
-            {"FromNodeId", nodeId},
-            {"Sender", ev->Sender});
+            {"marker", "CIG4"},
+            {"fromNodeId", nodeId},
+            {"sender", ev->Sender});
     }
 }
 
 void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
     Y_UNUSED(ev);
     YDB_LOG_WARN("Collection timed out. Missing responses from nodes",
-        {"Marker", "CIG5"},
-        {"PendingNodes", PendingNodes.size()});
+        {"marker", "CIG5"},
+        {"pendingNodes", PendingNodes.size()});
     UnknownNodes += PendingNodes.size();
     for (const auto& nodeId : PendingNodes) {
         UnknownNodesList.push_back(nodeId);
@@ -103,11 +103,11 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
 
 void TConfigurationInfoCollector::ReplyAndDie() {
     YDB_LOG_DEBUG("Replying with collected info",
-        {"Marker", "CIG6"},
+        {"marker", "CIG6"},
         {"V1", V1Nodes},
         {"V2", V2Nodes},
-        {"Unknown", UnknownNodes},
-        {"Total", TotalNodes});
+        {"unknown", UnknownNodes},
+        {"total", TotalNodes});
     auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>();
     auto *result = response->Record.MutableResponse();
     result->set_v1_nodes(V1Nodes);
@@ -141,9 +141,9 @@ STFUNC(TConfigurationInfoCollector::StateWork) {
         hFunc(TEvPrivate::TEvTimeout, Handle);
         default:
             YDB_LOG_DEBUG("Unhandled event",
-                {"Marker", "CIG7"},
-                {"Type", ev->GetTypeRewrite()},
-                {"Sender", ev->Sender});
+                {"marker", "CIG7"},
+                {"type", ev->GetTypeRewrite()},
+                {"sender", ev->Sender});
             break;
     }
 }

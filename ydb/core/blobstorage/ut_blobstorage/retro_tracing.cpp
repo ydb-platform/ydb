@@ -2,8 +2,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
-#include <ydb/library/actors/retro_tracing/retro_collector.h>
-#include <ydb/library/actors/retro_tracing/universal_span.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
+#include <ydb/library/actors/retro_tracing/span/universal_span.h>
 #include <ydb/core/retro_tracing_impl/spans/named_span.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>

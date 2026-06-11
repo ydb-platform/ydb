@@ -136,6 +136,10 @@ public:
             Cluster = opCtx.Cluster;
             Modify = opCtx.UpdatedConfig != Self->MainYamlConfig || Self->YamlDropped;
 
+            // Snapshot unknown/deprecated fields detected at upload time so the UI can
+            // highlight them later without re-resolving the (expensive) config on each view.
+            BuildYamlConfigUnknownFields(opCtx.UnknownFields, opCtx.DeprecatedFields, UpdatedUnknownFields);
+
             if (IngressDatabase) {
                 WarnDatabaseBypass = true;
             }
@@ -148,7 +152,8 @@ public:
                     // set config dropped by default to support rollback to previous versions
                     // where new config layout is not supported
                     // it will lead to ignoring config from new versions
-                    .Update<Schema::YamlConfig::Dropped>(true);
+                    .Update<Schema::YamlConfig::Dropped>(true)
+                    .Update<Schema::YamlConfig::UnknownFields>(UpdatedUnknownFields.SerializeAsString());
 
                 /* Later we shift this boundary to support rollback and history */
                 db.Table<Schema::YamlConfig>().Key(Version)
@@ -178,7 +183,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxReplaceMainYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxReplaceMainYamlConfig Complete");
 
         ctx.Send(Response.Release());
 
@@ -196,6 +201,7 @@ public:
 
             Self->YamlVersion = Version + 1;
             Self->MainYamlConfig = UpdatedMainConfig;
+            Self->MainYamlConfigUnknownFields = std::move(UpdatedUnknownFields);
             Self->YamlDropped = false;
 
             Self->VolatileYamlConfigs.clear();
@@ -242,6 +248,7 @@ private:
     ui32 Version;
     TString Cluster;
     TString UpdatedMainConfig;
+    NKikimrConsole::TYamlConfigUnknownFields UpdatedUnknownFields;
 };
 
 class TConfigsManager::TTxReplaceDatabaseYamlConfig
@@ -361,7 +368,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxReplaceDatabaseYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxReplaceDatabaseYamlConfig Complete");
 
         ctx.Send(Response.Release());
 

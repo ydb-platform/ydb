@@ -20,14 +20,14 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfirmedSubdomain for tenant to",
-            {"Path", Path},
-            {"Version", Version});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfirmedSubdomain for tenant",
+            {"path", Path},
+            {"version", Version});
 
         Tenant = Self->GetTenant(Path);
         if (!Tenant) {
-            YDB_LOG_CTX_ERROR(ctx, "TTxUpdateConfirmedSubdomain cannot find tenant",
-                {"Path", Path});
+            YDB_LOG_ERROR_CTX(ctx, "TTxUpdateConfirmedSubdomain cannot find tenant",
+                {"path", Path});
             return true;
         }
 
@@ -41,8 +41,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfirmedSubdomain complete for",
-            {"Path", Path});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfirmedSubdomain complete",
+            {"path", Path});
 
         if (Tenant) {
             if (Tenant->Worker == Worker)

@@ -2099,6 +2099,7 @@ private:
             TypesCtx->OptimizerFlags.insert("filterpushdownoverjoinoptionalsideignoreonlykeys");
         }
         TypesCtx->OptimizerFlags.insert("disablenormalizeequalityfilteroverjoin");
+        TypesCtx->OptimizerFlags.insert("rewriteswitchoverextractmembers");
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 

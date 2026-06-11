@@ -77,6 +77,28 @@ void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool forc
     }
 }
 
+void BuildYamlConfigUnknownFields(
+    const TMap<TString, std::pair<TString, TString>>& unknownFields,
+    const TMap<TString, std::pair<TString, TString>>& deprecatedFields,
+    NKikimrConsole::TYamlConfigUnknownFields& out)
+{
+    out.Clear();
+    for (const auto& [path, info] : unknownFields) {
+        auto *f = out.AddFields();
+        f->SetPath(path);
+        f->SetName(info.first);
+        f->SetProto(info.second);
+        f->SetDeprecated(false);
+    }
+    for (const auto& [path, info] : deprecatedFields) {
+        auto *f = out.AddFields();
+        f->SetPath(path);
+        f->SetName(info.first);
+        f->SetProto(info.second);
+        f->SetDeprecated(true);
+    }
+}
+
 void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
         // Re-applying an unchanged body with the same version is silently accepted
@@ -95,32 +117,63 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
             }
 
             auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
-            TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
+            // Collect unknown/deprecated fields per editable location so the UI can point at
+            // (and tint the parents of) the exact place a field lives in the document, including
+            // fields nested inside selector_config entries. Paths mirror the editable YAML:
+            // "/config/..." for the base config and "/selector_config/<i>/config/..." for the
+            // i-th selector. This is best-effort and must never reject a config -- acceptance is
+            // decided solely by the resolved-doc validation below.
+            const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
+            auto collectBlock = [&](const NFyaml::TNodeRef& configNode, const TString& prefix) {
+                auto collector = MakeSimpleShared<NYamlConfig::TBasicUnknownFieldsCollector>(prefix);
+                try {
+                    NYamlConfig::YamlToProto(configNode, true, true, collector);
+                } catch (const std::exception&) {
+                    // A partial selector fragment may not transform standalone; ignore.
+                }
+                for (const auto& [path, info] : collector->GetUnknownKeys()) {
+                    // Reserved (deprecated) paths are config-content-relative; strip the
+                    // location prefix ("/<prefix>") before matching.
+                    const TString leafPath = path.substr(prefix.size() + 1);
+                    if (deprecatedPaths.contains(leafPath)) {
+                        opCtx.DeprecatedFields[path] = info;
+                    } else {
+                        opCtx.UnknownFields[path] = info;
+                    }
+                }
+            };
+
+            try {
+                auto root = tree.Root().Map();
+                if (root.Has("config")) {
+                    collectBlock(root.at("config"), "config");
+                }
+                if (root.Has("selector_config")) {
+                    auto selectors = root.at("selector_config").Sequence();
+                    for (size_t i = 0; i < selectors.size(); ++i) {
+                        auto item = selectors.at(static_cast<int>(i)).Map();
+                        if (item.Has("config")) {
+                            collectBlock(item.at("config"),
+                                TStringBuilder() << "selector_config/" << i << "/config");
+                        }
+                    }
+                }
+            } catch (const std::exception&) {
+                // Best-effort field collection; never blocks config acceptance.
+            }
+
+            // Validate the fully resolved configuration. This decides accept/reject.
             std::vector<TString> errors;
             NYamlConfig::ResolveUniqueDocs(
                 tree,
                 [&](NYamlConfig::TDocumentConfig&& config) {
-                    auto cfg = NYamlConfig::YamlToProto(
-                        config.second,
-                        true,
-                        true,
-                        unknownFieldsCollector);
+                    auto cfg = NYamlConfig::YamlToProto(config.second, true, true);
                     NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
                     if (result == NKikimr::NConfig::EValidationResult::Error) {
                         ythrow yexception() << errors.front();
                     }
                 });
-
-            const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
-
-            for (const auto& [path, info] : unknownFieldsCollector->GetUnknownKeys()) {
-                if (deprecatedPaths.contains(path)) {
-                    opCtx.DeprecatedFields[path] = info;
-                } else {
-                    opCtx.UnknownFields[path] = info;
-                }
-            }
         }
     } catch (const yexception &e) {
         opCtx.Error = e.what();
@@ -236,7 +289,7 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
 void TConfigsManager::Bootstrap(const TActorContext &ctx)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "TConfigsManager::Bootstrap");
+    YDB_LOG_DEBUG_CTX(ctx, "TConfigsManager::Bootstrap");
     Become(&TThis::StateWork);
 
     ClusterName = AppData(ctx)->ClusterName;
@@ -274,24 +327,24 @@ void TConfigsManager::Detach()
 void TConfigsManager::ApplyPendingConfigModifications(const TActorContext &ctx,
                                                       TAutoPtr<IEventHandle> ev)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "Applying pending config modifications");
+    YDB_LOG_DEBUG_CTX(ctx, "Applying pending config modifications");
 
     for (auto &pr : PendingConfigModifications.RemovedItems)
-        YDB_LOG_CTX_DEBUG(ctx, "Remove",
-            {"Item", ConfigIndex.GetItem(pr.first)->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Remove",
+            {"item", ConfigIndex.GetItem(pr.first)->ToString()});
     for (auto &pr : PendingConfigModifications.ModifiedItems)
-        YDB_LOG_CTX_DEBUG(ctx, "Remove modified",
-            {"Item", pr.second->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Remove modified",
+            {"item", pr.second->ToString()});
     for (auto &pr : PendingConfigModifications.ModifiedItems)
-        YDB_LOG_CTX_DEBUG(ctx, "Add modified",
-            {"Item", pr.second->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Add modified",
+            {"item", pr.second->ToString()});
     for (auto item : PendingConfigModifications.AddedItems)
-        YDB_LOG_CTX_DEBUG(ctx, "Add new",
-            {"Item", item->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Add new",
+            {"item", item->ToString()});
 
     PendingConfigModifications.ApplyTo(ConfigIndex);
 
-    YDB_LOG_CTX_TRACE(ctx, "Send configs update to configs provider");
+    YDB_LOG_TRACE_CTX(ctx, "Send configs update to configs provider");
     auto req = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateConfigs>(PendingConfigModifications, ev);
     ctx.Send(ConfigsProvider, req.Release());
 
@@ -301,32 +354,32 @@ void TConfigsManager::ApplyPendingConfigModifications(const TActorContext &ctx,
 void TConfigsManager::ApplyPendingSubscriptionModifications(const TActorContext &ctx,
                                                             TAutoPtr<IEventHandle> ev)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "Applying pending subscription midifications");
+    YDB_LOG_DEBUG_CTX(ctx, "Applying pending subscription midifications");
 
     for (auto &id : PendingSubscriptionModifications.RemovedSubscriptions) {
-        YDB_LOG_CTX_DEBUG(ctx, "Remove subscription",
-            {"Subscription", SubscriptionIndex.GetSubscription(id)->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Remove subscription",
+            {"subscription", SubscriptionIndex.GetSubscription(id)->ToString()});
         SubscriptionIndex.RemoveSubscription(id);
     }
     for (auto &subscription : PendingSubscriptionModifications.AddedSubscriptions) {
-        YDB_LOG_CTX_DEBUG(ctx, "Add subscription",
-            {"Subscription", subscription->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Add subscription",
+            {"subscription", subscription->ToString()});
         SubscriptionIndex.AddSubscription(subscription);
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedLastProvided) {
-        YDB_LOG_CTX_DEBUG(ctx, "Modify last provided config for subscription",
-            {"Id", pr.first},
-            {"Lastprovidedconfig", pr.second.ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Modify last provided config for subscription",
+            {"id", pr.first},
+            {"lastprovidedconfig", pr.second});
         SubscriptionIndex.GetSubscription(pr.first)->LastProvidedConfig = pr.second;
     }
     for (auto &pr : PendingSubscriptionModifications.ModifiedCookies) {
-        YDB_LOG_CTX_DEBUG(ctx, "Modify cookie for subscription",
-            {"Id", pr.first},
-            {"Cookie", pr.second});
+        YDB_LOG_DEBUG_CTX(ctx, "Modify cookie for subscription",
+            {"id", pr.first},
+            {"cookie", pr.second});
         SubscriptionIndex.GetSubscription(pr.first)->Cookie = pr.second;
     }
 
-    YDB_LOG_CTX_TRACE(ctx, "Send subscriptions update to configs provider");
+    YDB_LOG_TRACE_CTX(ctx, "Send subscriptions update to configs provider");
     auto req = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateSubscriptions>(PendingSubscriptionModifications, ev);
     ctx.Send(ConfigsProvider, req.Release());
 
@@ -501,7 +554,7 @@ void TConfigsManager::DbApplyPendingSubscriptionModifications(TTransactionContex
 bool TConfigsManager::DbLoadState(TTransactionContext &txc,
                                   const TActorContext &ctx)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "Loading configs state");
+    YDB_LOG_DEBUG_CTX(ctx, "Loading configs state");
 
     NIceDb::TNiceDb db(txc.DB);
     auto nextConfigItemIdRow = db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextConfigItemId).Select<Schema::Config::Value>();
@@ -555,6 +608,14 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         // ignore this as deprecated
         // now used only for disabling new config layout for older console
         YamlDropped = false;
+
+        // Restore the unknown-fields snapshot cached at upload time (no re-validation).
+        MainYamlConfigUnknownFields.Clear();
+        const TString serializedUnknownFields =
+            yamlConfigRowset.template GetValueOrDefault<Schema::YamlConfig::UnknownFields>(TString());
+        if (serializedUnknownFields) {
+            Y_PROTOBUF_SUPPRESS_NODISCARD MainYamlConfigUnknownFields.ParseFromString(serializedUnknownFields);
+        }
     }
 
     while (!databaseYamlConfigRowset.EndOfSet()) {
@@ -602,8 +663,8 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         item->Cookie = cookie;
         ConfigIndex.AddItem(item);
 
-        YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-            {"Item", item->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+            {"item", item->ToString()});
 
         if (!configItemRowset.Next())
             return false;
@@ -632,8 +693,8 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         subscription->LastProvidedConfig.ItemIds = std::move(configId);
         subscription->Cookie = RandomNumber<ui64>();
 
-        YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-            {"Subscription", subscription->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+            {"subscription", subscription->ToString()});
 
         SubscriptionIndex.AddSubscription(subscription);
 
@@ -651,8 +712,8 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         DisabledValidators.insert(name);
         registry->DisableValidator(name);
 
-        YDB_LOG_CTX_DEBUG(ctx, "Disable validator",
-            {"Name", name});
+        YDB_LOG_DEBUG_CTX(ctx, "Disable validator",
+            {"name", name});
 
         if (!validatorsRowset.Next())
             return false;
@@ -665,8 +726,8 @@ void TConfigsManager::DbRemoveItem(ui64 id,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: removing config item",
-        {"Id", id});
+    YDB_LOG_TRACE_CTX(ctx, "Database: removing config item",
+        {"id", id});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigItems>().Key(id).Delete();
@@ -676,8 +737,8 @@ void TConfigsManager::DbRemoveSubscription(ui64 id,
                                            TTransactionContext &txc,
                                            const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: removing subscription",
-        {"Id", id});
+    YDB_LOG_TRACE_CTX(ctx, "Database: removing subscription",
+        {"id", id});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigSubscriptions>().Key(id).Delete();
@@ -687,9 +748,9 @@ void TConfigsManager::DbUpdateItem(TConfigItem::TPtr item,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "",
-        {"Database", (ConfigIndex.GetItem(item->Id) ? "updating " : "adding ")},
-        {"Item", item->ToString()});
+    YDB_LOG_TRACE_CTX(ctx, "Dump database, item",
+        {"database", (ConfigIndex.GetItem(item->Id) ? "updating " : "adding ")},
+        {"item", item->ToString()});
 
     TString config;
     Y_PROTOBUF_SUPPRESS_NODISCARD item->Config.SerializeToString(&config);
@@ -710,8 +771,8 @@ void TConfigsManager::DbUpdateItem(TConfigItem::TPtr item,
 void TConfigsManager::DbUpdateNextConfigItemId(TTransactionContext &txc,
                                                const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: update",
-        {"NextConfigItemId", NextConfigItemId});
+    YDB_LOG_TRACE_CTX(ctx, "Database: update",
+        {"nextConfigItemId", NextConfigItemId});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextConfigItemId)
@@ -721,8 +782,8 @@ void TConfigsManager::DbUpdateNextConfigItemId(TTransactionContext &txc,
 void TConfigsManager::DbUpdateNextSubscriptionId(TTransactionContext &txc,
                                                  const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: update",
-        {"NextSubscriptionId", NextSubscriptionId});
+    YDB_LOG_TRACE_CTX(ctx, "Database: update",
+        {"nextSubscriptionId", NextSubscriptionId});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Config>().Key(TConsole::ConfigKeyNextSubscriptionId)
@@ -733,8 +794,8 @@ void TConfigsManager::DbUpdateSubscription(TSubscription::TPtr subscription,
                                            TTransactionContext &txc,
                                            const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: update",
-        {"Subscription", subscription->ToString()});
+    YDB_LOG_TRACE_CTX(ctx, "Database: update",
+        {"subscription", subscription->ToString()});
 
     TVector<ui32> kinds(subscription->ItemKinds.begin(), subscription->ItemKinds.end());
     NIceDb::TNiceDb db(txc.DB);
@@ -754,9 +815,9 @@ void TConfigsManager::DbUpdateSubscriptionLastProvidedConfig(ui64 id,
                                                              TTransactionContext &txc,
                                                              const TActorContext &ctx) const
 {
-    YDB_LOG_CTX_TRACE(ctx, "Database: update last provided config for subscription",
-        {"Id", id},
-        {"Lastprovidedconfig", configId.ToString()});
+    YDB_LOG_TRACE_CTX(ctx, "Database: update last provided config for subscription",
+        {"id", id},
+        {"lastprovidedconfig", configId});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigSubscriptions>().Key(id)
@@ -798,7 +859,7 @@ void TConfigsManager::Handle(TEvConsole::TEvListConfigValidatorsRequest::TPtr &e
         entry.SetEnabled(pr.second->IsEnabled());
     }
 
-    YDB_LOG_CTX_TRACE(ctx, "Send",
+    YDB_LOG_TRACE_CTX(ctx, "Send",
         {"TEvListConfigValidatorsResponse", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);

@@ -18,20 +18,20 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateLastProvidedConfig",
-            {"Execute", rec.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateLastProvidedConfig",
+            {"execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
         auto subscription = Self->SubscriptionIndex.GetSubscription(rec.GetSubscriptionId());
         if (!subscription) {
-            YDB_LOG_CTX_DEBUG(ctx, "Config notification response for missing subscription",
-                {"Id", rec.GetSubscriptionId()});
+            YDB_LOG_DEBUG_CTX(ctx, "Config notification response for missing subscription",
+                {"id", rec.GetSubscriptionId()});
             return true;
         }
         if (Request->Cookie != subscription->Cookie) {
-            YDB_LOG_CTX_DEBUG(ctx, "Config notification response cookie mismatch for subscription",
-                {"Id", rec.GetSubscriptionId()});
+            YDB_LOG_DEBUG_CTX(ctx, "Config notification response cookie mismatch for subscription",
+                {"id", rec.GetSubscriptionId()});
             Y_ABORT_UNLESS(subscription->Subscriber.ServiceId,
                      "%s  ==>  %s",
                      rec.ShortDebugString().c_str(),
@@ -51,7 +51,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateLastProvidedConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateLastProvidedConfig Complete");
 
         if (!Self->PendingSubscriptionModifications.IsEmpty())
             Self->ApplyPendingSubscriptionModifications(ctx);

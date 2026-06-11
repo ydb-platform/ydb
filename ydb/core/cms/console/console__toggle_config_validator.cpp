@@ -23,8 +23,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot toggle",
-            {"Validator", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot toggle",
+            {"validator", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -35,8 +35,8 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "",
-            {"TConsole::TTxToggleConfigValidator", rec.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Dump txToggleConfigValidator",
+            {"txToggleConfigValidator", rec.ShortDebugString()});
 
         Response = MakeHolder<TEvConsole::TEvToggleConfigValidatorResponse>();
 
@@ -56,8 +56,8 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::DisabledValidators>().Key(rec.GetName()).Update();
 
-            YDB_LOG_CTX_DEBUG(ctx, "Add disabled validator to local database",
-                {"Name", rec.GetName()});
+            YDB_LOG_DEBUG_CTX(ctx, "Add disabled validator to local database",
+                {"name", rec.GetName()});
         } else {
             if (!Self->DisabledValidators.contains(name))
                 return true;
@@ -65,8 +65,8 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::DisabledValidators>().Key(rec.GetName()).Delete();
 
-            YDB_LOG_CTX_DEBUG(ctx, "Remove disabled validator from local database",
-                {"Name", rec.GetName()});
+            YDB_LOG_DEBUG_CTX(ctx, "Remove disabled validator from local database",
+                {"name", rec.GetName()});
         }
 
         Modify = true;
@@ -76,7 +76,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxToggleConfigValidator Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TConsole::TTxToggleConfigValidator Complete");
 
         if (Modify) {
             auto &rec = Request->Get()->Record;
@@ -86,20 +86,20 @@ public:
                 registry->DisableValidator(rec.GetName());
                 Self->DisabledValidators.insert(rec.GetName());
 
-                YDB_LOG_CTX_DEBUG(ctx, "Disable validator",
-                    {"Request", rec.GetName()});
+                YDB_LOG_DEBUG_CTX(ctx, "Disable validator",
+                    {"request", rec.GetName()});
             } else {
                 registry->EnableValidator(rec.GetName());
                 Self->DisabledValidators.erase(rec.GetName());
 
-                YDB_LOG_CTX_DEBUG(ctx, "Enable validator",
-                    {"Request", rec.GetName()});
+                YDB_LOG_DEBUG_CTX(ctx, "Enable validator",
+                    {"request", rec.GetName()});
             }
         }
 
         Y_ABORT_UNLESS(Response);
-        YDB_LOG_CTX_TRACE(ctx, "",
-            {"Send", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Dump send",
+            {"send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         Self->TxProcessor->TxCompleted(this, ctx);

@@ -25,33 +25,6 @@ std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     return request;
 }
 
-std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
-    const TActorId& selfId,
-    const TString& consumerName,
-    ui64 startOffset,
-    ui64 count,
-    ui64 cookie,
-    ui64 nextPartNo
-) {
-    return std::make_unique<TEvPQ::TEvRead>(
-        cookie,
-        startOffset,
-        startOffset + count,
-        nextPartNo,
-        count,
-        TString{},
-        consumerName,
-        0,
-        8_MB,
-        0,
-        0,
-        "unknown",
-        false,
-        TActorId{},
-        selfId
-    );
-}
-
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
     const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
     ui64 offset,

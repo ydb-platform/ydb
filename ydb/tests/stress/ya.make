@@ -3,6 +3,7 @@ RECURSE(
     cdc
     common
     ctas
+    federated_queries
     kafka
     kafka_serverless
     kv

@@ -27,7 +27,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxLoadState Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TConsole::TTxLoadState Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         auto configRow = db.Table<Schema::Config>().Key(ConfigKeyConfig).Select<Schema::Config::Value>();
@@ -46,10 +46,10 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
             Self->LoadConfigFromProto(config);
 
-            YDB_LOG_CTX_DEBUG(ctx, "Loaded",
-                {"Config", config.DebugString()});
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+                {"config", config.DebugString()});
         } else {
-            YDB_LOG_CTX_DEBUG(ctx, "Using default config");
+            YDB_LOG_DEBUG_CTX(ctx, "Using default config");
 
             Self->LoadConfigFromProto(NKikimrConsole::TConfig());
         }
@@ -65,7 +65,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxLoadState Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TConsole::TTxLoadState Complete");
 
         Self->Become(&TConsole::StateWork);
         Self->SignalTabletActive(ctx);

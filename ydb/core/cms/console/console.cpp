@@ -50,14 +50,14 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
 
 void TConsole::OnDetach(const TActorContext &ctx)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "TConsole::OnDetach");
+    YDB_LOG_DEBUG_CTX(ctx, "TConsole::OnDetach");
     Die(ctx);
 }
 
 void TConsole::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContext &ctx)
 {
-    YDB_LOG_CTX_INFO(ctx, "TConsole::OnTabletDead",
-        {"TabletID", TabletID()});
+    YDB_LOG_INFO_CTX(ctx, "TConsole::OnTabletDead",
+        {"tabletID", TabletID()});
 
     if (Counters)
         Counters->ResetCounters();
@@ -67,10 +67,10 @@ void TConsole::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContex
 
 void TConsole::Enqueue(TAutoPtr<IEventHandle> &ev)
 {
-    YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TConsole::Enqueue event",
-        {"TabletID", TabletID()},
-        {"Type", ev->GetTypeRewrite()},
-        {"Event", ev->ToString().data()});
+    YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TConsole::Enqueue event",
+        {"tabletID", TabletID()},
+        {"type", ev->GetTypeRewrite()},
+        {"event", ev->ToString().data()});
     InitQueue.push_back(ev);
 }
 
@@ -107,7 +107,7 @@ bool TConsole::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActo
 
 void TConsole::Cleanup(const TActorContext &ctx)
 {
-    YDB_LOG_CTX_DEBUG(ctx, "TConsole::Cleanup");
+    YDB_LOG_DEBUG_CTX(ctx, "TConsole::Cleanup");
 
     if (ConfigsManager) {
         ConfigsManager->Detach();
@@ -144,10 +144,10 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
 {
     while (!InitQueue.empty()) {
         TAutoPtr<IEventHandle> &ev = InitQueue.front();
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::Dequeue event",
-            {"TabletID", TabletID()},
-            {"Type", ev->GetTypeRewrite()},
-            {"Event", ev->ToString().data()});
+        YDB_LOG_DEBUG_CTX(ctx, "TConsole::Dequeue event",
+            {"tabletID", TabletID()},
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString().data()});
         ctx.Send(ev.Release());
         InitQueue.pop_front();
     }

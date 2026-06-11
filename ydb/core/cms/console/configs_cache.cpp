@@ -46,7 +46,7 @@ namespace {
                     ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
             } catch (const yexception &ex) {
                 YDB_LOG_WARN("An exception occurred while saving",
-                    {"Config", ex.what()});
+                    {"config", ex.what()});
             }
         }
     };
@@ -68,7 +68,7 @@ namespace {
                     ythrow yexception() << "Failed to parse config protobuf from string";
             } catch (const yexception &ex) {
                 YDB_LOG_WARN("An exception occurred while getting config from cache",
-                    {"File", ex.what()});
+                    {"file", ex.what()});
             }
         };
     };
@@ -81,7 +81,7 @@ void TConfigsCache::Bootstrap(const TActorContext &ctx) {
     Load(CurrentConfig);
 
     YDB_LOG_DEBUG("Restored",
-        {"Configuration", CurrentConfig.ShortDebugString()});
+        {"configuration", CurrentConfig.ShortDebugString()});
 
     const auto minKind = NKikimrConsole::TConfigItem::EKind_MIN;
     const auto maxKind = NKikimrConsole::TConfigItem::EKind_MAX;
@@ -109,7 +109,7 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
     CurrentConfig.Swap(rec.MutableConfig());
 
     YDB_LOG_DEBUG("Saving",
-        {"Configuration", CurrentConfig.ShortDebugString()});
+        {"configuration", CurrentConfig.ShortDebugString()});
 
     Save(CurrentConfig);
 
@@ -129,8 +129,8 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, con
     auto &rec = ev->Get()->Record;
 
     YDB_LOG_ERROR("Failed to create subscription will die",
-        {"Code", rec.GetCode()},
-        {"Reason", rec.GetReason()});
+        {"code", rec.GetCode()},
+        {"reason", rec.GetReason()});
 
     Die(ctx);
 }

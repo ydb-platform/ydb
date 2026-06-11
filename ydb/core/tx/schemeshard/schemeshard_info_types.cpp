@@ -673,7 +673,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
     }
 
-    if (op.HasDetailedMetricsSettings()) {
+    if (featureFlags.EnableDetailedMetrics && op.HasDetailedMetricsSettings()) {
         switch (op.GetDetailedMetricsSettings().GetStatusCase()) {
         case NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured:
             if (op.GetDetailedMetricsSettings().HasConfigured()) {
@@ -814,6 +814,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
         alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
+    }
+
+    if (op.HasIndexImplType()) {
+        alterData->TableDescriptionFull->SetIndexImplType(op.GetIndexImplType());
     }
 
     if (source) {
@@ -3078,7 +3082,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         if (TString objectPath = CanonizePath(path)) {
             result << objectPath;
         }
-        return std::move(result);
+        return result;
     };
 
     auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {

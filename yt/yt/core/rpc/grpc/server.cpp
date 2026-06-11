@@ -23,6 +23,8 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -177,7 +179,7 @@ private:
                 ::fprintf(logFile, "%s\tGRPC server shutdown failed: %s (ThreadId: %" PRISZT ")\n",
                     GetInstant().ToString().c_str(),
                     CurrentExceptionMessage().c_str(),
-                    GetCurrentThreadId());
+                    GetSystemThreadId());
             }
         }
     }

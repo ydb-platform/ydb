@@ -21,7 +21,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxCleanupSubscriptions");
+        YDB_LOG_DEBUG_CTX(ctx, "TConsole::TTxCleanupSubscriptions");
 
         THashSet<ui32> nodes;
         for (auto &node : Nodes->Get()->Nodes)
@@ -32,9 +32,9 @@ public:
             if (nodeId && !nodes.contains(nodeId)) {
                 Self->PendingSubscriptionModifications.RemovedSubscriptions.insert(pr.first);
 
-                YDB_LOG_CTX_DEBUG(ctx, "Subscription has subscriber from unknown node and will be removed",
-                    {"Subscriber", pr.first},
-                    {"NodeId", nodeId});
+                YDB_LOG_DEBUG_CTX(ctx, "Subscription has subscriber from unknown node and will be removed",
+                    {"subscriber", pr.first},
+                    {"nodeId", nodeId});
             }
         }
 
@@ -47,7 +47,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxCleanupSubscriptions Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TConsole::TTxCleanupSubscriptions Complete");
 
         if (!Self->PendingSubscriptionModifications.IsEmpty())
             Self->ApplyPendingSubscriptionModifications(ctx);

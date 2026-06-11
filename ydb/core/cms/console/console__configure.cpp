@@ -20,8 +20,8 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot modify",
-            {"Config", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot modify",
+            {"config", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -103,8 +103,8 @@ public:
             newItem->Kind = field->number();
             newItems.push_back(newItem);
 
-            YDB_LOG_CTX_DEBUG(ctx, "Split config",
-                {"Item", copy.ShortDebugString()});
+            YDB_LOG_DEBUG_CTX(ctx, "Split config",
+                {"item", copy.ShortDebugString()});
         }
     }
 
@@ -459,7 +459,7 @@ public:
     {
         TString error;
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump TTxConfigure",
             {"TTxConfigure", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingConfigModifications.IsEmpty());
@@ -500,8 +500,8 @@ public:
                                                 Self->PendingConfigModifications,
                                                 config);
         auto affected = affectedChecker.ComputeAffectedConfigs(GetAffectedKinds(rec.GetActions()), false);
-        YDB_LOG_CTX_DEBUG(ctx, "affected.size()",
-            {"Size", affected.size()});
+        YDB_LOG_DEBUG_CTX(ctx, "Affected.size()",
+            {"size", affected.size()});
         for (auto &item : affected) {
             auto &entry = *Response->Record.AddAffectedConfigs();
             entry.SetTenant(item.Tenant);
@@ -593,7 +593,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxConfigure Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxConfigure Complete");
 
         Y_ABORT_UNLESS(Response);
 
@@ -604,7 +604,7 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingConfigModifications(ctx, ev);
         } else {
-            YDB_LOG_CTX_TRACE(ctx, "Send",
+            YDB_LOG_TRACE_CTX(ctx, "Send",
                 {"TEvConfigureResponse", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }

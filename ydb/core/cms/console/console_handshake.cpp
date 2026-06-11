@@ -121,12 +121,12 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
         responseRecord.SetProposedConfigVersion(proposedConfigVersion);
         responseRecord.SetConsoleConfigVersion(YamlVersion);
         responseRecord.SetYAML(MainYamlConfig);
-        YDB_LOG_CTX_ALERT(ctx, "Unexpected proposed config");
+        YDB_LOG_ALERT_CTX(ctx, "Unexpected proposed config");
     } else if (proposedConfigHash != currentConfigHash) {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::HashMismatch);
         responseRecord.SetProposedConfigHash(proposedConfigHash);
         responseRecord.SetConsoleConfigHash(currentConfigHash);
-        YDB_LOG_CTX_ALERT(ctx, "Config hash mismatch");
+        YDB_LOG_ALERT_CTX(ctx, "Config hash mismatch");
     } else {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded);
     }

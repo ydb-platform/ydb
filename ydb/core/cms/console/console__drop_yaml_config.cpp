@@ -69,7 +69,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxDropYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxDropYamlConfig Complete");
 
         ctx.Send(Response.Release());
 

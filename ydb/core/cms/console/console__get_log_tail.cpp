@@ -19,15 +19,15 @@ public:
     {
         auto &req = Request->Get()->Record;
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail Execute",
-            {"Request", req.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGetLogTail Execute",
+            {"request", req.ShortDebugString()});
 
         TVector<NKikimrConsole::TLogRecord> records;
         if (!Self->Logger.DbLoadLogTail(req.GetLogFilter(), records, txc))
             return false;
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail found matching log records",
-            {"Records", records.size()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGetLogTail found matching log records",
+            {"records", records.size()});
 
         Response = MakeHolder<TEvConsole::TEvGetLogTailResponse>();
         auto &rec = Response->Record;
@@ -42,7 +42,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGetLogTail Complete");
 
         ctx.Send(Request->Sender, Response.Release());
 

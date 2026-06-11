@@ -1,8 +1,32 @@
 #include "kqp_rbo_physical_source_builder.h"
+
+#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
+
+namespace {
+
+THashMap<TString, TString> BuildOutputToPhysicalColumnMap(const TOpRead& read) {
+    THashMap<TString, TString> renameMap;
+    Y_ENSURE(read.Columns.size() == read.OutputIUs.size());
+    for (ui32 i = 0; i < read.Columns.size(); ++i) {
+        const auto& physicalColumn = read.Columns[i];
+        const auto& outputIU = read.OutputIUs[i];
+        if (outputIU.GetFullName() != physicalColumn) {
+            renameMap[outputIU.GetFullName()] = physicalColumn;
+        }
+        if (outputIU.GetColumnName() != physicalColumn) {
+            renameMap[outputIU.GetColumnName()] = physicalColumn;
+        }
+    }
+    return renameMap;
+}
+
+} // anonymous namespace
 
 TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
@@ -65,6 +89,10 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
             if (Read->OlapFilterLambda) {
                 processLambda = Read->OlapFilterLambda;
+                const auto renameMap = BuildOutputToPhysicalColumnMap(*Read);
+                if (!renameMap.empty()) {
+                    processLambda = NOpt::TOlapFilterInspector::RenameColumns(processLambda, renameMap, Ctx);
+                }
             }
 
             TKqpReadTableSettings settings;

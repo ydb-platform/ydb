@@ -15,8 +15,8 @@ public:
 
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error, const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot update tenant pool",
-            {"Config", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot update tenant pool",
+            {"config", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_status(code);
@@ -35,7 +35,7 @@ public:
 
         auto &rec = Request->Get()->Record;
         auto &token = rec.GetUserToken();
-        YDB_LOG_CTX_DEBUG(ctx, "",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump TTxUpdateTenantPoolConfig",
             {"TTxUpdateTenantPoolConfig", rec.ShortDebugString()});
 
         Response.Reset(new TEvConsole::TEvGetTenantStatusResponse);
@@ -77,11 +77,11 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateTenantPoolConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateTenantPoolConfig Complete");
 
         Y_ABORT_UNLESS(Response);
-        YDB_LOG_CTX_TRACE(ctx, "",
-            {"Send", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Dump send",
+            {"send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         Self->TxProcessor->TxCompleted(this, ctx);

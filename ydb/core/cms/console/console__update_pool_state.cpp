@@ -25,27 +25,27 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdatePoolState for pool of",
-            {"PoolName", Pool->Config.GetName()},
-            {"TenantPath", Tenant->Path},
-            {"State", State});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState for pool of",
+            {"poolName", Pool->Config.GetName()},
+            {"tenantPath", Tenant->Path},
+            {"state", State});
 
         if (Tenant != Self->GetTenant(Tenant->Path)) {
-            YDB_LOG_CTX_ERROR(ctx, "TTxUpdatePoolState tenant mismatch",
-                {"TenantPath", Tenant->Path});
+            YDB_LOG_ERROR_CTX(ctx, "TTxUpdatePoolState tenant mismatch",
+                {"tenantPath", Tenant->Path});
             return true;
         }
 
         if (!Tenant->StoragePools.contains(Pool->Kind)
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
-            YDB_LOG_CTX_ERROR(ctx, "TTxUpdatePoolState pool mismatch",
-                {"PoolName", Pool->Config.GetName()});
+            YDB_LOG_ERROR_CTX(ctx, "TTxUpdatePoolState pool mismatch",
+                {"poolName", Pool->Config.GetName()});
             return true;
         }
 
         if (Pool->Worker != Worker) {
-            YDB_LOG_CTX_NOTICE(ctx, "TTxUpdatePoolState pool worker mismatch",
-                {"PoolName", Pool->Config.GetName()});
+            YDB_LOG_NOTICE_CTX(ctx, "TTxUpdatePoolState pool worker mismatch",
+                {"poolName", Pool->Config.GetName()});
             return true;
         }
 
@@ -72,8 +72,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdatePoolState complete for",
-            {"PoolName", Pool->Config.GetName()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState complete",
+            {"poolName", Pool->Config.GetName()});
 
         if (Update) {
             Self->Counters.Inc(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,

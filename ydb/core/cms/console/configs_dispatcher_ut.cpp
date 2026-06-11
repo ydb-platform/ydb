@@ -242,8 +242,8 @@ public:
     {
         while (!EventsQueue.empty()) {
             TAutoPtr<IEventHandle> &ev = EventsQueue.front();
-            YDB_LOG_CTX_DEBUG(ctx, "Dequeue event",
-                {"Type", ev->GetTypeRewrite()});
+            YDB_LOG_DEBUG_CTX(ctx, "Dequeue event",
+                {"type", ev->GetTypeRewrite()});
             ctx.Send(ev.Release());
             EventsQueue.pop_front();
         }
@@ -1469,7 +1469,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
         initInfo.StartupStorageYaml = storageYaml;
         initInfo.Labels["config_source"] = "seed_nodes";
-        initInfo.Labels["configuration_version"] = "v2";
         initInfo.DebugInfo = NConfig::TDebugInfo{};
         
         TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
@@ -1488,7 +1487,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::SeedNodes);
         UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "seed_nodes");
-        UNIT_ASSERT_VALUES_EQUAL(state.ConfigurationVersion, "v2");
         UNIT_ASSERT(state.HasStorageYaml);
         UNIT_ASSERT(state.StorageYamlSize > 0);
         
@@ -1504,7 +1502,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         initInfo.InitialConfig = config;
         initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
         initInfo.Labels["config_source"] = "dynamic";
-        initInfo.Labels["configuration_version"] = "v1";
         initInfo.DebugInfo = NConfig::TDebugInfo{};
         
         TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
@@ -1523,7 +1520,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
         UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "dynamic");
-        UNIT_ASSERT_VALUES_EQUAL(state.ConfigurationVersion, "v1");
         UNIT_ASSERT(!state.HasStorageYaml);
         UNIT_ASSERT_VALUES_EQUAL(state.StorageYamlSize, 0);
         
@@ -1556,6 +1552,83 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
         UNIT_ASSERT(state.ConfigSourceLabel.empty());
         UNIT_ASSERT(!state.HasStorageYaml);
+    }
+
+    // The dispatcher computes unknown/deprecated fields for the *resolved* config it
+    // receives from the console and exposes them in its mon JSON ("unknown_fields").
+    Y_UNIT_TEST(TestMonJsonReportsResolvedUnknownFields) {
+        // The dispatcher (re)computes unknown/deprecated fields in ParseYamlProtoConfig,
+        // which only runs when it receives a config-subscription notification carrying a
+        // changed YAML body. That notification is only produced once the dispatcher has a
+        // subscriber, so we must: replace the YAML on the console (allowing the unknown
+        // field), then add a subscriber and wait for it to be notified -- by which point
+        // the dispatcher has resolved the config and filled ResolvedConfigUnknownFields.
+        NKikimrConfig::TAppConfig bootstrapConfig;
+        auto *label = bootstrapConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        const TString yamlWithUnknown = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+  unknown_field_for_test: 42
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), bootstrapConfig);
+        TAutoPtr<IEventHandle> handle;
+        const TActorId dispatcherId = InitConfigsDispatcher(runtime);
+
+        {
+            auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
+            event->Record.MutableRequest()->set_config(yamlWithUnknown);
+            event->Record.MutableRequest()->set_allow_unknown_fields(true);
+            runtime.SendToConsole(event);
+
+            runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceYamlConfigResponse>(handle);
+        }
+
+        // Subscribing drives the dispatcher to fetch & resolve the YAML config; grabbing the
+        // subscriber's notification guarantees ParseYamlProtoConfig has already run.
+        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        const TActorId edge = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<THttpRequest>(HTTP_METHOD_GET);
+        request->HttpHeaders.AddHeader("Content-Type", "application/json");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, request.Get(), nullptr, nullptr, "", nullptr);
+        runtime.Send(new IEventHandle(dispatcherId, edge, new NMon::TEvHttpInfo(monReq)));
+
+        const auto* response = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(handle);
+        const TString& answer = response->Answer;
+
+        const size_t jsonBegin = answer.find('{');
+        UNIT_ASSERT_UNEQUAL(jsonBegin, TString::npos);
+        const NJson::TJsonValue json = ReadJsonFromString(answer.substr(jsonBegin));
+
+        UNIT_ASSERT_C(json.Has("unknown_fields"), "no unknown_fields in mon json: " << answer);
+        bool found = false;
+        for (const auto& f : json["unknown_fields"].GetArray()) {
+            if (f["name"].GetString() == "unknown_field_for_test") {
+                found = true;
+                UNIT_ASSERT_VALUES_EQUAL(f["deprecated"].GetBoolean(), false);
+            }
+        }
+        UNIT_ASSERT_C(found, "unknown_field_for_test not reported: " << answer);
     }
 
     Y_UNIT_TEST(TestMonJsonMasksSensitiveFieldsInDebugInfo) {
@@ -1595,6 +1668,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         const TString jsonBody = answer.substr(jsonBegin);
         const NJson::TJsonValue actual = ReadJsonFromString(jsonBody);
         const NJson::TJsonValue expected = ReadJsonFromString(R"json({
+            "configuration_version": "v1",
             "last_replay_seed_nodes": false,
             "initial_cms_json_config": {
                 "grpc_config": {
@@ -1611,6 +1685,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
             "current_json_config": {},
             "has_storage_yaml": false,
             "yaml_config": "",
+            "unknown_fields": [],
             "initial_json_config": {
                 "grpc_config": {
                     "key": "***"

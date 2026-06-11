@@ -18,7 +18,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         ConfigsDispatcher = MakeConfigsDispatcherID(ctx.SelfID.NodeId());
         YDB_LOG_INFO("ConfigsDispatcher proxy started",
-            {"Marker", "CDP01"});
+            {"marker", "CDP01"});
  
         Become(&TConfigsDispatcherProxy::StateWork);
     }

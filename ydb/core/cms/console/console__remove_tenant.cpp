@@ -18,8 +18,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot remove",
-            {"Tenant", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot remove",
+            {"tenant", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -52,7 +52,7 @@ public:
         auto &token = Request->Get()->Record.GetUserToken();
         auto &peer = Request->Get()->Record.GetPeerName();
 
-        YDB_LOG_CTX_DEBUG(ctx, "",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump TTxRemoveTenant",
             {"TTxRemoveTenant", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvRemoveTenantResponse;
@@ -92,15 +92,15 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenant Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveTenant Complete");
 
         Y_ABORT_UNLESS(Response);
         if (Response->Record.GetResponse().operation().status())
             Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                                COUNTER_REMOVE_RESPONSES);
 
-        YDB_LOG_CTX_TRACE(ctx, "",
-            {"Send", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Dump send",
+            {"send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

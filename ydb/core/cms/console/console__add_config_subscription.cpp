@@ -19,8 +19,8 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot add",
-            {"Subscription", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot add",
+            {"subscription", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -35,8 +35,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "TTxAddConfigSubscription",
-            {"Execute", rec.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAddConfigSubscription",
+            {"execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -51,8 +51,8 @@ public:
         // Check if existing subscription should be returned.
         for (auto existingSubscription : Self->SubscriptionIndex.GetSubscriptions(subscription->Subscriber)) {
             if (subscription->IsEqual(*existingSubscription)) {
-                YDB_LOG_CTX_DEBUG(ctx, "",
-                    {"Id", existingSubscription->Id});
+                YDB_LOG_DEBUG_CTX(ctx, "Dump id",
+                    {"id", existingSubscription->Id});
 
                 Response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
                 Response->Record.SetSubscriptionId(existingSubscription->Id);
@@ -77,7 +77,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxAddConfigSubscription Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAddConfigSubscription Complete");
 
         Y_ABORT_UNLESS(Response);
         if (!Self->PendingSubscriptionModifications.IsEmpty()) {
@@ -87,7 +87,7 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            YDB_LOG_CTX_TRACE(ctx, "Send",
+            YDB_LOG_TRACE_CTX(ctx, "Send",
                 {"TEvAddConfigSubscriptionResponse", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }

@@ -13,7 +13,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxLogCleanup Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogCleanup Execute");
 
         const ui32 maxConsoleLogEntries = 25000;
 
@@ -22,7 +22,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxLogCleanup Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogCleanup Complete");
 
         Self->ScheduleLogCleanup(ctx);
 

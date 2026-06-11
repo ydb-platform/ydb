@@ -142,7 +142,7 @@ public:
 
     void Die(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_TRACE(ctx, "TConfigHelper Die");
+        YDB_LOG_TRACE_CTX(ctx, "TConfigHelper Die");
 
         if (Pipe)
             NTabletPipe::CloseClient(ctx, Pipe);
@@ -199,7 +199,7 @@ public:
             auto request = MakeHolder<TEvConsole::TEvReplaceConfigSubscriptionsRequest>();
             BuildSubscription(*request->Record.MutableSubscription());
 
-            YDB_LOG_CTX_TRACE(ctx, "TConfigHelper send",
+            YDB_LOG_TRACE_CTX(ctx, "TConfigHelper send",
                 {"TEvReplaceConfigSubscriptionsRequest", request->Record.ShortDebugString()});
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
@@ -207,7 +207,7 @@ public:
             auto request = MakeHolder<TEvConsole::TEvAddConfigSubscriptionRequest>();
             BuildSubscription(*request->Record.MutableSubscription());
 
-            YDB_LOG_CTX_TRACE(ctx, "TConfigHelper send",
+            YDB_LOG_TRACE_CTX(ctx, "TConfigHelper send",
                 {"TEvAddConfigSubscriptionRequest", request->Record.ShortDebugString()});
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
@@ -215,7 +215,7 @@ public:
             auto request = MakeHolder<TEvConsole::TEvRemoveConfigSubscriptionRequest>();
             request->Record.SetSubscriptionId(SubscriptionId);
 
-            YDB_LOG_CTX_TRACE(ctx, "TConfigHelper send",
+            YDB_LOG_TRACE_CTX(ctx, "TConfigHelper send",
                 {"TEvRemoveConfigSubscriptionRequest", request->Record.ShortDebugString()});
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
@@ -228,7 +228,7 @@ public:
             for (auto &kind : ConfigItemKinds)
                 request->Record.AddItemKinds(kind);
 
-            YDB_LOG_CTX_TRACE(ctx, "TConfigHelper send",
+            YDB_LOG_TRACE_CTX(ctx, "TConfigHelper send",
                 {"TEvGetNodeConfigRequest", request->Record.ShortDebugString()});
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
@@ -238,14 +238,14 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        YDB_LOG_CTX_DEBUG(ctx, "TConfigHelper Bootstrap",
-            {"Tabletid", TabletId},
-            {"Serviceid", ServiceId},
-            {"Subscriptionid", SubscriptionId},
-            {"Action", (ui32)Action},
-            {"Tenant", Tenant},
-            {"Detecttenant", DetectTenant},
-            {"Kinds", JoinSeq(",", ConfigItemKinds)});
+        YDB_LOG_DEBUG_CTX(ctx, "TConfigHelper Bootstrap",
+            {"tabletid", TabletId},
+            {"serviceid", ServiceId},
+            {"subscriptionid", SubscriptionId},
+            {"action", (ui32)Action},
+            {"tenant", Tenant},
+            {"detecttenant", DetectTenant},
+            {"kinds", JoinSeq(",", ConfigItemKinds)});
         Become(&TThis::StateWork);
         if (Action == EAction::REPLACE_SUBSCRIPTION
             || Action == EAction::ADD_SUBSCRIPTION
@@ -279,8 +279,8 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_CTX_DEBUG(ctx, "TConfigHelper connection",
-            {"Status", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
+        YDB_LOG_DEBUG_CTX(ctx, "TConfigHelper connection",
+            {"status", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
 
         if (ev->Get()->Status != NKikimrProto::OK) {
             OnPipeDestroyed(ctx);
@@ -288,7 +288,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &/*ev*/, const TActorContext &ctx) {
-        YDB_LOG_CTX_DEBUG(ctx, "TConfigHelper TEvTabletPipe::TEvClientDestroyed");
+        YDB_LOG_DEBUG_CTX(ctx, "TConfigHelper TEvTabletPipe::TEvClientDestroyed");
         OnPipeDestroyed(ctx);
     }
 
@@ -298,8 +298,8 @@ public:
 
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "TConfigHelper got status",
-            {"FromTenantPool", rec.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "TConfigHelper got status",
+            {"fromTenantPool", rec.ShortDebugString()});
 
         NodeType = rec.GetNodeType();
         if (DetectTenant) {
@@ -320,7 +320,7 @@ public:
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->SourceType) {
             case TEvTenantPool::TEvGetStatus::EventType: {
-                YDB_LOG_CTX_WARN(ctx, "TConfigHelper cannot deliver message to domain tenant, will retry");
+                YDB_LOG_WARN_CTX(ctx, "TConfigHelper cannot deliver message to domain tenant, will retry");
                 ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryPoolStatus);
                 break;
             }

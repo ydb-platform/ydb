@@ -23,23 +23,23 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateSubDomainKey for tenant",
-            {"Path", Path},
-            {"Schemeshardid", SchemeShardId},
-            {"Pathid", PathId});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateSubDomainKey for tenant",
+            {"path", Path},
+            {"schemeshardid", SchemeShardId},
+            {"pathid", PathId});
 
         Tenant = Self->GetTenant(Path);
         if (!Tenant) {
-            YDB_LOG_CTX_ERROR(ctx, "TTxUpdateSubDomainKey cannot find tenant",
-                {"Path", Path});
+            YDB_LOG_ERROR_CTX(ctx, "TTxUpdateSubDomainKey cannot find tenant",
+                {"path", Path});
             return true;
         }
 
         // We are probably already removing this tenant.
         if (Tenant->IsRemoving()) {
-            YDB_LOG_CTX_ERROR(ctx, "TTxUpdateSubDomainKey found tenant in wrong state",
-                {"Path", Path},
-                {"TenantState", Tenant->State});
+            YDB_LOG_ERROR_CTX(ctx, "TTxUpdateSubDomainKey found tenant in wrong state",
+                {"path", Path},
+                {"tenantState", Tenant->State});
             Tenant = nullptr;
             return true;
         }
@@ -63,8 +63,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateSubDomainKey complete for",
-            {"Path", Path});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateSubDomainKey complete",
+            {"path", Path});
 
         if (Tenant) {
             if (Tenant->DomainId) {

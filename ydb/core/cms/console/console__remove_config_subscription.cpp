@@ -17,8 +17,8 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot remove",
-            {"Subscription", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot remove",
+            {"subscription", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -33,8 +33,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveConfigSubscription",
-            {"Execute", rec.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveConfigSubscription",
+            {"execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -58,7 +58,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveConfigSubscription Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveConfigSubscription Complete");
 
         Y_ABORT_UNLESS(Response);
         if (!Self->PendingSubscriptionModifications.IsEmpty()) {
@@ -68,7 +68,7 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            YDB_LOG_CTX_TRACE(ctx, "Send",
+            YDB_LOG_TRACE_CTX(ctx, "Send",
                 {"TEvRemoveConfigSubscriptionResponse", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }

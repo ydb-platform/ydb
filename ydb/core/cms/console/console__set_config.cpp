@@ -21,8 +21,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot set",
-            {"Config", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot set",
+            {"config", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -33,8 +33,8 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         auto &rec = Request->Get()->Record;
-        YDB_LOG_CTX_DEBUG(ctx, "",
-            {"TConsole::TTxSetConfig", rec.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Dump txSetConfig",
+            {"txSetConfig", rec.ShortDebugString()});
 
         Response = new TEvConsole::TEvSetConfigResponse;
 
@@ -74,14 +74,14 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxSetConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TConsole::TTxSetConfig Complete");
 
         if (ModifyConfig)
             Self->LoadConfigFromProto(NewConfig);
 
         Y_ABORT_UNLESS(Response);
-        YDB_LOG_CTX_TRACE(ctx, "",
-            {"Send", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Dump send",
+            {"send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         Self->TxProcessor->TxCompleted(this, ctx);

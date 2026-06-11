@@ -20,26 +20,26 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRevertPoolState for pool of tenant",
-            {"PoolName", Pool->Config.GetName()},
-            {"TenantPath", Tenant->Path});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRevertPoolState for pool of tenant",
+            {"poolName", Pool->Config.GetName()},
+            {"tenantPath", Tenant->Path});
 
         if (Tenant != Self->GetTenant(Tenant->Path)) {
-            YDB_LOG_CTX_ERROR(ctx, "TTxRevertPoolState tenant mismatch",
-                {"TenantPath", Tenant->Path});
+            YDB_LOG_ERROR_CTX(ctx, "TTxRevertPoolState tenant mismatch",
+                {"tenantPath", Tenant->Path});
             return true;
         }
 
         if (!Tenant->StoragePools.contains(Pool->Kind)
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
-            YDB_LOG_CTX_ERROR(ctx, "TTxRevertPoolState pool mismatch",
-                {"PoolName", Pool->Config.GetName()});
+            YDB_LOG_ERROR_CTX(ctx, "TTxRevertPoolState pool mismatch",
+                {"poolName", Pool->Config.GetName()});
             return true;
         }
 
         if (Pool->Worker != Worker) {
-            YDB_LOG_CTX_NOTICE(ctx, "TTxRevertPoolState pool worker mismatch",
-                {"PoolName", Pool->Config.GetName()});
+            YDB_LOG_NOTICE_CTX(ctx, "TTxRevertPoolState pool worker mismatch",
+                {"poolName", Pool->Config.GetName()});
             return true;
         }
 
@@ -53,8 +53,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRevertPoolState complete for",
-            {"PoolName", Pool->Config.GetName()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRevertPoolState complete",
+            {"poolName", Pool->Config.GetName()});
 
         if (Update) {
             Tenant->Generation++;

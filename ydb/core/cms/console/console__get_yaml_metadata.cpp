@@ -46,7 +46,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxGetYamlMetadata Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGetYamlMetadata Complete");
 
         ctx.Send(Request->Sender, Response.Release());
 

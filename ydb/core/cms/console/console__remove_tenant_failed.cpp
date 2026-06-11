@@ -24,9 +24,9 @@ public:
         // (subdomain removal) fails.
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantFailed for tenant",
-            {"TenantPath", Tenant->Path},
-            {"Txid", Tenant->TxId});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveTenantFailed for tenant",
+            {"tenantPath", Tenant->Path},
+            {"txid", Tenant->TxId});
 
         Self->DbUpdateTenantState(Tenant, TTenant::RUNNING, txc, ctx);
         Self->DbUpdateRemovedTenant(Tenant, Code, txc, ctx);
@@ -37,7 +37,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantFailed Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveTenantFailed Complete");
 
         Self->SendTenantNotifications(Tenant, TTenant::REMOVE, Code, ctx);
         Self->Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_REMOVE_RESPONSES);

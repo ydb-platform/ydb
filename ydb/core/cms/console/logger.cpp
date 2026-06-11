@@ -21,13 +21,13 @@ bool TLogger::DbCleanupLog(ui32 remainEntries,
 
     ui64 fromId = NextLogItemId - remainEntries;
 
-    YDB_LOG_CTX_DEBUG(ctx, "Cleanup log records until",
-        {"FromId", fromId});
+    YDB_LOG_DEBUG_CTX(ctx, "Cleanup log records until",
+        {"fromId", fromId});
 
     NIceDb::TNiceDb db(txc.DB);
 
-    YDB_LOG_CTX_DEBUG(ctx, "Removing log records",
-        {"Count", (fromId - MinLogItemId + 1)});
+    YDB_LOG_DEBUG_CTX(ctx, "Removing log records",
+        {"count", (fromId - MinLogItemId + 1)});
 
     for (ui64 id = MinLogItemId; id <= fromId; ++id)
         db.Table<Schema::LogRecords>().Key(id).Delete();
@@ -170,9 +170,9 @@ void TLogger::DbLogData(const TString &userSID,
 
     TString serializedData = data.SerializeAsString();
 
-    YDB_LOG_CTX_TRACE(ctx, "Add log record to local DB",
-        {"Timestamp", timestamp},
-        {"Data", data.ShortDebugString()});
+    YDB_LOG_TRACE_CTX(ctx, "Add log record to local DB",
+        {"timestamp", timestamp},
+        {"data", data.ShortDebugString()});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::LogRecords>().Key(NextLogItemId)

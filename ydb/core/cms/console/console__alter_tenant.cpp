@@ -18,8 +18,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Cannot alter",
-            {"Tenant", error});
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot alter",
+            {"tenant", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -41,7 +41,7 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
-        YDB_LOG_CTX_DEBUG(ctx, "",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump TTxAlterTenant",
             {"TTxAlterTenant", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvAlterTenantResponse;
@@ -61,7 +61,7 @@ public:
 
         // Check idempotency key
         if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) {
-            YDB_LOG_CTX_DEBUG(ctx, "Returning success due to idempotency key match");
+            YDB_LOG_DEBUG_CTX(ctx, "Returning success due to idempotency key match");
             auto &operation = *Response->Record.MutableResponse()->mutable_operation();
             operation.set_ready(true);
             operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -367,14 +367,14 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxAlterTenant Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant Complete");
 
         Y_ABORT_UNLESS(Response);
         Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                            COUNTER_ALTER_RESPONSES);
 
-        YDB_LOG_CTX_TRACE(ctx, "",
-            {"Send", Response->ToString()});
+        YDB_LOG_TRACE_CTX(ctx, "Dump send",
+            {"send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

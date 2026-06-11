@@ -22,7 +22,7 @@ from sqlalchemy.types import (
     String as SqlaString,
 )
 
-from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
+from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType, schema_types
 from clickhouse_connect.datatypes.base import EMPTY_TYPE_DEF, LC_TYPE_DEF, NULLABLE_TYPE_DEF, TypeDef
 from clickhouse_connect.datatypes.numeric import Enum8 as ChEnum8
 from clickhouse_connect.datatypes.numeric import Enum16 as ChEnum16
@@ -256,15 +256,34 @@ class Date32(ChSqlaType, SqlaDate):
     pass
 
 
+_TIMEZONE_SENTINEL = object()
+
+
+def _resolve_tz_alias(tz, timezone):
+    """Resolve `tz=` / `timezone=` alias (clickhouse-sqlalchemy naming). Returns the zone string or None.
+
+    timezone=False maps silently to None: SQLAlchemy's type-adaptation passes it when cloning
+    DateTime (inherited from SqlaDateTime.timezone default). timezone=True is rejected because
+    ClickHouse requires a concrete IANA zone.
+    """
+    if timezone is not _TIMEZONE_SENTINEL:
+        if timezone is True:
+            raise ArgumentError(
+                "timezone=True is not supported for ClickHouse DateTime types; "
+                "pass a named IANA zone string such as timezone='UTC' or timezone='America/New_York'"
+            )
+        if timezone is False:
+            return tz
+        if tz is not None:
+            raise ArgumentError("Cannot specify both 'tz' and 'timezone'; they are aliases")
+        return timezone
+    return tz
+
+
 class DateTime(ChSqlaType, SqlaDateTime):
-    def __init__(self, tz: str = None, type_def: TypeDef = None):
-        """
-        Date time constructor with optional ClickHouse timezone parameter if not constructed with TypeDef
-        :param tz: IANA timezone key (e.g. "UTC", "America/New_York"). Resolved via the standard
-            library zoneinfo module. On platforms without system zoneinfo data (notably
-            Windows), install the tzdata package.
-        :param type_def: TypeDef from parse_name function
-        """
+    def __init__(self, tz: str = None, type_def: TypeDef = None, timezone=_TIMEZONE_SENTINEL):
+        """tz / timezone: IANA zone string (resolved via zoneinfo; install `tzdata` on Windows)."""
+        tz = _resolve_tz_alias(tz, timezone)
         if not type_def:
             if tz:
                 tzutil.resolve_zone(tz)
@@ -276,15 +295,9 @@ class DateTime(ChSqlaType, SqlaDateTime):
 
 
 class DateTime64(ChSqlaType, SqlaDateTime):
-    def __init__(self, precision: int = None, tz: str = None, type_def: TypeDef = None):
-        """
-        Date time constructor with precision and timezone parameters if not constructed with TypeDef
-        :param precision:   Usually 3/6/9 for mill/micro/nanosecond precision on ClickHouse side
-        :param tz: IANA timezone key (e.g. "UTC", "America/New_York"). Resolved via the standard
-            library zoneinfo module. On platforms without system zoneinfo data (notably
-            Windows), install the tzdata package.
-        :param type_def: TypeDef from parse_name function
-        """
+    def __init__(self, precision: int = None, tz: str = None, type_def: TypeDef = None, timezone=_TIMEZONE_SENTINEL):
+        """precision: 3/6/9 for ms/us/ns. tz / timezone: IANA zone string."""
+        tz = _resolve_tz_alias(tz, timezone)
         if not type_def:
             if tz:
                 tzutil.resolve_zone(tz)
@@ -374,8 +387,6 @@ class Nullable:
         """
         if callable(element):
             return element(type_def=NULLABLE_TYPE_DEF)
-        if element.low_card:
-            raise ArgumentError("Low Cardinality type cannot be Nullable")
         orig = element.type_def
         wrappers = orig if "Nullable" in orig.wrappers else orig.wrappers + ("Nullable",)
         return element.__class__(type_def=TypeDef(wrappers, orig.keys, orig.values))
@@ -446,18 +457,31 @@ class Tuple(ChSqlaType, UserDefinedType):
 
     def __init__(
         self,
+        *args,
         elements: Sequence[ChSqlaType | type[ChSqlaType]] = None,
         type_def: TypeDef = None,
     ):
-        """
-        Tuple constructor that can take a list of element types if not constructed from a TypeDef
-        :param elements: sequence of ChSqlaType instance or class to use as tuple element types
-        :param type_def: TypeDef from parse_name function
-        """
+        """Tuple(UInt32, UUID) variadic form or Tuple(elements=[UInt32, UUID]) list form, not both."""
+        if type_def is None and not args and elements is None:
+            # SA's dialect_impl -> adapt -> constructor_copy can call cls() with no args
+            # because get_cls_kwargs doesn't see keyword-only args behind *args.
+            # adapt() below preserves the real type_def; this branch just avoids a crash.
+            type_def = EMPTY_TYPE_DEF
         if not type_def:
+            if args and elements is not None:
+                raise ArgumentError("Cannot specify both positional elements and the 'elements' kwarg")
+            if args:
+                elements = args
             values = [et() if callable(et) else et for et in elements]
             type_def = TypeDef(values=tuple(v.name for v in values))
         super().__init__(type_def)
+
+    def adapt(self, cls, **kw):
+        # Bypass SA's constructor_copy: it can't see keyword-only args behind *args and
+        # would produce an empty Tuple. Copy state directly.
+        inst = cls.__new__(cls)
+        inst.__dict__.update(self.__dict__)
+        return inst
 
 
 class JSON(ChSqlaType, UserDefinedType):
@@ -544,3 +568,6 @@ class QBit(ChSqlaType, UserDefinedType):
                 raise ArgumentError("QBit requires element_type and dimension parameters")
             type_def = TypeDef(values=(element_type, dimension))
         super().__init__(type_def)
+
+
+__all__ = sorted(schema_types) + ["LowCardinality", "Nullable"]

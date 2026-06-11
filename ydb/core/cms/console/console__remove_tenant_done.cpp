@@ -19,9 +19,9 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_POOLS);
 
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantDone for tenant",
-            {"TenantPath", Tenant->Path},
-            {"Txid", Tenant->TxId});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveTenantDone for tenant",
+            {"tenantPath", Tenant->Path},
+            {"txid", Tenant->TxId});
 
         Self->DbRemoveComputationalUnits(Tenant, txc, ctx);
         Self->DbRemoveTenantAndPools(Tenant, txc, ctx);
@@ -33,7 +33,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantDone Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveTenantDone Complete");
 
         Self->SendTenantNotifications(Tenant, TTenant::REMOVE, Ydb::StatusIds::SUCCESS, ctx);
         Self->Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_REMOVE_RESPONSES);

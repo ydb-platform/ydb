@@ -119,6 +119,9 @@ public:
         LocalBloomNgramFilter = 7,
         GlobalJson = 8,
         LocalMinMax = 9,
+        GlobalFulltextCompact = 10,
+        GlobalFulltextCompactRelevance = 11,
+        GlobalJsonCompact = 12,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -176,6 +179,7 @@ public:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
             case EType::LocalMinMax:
+            case EType::GlobalJsonCompact:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -186,7 +190,9 @@ public:
                 break;
             }
             case EType::GlobalFulltextPlain:
-            case EType::GlobalFulltextRelevance: {
+            case EType::GlobalFulltextRelevance:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance: {
                 NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
                 *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
                 SpecializedIndexDescription = std::move(fulltextIndexDescription);
@@ -227,6 +233,7 @@ public:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
             case EType::LocalMinMax:
+            case EType::GlobalJsonCompact:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -235,6 +242,8 @@ public:
                 break;
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
                 SpecializedIndexDescription = message->GetFulltextIndexDescription();
                 break;
             case EType::LocalBloomFilter:
@@ -278,6 +287,12 @@ public:
                 return TIndexDescription::EType::LocalBloomNgramFilter;
             case NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax:
                 return TIndexDescription::EType::LocalMinMax;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:
+                return TIndexDescription::EType::GlobalFulltextCompact;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance:
+                return TIndexDescription::EType::GlobalFulltextCompactRelevance;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
+                return TIndexDescription::EType::GlobalJsonCompact;
             default:
                 YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
@@ -299,6 +314,12 @@ public:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
             case NYql::TIndexDescription::EType::GlobalJson:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
+            case NYql::TIndexDescription::EType::GlobalFulltextCompact:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact;
+            case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance;
+            case NYql::TIndexDescription::EType::GlobalJsonCompact:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact;
             case NYql::TIndexDescription::EType::LocalBloomFilter:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter;
             case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
@@ -336,6 +357,7 @@ public:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
             case EType::LocalMinMax:
+            case EType::GlobalJsonCompact:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;
@@ -344,6 +366,8 @@ public:
                 break;
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
                 *message->MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
                 break;
             case EType::LocalBloomFilter:
@@ -380,6 +404,9 @@ public:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:
                 return true;
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
+            case EType::GlobalJsonCompact:
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
             case EType::LocalMinMax:
@@ -396,6 +423,9 @@ public:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
+            case EType::GlobalJsonCompact:
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:

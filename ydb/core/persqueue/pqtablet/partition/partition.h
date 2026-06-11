@@ -1200,6 +1200,7 @@ private:
     void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
+    size_t WriteNewMessagesFromSupportivePartitions = 0;
 
     bool TryAddDeleteHeadKeysToPersistRequest();
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request) const;

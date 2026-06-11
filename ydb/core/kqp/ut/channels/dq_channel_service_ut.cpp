@@ -60,6 +60,13 @@ struct TWorkerSettings {
     bool EarlyFinish = false;
 };
 
+struct TFailureSettings {
+    int Data = 0;
+    int Ack = 0;
+    int Update = 0;
+    int Discovery = 0;
+};
+
 class TWorkerActor : public NActors::TActor<TWorkerActor> {
 public:
     TWorkerActor(std::shared_ptr<IDqChannelService> service, TEvTestPrivate::ERole role, ui32 channelId, const TWorkerSettings& settings)
@@ -181,7 +188,7 @@ public:
 
 Y_UNIT_TEST_SUITE(Channels20) {
 
-    void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings) {
+    void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& failureSettings = TFailureSettings{}) {
 
         TKikimrSettings settings;
         settings.NodeCount = local ? 1 : 2;
@@ -189,6 +196,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         settings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetUseRealInterconnect();
 
         auto control0 = runtime.AllocateEdgeActor(0);
         auto control1 = local ? control0 : runtime.AllocateEdgeActor(1);
@@ -212,6 +220,17 @@ Y_UNIT_TEST_SUITE(Channels20) {
         }
 
         THashSet<NActors::TActorId> actors;
+
+        std::atomic<int> dataCount = 0;
+        NActors::TTestActorRuntime::TEventObserverHolder dataHolder;
+        if (failureSettings.Data) {
+            dataHolder = runtime.AddObserver<TEvDqCompute::TEvChannelDataV2>([&](TEvDqCompute::TEvChannelDataV2::TPtr& event) {
+                if (dataCount.fetch_add(1) == failureSettings.Data) {
+                    dataCount.fetch_sub(failureSettings.Data);
+                    event.Reset();
+                }
+            });
+        }
 
         for (auto i = 0; i < count; i ++) {
             auto channelId = i + 1;
@@ -268,8 +287,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT_VALUES_EQUAL(errorCount, 0);
     }
 
-    void LoadTest(int count, bool local, const TWorkerSettings& settings = TWorkerSettings{}) {
-        LoadTest(count, local, settings, settings);
+    void LoadTest(int count, bool local, const TWorkerSettings& settings = TWorkerSettings{}, const TFailureSettings& failureSettings = TFailureSettings{}) {
+        LoadTest(count, local, settings, settings, failureSettings);
     }
 
     Y_UNIT_TEST(EmptyFinish2n) {
@@ -302,5 +321,9 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(InstantFinish1n) {
         LoadTest(100, true, TWorkerSettings{ .MessageCount = 10 }, TWorkerSettings{ .MessageCount = 0, .EarlyFinish = true });
+    }
+
+    Y_UNIT_TEST(MissedData) {
+        LoadTest(100, false, TWorkerSettings{ .MessageCount = 100 }, TWorkerSettings{ .MessageCount = 100 }, TFailureSettings{ .Data = 10 });
     }
 }

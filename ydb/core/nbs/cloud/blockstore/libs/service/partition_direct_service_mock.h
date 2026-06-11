@@ -37,6 +37,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     {
         Y_UNUSED(cfg);
     }
+
+    ui64 LsnGenerator = 0;
+
+    ui64 GenerateLsn() override
+    {
+        return ++LsnGenerator;
+    }
 };
 
 using TPartitionDirectServiceMockPtr =

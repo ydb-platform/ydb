@@ -867,25 +867,49 @@ TString SerializeToString(TUnversionedRow row)
 
 TString SerializeToString(TUnversionedValueRange range)
 {
-    int size = 2 * MaxVarUint32Size; // header size
+    TString buffer;
+    buffer.resize(GetUnversionedRowByteSizeForWire(range));
+
+    char* begin = const_cast<char*>(buffer.data());
+    char* current = SerializeRowToBuffer(begin, range);
+
+    buffer.resize(current - begin);
+
+    return buffer;
+}
+
+size_t GetUnversionedRowByteSizeForWire(TUnversionedValueRange range)
+{
+    size_t size = 2 * MaxVarUint32Size; // header size
     for (const auto& value : range) {
         size += EstimateRowValueSize(value);
     }
+    return size;
+}
 
-    TString buffer;
-    buffer.resize(size);
-
-    char* current = const_cast<char*>(buffer.data());
+char* SerializeRowToBuffer(char* dst, TUnversionedValueRange range)
+{
+    char* current = dst;
     current += WriteVarUint32(current, 0); // format version
     current += WriteVarUint32(current, range.size());
-
     for (const auto& value : range) {
         current += WriteRowValue(current, value);
     }
+    return current;
+}
 
-    buffer.resize(current - buffer.data());
+const char* ReadUnversionedRowHeaderFromBuffer(const char* input, ui32* valueCount)
+{
+    ui32 version;
+    input += ReadVarUint32(input, &version);
+    YT_VERIFY(version == 0);
+    input += ReadVarUint32(input, valueCount);
+    return input;
+}
 
-    return buffer;
+const char* ReadUnversionedValueFromBuffer(const char* input, TUnversionedValue* value)
+{
+    return input + ReadRowValue(input, value);
 }
 
 TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> nullPaddingWidth = std::nullopt)
@@ -895,14 +919,8 @@ TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> n
     }
     auto dataRef = TSharedRef::FromString(std::move(data));
 
-    const char* current = dataRef.begin();
-
-    ui32 version;
-    current += ReadVarUint32(current, &version);
-    YT_VERIFY(version == 0);
-
     ui32 valueCount;
-    current += ReadVarUint32(current, &valueCount);
+    const char* current = ReadUnversionedRowHeaderFromBuffer(dataRef.begin(), &valueCount);
 
     // TODO(max42): YT-14049.
     int nullCount = nullPaddingWidth ? std::max<int>(0, *nullPaddingWidth - static_cast<int>(valueCount)) : 0;
@@ -916,8 +934,7 @@ TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> n
 
     auto* values = reinterpret_cast<TUnversionedValue*>(header + 1);
     for (int index = 0; index < static_cast<int>(valueCount); ++index) {
-        auto* value = values + index;
-        current += ReadRowValue(current, value);
+        current = ReadUnversionedValueFromBuffer(current, values + index);
     }
     for (int index = valueCount; index < static_cast<int>(valueCount + nullCount); ++index) {
         values[index] = MakeUnversionedNullValue(index);
@@ -932,21 +949,15 @@ TUnversionedRow DeserializeFromString(const TString& data, const TRowBufferPtr& 
         return TUnversionedRow();
     }
 
-    const char* current = data.data();
-
-    ui32 version;
-    current += ReadVarUint32(current, &version);
-    YT_VERIFY(version == 0);
-
     ui32 valueCount;
-    current += ReadVarUint32(current, &valueCount);
+    const char* current = ReadUnversionedRowHeaderFromBuffer(data.data(), &valueCount);
 
     auto row = rowBuffer->AllocateUnversioned(valueCount);
 
     auto* values = row.begin();
     for (int index = 0; index < static_cast<int>(valueCount); ++index) {
         auto* value = values + index;
-        current += ReadRowValue(current, value);
+        current = ReadUnversionedValueFromBuffer(current, value);
         rowBuffer->CaptureValue(value);
     }
 

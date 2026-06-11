@@ -8,6 +8,7 @@ SRCS(
     kqp_full_text_source.cpp
     kqp_sys_view_source.cpp
     kqp_fulltext_analyze.cpp
+    kqp_stream_enumerate.cpp
     kqp_program_builder.cpp
     kqp_read_actor.cpp
     kqp_read_iterator_common.cpp

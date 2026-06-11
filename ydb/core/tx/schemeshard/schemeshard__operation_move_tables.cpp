@@ -2,6 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path_element.h"
+#include "schemeshard_info_types.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -79,7 +80,15 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
         Y_ABORT_UNLESS(srcChildPath.Base()->PathId == child.second);
 
-        result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+        const bool isLocalIndex = context.SS->Indexes.contains(srcChildPath.Base()->PathId) &&
+            TTableIndexInfo::IsLocalIndex(context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type);
+        if (isLocalIndex) {
+            const TString srcIndexPath = srcPath.PathString() + "/" + name;
+            result.push_back(CreateMoveLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            continue;
+        } else {
+            result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+        }
 
         for (const auto& [implTableName, implTablePathId]: srcChildPath.Base()->GetChildren()) {
             TPath srcImplTable = srcChildPath.Child(implTableName);

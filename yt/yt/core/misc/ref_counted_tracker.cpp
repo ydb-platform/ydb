@@ -70,16 +70,16 @@ const TSourceLocation& TRefCountedTracker::TNamedSlot::GetLocation() const
     return Key_.Location;
 }
 
-TString TRefCountedTracker::TNamedSlot::GetTypeName() const
+std::string TRefCountedTracker::TNamedSlot::GetTypeName() const
 {
     return TypeName(*GetTypeKey().Underlying());
 }
 
-TString TRefCountedTracker::TNamedSlot::GetFullName() const
+std::string TRefCountedTracker::TNamedSlot::GetFullName() const
 {
     const auto& location = Key_.Location;
     return location.IsValid()
-        ? Format("%v at %v:%v", GetTypeName(), location.GetFileName(), location.GetLine())
+        ? std::string(Format("%v at %v:%v", GetTypeName(), location.GetFileName(), location.GetLine()))
         : GetTypeName();
 }
 
@@ -240,7 +240,7 @@ void TRefCountedTracker::SortSnapshot(TNamedStatistics* snapshot, int sortByColu
     std::sort(snapshot->begin(), snapshot->end(), predicate);
 }
 
-TString TRefCountedTracker::GetDebugInfo(int sortByColumn) const
+std::string TRefCountedTracker::GetDebugInfo(int sortByColumn) const
 {
     auto snapshot = GetSnapshot();
     SortSnapshot(&snapshot, sortByColumn);

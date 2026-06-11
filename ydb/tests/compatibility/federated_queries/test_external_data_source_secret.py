@@ -6,6 +6,11 @@ from test_external_data_source import ExternalDataTableTestBase
 
 
 class ExternalDataSourceSecretCompatibilityBase(ExternalDataTableTestBase):
+    def setup_cluster(self):
+        yield from super().setup_cluster(
+            disabled_feature_flags=["enable_drain_on_shutdown"]
+        )
+
     def create_external_data_source_with_secret_kind(self, kind: str):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
 

@@ -5,6 +5,16 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+void AdvanceNextColumnIdPastIndexes(ui32& nextColumnId, const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
+    for (const auto& indexProto : tableSchema.GetIndexes()) {
+        nextColumnId = Max(nextColumnId, indexProto.GetId() + 1);
+    }
+}
+
+} // namespace
+
 bool TOlapSchema::ValidateTtlSettings(
     const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOperationContext& context, IErrorCollector& errors) const {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
@@ -43,6 +53,18 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
     return true;
 }
 
+bool TOlapSchema::ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
+    TOlapSchemaUpdate schemaDiff;
+    if (!schemaDiff.Parse(tableSchema, errors, allowNullKeys)) {
+        return false;
+    }
+    if (!Update(schemaDiff, errors)) {
+        return false;
+    }
+    ParseIndexesFromFullSchema(tableSchema);
+    return true;
+}
+
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
     Version = tableSchema.GetVersion();
@@ -50,10 +72,12 @@ void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& ta
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
     Options.Parse(tableSchema);
+    AdvanceNextColumnIdPastIndexes(NextColumnId, tableSchema);
 }
 
 void TOlapSchema::ParseIndexesFromFullSchema(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     Indexes.Parse(tableSchema);
+    AdvanceNextColumnIdPastIndexes(NextColumnId, tableSchema);
 }
 
 void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {

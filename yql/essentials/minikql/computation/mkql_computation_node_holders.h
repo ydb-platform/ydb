@@ -600,7 +600,6 @@ public:
         : TComputationValue(memInfo)
         , Datum_(std::move(datum))
     {
-        VALIDATE_DATUM_ARROW_BLOCK_CONSTRUCTOR(Datum_);
     }
 
     inline static const TArrowBlock& From(const NUdf::TUnboxedValuePod& value) {
@@ -891,7 +890,7 @@ public:
 
     NUdf::TUnboxedValuePod CreateDirectArrayHolder(ui64 size, NUdf::TUnboxedValue*& itemsPtr) const;
 
-    NUdf::TUnboxedValuePod CreateArrowBlock(arrow::Datum&& datum) const;
+    NUdf::TUnboxedValuePod CreateArrowBlock(arrow::Datum&& datum, NYql::EDatumValidationMode validationMode = NYql::DefaultDatumValidationMode) const;
 
     NUdf::TUnboxedValuePod VectorAsArray(TUnboxedValueVector& values) const;
 

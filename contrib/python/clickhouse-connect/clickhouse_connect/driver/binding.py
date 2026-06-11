@@ -32,12 +32,31 @@ class DT64Param:
         return f"'{s}'"
 
 
-def quote_identifier(identifier: str):
-    first_char = identifier[0]
-    if first_char in ("`", '"') and identifier[-1] == first_char:
-        # Identifier is already quoted, assume that it's valid
-        return identifier
+def quote_identifier(identifier: str) -> str:
+    if len(identifier) >= 2:
+        quote = identifier[0]
+        if quote in ("`", '"') and identifier[-1] == quote and _is_validly_quoted(identifier, quote):
+            return identifier
     return f"`{escape_str(identifier)}`"
+
+
+def _is_validly_quoted(identifier: str, quote: str) -> bool:
+    # Accepts backslash escapes (\X) and doubled-quote escapes (`` or "").
+    i, end = 1, len(identifier) - 1
+    while i < end:
+        c = identifier[i]
+        if c == "\\":
+            if i + 1 >= end:
+                return False
+            i += 2
+        elif c == quote:
+            if i + 1 < end and identifier[i + 1] == quote:
+                i += 2
+            else:
+                return False
+        else:
+            i += 1
+    return True
 
 
 def finalize_query(query: str, parameters: Sequence | dict[str, Any] | None, server_tz: tzinfo | None = None) -> str:

@@ -78,7 +78,7 @@ std::string BuildServiceAddress(TStringBuf hostName, int port)
 void ParseServiceAddress(TStringBuf address, TStringBuf* hostName, int* port)
 {
     auto colonIndex = address.find_last_of(':');
-    if (colonIndex == TString::npos) {
+    if (colonIndex == std::string::npos) {
         THROW_ERROR_EXCEPTION("Service address %Qv is malformed, <host>:<port> format is expected",
             address);
     }
@@ -270,14 +270,14 @@ TErrorOr<TNetworkAddress> TNetworkAddress::TryParse(TStringBuf address)
     std::optional<int> port;
 
     auto closingBracketIndex = address.find(']');
-    if (closingBracketIndex != TString::npos) {
+    if (closingBracketIndex != std::string::npos) {
         if (address.empty() || address[0] != '[') {
             return TError("Address %Qv is malformed, expected [<addr>]:<port> or [<addr>] format",
                 address);
         }
 
         auto colonIndex = address.find(':', closingBracketIndex + 1);
-        if (colonIndex != TString::npos) {
+        if (colonIndex != std::string::npos) {
             try {
                 port = FromString<int>(address.substr(colonIndex + 1));
             } catch (const std::exception) {
@@ -288,9 +288,9 @@ TErrorOr<TNetworkAddress> TNetworkAddress::TryParse(TStringBuf address)
 
         ipAddress = address.substr(1, closingBracketIndex - 1);
     } else {
-        if (address.find('.') != TString::npos) {
+        if (address.find('.') != std::string::npos) {
             auto colonIndex = address.find(':');
-            if (colonIndex != TString::npos) {
+            if (colonIndex != std::string::npos) {
                 try {
                     port = FromString<int>(address.substr(colonIndex + 1));
                     ipAddress = address.substr(0, colonIndex);
@@ -382,12 +382,12 @@ TNetworkAddress TNetworkAddress::Parse(TStringBuf address)
     return TryParse(address).ValueOrThrow();
 }
 
-void ToProto(TString* protoAddress, const TNetworkAddress& address)
+void ToProto(TProtobufString* protoAddress, const TNetworkAddress& address)
 {
-    *protoAddress = TString(reinterpret_cast<const char*>(&address.Storage_), address.Length_);
+    *protoAddress = TProtobufString(reinterpret_cast<const char*>(&address.Storage_), address.Length_);
 }
 
-void FromProto(TNetworkAddress* address, const TString& protoAddress)
+void FromProto(TNetworkAddress* address, const TProtobufString& protoAddress)
 {
     if (protoAddress.size() > sizeof(address->Storage_)) {
         THROW_ERROR_EXCEPTION("Network address size is too big")
@@ -423,7 +423,7 @@ std::string ToString(const TNetworkAddress& address, const TNetworkAddressFormat
                 auto quoted = Format("%Qv", addressRef);
                 return Format("unix://[%v]", quoted.substr(1, quoted.size() - 2));
             } else {
-                auto addressRef = TString(typedAddr->sun_path, address.GetLength() - sizeof(sa_family_t));
+                auto addressRef = std::string(typedAddr->sun_path, address.GetLength() - sizeof(sa_family_t));
                 return Format("unix://%v", NFS::GetRealPath(addressRef));
             }
         }
@@ -1289,7 +1289,7 @@ std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName)
 std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName)
 {
     if (auto rawResult = InferYPClusterFromHostNameRaw(hostName)) {
-        return TString{*rawResult};
+        return std::string{*rawResult};
     }
     return {};
 }
@@ -1311,7 +1311,7 @@ std::optional<TStringBuf> InferYTClusterFromClusterUrlRaw(TStringBuf clusterUrl)
 std::optional<std::string> InferYTClusterFromClusterUrl(TStringBuf clusterUrl)
 {
     if (auto rawResult = InferYTClusterFromClusterUrlRaw(clusterUrl)) {
-        return TString{*rawResult};
+        return std::string{*rawResult};
     }
     return {};
 }

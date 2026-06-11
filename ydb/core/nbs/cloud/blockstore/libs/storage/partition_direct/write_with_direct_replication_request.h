@@ -15,11 +15,7 @@ public:
         TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlockRange64 vChunkRange,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
-        NWilson::TTraceId traceId);
+        std::shared_ptr<TWriteRequestBundle> bundle);
 
     ~TWriteWithDirectReplicationRequestExecutor() override = default;
 

@@ -77,6 +77,15 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
     ptr->Read(resp.get(), [resp, ptr, client, holder](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         switch (grpcStatus.GRpcStatusCode) {
             case grpc::StatusCode::OK:
+                if (resp->has_session_shutdown()) {
+                    auto impl = holder->TrySharedOwning();
+                    if (impl) {
+                        impl->MarkIdle();
+                    }
+                } else if (resp->has_node_shutdown())) {
+                    auto impl = holder->TrySharedOwning();
+                    
+                }
                 StartAsyncRead(ptr, client, holder);
                 break;
             default: {

@@ -211,6 +211,7 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
+            IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(

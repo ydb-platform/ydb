@@ -2,7 +2,6 @@
 
 #include "admin_commands.h"
 #include "authentication_commands.h"
-#include "ban_commands.h"
 #include "bundle_controller_commands.h"
 #include "chaos_commands.h"
 #include "command.h"
@@ -100,14 +99,14 @@ void TDriverRequest::Reset()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCommandDescriptor IDriver::GetCommandDescriptor(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptor(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     YT_VERIFY(descriptor);
     return *descriptor;
 }
 
-TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     if (!descriptor) {
@@ -429,10 +428,6 @@ public:
         REGISTER    (TFinishDistributedWriteFileSessionCommand, "finish_distributed_write_file_session",Null,Null,    true,  false, ApiVersion4);
         REGISTER    (TWriteFileFragmentCommand,            "write_file_fragment",             Binary,     Structured, true,   true, ApiVersion4);
 
-        REGISTER    (TGetUserBannedCommand,                "get_user_banned",                 Null,       Structured, false, true,  ApiVersion4);
-        REGISTER    (TSetUserBannedCommand,                "set_user_banned",                 Null,       Null,       true,  true,  ApiVersion4);
-        REGISTER    (TListBannedUsersCommand,              "list_banned_users",               Null,       Structured, false, false, ApiVersion4);
-
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                 "read_hunks",                             Null,       Structured, false, true );
             REGISTER_ALL(TWriteHunksCommand,                "write_hunks",                            Null,       Structured, true,  true );
@@ -503,7 +498,7 @@ public:
             .Run();
     }
 
-    std::optional<TCommandDescriptor> FindCommandDescriptor(const TString& commandName) const override
+    std::optional<TCommandDescriptor> FindCommandDescriptor(const std::string& commandName) const override
     {
         auto it = CommandNameToEntry_.find(commandName);
         return it == CommandNameToEntry_.end() ? std::nullopt : std::make_optional(it->second.Descriptor);
@@ -583,7 +578,7 @@ private:
         TExecuteCallback Execute;
     };
 
-    THashMap<TString, TCommandEntry> CommandNameToEntry_;
+    THashMap<std::string, TCommandEntry> CommandNameToEntry_;
 
 
     template <class TCommand>

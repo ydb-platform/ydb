@@ -44,7 +44,7 @@ DEFINE_ENUM(ETokenType,
 
 ETokenType CharToTokenType(char ch);        // returns ETokenType::EndOfStream for non-special chars
 char TokenTypeToChar(ETokenType type);      // YT_ABORT for non-special types
-TString TokenTypeToString(ETokenType type);  // YT_ABORT for non-special types
+std::string TokenTypeToString(ETokenType type);  // YT_ABORT for non-special types
 
 ////////////////////////////////////////////////////////////////////////////////
 

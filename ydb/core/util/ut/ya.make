@@ -17,6 +17,7 @@ SRCS(
     btree_ut.cpp
     cache_ut.cpp
     circular_queue_ut.cpp
+    circular_sparse_queue_ut.cpp
     concurrent_rw_hash_ut.cpp
     event_priority_queue_ut.cpp
     fast_lookup_unique_list_ut.cpp

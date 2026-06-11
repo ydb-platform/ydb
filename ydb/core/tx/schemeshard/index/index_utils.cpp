@@ -25,11 +25,14 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact: {
             res.IndexTableCount = 1;
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
             res.IndexTableCount = 4;
             break;
         }
@@ -419,6 +422,86 @@ auto CalcVectorKmeansTreeBuildOverlapTableDescImpl(
     return implTableDesc;
 }
 
+auto CalcFulltextCompactImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns;
+    Y_ENSURE(tableColumns.Keys.size() == 1);
+    for (const auto & keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
+    TColumnTypes baseColumnTypes;
+    TString error;
+    Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
+    NScheme::TTypeId tokenColumnType;
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+        tokenColumnType = NScheme::NTypeIds::String;
+    } else {
+        Y_ENSURE(indexDesc->GetSettings().columns().size() == 1);
+        auto textColumnInfo = baseColumnTypes.at(indexDesc->GetSettings().columns().at(0).column());
+        tokenColumnType = textColumnInfo.GetTypeId();
+    }
+
+    auto idType = baseColumnTypes.at(tableColumns.Keys.at(0)).GetTypeId();
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::ImplTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto tokenColumn = implTableDesc.AddColumns();
+        tokenColumn->SetName(NFulltext::TokenColumn);
+        tokenColumn->SetType(NScheme::TypeName(tokenColumnType));
+        tokenColumn->SetTypeId(tokenColumnType);
+        tokenColumn->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::MaxIdColumn);
+        col->SetType(NScheme::TypeName(idType));
+        col->SetTypeId(idType);
+        col->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames(NFulltext::MaxIdColumn);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::GenColumn);
+        col->SetType(NScheme::TypeName(NFulltext::GenType));
+        col->SetTypeId(NFulltext::GenType);
+        col->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames(NFulltext::GenColumn);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::AddedColumn);
+        col->SetType("Bool");
+        col->SetTypeId(Ydb::Type::BOOL);
+        col->SetNotNull(true);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::SegmentColumn);
+        col->SetType("String");
+        col->SetTypeId(NScheme::NTypeIds::String);
+        col->SetNotNull(true);
+    }
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+    implTableDesc.SetIndexImplType(indexType);
+
+    return implTableDesc;
+}
+
 auto CalcFulltextImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
@@ -429,6 +512,9 @@ auto CalcFulltextImplTableDescImpl(
 {
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns;
+    Y_ENSURE(indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain ||
+        indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance ||
+        indexType == NKikimrSchemeOp::EIndexTypeGlobalJson);
     if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
         indexColumns = indexDataColumns;
     }
@@ -717,6 +803,26 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NKikimrSchemeOp::EIndexType indexType)
 {
     return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType)
+{
+    return CalcFulltextCompactImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType)
+{
+    return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(

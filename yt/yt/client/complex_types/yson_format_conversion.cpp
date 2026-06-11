@@ -502,7 +502,7 @@ std::variant<TYsonServerToClientConverter, TYsonClientToServerConverter> CreateU
 struct TStructFieldInfo
 {
     TYsonCursorConverter Converter;
-    TString FieldName;
+    std::string FieldName;
     bool IsNullable = false;
 };
 
@@ -557,7 +557,7 @@ struct TVariantTupleApplier
 struct TVariantStructApplier
 {
     Y_FORCE_INLINE void OnVariantAlternative(
-        const std::pair<TString, TYsonCursorConverter>& alternative,
+        const std::pair<std::string, TYsonCursorConverter>& alternative,
         TYsonPullParserCursor* cursor,
         IYsonConsumer* consumer) const
     {
@@ -678,7 +678,7 @@ public:
     TNamedToPositionalStructConverter(TComplexTypeFieldDescriptor descriptor, std::vector<TStructFieldInfo> fields)
         : Descriptor_(std::move(descriptor))
         , FieldMap_(std::invoke([&] {
-            THashMap<TString, TFieldMapEntry> result;
+            THashMap<std::string, TFieldMapEntry> result;
             result.reserve(fields.size());
             for (auto fieldPosition : std::views::iota(0, std::ssize(fields))) {
                 auto& field = fields[fieldPosition];
@@ -783,7 +783,7 @@ private:
 
     struct TPositionTableEntry
     {
-        TString FieldName;
+        std::string FieldName;
         bool IsNullable = false;
 
         bool IsPresent = false;
@@ -792,7 +792,7 @@ private:
     };
 
     const TComplexTypeFieldDescriptor Descriptor_;
-    const THashMap<TString, TFieldMapEntry> FieldMap_;
+    const THashMap<std::string, TFieldMapEntry> FieldMap_;
 
     std::vector<TPositionTableEntry> PositionTable_;
     TBuffer Buffer_;
@@ -809,9 +809,9 @@ private:
 
 TYsonCursorConverter CreateNamedToPositionalVariantStructConverter(
     TComplexTypeFieldDescriptor descriptor,
-    std::vector<std::pair<TString, TYsonCursorConverter>> fieldConverters)
+    std::vector<std::pair<std::string, TYsonCursorConverter>> fieldConverters)
 {
-    THashMap<TString, std::pair<int, TYsonCursorConverter>> typeMap;
+    THashMap<std::string, std::pair<int, TYsonCursorConverter>> typeMap;
     int fieldIndex = 0;
     for (auto& [fieldName, converter] : fieldConverters) {
         typeMap.emplace(std::move(fieldName), std::pair(fieldIndex, std::move(converter)));
@@ -881,7 +881,7 @@ TYsonCursorConverter CreateStructFieldsConverter(
 
 TYsonCursorConverter CreateVariantStructFieldsConverter(
     TComplexTypeFieldDescriptor descriptor,
-    std::vector<std::pair<TString, TYsonCursorConverter>> elementConverters,
+    std::vector<std::pair<std::string, TYsonCursorConverter>> elementConverters,
     const TYsonConverterCreatorConfig& config)
 {
     YT_VERIFY(config.Config.ComplexTypeMode == EComplexTypeMode::Positional);
@@ -979,7 +979,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
                 auto fieldDescriptor = descriptor.StructField(index);
                 fieldInfos.push_back({
                     .Converter = CreateYsonConverterImpl(std::move(fieldDescriptor), cache, config),
-                    .FieldName = TString(fields[index].Name),
+                    .FieldName = fields[index].Name,
                     .IsNullable = fields[index].Type->IsNullable(),
                 });
             }
@@ -1013,7 +1013,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
                 descriptor, TVariantTupleApplier(), std::move(elementConverters));
         }
         case ELogicalMetatype::VariantStruct: {
-            std::vector<std::pair<TString, TYsonCursorConverter>> elementConverters;
+            std::vector<std::pair<std::string, TYsonCursorConverter>> elementConverters;
             const auto& fields = type->GetFields();
             for (auto index : std::views::iota(0, std::ssize(fields))) {
                 elementConverters.emplace_back(

@@ -9,7 +9,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::InitPDiskInterface() {
         Y_ABORT_UNLESS(!IsPersistentBufferActor);
         YDB_LOG_DEBUG("TDDiskActor::InitPDiskInterface",
-            {"Marker", "BSDD01"},
+            {"marker", "BSDD01"},
             {"DDiskId", DDiskId},
             {"PDiskActorId", BaseInfo.PDiskActorID});
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
@@ -20,9 +20,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult)",
-            {"Marker", "BSDD02"},
+            {"marker", "BSDD02"},
             {"DDiskId", DDiskId},
-            {"Msg", msg.ToString()});
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvYardInitResult)")) {
             return;
@@ -35,7 +35,7 @@ namespace NKikimr::NDDisk {
         DiskFd = std::move(msg.DiskFd);
         if (!DiskFd.IsOpen()) {
             YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) DiskFd is invalid, all further I/O will be routed through PDisk",
-                {"Marker", "BSDD17"},
+                {"marker", "BSDD17"},
                 {"DDiskId", DDiskId},
                 {"PDiskActorId", BaseInfo.PDiskActorID});
         }
@@ -74,9 +74,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvReadLogResult::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_DEBUG("TDDiskActor::Handle(TEvReadLogResult)",
-            {"Marker", "BSDD03"},
+            {"marker", "BSDD03"},
             {"DDiskId", DDiskId},
-            {"Msg", msg.ToString()});
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvReadLogResult)")) {
             return;
@@ -134,10 +134,10 @@ namespace NKikimr::NDDisk {
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
         as->RegisterLocalService(pbServiceId, PersistentBufferActorId);
         YDB_LOG_DEBUG("TDDiskActor::CreatePersistentBuffer()",
-            {"Marker", "BSDD03"},
+            {"marker", "BSDD03"},
             {"DDiskId", DDiskId},
-            {"PbServiceId", pbServiceId},
-            {"PersistentBufferActorId", PersistentBufferActorId});
+            {"pbServiceId", pbServiceId},
+            {"persistentBufferActorId", PersistentBufferActorId});
     }
 
     void TDDiskActor::InitUring() {
@@ -151,9 +151,9 @@ namespace NKikimr::NDDisk {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
                 if (const auto result = UringRouter->RegisterFile(); !result) {
                     YDB_LOG_WARN("TDDiskActor::InitUring failed to register fixed file for io_uring",
-                        {"Marker", "BSDD18"},
+                        {"marker", "BSDD18"},
                         {"DDiskId", DDiskId},
-                        {"Errno", result.error()});
+                        {"errno", result.error()});
                 }
 
                 UringRouter->Start();
@@ -168,15 +168,15 @@ namespace NKikimr::NDDisk {
             *Counters.DirectIO.FallbackPDiskCount = 0;
             if (actualFavor != requestedFavor) {
                 YDB_LOG_WARN("TDDiskActor::InitUring io_uring mode fallback",
-                    {"Marker", "BSDD19"},
+                    {"marker", "BSDD19"},
                     {"DDiskId", DDiskId},
-                    {"RequestedFavor", requestedFavor},
-                    {"ActualFavor", actualFavor});
+                    {"requestedFavor", requestedFavor},
+                    {"actualFavor", actualFavor});
             }
             YDB_LOG_INFO("TDDiskActor::InitUring started io_uring with config",
-                {"Marker", "BSDD20"},
+                {"marker", "BSDD20"},
                 {"DDiskId", DDiskId},
-                {"Config", UringRouter->GetConfig()});
+                {"config", UringRouter->GetConfig()});
         } else {
             *Counters.DirectIO.RegularUringCount = 0;
             *Counters.DirectIO.FallbackUringCount = 0;
@@ -234,9 +234,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvLogResult::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_DEBUG("TDDiskActor::Handle(TEvLogResult)",
-            {"Marker", "BSDD05"},
+            {"marker", "BSDD05"},
             {"DDiskId", DDiskId},
-            {"Msg", msg.ToString()});
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvLogResult)")) {
             return;

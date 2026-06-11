@@ -114,6 +114,7 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(info.SpecializedIndexDescription));
                 break;
@@ -123,6 +124,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                 *serializableRepresentation.MutableFulltextIndexDescription() =
                     std::get<NKikimrSchemeOp::TFulltextIndexDescription>(info.SpecializedIndexDescription);
                 break;
@@ -537,12 +540,11 @@ bool TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
 
 void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx) {
     for (const auto& id : indexIds) {
-        const auto* buildInfoPtr = IndexBuilds.FindPtr(id);
-        if (!buildInfoPtr || buildInfoPtr->get()->IsBroken) {
-            continue;
+        if (const auto* opPtr = SetColumnConstraintOperations.FindPtr(id); opPtr) {
+            Execute(CreateTxSetColumnConstraintProgress(id), ctx);
+        } else if (const auto* buildInfoPtr = IndexBuilds.FindPtr(id); buildInfoPtr && !buildInfoPtr->get()->IsBroken) {
+            Execute(CreateTxProgress(id), ctx);
         }
-
-        Execute(CreateTxProgress(id), ctx);
     }
 }
 

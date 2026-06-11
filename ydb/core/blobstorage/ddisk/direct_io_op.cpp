@@ -112,21 +112,21 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
             << " chunkIdx=" << ChunkIdx
             << " chunkOffset=" << ChunkOffsetInBytes
             << " DDiskId=" << DDiskId;
-        YDB_LOG_CTX_ERROR(*actorSystem, "On complete reply error",
+        YDB_LOG_ERROR_CTX(*actorSystem, "On complete reply error",
             {"io_uring ", opName},
-            {"Errno", (-result)},
-            {"ErrnoText", strerror(-result)},
-            {"DiskOffset", GetDiskOffset()},
-            {"TotalSize", GetTotalSize()},
-            {"IovLen", GetOperationBytes()},
-            {"BufAddr", Hex(bufAddr)},
-            {"BufAligned4k", (int)(bufAddr % MinBlockSize == 0)},
-            {"OffsetAligned4k", (int)(GetDiskOffset() % MinBlockSize == 0)},
-            {"SizeAligned4k", (int)(GetOperationBytes() % MinBlockSize == 0)},
-            {"ChunkIdx", ChunkIdx},
-            {"ChunkOffset", ChunkOffsetInBytes},
+            {"errno", (-result)},
+            {"errnoText", strerror(-result)},
+            {"diskOffset", GetDiskOffset()},
+            {"totalSize", GetTotalSize()},
+            {"iovLen", GetOperationBytes()},
+            {"bufAddr", Hex(bufAddr)},
+            {"bufAligned4k", (int)(bufAddr % MinBlockSize == 0)},
+            {"offsetAligned4k", (int)(GetDiskOffset() % MinBlockSize == 0)},
+            {"sizeAligned4k", (int)(GetOperationBytes() % MinBlockSize == 0)},
+            {"chunkIdx", ChunkIdx},
+            {"chunkOffset", ChunkOffsetInBytes},
             {"DDiskId", DDiskId},
-            {"Reason", reason});
+            {"reason", reason});
         Reply(actorSystem, UringErrorToStatus(result, opType), std::move(reason));
         Y_UNUSED(guard.release());
         SelfRecycle();

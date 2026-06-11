@@ -9,9 +9,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvConnect::TPtr ev) {
         const auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("TDDiskActor::Handle(TEvConnect)",
-            {"Marker", "BSDD00"},
+            {"marker", "BSDD00"},
             {"DDiskId", DDiskId},
-            {"Record", record});
+            {"record", record});
 
         const TQueryCredentials creds(record.GetCredentials());
         const auto [it, inserted] = Connections.try_emplace(creds.TabletId);
@@ -36,10 +36,10 @@ namespace NKikimr::NDDisk {
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
 
-        YDB_LOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvConnect) sending OK",
-            {"Marker", "BSDD11"},
+        YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::Handle(TEvConnect) sending OK",
+            {"marker", "BSDD11"},
             {"DDiskId", DDiskId},
-            {"Recipient", ev->Sender},
+            {"recipient", ev->Sender},
             {"ICSession", ev->InterconnectSession});
         SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
                 DDiskInstanceGuid));

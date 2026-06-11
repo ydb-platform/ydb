@@ -941,8 +941,13 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TTLColumnId;
     }
 
+    static constexpr ui32 InvalidColumnId = Max<ui32>();
+    // TODO(flown4qqqq):: rework this into a fast way.
+    ui32 GetColumnIdByNameSlow(const TString& columnName) const;
+
 private:
     using TPartitionsVec = TVector<TTableShardInfo*>;
+    void CalculateColumnIdByName() const;
 
     // Stable-address store: THashMap uses separate chaining, so element references
     // survive insert.  Also serves as the O(1) ShardIdx lookup index.
@@ -996,7 +1001,7 @@ public:
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
-        bool EnableSetColumnConstraint = false; // This flag is used in alter table operation only
+        bool EnableDetailedMetrics;
     };
 
     static TAlterDataPtr CreateAlterData(
@@ -3013,6 +3018,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 Y_ASSERT(description.empty());
                 break;
@@ -3024,15 +3031,30 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
                 auto success = SpecializedIndexDescription
                     .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
                     .ParseFromString(description);
                 Y_ENSURE(success, description);
                 break;
             }
-            default:
-                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(type));
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TBloomFilter>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TBloomNGrammFilter>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 break;
         }
     }
@@ -3067,8 +3089,14 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return new TTableIndexInfo(0, type, EState::EIndexStateInvalid, {});
     }
 
+    static bool IsLocalIndex(EType type) {
+        return type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
+            || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
+            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax;
+    }
+
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
-        if (!config.KeyColumnNamesSize()) {
+        if (!config.KeyColumnNamesSize() && !IsLocalIndex(config.GetType())) {
             errMsg += TStringBuilder() << "no key columns in index creation config";
             return nullptr;
         }
@@ -3077,7 +3105,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         TPtr alterData = result->CreateNextVersion();
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
-        Y_ENSURE(!alterData->IndexKeys.empty());
+        if (!IsLocalIndex(config.GetType())) {
+            Y_ENSURE(!alterData->IndexKeys.empty());
+        }
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
@@ -3087,6 +3117,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
@@ -3094,10 +3126,57 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                 alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
                 break;
-            default:
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 errMsg += InvalidIndexType(config.GetType());
+                return nullptr;
+        }
+
+        return result;
+    }
+
+    static TPtr Create(const NKikimrSchemeOp::TIndexAlteringConfig& config, TString& errMsg) {
+        if (!config.HasType() || !IsLocalIndex(config.GetType())) {
+            errMsg += TStringBuilder() << "TIndexAlteringConfig requires a valid local index type to be set";
+            return nullptr;
+        }
+
+        if (!config.KeyColumnNamesSize() && !IsLocalIndex(config.GetType())) {
+            errMsg += TStringBuilder() << "no key columns in index altering config";
+            return nullptr;
+        }
+
+        TPtr result = NotExistedYet(config.GetType());
+
+        TPtr alterData = result->CreateNextVersion();
+        alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
+        if (!IsLocalIndex(config.GetType())) {
+            Y_ENSURE(!alterData->IndexKeys.empty());
+        }
+
+        alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
+
+        switch (GetIndexType(config)) {
+            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                alterData->SpecializedIndexDescription = std::monostate{};
+                break;
+            default:
+                errMsg += TStringBuilder() << "TIndexAlteringConfig only supports local index types, got: " << NKikimrSchemeOp::EIndexType_Name(config.GetType());
                 return nullptr;
         }
 
@@ -3115,7 +3194,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
-        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
+        NKikimrSchemeOp::TFulltextIndexDescription,
+        NKikimrSchemeOp::TBloomFilter,
+        NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;
 };
 
 struct TCdcStreamSettings {

@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/public.h>
 
+#include <string_view>
+
 namespace NYT::NFlow {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,6 +33,9 @@ YT_DEFINE_ERROR_ENUM(
     ((SpecVersionMismatch)             (3300))
     ((PipelineStateVersionMismatch)    (3301))
     ((FlowViewKeeperIsNotInitialized)  (3302))
+    // FlowCoreTarget value differs from the running controller binary; fail-fast.
+    ((FlowCoreTargetMismatch)          (3305))
+    // FlowCoreTarget version moved between read and CAS write; retryable.
     ((FlowCoreTargetVersionMismatch)   (3303))
     ((GracefulShutdown)                (3304))
 );
@@ -39,10 +44,11 @@ YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const std::string PipelineFormatVersionAttribute("pipeline_format_version");
-inline const std::string LeaderControllerAddressAttribute("leader_controller_address");
-inline const std::string MonitoringProjectAttribute("monitoring_project");
-inline const std::string MonitoringClusterAttribute("monitoring_cluster");
+constexpr std::string_view PipelineFormatVersionAttribute = "pipeline_format_version";
+constexpr std::string_view LeaderControllerAddressAttribute = "leader_controller_address";
+constexpr std::string_view MonitoringProjectAttribute = "monitoring_project";
+constexpr std::string_view MonitoringClusterAttribute = "monitoring_cluster";
+constexpr std::string_view IdAttribute = "id";
 
 constexpr int CurrentPipelineFormatVersion = 1;
 

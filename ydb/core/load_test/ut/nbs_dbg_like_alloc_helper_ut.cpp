@@ -144,4 +144,72 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeAllocHelper) {
         UNIT_ASSERT(!out.has_value());
         UNIT_ASSERT_STRING_CONTAINS(out.error(), "4 nodes");
     }
+
+    Y_UNIT_TEST(Routing_ZeroMeansAllDbgs) {
+        auto alloc = MakeCfg(4);
+        TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet cfg;
+        cfg.SetNumDirectBlockGroupsToUse(0);
+        cfg.SetIoSizeBytes(4096);
+
+        auto p = ComputeRoutingParams(cfg, alloc, /*numDbgs=*/4);
+        UNIT_ASSERT_VALUES_EQUAL(p.ActiveDbgs, 4u);
+        UNIT_ASSERT(p.IoValid);
+        UNIT_ASSERT_VALUES_EQUAL(p.IoSizeBytes, 4096u);
+        UNIT_ASSERT_VALUES_EQUAL(p.BytesPerDbg, 7ull * 4 * 1024 * 1024);
+    }
+
+    Y_UNIT_TEST(Routing_TooManyClampsToAll) {
+        auto alloc = MakeCfg(2);
+        TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet cfg;
+        cfg.SetNumDirectBlockGroupsToUse(9);
+        cfg.SetIoSizeBytes(4096);
+
+        auto p = ComputeRoutingParams(cfg, alloc, /*numDbgs=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(p.ActiveDbgs, 2u);
+    }
+
+    Y_UNIT_TEST(Routing_SubsetHonored) {
+        auto alloc = MakeCfg(4);
+        TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet cfg;
+        cfg.SetNumDirectBlockGroupsToUse(3);
+        cfg.SetIoSizeBytes(4096);
+
+        auto p = ComputeRoutingParams(cfg, alloc, /*numDbgs=*/4);
+        UNIT_ASSERT_VALUES_EQUAL(p.ActiveDbgs, 3u);
+        UNIT_ASSERT(p.IoValid);
+    }
+
+    Y_UNIT_TEST(Routing_NonDividingIoIsInvalid) {
+        auto alloc = MakeCfg(2);  // VChunkSizeBytes = 4MB
+        TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet cfg;
+        cfg.SetNumDirectBlockGroupsToUse(2);
+        cfg.SetIoSizeBytes(4097);  // does not divide 4MB
+
+        auto p = ComputeRoutingParams(cfg, alloc, /*numDbgs=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(p.ActiveDbgs, 2u);
+        UNIT_ASSERT(!p.IoValid);
+        UNIT_ASSERT_VALUES_EQUAL(p.IoSizeBytes, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(p.BytesPerDbg, 0ull);
+    }
+
+    Y_UNIT_TEST(Routing_IoLargerThanVChunkIsInvalid) {
+        auto alloc = MakeCfg(2);  // VChunkSizeBytes = 4MB
+        TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet cfg;
+        cfg.SetNumDirectBlockGroupsToUse(2);
+        cfg.SetIoSizeBytes(8 * 1024 * 1024);  // > VChunkSizeBytes
+
+        auto p = ComputeRoutingParams(cfg, alloc, /*numDbgs=*/2);
+        UNIT_ASSERT(!p.IoValid);
+    }
+
+    Y_UNIT_TEST(Routing_ZeroVChunkSizeIsInvalid) {
+        auto alloc = MakeCfg(2);
+        alloc.SetVChunkSizeBytes(0);
+        TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet cfg;
+        cfg.SetNumDirectBlockGroupsToUse(2);
+        cfg.SetIoSizeBytes(4096);
+
+        auto p = ComputeRoutingParams(cfg, alloc, /*numDbgs=*/2);
+        UNIT_ASSERT(!p.IoValid);
+    }
 }

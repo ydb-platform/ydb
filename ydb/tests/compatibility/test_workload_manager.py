@@ -118,7 +118,7 @@ class TestWorkloadManagerMixedCluster(MixedClusterFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(extra_feature_flags={"enable_resource_pools": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_resource_pools"])
 
     def test_workload_manager_mixed_cluster(self):
         if min(self.versions) < (25, 1, 4):
@@ -139,7 +139,7 @@ class TestWorkloadManagerRestartToAnotherVersion(RestartToAnotherVersionFixture)
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(extra_feature_flags={"enable_resource_pools": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_resource_pools"])
 
     def test_workload_manager_version_upgrade(self):
         if min(self.versions) < (25, 1, 4):
@@ -174,7 +174,7 @@ class TestWorkloadManagerTabletTransfer(RollingUpgradeAndDowngradeFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(extra_feature_flags={"enable_resource_pools": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_resource_pools"])
 
     def test_workload_manager_tablet_transfer(self):
         if min(self.versions) < (25, 1, 4):

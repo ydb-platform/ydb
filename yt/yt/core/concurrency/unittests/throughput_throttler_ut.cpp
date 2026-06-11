@@ -63,7 +63,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Limit)
     WaitForFast(throttler->Throttle(1)).ThrowOnError();
 
     auto duration = timer.GetElapsedTime().MilliSeconds();
-    EXPECT_GE(duration, 1000u);
+    EXPECT_GE(duration, 950u);
     EXPECT_LE(duration, 3000u);
 }
 

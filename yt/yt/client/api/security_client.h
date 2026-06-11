@@ -166,24 +166,24 @@ struct ISecurityClient
     // and are intended to be used on clusters without third-party tokens (e.g. Yandex blackbox).
     virtual TFuture<void> SetUserPassword(
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options) = 0;
 
     virtual TFuture<TIssueTokenResult> IssueToken(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options) = 0;
 
     virtual TFuture<void> RevokeToken(
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options) = 0;
 
     virtual TFuture<TListUserTokensResult> ListUserTokens(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options) = 0;
 };
 

@@ -9,6 +9,7 @@
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/system/exit.h>
+#include <library/cpp/yt/system/thread_id.h>
 
 #include <library/cpp/yt/threading/execution_stack.h>
 
@@ -62,7 +63,7 @@ public:
         if (auto* logFile = TryGetShutdownLogFile()) {
             ::fprintf(logFile, "%s\tSignal handler stack allocated (ThreadId: %" PRISZT ", Stack: %p-%p, Size: %zu)\n",
                 GetInstant().ToString().c_str(),
-                GetCurrentThreadId(),
+                GetSystemThreadId(),
                 stackStart,
                 static_cast<void*>(static_cast<char*>(stackStart) + stackSize),
                 stackSize);
@@ -82,7 +83,7 @@ public:
         if (auto* logFile = TryGetShutdownLogFile()) {
             ::fprintf(logFile, "%s\tSignal handler stack deallocated (ThreadId: %" PRISZT ")\n",
                 GetInstant().ToString().c_str(),
-                GetCurrentThreadId());
+                GetSystemThreadId());
         }
     }
 
@@ -114,7 +115,7 @@ TThreadId TThread::GetThreadId() const
     return ThreadId_;
 }
 
-TString TThread::GetThreadName() const
+std::string TThread::GetThreadName() const
 {
     return ThreadName_;
 }
@@ -199,7 +200,7 @@ void TThread::Stop()
                         GetInstant().ToString().c_str(),
                         ThreadName_.c_str(),
                         ThreadId_,
-                        GetCurrentThreadId());
+                        GetSystemThreadId());
                 }
                 StoppedEvent_.Wait();
             } else {
@@ -208,7 +209,7 @@ void TThread::Stop()
                         GetInstant().ToString().c_str(),
                         ThreadName_.c_str(),
                         ThreadId_,
-                        GetCurrentThreadId());
+                        GetSystemThreadId());
                 }
             }
             return;
@@ -220,7 +221,7 @@ void TThread::Stop()
             GetInstant().ToString().c_str(),
             ThreadName_.c_str(),
             ThreadId_,
-            GetCurrentThreadId());
+            GetSystemThreadId());
     }
 
     StopPrologue();
@@ -232,7 +233,7 @@ void TThread::Stop()
                 GetInstant().ToString().c_str(),
                 ThreadName_.c_str(),
                 ThreadId_,
-                GetCurrentThreadId());
+                GetSystemThreadId());
         }
         UnderlyingThread_.Join();
     } else {
@@ -241,7 +242,7 @@ void TThread::Stop()
                 GetInstant().ToString().c_str(),
                 ThreadName_.c_str(),
                 ThreadId_,
-                GetCurrentThreadId());
+                GetSystemThreadId());
         }
         UnderlyingThread_.Detach();
     }
@@ -253,7 +254,7 @@ void TThread::Stop()
             GetInstant().ToString().c_str(),
             ThreadName_.c_str(),
             ThreadId_,
-            GetCurrentThreadId());
+            GetSystemThreadId());
     }
 }
 
@@ -273,7 +274,7 @@ YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
 
     ::TThread::SetCurrentThreadName(ThreadName_.c_str());
 
-    ThreadId_ = GetCurrentThreadId();
+    ThreadId_ = GetSystemThreadId();
     CurrentUniqueThreadId() = UniqueThreadId_;
 
     SetThreadPriority();
@@ -285,7 +286,7 @@ YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
     YT_LOG_DEBUG(
         "Initializing thread (ThreadName: %v, ThreadId: %v, FSBase: %v)",
         ThreadName_,
-        GetCurrentThreadId(),
+        GetSystemThreadId(),
         FSBase_);
 
     class TExitInterceptor
@@ -297,7 +298,7 @@ YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
                 if (auto* logFile = TryGetShutdownLogFile()) {
                     ::fprintf(logFile, "%s\tThread exit interceptor triggered (ThreadId: %" PRISZT ")\n",
                         GetInstant().ToString().c_str(),
-                        GetCurrentThreadId());
+                        GetSystemThreadId());
                 }
                 Shutdown();
             }

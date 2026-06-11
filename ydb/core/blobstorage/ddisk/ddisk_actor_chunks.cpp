@@ -29,9 +29,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_DEBUG("TDDiskActor::Handle(TEvChunkReserveResult)",
-            {"Marker", "BSDD04"},
+            {"marker", "BSDD04"},
             {"DDiskId", DDiskId},
-            {"Msg", msg.ToString()});
+            {"msg", msg});
 
         Y_ABORT_UNLESS(ReserveInFlight);
         ReserveInFlight = false;
@@ -96,11 +96,11 @@ namespace NKikimr::NDDisk {
         }
         if (ChunkReserve.size() < MinChunksReserved && !ReserveInFlight) { // ask for another reservation
             YDB_LOG_DEBUG("TDDiskActor::HandleChunkReserved requesting chunk reserve",
-                {"Marker", "BSDD28"},
+                {"marker", "BSDD28"},
                 {"DDiskId", DDiskId},
-                {"ChunkReserveSize", ChunkReserve.size()},
-                {"MinChunksReserved", MinChunksReserved},
-                {"RequestCount", MinChunksReserved - ChunkReserve.size()});
+                {"chunkReserveSize", ChunkReserve.size()},
+                {"minChunksReserved", MinChunksReserved},
+                {"requestCount", MinChunksReserved - ChunkReserve.size()});
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound,
                 MinChunksReserved - ChunkReserve.size()));
             ReserveInFlight = true;
@@ -134,9 +134,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvCutLog::TPtr ev) {
         auto& msg = *ev->Get();
         YDB_LOG_DEBUG("TDDiskActor::Handle(TEvCutLog)",
-            {"Marker", "BSDD06"},
+            {"marker", "BSDD06"},
             {"DDiskId", DDiskId},
-            {"Msg", msg});
+            {"msg", msg});
 
         if (ChunkMapSnapshotLsn < msg.FreeUpToLsn) { // we have to rewrite snapshot
             IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(), &ChunkMapSnapshotLsn, {});
@@ -206,10 +206,10 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
         const ui64 tabletId = creds.TabletId;
 
-        YDB_LOG_COMP_DEBUG(BS_DDISK, "TDDiskActor::Handle(TEvDeleteTabletChunks)",
-            {"Marker", "BSDD51"},
+        YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::Handle(TEvDeleteTabletChunks)",
+            {"marker", "BSDD51"},
             {"DDiskId", DDiskId},
-            {"TabletId", tabletId});
+            {"tabletId", tabletId});
 
         // Reject if any chunk allocation for this tablet is in flight (log record pending)
         {

@@ -74,6 +74,14 @@ void ValidateAutoSelect(NYdb::NQuery::TQueryClient& db, const std::string& predi
 void ValidateNoAutoSelect(NYdb::NQuery::TQueryClient& db, const std::string& predicate,
     const TString& indexName = "json_idx", const std::string& tableName = "TestTable");
 
+void ValidateAutoSelectWithDecl(NYdb::NQuery::TQueryClient& db, const std::string& declares,
+    const std::string& predicate, const TString& indexName = "json_idx",
+    const std::string& tableName = "TestTable");
+
+void ValidateNoAutoSelectWithDecl(NYdb::NQuery::TQueryClient& db, const std::string& declares,
+    const std::string& predicate, const TString& indexName = "json_idx",
+    const std::string& tableName = "TestTable");
+
 void TestJsonIndexAlterTableWithIntegerPk(const std::string& pkType);
 
 constexpr ui64 CorpusSeed(ui32 index) noexcept {

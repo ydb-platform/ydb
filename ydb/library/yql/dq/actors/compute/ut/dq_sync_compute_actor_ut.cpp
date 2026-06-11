@@ -518,7 +518,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 40_MB);
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
-        runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::MilliSeconds(10), TDuration::MilliSeconds(10)};
+        runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
     
         auto actor = CreateDqComputeActor(
                 EdgeActor, // executerId,
@@ -1118,7 +1118,9 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
 
     Y_UNIT_TEST_F(StreamingQuerySendStatsWithCreateSuspended, TSyncComputeActorTestFixture) {
         auto [syncCA, dqOutputChannels, dqInputChannel] = StartCA(5, 1, true, 1, NDqProto::DQ_STATS_MODE_PROFILE, true);
-        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor, TDuration::Seconds(5));
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT(ev->Get()->Record.HasStats());
     }
 }
 

@@ -355,9 +355,9 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         Y_ABORT_UNLESS(Info);
         if (Info->ClusterStateGeneration < msgGeneration || (Info->ClusterStateGeneration == msgGeneration && Info->ClusterStateGuid != msgGuid)) {
             YDB_LOG_DEBUG("Replica TEvNodeWardenNotifyConfigMismatch",
-                {"Info->ClusterStateGeneration", Info->ClusterStateGeneration},
+                {"clusterStateGeneration", Info->ClusterStateGeneration},
                 {"msgGeneration", msgGeneration},
-                {"Info->ClusterStateGuid", Info->ClusterStateGuid},
+                {"clusterStateGuid", Info->ClusterStateGuid},
                 {"msgGuid", msgGuid});
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));

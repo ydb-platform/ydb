@@ -81,3 +81,4 @@ flowchart LR
 
 - [{#T}](initial-deployment.md)
 - [{#T}](s3-backups.md)
+- [{#T}](ai-assistant.md)

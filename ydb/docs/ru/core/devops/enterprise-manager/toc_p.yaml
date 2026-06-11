@@ -3,3 +3,5 @@ items:
   href: initial-deployment.md
 - name: Настройка резервного копирования в S3
   href: s3-backups.md
+- name: AI-ассистент
+  href: ai-assistant.md

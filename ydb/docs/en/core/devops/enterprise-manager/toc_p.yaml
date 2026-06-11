@@ -3,3 +3,5 @@ items:
   href: initial-deployment.md
 - name: Configuring S3 backups
   href: s3-backups.md
+- name: AI assistant
+  href: ai-assistant.md

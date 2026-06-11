@@ -19,9 +19,7 @@ NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& u
     auto [it, inserted] = ConsumerProcessors.emplace(user, NActors::TActorId{});
     if (inserted) {
         it->second = Register(
-            CreateConsumerBatchProcessor(TabletId, TabletActorId, user),
-            NActors::TMailboxType::HTSwap,
-            AppData()->BatchPoolId);
+            CreateConsumerBatchProcessor(TabletId, TabletActorId, user));
     }
     return it->second;
 }

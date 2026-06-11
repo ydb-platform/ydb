@@ -441,9 +441,9 @@ public:
 
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
-                        YDB_LOG_CTX_ERROR(*actorSystem, "Formatting error",
-                            {"Marker", "BSP01"},
-                            {"What", readOnlyError});
+                        YDB_LOG_ERROR_CTX(*actorSystem, "Formatting error",
+                            {"marker", "BSP01"},
+                            {"what", readOnlyError});
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
                         return nullptr;
                     }
@@ -476,9 +476,9 @@ public:
                         }
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                     } catch (yexception ex) {
-                        YDB_LOG_CTX_ERROR(*actorSystem, "Formatting error",
-                            {"Marker", "BSP01"},
-                            {"What", ex.what()});
+                        YDB_LOG_ERROR_CTX(*actorSystem, "Formatting error",
+                            {"marker", "BSP01"},
+                            {"what", ex.what()});
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, ex.what()));
                     }
                     return nullptr;
@@ -510,9 +510,9 @@ public:
 
                 if (cfg->ReadOnly) {
                     TString readOnlyError = "PDisk is in read-only mode";
-                    YDB_LOG_CTX_ERROR(*pCtx->ActorSystem, "Formatting error",
-                        {"Marker", "BSP01"},
-                        {"What", readOnlyError});
+                    YDB_LOG_ERROR_CTX(*pCtx->ActorSystem, "Formatting error",
+                        {"marker", "BSP01"},
+                        {"what", readOnlyError});
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
                     return nullptr;
                 }
@@ -529,9 +529,9 @@ public:
                     pDisk->WriteApplyFormatRecord(format, mainKey);
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvFormatReencryptionFinish(true, ""));
                 } catch (yexception ex) {
-                    YDB_LOG_CTX_ERROR(*pCtx->ActorSystem, "Reencryption error",
-                        {"Marker", "BPD01"},
-                        {"What", ex.what()});
+                    YDB_LOG_ERROR_CTX(*pCtx->ActorSystem, "Reencryption error",
+                        {"marker", "BPD01"},
+                        {"what", ex.what()});
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvFormatReencryptionFinish(false, ex.what()));
                 }
                 return nullptr;

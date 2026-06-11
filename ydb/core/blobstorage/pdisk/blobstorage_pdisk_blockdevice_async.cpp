@@ -1304,20 +1304,20 @@ class TCachedBlockDevice : public TRealBlockDevice {
 
         void Exec(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                YDB_LOG_CTX_DEBUG(*actorSystem, "Exec TCachedReadCompletion",
-                    {"Marker", "BPD01"},
-                    {"ReqId", ReqId},
-                    {"Offset", Offset});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Exec TCachedReadCompletion",
+                    {"marker", "BPD01"},
+                    {"reqId", ReqId},
+                    {"offset", Offset});
             }
             CachedBlockDevice.ExecRead(this, actorSystem);
         }
 
         void Release(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                YDB_LOG_CTX_DEBUG(*actorSystem, "Release TCachedReadCompletion",
-                    {"Marker", "BPD01"},
-                    {"ReqId", ReqId},
-                    {"Offset", Offset});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Release TCachedReadCompletion",
+                    {"marker", "BPD01"},
+                    {"reqId", ReqId},
+                    {"offset", Offset});
             }
             CachedBlockDevice.ReleaseRead(this, actorSystem);
         }

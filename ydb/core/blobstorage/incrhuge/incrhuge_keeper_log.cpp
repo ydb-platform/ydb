@@ -458,10 +458,10 @@ namespace NKikimr {
                 const TActorContext& ctx) {
             Y_ABORT_UNLESS(ChunkQueue && &item == &ChunkQueue.front());
 
-            YDB_LOG_CTX_DEBUG((ctx), "",
-                {"LogPrefix", LogPrefix},
-                {"Lsn", item.Lsn},
-                {"Status", NKikimrProto::EReplyStatus_Name(status).data()});
+            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, lsn, status",
+                {"logPrefix", LogPrefix},
+                {"lsn", item.Lsn},
+                {"status", NKikimrProto::EReplyStatus_Name(status).data()});
 
             if (status == NKikimrProto::OK) {
                 // if this was an entrypoint, reset merger and update LSN
@@ -474,10 +474,10 @@ namespace NKikimr {
                 std::visit([this](const auto& content) { ConfirmedChunkMerger(content); }, item.Content);
                 // if it was chunk deletion, propagate this information to deleter state
                 if (auto *record = std::get_if<TChunkRecordMerger::TChunkDeletion>(&item.Content)) {
-                    YDB_LOG_CTX_DEBUG((ctx), "",
-                        {"LogPrefix", LogPrefix},
-                        {"ChunkIdx", record->ChunkIdx},
-                        {"ChunkSerNum", record->ChunkSerNum});
+                    YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, chunkIdx, chunkSerNum",
+                        {"logPrefix", LogPrefix},
+                        {"chunkIdx", record->ChunkIdx},
+                        {"chunkSerNum", record->ChunkSerNum});
 
                     TDeleteQueueItem deleteItem{
                         TDeleteRecordMerger::TDeleteChunk{record->ChunkSerNum, record->NumItems}, // Content
@@ -543,16 +543,16 @@ namespace NKikimr {
             Y_ABORT_UNLESS(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());
 
             for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
-                YDB_LOG_CTX_DEBUG((ctx), "",
-                    {"LogPrefix", LogPrefix},
-                    {"ChunkIdx", deleteLocator.ChunkIdx},
-                    {"ChunkSerNum", deleteLocator.ChunkSerNum},
-                    {"Id", deleteLocator.Id},
-                    {"IndexInsideChunk", deleteLocator.IndexInsideChunk},
-                    {"SizeInBlocks", deleteLocator.SizeInBlocks},
-                    {"Lsn", Lsn},
-                    {"Owner", owner},
-                    {"SeqNo", seqNo});
+                YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, chunkIdx, chunkSerNum, id, indexInsideChunk, sizeInBlocks, lsn, owner, seqNo",
+                    {"logPrefix", LogPrefix},
+                    {"chunkIdx", deleteLocator.ChunkIdx},
+                    {"chunkSerNum", deleteLocator.ChunkSerNum},
+                    {"id", deleteLocator.Id},
+                    {"indexInsideChunk", deleteLocator.IndexInsideChunk},
+                    {"sizeInBlocks", deleteLocator.SizeInBlocks},
+                    {"lsn", Lsn},
+                    {"owner", owner},
+                    {"seqNo", seqNo});
             }
 
             // format blob deletes record
@@ -585,14 +585,14 @@ namespace NKikimr {
             Y_ABORT_UNLESS(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());
 
             for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
-                YDB_LOG_CTX_DEBUG((ctx), "LogVirtualBlobDeletes",
-                    {"LogPrefix", LogPrefix},
-                    {"ChunkIdx", deleteLocator.ChunkIdx},
-                    {"ChunkSerNum", deleteLocator.ChunkSerNum},
-                    {"Id", deleteLocator.Id},
-                    {"IndexInsideChunk", deleteLocator.IndexInsideChunk},
-                    {"SizeInBlocks", deleteLocator.SizeInBlocks},
-                    {"Lsn", Lsn});
+                YDB_LOG_DEBUG_CTX((ctx), "LogVirtualBlobDeletes",
+                    {"logPrefix", LogPrefix},
+                    {"chunkIdx", deleteLocator.ChunkIdx},
+                    {"chunkSerNum", deleteLocator.ChunkSerNum},
+                    {"id", deleteLocator.Id},
+                    {"indexInsideChunk", deleteLocator.IndexInsideChunk},
+                    {"sizeInBlocks", deleteLocator.SizeInBlocks},
+                    {"lsn", Lsn});
             }
 
             DeleteQueue.push_back(TDeleteQueueItem{
@@ -649,11 +649,11 @@ namespace NKikimr {
             DeleteQueue.emplace_back(std::move(newItem));
             TDeleteQueueItem& item = DeleteQueue.back();
 
-            YDB_LOG_CTX_DEBUG((ctx), "",
-                {"LogPrefix", LogPrefix},
-                {"Lsn", item.Lsn},
-                {"Entrypoint", item.Entrypoint},
-                {"Virtual", item.Virtual});
+            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, lsn, entrypoint, virtual",
+                {"logPrefix", LogPrefix},
+                {"lsn", item.Lsn},
+                {"entrypoint", item.Entrypoint},
+                {"virtual", item.Virtual});
 
             if (item.Virtual) {
                 ProcessDeleteQueueVirtualItems(ctx);
@@ -662,10 +662,10 @@ namespace NKikimr {
 
             // create callback that will be invoked upon completion of log
             auto callback = [this, p = &item](NKikimrProto::EReplyStatus status, IEventBase *msg, const TActorContext& ctx) {
-                YDB_LOG_CTX_DEBUG((ctx), "",
-                    {"LogPrefix", LogPrefix},
-                    {"Lsn", p->Lsn},
-                    {"Status", NKikimrProto::EReplyStatus_Name(status).data()});
+                YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, lsn, status",
+                    {"logPrefix", LogPrefix},
+                    {"lsn", p->Lsn},
+                    {"status", NKikimrProto::EReplyStatus_Name(status).data()});
                 ApplyLogDeleteItem(*p, status, msg, ctx);
             };
 
@@ -703,11 +703,11 @@ namespace NKikimr {
                 }
                 // update confirmed state
                 if (IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_DEBUG, NKikimrServices::BS_INCRHUGE, 0ull)) {
-                    YDB_LOG_CTX_DEBUG((ctx), "ApplyLogDeleteItem",
-                        {"LogPrefix", LogPrefix},
-                        {"Entrypoint", item.Entrypoint},
-                        {"Lsn", item.Lsn},
-                        {"Virtual", item.Virtual});
+                    YDB_LOG_DEBUG_CTX((ctx), "ApplyLogDeleteItem",
+                        {"logPrefix", LogPrefix},
+                        {"entrypoint", item.Entrypoint},
+                        {"lsn", item.Lsn},
+                        {"virtual", item.Virtual});
 
                     std::visit([this](const auto& content) { ConfirmedDeletesMerger(content); }, item.Content);
                 }

@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
         env.Setup(false);
         env.Start();
-        YDB_LOG_CTX_DEBUG(*env.ActorSystem, "starting recovery");
+        YDB_LOG_DEBUG_CTX(*env.ActorSystem, "Starting recovery");
         const ui32 numActions = NSan::PlainOrUnderSanitizer(5000, 1000);
         actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 2);
         env.ActorSystem->Register(actor);
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
         env.Setup(false);
         env.Start();
-        YDB_LOG_CTX_DEBUG(*env.ActorSystem, "starting recovery");
+        YDB_LOG_DEBUG_CTX(*env.ActorSystem, "Starting recovery");
         actor = new TTestActorConcurrent(env.KeeperId, &event, state, 0, 2);
         env.ActorSystem->Register(actor);
         event.WaitI();
@@ -249,8 +249,8 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
             env.Setup(true, counter, &event);
             env.Start();
-            YDB_LOG_CTX_DEBUG(*env.ActorSystem, "=== starting",
-                {"Counter", counter});
+            YDB_LOG_DEBUG_CTX(*env.ActorSystem, "=== starting",
+                {"counter", counter});
             actor = new TTestActorSeq(env.KeeperId, state, 1, nullptr);
             env.ActorSystem->Register(actor);
             event.WaitI();
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
             env.Setup(false);
             env.Start();
-            YDB_LOG_CTX_DEBUG(*env.ActorSystem, "=== restarting 1");
+            YDB_LOG_DEBUG_CTX(*env.ActorSystem, "=== restarting 1");
             actor = new TTestActorSeq(env.KeeperId, state, 1, &event);
             env.ActorSystem->Register(actor);
             usleep(5 * 1000 * 1000);
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
             env.Setup(false);
             env.Start();
-            YDB_LOG_CTX_DEBUG(*env.ActorSystem, "=== restarting 2");
+            YDB_LOG_DEBUG_CTX(*env.ActorSystem, "=== restarting 2");
             actor = new TTestActorSeq(env.KeeperId, state, 1, &event);
             env.ActorSystem->Register(actor);
             event.WaitI();

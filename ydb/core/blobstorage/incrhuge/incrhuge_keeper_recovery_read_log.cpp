@@ -98,9 +98,9 @@ namespace NKikimr {
                                     s << (i ? " " : "") << o.GetOwner() << ": " << o.GetSeqNo();
                                 }
                                 s << "]";
-                                YDB_LOG_CTX_DEBUG(ctx, "",
-                                    {"Lsn", item.Lsn},
-                                    {"IncrHugeDelete", s.Str().data()});
+                                YDB_LOG_DEBUG_CTX(ctx, "Dump lsn, incrHugeDelete",
+                                    {"lsn", item.Lsn},
+                                    {"incrHugeDelete", s.Str().data()});
 
                                 DeleteMerger(record);
                             }

@@ -63,10 +63,10 @@ namespace NKikimr {
                         for (size_t i = 0; i < chunks.size(); ++i) {
                             TChunkSerNum chunkSerNum = baseSerNum.Add(i);
                             const ui32 chunkIdx = chunks[i];
-                            YDB_LOG_CTX_DEBUG((ctx), "",
-                                {"LogPrefix", LogPrefix},
-                                {"ChunkIdx", chunkIdx},
-                                {"ChunkSerNum", chunkSerNum.ToString().data()});
+                            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, chunkIdx, chunkSerNum",
+                                {"logPrefix", LogPrefix},
+                                {"chunkIdx", chunkIdx},
+                                {"chunkSerNum", chunkSerNum});
                             Keeper.State.WriteIntentQueue.push(chunks[i]);
                             Keeper.State.Chunks.emplace(chunks[i], TChunkInfo{
                                     EChunkState::WriteIntent, // State

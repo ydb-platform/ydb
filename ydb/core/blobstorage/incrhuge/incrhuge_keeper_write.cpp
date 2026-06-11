@@ -127,13 +127,13 @@ namespace NKikimr {
             };
             it->Callback = MakeCallback(std::move(callback));
 
-            YDB_LOG_CTX_DEBUG((ctx), "HandleWrite",
-                {"LogPrefix", LogPrefix},
-                {"QueryId", it->QueryId},
-                {"Lsn", it->Lsn},
-                {"DataSize", ui32(it->Data.size())},
-                {"WriteQueueSize", WriteQueue.size()},
-                {"WriteInProgressItemsSize", WriteInProgressItems.size()});
+            YDB_LOG_DEBUG_CTX((ctx), "HandleWrite",
+                {"logPrefix", LogPrefix},
+                {"queryId", it->QueryId},
+                {"lsn", it->Lsn},
+                {"dataSize", ui32(it->Data.size())},
+                {"writeQueueSize", WriteQueue.size()},
+                {"writeInProgressItemsSize", WriteInProgressItems.size()});
 
             // kick processor
             ProcessWriteQueue(ctx);
@@ -176,10 +176,10 @@ namespace NKikimr {
         // when either queue ends, or there is not enough space to fit current blob in current chunk and there is no
         // other chunk in write intent queue, or in flight counter exceeded its maximum value
         void TWriter::ProcessWriteQueue(const TActorContext& ctx) {
-            YDB_LOG_CTX_DEBUG((ctx), "",
-                {"LogPrefix", LogPrefix},
-                {"WriteQueueSize", WriteQueue.size()},
-                {"WriteInProgressItemsSize", WriteInProgressItems.size()});
+            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, writeQueueSize, writeInProgressItemsSize",
+                {"logPrefix", LogPrefix},
+                {"writeQueueSize", WriteQueue.size()},
+                {"writeInProgressItemsSize", WriteInProgressItems.size()});
             for (auto it = WriteQueue.begin(); it != WriteQueue.end() &&
                     WriteInProgressItems.size() < Keeper.State.Settings.MaxInFlightWrites; ) {
                 // iterator is postincremented because it may be invalidated inside this function
@@ -197,17 +197,17 @@ namespace NKikimr {
         bool TWriter::ProcessWriteItem(TWriteQueue::iterator it, const TActorContext& ctx) {
             TWriteQueueItem& item = *it;
 
-            YDB_LOG_CTX_DEBUG((ctx), "ProcessWriteItem entry",
-                {"LogPrefix", LogPrefix},
-                {"QueryId", item.QueryId});
+            YDB_LOG_DEBUG_CTX((ctx), "ProcessWriteItem entry",
+                {"logPrefix", LogPrefix},
+                {"queryId", item.QueryId});
 
             // for items coming from defragmenter we should first check if this item was deleted while it was in write
             // queue; for such items we return special condition
             if (item.Defrag && IsObsolete(item, ctx)) {
                 item.Callback->Apply(NKikimrProto::RACE, nullptr, ctx);
-                YDB_LOG_CTX_DEBUG((ctx), "ProcessWriteItem defrag, obsolete",
-                    {"LogPrefix", LogPrefix},
-                    {"QueryId", item.QueryId});
+                YDB_LOG_DEBUG_CTX((ctx), "ProcessWriteItem defrag, obsolete",
+                    {"logPrefix", LogPrefix},
+                    {"queryId", item.QueryId});
                 WriteQueue.erase(it);
                 return true;
             }
@@ -215,9 +215,9 @@ namespace NKikimr {
             // if this is item from user and there is not enough disk space to process query, abort this request
             if (!item.Defrag && Keeper.State.DiskState <= EDiskState::SpaceOrange) {
                 item.Callback->Apply(NKikimrProto::OUT_OF_SPACE, nullptr, ctx);
-                YDB_LOG_CTX_DEBUG((ctx), "",
-                    {"LogPrefix", LogPrefix},
-                    {"QueryId", item.QueryId});
+                YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, queryId",
+                    {"logPrefix", LogPrefix},
+                    {"queryId", item.QueryId});
                 WriteQueue.erase(it);
                 return true;
             }
@@ -241,9 +241,9 @@ namespace NKikimr {
             if (!Keeper.State.CurrentChunk && !TryToBeginNewChunk(ctx)) {
                 // can't handle this now, no chunks to write into, because write intent queue is empty; this function
                 // should be called once again when allocation occurs
-                YDB_LOG_CTX_DEBUG((ctx), "ProcessWriteItem no free chunks",
-                    {"LogPrefix", LogPrefix},
-                    {"QueryId", item.QueryId});
+                YDB_LOG_DEBUG_CTX((ctx), "ProcessWriteItem no free chunks",
+                    {"logPrefix", LogPrefix},
+                    {"queryId", item.QueryId});
                 return false;
             }
 
@@ -327,19 +327,19 @@ namespace NKikimr {
             ctx.Send(Keeper.State.Settings.PDiskActorId, writeMsg.release());
             ++CurrentChunkWritesInFlight;
 
-            YDB_LOG_CTX_DEBUG((ctx), "ProcessWriteItem",
-                {"LogPrefix", LogPrefix},
-                {"QueryId", item.QueryId},
-                {"OffsetInBlocks", CurrentChunkOffsetInBlocks},
-                {"IndexInsideChunk", chunk.NumItems},
-                {"SizeInBlocks", sizeInBlocks},
-                {"Offset", offset},
-                {"Size", totalSize},
-                {"End", offset + totalSize},
-                {"Id", item.Id},
-                {"ChunkIdx", item.ChunkIdx},
-                {"ChunkSerNum", chunk.ChunkSerNum},
-                {"Defrag", item.Defrag});
+            YDB_LOG_DEBUG_CTX((ctx), "ProcessWriteItem",
+                {"logPrefix", LogPrefix},
+                {"queryId", item.QueryId},
+                {"offsetInBlocks", CurrentChunkOffsetInBlocks},
+                {"indexInsideChunk", chunk.NumItems},
+                {"sizeInBlocks", sizeInBlocks},
+                {"offset", offset},
+                {"size", totalSize},
+                {"end", offset + totalSize},
+                {"id", item.Id},
+                {"chunkIdx", item.ChunkIdx},
+                {"chunkSerNum", chunk.ChunkSerNum},
+                {"defrag", item.Defrag});
 
             // if this is defragmentation item, then put it into special hash map indicating that it is 'write in progress'
             // in this case, if delete request comes for such item, it should wait for defragmentation to finish
@@ -363,10 +363,10 @@ namespace NKikimr {
         // state
         void TWriter::ApplyBlobWrite(NKikimrProto::EReplyStatus status, TWriteQueueItem& item, IEventBase *result,
                 const TActorContext& ctx) {
-            YDB_LOG_CTX_DEBUG((ctx), "",
-                {"LogPrefix", LogPrefix},
-                {"QueryId", item.QueryId},
-                {"Status", NKikimrProto::EReplyStatus_Name(status).data()});
+            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, queryId, status",
+                {"logPrefix", LogPrefix},
+                {"queryId", item.QueryId},
+                {"status", NKikimrProto::EReplyStatus_Name(status).data()});
 
             Y_ABORT_UNLESS(status == NKikimrProto::OK, "don't know how to handle errors yet");
 
@@ -420,15 +420,15 @@ namespace NKikimr {
                         const TBlobLocator& locator = Keeper.State.BlobLookup.Lookup(item.Header.IndexRecord.Id);
                         Y_ABORT_UNLESS(locator.ChunkIdx == item.OriginalChunkIdx);
                         obsolete = locator.DeleteInProgress;
-                        YDB_LOG_CTX_DEBUG((ctx), "",
-                            {"LogPrefix", LogPrefix},
-                            {"QueryId", item.QueryId},
-                            {"DeleteInProgress", obsolete});
+                        YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, queryId, deleteInProgress",
+                            {"logPrefix", LogPrefix},
+                            {"queryId", item.QueryId},
+                            {"deleteInProgress", obsolete});
                     } else {
-                        YDB_LOG_CTX_DEBUG((ctx), "",
-                            {"LogPrefix", LogPrefix},
-                            {"QueryId", item.QueryId},
-                            {"Obsolete", true});
+                        YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, queryId, obsolete",
+                            {"logPrefix", LogPrefix},
+                            {"queryId", item.QueryId},
+                            {"obsolete", true});
                     }
                 }
             }
@@ -560,12 +560,12 @@ namespace NKikimr {
                 IndexWriteQueue.erase(it);
             };
 
-            YDB_LOG_CTX_DEBUG((ctx), "IndexWrite",
-                {"LogPrefix", LogPrefix},
-                {"ChunkIdx", item.ChunkIdx},
-                {"Offset", offset},
-                {"Size", totalSize},
-                {"End", offset + totalSize});
+            YDB_LOG_DEBUG_CTX((ctx), "IndexWrite",
+                {"logPrefix", LogPrefix},
+                {"chunkIdx", item.ChunkIdx},
+                {"offset", offset},
+                {"size", totalSize},
+                {"end", offset + totalSize});
 
             // send write message to yard
             ctx.Send(Keeper.State.Settings.PDiskActorId, new NPDisk::TEvChunkWrite(Keeper.State.PDiskParams->Owner,
@@ -598,9 +598,9 @@ namespace NKikimr {
 
                 // check if all chunk contents were deleted while finalizing; if so, this record should be deleted
                 if (!chunk.NumUsedBlocks) {
-                    YDB_LOG_CTX_DEBUG((ctx), "deleting",
-                        {"LogPrefix", LogPrefix},
-                        {"ChunkIdx", chunkIdx});
+                    YDB_LOG_DEBUG_CTX((ctx), "Deleting",
+                        {"logPrefix", LogPrefix},
+                        {"chunkIdx", chunkIdx});
                     Keeper.Deleter.IssueLogChunkDelete(chunkIdx, ctx);
                     return true;
                 }

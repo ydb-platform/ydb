@@ -68,13 +68,13 @@ namespace NKikimr {
                 }
             }
 
-            YDB_LOG_CTX_DEBUG(ctx, "",
-                {"BlockSize", State.BlockSize},
-                {"BlocksInChunk", State.BlocksInChunk},
-                {"BlocksInMinBlob", State.BlocksInMinBlob},
-                {"MaxBlobsPerChunk", State.MaxBlobsPerChunk},
-                {"BlocksInDataSection", State.BlocksInDataSection},
-                {"BlocksInIndexSection", State.BlocksInIndexSection});
+            YDB_LOG_DEBUG_CTX(ctx, "Dump blockSize, blocksInChunk, blocksInMinBlob, maxBlobsPerChunk, blocksInDataSection, blocksInIndexSection",
+                {"blockSize", State.BlockSize},
+                {"blocksInChunk", State.BlocksInChunk},
+                {"blocksInMinBlob", State.BlocksInMinBlob},
+                {"maxBlobsPerChunk", State.MaxBlobsPerChunk},
+                {"blocksInDataSection", State.BlocksInDataSection},
+                {"blocksInIndexSection", State.BlocksInIndexSection});
 
             auto chunksIt = msg->StartingPoints.find(TLogSignature::SignatureIncrHugeChunks);
             auto deletesIt = msg->StartingPoints.find(TLogSignature::SignatureIncrHugeDeletes);

@@ -45,9 +45,9 @@ namespace NKikimr {
                 numUsedBlocks += chunk.NumUsedBlocks;
             }
             double efficiency = (double)numUsedBlocks / (Keeper.State.Chunks.size() * Keeper.State.BlocksInDataSection);
-            YDB_LOG_CTX_DEBUG((ctx), "",
-                {"LogPrefix", LogPrefix},
-                {"Efficiency", efficiency});
+            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, efficiency",
+                {"logPrefix", LogPrefix},
+                {"efficiency", efficiency});
             if (efficiency >= Threshold) {
                 return;
             }
@@ -78,10 +78,10 @@ namespace NKikimr {
             }
 
             // notify
-            YDB_LOG_CTX_DEBUG((ctx), "starting defrag",
-                {"LogPrefix", LogPrefix},
-                {"ChunkInProgress", ChunkInProgress},
-                {"WorstEfficiency", worstEfficiency});
+            YDB_LOG_DEBUG_CTX((ctx), "Starting defrag",
+                {"logPrefix", LogPrefix},
+                {"chunkInProgress", ChunkInProgress},
+                {"worstEfficiency", worstEfficiency});
 
             // create chunk scanner to read index
             const TActorId actorId = ctx.Register(CreateRecoveryScanActor(ChunkInProgress, true, ChunkInProgressSerNum,
@@ -109,8 +109,8 @@ namespace NKikimr {
             const size_t num = Keeper.State.ChildActors.erase(sender);
             Y_ABORT_UNLESS(num == 1);
 
-            YDB_LOG_CTX_DEBUG((ctx), "ApplyScan received",
-                {"LogPrefix", LogPrefix});
+            YDB_LOG_DEBUG_CTX((ctx), "ApplyScan received",
+                {"logPrefix", LogPrefix});
 
             if (!CheckCurrentChunk(ctx)) {
                 // if this chunk is finished, then we have nothing to do with this reply, simply ignore it
@@ -167,11 +167,11 @@ namespace NKikimr {
                             Keeper.State.PDiskParams->OwnerRound, ChunkInProgress, offset, size, NPriRead::HullComp,
                             Keeper.RegisterYardCallback(MakeCallback(std::move(callback)))));
 
-                    YDB_LOG_CTX_DEBUG((ctx), "sending TEvChunkRead",
-                        {"LogPrefix", LogPrefix},
-                        {"ChunkIdx", ChunkInProgress},
-                        {"OffsetInBlocks", OffsetInBlocks},
-                        {"SizeInBlocks", sizeInBlocks});
+                    YDB_LOG_DEBUG_CTX((ctx), "Sending TEvChunkRead",
+                        {"logPrefix", LogPrefix},
+                        {"chunkIdx", ChunkInProgress},
+                        {"offsetInBlocks", OffsetInBlocks},
+                        {"sizeInBlocks", sizeInBlocks});
 
                     ++InFlightReads;
                     InFlightReadBytes += size;
@@ -198,11 +198,11 @@ namespace NKikimr {
             const ui32 sizeInBlocks = Keeper.State.GetBlobSizeInBlocks(record.PayloadSize);
             const ui32 totalSize = sizeof(TBlobHeader) + record.PayloadSize;
 
-            YDB_LOG_CTX_DEBUG((ctx), "",
-                {"LogPrefix", LogPrefix},
-                {"OffsetInBlocks", offsetInBlocks},
-                {"Index", index},
-                {"Status", NKikimrProto::EReplyStatus_Name(status).data()});
+            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, offsetInBlocks, index, status",
+                {"logPrefix", LogPrefix},
+                {"offsetInBlocks", offsetInBlocks},
+                {"index", index},
+                {"status", NKikimrProto::EReplyStatus_Name(status).data()});
 
             // adjust number of in-flight requests
             const ui32 bytes = sizeInBlocks * Keeper.State.BlockSize;
@@ -261,11 +261,11 @@ namespace NKikimr {
 
                     // enqueue writer queue item; it should check if item was deleted when starting actual execution
                     // of queue item and after writing it
-                    YDB_LOG_CTX_DEBUG((ctx), "EnqueueDefragWrite",
-                        {"LogPrefix", LogPrefix},
-                        {"ChunkIdx", chunkIdx},
-                        {"Index", index},
-                        {"Id", header.IndexRecord.Id});
+                    YDB_LOG_DEBUG_CTX((ctx), "EnqueueDefragWrite",
+                        {"logPrefix", LogPrefix},
+                        {"chunkIdx", chunkIdx},
+                        {"index", index},
+                        {"id", header.IndexRecord.Id});
                     Keeper.Writer.EnqueueDefragWrite(header, chunkIdx, chunk.ChunkSerNum, index, std::move(data),
                             MakeSimpleCallback(std::move(callback)), ctx);
                     ++InFlightWrites;
@@ -282,9 +282,9 @@ namespace NKikimr {
             if (status != NKikimrProto::RACE) {
                 // ensure that write succeeds FIXME: error handling
                 Y_ABORT_UNLESS(status == NKikimrProto::OK);
-                YDB_LOG_CTX_DEBUG((ctx), "generating virtual log record",
-                    {"LogPrefix", LogPrefix},
-                    {"DeleteLocator", deleteLocator.ToString().data()});
+                YDB_LOG_DEBUG_CTX((ctx), "Generating virtual log record",
+                    {"logPrefix", LogPrefix},
+                    {"deleteLocator", deleteLocator});
 
                 // delete this locator right now; we do not log it, because on recovery it's easy to find
                 // duplicate items by their id
@@ -304,10 +304,10 @@ namespace NKikimr {
         }
 
         void TDefragmenter::FinishChunkInProgress(const TActorContext& ctx) {
-            YDB_LOG_CTX_DEBUG((ctx), "finishing",
-                {"LogPrefix", LogPrefix},
-                {"ChunkIdx", ChunkInProgress},
-                {"ChunkSerNum", ChunkInProgressSerNum});
+            YDB_LOG_DEBUG_CTX((ctx), "Finishing",
+                {"logPrefix", LogPrefix},
+                {"chunkIdx", ChunkInProgress},
+                {"chunkSerNum", ChunkInProgressSerNum});
             ChunkInProgress = 0;
             ChunkInProgressSerNum = {};
             Index.clear();

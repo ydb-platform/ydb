@@ -49,6 +49,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     void Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx);
+    void HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
 
 private:

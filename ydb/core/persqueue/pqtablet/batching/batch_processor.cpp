@@ -29,6 +29,14 @@ void TBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorCon
     ctx.Send(actorId, new TEvProcessBatch(std::move(ev->Get()->Context)));
 }
 
+void TBatchProcessor::HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, const NActors::TActorContext&) {
+    auto it = ConsumerProcessors.find(ev->Get()->Consumer);
+    if (it != ConsumerProcessors.end()) {
+        Send(it->second, new NActors::TEvents::TEvPoisonPill());
+        ConsumerProcessors.erase(it);
+    }
+}
+
 void TBatchProcessor::Handle(NActors::TEvents::TEvPoisonPill::TPtr&, const NActors::TActorContext&) {
     for (const auto& [_, actorId] : ConsumerProcessors) {
         Send(actorId, new NActors::TEvents::TEvPoisonPill());
@@ -39,6 +47,7 @@ void TBatchProcessor::Handle(NActors::TEvents::TEvPoisonPill::TPtr&, const NActo
 STFUNC(TBatchProcessor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvProcessBatch, Handle);
+        HFunc(TEvPQ::TEvConsumerRemoved, HandleConsumerRemoved);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
         LOG_W("Unexpected event in TBatchProcessor: " << ev->GetTypeRewrite());

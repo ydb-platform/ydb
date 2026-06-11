@@ -540,7 +540,9 @@ private:
         for (const auto& index : entry.Indexes) {
             const auto indexType = index.GetType();
             if ((indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
-                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance)
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance)
                 && index.GetFulltextIndexDescription().GetUseRowIdAsDocId())
             {
                 for (const auto& reqCol : *reqColumns) {

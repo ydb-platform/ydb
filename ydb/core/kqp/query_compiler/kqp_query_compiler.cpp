@@ -1522,15 +1522,13 @@ private:
                     uniqueProto->MutableTable()->SetSysView(uniqueImplMeta->SysView);
                     uniqueProto->MutableTable()->SetVersion(uniqueImplMeta->SchemaVersion);
 
+                    // Only KeyColumns are consumed by the runtime reader (see TUniqueIndexReader in
+                    // kqp_full_text_source.cpp); it never reads UniqueIndexImplTable.Columns. Filling
+                    // the full column list here would just bloat the protobuf with unused data.
                     for (auto& keyColumn : uniqueImplMeta->KeyColumnNames) {
                         auto* columnPtr = uniqueImplMeta->Columns.FindPtr(keyColumn);
                         YQL_ENSURE(columnPtr);
                         fillCol(columnPtr, uniqueProto->AddKeyColumns());
-                    }
-                    for (auto& column : uniqueImplMeta->Columns) {
-                        auto* columnPtr = uniqueImplMeta->Columns.FindPtr(column.first);
-                        YQL_ENSURE(columnPtr);
-                        fillCol(columnPtr, uniqueProto->AddColumns());
                     }
                 }
             }

@@ -57,7 +57,11 @@ void MaybeAutoBindRowIdSequence(NYql::TKikimrTableMetadata& meta) {
     if (col.Type != "Uint64" || !col.NotNull || col.IsDefaultKindDefined()) {
         return;
     }
-    col.DefaultFromSequence = TString("_serial_column_") + NKikimr::NTableIndex::NFulltext::RowIdColumn;
+    // Use the dedicated RowIdSequenceName so the sequence is named identically no matter how the
+    // column was provisioned (CREATE TABLE here, ALTER ADD, or schemeshard auto-provisioning). A
+    // generic "_serial_column_<col>" name would also make the SDK report __ydb_row_id as a Serial
+    // column, which the auto-provision path does not do - keep the representation consistent.
+    col.DefaultFromSequence = NKikimr::NTableIndex::NFulltext::RowIdSequenceName;
     col.SetDefaultFromSequence();
 }
 

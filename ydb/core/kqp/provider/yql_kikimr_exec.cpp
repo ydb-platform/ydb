@@ -2055,7 +2055,7 @@ public:
                             columnBuild->SetColumnName(TString(columnName));
                             columnBuild->SetNotNull(true);
                             columnBuild->set_default_from_sequence(
-                                TStringBuilder() << "_seq_" << NKikimr::NTableIndex::NFulltext::RowIdColumn);
+                                NKikimr::NTableIndex::NFulltext::RowIdSequenceName);
                             columnBuild->set_bit_reverse_sequence_value(true);
                             columnBuild->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT64);
                             hasDefaultValue = true;

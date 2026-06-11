@@ -53,7 +53,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxProcessNotification complete with response",
-            {"response", Response->Record.ShortDebugString().data()});
+            {"response", Response->Record});
 
         Self->Reply(Event, std::move(Response), ctx);
         Self->ScheduleNotificationsCleanup(ctx);

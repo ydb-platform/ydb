@@ -28,7 +28,7 @@ public:
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
         YDB_LOG_INFO_CTX(ctx, "Processing Wall-E request",
-            {"requestEvent", RequestEvent->Get()->Record.ShortDebugString().data()});
+            {"requestEvent", RequestEvent->Get()->Record});
 
         if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);

@@ -43,7 +43,7 @@ public:
             Self->State->Config.Deserialize(Config);
 
             YDB_LOG_DEBUG_CTX(ctx, "Updated",
-                {"config", Config.ShortDebugString()});
+                {"config", Config});
         }
 
         ctx.Send(Response.Release());

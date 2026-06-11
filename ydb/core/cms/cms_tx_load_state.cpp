@@ -71,7 +71,7 @@ public:
             config = paramRow.GetValueOrDefault<Schema::Param::Config>(NKikimrCms::TCmsConfig());
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded",
-                {"config", config.ShortDebugString()});
+                {"config", config});
         } else {
             FirstBoot = true;
 

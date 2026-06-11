@@ -368,7 +368,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     }
 
     YDB_LOG_INFO_CTX(ctx, "Check",
-        {"request", request.ShortDebugString()});
+        {"request", request});
 
     switch (request.GetAvailabilityMode()) {
     case MODE_MAX_AVAILABILITY:
@@ -426,7 +426,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         TErrorInfo error;
 
         YDB_LOG_DEBUG_CTX(ctx, "Checking action",
-            {"action", action.ShortDebugString().data()});
+            {"action", action});
 
         bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
@@ -2473,7 +2473,7 @@ bool TCms::CheckNotification(const TNotification &notification,
         TErrorInfo error;
 
         YDB_LOG_DEBUG_CTX(ctx, "Processing notification for action",
-            {"action", action.ShortDebugString().data()});
+            {"action", action});
 
         if (!IsValidNotificationAction(action, time, error, ctx)) {
             resp.MutableStatus()->SetCode(error.Code);
@@ -2500,7 +2500,7 @@ void TCms::Handle(TEvCms::TEvManageNotificationRequest::TPtr &ev, const TActorCo
     auto &rec = ev->Get()->Record;
 
     YDB_LOG_INFO_CTX(ctx, "Notification management",
-        {"request", rec.ShortDebugString().data()});
+        {"request", rec});
 
     if (!rec.GetUser()) {
         return ReplyWithError<TEvCms::TEvManageNotificationResponse>(

@@ -29,7 +29,7 @@ public:
         auto &rec = RequestEvent->Get()->Record;
 
         YDB_LOG_INFO_CTX(ctx, "Processing Wall-E request",
-            {"request", rec.ShortDebugString().data()});
+            {"request", rec});
 
         if (!Actions.contains(rec.GetAction())) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unsupported action", ctx);

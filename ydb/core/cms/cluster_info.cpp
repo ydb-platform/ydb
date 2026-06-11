@@ -594,9 +594,9 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         Y_DEBUG_ABORT_UNLESS(pdisk.VSlots.contains(vdisk.GetVSlotId()));
         if (!pdisk.VSlots.contains(vdisk.GetVSlotId())) {
             YDB_LOG_ERROR("Group refers unknown slot in disk",
-                {"GroupId", bsgroup.GroupId},
+                {"groupId", bsgroup.GroupId},
                 {"vslotId", vdisk.GetVSlotId()},
-                {"pdiskId", pdiskId.ToString()});
+                {"pdiskId", pdiskId});
             return;
         }
 

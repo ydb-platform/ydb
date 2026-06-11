@@ -732,6 +732,9 @@ namespace NKikimr::NDDisk {
                 TRope JoinData(ui32 sectorSize);
             };
 
+            bool BatchWrite = false;
+            bool BatchReady = false;
+            TPersistentBufferSectorInfo BatchHeaderSectorInfo;
             std::vector<TRecord> Records;
 
             std::unordered_set<ui64> OperationCookies;
@@ -752,21 +755,7 @@ namespace NKikimr::NDDisk {
             std::vector<ui64> OperationsCookie;
         };
 
-        struct TPersistentBufferBatchWriteInflight {
-            TActorId Sender;
-            ui64 Cookie;
-            TActorId Session;
-            NWilson::TSpan Span;
-
-            TPersistentBufferLsnRecordHeader Header;
-            std::vector<TPersistentBufferSectorInfo> SectorInfos;
-            TRope Data;
-
-            ui64 OperationCookie;
-        };
-
         ui64 PersistentBufferBatchWriteCookie = 0;
-        std::vector<TPersistentBufferBatchWriteInflight> PersistentBufferBatchWriteInflight;
         std::unordered_map<TPersistentBufferLocation, std::unordered_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
@@ -784,7 +773,6 @@ namespace NKikimr::NDDisk {
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
         bool PersistentBufferReady = false;
-        bool PersistentBufferWaitingTimerIsOn = false;
 
         std::unordered_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
         std::unordered_set<ui32> PersistentBufferAllocatedChunks;
@@ -804,6 +792,7 @@ namespace NKikimr::NDDisk {
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors);
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBufferData(TRope data, std::vector<TPersistentBufferSectorInfo>& sectors);
         void StartRestorePersistentBuffer();
         void RestorePersistentBufferChunk(TEvPrivate::TEvReadPersistentBufferPart::TPtr ev);
         void ReplyReadPersistentBuffer(ui64 operationCookie);
@@ -811,6 +800,7 @@ namespace NKikimr::NDDisk {
 
         bool PreprocessPersistentBufferWrite(NActors::TEventHandle<TEvWritePersistentBuffer>& ev);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
+        void ProcessPersistentBufferBatchWriteData(TEvWritePersistentBuffer::TPtr ev);
         void ProcessPersistentBufferBatchWrite();
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);

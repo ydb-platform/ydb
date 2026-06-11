@@ -1184,7 +1184,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
 
     if (!MaxTimeLagMs && !ReadTimestampMs && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
-    } else if (IsNeedMorePartitionData()) {
+    } else {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
             WaitDataInPartition(ctx);

@@ -1124,13 +1124,7 @@ struct TEvBlobStorage {
             , Tactic(parameters.Tactic)
             , IssueKeepFlag(parameters.IssueKeepFlag)
             , IgnoreBlock(parameters.IgnoreBlock)
-<<<<<<< HEAD
-=======
-            , AlreadyEncrypted(parameters.AlreadyEncrypted)
-            , ReduceInterpileTraffic(parameters.ReduceInterpileTraffic)
-            , IsZeroEntry(parameters.IsZeroEntry)
             , FailOnSlowDown(parameters.FailOnSlowDown)
->>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());

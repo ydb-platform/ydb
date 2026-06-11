@@ -100,8 +100,12 @@ public:
     // Move endpoint to the end
     void PessimizeEndpoint(const std::string& endpoint);
 
+    // Move all endpoints of a certain node to the end
+    void PessimizeNode(const std::uint64_t nodeId);
+
     // Returns % of pessimized endpoints
     int GetPessimizationRatio() const;
+
 
     // Associate object with the endpoint
     // Returns false if no required endpoint, or object already registered

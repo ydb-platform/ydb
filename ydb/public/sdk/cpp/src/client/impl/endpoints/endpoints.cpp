@@ -2,7 +2,7 @@
 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/string_utils/quote/quote.h>
-
+#include <ranges>
 #include <util/random/random.h>
 
 #include <set>
@@ -178,6 +178,41 @@ void TEndpointElectorSafe::PessimizeEndpoint(const std::string& endpoint) {
     }
     Sort(Records_.begin(), Records_.end());
     BestK_ = GetBestK(Records_);
+}
+
+void TEndpointElectorSafe::PessimizeNode(const std::uint64_t nodeId) {
+    if (nodeId == 0) {
+        return;
+    }
+
+    std::unique_lock guard(Mutex_);
+    bool changed = false;
+
+    for (auto& record : Records_
+        | std::views::filter([nodeId](const TEndpointRecord& r) {
+            return r.NodeId == nodeId && r.Priority != std::numeric_limits<std::int32_t>::max();
+        })) {
+        int pessimizationRatio = PessimizationRatio_.load();
+        auto newRatio = (pessimizationRatio * Records_.size() + 100) / Records_.size();
+        PessimizationRatio_.store(newRatio);
+        PessimizationRatioGauge_.SetValue(newRatio);
+        EndpointActiveGauge_.Dec();
+        record.Priority = std::numeric_limits<std::int32_t>::max();
+
+        if (auto it = KnownEndpoints_.find(record.Endpoint); it != KnownEndpoints_.end()) {
+            it->second.Priority = std::numeric_limits<std::int32_t>::max();
+        }
+        changed = true;
+    }
+
+    if (auto it = KnownEndpointsByNodeId_.find(nodeId); it != KnownEndpointsByNodeId_.end()) {
+        it->second.Record.Priority = std::numeric_limits<std::int32_t>::max();
+    }
+
+    if (changed) {
+        Sort(Records_.begin(), Records_.end());
+        BestK_ = GetBestK(Records_);
+    }
 }
 
 // % of endpoints which was pessimized

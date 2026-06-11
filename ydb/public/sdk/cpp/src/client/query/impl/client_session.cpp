@@ -42,7 +42,7 @@ public:
     {}
 
     TSession::TImpl* TrySharedOwning() noexcept {
-        auto old = Semaphore.fetch_add(1); 
+        auto old = Semaphore.fetch_add(1);
         if (old == 0) {
             OwnerThread.store(std::this_thread::get_id());
             return Ptr;
@@ -82,11 +82,19 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
                     if (impl) {
                         impl->MarkIdle();
                     }
-                } else if (resp->has_node_shutdown())) {
+                    StartAsyncRead(ptr, client, holder);
+                } else if (resp->has_node_shutdown()) {
                     auto impl = holder->TrySharedOwning();
-                    
+                    if (impl) {
+                        if (auto sessionClient = client.lock()) {
+                            sessionClient->PessimizeNode(impl->GetEndpointKey().GetNodeId());
+                        }
+                        impl->CloseFromServer(client);
+                        holder->Release();
+                    }
+                } else {
+                    StartAsyncRead(ptr, client, holder);
                 }
-                StartAsyncRead(ptr, client, holder);
                 break;
             default: {
                 auto impl = holder->TrySharedOwning();

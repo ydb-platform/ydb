@@ -1024,6 +1024,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    Y_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:
@@ -1100,6 +1104,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    Y_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:

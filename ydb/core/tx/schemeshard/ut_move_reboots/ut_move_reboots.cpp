@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/change_exchange.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -505,6 +506,34 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                     NLs::PathExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
                                    {NLs::PathNotExist});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ColumnTableWithLocalBloomIndexes) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
+                    NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTable"));
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
+                    {NLs::PathExist, NLs::ChildrenCount(2)});
+                NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTable");
+            }
+
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMove", TTestTxConfig::SchemeShard, {pathVersion}),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"), {NLs::PathNotExist});
+                NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableMove");
             }
         });
     }

@@ -99,12 +99,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldHandleConfirmedWrite)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(
-            &readyQueue,
-            123,
-            4096,
-            MakePrimaryHosts(),
-            MakePrimaryHosts());
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
         // Start flushes
@@ -158,12 +154,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldHandleLock)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(
-            &readyQueue,
-            123,
-            4096,
-            MakePrimaryHosts(),
-            MakePrimaryHosts());
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
         // Start flushes
@@ -219,12 +211,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldPutToReadyQueueOnFail)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(
-            &readyQueue,
-            123,
-            4096,
-            MakePrimaryHosts(),
-            MakePrimaryHosts());
+        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Flush started
         UNIT_ASSERT_VALUES_EQUAL(
@@ -308,12 +296,8 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     {
         TTestReadyQueue readyQueue;
         {
-            TInflightInfo inflightInfo(
-                &readyQueue,
-                123,
-                4096,
-                MakePrimaryHosts(),
-                MakePrimaryHosts());
+            TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+            inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,

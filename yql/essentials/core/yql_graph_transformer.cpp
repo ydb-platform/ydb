@@ -4,6 +4,8 @@
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <util/generic/scope.h>
+
 namespace NYql {
 
 namespace {
@@ -282,6 +284,10 @@ TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
 IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx) {
     try {
         ctx.ResetCycleDetector();
+        Y_DEFER {
+            ctx.ResetCycleDetector();
+        };
+
         for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
             auto status = transformer.Transform(root, newRoot, ctx);
@@ -408,6 +414,10 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
 
 IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart) {
     ctx.ResetCycleDetector();
+    Y_DEFER {
+        ctx.ResetCycleDetector();
+    };
+
     IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, false, breakOnRestart, "InstantTransform");
     if (status.Level == IGraphTransformer::TStatus::Async) {
         ctx.AddError(TIssue(ctx.GetPosition(root->Pos()), "Instant transform can not be delayed"));

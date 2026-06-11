@@ -1,2 +1,3 @@
 items:
 - include: { mode: link, path: toc_i.yaml }
+- include: { mode: link, path: reference/toc_p.yaml }

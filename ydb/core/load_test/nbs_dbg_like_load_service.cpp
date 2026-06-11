@@ -936,6 +936,14 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     .replace(/"/g, "\\\"");
             }
 
+            function nbsRunScaleLsns(factor) {
+                const inp = $("#nbs-run-max-inflight-lsns");
+                const v = parseInt(inp.val(), 10);
+                if (!isNaN(v) && v >= 1) {
+                    inp.val(factor >= 1 ? v * factor : Math.max(1, Math.floor(v * factor)));
+                }
+            }
+
             function nbsRunDisableReplicationChanged(cb) {
                 const readRatio = $("#nbs-run-read-ratio");
                 if (cb.checked) {
@@ -1157,6 +1165,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         read_write_size_kib:     nbsTabletTrim($("#nbs-run-size-kib").val()) || "4",
                         sequential:              $("#nbs-run-sequential").is(":checked") ? "1" : "0",
                         num_dbg_to_use:          nbsTabletTrim($("#nbs-run-num-dbg").val()) || "0",
+                        max_inflight_lsns:       nbsTabletTrim($("#nbs-run-max-inflight-lsns").val()) || "4096",
                         disable_replication:     $("#nbs-run-disable-replication").is(":checked") ? "1" : "0"
                     };
                     $.ajax({
@@ -1651,6 +1660,171 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 plotDiv.innerHTML = svg;
             }
 
+            function nbsTabletLatMedian(arr) {
+                if (!arr || arr.length === 0) {
+                    return null;
+                }
+                const sorted = arr.slice().sort(function(a, b) { return a - b; });
+                return sorted[Math.floor(sorted.length / 2)];
+            }
+
+            function nbsTabletRenderLatencyPlot(sweepValues, plotData) {
+                const plotDiv = document.getElementById("nbs-run-latency-plot");
+                if (!plotDiv || !sweepValues || sweepValues.length === 0) {
+                    return;
+                }
+
+                const writeColor = "#337ab7";
+                const readColor  = "#f0ad4e";
+                const n = sweepValues.length;
+                const marginLeft   = 70;
+                const marginRight  = 20;
+                const marginTop    = 56;
+                const marginBottom = 50;
+                const width  = 800;
+                const height = 320;
+                const plotW  = width  - marginLeft - marginRight;
+                const plotH  = height - marginTop  - marginBottom;
+                const baseY  = height - marginBottom;
+
+                function xAt(i) {
+                    if (n <= 1) {
+                        return marginLeft + plotW / 2;
+                    }
+                    return marginLeft + (i / (n - 1)) * plotW;
+                }
+
+                function yAt(v, yMax) {
+                    if (yMax <= 0) {
+                        return baseY;
+                    }
+                    return baseY - (v / yMax) * plotH;
+                }
+
+                let yMax = 1;
+                let hasReads = false;
+                for (let i = 0; i < plotData.length; i++) {
+                    const p = plotData[i];
+                    if (p.writeLat) {
+                        const v = nbsTabletLatMedian(p.writeLat.p99);
+                        if (v) {
+                            yMax = Math.max(yMax, v);
+                        }
+                    }
+                    if (p.readLat && p.readLat.p99 && p.readLat.p99.length > 0) {
+                        const v = nbsTabletLatMedian(p.readLat.p99);
+                        if (v && v > 0) {
+                            hasReads = true;
+                            yMax = Math.max(yMax, v);
+                        }
+                    }
+                }
+                if (yMax <= 1) {
+                    return;
+                }
+                yMax = Math.ceil(yMax * 1.1);
+
+                let svg = "<h4 style='margin-top:0'>Latency (us) vs MaxInFlight</h4>";
+                svg += "<svg viewBox='0 0 " + width + " " + height +
+                    "' width='100%' style='max-width:800px;background:#fff' " +
+                    "xmlns='http://www.w3.org/2000/svg'>";
+
+                svg += "<line x1='" + marginLeft + "' y1='" + marginTop +
+                    "' x2='" + marginLeft + "' y2='" + baseY +
+                    "' stroke='#ccc' stroke-width='1'/>";
+                svg += "<line x1='" + marginLeft + "' y1='" + baseY +
+                    "' x2='" + (width - marginRight) + "' y2='" + baseY +
+                    "' stroke='#ccc' stroke-width='1'/>";
+
+                const yTicks = 5;
+                for (let t = 0; t <= yTicks; t++) {
+                    const val = Math.round((yMax * t) / yTicks);
+                    const y = yAt(val, yMax);
+                    svg += "<line x1='" + marginLeft + "' y1='" + y +
+                        "' x2='" + (width - marginRight) + "' y2='" + y +
+                        "' stroke='#eee' stroke-width='1'/>";
+                    svg += "<text x='" + (marginLeft - 6) + "' y='" + (y + 4) +
+                        "' text-anchor='end' font-size='10' fill='#666'>" + val + "</text>";
+                }
+
+                for (let i = 0; i < n; i++) {
+                    const x = xAt(i);
+                    svg += "<text x='" + x + "' y='" + (baseY + 16) +
+                        "' text-anchor='middle' font-size='11' fill='#333'>" +
+                        sweepValues[i] + "</text>";
+                }
+
+                const pctLines = [
+                    { pct: "p50", dash: "4,3",  strokeW: "1.5" },
+                    { pct: "p95", dash: "2,2",  strokeW: "1.5" },
+                    { pct: "p99", dash: "none", strokeW: "2"   },
+                ];
+                const bands = [
+                    { lat: "writeLat", color: writeColor },
+                ];
+                if (hasReads) {
+                    bands.push({ lat: "readLat", color: readColor });
+                }
+
+                for (const band of bands) {
+                    for (const pl of pctLines) {
+                        const pts = [];
+                        for (let i = 0; i < n; i++) {
+                            const x = xAt(i);
+                            const p = plotData[i];
+                            const latArr = p[band.lat] && p[band.lat][pl.pct];
+                            const med = nbsTabletLatMedian(latArr);
+                            if (med == null) {
+                                continue;
+                            }
+                            const yv = yAt(med, yMax);
+                            svg += "<circle cx='" + x + "' cy='" + yv +
+                                "' r='3' fill='" + band.color + "' opacity='0.75'/>";
+                            pts.push(x + "," + yv);
+                        }
+                        if (pts.length >= 2) {
+                            svg += "<polyline points='" + pts.join(" ") +
+                                "' fill='none' stroke='" + band.color +
+                                "' stroke-width='" + pl.strokeW + "'" +
+                                (pl.dash !== "none" ? " stroke-dasharray='" + pl.dash + "'" : "") +
+                                "/>";
+                        }
+                    }
+                }
+
+                const legItems = [
+                    { color: writeColor, label: "Write p50", dash: "4,3"  },
+                    { color: writeColor, label: "Write p95", dash: "2,2"  },
+                    { color: writeColor, label: "Write p99", dash: "none" },
+                ];
+                if (hasReads) {
+                    legItems.push(
+                        { color: readColor, label: "Read p50", dash: "4,3"  },
+                        { color: readColor, label: "Read p95", dash: "2,2"  },
+                        { color: readColor, label: "Read p99", dash: "none" }
+                    );
+                }
+                const legColW = 90;
+                const legCols = 3;
+                const legStartX = marginLeft + 4;
+                const legStartY = 14;
+                for (let li = 0; li < legItems.length; li++) {
+                    const lx = legStartX + (li % legCols) * legColW;
+                    const ly = legStartY + Math.floor(li / legCols) * 18;
+                    const item = legItems[li];
+                    svg += "<line x1='" + lx + "' y1='" + ly +
+                        "' x2='" + (lx + 20) + "' y2='" + ly +
+                        "' stroke='" + item.color + "' stroke-width='2'" +
+                        (item.dash !== "none" ? " stroke-dasharray='" + item.dash + "'" : "") +
+                        "/>";
+                    svg += "<text x='" + (lx + 24) + "' y='" + (ly + 4) +
+                        "' font-size='10' fill='#333'>" + item.label + "</text>";
+                }
+
+                svg += "</svg>";
+                plotDiv.innerHTML = svg;
+            }
+
             function nbsTabletRefreshList() {
                 $.get(window.location.pathname + "?mode=tablet_list", function(html) {
                     $("#nbs-tablet-list-container").html(html);
@@ -1697,6 +1871,10 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 if (plotDiv) {
                     plotDiv.innerHTML = "";
                 }
+                const latencyPlotDiv = document.getElementById("nbs-run-latency-plot");
+                if (latencyPlotDiv) {
+                    latencyPlotDiv.innerHTML = "";
+                }
 
                 let statusMsg = "Starting sweep over " + sweepValues.length + " value(s)";
                 if (trials > 1) {
@@ -1711,7 +1889,9 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 for (let i = 0; i < sweepValues.length; i++) {
                     const v = sweepValues[i];
                     const trialResults = [];
-                    plotData.push({ inflight: v, writes: [], reads: [] });
+                    plotData.push({ inflight: v, writes: [], reads: [],
+                        writeLat: { p50: [], p95: [], p99: [] },
+                        readLat:  { p50: [], p95: [], p99: [] } });
 
                     for (let t = 0; t < trials; t++) {
                         let statusLine = "MaxInFlight=" + v + " (" + (i + 1) + "/" +
@@ -1739,6 +1919,16 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                             trialResults.push(jr);
                             plotData[i].writes.push(Math.round(jr.write_rps || 0));
                             plotData[i].reads.push(Math.round(jr.read_rps || 0));
+                            if (jr.write_p50 != null) {
+                                plotData[i].writeLat.p50.push(jr.write_p50);
+                                plotData[i].writeLat.p95.push(jr.write_p95);
+                                plotData[i].writeLat.p99.push(jr.write_p99);
+                            }
+                            if (jr.read_p50 != null && (jr.read_p50 || jr.read_p95 || jr.read_p99)) {
+                                plotData[i].readLat.p50.push(jr.read_p50);
+                                plotData[i].readLat.p95.push(jr.read_p95);
+                                plotData[i].readLat.p99.push(jr.read_p99);
+                            }
                             if (trials > 1) {
                                 nbsTabletFillTrialRows(i, t, jr);
                             } else {
@@ -1766,6 +1956,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     }
                 }
                 nbsTabletRenderIopsPlot(sweepValues, plotData);
+                nbsTabletRenderLatencyPlot(sweepValues, plotData);
                 nbsTabletStatus("Sweep complete.");
             }
         </script>
@@ -1919,6 +2110,22 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                         </div>
                                     </div>
                                 </div>
+                                <div class='row'>
+                                    <div class='col-sm-4'>
+                                        <div class='form-group'>
+                                            <label for='nbs-run-max-inflight-lsns'>MaxInflightLsns:</label>
+                                            <div class='input-group'>
+                                                <span class='input-group-btn'>
+                                                    <button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(0.5)' title='Halve'>&divide;2</button>
+                                                </span>
+                                                <input id='nbs-run-max-inflight-lsns' class='form-control' type='number' min='1' step='1' value='4096' />
+                                                <span class='input-group-btn'>
+                                                    <button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(2)' title='Double'>&times;2</button>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class='form-group'>
                                     <div class='checkbox'>
                                         <label>
@@ -1942,6 +2149,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                 <div id='nbs-run-result-table'></div>
                                 <div id='nbs-run-median-table' style='margin-top:16px;display:none'></div>
                                 <div id='nbs-run-iops-plot' style='margin-top:16px'></div>
+                                <div id='nbs-run-latency-plot' style='margin-top:16px'></div>
                             </div>
                         </div>
                     </div>

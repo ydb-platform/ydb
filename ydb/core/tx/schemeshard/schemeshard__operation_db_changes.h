@@ -57,6 +57,10 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> StreamingQueries;
 
+    TDeque<TPathId> ExternalDataSources;
+    TDeque<TPathId> ExternalTables;
+    TDeque<TPathId> ResourcePools;
+
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
@@ -175,6 +179,18 @@ public:
 
     void PersistStreamingQuery(const TPathId& pathId) {
         StreamingQueries.emplace_back(pathId);
+    }
+
+    void PersistExternalDataSource(const TPathId& pathId) {
+        ExternalDataSources.emplace_back(pathId);
+    }
+
+    void PersistExternalTable(const TPathId& pathId) {
+        ExternalTables.emplace_back(pathId);
+    }
+
+    void PersistResourcePool(const TPathId& pathId) {
+        ResourcePools.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

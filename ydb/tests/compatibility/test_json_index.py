@@ -19,7 +19,7 @@ class TestJsonIndex(RollingUpgradeAndDowngradeFixture):
         self.row_count = 50
         self.query_count = 5
         self.limit = 5
-        yield from self.setup_cluster(extra_feature_flags={"enable_json_index": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_json_index"])
 
     def create_table(self, table_name, json_type):
         logger.info(f"Creating table: {table_name}")

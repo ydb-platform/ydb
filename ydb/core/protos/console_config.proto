@@ -326,9 +326,26 @@ message TGetAllConfigsRequest {
     optional bool BypassAuth = 5;
 }
 
+// A single config field that the config parser did not recognize.
+// Deprecated=false: genuinely unknown field (rendered red in the UI).
+// Deprecated=true:  reserved/removed proto slot (rendered amber in the UI).
+message TYamlConfigUnknownField {
+    optional string Path = 1;       // full path to the field, e.g. /config/blob_storage_config/foo
+    optional string Name = 2;       // leaf key name, e.g. foo
+    optional string Proto = 3;      // full name of the proto message that owns the slot
+    optional bool Deprecated = 4;
+}
+
+// Persisted/cached snapshot of unknown fields detected when a config was uploaded.
+message TYamlConfigUnknownFields {
+    repeated TYamlConfigUnknownField Fields = 1;
+}
+
 message TGetAllConfigsResponse {
     reserved 1;
     optional Ydb.DynamicConfig.GetConfigResult Response = 2;
+    // Unknown/deprecated fields of the main (cluster) config, cached from upload time.
+    repeated TYamlConfigUnknownField MainConfigUnknownFields = 3;
 }
 
 message TIsYamlReadOnlyRequest {

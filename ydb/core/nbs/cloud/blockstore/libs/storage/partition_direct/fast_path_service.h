@@ -44,6 +44,15 @@ private:
     size_t DumpCount = 0;
     TMap<size_t, TDBGDumpResponse> DebugDumps;
 
+    struct TPBufferCleanupGather
+    {
+        std::atomic<bool> Active{false};
+        TVector<std::optional<ui64>> SafeBarriers;
+        std::atomic<size_t> PendingResponses{0};
+    };
+
+    TPBufferCleanupGather CleanupGather;
+
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
@@ -89,11 +98,19 @@ public:
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
+    ui64 GenerateLsn() override;
+
 private:
-    ui64 GenerateSequenceNumber();
     void ScheduleDirtyMapDebugPrint();
     void QueryDirtyMapDebugDump();
     void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
+
+    void MaybeTriggerPBufferCleanup(ui64 lsn);
+    void PBufferCleanup();
+    void OnGatherSafeBarrierForErase(
+        size_t dbgIndex,
+        std::optional<ui64> safeBarrier);
+    void FinishPBufferCleanup();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

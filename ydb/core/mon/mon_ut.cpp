@@ -13,17 +13,6 @@ using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::Tests;
 
-void GrantConnect(Tests::TClient& client) {
-    client.CreateUser("/Root", "username", "password");
-    client.GrantConnect("username");
-
-    const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
-        { "folder_id", "test_folder_id" },
-        { "database_id", "test_database_id" },
-    });
-    UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
-}
-
 void AssertCorsHeaders(const THttpHeaders& headers) {
     UNIT_ASSERT(headers.HasHeader("Access-Control-Allow-Origin"));
     UNIT_ASSERT(headers.HasHeader("Access-Control-Allow-Credentials"));

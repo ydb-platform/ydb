@@ -288,6 +288,11 @@ enum ESimpleCounters {
     COUNTER_FORMAT_POSITION_TABLE_COUNT = 222 [(CounterOpts) = {Name: "TablesInFormatPosition"}];
 
     COUNTER_IN_FLIGHT_OPS_TxCreateFullBackupOp = 223 [(CounterOpts) = {Name: "InFlightOps/CreateFullBackupOp"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateLocalIndex = 224 [(CounterOpts) = {Name: "InFlightOps/CreateLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropLocalIndex = 225 [(CounterOpts) = {Name: "InFlightOps/DropLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterLocalIndex = 226 [(CounterOpts) = {Name: "InFlightOps/AlterLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxMoveLocalIndex = 227 [(CounterOpts) = {Name: "InFlightOps/MoveLocalIndex"}];
 }
 
 enum ECumulativeCounters {
@@ -481,6 +486,11 @@ enum ECumulativeCounters {
 
     // How much time TTableInfo::VerifyConsistency() call takes, in nanoseconds
     COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS = 144 [(CounterOpts) = {Name: "TablePartitionsConsistencyCheckTimeNs"}];
+
+    COUNTER_FINISHED_OPS_TxCreateLocalIndex = 145 [(CounterOpts) = {Name: "FinishedOps/CreateLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxDropLocalIndex = 146 [(CounterOpts) = {Name: "FinishedOps/DropLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxAlterLocalIndex = 147 [(CounterOpts) = {Name: "FinishedOps/AlterLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxMoveLocalIndex = 148 [(CounterOpts) = {Name: "FinishedOps/MoveLocalIndex"}];
 }
 
 enum EPercentileCounters {
@@ -512,6 +522,11 @@ enum EPercentileCounters {
         Name: "NumShardsByTtlLag"
         Integral: true
         Ranges: { Value: 0        Name: "0"     }
+        Ranges: { Value: 30       Name: "30"    }
+        Ranges: { Value: 60       Name: "60"    }
+        Ranges: { Value: 120      Name: "120"   }
+        Ranges: { Value: 300      Name: "300"   }
+        Ranges: { Value: 600      Name: "600"   }
         Ranges: { Value: 900      Name: "900"   }
         Ranges: { Value: 1800     Name: "1800"  }
         Ranges: { Value: 3600     Name: "3600"  }
@@ -582,6 +597,15 @@ enum EPercentileCounters {
         Ranges: { Value: 200000      Name: "200 ms"       }
         Ranges: { Value: 500000      Name: "500 ms"       }
         Ranges: { Value: 1000000     Name: "1000 ms"      }
+        Ranges: { Value: 5000000     Name: "5000 ms"      }
+        Ranges: { Value: 10000000    Name: "10000 ms"     }
+        Ranges: { Value: 30000000    Name: "30000 ms"     }
+        Ranges: { Value: 50000000    Name: "50000 ms"     }
+        Ranges: { Value: 60000000    Name: "60000 ms"     }
+        Ranges: { Value: 70000000    Name: "70000 ms"     }
+        Ranges: { Value: 300000000   Name: "300000 ms"    }
+        Ranges: { Value: 600000000   Name: "600000 ms"    }
+        Ranges: { Value: 900000000   Name: "900000 ms"    }
     }];
 
     COUNTER_PQ_STATS_BATCH_LATENCY = 6 [(CounterOpts) = {
@@ -754,4 +778,6 @@ enum ETxTypes {
     TXTYPE_LIST_FULL_BACKUP = 121 [(TxTypeOpts) = {Name: "TxListFullBackup"}];
     TXTYPE_FORGET_FULL_BACKUP = 122 [(TxTypeOpts) = {Name: "TxForgetFullBackup"}];
     TXTYPE_PROGRESS_FULL_BACKUP = 123 [(TxTypeOpts) = {Name: "TxProgressFullBackup"}];
+
+    TXTYPE_CREATE_SET_COLUMN_CONSTRAINT = 124             [(TxTypeOpts) = {Name: "TxCreateSetColumnConstraint"}];
 }

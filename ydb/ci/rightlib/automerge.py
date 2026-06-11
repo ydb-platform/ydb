@@ -83,7 +83,15 @@ class PrAutomerger:
         shutil.rmtree("merge-repo", ignore_errors=True)
         original_dir = os.getcwd()
         try:
-            self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "merge-repo")
+            self.git_run(
+                "clone",
+                "--filter=blob:none",
+                "--single-branch",
+                "--branch",
+                pr.base.ref,
+                f"https://{self.token}@github.com/{self.repo_name}.git",
+                "merge-repo",
+            )
             os.chdir("merge-repo")
             self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
             self.git_run("checkout", pr.base.ref)
@@ -100,8 +108,13 @@ class PrAutomerger:
                 self.git_run("push")
                 return True
             except subprocess.CalledProcessError:
-                self.add_failed_comment(pr, "Unable to push merged revision.")
-                self.add_pr_failed_label(pr)
+                # Most likely a race: someone pushed to the base branch between
+                # our clone and push. Not a PR problem, retry on next iteration.
+                self.logger.warning("push to %s rejected, will retry on next iteration", pr.base.ref)
+                text = f"Unable to push merged revision to `{pr.base.ref}` (probably a race with another push), will retry automatically."
+                if self.workflow_url:
+                    text += f" Sync workflow logs can be found [here]({self.workflow_url})."
+                pr.create_issue_comment(text)
                 return False
         finally:
             os.chdir(original_dir)

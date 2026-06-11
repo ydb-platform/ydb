@@ -86,7 +86,6 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
         UNKNOWN = std::numeric_limits<int>::max(),
     };
 
-
     // For backward compatibility
     using TEncryptionAlgorithm = NExport::TEncryptionAlgorithm;
 

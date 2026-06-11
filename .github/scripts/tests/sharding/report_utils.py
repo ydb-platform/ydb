@@ -82,6 +82,37 @@ def count_failures(report: dict[str, Any]) -> int:
     return count
 
 
+def test_name_to_ya_filter(test_name: str) -> str:
+    """Convert report test name to ya ``--test-filter`` value (see summary.html)."""
+    name_pieces = test_name.split(".")
+    if len(name_pieces) == 2:
+        return f"{name_pieces[0]}::{name_pieces[1]}"
+    if len(name_pieces) > 2:
+        return f"{name_pieces[0]}.{name_pieces[1]}::{'::'.join(name_pieces[2:])}"
+    return test_name
+
+
+def iter_failed_test_filters(report: dict[str, Any]) -> Iterator[str]:
+    """Yield ya ``--test-filter`` values for failed/errored tests in a report."""
+    seen: set[str] = set()
+    for row in iter_test_rows(report):
+        if row.get("status") not in {"FAILED", "ERROR"}:
+            continue
+        if row.get("type") == "build":
+            continue
+        subtest_name = row.get("subtest_name") or ""
+        if subtest_name and "chunk" in subtest_name:
+            continue
+        entry = TestEntry.from_report_row(row)
+        if entry is None or not entry.name:
+            continue
+        ya_filter = test_name_to_ya_filter(entry.name)
+        if ya_filter in seen:
+            continue
+        seen.add(ya_filter)
+        yield ya_filter
+
+
 def write_report(report: dict[str, Any], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fp:

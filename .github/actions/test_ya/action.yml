@@ -464,10 +464,13 @@ runs:
 
         BUILD_FAILED=0
 
+        CROSS_JOB_RETRY=0
         if [ "$START_RETRY" -gt 1 ] && [ -n "${{ inputs.previous_report_path }}" ]; then
           PREV_REPORT="${{ inputs.previous_report_path }}"
-          GRAPH_PATH=""
-          CONTEXT_PATH=""
+          CROSS_JOB_RETRY=1
+          mkdir -p "$PUBLIC_DIR/try_1"
+          cp "$PREV_REPORT" "$PUBLIC_DIR/try_1/report.json"
+          cp "$PREV_REPORT" "$LAST_BUILD_RESULTS_REPORT"
         fi
 
         if [ "$SKIP_TEST_LOOP" = "1" ]; then
@@ -495,17 +498,31 @@ runs:
           fi
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
+          RERUN_EXTRA_OPTS=()
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
-            RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
+            MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
+            python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
+            RERUN_EXTRA_OPTS+=(--build-only-test-deps)
             if [ -z "$GRAPH_PATH" ]; then
-              MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
-              python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
-              RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
+              RERUN_EXTRA_OPTS+=(--test-blacklist-path "$MUTED_YAML_PATH")
+            fi
+            if [ "$CROSS_JOB_RETRY" = "1" ] && [ "$RETRY" = "$START_RETRY" ]; then
+              FAILED_FILTER_COUNT=0
+              while IFS= read -r filter; do
+                if [ -n "$filter" ]; then
+                  RERUN_EXTRA_OPTS+=(--test-filter "$filter")
+                  FAILED_FILTER_COUNT=$((FAILED_FILTER_COUNT + 1))
+                fi
+              done < <(python3 .github/scripts/tests/sharding/extract_failed_test_filters.py "$PREV_REPORT")
+              echo "Cross-job retry: scheduling $FAILED_FILTER_COUNT failed test(s) via --test-filter"
+              if [ "$FAILED_FILTER_COUNT" = "0" ]; then
+                RERUN_EXTRA_OPTS+=(-X)
+              fi
             else
-              RERUN_FAILED_OPT=""
+              RERUN_EXTRA_OPTS+=(-X)
             fi
           fi
 
@@ -542,7 +559,7 @@ runs:
 
           YA_MAKE_CMD=(
             ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
+            "${RERUN_EXTRA_OPTS[@]}" --log-file "$PUBLIC_DIR/ya_log.txt"
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
           )

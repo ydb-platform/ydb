@@ -57,6 +57,39 @@ class ShardingToolsTest(unittest.TestCase):
             loads = [shard["estimated_duration_sec"] for shard in plan["shards"]]
             self.assertLess(max(loads) - min(loads), 60)
 
+    def test_split_keeps_ya_make_suite_together(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            _run(
+                "split_test_shards.py",
+                "--tests-file",
+                str(FIXTURES / "tests.txt"),
+                "--durations-file",
+                str(FIXTURES / "durations.csv"),
+                "--shard-count",
+                "2",
+                "-o",
+                str(plan_path),
+            )
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            all_tests = FIXTURES.joinpath("tests.txt").read_text().strip().split()
+            by_suite: dict[str, list[str]] = {}
+            for full_name in all_tests:
+                suite = full_name.rsplit("/", 1)[0] if "/" in full_name else full_name
+                by_suite.setdefault(suite, []).append(full_name)
+
+            for suite, suite_tests in by_suite.items():
+                shard_ids = {
+                    shard["id"]
+                    for shard in plan["shards"]
+                    if suite_tests[0] in shard["tests"]
+                }
+                self.assertEqual(len(shard_ids), 1, f"suite {suite} split across shards")
+                for test in suite_tests[1:]:
+                    for shard in plan["shards"]:
+                        if test in shard["tests"]:
+                            self.assertIn(shard["id"], shard_ids)
+
     def test_build_shard_blacklist_complement(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"

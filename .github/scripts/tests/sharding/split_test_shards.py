@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Split a test list into N shards balanced by estimated duration."""
+"""Split a test list into N shards balanced by estimated duration.
+
+Tests from the same ya.make suite (directory path) are kept on one shard so
+in-suite chunking is not split across parallel runners.
+"""
 from __future__ import annotations
 
 import argparse
@@ -7,6 +11,12 @@ import csv
 import json
 import sys
 from pathlib import Path
+
+
+def suite_path(full_name: str) -> str:
+    if "/" not in full_name:
+        return full_name
+    return full_name.rsplit("/", 1)[0]
 
 
 def load_durations(path: Path | None) -> dict[str, float]:
@@ -43,19 +53,33 @@ def load_tests(path: Path) -> list[str]:
     return lines
 
 
+def group_tests_by_suite(tests: list[str]) -> dict[str, list[str]]:
+    groups: dict[str, list[str]] = {}
+    for full_name in tests:
+        groups.setdefault(suite_path(full_name), []).append(full_name)
+    return groups
+
+
+def suite_weight(suite_tests: list[str], durations: dict[str, float]) -> float:
+    return sum(durations.get(name, 1.0) for name in suite_tests)
+
+
 def assign_shards(tests: list[str], shard_count: int, durations: dict[str, float]) -> list[list[str]]:
     if shard_count < 1:
         raise ValueError("shard_count must be >= 1")
     buckets: list[list[str]] = [[] for _ in range(shard_count)]
     bucket_load = [0.0] * shard_count
 
-    def weight(full_name: str) -> float:
-        return durations.get(full_name, 1.0)
-
-    for full_name in sorted(tests, key=lambda name: weight(name), reverse=True):
+    groups = group_tests_by_suite(tests)
+    sorted_groups = sorted(
+        groups.items(),
+        key=lambda item: suite_weight(item[1], durations),
+        reverse=True,
+    )
+    for _path, suite_tests in sorted_groups:
         idx = min(range(shard_count), key=lambda i: bucket_load[i])
-        buckets[idx].append(full_name)
-        bucket_load[idx] += weight(full_name)
+        buckets[idx].extend(sorted(suite_tests))
+        bucket_load[idx] += suite_weight(suite_tests, durations)
     return buckets
 
 
@@ -63,10 +87,12 @@ def build_plan(tests: list[str], shard_count: int, durations: dict[str, float]) 
     buckets = assign_shards(tests, shard_count, durations)
     shards = []
     for shard_id, bucket in enumerate(buckets):
+        suites = sorted({suite_path(name) for name in bucket})
         shards.append(
             {
                 "id": shard_id,
                 "tests": bucket,
+                "suites": suites,
                 "estimated_duration_sec": sum(durations.get(name, 1.0) for name in bucket),
             }
         )

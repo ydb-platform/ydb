@@ -13,17 +13,18 @@ def render(plan: dict, title: str = "Shard plan") -> str:
     shard_count = plan.get("shard_count", len(plan.get("shards") or []))
     lines.append(f"**Shard count:** {shard_count}")
     lines.append("")
-    lines.append("| Shard | Tests | Est. duration (sec) | Sample tests |")
-    lines.append("| ---: | ---: | ---: | --- |")
+    lines.append("| Shard | Suites | Tests | Est. duration (sec) | Sample suites |")
+    lines.append("| ---: | ---: | ---: | ---: | --- |")
 
     for shard in plan.get("shards") or []:
         shard_id = shard.get("id", "?")
         tests = shard.get("tests") or []
+        suites = shard.get("suites") or sorted({t.rsplit("/", 1)[0] if "/" in t else t for t in tests})
         est = shard.get("estimated_duration_sec", "")
-        sample = ", ".join(tests[:3])
-        if len(tests) > 3:
-            sample += f", … (+{len(tests) - 3})"
-        lines.append(f"| {shard_id} | {len(tests)} | {est} | `{sample}` |")
+        sample = ", ".join(f"`{s}`" for s in suites[:3])
+        if len(suites) > 3:
+            sample += f", … (+{len(suites) - 3})"
+        lines.append(f"| {shard_id} | {len(suites)} | {len(tests)} | {est} | {sample} |")
 
     lines.append("")
     return "\n".join(lines)

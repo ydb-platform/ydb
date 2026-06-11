@@ -19,12 +19,10 @@ class TestDefaultColumns(RestartToAnotherVersionFixture):
         if min(self.versions) < (25, 3):
             pytest.skip("Only available since 25-3")
 
-        feature_flags = {
-            "enable_add_colums_with_defaults": True,
-        }
+        feature_flags = ["enable_add_colums_with_defaults"]
 
         if min(self.versions) >= (26, 1):
-            feature_flags["enable_set_drop_default_value"] = True
+            feature_flags.append("enable_set_drop_default_value")
 
         yield from self.setup_cluster(
             extra_feature_flags=feature_flags

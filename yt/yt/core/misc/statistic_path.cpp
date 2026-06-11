@@ -100,7 +100,7 @@ TErrorOr<TStatisticPath> ParseStatisticPath(const TStatisticPathType& path)
 
 TErrorOr<TStatisticPath> SlashedStatisticPath(const TStatisticPathType& path)
 {
-    TString copy;
+    std::string copy;
     std::replace_copy(path.begin(), path.end(), std::back_inserter(copy), TChar('/'), Delimiter);
     return ParseStatisticPath(copy);
 }

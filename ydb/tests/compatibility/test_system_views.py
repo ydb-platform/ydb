@@ -129,9 +129,7 @@ class TestSystemViewsSetPermissions(RestartToAnotherVersionFixture):
             pytest.skip('Only available since 25-3')
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                'enable_real_system_view_paths': True,
-            }
+            extra_feature_flags=['enable_real_system_view_paths']
         )
 
     def permissions_to_dict(self, permissions):

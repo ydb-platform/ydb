@@ -1,21 +1,15 @@
-from __future__ import absolute_import
 import sys
 import doctest
 import unittest
 import decimal
 import inspect
-import functools
-import collections
-from collections import defaultdict
-try:
-    c = collections.abc
-except AttributeError:
-    c = collections
+from asyncio import get_event_loop
+from collections import defaultdict, ChainMap, abc as c
 from decorator import dispatch_on, contextmanager, decorator
 try:
-    from . import documentation as doc
-except (ImportError, ValueError, SystemError):  # depending on the py-version
-    import documentation as doc
+    from . import documentation as doc  # good with pytest
+except ImportError:
+    import documentation as doc  # good with `python src/tests/test.py`
 
 
 @contextmanager
@@ -29,22 +23,21 @@ def assertRaises(etype):
         raise Exception('Expected %s' % etype.__name__)
 
 
-if sys.version_info >= (3, 5):
-    exec('''from asyncio import get_event_loop
-
 @decorator
 async def before_after(coro, *args, **kwargs):
     return "<before>" + (await coro(*args, **kwargs)) + "<after>"
+
 
 @decorator
 def coro_to_func(coro, *args, **kw):
     return get_event_loop().run_until_complete(coro(*args, **kw))
 
+
 class CoroutineTestCase(unittest.TestCase):
     def test_before_after(self):
         @before_after
         async def coro(x):
-           return x
+            return x
         self.assertTrue(inspect.iscoroutinefunction(coro))
         out = get_event_loop().run_until_complete(coro('x'))
         self.assertEqual(out, '<before>x<after>')
@@ -55,7 +48,6 @@ class CoroutineTestCase(unittest.TestCase):
             return x
         self.assertFalse(inspect.iscoroutinefunction(coro))
         self.assertEqual(coro('x'), 'x')
-''')
 
 
 def gen123():
@@ -80,28 +72,42 @@ class DocumentationTestCase(unittest.TestCase):
         err = doctest.testmod(doc)[0]
         self.assertEqual(err, 0)
 
+    def test_copy_dunder_attrs(self):
+        traced = doc.trace(doc.foo)
+        self.assertIn('documentation', traced.__module__)
+        self.assertEqual(traced.__annotations__, {})
+        self.assertEqual(traced.__defaults__, (None,))
+
     def test_singledispatch1(self):
-        if hasattr(functools, 'singledispatch'):
-            with assertRaises(RuntimeError):
-                doc.singledispatch_example1()
+        with assertRaises(RuntimeError):
+            doc.singledispatch_example1()
 
     def test_singledispatch2(self):
-        if hasattr(functools, 'singledispatch'):
-            doc.singledispatch_example2()
+        doc.singledispatch_example2()
+
+    def test_context_manager(self):
+
+        @contextmanager
+        def before_after(before, after):
+            print(before)
+            yield
+            print(after)
+
+        @before_after('BEFORE', 'AFTER')
+        def hello_user(user):
+            print('hello %s' % user)
+
+        argspec = inspect.getfullargspec(hello_user)
+        self.assertEqual(argspec.args, ['user'])
 
 
 class ExtraTestCase(unittest.TestCase):
     def test_qualname(self):
-        if sys.version_info >= (3, 3):
-            self.assertEqual(doc.hello.__qualname__, 'hello')
-        else:
-            with assertRaises(AttributeError):
-                doc.hello.__qualname__
+        self.assertEqual(doc.operation1.__qualname__, 'operation1')
 
     def test_signature(self):
-        if hasattr(inspect, 'signature'):
-            sig = inspect.signature(doc.f1)
-            self.assertEqual(str(sig), '(x)')
+        sig = inspect.signature(doc.f1)
+        self.assertEqual(str(sig), '(x)')
 
     def test_unique_filenames(self):
         @decorator
@@ -125,10 +131,13 @@ class ExtraTestCase(unittest.TestCase):
         @d1
         def f1(x, y, z):
             pass
-        self.assertNotEqual(d1.__code__.co_filename, d2.__code__.co_filename)
-        self.assertNotEqual(f1.__code__.co_filename, f2.__code__.co_filename)
-        self.assertNotEqual(f1_orig.__code__.co_filename,
-                            f1.__code__.co_filename)
+
+        self.assertEqual(d1.__code__.co_filename,
+                         d2.__code__.co_filename)
+        self.assertEqual(f1.__code__.co_filename,
+                         f2.__code__.co_filename)
+        self.assertEqual(f1_orig.__code__.co_filename,
+                         f1.__code__.co_filename)
 
     def test_no_first_arg(self):
         @decorator
@@ -137,17 +146,19 @@ class ExtraTestCase(unittest.TestCase):
 
         @example
         def func(**kw):
+            "Docstring"
             return kw
 
         # there is no confusion when passing args as a keyword argument
         self.assertEqual(func(args='a'), {'args': 'a'})
+        self.assertEqual(func.__doc__, "Docstring")
 
     def test_decorator_factory(self):
         # similar to what IPython is doing in traitlets.config.application
         @decorator
         def catch_config_error(method, app, *args, **kwargs):
             return method(app)
-        catch_config_error(lambda app: None)
+        catch_config_error(lambda app, **kw: None)(1)
 
     def test_add1(self):
         # similar to what IPython is doing in traitlets.config.application
@@ -158,6 +169,29 @@ class ExtraTestCase(unittest.TestCase):
         def f(x):
             return x
         self.assertEqual(add(f, 2)(0), 2)
+
+    def test_dan_schult(self):
+        # see https://github.com/micheles/decorator/issues/120
+        @decorator
+        def prnt(func, index=0, *args, **kw):
+            print(args[index])
+            return func(*args, **kw)
+
+        @prnt(index=2)  # print the value of the third argument
+        def f(a, b, c=None):
+            return [a, b, c]
+
+        self.assertEqual(f(0, 1), [0, 1, None])
+
+    def test_slow_wrapper(self):
+        # see https://github.com/micheles/decorator/issues/123
+        dd = defaultdict(list)
+        doc.trace(defaultdict.__setitem__)(dd, 'x', [1])
+        self.assertEqual(dd['x'], [1])
+        doc.trace(defaultdict.__delitem__)(dd, 'x')
+        self.assertEqual(dd['x'], [])
+        # NB: defaultdict.__getitem__ has no signature and cannot be
+        # decorated in CPython, while it is regular in PyPy
 
 
 # ################### test dispatch_on ############################# #
@@ -290,14 +324,13 @@ class TestSingleDispatch(unittest.TestCase):
         self.assertEqual(g(f), "sized")
         self.assertEqual(g(t), "sized")
 
-        if hasattr(c, 'ChainMap'):
-            g.register(c.ChainMap)(lambda obj: "chainmap")
-            # irrelevant ABCs registered
-            self.assertEqual(g(d), "mutablemapping")
-            self.assertEqual(g(l), "sized")
-            self.assertEqual(g(s), "sized")
-            self.assertEqual(g(f), "sized")
-            self.assertEqual(g(t), "sized")
+        g.register(ChainMap)(lambda obj: "chainmap")
+        # irrelevant ABCs registered
+        self.assertEqual(g(d), "mutablemapping")
+        self.assertEqual(g(l), "sized")
+        self.assertEqual(g(s), "sized")
+        self.assertEqual(g(f), "sized")
+        self.assertEqual(g(t), "sized")
 
         g.register(c.MutableSequence)(lambda obj: "mutablesequence")
         self.assertEqual(g(d), "mutablemapping")

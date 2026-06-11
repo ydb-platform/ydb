@@ -146,18 +146,46 @@ TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx
     return settings;
 }
 
-const TStructExprType* PrepareSchemeType(const TString& alias, const TStructExprType* schemeType, TExprContext& ctx) {
-    const auto itemTypes = schemeType->GetItems();
-    // If scheme type does not have aliases - add it.
-    if (!alias.empty() && std::any_of(itemTypes.begin(), itemTypes.end(), [](const TItemExprType* itemType) { return itemType->GetName().find(".") == TString::npos; })) {
-        TVector<const TItemExprType*> newItemTypes;
-        for (const auto itemType : itemTypes) {
-            const auto newName = alias + "." + itemType->GetName();
-            newItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, itemType->GetItemType()));
-        }
-        return ctx.MakeType<TStructExprType>(newItemTypes);
+// Map a physical table column name to the name the read actually exposes. Projection elimination
+// can rename read outputs (most commonly by stripping the alias), so Columns[i] (physical) is
+// aligned with OutputIUs[i] (exposed). Columns not selected by the read are absent from the map.
+THashMap<TString, TString> BuildPhysicalToExposedName(const TOpRead& read) {
+    THashMap<TString, TString> result;
+    const size_t count = std::min(read.Columns.size(), read.OutputIUs.size());
+    for (size_t i = 0; i < count; ++i) {
+        result[read.Columns[i]] = read.OutputIUs[i].GetFullName();
     }
-    return schemeType;
+    return result;
+}
+
+// Resolve the name a physical column should carry so it stays consistent with the read's exposed
+// outputs and the lambda the predicate extractor is typed against.
+TString ResolveExposedName(const TString& physicalName, const TOpRead& read,
+                           const THashMap<TString, TString>& physicalToExposed, bool exposesQualified) {
+    if (const auto it = physicalToExposed.find(physicalName); it != physicalToExposed.end()) {
+        return it->second;
+    }
+    if (exposesQualified && !read.Alias.empty()) {
+        return read.Alias + "." + physicalName;
+    }
+    return physicalName;
+}
+
+const TStructExprType* PrepareSchemeType(const TOpRead& read, const TStructExprType* schemeType, TExprContext& ctx) {
+    const auto physicalToExposed = BuildPhysicalToExposedName(read);
+    const bool exposesQualified = std::any_of(read.OutputIUs.begin(), read.OutputIUs.end(),
+                                              [](const TInfoUnit& iu) { return !iu.GetAlias().empty(); });
+
+    TVector<const TItemExprType*> newItemTypes;
+    bool changed = false;
+    for (const auto itemType : schemeType->GetItems()) {
+        const TString physicalName(itemType->GetName());
+        const auto newName = ResolveExposedName(physicalName, read, physicalToExposed, exposesQualified);
+        changed |= newName != physicalName;
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, itemType->GetItemType()));
+    }
+
+    return changed ? ctx.MakeType<TStructExprType>(newItemTypes) : schemeType;
 }
 
 } // anonymous namespace
@@ -196,18 +224,25 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     THashSet<TString> possibleKeys;
     auto settings = PrepareExtractorSettings(kqpCtx);
     auto extractor = MakePredicateRangeExtractor(settings);
-    auto schemeType = PrepareSchemeType(read->Alias, tableDesc->SchemeNode, ctx);
-    const bool prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
-    YQL_ENSURE(prepareSuccess);
+    auto schemeType = PrepareSchemeType(*read, tableDesc->SchemeNode, ctx);
+    bool prepareSuccess = false;
+    try {
+        prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
+    } catch (...) {
+        return input;
+    }
+    if (!prepareSuccess) {
+        return input;
+    }
 
+    // Key columns must be named exactly as the scheme type exposes them, so the compute node lines up
+    // with the names the predicate extractor resolved.
+    const auto physicalToExposed = BuildPhysicalToExposedName(*read);
+    const bool exposesQualified = std::any_of(read->OutputIUs.begin(), read->OutputIUs.end(),
+                                              [](const TInfoUnit& iu) { return !iu.GetAlias().empty(); });
     TVector<TString> keyColumns;
-    if (std::any_of(possibleKeys.begin(), possibleKeys.end(), [](const TString& key) { return key.find(".") != TString::npos; })) {
-        for (const auto& key : tableDesc->Metadata->KeyColumnNames) {
-            auto newName = read->Alias + "." + key;
-            keyColumns.emplace_back(std::move(newName));
-        }
-    } else {
-        keyColumns = tableDesc->Metadata->KeyColumnNames;
+    for (const auto& key : tableDesc->Metadata->KeyColumnNames) {
+        keyColumns.emplace_back(ResolveExposedName(key, *read, physicalToExposed, exposesQualified));
     }
 
     auto buildResult = extractor->BuildComputeNode(keyColumns, ctx, typeCtx);

@@ -199,7 +199,7 @@ class Client(ABC):
         self.server_version, server_tz = tuple(self.command("SELECT version(), timezone()", use_database=False))
         try:
             server_tz_info = tzutil.resolve_zone(server_tz)
-            server_tz_info, self._dst_safe = tzutil.normalize_timezone(server_tz_info)
+            server_tz_info, self._dst_safe = tzutil.normalize_timezone(server_tz_info, trust_fixed_offset=True)
             self.server_tz = server_tz_info
         except ZoneInfoNotFoundError:
             logger.warning(

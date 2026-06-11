@@ -227,14 +227,14 @@ public:
         TConcreteConstructor concreteConstructor);
 
     template <TFieldTag::TUnderlying TagValue, auto Member>
-    auto Field(TString name)
+    auto Field(std::string name)
     {
         return DoField<TagValue>(std::move(name));
     }
 
     template <TFieldTag::TUnderlying TagValue>
     auto VirtualField(
-        TString name,
+        std::string name,
         auto&& /*loadHandler*/)
     {
         return DoField<TagValue>(std::move(name));
@@ -242,7 +242,7 @@ public:
 
     template <TFieldTag::TUnderlying TagValue>
     auto VirtualField(
-        TString name,
+        std::string name,
         auto&& loadHandler,
         auto&& /*saveHandler*/)
     {
@@ -261,7 +261,7 @@ private:
     std::unique_ptr<TTypeDescriptor> TypeDescriptor_ = std::make_unique<TTypeDescriptor>();
 
     template <TFieldTag::TUnderlying TagValue>
-    auto DoField(TString name)
+    auto DoField(std::string name)
     {
         auto fieldDescriptor = std::make_unique<TFieldDescriptor>();
         fieldDescriptor->Name_ = std::move(name);

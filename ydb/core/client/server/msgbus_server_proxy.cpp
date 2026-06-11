@@ -166,7 +166,7 @@ void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatDescribeRequest::TPtr& e
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbOperation::TPtr& ev, const TActorContext& ctx); // see msgbus_server_db.cpp
 
 void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
-    YDB_LOG_CTX_TRACE(ctx, "TMessageBusServerProxy::Bootstrap");
+    YDB_LOG_TRACE_CTX(ctx, "TMessageBusServerProxy::Bootstrap");
 
     SelfID = ctx.SelfID;
 

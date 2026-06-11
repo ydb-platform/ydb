@@ -101,8 +101,8 @@ public:
             tenant.SkipPrefix("/");
             tenant.ChopSuffix("/");
             if (tenant != "Root") {
-                YDB_LOG_CTX_NOTICE(ctx, "Started on tenant, will not request hive",
-                    {"Tenant", tenant});
+                YDB_LOG_NOTICE_CTX(ctx, "Started on tenant, will not request hive",
+                    {"tenant", tenant});
                 OnDynNode = true;
             } else {
                 StartHivePipe(ctx);
@@ -120,7 +120,7 @@ private:
     }
 
     void SubscribeToClustersUpdate(const TActorContext& ctx) {
-        YDB_LOG_CTX_DEBUG(ctx, "Subscribe to cluster tracker");
+        YDB_LOG_DEBUG_CTX(ctx, "Subscribe to cluster tracker");
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
 
@@ -128,9 +128,9 @@ private:
             NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev,
             const TActorContext& ctx
     ) {
-        YDB_LOG_CTX_DEBUG(ctx, "HandleClustersUpdate");
+        YDB_LOG_DEBUG_CTX(ctx, "HandleClustersUpdate");
         if (!LocalCluster.empty()) {
-            YDB_LOG_CTX_DEBUG(ctx, "HandleClustersUpdate LocalCluster !LocalCluster.empty()");
+            YDB_LOG_DEBUG_CTX(ctx, "HandleClustersUpdate LocalCluster !LocalCluster.empty()");
             return;
         }
         for (const auto& cluster : ev->Get()->ClustersList->Clusters) {
@@ -150,8 +150,8 @@ private:
 
     void StartHivePipe(const TActorContext& ctx) {
         auto hiveTabletId = GetHiveTabletId(ctx);
-        YDB_LOG_CTX_DEBUG(ctx, "Start pipe to hive",
-            {"Tablet", hiveTabletId});
+        YDB_LOG_DEBUG_CTX(ctx, "Start pipe to hive",
+            {"tablet", hiveTabletId});
         auto pipeRetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         pipeRetryPolicy.MaxRetryTime = TDuration::Seconds(1);
         NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = pipeRetryPolicy};
@@ -168,12 +168,12 @@ private:
             default:
                 return HandlePipeDestroyed(ctx);
         }
-        YDB_LOG_CTX_DEBUG(ctx, "Hive pipe connected");
+        YDB_LOG_DEBUG_CTX(ctx, "Hive pipe connected");
         ProcessNodesInfoWork(ctx);
     }
 
     void HandlePipeDestroyed(const TActorContext& ctx) {
-        YDB_LOG_CTX_DEBUG(ctx, "Hive pipe destroyed");
+        YDB_LOG_DEBUG_CTX(ctx, "Hive pipe destroyed");
         NTabletPipe::CloseClient(ctx, HivePipeClient);
         HivePipeClient = TActorId();
         StartHivePipe(ctx);
@@ -283,7 +283,7 @@ private:
     }
 
     void HandleDescribeTopics(TEvPqNewMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_CTX_DEBUG(ctx, "Handle describe topics");
+        YDB_LOG_DEBUG_CTX(ctx, "Handle describe topics");
         const auto& msg = *ev->Get();
 
         for (auto& t : ev->Get()->Topics) {
@@ -295,7 +295,7 @@ private:
     }
 
     void HandleDescribeTopicsByName(TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_CTX_DEBUG(ctx, "Handle describe topics by name");
+        YDB_LOG_DEBUG_CTX(ctx, "Handle describe topics by name");
 
         if (!ConverterFactory) {
             PendingTopicsRequests.emplace_back(ev);
@@ -329,7 +329,7 @@ private:
 
     void SendSchemeCacheRequest(std::shared_ptr<TWaiter> waiter) {
         const auto& ctx = ActorContext();
-        YDB_LOG_CTX_DEBUG(ctx, "SendSchemeCacheRequest");
+        YDB_LOG_DEBUG_CTX(ctx, "SendSchemeCacheRequest");
 
         auto reqId = ++RequestId;
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(reqId);
@@ -355,10 +355,10 @@ private:
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }
         if (db) schemeCacheRequest->DatabaseName = *db;
-        YDB_LOG_CTX_DEBUG(ctx, "send request for topics, got requests infly",
-            {"Topics", waiter->GetTopics().size()},
-            {"Waiters", DescribeTopicsWaiters.size()},
-            {"Db", db});
+        YDB_LOG_DEBUG_CTX(ctx, "Send request for topics, got requests infly",
+            {"topics", waiter->GetTopics().size()},
+            {"waiters", DescribeTopicsWaiters.size()},
+            {"db", db});
 
         ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release()), 0, 0, waiter->Span.GetTraceId());
     }
@@ -366,8 +366,8 @@ private:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         std::shared_ptr<TSchemeCacheNavigate> result(ev->Get()->Request.Release());
 
-        YDB_LOG_CTX_DEBUG(ctx, "Handle SchemeCache response",
-            {"Result", result->ToString(*AppData()->TypeRegistry)});
+        YDB_LOG_DEBUG_CTX(ctx, "Handle SchemeCache response",
+            {"result", result->ToString(*AppData()->TypeRegistry)});
 
         bool needLogError = AnyOf(result->ResultSet, [](const auto& entry) {
             switch (entry.Status) {
@@ -386,8 +386,8 @@ private:
             }
         });
         if (needLogError) {
-            YDB_LOG_CTX_ERROR(ctx, "Handle SchemeCache response",
-                {"Result", result->ToString(*AppData()->TypeRegistry)});
+            YDB_LOG_ERROR_CTX(ctx, "Handle SchemeCache response",
+                {"result", result->ToString(*AppData()->TypeRegistry)});
         }
 
         auto waiterIter = DescribeTopicsWaiters.find(result->Instant);
@@ -412,7 +412,7 @@ private:
             auto* response = new TEvPqNewMetaCache::TEvDescribeTopicsResponse{
                     std::move(waiter->Topics), navigate
             };
-            YDB_LOG_CTX_DEBUG(ctx, "Got describe topics SC response");
+            YDB_LOG_DEBUG_CTX(ctx, "Got describe topics SC response");
             ctx.Send(waiter->WaiterId, response);
         }
     }
@@ -462,14 +462,14 @@ private:
             param->SetValue("json");
         }
         info.SetPath("/app");
-        YDB_LOG_CTX_DEBUG(ctx, "Send Hive nodes state request");
+        YDB_LOG_DEBUG_CTX(ctx, "Send Hive nodes state request");
         NTabletPipe::SendData(ctx, HivePipeClient, new NActors::NMon::TEvRemoteHttpInfo(info));
     }
 
     void HandleHiveMonResponse(NMon::TEvRemoteJsonInfoRes::TPtr& ev, const TActorContext& ctx) {
         ResetHiveRequestState(ctx);
-        YDB_LOG_CTX_DEBUG(ctx, "Got Hive landing data response",
-            {"Ev", ev->Get()->Json});
+        YDB_LOG_DEBUG_CTX(ctx, "Got Hive landing data response",
+            {"ev", ev->Get()->Json});
         TStringInput input(ev->Get()->Json);
         auto jsonValue = NJson::ReadJsonTree(&input, true);
         const auto& rootMap = jsonValue.GetMap();

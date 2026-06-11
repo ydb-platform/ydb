@@ -578,12 +578,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
 void TMessageBusServer::OnError(TAutoPtr<NBus::TBusMessage> msg, NBus::EMessageStatus status) {
     if (ActorSystem) {
         if (status == NBus::MESSAGE_SHUTDOWN) {
-            YDB_LOG_CTX_DEBUG(*ActorSystem, "Msgbus client disconnected before reply was sent",
-                {"Msg", msg->Describe()});
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Msgbus client disconnected before reply was sent",
+                {"msg", msg->Describe()});
         } else {
-            YDB_LOG_CTX_ERROR(*ActorSystem, "Failed to send reply over msgbus",
-                {"Status", status},
-                {"Msg", msg->Describe()});
+            YDB_LOG_ERROR_CTX(*ActorSystem, "Failed to send reply over msgbus",
+                {"status", status},
+                {"msg", msg->Describe()});
         }
     }
 }

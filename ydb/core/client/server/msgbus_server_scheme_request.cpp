@@ -218,19 +218,19 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(ERespo
 }
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_CTX_TRACE(ctx, "TMessageBusServerProxy::Handle");
+    YDB_LOG_TRACE_CTX(ctx, "TMessageBusServerProxy::Handle");
 
     TEvBusProxy::TEvPersQueue *msg = ev->Get();
     const auto& rec = static_cast<TBusPersQueue *>(msg->MsgContext.GetMessage())->Record;
     if (rec.HasMetaRequest() && (rec.GetMetaRequest().HasCmdCreateTopic()
                                  || rec.GetMetaRequest().HasCmdChangeTopic()
                                  || rec.GetMetaRequest().HasCmdDeleteTopic())) {
-        YDB_LOG_CTX_TRACE(ctx, "TMessageBusServerProxy::Handle new TMessageBusServerSchemeRequest");
+        YDB_LOG_TRACE_CTX(ctx, "TMessageBusServerProxy::Handle new TMessageBusServerSchemeRequest");
 
         ctx.Register(new TMessageBusServerSchemeRequest<TBusPersQueue>(ev->Get()), TMailboxType::HTSwap, AppData()->UserPoolId);
         return;
     }
-    YDB_LOG_CTX_TRACE(ctx, "TMessageBusServerProxy::Handle CreateMessageBusServerPersQueue");
+    YDB_LOG_TRACE_CTX(ctx, "TMessageBusServerProxy::Handle CreateMessageBusServerPersQueue");
 
     ctx.Register(CreateMessageBusServerPersQueue(msg->MsgContext, PqMetaCache));
 }

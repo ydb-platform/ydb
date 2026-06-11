@@ -58,8 +58,8 @@ public:
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig);
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
-        YDB_LOG_CTX_DEBUG(ctx, "Forwarding CMS request",
-            {"Request", Request.ShortDebugString().data()});
+        YDB_LOG_DEBUG_CTX(ctx, "Forwarding CMS request",
+            {"request", Request.ShortDebugString().data()});
 
         if (Request.HasClusterStateRequest()) {
             TAutoPtr<TEvCms::TEvClusterStateRequest> request

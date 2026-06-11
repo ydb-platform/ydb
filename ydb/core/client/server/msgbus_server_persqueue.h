@@ -323,9 +323,9 @@ protected:
             HFunc(TPipeEvent, HandlePipeEvent);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
-            YDB_LOG_COMP_WARN(NKikimrServices::PERSQUEUE, "Unexpected event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Ev", ev->ToString()});
+            YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 
@@ -336,9 +336,9 @@ protected:
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeEvent);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
-            YDB_LOG_COMP_WARN(NKikimrServices::PERSQUEUE, "Unexpected event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Ev", ev->ToString()});
+            YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 

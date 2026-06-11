@@ -828,9 +828,6 @@ NNodes::TMaybeNode<NNodes::TExprBase> FuseMapToMapReduce(NNodes::TExprBase node,
         if (!path.Ranges().Maybe<TCoVoid>()) {
             continue;
         }
-        if (!path.QLFilter().Maybe<TCoVoid>()) {
-            continue;
-        }
 
         const TParentsMap* parentsMap = getParents();
         if (IsOutputUsedMultipleTimes(innerMap.Ref(), *parentsMap)) {

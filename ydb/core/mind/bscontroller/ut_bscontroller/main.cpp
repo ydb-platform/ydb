@@ -564,6 +564,78 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
+    Y_UNIT_TEST(ReadStoragePoolWithImplicitBoxId) {
+        const ui32 numNodes = 50;
+        const ui32 numGroups = 20;
+        TEnvironmentSetup env(numNodes, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            TVector<TEnvironmentSetup::TNodeRecord> nodes1, nodes2;
+            for (const auto& node : env.GetNodes()) {
+                (nodes1.size() < numNodes / 2 ? nodes1 : nodes2).push_back(node);
+            }
+
+            const TVector<TEnvironmentSetup::TPDiskDefinition> disks = {
+                {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                {"/dev/disk2", NKikimrBlobStorage::ROT, true,  false, 0},
+                {"/dev/disk3", NKikimrBlobStorage::SSD, false, false, 0},
+            };
+
+            NKikimrBlobStorage::TConfigRequest request;
+            env.DefineBox(1, "box", disks, nodes1, request);
+            env.DefineStoragePool(1, 1, "storage pool", numGroups, NKikimrBlobStorage::ROT, {}, request);
+            NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+            UNIT_ASSERT(response.GetSuccess());
+
+            auto readPool = [&](TMaybe<ui64> boxId) {
+                NKikimrBlobStorage::TConfigRequest req;
+                auto *read = req.AddCommand()->MutableReadStoragePool();
+                if (boxId) {
+                    read->SetBoxId(*boxId);
+                }
+                read->AddName("storage pool");
+                return env.Invoke(req);
+            };
+
+            const auto explicitResp = readPool(1);
+            UNIT_ASSERT(explicitResp.GetSuccess());
+            const auto explicitStatus = explicitResp.GetStatus(0);
+            UNIT_ASSERT_VALUES_EQUAL(explicitStatus.StoragePoolSize(), 1);
+
+            const auto implicitResp = readPool(Nothing());
+            UNIT_ASSERT(implicitResp.GetSuccess());
+            const auto implicitStatus = implicitResp.GetStatus(0);
+            UNIT_ASSERT_VALUES_EQUAL(implicitStatus.StoragePoolSize(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(implicitStatus.GetStoragePool(0).GetName(),
+                explicitStatus.GetStoragePool(0).GetName());
+            UNIT_ASSERT_VALUES_EQUAL(implicitStatus.GetStoragePool(0).GetItemConfigGeneration(),
+                explicitStatus.GetStoragePool(0).GetItemConfigGeneration());
+
+            const auto zeroResp = readPool(0);
+            UNIT_ASSERT(zeroResp.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(zeroResp.GetStatus(0).StoragePoolSize(), 0);
+
+            request.Clear();
+            env.DefineBox(2, "box 2", disks, nodes2, request);
+            response = env.Invoke(request);
+            UNIT_ASSERT(response.GetSuccess());
+
+            const auto explicitTwoResp = readPool(1);
+            UNIT_ASSERT(explicitTwoResp.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(explicitTwoResp.GetStatus(0).StoragePoolSize(), 1);
+
+            const auto ambiguousResp = readPool(Nothing());
+            UNIT_ASSERT(!ambiguousResp.GetSuccess());
+
+            const auto allBoxesResp = readPool(Max<ui64>());
+            UNIT_ASSERT(allBoxesResp.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(allBoxesResp.GetStatus(0).StoragePoolSize(), 1);
+        });
+    }
+
     Y_UNIT_TEST(ReassignGroupDisk) {
         const ui32 numNodes = 12;
         const ui32 numGroups = 8;

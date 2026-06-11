@@ -326,16 +326,6 @@ std::vector<int> GetPidsUnderParent(int targetPid)
 #endif
 }
 
-size_t GetCurrentProcessId()
-{
-    return GetPID();
-}
-
-size_t GetCurrentThreadId()
-{
-    return TThread::CurrentThreadNumericId();
-}
-
 std::vector<size_t> GetCurrentProcessThreadIds()
 {
 #ifdef __linux__

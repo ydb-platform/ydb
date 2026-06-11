@@ -43,6 +43,8 @@ class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
 class EvictionToExternalStorageSettings;
 class CompactItem;
+class LocalBloomFilterIndex;
+class LocalBloomNgramFilterIndex;
 
 } // namespace Table
 } // namespace Ydb
@@ -416,6 +418,25 @@ public:
 };
 
 //! Represents index description
+// If FalsePositiveProbability is left unset, the server applies its built-in default of 0.1.
+struct TLocalBloomFilterSettings {
+    std::optional<double> FalsePositiveProbability;
+
+    static TLocalBloomFilterSettings FromProto(const Ydb::Table::LocalBloomFilterIndex& proto);
+    void SerializeTo(Ydb::Table::LocalBloomFilterIndex& proto) const;
+};
+
+// All fields are optional. If a field is left unset, the server applies its built-in
+// default: NgramSize = 3, CaseSensitive = true, FalsePositiveProbability = 0.1.
+struct TLocalBloomNgramFilterSettings {
+    std::optional<uint32_t> NgramSize;
+    std::optional<bool> CaseSensitive;
+    std::optional<double> FalsePositiveProbability;
+
+    static TLocalBloomNgramFilterSettings FromProto(const Ydb::Table::LocalBloomNgramFilterIndex& proto);
+    void SerializeTo(Ydb::Table::LocalBloomNgramFilterIndex& proto) const;
+};
+
 class TIndexDescription {
     friend class NYdb::TProtoAccessor;
 
@@ -426,7 +447,7 @@ public:
         const std::vector<std::string>& indexColumns,
         const std::vector<std::string>& dataColumns = {},
         const std::vector<TGlobalIndexSettings>& globalIndexSettings = {},
-        const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& specializedIndexSettings = {}
+        const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& specializedIndexSettings = {}
     );
 
     TIndexDescription(
@@ -440,7 +461,7 @@ public:
     EIndexType GetIndexType() const;
     const std::vector<std::string>& GetIndexColumns() const;
     const std::vector<std::string>& GetDataColumns() const;
-    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& GetIndexSettings() const;
+    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
     void SetParallel(uint32_t parallel);
 
@@ -520,7 +541,7 @@ private:
     std::vector<std::string> IndexColumns_;
     std::vector<std::string> DataColumns_;
     std::vector<TGlobalIndexSettings> GlobalIndexSettings_;
-    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> SpecializedIndexSettings_;
+    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings> SpecializedIndexSettings_;
     uint64_t SizeBytes_ = 0;
     uint32_t Parallel_ = 0;
 };

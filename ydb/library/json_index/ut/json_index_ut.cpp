@@ -2822,7 +2822,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"invalid json", error), TVector<TString>{});
         UNIT_ASSERT(!error.empty());
 
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), (TVector<TString>{TString(), TString("\0\3literal string", 16)}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), (TVector<TString>{TString(), strSuffix("literal string")}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         TString obj = "{\"id\":42042,\"brand\":\"bricks\",\"part_count\":1401,\"price\":null,\"parts\":"
@@ -2831,36 +2831,36 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         std::sort(tokens.begin(), tokens.end());
         UNIT_ASSERT_VALUES_EQUAL(tokens, (TVector<TString>{
             TString(),
-            TString("\3id", 3),
-            TString("\3id\0\4\0\0\0\0@\x87\xE4@", 13),
-            TString("\6brand", 6),
-            TString("\6brand\0\3bricks", 14),
-            TString("\6parts", 6),
-            TString("\6parts\3id", 9),
-            TString("\6parts\3id", 9),
-            TString("\6parts\3id\0\4\0\0\0\0\x80\xC3\xDF@", 19),
-            TString("\6parts\3id\0\4\0\0\0\0\xC0\xC2\xDF@", 19),
-            TString("\6parts\5name", 11),
-            TString("\6parts\5name", 11),
-            TString("\6parts\5name\0\0031x3", 16),
-            TString("\6parts\5name\0\0033x5", 16),
-            TString("\6parts\6count", 12),
-            TString("\6parts\6count", 12),
-            TString("\6parts\6count\0\4\0\0\0\0\0\0\x1C@", 22),
-            TString("\6parts\6count\0\4\0\0\0\0\0\0001@", 22),
-            TString("\6price", 6),
-            TString("\6price\0\2", 8),
-            TString("\x0Bpart_count", 11),
-            TString("\x0Bpart_count\0\4\0\0\0\0\0\xE4\x95@", 21)
+            encodeKey("id"),
+            encodeKey("id") + numSuffix(42042),
+            encodeKey("brand"),
+            encodeKey("brand") + strSuffix("bricks"),
+            encodeKey("parts"),
+            encodePath({"parts", "id"}),
+            encodePath({"parts", "id"}),
+            encodePath({"parts", "id"}) + numSuffix(32526),
+            encodePath({"parts", "id"}) + numSuffix(32523),
+            encodePath({"parts", "name"}),
+            encodePath({"parts", "name"}),
+            encodePath({"parts", "name"}) + strSuffix("1x3"),
+            encodePath({"parts", "name"}) + strSuffix("3x5"),
+            encodePath({"parts", "count"}),
+            encodePath({"parts", "count"}),
+            encodePath({"parts", "count"}) + numSuffix(7),
+            encodePath({"parts", "count"}) + numSuffix(17),
+            encodeKey("price"),
+            encodeKey("price") + nullSuffix,
+            encodeKey("part_count"),
+            encodeKey("part_count") + numSuffix(1401),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         TString emptyKeyObj = "{\"\":{\"a\":\"b\"}}";
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(emptyKeyObj, error), (TVector<TString>{
             TString(),
-            TString("\1", 1),
-            TString("\1\2a", 3),
-            TString("\1\2a\0\3b", 6)
+            encodeKey(""),
+            encodePath({"", "a"}),
+            encodePath({"", "a"}) + strSuffix("b"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2871,10 +2871,180 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         TString longKeyObj = "{\"" + longKey + "\":{\"short\":\"b\"}}";
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(longKeyObj, error), (TVector<TString>{
             TString(),
-            TString("\xE9\7") + longKey,
-            TString("\xE9\7") + longKey + TString("\6short", 6),
-            TString("\xE9\7") + longKey + TString("\6short\0\3b", 9)
+            encodeKey(longKey),
+            encodePath({longKey, "short"}),
+            encodePath({longKey, "short"}) + strSuffix("b"),
         }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Empty object: only the root token is emitted
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{}", error), (TVector<TString>{TString()}));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Empty array: only the root token is emitted
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[]", error), (TVector<TString>{TString()}));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Root-level number literal
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("42", error), (TVector<TString>{TString(), numSuffix(42)}));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Root-level boolean literals
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("true", error), (TVector<TString>{TString(), boolTrueSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("false", error), (TVector<TString>{TString(), boolFalseSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Root-level null literal
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("null", error), (TVector<TString>{TString(), nullSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Root-level array: elements are tokenized at the root prefix (no key added for array indices)
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[1, 2, 3]", error), (TVector<TString>{
+            TString(), numSuffix(1), numSuffix(2), numSuffix(3),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Array of arrays: nested arrays are flattened to the same path prefix
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[[1, 2], [3, 4]]", error), (TVector<TString>{
+            TString(), numSuffix(1), numSuffix(2), numSuffix(3), numSuffix(4),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Deeply nested arrays
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[[1, [2, 3]], 4]", error), (TVector<TString>{
+            TString(), numSuffix(1), numSuffix(2), numSuffix(3), numSuffix(4),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Mixed-type array
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[1, \"hello\", true, false, null]", error), (TVector<TString>{
+            TString(), numSuffix(1), strSuffix("hello"), boolTrueSuffix, boolFalseSuffix, nullSuffix,
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Array of empty containers: no scalar values, only the root token
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[[], {}, []]", error), (TVector<TString>{TString()}));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Array of objects: each object's keys appear at the same path depth (array adds no prefix)
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[{\"a\":1},{\"a\":2}]", error), (TVector<TString>{
+            TString(),
+            encodeKey("a"), encodeKey("a") + numSuffix(1),
+            encodeKey("a"), encodeKey("a") + numSuffix(2),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Simple root-level object
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"a\":1}", error), (TVector<TString>{
+            TString(), encodeKey("a"), encodeKey("a") + numSuffix(1),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Object covering all scalar value types (binary JSON sorts keys alphabetically)
+        {
+            auto objAllTypes = TokenizeJson("{\"s\":\"val\",\"b\":true,\"n\":null}", error);
+            std::sort(objAllTypes.begin(), objAllTypes.end());
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
+            TVector<TString> expected{
+                TString(),
+                encodeKey("b"), encodeKey("b") + boolTrueSuffix,
+                encodeKey("n"), encodeKey("n") + nullSuffix,
+                encodeKey("s"), encodeKey("s") + strSuffix("val"),
+            };
+            std::sort(expected.begin(), expected.end());
+            UNIT_ASSERT_VALUES_EQUAL(objAllTypes, expected);
+        }
+
+        // Empty key with a scalar value
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"\":42}", error), (TVector<TString>{
+            TString(), encodeKey(""), encodeKey("") + numSuffix(42),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Object with an empty string value
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"a\":\"\"}", error), (TVector<TString>{
+            TString(), encodeKey("a"), encodeKey("a") + strSuffix(""),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Object whose values are empty containers: only path-prefix tokens, no value tokens
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"a\":{},\"b\":[]}", error), (TVector<TString>{
+            TString(), encodeKey("a"), encodeKey("b"),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Unicode string value (ASCII key, Unicode value)
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"key\":\"Привет\"}", error), (TVector<TString>{
+            TString(), encodeKey("key"), encodeKey("key") + strSuffix("Привет"),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Multiple unicode string values
+        {
+            auto unicodeVals = TokenizeJson("{\"a\":\"Привет\",\"b\":\"Мир\"}", error);
+            std::sort(unicodeVals.begin(), unicodeVals.end());
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
+            TVector<TString> expected{
+                TString(),
+                encodeKey("a"), encodeKey("a") + strSuffix("Привет"),
+                encodeKey("b"), encodeKey("b") + strSuffix("Мир"),
+            };
+            std::sort(expected.begin(), expected.end());
+            UNIT_ASSERT_VALUES_EQUAL(unicodeVals, expected);
+        }
+
+        // Unicode key (ASCII value)
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":\"val\"}", error), (TVector<TString>{
+            TString(), encodeKey("ключ"), encodeKey("ключ") + strSuffix("val"),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Unicode key and unicode value
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":\"значение\"}", error), (TVector<TString>{
+            TString(), encodeKey("ключ"), encodeKey("ключ") + strSuffix("значение"),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Nested unicode key
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":{\"поле\":\"v\"}}", error), (TVector<TString>{
+            TString(), encodeKey("ключ"), encodePath({"ключ", "поле"}), encodePath({"ключ", "поле"}) + strSuffix("v"),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Unicode key with numeric value
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":42}", error), (TVector<TString>{
+            TString(), encodeKey("ключ"), encodeKey("ключ") + numSuffix(42),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Unicode key with boolean value
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":true}", error), (TVector<TString>{
+            TString(), encodeKey("ключ"), encodeKey("ключ") + boolTrueSuffix,
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Unicode key with null value
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":null}", error), (TVector<TString>{
+            TString(), encodeKey("ключ"), encodeKey("ключ") + nullSuffix,
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Unicode value in array
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[\"Привет\",\"Мир\"]", error), (TVector<TString>{
+            TString(), strSuffix("Привет"), strSuffix("Мир"),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Array with unicode values under unicode key
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":[\"а\",\"б\"]}", error), (TVector<TString>{
+            TString(), encodeKey("ключ"), encodeKey("ключ") + strSuffix("а"), encodeKey("ключ") + strSuffix("б"),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // Root-level unicode string literal
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"Привет\"", error), (TVector<TString>{TString(), strSuffix("Привет")}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
@@ -2940,6 +3110,94 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
                 FormatJsonIndexToken(encodePath({longKey}), ""),
                 TStringBuilder() << R"({"path":")" << longKey << R"("})");
         }
+
+        // unicode key (FormatJsonIndexToken must round-trip it)
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"ключ"}), ""), R"({"path":"ключ"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"ключ", "поле"}), ""), R"({"path":"ключ.поле"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"ключ"}) + strSuffix("значение"), ""), R"({"path":"ключ","literal":"значение"})");
+
+        // unicode string literal only
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(strSuffix("Привет"), ""), R"({"literal":"Привет"})");
+    }
+
+    Y_UNIT_TEST(Unicode) {
+        // Unicode string VALUE in JSONPath (ASCII key, Unicode value)
+        // Equality: path + strSuffix with unicode bytes
+        ValidateJsonValue(R"($.key == "Привет")", {encodePath({"key"}) + strSuffix("Привет")});
+        ValidateJsonValue(R"("Привет" == $.key)", {encodePath({"key"}) + strSuffix("Привет")});
+        ValidateJsonValue(R"($.key == "Мир")", {encodePath({"key"}) + strSuffix("Мир")});
+        // Inequality / range: path only (literal dropped)
+        ValidateJsonValue(R"($.key != "Привет")", {encodePath({"key"})});
+        ValidateJsonValue(R"($.key < "Я")", {encodePath({"key"})});
+        ValidateJsonValue(R"($.key > "А")", {encodePath({"key"})});
+        ValidateJsonValue(R"($.key <= "Я")", {encodePath({"key"})});
+        ValidateJsonValue(R"($.key >= "А")", {encodePath({"key"})});
+
+        // Unicode KEY in JSONPath (quoted key)
+        // $."ключ" — the JSONPath parser strips the quotes, key = "ключ"
+        ValidateJsonExists(R"($."ключ")", {encodePath({"ключ"})});
+        ValidateJsonValue(R"($."ключ" == "val")", {encodePath({"ключ"}) + strSuffix("val")});
+        ValidateJsonValue(R"($."ключ" != "val")", {encodePath({"ключ"})});
+        // starts with / like_regex with unicode key: path only
+        ValidateJsonValue(R"($."ключ" starts with "пр")", {encodePath({"ключ"})});
+        ValidateJsonValue(R"($."ключ" like_regex "пр.*")", {encodePath({"ключ"})});
+
+        // Unicode KEY and unicode VALUE
+        ValidateJsonValue(R"($."ключ" == "значение")", {encodePath({"ключ"}) + strSuffix("значение")});
+        ValidateJsonValue(R"("значение" == $."ключ")", {encodePath({"ключ"}) + strSuffix("значение")});
+
+        // Nested unicode keys: $."ключ"."поле"
+        ValidateJsonExists(R"($."ключ"."поле")", {encodePath({"ключ", "поле"})});
+        ValidateJsonValue(R"($."ключ"."поле" == "v")", {encodePath({"ключ", "поле"}) + strSuffix("v")});
+        ValidateJsonValue(R"($."ключ"."поле" == "значение")", {encodePath({"ключ", "поле"}) + strSuffix("значение")});
+
+        // Unicode value in filter equality (JSON_EXISTS)
+        ValidateJsonExists(R"($.key ? (@ == "Привет"))", {encodePath({"key"}) + strSuffix("Привет")});
+        ValidateJsonExists(R"($ ? (@.key == "Мир"))", {encodePath({"key"}) + strSuffix("Мир")});
+        ValidateJsonExists(R"($ ? (@."ключ" == "значение"))", {encodePath({"ключ"}) + strSuffix("значение")});
+        // Inequality in filter: path only
+        ValidateJsonExists(R"($.key ? (@ != "Привет"))", {encodePath({"key"})});
+        ValidateJsonExists(R"($ ? (@.key != "Привет"))", {encodePath({"key"})});
+
+        // Unicode value in filter starts with / like_regex (path only)
+        ValidateJsonExists(R"($.a ? (@.key starts with "При"))", {encodePath({"a", "key"})});
+        ValidateJsonExists(R"($.a ? (@.key like_regex "При.*"))", {encodePath({"a", "key"})});
+        ValidateJsonExists(R"($.a ? (@ starts with "При"))", {encodePath({"a"})});
+        ValidateJsonExists(R"($.a ? (@ like_regex "При.*"))", {encodePath({"a"})});
+
+        // Unicode key with filter predicate
+        ValidateJsonExists(R"($."ключ" ? (@ == "значение"))", {encodePath({"ключ"}) + strSuffix("значение")});
+        ValidateJsonExists(R"($."ключ" ? (@."поле" == "v"))", {encodePath({"ключ", "поле"}) + strSuffix("v")});
+
+        // Unicode in filter AND/OR
+        ValidateJsonExists(R"($ ? (@.key == "Привет" && @.other == "Мир"))",
+            {encodePath({"key"}) + strSuffix("Привет"), encodePath({"other"}) + strSuffix("Мир")});
+        ValidateJsonExists(R"($ ? ((@.key == "Привет") || (@.key == "Мир")))",
+            {encodePath({"key"}) + strSuffix("Привет"), encodePath({"key"}) + strSuffix("Мир")});
+        ValidateJsonExists(R"($ ? (@."ключ" == "а" && @."поле" == "б"))",
+            {encodePath({"ключ"}) + strSuffix("а"), encodePath({"поле"}) + strSuffix("б")});
+
+        // Unicode in starts with / like_regex at JsonValue path level (path only)
+        ValidateJsonValue(R"($.key starts with "При")", {encodePath({"key"})});
+        ValidateJsonValue(R"($.key like_regex "При.*")", {encodePath({"key"})});
+        ValidateJsonValue(R"($."ключ" starts with "При")", {encodePath({"ключ"})});
+        ValidateJsonValue(R"($."ключ" like_regex "При.*")", {encodePath({"ключ"})});
+
+        // Unicode value via variables (PASSING): variable map value is the encoded suffix
+        ValidateTokens(R"($.key == $var)", {encodePath({"key"}) + strSuffix("Привет")},
+            {{"var", strSuffix("Привет")}});
+        ValidateTokens(R"($.k1 ? (@.k2 == $var))", {encodePath({"k1", "k2"}) + strSuffix("Привет")},
+            {{"var", strSuffix("Привет")}}, {}, ECallableType::JsonExists);
+        ValidateTokens(R"($ ? (@."ключ" == $var))", {encodePath({"ключ"}) + strSuffix("значение")},
+            {{"var", strSuffix("значение")}}, {}, ECallableType::JsonExists);
+
+        // Unicode AND/OR at JsonValue level
+        ValidateJsonValue(R"(($.k1 == "Привет") && ($.k2 == "Мир"))",
+            {encodePath({"k1"}) + strSuffix("Привет"), encodePath({"k2"}) + strSuffix("Мир")});
+        ValidateJsonValue(R"(($.k1 == "Привет") || ($.k2 == "Мир"))",
+            {encodePath({"k1"}) + strSuffix("Привет"), encodePath({"k2"}) + strSuffix("Мир")});
+        ValidateJsonValue(R"(($."ключ" == "значение") && ($.k2 == "val"))",
+            {encodePath({"ключ"}) + strSuffix("значение"), encodePath({"k2"}) + strSuffix("val")});
     }
 }
 

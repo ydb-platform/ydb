@@ -531,6 +531,118 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         f.ClosePipe(pipe);
     }
 
+    // Direct write/read across two DBGs. The proxy tablet must route each
+    // request (by address / BytesPerDbg) to the correct per-DBG worker actor,
+    // and each worker must reply straight back to the requestor. Addresses
+    // span both DBGs so a routing regression (e.g. all traffic to DBG0) would
+    // surface as wrong payloads or missing acks.
+    Y_UNIT_TEST(WriteReadMultiDbg) {
+        TFixture f;
+        const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1);
+        TActorId pipe = f.OpenTabletPipe(tabletId);
+
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, /*numDirectBlockGroups=*/2), NBSLT_OK);
+
+        // Allow both DBGs' worker actors to finish their peer handshake.
+        f.Env.Sim(TDuration::Seconds(5));
+
+        constexpr ui32 kBlockSize = 4096;
+        constexpr ui32 kBlocksPerDbg = 200;
+        constexpr ui32 kNumDbgs = 2;
+        constexpr ui32 kTotal = kBlocksPerDbg * kNumDbgs;
+        // BytesPerDbg = TargetNumVChunks(1) * VChunkSizeBytes(128MB).
+        const ui64 bytesPerDbg = 128_MB;
+
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
+            auto& cfg = ev->Record;
+            cfg.SetMaxInflightLsns(2000);
+            cfg.SetFlushBatchSize(16);
+            cfg.SetEraseBatchSize(32);
+            cfg.SetSyncRequestsBatchSize(1);
+            cfg.SetPBufferReplyTimeoutMicroseconds(500000);
+            cfg.SetNumDirectBlockGroupsToUse(kNumDbgs);
+            cfg.SetIoSizeBytes(kBlockSize);
+            NTabletPipe::SendData(f.Edge, pipe, ev.release());
+        });
+
+        auto addressOf = [&](ui32 dbg, ui32 i) -> ui64 {
+            return dbg * bytesPerDbg + static_cast<ui64>(i) * kBlockSize;
+        };
+        auto cookieOf = [&](ui32 dbg, ui32 i) -> ui64 {
+            return static_cast<ui64>(dbg) * kBlocksPerDbg + i;
+        };
+
+        // Submit writes interleaved across both DBGs; payload encodes cookie.
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            for (ui32 i = 0; i < kBlocksPerDbg; ++i) {
+                for (ui32 dbg = 0; dbg < kNumDbgs; ++dbg) {
+                    const ui64 cookie = cookieOf(dbg, i);
+                    auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(
+                        addressOf(dbg, i), /*sizeBytes=*/kBlockSize);
+                    TString data(kBlockSize, '\0');
+                    memcpy(data.Detach(), &cookie, sizeof(cookie));
+                    const ui32 payloadId = ev->AddPayload(TRope(std::move(data)));
+                    ev->Record.SetPayloadId(payloadId);
+                    NTabletPipe::SendData(f.Edge, pipe, ev.release(), cookie);
+                }
+            }
+        });
+
+        TVector<bool> writeOk(kTotal, false);
+        for (ui32 got = 0; got < kTotal; ++got) {
+            auto resp = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsWriteResult>(
+                f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(120)));
+            UNIT_ASSERT(resp);
+            UNIT_ASSERT_VALUES_EQUAL_C(resp->Get()->Record.GetStatus(), 0u,
+                "write cookie=" << resp->Cookie << " status=" << resp->Get()->Record.GetStatus());
+            const ui64 cookie = resp->Cookie;
+            UNIT_ASSERT_C(cookie < kTotal, "cookie=" << cookie);
+            UNIT_ASSERT_C(!writeOk[cookie], "duplicate ack for cookie=" << cookie);
+            writeOk[cookie] = true;
+        }
+
+        // Read everything back and verify payloads route to the right worker.
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            for (ui32 i = 0; i < kBlocksPerDbg; ++i) {
+                for (ui32 dbg = 0; dbg < kNumDbgs; ++dbg) {
+                    auto ev = std::make_unique<TEvLoad::TEvNbsRead>(
+                        addressOf(dbg, i), /*sizeBytes=*/kBlockSize);
+                    NTabletPipe::SendData(f.Edge, pipe, ev.release(), cookieOf(dbg, i));
+                }
+            }
+        });
+
+        TVector<bool> readOk(kTotal, false);
+        for (ui32 got = 0; got < kTotal; ++got) {
+            auto resp = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsReadResult>(
+                f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(120)));
+            UNIT_ASSERT(resp);
+            UNIT_ASSERT_VALUES_EQUAL_C(resp->Get()->Record.GetStatus(), 0u,
+                "read cookie=" << resp->Cookie << " status=" << resp->Get()->Record.GetStatus());
+            const ui64 cookie = resp->Cookie;
+            UNIT_ASSERT_C(cookie < kTotal, "cookie=" << cookie);
+            UNIT_ASSERT_C(!readOk[cookie], "duplicate result for cookie=" << cookie);
+            UNIT_ASSERT_C(resp->Get()->Record.HasPayloadId(),
+                "missing PayloadId for cookie=" << cookie);
+            const ui32 payloadId = resp->Get()->Record.GetPayloadId();
+            UNIT_ASSERT_C(payloadId < resp->Get()->GetPayloadCount(),
+                "bad PayloadId=" << payloadId << " PayloadCount="
+                << resp->Get()->GetPayloadCount() << " for cookie=" << cookie);
+            const TString payload = resp->Get()->GetPayload(payloadId).ConvertToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(payload.size(), kBlockSize,
+                "short payload for cookie=" << cookie);
+            ui64 decoded = 0;
+            memcpy(&decoded, payload.data(), sizeof(decoded));
+            UNIT_ASSERT_VALUES_EQUAL_C(decoded, cookie,
+                "payload mismatch for cookie=" << cookie);
+            readOk[cookie] = true;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+        f.ClosePipe(pipe);
+    }
+
     // Two back-to-back Run cycles with one Create. Verifies the tablet can
     // serve multiple consecutive runs from independent load actors.
     Y_UNIT_TEST(RunRunDelete) {

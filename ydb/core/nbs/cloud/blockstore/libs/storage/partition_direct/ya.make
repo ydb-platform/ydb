@@ -21,11 +21,12 @@ SRCS(
     partition_direct.cpp
     range_translate.cpp
     read_request_executor.cpp
-    read_request_single_location.cpp
     read_request_multiple_location.cpp
+    read_request_single_location.cpp
     region.cpp
     restore_request.cpp
     vchunk.cpp
+    write_request_bundle.cpp
     write_request.cpp
     write_with_direct_replication_request.cpp
     write_with_pb_replication_request.cpp

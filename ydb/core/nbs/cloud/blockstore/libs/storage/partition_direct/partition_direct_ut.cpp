@@ -48,7 +48,9 @@ struct TScopedNbsService: TDisableCopyMove
 [[nodiscard]] TScopedNbsService SetupStorage(
     TEnvironmentSetup& env,
     EWriteMode writeMode,
-    TDuration writeHedgingDelay = TDuration::Seconds(1))
+    TDuration writeHedgingDelay = TDuration::Seconds(1),
+    ui64 pbufferCleanupLsnStep = 0,
+    ui32 syncRequestsBatchSize = 0)
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -82,6 +84,10 @@ struct TScopedNbsService: TDisableCopyMove
     storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
     storageConfig->SetVChunkSize(DefaultVChunkSize);
     storageConfig->SetWriteHedgingDelay(writeHedgingDelay.MicroSeconds());
+    storageConfig->SetPBufferCleanupLsnStep(pbufferCleanupLsnStep);
+    if (syncRequestsBatchSize) {
+        storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
+    }
 
     return TScopedNbsService(nbsConfig);
 }
@@ -176,6 +182,55 @@ TActorId GetLoadActorAdapterActorId(
         res->Get()->Record.GetActorId().data(),
         res->Get()->Record.GetActorId().size());
     return loadActorAdapter;
+}
+
+void WriteBlock(
+    TEnvironmentSetup& env,
+    const TActorId& loadActorAdapter,
+    const TActorId& edge,
+    ui64 index,
+    const TString& data)
+{
+    auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
+    request->Record.SetStartIndex(index);
+    request->Record.MutableBlocks()->AddBuffers(data);
+
+    env.Runtime->Send(
+        new IEventHandle(loadActorAdapter, edge, request.release()),
+        edge.NodeId());
+
+    auto res = env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+        edge,
+        false);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        S_OK,
+        res->Get()->Record.GetError().GetCode(),
+        FormatError(res->Get()->Record.GetError()));
+}
+
+TString ReadBlock(
+    TEnvironmentSetup& env,
+    const TActorId& loadActorAdapter,
+    const TActorId& edge,
+    ui64 index)
+{
+    auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+    request->Record.SetStartIndex(index);
+    request->Record.SetBlocksCount(1);
+
+    env.Runtime->Send(
+        new IEventHandle(loadActorAdapter, edge, request.release()),
+        edge.NodeId());
+
+    auto res = env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+        edge,
+        false);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        S_OK,
+        res->Get()->Record.GetError().GetCode(),
+        FormatError(res->Get()->Record.GetError()));
+    UNIT_ASSERT_VALUES_EQUAL(1, res->Get()->Record.GetBlocks().BuffersSize());
+    return res->Get()->Record.GetBlocks().GetBuffers(0);
 }
 
 }   // namespace
@@ -971,6 +1026,182 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             UNIT_ASSERT_VALUES_EQUAL(
                 res->Get()->Record.GetBlocks().GetBuffers(0),
                 expectedData);
+        }
+    }
+
+    // PBuffer cleanup: once the write LSN advances by PBufferCleanupLsnStep the
+    // tablet barrier-erases PBuffer records up to the cleanup bound. Drive two
+    // write batches and assert a real barrier-erase (TEvErasePersistentBuffer
+    // with Lsn > 0) reaches the persistent buffer, with no data lost.
+    Y_UNIT_TEST(ShouldBarrierErasePBufferOnCleanup)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::DirectPBuffersFilling,
+            TDuration::Seconds(1),
+            /*pbufferCleanupLsnStep=*/4,
+            /*syncRequestsBatchSize=*/1);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        TVector<ui64> barrierEraseLsns;
+        runtime->FilterFunction =
+            [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvErasePersistentBuffer::EventType)
+            {
+                barrierEraseLsns.push_back(
+                    ev->Get<NDDisk::TEvErasePersistentBuffer>()
+                        ->Record.GetLsn());
+            }
+            return true;
+        };
+
+        constexpr ui64 BlockCount = 16;
+        TVector<TString> data(BlockCount);
+        for (ui64 i = 0; i < BlockCount; ++i) {
+            data[i] = NUnitTest::RandomString(DefaultBlockSize, i);
+        }
+
+        // First batch: let it flush+erase so the cleanup floor moves past
+        // lsn 1 (a barrier of lsn 0 is suppressed by design).
+        for (ui64 i = 0; i < BlockCount / 2; ++i) {
+            WriteBlock(env, loadActorAdapter, edge, i, data[i]);
+        }
+        env.Sim(TDuration::Seconds(10));
+
+        // Second batch: still in flight when cleanup triggers, so the barrier
+        // fires at (oldest-in-flight lsn - 1) > 0.
+        for (ui64 i = BlockCount / 2; i < BlockCount; ++i) {
+            WriteBlock(env, loadActorAdapter, edge, i, data[i]);
+        }
+        env.Sim(TDuration::Seconds(10));
+
+        ui64 maxBarrierLsn = 0;
+        for (const ui64 lsn: barrierEraseLsns) {
+            if (lsn > maxBarrierLsn) {
+                maxBarrierLsn = lsn;
+            }
+        }
+        // A real barrier reached the PBuffer and never erased the newest write
+        // (exact lsn is timing-dependent in this sustained-flow test).
+        UNIT_ASSERT_C(
+            maxBarrierLsn > 0 && maxBarrierLsn < BlockCount,
+            "barrier lsn outside (0, " << BlockCount << "): " << maxBarrierLsn);
+
+        // Nothing extra was erased: every block still reads back correctly.
+        for (ui64 i = 0; i < BlockCount; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                ReadBlock(env, loadActorAdapter, edge, i),
+                data[i]);
+        }
+    }
+
+    // PBuffer cleanup must never barrier-erase a record that has not been
+    // per-record erased yet (still in the dirty map) - even one already
+    // flushed to DDisk; erasing it out from under the dirty map desyncs it
+    // from the PBuffer. We let an initial batch flush+erase (advancing the
+    // floor so the barrier fires), then hold back every per-record erase and
+    // assert the barrier stops at the floor, never reaching the un-erased
+    // records.
+    Y_UNIT_TEST(ShouldNotBarrierEraseUnerasedRecords)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::DirectPBuffersFilling,
+            TDuration::Seconds(1),
+            /*pbufferCleanupLsnStep=*/2,
+            /*syncRequestsBatchSize=*/1);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        bool holdErases = false;
+        TVector<ui64> barrierEraseLsns;
+        runtime->FilterFunction =
+            [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type == NDDisk::TEvErasePersistentBuffer::EventType) {
+                barrierEraseLsns.push_back(
+                    ev->Get<NDDisk::TEvErasePersistentBuffer>()
+                        ->Record.GetLsn());
+            } else if (
+                holdErases &&
+                type == NDDisk::TEvBatchErasePersistentBuffer::EventType)
+            {
+                return false;   // flush succeeds, but the record is never
+                                // erased
+            }
+            return true;
+        };
+
+        // lsn == cumulative write count (one lsn per write on a fresh volume),
+        // so the first ErasedCount writes get lsns 1..ErasedCount and the held
+        // records get lsns > ErasedCount.
+        constexpr ui64 ErasedCount = 4;
+        constexpr ui64 UnerasedCount = 8;
+        TVector<TString> data(ErasedCount + UnerasedCount);
+        for (ui64 i = 0; i < data.size(); ++i) {
+            data[i] = NUnitTest::RandomString(DefaultBlockSize, 1000 + i);
+        }
+
+        // Erased batch: flush + per-record erase, advancing the cleanup floor
+        // past lsn 1 so the barrier can fire.
+        for (ui64 i = 0; i < ErasedCount; ++i) {
+            WriteBlock(env, loadActorAdapter, edge, i, data[i]);
+        }
+        env.Sim(TDuration::Seconds(10));
+
+        // From now on records flush but are never erased -> they stay in the
+        // dirty map, so the barrier must not advance past them.
+        holdErases = true;
+        for (ui64 i = ErasedCount; i < ErasedCount + UnerasedCount; ++i) {
+            WriteBlock(env, loadActorAdapter, edge, i, data[i]);
+        }
+        env.Sim(TDuration::Seconds(5));
+
+        ui64 maxBarrierLsn = 0;
+        for (const ui64 lsn: barrierEraseLsns) {
+            if (lsn > maxBarrierLsn) {
+                maxBarrierLsn = lsn;
+            }
+        }
+        // Floor pinned at ErasedCount+1, so the barrier lands exactly at
+        // ErasedCount and never reaches the un-erased records.
+        UNIT_ASSERT_VALUES_EQUAL(maxBarrierLsn, ErasedCount);
+
+        // The un-erased records still read back correctly.
+        for (ui64 i = ErasedCount; i < ErasedCount + UnerasedCount; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(
+                ReadBlock(env, loadActorAdapter, edge, i),
+                data[i]);
         }
     }
 }

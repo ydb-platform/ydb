@@ -728,6 +728,7 @@ public:
         { EGroupFields::MaxNormalizedOccupancy, TFieldsType().set(+EGroupFields::NodeId) },
         { EGroupFields::MaxVDiskRawUsage, TFieldsType().set(+EGroupFields::NodeId) },
         { EGroupFields::CapacityAlert, TFieldsType().set(+EGroupFields::NodeId) },
+        { EGroupFields::AllocationUnits, TFieldsType().set(+EGroupFields::PoolName) },
     };
 
     bool FieldsNeeded(TFieldsType fields) const {

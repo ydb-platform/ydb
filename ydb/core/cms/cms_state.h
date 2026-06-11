@@ -18,6 +18,7 @@ struct TTaskInfo {
     bool HasSingleCompositeActionGroup = false;
     TInstant CreateTime;
     TInstant LastRefreshTime;
+    ui32 MaxInflightActions = 0;
 
     TString ToString() const {
         return TStringBuilder() << "{"
@@ -28,6 +29,7 @@ struct TTaskInfo {
             << " HasSingleCompositeActionGroup: " << HasSingleCompositeActionGroup
             << " CreateTime: " << CreateTime
             << " LastRefreshTime: " << LastRefreshTime
+            << " MaxInflightActions: " << MaxInflightActions
             << " }";
     }
 };

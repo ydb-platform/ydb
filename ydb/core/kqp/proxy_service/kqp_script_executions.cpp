@@ -1688,6 +1688,13 @@ public:
                         return;
                     }
                     Response->WaitFinalizationOrRetry = true;
+                    Response->OperationStatus = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
+                    if (const auto executionStatus = executionsResult.ColumnParser("execution_status").GetOptionalInt32()) {
+                        Response->ExecutionStatus = static_cast<Ydb::Query::ExecStatus>(*executionStatus);
+                    }
+                    if (const auto issuesSerialized = executionsResult.ColumnParser("issues").GetOptionalJsonDocument()) {
+                        Response->OperationIssues = DeserializeIssues(*issuesSerialized);
+                    }
                     break;
             }
 
@@ -1820,7 +1827,13 @@ private:
         } else if (event.LeaseExpired) {
             StartLeaseChecking(event.RunScriptActorId, event.LeaseGeneration);
         } else if (const auto finalizationStatus = event.FinalizationStatus) {
-            StartScriptFinalization(*finalizationStatus, event.OperationStatus, event.ExecutionStatus, event.Issues, event.LeaseGeneration);
+            const bool finalizationInProgress = event.WaitFinalizationOrRetry && !event.LeaseExpired;
+            if (!finalizationInProgress && event.OperationStatus && event.ExecutionStatus) {
+                auto issues = event.OperationIssues ? *event.OperationIssues : event.Issues;
+                StartScriptFinalization(*finalizationStatus, *event.OperationStatus, *event.ExecutionStatus, std::move(issues), event.LeaseGeneration);
+            } else {
+                Reply();
+            }
         } else {
             Reply();
         }
@@ -2389,8 +2402,14 @@ public:
         if (Response->FinalizationStatus || LeaseStatus && *LeaseStatus == ELeaseState::WaitRetry) {
             Response->Ready = false;
             if (OperationStatus) {
-                Response->Issues.AddIssue(TStringBuilder() << "Execution finished with status " << *OperationStatus << " and wait " << (Response->FinalizationStatus ? "finalization" : "retry"));
+                NYql::TIssue issue(TStringBuilder() << "Execution finished with status " << *OperationStatus << " and wait " << (Response->FinalizationStatus ? "finalization" : "retry"));
+                issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                Response->Issues.AddIssue(std::move(issue));
                 OperationStatus = std::nullopt;
+            }
+            if (Response->FinalizationStatus) {
+                // Keep polling until S3 external effects are applied (e.g. atomic multipart commit).
+                Response->Metadata.set_exec_status(Ydb::Query::EXEC_STATUS_RUNNING);
             }
         }
 
@@ -2510,12 +2529,6 @@ private:
             } else {
                 StartLeaseChecking(event.RunScriptActorId, event.LeaseGeneration);
             }
-        } else if (const auto finalizationStatus = event.FinalizationStatus) {
-            TMaybe<Ydb::Query::ExecStatus> execStatus;
-            if (Response->Get()->Ready) {
-                execStatus = Response->Get()->Metadata.exec_status();
-            }
-            StartScriptFinalization(*Response->Get()->FinalizationStatus, Response->Get()->Status, execStatus, Response->Get()->Issues, event.LeaseGeneration);
         } else {
             Reply();
         }

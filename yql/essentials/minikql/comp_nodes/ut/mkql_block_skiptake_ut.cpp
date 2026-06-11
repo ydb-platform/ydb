@@ -71,9 +71,9 @@ private:
         std::shared_ptr<arrow::ArrayData> block;
         ARROW_OK(builder.FinishInternal(&block));
 
-        val1 = ctx.HolderFactory.CreateArrowBlock(std::move(block));
-        val2 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(index)));
-        val3 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BlockSize)));
+        val1 = ctx.HolderFactory.CreateArrowBlock(std::move(block), NYql::DefaultDatumTestValidationMode);
+        val2 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(index)), NYql::DefaultDatumTestValidationMode);
+        val3 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BlockSize)), NYql::DefaultDatumTestValidationMode);
 
         state = NUdf::TUnboxedValuePod(++index);
         return EFetchResult::One;

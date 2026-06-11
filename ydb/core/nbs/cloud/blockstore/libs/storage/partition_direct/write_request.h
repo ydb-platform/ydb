@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include "write_request_bundle.h"
+
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
@@ -24,34 +26,14 @@ class TBaseWriteRequestExecutor
     : public std::enable_shared_from_this<TBaseWriteRequestExecutor>
 {
 public:
-    struct TResponse
-    {
-        NProto::TError Error;
-        ui64 Lsn = 0;
-        // The PBuffer hosts where the attempt was made to write the data.
-        THostMask RequestedWrites;
-        // The PBuffer hosts where exactly the data was written and confirmed.
-        THostMask CompletedWrites;
-    };
-
-    using TReplyCallback = std::function<void(TResponse)>;
-    using TNotifyBelatedCallback = std::function<void(THostMask, ui64)>;
-
     TBaseWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
         TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlockRange64 vChunkRange,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
-        NWilson::TTraceId traceId);
+        std::shared_ptr<TWriteRequestBundle> bundle);
 
     virtual ~TBaseWriteRequestExecutor();
-
-    void SetReplyCallback(TReplyCallback callback);
-    void SetNotifyBelatedCallback(TNotifyBelatedCallback callback);
 
     [[nodiscard]] bool IsAlreadyReplied() const;
 
@@ -84,11 +66,7 @@ protected:
     const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const TBlockRange64 VChunkRange;
-    const TCallContextPtr CallContext;
-    const std::shared_ptr<TWriteBlocksLocalRequest> Request;
-    const NWilson::TTraceId TraceId;
-    const ui64 Lsn;
+    const TWriteRequestBundlePtr Bundle;
     const TDuration HedgingDelay;
     const TDuration RequestTimeout;
 
@@ -96,8 +74,6 @@ protected:
     THostMask CompletedWrites;
 
 private:
-    TReplyCallback ReplyCallback;
-    TNotifyBelatedCallback NotifyBelatedCallback;
     bool IsReplied = false;
 };
 
@@ -106,15 +82,11 @@ using TBaseWriteRequestExecutorPtr = std::shared_ptr<TBaseWriteRequestExecutor>;
 ////////////////////////////////////////////////////////////////////////////////
 
 TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
-    NActors::TActorSystem* actorSystem,
+    NActors::TActorSystem* const actorSystem,
     const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TBlockRange64 vChunkRange,
-    TCallContextPtr callContext,
-    std::shared_ptr<TWriteBlocksLocalRequest> request,
-    ui64 lsn,
-    NWilson::TTraceId traceId);
+    std::shared_ptr<TWriteRequestBundle> bundle);
 
 ////////////////////////////////////////////////////////////////////////////////
 

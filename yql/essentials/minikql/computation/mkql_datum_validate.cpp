@@ -292,21 +292,21 @@ arrow::Status ValidateArrayExpensive(arrow::Datum datum, const TType* type) {
     return arrow::internal::ValidateArrayFull(*array);
 }
 
-arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
+arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::EDatumValidationMode validateMode) {
     if (datum.is_arraylike()) {
         NYql::NUdf::TArgsDechunker dechunker({datum});
         std::vector<arrow::Datum> chunk;
         while (dechunker.Next(chunk)) {
             Y_ENSURE(chunk[0].is_array(), "Chunk expected to be array. Got: " << chunk[0].ToString());
             switch (validateMode) {
-                case NYql::NUdf::EValidateDatumMode::None:
+                case NYql::EDatumValidationMode::None:
                     break;
-                case NYql::NUdf::EValidateDatumMode::Cheap:
+                case NYql::EDatumValidationMode::Cheap:
                     if (auto status = ValidateArrayCheap(chunk[0], type); !status.ok()) {
                         return status;
                     }
                     break;
-                case NYql::NUdf::EValidateDatumMode::Expensive:
+                case NYql::EDatumValidationMode::Expensive:
                     if (auto status = ValidateArrayExpensive(chunk[0], type); !status.ok()) {
                         return status;
                     }
@@ -330,8 +330,8 @@ arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::E
 
 } // namespace
 
-void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
-    if (validateMode == NYql::NUdf::EValidateDatumMode::None) {
+void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type, NYql::EDatumValidationMode validateMode) {
+    if (validateMode == NYql::EDatumValidationMode::None) {
         return;
     }
     if (datum.is_collection()) {

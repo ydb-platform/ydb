@@ -599,6 +599,16 @@ TTimestamp GetReplicationProgressMaxTimestamp(const TReplicationProgress& progre
     return maxTimestamp;
 }
 
+std::pair<TTimestamp, TTimestamp> GetReplicationProgressMinMaxTimestamp(const TReplicationProgress& progress)
+{
+    auto result = std::make_pair(MaxTimestamp, MinTimestamp);
+    for (const auto& segment : progress.Segments) {
+        result.first = std::min(segment.Timestamp, result.first);
+        result.second = std::max(segment.Timestamp, result.second);
+    }
+    return result;
+}
+
 std::optional<TTimestamp> FindReplicationProgressTimestampForKey(
     const TReplicationProgress& progress,
     TUnversionedValueRange key)

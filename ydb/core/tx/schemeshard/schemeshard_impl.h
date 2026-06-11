@@ -417,6 +417,7 @@ public:
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
     bool EnableFulltextIndex = false;
+    bool EnableCompactFulltextIndex = false;
     bool EnableJsonIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;
@@ -1977,6 +1978,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReplyModifySetColumnConstraint(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxReplyCompletedSetColumnConstraint(TTxId completedTxId);
     NTabletFlatExecutor::ITransaction* CreateTxReplyValidateRowCondition(TIndexBuildId operationId, TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreatePipeRetrySetColumnConstraint(TIndexBuildId operationId, TTabletId tabletId);
 
     THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperations;
     THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;
@@ -2016,12 +2018,13 @@ public:
     TFifoQueue<TPathId> ForcedCompactionTablesQueue;
     THashMap<TPathId, TFifoQueue<TShardIdx>> ForcedCompactionShardsByTable;
     ui64 ForcedCompactionTotalInQueues = 0;
-    bool InProcessForcedCompactionQueues = false;
+    bool ForcedCompactionProgressScheduled = false;
 
-    TVector<std::pair<TShardIdx, TForcedCompactionInfo::TPtr>> ForcedCompactionsDoneShardsToPersist; // info may be null
+    THashMap<TShardIdx, TForcedCompactionInfo::TPtr> ForcedCompactionsDoneShardsToPersist; // info may be null
     ui32 ForcedCompactionPersistBatchSize = 100;
     TInstant ForcedCompactionProgressStartTime;
     TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
+    bool ForcedCompactionNeedsImmediatePersist = false;
 
     struct TCancellingForcedCompaction {
         struct TWaiter {
@@ -2068,16 +2071,15 @@ public:
 
     void CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx);
     bool IsForcedCompactionCompleted(const TForcedCompactionInfo& forcedCompactionInfo) const;
-    void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId);
+    void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId, const TActorContext &ctx);
     void ProcessForcedCompactionQueues();
-    void ProcessForcedCompactionQueuesForTable(const TPathId& tablePathId, TForcedCompactionInfo& compaction);
-    void TryEnqueueOneShard(const TPathId& tablePathId, TForcedCompactionInfo& forcedCompactionInfo, THashSet<TPathId>* tablesWithoutCandidates);
     void UpdateForcedCompactionQueueMetrics();
 
     void EnqueueForcedCompaction(const TShardIdx& shardIdx);
     NOperationQueue::EStartStatus StartForcedCompaction(const TShardIdx& shardIdx);
     void OnForcedCompactionTimeout(const TShardIdx& shardIdx);
     void HandleForcedCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
+    void ScheduleForcedCompactionProgress(const TActorContext& ctx);
 
     void ProcessForcedCompactionOnSplitMerge(
         NIceDb::TNiceDb& db,
@@ -2097,6 +2099,7 @@ public:
     void Handle(TEvForcedCompaction::TEvCancelRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvForcedCompaction::TEvForgetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvForcedCompaction::TEvListRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvProgressForcedCompaction::TPtr& ev, const TActorContext& ctx);
     // } // NForcedCompaction
 
     // namespace NCdcStreamScan {

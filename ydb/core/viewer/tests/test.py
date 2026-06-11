@@ -794,6 +794,12 @@ class TestViewer(object):
         }
 
     @classmethod
+    def test_viewer_groups_allocation_units_without_pool_name(cls):
+        return cls.get_viewer_normalized("/viewer/groups", {
+            'fields_required': 'AllocationUnits',
+        })
+
+    @classmethod
     def test_viewer_groups_with_invalid_database(cls):
         # Test that the endpoint doesn't crash when provided with an invalid database
         result = cls.call_viewer("/viewer/groups", {
@@ -1640,6 +1646,34 @@ class TestViewer(object):
             return events
 
         result['events'] = parse_event_stream(raw_text)
+        return result
+
+    @classmethod
+    def test_viewer_query_forget_immediate(cls):
+        """Test execute-query-and-forget immediate return when query finishes quickly"""
+        # Run query that executes and completes before forget_after (10 seconds)
+        result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'action': 'execute-query-and-forget',
+            'query': 'SELECT 7*6;',
+            'schema': 'multi',
+            'forget_after': 10000
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
+
+    @classmethod
+    def test_viewer_query_forget_delayed(cls):
+        """Test execute-query-and-forget when query takes longer than forget_after"""
+        # Run query with very small forget_after (1ms) so it will be forgotten and run in background
+        result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'action': 'execute-query-and-forget',
+            'query': 'SELECT * FROM table1 LIMIT 3;',
+            'schema': 'multi',
+            'forget_after': 1
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod

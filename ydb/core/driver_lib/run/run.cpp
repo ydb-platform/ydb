@@ -201,27 +201,32 @@ namespace NKikimr {
 
 namespace {
 
-    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
-        auto wrapper = grpcServersWrapper.lock();
-        if (!wrapper) {
-            return;
-        }
-        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
-            return;
-        }
-        if (isDisabled) {
-            wrapper->IsDisabled.store(true, std::memory_order_release);
-        }
-        TGuard<TMutex> guard = wrapper->Guard();
-        for (auto& [name, server] : wrapper->Servers) {
-            if (!server) {
-                continue;
-            }
-            server->Stop();
-        }
-        wrapper->Servers.clear();
+void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
+    auto wrapper = grpcServersWrapper.lock();
+    if (!wrapper) {
+        return;
     }
+
+    if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (isDisabled) {
+        wrapper->IsDisabled.store(true, std::memory_order_release);
+    }
+
+    TGuard<TMutex> guard = wrapper->Guard();
+    for (auto& [_, server] : wrapper->Servers) {
+        if (!server) {
+            continue;
+        }
+        server->Stop();
+    }
+
+    wrapper->Servers.clear();
 }
+
+} // anonymous namespace
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
@@ -1958,6 +1963,16 @@ void TKikimrRunner::InitializeActorSystem(
     }
 }
 
+void TKikimrRunner::RecordEmptyDomainSensor() {
+    const auto& labels = AppData->Labels;
+    const auto it = labels.find("empty_domain_during_node_registration");
+    if (it != labels.end() && it->second == "true") {
+        GetServiceCounters(AppData->Counters, "ydb")
+            ->GetSubgroup("subsystem", "nodeRegistration")
+            ->GetCounter("EmptyDomainName")->Inc();
+    }
+}
+
 TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializersList(
     const TKikimrRunConfig& runConfig,
     const TBasicKikimrServicesMask& serviceMask) {
@@ -2465,19 +2480,19 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
         if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {
             NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
             if (udfsPaths.empty()) {
-                Cout << "UDF directory " << udfsDir << " contains no dynamic UDFs. " << Endl;
+                Cout << "UDF directory " << udfsDir << " contains no dynamic UDFs." << Endl;
             } else {
-                Cout << "UDF directory " << udfsDir << " contains " << udfsPaths.size() << " dynamic UDFs. " << Endl;
+                Cout << "UDF directory " << udfsDir << " contains " << udfsPaths.size() << " dynamic UDFs." << Endl;
             }
             NMiniKQL::TUdfModuleRemappings remappings;
             for (const auto& udfPath : udfsPaths) {
                 FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
             }
         } else {
-            Cout << "UDF directory " << udfsDir << " doesn't exist, no dynamic UDFs will be loaded. " << Endl;
+            Cout << "UDF directory " << udfsDir << " doesn't exist, no dynamic UDFs will be loaded." << Endl;
         }
     } else {
-        Cout << "UDFsDir is not specified, no dynamic UDFs will be loaded. " << Endl;
+        Cout << "UDFsDir is not specified, no dynamic UDFs will be loaded." << Endl;
     }
 
     NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
@@ -2504,6 +2519,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeControlBoard(runConfig);
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
+    runner->RecordEmptyDomainSensor();
     TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, runConfig.ServicesMask));
     runner->InitializeActorSystem(runConfig, sil, runConfig.ServicesMask);
     runner->InitializeMonitoringLogin(runConfig);
@@ -2522,7 +2538,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 
     TKikimrRunner::SetSignalHandlers();
     Cout << "Starting YDB server" << Endl;
-    Cout << GetProgramSvnVersion() << Endl;
+    Cout << Strip(GetProgramSvnVersion()) << Endl;
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
     if (runner) {
@@ -2536,4 +2552,4 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
     return 0;
 }
 
-} // NKikimr
+} // namespace NKikimr

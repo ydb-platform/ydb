@@ -48,6 +48,50 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
     }
 }
 
+static void AssertColumnAndIndexEntityIdsDisjoint(
+    const NKikimrSchemeOp::TColumnTableSchema& schema, const TString& contextLabel)
+{
+    THashSet<ui32> columnIds;
+    ui32 maxColumnId = 0;
+    for (const auto& column : schema.GetColumns()) {
+        UNIT_ASSERT_C(column.HasId(), contextLabel << ": column '" << column.GetName() << "' has no id");
+        const ui32 columnId = column.GetId();
+        UNIT_ASSERT_C(columnIds.emplace(columnId).second,
+            contextLabel << ": duplicate column id " << columnId);
+        maxColumnId = Max(maxColumnId, columnId);
+    }
+
+    THashSet<ui32> indexIds;
+    for (const auto& index : schema.GetIndexes()) {
+        UNIT_ASSERT_C(index.HasId(), contextLabel << ": index '" << index.GetName() << "' has no id");
+        const ui32 indexId = index.GetId();
+        UNIT_ASSERT_C(indexIds.emplace(indexId).second,
+            contextLabel << ": duplicate index id " << indexId);
+        UNIT_ASSERT_C(!columnIds.contains(indexId),
+            contextLabel << ": index '" << index.GetName() << "' id " << indexId
+                         << " overlaps with a column id (max column id is " << maxColumnId << ")");
+    }
+}
+
+static void AssertTableEntityIdsDisjoint(TKikimrRunner& kikimr, const TString& tablePath, const TString& contextLabel)
+{
+    auto desc = kikimr.GetTestClient().Ls(tablePath);
+    UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), contextLabel);
+    AssertColumnAndIndexEntityIdsDisjoint(
+        desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema(), contextLabel);
+}
+
+static ui32 GetColumnIdByName(const NKikimrSchemeOp::TColumnTableSchema& schema, const TString& name)
+{
+    for (const auto& column : schema.GetColumns()) {
+        if (column.GetName() == name) {
+            UNIT_ASSERT(column.HasId());
+            return column.GetId();
+        }
+    }
+    ythrow yexception() << "column not found: " << name;
+}
+
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
@@ -173,6 +217,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
@@ -219,11 +264,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             WITH (
                 STORE = COLUMN
             );
-        )");
-
-        assertDDLQueryOk(R"(
-            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=value_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "value"}`);
-
+            ALTER TABLE `/Root/minmax_test_applied_applied` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);
         )");
 
         runDMLQuery(R"(
@@ -239,36 +280,81 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        auto skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+        struct TQueryResult {
+            ui64 CountResult;
+            bool MinMaxIndexUsed;
+        };
 
+        auto runQuery = [&](TString text) -> TQueryResult {
+            ui64 skippedAndApprovedBeforeQuery = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+            auto ysonArrayWithOneInteger = runDMLQuery(text);
+            ui64 skippedAndApprovedAfterQuery = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+            
+            return TQueryResult {
+                .CountResult = NYT::NodeFromYsonString(ysonArrayWithOneInteger).AsList()[0].AsList()[0].AsUint64(),
+                .MinMaxIndexUsed = skippedAndApprovedBeforeQuery < skippedAndApprovedAfterQuery
+            };
+        };
 
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resLess = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` < "Value_500000";
-        )"), "[[944450u]]");
-        Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
-
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resLess.CountResult, 944450, "incorrect result for query with '<' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resLess.MinMaxIndexUsed, "query with '<' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resGreater = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` > "Value_500000";
-        )"), "[[555549u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resGreater.CountResult, 555549, "incorrect result for query with '>' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resGreater.MinMaxIndexUsed, "query with '>' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resLessOrEqual = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` <= "Value_500000";
-        )"), "[[944451u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resLessOrEqual.CountResult, 944451, "incorrect result for query with '<=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resLessOrEqual.MinMaxIndexUsed, "query with '<=' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resGreaterOrEqual = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000";
-        )"), "[[555550u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resGreaterOrEqual.CountResult, 555550, "incorrect result for query with '>=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resGreaterOrEqual.MinMaxIndexUsed, "query with '>=' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        TQueryResult resBetween = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` BETWEEN "Value_500000" AND "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resBetween.CountResult, 2, "incorrect result for query with 'BETWEEN' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resBetween.MinMaxIndexUsed, "query with 'BETWEEN' filter over min_max-indexed column doesn't use min_max index");
+
+        TQueryResult resAnd = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" AND `value` <= "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resAnd.CountResult, 2, "incorrect result for query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resAnd.MinMaxIndexUsed, "query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resOr = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" OR `value` <= "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resOr.CountResult, 1500000, "incorrect result for query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resOr.MinMaxIndexUsed, "query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resNeq = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` != "Value_500000";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resNeq.CountResult, 1499999, "incorrect result for query with '!=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resNeq.MinMaxIndexUsed, "query with '!=' filter over min_max-indexed column use min_max index, but it shouldn't");
+        
+        TQueryResult resIsNotNull = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS NOT NULL;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resIsNotNull.CountResult, 1500000, "incorrect result for query with 'IS NOT NULL' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resIsNotNull.MinMaxIndexUsed, "query with 'IS NOT NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
+        
+        TQueryResult resDistinctFromNull = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS DISTINCT FROM NULL;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resDistinctFromNull.CountResult, 1500000, "incorrect result for query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resDistinctFromNull.MinMaxIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
     }
 
     Y_UNIT_TEST(MinMaxNulls, EUseQueryService, ELocalIndexAsSchemeObject) {
@@ -488,6 +574,146 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
 
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
+    }
+
+    Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnCreate, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableEntityIdDisjointCreate`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                payload Utf8,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
+                INDEX idx_minmax LOCAL USING min_max ON (payload)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        AssertTableEntityIdsDisjoint(kikimr, "/Root/olapTableEntityIdDisjointCreate", "after CREATE TABLE with indexes");
+    }
+
+    Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnAlter, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString tablePath = "/Root/olapTableEntityIdDisjointAlter";
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableEntityIdDisjointAlter`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableEntityIdDisjointAlter` ADD INDEX idx_bloom LOCAL USING bloom_filter
+                ON (resource_id) WITH (false_positive_probability = 0.01);
+        )");
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after first ALTER TABLE ADD INDEX");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableEntityIdDisjointAlter` ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (uid) WITH (ngram_size = 3, false_positive_probability = 0.01);
+        )");
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after second ALTER TABLE ADD INDEX");
+    }
+
+    Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnAlterAfterCreateWithIndexes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString tablePath = "/Root/olapTableEntityIdDisjointAlterAfterCreate";
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableEntityIdDisjointAlterAfterCreate`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                payload Utf8,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id) WITH (false_positive_probability = 0.01),
+                INDEX idx_minmax LOCAL USING min_max ON (payload)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after CREATE TABLE with indexes");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableEntityIdDisjointAlterAfterCreate` ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (uid) WITH (ngram_size = 3, false_positive_probability = 0.01);
+        )");
+
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after ALTER TABLE ADD INDEX on table created with indexes");
+    }
+
+    Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnAlterAddColumnAfterCreateWithManyIndexes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString tablePath = "/Root/olapTableEntityIdDisjointAddColumn";
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableEntityIdDisjointAddColumn`
+            (
+                timestamp Timestamp NOT NULL,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (uid) WITH (false_positive_probability = 0.01),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (uid)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01),
+                INDEX idx_minmax LOCAL USING min_max ON (uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after CREATE TABLE with three indexes on two columns");
+
+        ExecQuery(kikimr, UseQueryService,
+            "ALTER TABLE `/Root/olapTableEntityIdDisjointAddColumn` ADD COLUMN extra Utf8;");
+
+        auto desc = kikimr.GetTestClient().Ls(tablePath);
+        const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
+        AssertColumnAndIndexEntityIdsDisjoint(schema, "after ALTER TABLE ADD COLUMN");
+        const ui32 extraColumnId = GetColumnIdByName(schema, "extra");
+        ui32 maxIndexId = 0;
+        for (const auto& index : schema.GetIndexes()) {
+            maxIndexId = Max(maxIndexId, index.GetId());
+        }
+        UNIT_ASSERT_C(extraColumnId > maxIndexId,
+            "new column id " << extraColumnId << " must be greater than max index id " << maxIndexId);
     }
 
     Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService, ELocalIndexAsSchemeObject) {

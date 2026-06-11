@@ -13,17 +13,17 @@ using namespace NYPath;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString Prettify(const TString& yson)
+std::string Prettify(const std::string& yson)
 {
     return ConvertToYsonString(TYsonString(yson), EYsonFormat::Pretty).ToString();
 }
 
-TString PrettifyYson(const TYsonString& yson)
+std::string PrettifyYson(const TYsonString& yson)
 {
     return ConvertToYsonString(yson, EYsonFormat::Pretty).ToString();
 };
 
-void Check(const TString& yson, const std::vector<TYPath>& paths, const TString& expectedYson)
+void Check(const std::string& yson, const std::vector<TYPath>& paths, const std::string& expectedYson)
 {
     auto originalYsonPretty = Prettify(yson);
     auto expectedYsonPretty = Prettify(expectedYson);
@@ -35,12 +35,12 @@ void Check(const TString& yson, const std::vector<TYPath>& paths, const TString&
         << "Actual:" << std::endl << actualYsonPretty << std::endl;
 }
 
-void CheckThrow(const TString& yson)
+void CheckThrow(const std::string& yson)
 {
     EXPECT_THROW(FilterYsonString({}, TYsonStringBuf(yson)), std::exception);
 }
 
-void CheckNull(const TString& yson, const std::vector<TYPath>& paths)
+void CheckNull(const std::string& yson, const std::vector<TYPath>& paths)
 {
     auto originalYsonPretty = Prettify(yson);
     auto actualYson = FilterYsonString(paths, TYsonStringBuf(yson), /*allowNullResult*/ true);
@@ -53,15 +53,15 @@ void CheckNull(const TString& yson, const std::vector<TYPath>& paths)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<TString> ScalarYsons = {"#", "%true", "-42", "23u", "42.5", "xyz"};
-const std::vector<TString> CompositeYsons = {"{foo=bar}", "[foo;bar]"};
+const std::vector<std::string> ScalarYsons = {"#", "%true", "-42", "23u", "42.5", "xyz"};
+const std::vector<std::string> CompositeYsons = {"{foo=bar}", "[foo;bar]"};
 
 TEST(TStringFilterTest, TestNoMatchFallback)
 {
     // In a no match case attribute-stripped original YSON must be returned.
 
     // Cases when original YSON is scalar.
-    for (const TString& yson : ScalarYsons) {
+    for (const std::string& yson : ScalarYsons) {
         auto ysonWithAttributes = "<foo=bar>" + yson;
         Check(yson, {}, yson);
         Check(ysonWithAttributes, {}, yson);
@@ -72,7 +72,7 @@ TEST(TStringFilterTest, TestNoMatchFallback)
     }
 
     // Cases when original YSON is a map or list.
-    for (const auto& [yson, emptyCollection] : std::vector<std::pair<TString, TString>>{{"{foo=bar}", "{}"}, {"[foo; bar]", "[]"}}) {
+    for (const auto& [yson, emptyCollection] : std::vector<std::pair<std::string, std::string>>{{"{foo=bar}", "{}"}, {"[foo; bar]", "[]"}}) {
         auto ysonWithAttributes = "<foo=bar>" + yson;
         Check(yson, {}, emptyCollection);
         Check(ysonWithAttributes, {}, emptyCollection);
@@ -88,7 +88,7 @@ TEST(TStringFilterTest, TestNoMatchNullString)
     // In a no match case attribute-stripped original YSON must be returned.
 
     // Cases when original YSON is scalar.
-    for (const TString& yson : Concatenate(ScalarYsons, CompositeYsons)) {
+    for (const std::string& yson : Concatenate(ScalarYsons, CompositeYsons)) {
         auto ysonWithAttributes = "<foo=bar>" + yson;
         CheckNull(yson, {});
         CheckNull(ysonWithAttributes, {});
@@ -102,13 +102,13 @@ TEST(TStringFilterTest, TestNoMatchNullString)
 TEST(TStringFilterTest, TestFullMatch)
 {
     // In a match case original YSON must be returned.
-    for (const TString& yson : ScalarYsons) {
+    for (const std::string& yson : ScalarYsons) {
         auto ysonWithAttributes = "<foo=bar>" + yson;
         Check(yson, {""}, yson);
         Check(ysonWithAttributes, {""}, ysonWithAttributes);
     }
 
-    for (const TString& yson : {"{foo=bar}", "[foo;bar]"}) {
+    for (const std::string& yson : {"{foo=bar}", "[foo;bar]"}) {
         auto ysonWithAttributes = "<foo=bar>" + yson;
         Check(yson, {""}, yson);
         Check(ysonWithAttributes, {""}, ysonWithAttributes);

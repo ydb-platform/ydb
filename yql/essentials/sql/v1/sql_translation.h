@@ -186,7 +186,7 @@ protected:
     TNodePtr IfStatement(const TRule_if_stmt& stmt);
     TNodePtr ForStatement(const TRule_for_stmt& stmt);
     TSQLResult<TTableArg> TableArgImpl(const TRule_table_arg& node);
-    bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery);
+    bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery, TTableHints& tableHints, TMaybe<TString>& keyFunc, TString* effectiveProvider = nullptr, bool* isAnonymous = nullptr);
     TMaybe<TSourcePtr> AsTableImpl(const TRule_table_ref& node);
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, TString& service, TDeferredAtom& cluster);
     bool ClusterExprOrBinding(const TRule_cluster_expr& node, TString& service, TDeferredAtom& cluster, bool& isBinding);

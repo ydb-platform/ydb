@@ -281,7 +281,7 @@ jobs:
         run: |
           git fetch origin "${{ github.event.pull_request.base.ref }}"
           if git diff --name-only "origin/${{ github.event.pull_request.base.ref }}" "${{ needs.check-running-allowed.outputs.commit_sha }}" \
-             | grep -q '^ydb/public/sdk/cpp/'; then
+             | grep -Eq '^(ydb/public/sdk/cpp/|\.github/actions/test_cpp_sdk_with_coverage/|\.github/scripts/tests/compare_cpp_sdk_coverage\.py$)'; then
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
       - name: Setup ydb access

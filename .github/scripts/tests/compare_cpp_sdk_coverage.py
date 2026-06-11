@@ -14,13 +14,23 @@ def line_pct(report_dir: str) -> float:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        raise SystemExit("usage: compare_cpp_sdk_coverage.py {extract|check} ...")
+
     cmd = sys.argv[1]
     if cmd == "extract":
-        json.dump({"line_pct": line_pct(sys.argv[2])}, open(sys.argv[3], "w"))
+        if len(sys.argv) != 4:
+            raise SystemExit("usage: compare_cpp_sdk_coverage.py extract <report_dir> <out_json>")
+        with open(sys.argv[3], "w", encoding="utf-8") as f:
+            json.dump({"line_pct": line_pct(sys.argv[2])}, f)
     elif cmd == "check":
-        current = json.load(open(sys.argv[2]))["line_pct"]
-        baseline = json.load(open(sys.argv[3]))["line_pct"]
-        print(f"CPP SDK line coverage: {current}% (main: {baseline}%)", file=sys.stderr)
+        if len(sys.argv) != 4:
+            raise SystemExit("usage: compare_cpp_sdk_coverage.py check <current_json> <baseline_json>")
+        with open(sys.argv[2], encoding="utf-8") as f:
+            current = json.load(f)["line_pct"]
+        with open(sys.argv[3], encoding="utf-8") as f:
+            baseline = json.load(f)["line_pct"]
+        print(f"CPP SDK line coverage: {current}% (baseline: {baseline}%)", file=sys.stderr)
         sys.exit(1 if current < baseline else 0)
     else:
         raise SystemExit(f"unknown command: {cmd}")

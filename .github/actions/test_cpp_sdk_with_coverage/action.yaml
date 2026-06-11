@@ -29,15 +29,16 @@ runs:
         folder_prefix: ya-
         build_preset: profile
 
-    - name: Coverage on main
+    - name: Coverage on base branch
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash
       run: |
         set -ex
         ORIGINAL_HEAD=$(git rev-parse HEAD)
-        MAIN_OUT="$(pwd)/coverage_workspace/main"
-        git fetch origin main
-        git checkout origin/main
+        BASE_REF="${{ github.event.pull_request.base.ref }}"
+        MAIN_OUT="$(pwd)/coverage_workspace/$BASE_REF"
+        git fetch origin "$BASE_REF"
+        git checkout "origin/$BASE_REF"
         mkdir -p "$MAIN_OUT"
         ./ya make -tA --build profile --clang-coverage --coverage-report \
           -DCOVERAGE_TARGET_REGEXP=ydb/public/sdk/cpp \
@@ -78,20 +79,21 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -ex
+        BASE_REF="${{ github.event.pull_request.base.ref }}"
         CURRENT_JSON="$PUBLIC_DIR/current_line_coverage.json"
         python3 .github/scripts/tests/compare_cpp_sdk_coverage.py extract \
           "$TMP_DIR/out/coverage.report" "$CURRENT_JSON"
         CURRENT=$(python3 -c 'import json; print(json.load(open("'"$CURRENT_JSON"'"))["line_pct"])')
-        MAIN=$(python3 -c 'import json; print(json.load(open("'"$MAIN_COVERAGE_JSON"'"))["line_pct"])')
+        BASELINE=$(python3 -c 'import json; print(json.load(open("'"$MAIN_COVERAGE_JSON"'"))["line_pct"])')
         if python3 .github/scripts/tests/compare_cpp_sdk_coverage.py check "$CURRENT_JSON" "$MAIN_COVERAGE_JSON"; then
-          STATE=success; COLOR=green; MSG="CPP SDK line coverage: ${CURRENT}% (main: ${MAIN}%) — OK"
+          STATE=success; COLOR=green; MSG="CPP SDK line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — OK"
         else
-          STATE=failure; COLOR=red; MSG="CPP SDK line coverage: ${CURRENT}% (main: ${MAIN}%) — FAILED"
+          STATE=failure; COLOR=red; MSG="CPP SDK line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — FAILED"
         fi
         SHA="${{ github.event.pull_request.head.sha }}"
         curl --retry 5 --fail -L -X POST \
           -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
           "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$SHA" \
-          -d "{\"state\":\"$STATE\",\"description\":\"${CURRENT}% vs main ${MAIN}%\",\"context\":\"coverage_cpp_sdk\"}"
+          -d "{\"state\":\"$STATE\",\"description\":\"${CURRENT}% vs ${BASE_REF} ${BASELINE}%\",\"context\":\"coverage_cpp_sdk\"}"
         echo "$MSG" | .github/scripts/tests/comment-pr.py --color "$COLOR"
         [[ "$STATE" == success ]]

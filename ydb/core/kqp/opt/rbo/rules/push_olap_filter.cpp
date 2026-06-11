@@ -104,9 +104,6 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     auto predicate = lambda.Body();
     auto lambdaArg = lambda.Args().Arg(0).Ptr();
 
-    // Compute the predicate selectivity now, while the filter lambda is still live and type-annotated
-    const double pushedDownFilterSelectivity = TPredicateSelectivityComputer(std::make_shared<TOptimizerStatistics>()).Compute(lambda.Body());
-
     // Here we want to apply coalesce and propagate it to optional predicates.
     // clang-format off
     predicate = Build<TCoCoalesce>(ctx.ExprCtx, input->Pos)
@@ -214,6 +211,11 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
         // Part of the predicate could not be pushed down. The remaining TOpFilter survives and its selectivity computed later.
         return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(remainingFilter.Cast().Ptr(), &ctx.ExprCtx, &props));
     }
+
+    // Compute the predicate selectivity now, while the filter lambda is still live and type-annotated
+    auto readStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(read->Props, true));
+    const double pushedDownFilterSelectivity = TPredicateSelectivityComputer(readStats).Compute(lambda.Body());
+
     // The whole predicate was pushed in: no TOpFilter remains, so carry its selectivity on the read.
     newRead->Props.PushedDownFilterSelectivity = pushedDownFilterSelectivity;
     return newRead;

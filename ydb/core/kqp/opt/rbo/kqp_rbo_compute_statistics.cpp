@@ -232,6 +232,7 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     if (Props.PushedDownFilterSelectivity.has_value()) {
         double filterSelectivity = Props.PushedDownFilterSelectivity.value() * Props.Statistics->Selectivity;
         Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
+        Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
         Props.Statistics->Selectivity = filterSelectivity;
     }
 }
@@ -279,6 +280,7 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     double filterSelectivity = selectivity * Props.Statistics->Selectivity;
     Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
+    Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
     Props.Statistics->Selectivity = filterSelectivity;
 }
 

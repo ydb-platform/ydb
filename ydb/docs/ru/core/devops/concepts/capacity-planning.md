@@ -72,7 +72,7 @@ SlotSize = (DriveSize - 27.65 GB) / ExpectedSlotCount
 TotalGroups = ceil( Database Storage / (SlotSize × VDisksInGroup × 0.87) )
 ```
 
-Здесь `VDisksInGroup` определяется режимом работы кластера согласно таблице выше: `8` для `block-4-2` и `mirror-3of4`, `9` для `mirror-3-dc`, `1` для `none`.
+Здесь `VDisksInGroup` определяется режимом работы кластера (см. [таблицу выше](#storage-model)).
 
 Помимо этого, в кластере должен оставаться запас пустых слотов для нормальной работы механизма [SelfHeal](../../maintenance/manual/selfheal.md), выполняющего автоматическую реконфигурацию групп хранения для замены вышедших из строя или длительное время недоступных дисков.
 

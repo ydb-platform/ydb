@@ -204,9 +204,6 @@ runs:
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
             ;;
-          profile)
-            params+=(--build "profile")
-            ;;
           release)
             params+=(--build "release")
             ;;

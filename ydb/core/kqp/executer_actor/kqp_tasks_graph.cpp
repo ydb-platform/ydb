@@ -606,6 +606,17 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullText
     return result.empty() ? TVector<TString>{baseToken} : result;
 }
 
+void AddQueryPathParam(TKqpTasksGraph::TTaskType& task, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext) {
+    if (!userRequestContext || !userRequestContext->IsStreamingQuery) {
+        return;
+    }
+
+    const auto& queryPath = userRequestContext->StreamingQueryPath
+        ? userRequestContext->StreamingQueryPath
+        : "default";
+    task.Meta.TaskParams.emplace("query_path", queryPath);
+}
+
 } // anonymous namespace
 
 void TKqpTasksGraph::FillStages() {
@@ -2394,11 +2405,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
 
-        TString queryPath = "default";
-        if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-            queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
-        }
-        task.Meta.TaskParams.emplace("query_path", queryPath);
+        AddQueryPathParam(task, GetMeta().UserRequestContext);
         if (externalSource.GetType() == "PqSource" && i == 0) {   // Only first task will check partition count.
             task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
         }
@@ -2965,11 +2972,7 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
             // "fq.restart_count"
         }
     }
-    TString queryPath = "default";
-    if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-        queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
-    }
-    task.Meta.TaskParams.emplace("query_path", queryPath);
+    AddQueryPathParam(task, GetMeta().UserRequestContext);
 
     auto& output = task.Outputs[sink.GetOutputIndex()];
     output.Type = TTaskOutputType::Sink;

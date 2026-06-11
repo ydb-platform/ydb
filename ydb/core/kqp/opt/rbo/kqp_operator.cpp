@@ -1038,8 +1038,13 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     TStringBuilder strBuilder;
     strBuilder << "Aggregate [";
     for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
-        strBuilder << AggregationTraitsList[i].ResultColName.GetFullName() << ": " << AggregationTraitsList[i].AggFunction << "("
-                   << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
+        strBuilder << AggregationTraitsList[i].ResultColName.GetFullName() << ": " << AggregationTraitsList[i].AggFunction << "(";
+        if (AggregationTraitsList[i].Distinct) {
+            strBuilder << "distinct ";
+        }
+
+        strBuilder << AggregationTraitsList[i].OriginalColName.GetFullName();
+        strBuilder << ")";
         if (i + 1 != AggregationTraitsList.size()) {
             strBuilder << ", ";
         }

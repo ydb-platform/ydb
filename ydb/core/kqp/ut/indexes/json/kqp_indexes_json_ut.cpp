@@ -978,13 +978,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             if (WithReturning) {
                 if (IsJsonDocument) {
                     CompareYson(R"([
-                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]];
-                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]]
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
                 } else {
                     CompareYson(R"([
-                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]];
-                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]]
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
                 }
             }
@@ -1024,13 +1024,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             if (WithReturning) {
                 if (IsJsonDocument) {
                     CompareYson(R"([
-                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
-                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]]
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
                 } else {
                     CompareYson(R"([
-                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
-                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]]
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]]
                     ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
                 }
             }

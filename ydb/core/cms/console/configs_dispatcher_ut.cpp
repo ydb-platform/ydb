@@ -1467,7 +1467,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
         initInfo.StartupStorageYaml = storageYaml;
         initInfo.Labels["config_source"] = "seed_nodes";
-        initInfo.Labels["configuration_version"] = "v2";
         initInfo.DebugInfo = NConfig::TDebugInfo{};
         
         TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
@@ -1486,7 +1485,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::SeedNodes);
         UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "seed_nodes");
-        UNIT_ASSERT_VALUES_EQUAL(state.ConfigurationVersion, "v2");
         UNIT_ASSERT(state.HasStorageYaml);
         UNIT_ASSERT(state.StorageYamlSize > 0);
         
@@ -1502,7 +1500,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         initInfo.InitialConfig = config;
         initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
         initInfo.Labels["config_source"] = "dynamic";
-        initInfo.Labels["configuration_version"] = "v1";
         initInfo.DebugInfo = NConfig::TDebugInfo{};
         
         TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
@@ -1521,7 +1518,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
         UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "dynamic");
-        UNIT_ASSERT_VALUES_EQUAL(state.ConfigurationVersion, "v1");
         UNIT_ASSERT(!state.HasStorageYaml);
         UNIT_ASSERT_VALUES_EQUAL(state.StorageYamlSize, 0);
         
@@ -1670,6 +1666,7 @@ selector_config: []
         const TString jsonBody = answer.substr(jsonBegin);
         const NJson::TJsonValue actual = ReadJsonFromString(jsonBody);
         const NJson::TJsonValue expected = ReadJsonFromString(R"json({
+            "configuration_version": "v1",
             "last_replay_seed_nodes": false,
             "initial_cms_json_config": {
                 "grpc_config": {

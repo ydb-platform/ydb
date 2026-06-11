@@ -1412,18 +1412,39 @@ private:
 
             auto [indexMeta, index] = tableMeta->GetIndex(indexName);
 
-            YQL_ENSURE(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                || index->Type == TIndexDescription::EType::GlobalFulltextPlain
-                || index->Type == TIndexDescription::EType::GlobalJson);
-            if (index->Type == TIndexDescription::EType::GlobalJson) {
-                fullTextProto.SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson);
-            } else {
+            NKqpProto::EKqpFullTextIndexType kqpType;
+            bool hasDesc = false;
+            switch (index->Type) {
+            case TIndexDescription::EType::GlobalFulltextRelevance:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance;
+                hasDesc = true;
+                break;
+            case TIndexDescription::EType::GlobalFulltextPlain:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain;
+                hasDesc = true;
+                break;
+            case TIndexDescription::EType::GlobalJson:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson;
+                break;
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance;
+                hasDesc = true;
+                break;
+            case TIndexDescription::EType::GlobalFulltextCompact:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact;
+                hasDesc = true;
+                break;
+            case TIndexDescription::EType::GlobalJsonCompact:
+                kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
+                break;
+            default:
+                YQL_ENSURE(false, "Index type " << index->Type << " is not supported");
+            }
+            fullTextProto.SetIndexType(kqpType);
+            if (hasDesc) {
                 auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
                 YQL_ENSURE(desc, "unexpected index description type");
                 fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
-                fullTextProto.SetIndexType(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                    ? NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance
-                    : NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain);
             }
 
             auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {

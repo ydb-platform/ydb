@@ -632,8 +632,12 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             test.is_verify_issue = source_has_tag(et, "VERIFY")
             test.is_possible_oom = source_has_tag(et, "POSSIBLE_OOM")
 
-        if os.path.isabs(html_fn):
-            html_fn = os.path.relpath(html_fn, public_dir)
+        html_fn_norm = os.path.normpath(html_fn)
+        public_dir_norm = os.path.normpath(public_dir)
+        if os.path.isabs(html_fn_norm):
+            html_fn = os.path.relpath(html_fn_norm, public_dir_norm)
+        elif html_fn_norm == public_dir_norm or html_fn_norm.startswith(public_dir_norm + os.sep):
+            html_fn = os.path.relpath(html_fn_norm, public_dir_norm)
         report_url = f"{public_dir_url}/{html_fn}"
 
         render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id)

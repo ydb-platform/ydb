@@ -35,7 +35,7 @@ python3 .github/scripts/tests/generate-summary.py \
   --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
   ${PR_NUMBER:+--pr_number "$PR_NUMBER"} \
   --workflow_run_id "${GITHUB_RUN_ID:-}" \
-  "Tests" "$PUBLIC_DIR/try_1/ya-test.html" "$PUBLIC_DIR/try_1/report.json"
+  "Tests" "try_1/ya-test.html" "$PUBLIC_DIR/try_1/report.json"
 
 if [[ -n "${S3_BUCKET_PATH:-}" ]]; then
   .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/" || true

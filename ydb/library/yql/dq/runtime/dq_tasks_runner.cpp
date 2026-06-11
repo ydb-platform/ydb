@@ -371,7 +371,7 @@ public:
         }
 
         auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
-    
+
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
             AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr,
@@ -1187,7 +1187,6 @@ private:
                             return TMaybe<TInstant>{};
                         }
                     }();
-                    Cerr << (TStringBuilder() << TInstant::Now() << " [TODO][" << StageId << "][" << TaskId << "] Got new output watermark: " << watermark << "\n");
                     if (watermark) {
                         NDqProto::TWatermark watermarkRequest;
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());

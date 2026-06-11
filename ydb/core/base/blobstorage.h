@@ -1086,13 +1086,7 @@ struct TEvBlobStorage {
         const ETactic Tactic;
         const bool IssueKeepFlag = false;
         const bool IgnoreBlock = false;
-<<<<<<< HEAD
-=======
-        const bool AlreadyEncrypted = false; // when set to true, no encryption is required
-        const bool ReduceInterpileTraffic = false;
-        const bool IsZeroEntry = false;
         const bool FailOnSlowDown = false; // when set, fail the request with ERROR/"SlowDown" instead of retrying
->>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;

@@ -2658,7 +2658,7 @@ public:
                                        TStringBuilder() << "Unknown alter index setting: " << settingName
                                 )
                             );
-                            
+
                             return SyncError();
                         }
                     }

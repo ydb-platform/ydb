@@ -111,6 +111,10 @@ inputs:
     type: string
     default: ""
     description: "build-results-report for retries when start_retry > 1"
+  save_test_graph:
+    type: boolean
+    default: false
+    description: "Include test nodes in saved graph for sharded test jobs (does not run tests)"
 
 outputs:
   success:
@@ -337,6 +341,13 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
+
+        GRAPH_SAVE_PARAMS=("${params[@]}")
+        if [ "${{ inputs.save_test_graph }}" = "true" ] && [ "${{ inputs.run_tests }}" != "true" ]; then
+          GRAPH_SAVE_PARAMS+=(-A)
+        fi
+        GRAPH_YA_MAKE_COMMAND="./ya make ${GRAPH_SAVE_PARAMS[@]}"
+
         YA_MAKE_COMMAND="./ya make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
@@ -357,7 +368,7 @@ runs:
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command="$GRAPH_YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -381,9 +392,9 @@ runs:
              fi
           done
           if [ true = ${{ inputs.run_tests }} ]; then
-            YA_MAKE_COMMAND+=" --retest"
+            GRAPH_YA_MAKE_COMMAND+=" --retest"
           fi
-          $YA_MAKE_COMMAND -k --cache-tests \
+          $GRAPH_YA_MAKE_COMMAND -k --cache-tests \
             --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
             $YA_MAKE_TARGET
         fi

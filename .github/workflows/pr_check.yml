@@ -243,6 +243,7 @@ jobs:
           build_target: "ydb/"
           increment: true
           run_tests: false
+          save_test_graph: true
           test_size: small,medium
           test_threads: 52
           put_build_results_to_cache: true

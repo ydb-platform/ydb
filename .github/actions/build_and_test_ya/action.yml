@@ -91,6 +91,10 @@ inputs:
   previous_report_path:
     type: string
     default: ""
+  save_test_graph:
+    type: boolean
+    default: false
+    description: "Include test nodes in saved graph for sharded test jobs"
 defaults:
   run:
     shell: bash
@@ -161,3 +165,4 @@ runs:
         single_attempt: ${{ inputs.single_attempt }}
         start_retry: ${{ inputs.start_retry }}
         previous_report_path: ${{ inputs.previous_report_path }}
+        save_test_graph: ${{ inputs.save_test_graph }}

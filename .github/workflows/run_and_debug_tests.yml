@@ -167,6 +167,7 @@ jobs:
           build_target: ${{ inputs.test_targets }}
           increment: ${{ inputs.increment }}
           run_tests: false
+          save_test_graph: true
           test_size: small,medium
           test_threads: 52
           custom_branch_name: ${{ needs.prepare.outputs.sharding_branch }}

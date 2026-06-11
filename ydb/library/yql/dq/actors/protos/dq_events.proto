@@ -252,6 +252,7 @@ message TEvChannelDataV2 {
     optional bool Finished = 14;
     optional uint64 ConfirmedPopBytes = 15;
     optional bool ConfirmFinish = 18;
+    optional uint32 ChannelSeqNo = 19;
 };
 
 message TEvChannelAckV2 {

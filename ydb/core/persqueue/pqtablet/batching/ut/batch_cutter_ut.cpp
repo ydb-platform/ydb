@@ -77,6 +77,7 @@ TReadResult MakeKafkaBatchReadResult(
     readResult.SetMessageCount(2);
     readResult.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
     readResult.SetData(SerializeDataChunk(std::move(chunk)));
+    readResult.SetWriteTimestampMS(777);
     if (uncompressedSize > 0) {
         readResult.SetUncompressedSize(uncompressedSize);
     }
@@ -122,8 +123,10 @@ void AssertKafkaBatchCut(
 
     UNIT_ASSERT_VALUES_EQUAL(cut[0].GetPartitionKey(), "k0");
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetPartitionKey(), "k1");
-    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetWriteTimestampMS(), 1005);
-    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetWriteTimestampMS(), 1007);
+    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetWriteTimestampMS(), 777);
+    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetWriteTimestampMS(), 777);
+    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetCreateTimestampMS(), 1005);
+    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetCreateTimestampMS(), 1007);
 
     const auto chunk0 = NKikimr::GetDeserializedData(cut[0].GetData());
     const auto chunk1 = NKikimr::GetDeserializedData(cut[1].GetData());

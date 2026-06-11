@@ -107,7 +107,6 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
         }
         const i64 timestamp = batch.BaseTimestamp + record.TimestampDelta;
         if (timestamp > 0) {
-            item.SetWriteTimestampMS(timestamp);
             item.SetCreateTimestampMS(timestamp);
         }
         result.push_back(std::move(item));

@@ -26,3 +26,4 @@ items:
 - { name: SAMPLE,               href: sample.md                                               }
 - { name: TABLESAMPLE,          href: sample.md                                               }
 - { name: MATCH_RECOGNIZE,      href: match_recognize.md                                      }
+- { name: STREAMING,            href: streaming.md                                            }

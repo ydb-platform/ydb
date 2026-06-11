@@ -110,6 +110,28 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicCollectGarbage(tenv, 100, tenv.BlobDepot);
     }
 
+    Y_UNIT_TEST(CollectGarbageAfterMaxGenerationBlock) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+
+        auto& env = *tenv.Env;
+        const ui32 nodeId = 1;
+        const ui32 groupId = tenv.BlobDepot;
+        const ui64 tabletId = 100;
+        const ui32 channel = 0;
+        auto sender = env.Runtime->AllocateEdgeActor(nodeId);
+
+        SendTEvBlock(env, sender, groupId, tabletId, Max<ui32>());
+        auto blockResult = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(blockResult->Get()->Status, NKikimrProto::OK);
+
+        SendTEvCollectGarbage(env, sender, groupId, tabletId, Max<ui32>(), Max<ui32>(), channel,
+            true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
+        auto collectResult = CaptureTEvCollectGarbageResult(env, sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK, collectResult->Get()->ToString());
+    }
+
     Y_UNIT_TEST(VerifiedRandom) {
         ui32 seed;
         LoadSeed(seed);

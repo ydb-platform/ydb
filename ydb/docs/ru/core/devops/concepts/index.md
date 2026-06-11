@@ -13,4 +13,4 @@
 * [{#T}](../deployment-options/index.md)
 * [{#T}](../configuration-management/index.md)
 * [{#T}](../observability/index.md)
-* [{#T}](../backup-and-recovery.md)
+* [{#T}](../backup-and-recovery/index.md)

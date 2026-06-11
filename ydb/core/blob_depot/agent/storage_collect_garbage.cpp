@@ -13,6 +13,11 @@ namespace NKikimr::NBlobDepot {
             bool IsLast;
             bool QueryInFlight = false;
 
+            bool IsCompleteDeletion() const {
+                return Request.RecordGeneration == Max<ui32>() && Request.PerGenerationCounter == Max<ui32>() &&
+                       Request.CollectGeneration == Max<ui32>() && Request.CollectStep == Max<ui32>();
+            }
+
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -20,8 +25,7 @@ namespace NKikimr::NBlobDepot {
                 NumKeep = Request.Keep ? Request.Keep->size() : 0;
                 NumDoNotKeep = Request.DoNotKeep ? Request.DoNotKeep->size() : 0;
 
-                if (Request.IgnoreBlock || CheckBlockForTablet(Request.TabletId,
-                        Request.RecordGeneration) == NKikimrProto::OK) {
+                if (Request.IgnoreBlock || IsCompleteDeletion() || CheckBlockForTablet(Request.TabletId, Request.RecordGeneration) == NKikimrProto::OK) {
                     IssueCollectGarbage();
                 }
             }

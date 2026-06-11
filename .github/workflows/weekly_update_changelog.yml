@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         
       - name: List 'main' and 'stable-*' branches
         id: branch-list
@@ -42,7 +42,7 @@ jobs:
       base_branch: ${{ steps.branch-name.outputs.base_branch }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
            ref: ${{ github.ref }}
            
@@ -71,7 +71,7 @@ jobs:
           cat prs-${{ matrix.branch }}.json
 
       - name: Upload PRs JSON
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: prs-json-${{ matrix.branch }}
           path: prs-${{ matrix.branch }}.json

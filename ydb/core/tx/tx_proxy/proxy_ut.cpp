@@ -1052,14 +1052,8 @@ Y_UNIT_TEST_SUITE(TModifyUserTest) {
 
             // user1 can change password for user2. user1 has ydb.granular.alter_schema permission
             // ACL publication to SchemeBoard is async; retry until the proxy cache sees the new effective ACL
-            auto status = NMsgBusProxy::MSTATUS_ERROR;
-            for (int i = 0; i < 10 && status != NMsgBusProxy::MSTATUS_OK; ++i) {
-                status = client.ModifyUser("/dc-1", { .User = "user2", .Password = "pas2user"}, user1Token);
-                if (status != NMsgBusProxy::MSTATUS_OK) {
-                    Sleep(TDuration::MilliSeconds(100));
-                }
-            }
-            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+            Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", { .User = "user2", .Password = "pas2user"}, user1Token), NMsgBusProxy::MSTATUS_OK);
         }
 
         // user2 login with new password

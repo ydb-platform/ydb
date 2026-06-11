@@ -37,12 +37,12 @@ struct TResolveParams {
     // Treat ID as:
     // - cluster ID (ClickHouse, PostgreSQL)
     // - database ID (YDB)
-    TString Id; 
+    TString Id;
     NYql::EDatabaseType DatabaseType = NYql::EDatabaseType::Ydb;
     NYql::TDatabaseAuth DatabaseAuth;
 
     TString ToDebugString() const {
-        return TStringBuilder() << "id=" << Id 
+        return TStringBuilder() << "id=" << Id
                                 << ", database_type=" << DatabaseType;
     }
 };
@@ -144,9 +144,9 @@ private:
             const TString msg = TStringBuilder() << "error while response processing, params "
                 << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
                 << ", details: " << CurrentExceptionMessage();
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("ResponseProccessor::Handle(TEvHttpIncomingResponse)",
                 {"traceId", TraceId},
-                {"#_ResponseProccessor::Handle(TEvHttpIncomingResponse)", msg});
+                {"msg", msg});
             Issues.AddIssue(msg);
         }
 
@@ -166,7 +166,7 @@ private:
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::const_iterator& requestIter,
         TMaybe<TDatabaseDescription>& result)
-    { 
+    {
         TString errorMessage;
 
         if (requestIter == Requests.end()) {
@@ -231,16 +231,16 @@ private:
                 result.ConstructInPlace(description);
                 return "";
             } catch (const NKikimr::TCodeLineException& ex) {
-                YDB_LOG_ERROR("",
+                YDB_LOG_ERROR("ResponseProcessor::Handle(HttpIncomingResponse)",
                     {"traceId", TraceId},
-                    {"#_ResponseProcessor::Handle(HttpIncomingResponse)", ex.what()});
+                    {"ex", ex.what()});
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << ex.GetRawMessage();
             } catch (...) {
-                YDB_LOG_ERROR("",
+                YDB_LOG_ERROR("ResponseProcessor::Handle(HttpIncomingResponse)",
                     {"traceId", TraceId},
-                    {"#_ResponseProcessor::Handle(HttpIncomingResponse)", CurrentExceptionMessage()});
+                    {"ex", CurrentExceptionMessage()});
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << CurrentExceptionMessage();
@@ -254,7 +254,7 @@ private:
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::value_type& requestWithParams
     ) const {
-        auto sb = TStringBuilder() 
+        auto sb = TStringBuilder()
             << "Error while trying to resolve managed " << ToString(requestWithParams.second.DatabaseType)
             << " database with id " << requestWithParams.second.Id << " via HTTP request to"
             << ": endpoint '" << requestWithParams.first->Host << "'"
@@ -282,7 +282,7 @@ private:
     TString DetailedPermissionsError(const TResolveParams& params) const {
         if (params.DatabaseType == EDatabaseType::ClickHouse || params.DatabaseType == EDatabaseType::PostgreSQL) {
                 auto mdbTypeStr = NYql::DatabaseTypeLowercase(params.DatabaseType);
-                return TStringBuilder() << " Please check that your service account has role "  << 
+                return TStringBuilder() << " Please check that your service account has role "  <<
                                        "`managed-" << mdbTypeStr << ".viewer`.";
         }
         return {};
@@ -428,7 +428,7 @@ public:
                     aliveHosts.push_back(host["name"].GetString());
                 }
             }
-            
+
             if (aliveHosts.empty()) {
                 ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE PostgreSQL hosts found";
             }
@@ -466,7 +466,7 @@ public:
                 aliveHost = hostMap.at("name").GetString();
                 break;
             }
-    
+
             if (aliveHost == "") {
                 ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "No ALIVE Greenplum hosts found";
             }
@@ -570,9 +570,9 @@ private:
             const auto& kind = item.first.second;
             initMsg << id << " (" << kind << ")" << ", ";
         }
-        YDB_LOG_DEBUG("Dump traceId, #_ResponseProccessor::Handle(EndpointRequest)",
+        YDB_LOG_DEBUG("Dump traceId, initMsg",
             {"traceId", TraceId},
-            {"#_ResponseProccessor::Handle(EndpointRequest)", initMsg});
+            {"initMsg", initMsg});
 
         TRequestMap requests;
         TDatabaseResolverResponse::TDatabaseDescriptionMap ready;
@@ -650,7 +650,7 @@ private:
 
                 requests[httpRequest] = TResolveParams{databaseId, databaseType, databaseAuth};
             } catch (const std::exception& e) {
-                const TString msg = TStringBuilder() << "error while preparing to resolve database id: " << databaseId 
+                const TString msg = TStringBuilder() << "error while preparing to resolve database id: " << databaseId
                                                      << ", details: " << e.what();
                 YDB_LOG_ERROR("ResponseProccessor::Handle(EndpointRequest): put error",
                     {"traceId", TraceId},

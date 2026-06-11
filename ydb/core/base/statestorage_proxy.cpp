@@ -225,9 +225,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         if (Info->ClusterStateGeneration < clusterStateGeneration ||
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             YDB_LOG_DEBUG("StateStorageProxy TEvNodeWardenNotifyConfigMismatch",
-                {"clusterStateGeneration", Info->ClusterStateGeneration},
+                {"Info->ClusterStateGeneration", Info->ClusterStateGeneration},
                 {"clusterStateGeneration", clusterStateGeneration},
-                {"clusterStateGuid", Info->ClusterStateGuid},
+                {"Info->ClusterStateGuid", Info->ClusterStateGuid},
                 {"clusterStateGuid", clusterStateGuid});
             if (NotifyRingGroupProxy) {
                 Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid), 0, SourceCookie);

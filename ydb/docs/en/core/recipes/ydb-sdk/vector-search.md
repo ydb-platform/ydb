@@ -5,12 +5,12 @@ This section contains code recipes in different programming languages for [vecto
 The following operations are covered in detail:
 
 - [Vector search](#vector-search)
-  - [Connecting to {{ ydb-short-name }}](#connect-ydb)
-  - [Creating a table](#create-table)
-  - [Inserting vectors](#insert-vectors)
-  - [Adding an index](#add-vector-index)
-  - [Search by vector](#search-by-vector)
-  - [Full example](#full-example)
+  - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
+  - [Creating a table {#create-table}](#creating-a-table-create-table)
+  - [Inserting vectors {#insert-vectors}](#inserting-vectors-insert-vectors)
+  - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)
+  - [Vector search {#search-by-vector}](#vector-search-search-by-vector)
+  - [Full example {#full-example}](#full-example-full-example)
 
 This recipe creates a text store with the following structure:
 
@@ -214,45 +214,6 @@ The `String` type is used to store vectors. For details, see the [exact vector s
       ```
 
     {% endlist %}
-<<<<<<< HEAD
-
-- JavaScript
-
-  ```javascript
-  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
-    id Utf8,
-    document Utf8,
-    embedding String,
-    PRIMARY KEY (id)
-  );`
-  ```
-
-- Java
-
-  ```java
-  import tech.ydb.common.transaction.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.table.query.Params;
-
-  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
-      String query = String.format("""
-              CREATE TABLE IF NOT EXISTS `%s` (
-                  id Utf8,
-                  document Utf8,
-                  embedding String,
-                  PRIMARY KEY (id)
-              );""", tableName);
-
-      retryCtx.supplyResult(session -> QueryReader.readFrom(
-              session.createQuery(query, TxMode.NONE, Params.empty())
-      )).join().getValue();
-
-      System.out.println("Vector table created: " + tableName);
-  }
-  ```
-=======
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 
 - C++
 
@@ -345,8 +306,6 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
     The example builds `items_struct_type = ydb.StructType()` with field types, then wraps the list with `ydb.ListType(items_struct_type)`.
 
     {% cut "asyncio" %}
-<<<<<<< HEAD
-=======
 
     ```python
     import struct
@@ -397,7 +356,6 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
     ```
 
     {% endcut %}
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 
     ```python
     import struct
@@ -807,8 +765,6 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
     The example builds `items_struct_type = ydb.StructType()` with field types, then wraps the list with `ydb.ListType(items_struct_type)`.
 
     {% cut "asyncio" %}
-<<<<<<< HEAD
-=======
 
     ```python
     import ydb
@@ -851,7 +807,6 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
     ```
 
     {% endcut %}
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 
     ```python
     import ydb
@@ -1121,18 +1076,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
 
 - Python
 
-<<<<<<< HEAD
-    {% list tabs %}
-
-    - Native SDK
-
-      ```python
-
-        import ydb
-        async def add_vector_index(
-        pool: ydb.aio.QuerySessionPool,
-        driver: ydb.aio.Driver,
-=======
     {% cut "asyncio" %}
 
     ```python
@@ -1184,7 +1127,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     def add_vector_index(
         pool: ydb.QuerySessionPool,
         driver: ydb.Driver,
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
         table_name: str,
         index_name: str,
         strategy: str,
@@ -1490,8 +1432,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
     {% cut "asyncio" %}
 
-<<<<<<< HEAD
-=======
     ```python
     import ydb
 
@@ -1546,7 +1486,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
     {% endcut %}
 
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
     ```python
     import ydb
 
@@ -1936,8 +1875,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
     {% cut "asyncio" %}
 
-<<<<<<< HEAD
-=======
     ```python
     import ydb
 
@@ -1992,7 +1929,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
     {% endcut %}
 
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
     ```python
     import ydb
 
@@ -2271,8 +2207,6 @@ The following example combines all the steps above:
 
     {% cut "asyncio" %}
 
-<<<<<<< HEAD
-=======
     ```python
     import os
     import ydb
@@ -2368,7 +2302,6 @@ The following example combines all the steps above:
 
     {% endcut %}
 
->>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
     ```python
     import os
     import ydb

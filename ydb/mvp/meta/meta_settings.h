@@ -11,16 +11,8 @@ namespace NMVP {
 using TSupportLinkEntryConfig = NMvp::NMeta::TMetaConfig::TSupportLinksConfig::TSupportLinkEntry;
 using TSupportLinksConfig = NMvp::NMeta::TMetaConfig::TSupportLinksConfig;
 
-struct TGrafanaLoggingSettings {
-    TString ClusterLabel;
-    TString DatabaseLabel = "database";
-    TString NodeLabel = "node";
-    TString HostLabel = "host";
-};
-
 struct TSupportLinksSettings {
     TString GrafanaEndpoint;
-    TGrafanaLoggingSettings GrafanaLogging;
     TVector<TSupportLinkEntryConfig> ClusterLinks;
     TVector<TSupportLinkEntryConfig> DatabaseLinks;
     TVector<TSupportLinkEntryConfig> NodeLinks;

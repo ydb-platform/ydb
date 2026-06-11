@@ -24,8 +24,8 @@ public:
 
     void Bootstrap() {
         if (const auto& vdisk = VDisk.lock()) {
-            YDB_LOG_COMP_INFO(BS_NODE, "VDisk starting",
-                {"Marker", "NWM06"},
+            YDB_LOG_INFO_COMP(BS_NODE, "VDisk starting",
+                {"marker", "NWM06"},
                 {"VDiskId", vdisk->VDiskId},
                 {"VSlotId", vdisk->VSlotId});
             if (vdisk->AllocatedSize) {
@@ -82,8 +82,8 @@ public:
     void StartReplication() {
         State = EState::REPLICATION;
         if (const auto& vdisk = VDisk.lock()) {
-            YDB_LOG_COMP_INFO(BS_NODE, "VDisk REPLICATING",
-                {"Marker", "NWM09"},
+            YDB_LOG_INFO_COMP(BS_NODE, "VDisk REPLICATING",
+                {"marker", "NWM09"},
                 {"VDiskId", vdisk->VDiskId},
                 {"VSlotId", vdisk->VSlotId});
             vdisk->Status = NKikimrBlobStorage::EVDiskStatus::REPLICATING;
@@ -107,8 +107,8 @@ public:
 
     void BecomeReady() {
         if (const auto& vdisk = VDisk.lock()) {
-            YDB_LOG_COMP_INFO(BS_NODE, "VDisk READY",
-                {"Marker", "NWM08"},
+            YDB_LOG_INFO_COMP(BS_NODE, "VDisk READY",
+                {"marker", "NWM08"},
                 {"VDiskId", vdisk->VDiskId},
                 {"VSlotId", vdisk->VSlotId});
             vdisk->Status = NKikimrBlobStorage::EVDiskStatus::READY;
@@ -138,8 +138,8 @@ public:
 
     void PassAway() override {
         if (const auto& vdisk = VDisk.lock()) {
-            YDB_LOG_COMP_INFO(BS_NODE, "VDisk stopping",
-                {"Marker", "NWM07"},
+            YDB_LOG_INFO_COMP(BS_NODE, "VDisk stopping",
+                {"marker", "NWM07"},
                 {"VDiskId", vdisk->VDiskId},
                 {"VSlotId", vdisk->VSlotId});
             UNIT_ASSERT_EQUAL(vdisk->Actor, this);

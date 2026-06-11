@@ -82,8 +82,8 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
     const auto& services = record.GetServiceSet();
 
     YDB_LOG_INFO("TEvControllerNodeServiceSetUpdate",
-        {"Marker", "NWM10"},
-        {"Record", record});
+        {"marker", "NWM10"},
+        {"record", record});
 
     for (const auto& group : services.GetGroups()) {
         auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr); // TODO(alexvru): group encryption?
@@ -102,11 +102,11 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
         pdiskIds.erase(pdiskId);
 
         YDB_LOG_DEBUG("PDisk",
-            {"Marker", "NWM04"},
-            {"Comprehensive", record.GetComprehensive()},
+            {"marker", "NWM04"},
+            {"comprehensive", record.GetComprehensive()},
             {"PDiskId", pdiskId},
-            {"EntityStatus", pdisk.GetEntityStatus()},
-            {"Path", pdisk.GetPath()},
+            {"entityStatus", pdisk.GetEntityStatus()},
+            {"path", pdisk.GetPath()},
             {"PDiskGuid", pdisk.GetPDiskGuid()});
 
         switch (pdisk.GetEntityStatus()) {
@@ -145,14 +145,14 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
         const TVDiskID& vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
 
         YDB_LOG_DEBUG("VDisk",
-            {"Marker", "NWM05"},
-            {"Comprehensive", record.GetComprehensive()},
+            {"marker", "NWM05"},
+            {"comprehensive", record.GetComprehensive()},
             {"VSlotId", vslotId},
-            {"EntityStatus", vdisk.GetEntityStatus()},
+            {"entityStatus", vdisk.GetEntityStatus()},
             {"VDiskId", vdiskId},
-            {"DoDestroy", vdisk.GetDoDestroy()},
-            {"DoWipe", vdisk.GetDoWipe()},
-            {"DonorMode", vdisk.HasDonorMode()});
+            {"doDestroy", vdisk.GetDoDestroy()},
+            {"doWipe", vdisk.GetDoWipe()},
+            {"donorMode", vdisk.HasDonorMode()});
 
         TVDiskState *vdiskp = GetVDisk(vslotId);
 

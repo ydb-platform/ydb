@@ -8,11 +8,11 @@ void TNodeWardenMockActor::Connect() {
 }
 
 void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-    YDB_LOG_INFO("pipe connected",
-        {"Marker", "NWM02"},
-        {"Sender", ev->Sender},
-        {"PipeId", PipeId},
-        {"Status", ev->Get()->Status});
+    YDB_LOG_INFO("Pipe connected",
+        {"marker", "NWM02"},
+        {"sender", ev->Sender},
+        {"pipeId", PipeId},
+        {"status", ev->Get()->Status});
     if (ev->Sender == PipeId) {
         Y_ABORT_UNLESS(!IsPipeConnected);
         if (ev->Get()->Status == NKikimrProto::OK) {
@@ -26,10 +26,10 @@ void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
 }
 
 void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-    YDB_LOG_INFO("pipe disconnected",
-        {"Marker", "NWM03"},
-        {"Sender", ev->Sender},
-        {"PipeId", PipeId});
+    YDB_LOG_INFO("Pipe disconnected",
+        {"marker", "NWM03"},
+        {"sender", ev->Sender},
+        {"pipeId", PipeId});
     if (ev->Sender == PipeId) {
         IsPipeConnected = false;
         ScheduleReconnect();

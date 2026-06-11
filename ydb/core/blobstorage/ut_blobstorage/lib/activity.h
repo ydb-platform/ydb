@@ -40,17 +40,17 @@ public:
     }
 
     void IssueInitialCheck() {
-        YDB_LOG_COMP_NOTICE(NActorsServices::TEST, "starting new cycle",
-            {"Prefix", Prefix},
-            {"Generation", Generation});
+        YDB_LOG_NOTICE_COMP(NActorsServices::TEST, "Starting new cycle",
+            {"prefix", Prefix},
+            {"generation", Generation});
         NumWritesRemaining = 15 + RandomNumber<size_t>(10);
         MaxWritesInFlight = 1 + RandomNumber<size_t>(5);
         SendToProxy(TDuration::MilliSeconds(100 + RandomNumber(100u)), new TEvBlobStorage::TEvStatus(TInstant::Max()));
     }
 
     void Handle(TEvBlobStorage::TEvStatusResult::TPtr ev) {
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "got",
-            {"Prefix", Prefix},
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Got",
+            {"prefix", Prefix},
             {"TEvStatusResult", ev->Get()->ToString()});
         if (ev->Get()->Status != NKikimrProto::OK) {
             IssueInitialCheck();
@@ -68,8 +68,8 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "got",
-            {"Prefix", Prefix},
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Got",
+            {"prefix", Prefix},
             {"TEvBlockResult", ev->Get()->ToString()});
         UNIT_ASSERT_C(ev->Get()->Status == NKikimrProto::OK || ev->Get()->Status == NKikimrProto::ALREADY ||
             ev->Get()->Status == NKikimrProto::RACE, ev->Get()->Print(false));
@@ -85,8 +85,8 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvDiscoverResult::TPtr ev) {
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "got",
-            {"Prefix", Prefix},
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Got",
+            {"prefix", Prefix},
             {"TEvDiscoverResult", ev->Get()->ToString()});
         if (Generation == 1) {
             UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrProto::NODATA, ev->Get()->Print(false));
@@ -101,15 +101,15 @@ public:
         const TLogoBlobID from(TabletId, Generation - 1, 0, 0, 0, 0);
         const TLogoBlobID to(TabletId, Generation - 1, Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
         auto msg = std::make_unique<TEvBlobStorage::TEvRange>(TabletId, from, to, true, TInstant::Max(), true);
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "sending",
-            {"Prefix", Prefix},
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Sending",
+            {"prefix", Prefix},
             {"TEvRange", msg->ToString()});
         SendToProxy(TDuration::MilliSeconds(100), msg.release());
     }
 
     void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev) {
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "got",
-            {"Prefix", Prefix},
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Got",
+            {"prefix", Prefix},
             {"TEvRangeResult", ev->Get()->ToString()});
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrProto::OK, ev->Get()->Print(false));
         TDuration timeout = TDuration::MilliSeconds(100);
@@ -126,8 +126,8 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "got",
-            {"Prefix", Prefix},
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Got",
+            {"prefix", Prefix},
             {"TEvGetResult", ev->Get()->ToString()});
         auto *msg = ev->Get();
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrProto::OK, ev->Get()->Print(false));
@@ -155,16 +155,16 @@ public:
         } else {
             auto msg = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation, 1, 0, true,
                 Generation - 1, Max<ui32>(), nullptr, nullptr, TInstant::Max(), false, false);
-            YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "sending",
-                {"Prefix", Prefix},
+            YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Sending",
+                {"prefix", Prefix},
                 {"TEvCollectGarbage", msg->ToString()});
             SendToProxy(TDuration::MilliSeconds(100), msg.release());
         }
     }
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "got",
-            {"Prefix", Prefix},
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Got",
+            {"prefix", Prefix},
             {"TEvCollectGarbageResult", ev->Get()->ToString()});
         UNIT_ASSERT_C(ev->Get()->Status == NKikimrProto::OK || ev->Get()->Status == NKikimrProto::ALREADY, ev->Get()->Print(false));
         IssueWrites();
@@ -182,9 +182,9 @@ public:
         for (; Inflight.size() < MaxWritesInFlight && NumWritesRemaining; --NumWritesRemaining) {
             TString buffer = GenerateBuffer();
             const TLogoBlobID id(TabletId, Generation, Step++, 0, buffer.size(), 0);
-            YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "sending TEvPut",
-                {"Prefix", Prefix},
-                {"Id", id});
+            YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Sending TEvPut",
+                {"prefix", Prefix},
+                {"id", id});
             SendToProxy(Quoter.Take(TActivationContext::Monotonic(), 1), new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
             Inflight.emplace(id, std::move(buffer));
         }
@@ -195,8 +195,8 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "got",
-            {"Prefix", Prefix},
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Got",
+            {"prefix", Prefix},
             {"TEvPutResult", ev->Get()->ToString()});
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrProto::OK, ev->Get()->Print(false));
         auto it = Inflight.find(ev->Get()->Id);

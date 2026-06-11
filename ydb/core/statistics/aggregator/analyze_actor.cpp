@@ -416,7 +416,10 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 
     ++ScansCompletedTotal;
     const ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
-    SendProgressEvent(shardsTotal, std::min(ScansCompletedTotal, shardsTotal));
+    // Cap intermediate progress below 100%: simple-stats and stage-2 rounds share
+    // ScansCompletedTotal, so 100% is only emitted from the final-result branch.
+    const ui32 shardsDoneCap = shardsTotal > 0 ? shardsTotal - 1 : 0;
+    SendProgressEvent(shardsTotal, std::min(ScansCompletedTotal, shardsDoneCap));
 
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
@@ -512,6 +515,8 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     Send(Parent, response.release());
 
     if (isFinalResult) {
+        // Only emit 100% once, when all scan rounds are done.
+        SendProgressEvent(shardsTotal, shardsTotal);
         PassAway();
     } else {
         StartColumnStatEvalTasks();

@@ -948,10 +948,13 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         auto jwksReq = WaitHttp();
         ReplyHttpError(Rt.get(), Node, Proxy, jwksReq, "Connection refused");
 
-        // After staleness period, cache should be cleared
-        // Next JWKS refresh also fails
-        auto jwksReq2 = WaitHttp();
-        ReplyHttpError(Rt.get(), Node, Proxy, jwksReq2, "Connection refused");
+        // After the staleness period the cache is cleared and the backoffs of both
+        // the discovery and the JWKS refresh are reset, so two more requests
+        // (discovery and JWKS) arrive; fail both of them
+        auto req2 = WaitHttp();
+        ReplyHttpError(Rt.get(), Node, Proxy, req2, "Connection refused");
+        auto req3 = WaitHttp();
+        ReplyHttpError(Rt.get(), Node, Proxy, req3, "Connection refused");
 
         // Auth should now fail because cache was cleared due to staleness
         auto token2 = CreateJwt(keys, KID, ISS, "u2", {});

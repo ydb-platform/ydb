@@ -309,45 +309,46 @@ jobs:
           path: shard_artifact/shard_${{ matrix.shard_id }}.json
           retention-days: 3
 
-  shard_aggregate:
+  shard_aggregate_merge:
     needs:
       - prepare
       - shard_build
       - shard_plan
       - shard_test
     if: always() && inputs.use_sharding == true && needs.shard_build.result == 'success'
-    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
-    name: Sharded aggregate
+    runs-on: [self-hosted, tiny-worker]
+    name: Sharded merge
+    outputs:
+      failed_count: ${{ steps.merge.outputs.failed_count }}
+      shard_count: ${{ steps.merge.outputs.shard_count }}
     steps:
-      - name: Checkout
+      - name: Checkout scripts
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare.outputs.sharding_branch }}
-          fetch-depth: 2
-      - name: Download graph
-        uses: actions/download-artifact@v4
-        with:
-          name: debug-shard-graph-${{ github.run_id }}
-          path: .
+          sparse-checkout: |
+            .github/scripts/tests/sharding
+            .github/scripts/tests/fail-checker.py
       - name: Download shard reports
         uses: actions/download-artifact@v4
         with:
           pattern: debug-shard-report-*-${{ github.run_id }}
           merge-multiple: true
           path: shard_reports
-      - name: Setup ydb access
-        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-        with:
-          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Merge shard reports
         id: merge
+        env:
+          EXPECTED_SHARDS: ${{ inputs.shard_count }}
         run: |
           set -eux
           mkdir -p merged
           mapfile -t reports < <(find shard_reports -name 'shard_*.json' | sort)
           if [ "${#reports[@]}" -eq 0 ]; then
             echo "No shard reports found"
+            exit 1
+          fi
+          if [ "${#reports[@]}" -ne "$EXPECTED_SHARDS" ]; then
+            echo "Expected $EXPECTED_SHARDS shard reports, got ${#reports[@]}"
             exit 1
           fi
           python3 .github/scripts/tests/sharding/merge_build_reports.py \
@@ -376,8 +377,50 @@ jobs:
           name: debug-shard-aggregate-${{ github.run_id }}
           path: merged/
           retention-days: 3
+      - name: Upload merged report for retry
+        if: steps.merge.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-shard-merged-${{ github.run_id }}
+          path: merged/
+          retention-days: 3
+
+  shard_aggregate_retry:
+    needs:
+      - prepare
+      - shard_build
+      - shard_aggregate_merge
+    if: |
+      always() &&
+      inputs.use_sharding == true &&
+      needs.shard_build.result == 'success' &&
+      needs.shard_aggregate_merge.result == 'success' &&
+      needs.shard_aggregate_merge.outputs.failed_count != '0' &&
+      fromJSON(needs.shard_aggregate_merge.outputs.failed_count) < 500
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
+    name: Sharded retry
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.sharding_branch }}
+          fetch-depth: 2
+      - name: Download graph
+        uses: actions/download-artifact@v4
+        with:
+          name: debug-shard-graph-${{ github.run_id }}
+          path: .
+      - name: Download merged try1 report
+        uses: actions/download-artifact@v4
+        with:
+          name: debug-shard-merged-${{ github.run_id }}
+          path: merged
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Retry failed tests (attempts 2-3)
-        if: steps.merge.outputs.failed_count != '0' && fromJSON(steps.merge.outputs.failed_count) < 500
         uses: ./.github/actions/build_and_test_ya
         with:
           build_preset: relwithdebinfo
@@ -404,6 +447,7 @@ jobs:
   collect_combined_summary:
     needs:
       - main
-      - shard_aggregate
-    if: always() && (needs.main.result != 'skipped' || needs.shard_aggregate.result != 'skipped')
+      - shard_aggregate_merge
+      - shard_aggregate_retry
+    if: always() && (needs.main.result != 'skipped' || needs.shard_aggregate_merge.result != 'skipped')
     uses: ./.github/workflows/collect_combined_summary.yml

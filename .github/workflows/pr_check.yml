@@ -390,26 +390,30 @@ jobs:
           path: shard_artifact/shard_${{ matrix.shard_id }}.json
           retention-days: 3
 
-  aggregate_rwdi:
+  merge_rwdi:
     needs:
       - check-running-allowed
       - build_rwdi
       - plan_rwdi_shards
       - test_rwdi_shard
-    if: needs.check-running-allowed.outputs.result == 'true' && fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2
-    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
-    name: Aggregate relwithdebinfo
+    if: always() && needs.check-running-allowed.outputs.result == 'true' && fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2 && needs.build_rwdi.result == 'success'
+    runs-on: [self-hosted, tiny-worker]
+    name: Merge relwithdebinfo shards
+    outputs:
+      failed_count: ${{ steps.merge.outputs.failed_count }}
+      shard_count: ${{ steps.merge.outputs.shard_count }}
     steps:
-      - name: Checkout
+      - name: Checkout scripts
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
-          fetch-depth: 2
-      - name: Download increment graph
-        uses: actions/download-artifact@v4
-        with:
-          name: pr-check-rwdi-graph
-          path: .
+          sparse-checkout: |
+            .github/actions
+            .github/scripts/tests/sharding
+            .github/scripts/tests/fail-checker.py
+            .github/scripts/tests/generate-summary.py
+            .github/scripts/tests/comment-pr.py
+            .github/scripts/Indexer
       - name: Download shard reports
         uses: actions/download-artifact@v4
         with:
@@ -423,12 +427,18 @@ jobs:
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Merge shard reports
         id: merge
+        env:
+          EXPECTED_SHARDS: ${{ needs.check-running-allowed.outputs.shard_count }}
         run: |
           set -eux
           mkdir -p merged
           mapfile -t reports < <(find shard_reports -name 'shard_*.json' | sort)
           if [ "${#reports[@]}" -eq 0 ]; then
             echo "No shard reports found"
+            exit 1
+          fi
+          if [ "${#reports[@]}" -ne "$EXPECTED_SHARDS" ]; then
+            echo "Expected $EXPECTED_SHARDS shard reports, got ${#reports[@]}"
             exit 1
           fi
           python3 .github/scripts/tests/sharding/merge_build_reports.py \
@@ -456,6 +466,16 @@ jobs:
           name: pr-check-rwdi-aggregate-debug
           path: merged/
           retention-days: 3
+      - name: Upload merged report for retry
+        if: steps.merge.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-rwdi-merged
+          path: merged/
+          retention-days: 3
+      - name: Install publish dependencies
+        if: steps.merge.outputs.failed_count == '0' || fromJSON(steps.merge.outputs.failed_count) >= 500
+        run: python3 -m pip install ydb ydb[yc] codeowners humanize plotly --quiet
       - name: Prepare s3cmd
         if: steps.merge.outputs.failed_count == '0' || fromJSON(steps.merge.outputs.failed_count) >= 500
         uses: ./.github/actions/s3cmd
@@ -482,8 +502,43 @@ jobs:
         run: |
           set -eux
           bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/try_1_report.json
+
+  retry_rwdi:
+    needs:
+      - check-running-allowed
+      - build_rwdi
+      - merge_rwdi
+    if: |
+      always() &&
+      needs.check-running-allowed.outputs.result == 'true' &&
+      fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2 &&
+      needs.merge_rwdi.result == 'success' &&
+      needs.merge_rwdi.outputs.failed_count != '0' &&
+      fromJSON(needs.merge_rwdi.outputs.failed_count) < 500
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
+    name: Retry relwithdebinfo shards
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+          fetch-depth: 2
+      - name: Download increment graph
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-check-rwdi-graph
+          path: .
+      - name: Download merged try1 report
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-check-rwdi-merged
+          path: merged
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Retry failed tests (attempts 2-3)
-        if: steps.merge.outputs.failed_count != '0' && steps.merge.outputs.failed_count < 500
         uses: ./.github/actions/build_and_test_ya
         with:
           build_preset: relwithdebinfo
@@ -599,14 +654,16 @@ jobs:
     needs:
       - check-running-allowed
       - build_and_test
-      - aggregate_rwdi
+      - merge_rwdi
+      - retry_rwdi
       - build_and_test_asan
     if: |
       always() &&
       github.event.pull_request.state == 'open' &&
       needs.check-running-allowed.outputs.result == 'true' &&
       (needs.build_and_test.result == 'success' || needs.build_and_test.result == 'skipped') &&
-      (needs.aggregate_rwdi.result == 'success' || needs.aggregate_rwdi.result == 'skipped') &&
+      (needs.merge_rwdi.result == 'success' || needs.merge_rwdi.result == 'skipped') &&
+      (needs.retry_rwdi.result == 'success' || needs.retry_rwdi.result == 'skipped') &&
       (needs.build_and_test_asan.result == 'success' || needs.build_and_test_asan.result == 'skipped')
     steps:
       - name: Gather required checks results

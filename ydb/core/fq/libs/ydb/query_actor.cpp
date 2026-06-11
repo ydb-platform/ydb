@@ -116,9 +116,9 @@ private:
             tx.SnapshotRead(true);
         }
         YDB_LOG_TRACE("Run query commit",
-            {"LogPrefix", LogPrefix()},
-            {"Sql", DataQuery->Sql},
-            {"Commit", tx.Commit_});
+            {"logPrefix", LogPrefix()},
+            {"sql", DataQuery->Sql},
+            {"commit", tx.Commit_});
         RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx);
     }
 

@@ -97,9 +97,9 @@ public:
 
     void StartRequest() {
         YDB_LOG_DEBUG("Make request for read rule deletion for topic ` `",
-            {"QueryId", QueryId},
-            {"TopicPath", Topic.topic_path()},
-            {"Index", Index});
+            {"queryId", QueryId},
+            {"topicPath", Topic.topic_path()},
+            {"index", Index});
 
         NYdb::NTopic::TAlterTopicSettings alterTopicSettings;
         alterTopicSettings.AppendDropConsumers(Topic.consumer_name());
@@ -135,12 +135,12 @@ public:
                 nextRetryDelay = Nothing(); // No topic => OK. Leave just transient issues.
             }
 
-            YDB_LOG_DEBUG("Failed to remove read rule from `.. Retry",
-                {"QueryId", QueryId},
-                {"TopicPath", Topic.topic_path()},
-                {"`", status.GetIssues().ToString()},
-                {"Status", status.GetStatus()},
-                {"After", nextRetryDelay});
+            YDB_LOG_DEBUG("Failed to remove read rule from Retry",
+                {"queryId", QueryId},
+                {"topicPath", Topic.topic_path()},
+                {"statusIssues", status.GetIssues()},
+                {"status", status.GetStatus()},
+                {"after", nextRetryDelay});
             if (!nextRetryDelay) { // Not retryable
                 Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleDeleterResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
@@ -213,9 +213,9 @@ public:
         Results.reserve(Topics.size());
         for (size_t i = 0; i < Topics.size(); ++i) {
             YDB_LOG_DEBUG("Create read rule deleter actor for ` `",
-                {"QueryId", QueryId},
-                {"TopicPath", Topics[i].topic_path()},
-                {"I", i});
+                {"queryId", QueryId},
+                {"topicPath", Topics[i].topic_path()},
+                {"i", i});
             Children.push_back(Register(new TSingleReadRuleDeleter(SelfId(), QueryId, YdbDriver, PqGateway, Topics[i], Credentials[i], i, MaxRetries)));
         }
     }

@@ -142,7 +142,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_DEBUG("Starting yandex query test connection. Actor",
-            {"Id", SelfId()});
+            {"id", SelfId()});
 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_TEST_CONNECTION_PROVIDER));
 
@@ -172,19 +172,19 @@ public:
         if (issues) {
             requestCounters->Error->Inc();
             YDB_LOG_DEBUG("TestConnectionRequest: validation failed",
-                {"Scope", scope},
-                {"User", user},
-                {"Ticket", NKikimr::MaskTicket(token)},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", scope},
+                {"user", user},
+                {"ticket", NKikimr::MaskTicket(token)},
+                {"issues", issues.ToOneLineString()});
             Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(issues), 0, ev->Cookie);
             return;
         }
 
-        YDB_LOG_TRACE("",
-            {"TestConnectionRequest", scope},
-            {"User", user},
-            {"Ticket", NKikimr::MaskTicket(token)},
-            {"Request", request.DebugString()});
+        YDB_LOG_TRACE("Dump testConnectionRequest, user, ticket, request",
+            {"testConnectionRequest", scope},
+            {"user", user},
+            {"ticket", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()});
         switch (request.setting().connection_case()) {
             case FederatedQuery::ConnectionSetting::kDataStreams: {
                 Register(CreateTestDataStreamsConnectionActor(
@@ -218,10 +218,10 @@ public:
                 LWPROBE(TestUnsupportedConnectionRequest, scope, user);
                 requestCounters->Error->Inc();
                 YDB_LOG_ERROR("TestConnectionRequest: unimplemented",
-                    {"Scope", scope},
-                    {"User", user},
-                    {"Ticket", NKikimr::MaskTicket(token)},
-                    {"Request", request.DebugString()});
+                    {"scope", scope},
+                    {"user", user},
+                    {"ticket", NKikimr::MaskTicket(token)},
+                    {"request", request.DebugString()});
                 Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Unimplemented yet")}), 0, ev->Cookie);
             }
         }

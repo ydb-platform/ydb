@@ -101,9 +101,9 @@ public:
         Y_ABORT_UNLESS(!RequestInFlight);
         RequestInFlight = true;
         YDB_LOG_DEBUG("Make request for read rule creation for topic ` `",
-            {"QueryId", QueryId},
-            {"TopicPath", TopicConsumer.topic_path()},
-            {"Index", Index});
+            {"queryId", QueryId},
+            {"topicPath", TopicConsumer.topic_path()},
+            {"index", Index});
 
         const NYdb::NTopic::TAlterTopicSettings alterTopicSettings =
             NYdb::NTopic::TAlterTopicSettings()
@@ -142,11 +142,11 @@ public:
             }
 
             YDB_LOG_DEBUG("Failed to add read rule to `.. Retry",
-                {"QueryId", QueryId},
-                {"TopicPath", TopicConsumer.topic_path()},
-                {"`", status.GetIssues().ToOneLineString()},
-                {"Status", status.GetStatus()},
-                {"After", nextRetryDelay});
+                {"queryId", QueryId},
+                {"topicPath", TopicConsumer.topic_path()},
+                {"statusIssues", status.GetIssues().ToOneLineString()},
+                {"status", status.GetStatus()},
+                {"after", nextRetryDelay});
             if (!nextRetryDelay) { // Not retryable
                 Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
@@ -239,9 +239,9 @@ public:
         Results.reserve(TopicConsumers.size());
         for (size_t i = 0; i < TopicConsumers.size(); ++i) {
             YDB_LOG_DEBUG("Create read rule creation actor for ` `",
-                {"QueryId", QueryId},
-                {"TopicPath", TopicConsumers[i].topic_path()},
-                {"I", i});
+                {"queryId", QueryId},
+                {"topicPath", TopicConsumers[i].topic_path()},
+                {"i", i});
             Children.push_back(Register(new TSingleReadRuleCreator(SelfId(), QueryId, YdbDriver, PqGateway, TopicConsumers[i], Credentials[i], i)));
         }
     }

@@ -66,10 +66,10 @@ public:
 
     void Bootstrap() {
         YDB_LOG_DEBUG("Starting test monitoring connection actor. Actor",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)},
-            {"Id", SelfId()});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"id", SelfId()});
         Become(&TTestMonitoringConnectionActor::StateFunc);
 
         try {
@@ -78,15 +78,15 @@ public:
             auto retryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy();
             const TActorId httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, retryPolicy));
             Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
-            YDB_LOG_TRACE("send request",
-                {"Scope", Scope},
-                {"User", User},
-                {"Ticket", NKikimr::MaskTicket(Token)},
-                {"Method", httpRequest->Method},
-                {"Protocol", httpRequest->Protocol},
-                {"Host", httpRequest->Host},
-                {"Url", httpRequest->URL},
-                {"Body", httpRequest->Body});
+            YDB_LOG_TRACE("Send request",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"method", httpRequest->Method},
+                {"protocol", httpRequest->Protocol},
+                {"host", httpRequest->Host},
+                {"url", httpRequest->URL},
+                {"body", httpRequest->Body});
         } catch (...) {
             ReplyError(CurrentExceptionMessage());
         }
@@ -131,22 +131,22 @@ public:
     void Handle(NYql::NDq::TEvHttpBase::TEvSendResult::TPtr& ev) {
         const auto* res = ev->Get();
         if (res->HttpIncomingResponse->Get()->Response->Status == "400") {
-            YDB_LOG_TRACE("ok",
-                {"Scope", Scope},
-                {"User", User},
-                {"Ticket", NKikimr::MaskTicket(Token)},
-                {"Response", res->HttpIncomingResponse->Get()->ToString()});
+            YDB_LOG_TRACE("Ok",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"response", res->HttpIncomingResponse->Get()->ToString()});
             ReplyOk();
             return;
         }
 
         const TString& error = res->HttpIncomingResponse->Get()->GetError();
-        YDB_LOG_TRACE("access problem",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)},
-            {"Response", res->HttpIncomingResponse->Get()->ToString()},
-            {"Error", error});
+        YDB_LOG_TRACE("Access problem",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"response", res->HttpIncomingResponse->Get()->ToString()},
+            {"error", error});
         ReplyError(error);
     }
 

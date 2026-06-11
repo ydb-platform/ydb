@@ -63,8 +63,8 @@ public:
     void Bootstrap() {
         Init();
         YDB_LOG_DEBUG("Run actor",
-            {"ActionName", GetActionName()},
-            {"EntityName", GetEntityName()});
+            {"actionName", GetActionName()},
+            {"entityName", GetEntityName()});
         this->Become(&TSchemaActorBase<TResponseEvent>::StateFunc);
         CallAndSubscribe();
     }
@@ -107,8 +107,8 @@ public:
 
     virtual void CallAndSubscribe() {
         YDB_LOG_DEBUG("Call",
-            {"ActionName", GetActionName()},
-            {"EntityName", GetEntityName()});
+            {"actionName", GetActionName()},
+            {"entityName", GetEntityName()});
         CallYdbSdk().Subscribe(
             [actorId = this->SelfId(), actorSystem = NActors::TActivationContext::ActorSystem()](const NYdb::TAsyncStatus& result) {
                 actorSystem->Send(actorId, new TResponseEvent(result.GetValue()));
@@ -117,10 +117,10 @@ public:
     }
 
     void ReplyStatusAndDie(const NYdb::TStatus& status) {
-        YDB_LOG_DEBUG("Reply for",
-            {"ActionName", GetActionName()},
-            {"EntityName", GetEntityName()},
-            {"Issues", status.GetIssues().ToOneLineString()});
+        YDB_LOG_DEBUG("Reply",
+            {"actionName", GetActionName()},
+            {"entityName", GetEntityName()},
+            {"issues", status.GetIssues().ToOneLineString()});
         if (Parent) {
             this->Send(Parent, new TResponseEvent(status), 0, Cookie);
         }
@@ -154,15 +154,15 @@ protected:
     void Handle(TEvents::TEvSchemaCreated::TPtr& ev) override {
         if (IsTableCreated(ev->Get()->Result)) {
             YDB_LOG_DEBUG("Successfully created",
-                {"EntityName", GetEntityName()});
+                {"entityName", GetEntityName()});
             ReplyAndDie(ev);
             return;
         }
 
         YDB_LOG_ERROR("Create",
-            {"EntityName", GetEntityName()},
-            {"Error", ev->Get()->Result.GetStatus()},
-            {"Issues", ev->Get()->Result.GetIssues().ToOneLineString()});
+            {"entityName", GetEntityName()},
+            {"error", ev->Get()->Result.GetStatus()},
+            {"issues", ev->Get()->Result.GetIssues().ToOneLineString()});
 
         if (!ScheduleNextAttempt(ev)) {
             ReplyAndDie(ev);
@@ -182,15 +182,15 @@ protected:
     void Handle(TEvents::TEvSchemaDeleted::TPtr& ev) override {
         if (IsTableDeleted(ev->Get()->Result)) {
             YDB_LOG_DEBUG("Successfully deleted",
-                {"EntityName", GetEntityName()});
+                {"entityName", GetEntityName()});
             ReplyAndDie(ev);
             return;
         }
 
         YDB_LOG_ERROR("Delete",
-            {"EntityName", GetEntityName()},
-            {"Error", ev->Get()->Result.GetStatus()},
-            {"Issues", ev->Get()->Result.GetIssues().ToOneLineString()});
+            {"entityName", GetEntityName()},
+            {"error", ev->Get()->Result.GetStatus()},
+            {"issues", ev->Get()->Result.GetIssues().ToOneLineString()});
 
         if (!ScheduleNextAttempt(ev)) {
             ReplyAndDie(ev);
@@ -210,15 +210,15 @@ protected:
     void Handle(TEvents::TEvSchemaUpdated::TPtr& ev) override {
         if (ev->Get()->Result.IsSuccess()) {
             YDB_LOG_DEBUG("Successfully updated",
-                {"EntityName", GetEntityName()});
+                {"entityName", GetEntityName()});
             ReplyAndDie(ev);
             return;
         }
 
         YDB_LOG_ERROR("Update",
-            {"EntityName", GetEntityName()},
-            {"Error", ev->Get()->Result.GetStatus()},
-            {"Issues", ev->Get()->Result.GetIssues().ToOneLineString()});
+            {"entityName", GetEntityName()},
+            {"error", ev->Get()->Result.GetStatus()},
+            {"issues", ev->Get()->Result.GetIssues().ToOneLineString()});
 
         if (!ScheduleNextAttempt(ev)) {
             ReplyAndDie(ev);
@@ -255,7 +255,7 @@ protected:
     void Handle(TEvents::TEvSchemaCreated::TPtr& ev) override {
         if (CurrentRequest < RequestsPath.size() - 1 && IsTableCreated(ev->Get()->Result)) {
             YDB_LOG_DEBUG("Successfully created",
-                {"EntityName", GetEntityName(RequestsPath[CurrentRequest])});
+                {"entityName", GetEntityName(RequestsPath[CurrentRequest])});
             ++CurrentRequest;
             if (!OnCurrentRequestChanged()) {
                 return;
@@ -273,7 +273,7 @@ protected:
                 TriedPaths[CurrentRequest] = true;
                 this->RetryState = nullptr;
                 YDB_LOG_DEBUG("Trying to recursively create",
-                    {"EntityName", GetEntityName(RequestsPath[CurrentRequest])});
+                    {"entityName", GetEntityName(RequestsPath[CurrentRequest])});
                 this->CallAndSubscribe();
                 return;
             }
@@ -306,13 +306,13 @@ protected:
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) override {
         if (ev->Get()->Result.IsSuccess()) {
             YDB_LOG_DEBUG("Create. Create session OK",
-                {"EntityName", GetEntityName()});
+                {"entityName", GetEntityName()});
             Session = ev->Get()->Result.GetSession();
             CallAndSubscribe();
         } else {
             YDB_LOG_WARN("Create. Create session",
-                {"EntityName", GetEntityName()},
-                {"Error", ev->Get()->Result.GetIssues().ToOneLineString()});
+                {"entityName", GetEntityName()},
+                {"error", ev->Get()->Result.GetIssues().ToOneLineString()});
             if (!ScheduleNextAttempt(ev)) {
                 ReplyAndDie(ev);
             }
@@ -370,7 +370,7 @@ private:
 
     NYdb::TAsyncStatus CallYdbSdk() override {
         YDB_LOG_DEBUG("Call create table",
-            {"TablePath", TablePath});
+            {"tablePath", TablePath});
         return Session->CreateTable(TablePath, NYdb::NTable::TTableDescription(TableDesc));
     }
 
@@ -400,7 +400,7 @@ private:
 
     NYdb::TAsyncStatus CallYdbSdk() override {
         YDB_LOG_DEBUG("Call create directory",
-            {"DirectoryPath", DirectoryPath});
+            {"directoryPath", DirectoryPath});
         return Connection->SchemeClient.MakeDirectory(DirectoryPath);
     }
 
@@ -429,7 +429,7 @@ private:
 
     NYdb::TAsyncStatus CallYdbSdk() override {
         YDB_LOG_DEBUG("Call create coordination node",
-            {"CoordinationNodePath", CoordinationNodePath});
+            {"coordinationNodePath", CoordinationNodePath});
         return Connection->CoordinationClient.CreateNode(CoordinationNodePath);
     }
 
@@ -473,7 +473,7 @@ private:
     bool OnCurrentRequestChanged() override {
         if (CurrentRequest == 0 && !Limits[0]) {
             YDB_LOG_WARN("Create. Attempt to create rate limiter resource root without limit",
-                {"EntityName", TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName()});
+                {"entityName", TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName()});
             NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "Internal error: attempt to create rate limiter resource root \"" << RequestsPath[0].Path << "\" without limit");
             NYdb::TStatus status(NYdb::EStatus::INTERNAL_ERROR, std::move(issues));

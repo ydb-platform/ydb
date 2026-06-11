@@ -99,10 +99,10 @@ public:
     void Bootstrap() {
         Become(&TTestObjectStorageConnectionActor::StateFunc);
         YDB_LOG_DEBUG("Starting test object storage connection actor. Actor",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)},
-            {"Id", SelfId()});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"id", SelfId()});
         try {
             SendDiscover();
         } catch (...) {
@@ -193,10 +193,10 @@ private:
 
     void ReplyError(const TString& message) {
         YDB_LOG_DEBUG("Invalid access for object storage",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)},
-            {"Connection", message});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"connection", message});
         Counters->Error->Inc();
         Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, "Object Storage: " + message)}), 0, Cookie);
         DestroyActor(false /* success */);
@@ -204,10 +204,10 @@ private:
 
     void ReplyOk(const TString& requestId) {
         YDB_LOG_TRACE("Access is valid for object storage connection, request id",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)},
-            {"RequestId", requestId});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"requestId", requestId});
         Counters->Ok->Inc();
         Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
         DestroyActor();

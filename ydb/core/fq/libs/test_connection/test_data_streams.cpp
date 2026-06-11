@@ -129,18 +129,18 @@ public:
 
     void Bootstrap() {
         YDB_LOG_DEBUG("Starting test data stream connection actor. Actor",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)},
-            {"Id", SelfId()});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"id", SelfId()});
         YDB_LOG_TRACE("Structured",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)},
-            {"Token", StructuredToken},
-            {"service-account", ClusterConfig.GetServiceAccountId()},
-            {"Signature", ClusterConfig.GetServiceAccountIdSignature()},
-            {"Ticket", NKikimr::MaskTicket(ClusterConfig.GetToken())});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"token", StructuredToken},
+            {"serviceAccount", ClusterConfig.GetServiceAccountId()},
+            {"signature", ClusterConfig.GetServiceAccountIdSignature()},
+            {"clusterConfigTicket", NKikimr::MaskTicket(ClusterConfig.GetToken())});
         Become(&TTestDataStreamsConnectionActor::StateFunc);
         SendResolveDatabaseId();
     }
@@ -155,10 +155,10 @@ private:
     void SendResolveDatabaseId() {
         if (ClusterConfig.GetDatabase()) {
             YDB_LOG_TRACE("Database from connection settings",
-                {"Scope", Scope},
-                {"User", User},
-                {"Ticket", NKikimr::MaskTicket(Token)},
-                {"Database", ClusterConfig.GetDatabase()});
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"database", ClusterConfig.GetDatabase()});
             SendOpenSession();
             return;
         }
@@ -178,11 +178,11 @@ private:
         const auto& response = ev->Get()->Result;
         if (!response.Success) {
             YDB_LOG_TRACE("Resolve datababse id error",
-                {"Scope", Scope},
-                {"User", User},
-                {"Ticket", NKikimr::MaskTicket(Token)},
-                {"DatabaseId", ClusterConfig.GetDatabaseId()},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"databaseId", ClusterConfig.GetDatabaseId()},
+                {"issues", response.Issues.ToOneLineString()});
             ReplyError(response.Issues);
             return;
         }
@@ -190,19 +190,19 @@ private:
         auto it = response.DatabaseDescriptionMap.find(std::pair{ClusterConfig.GetDatabaseId(), NYql::EDatabaseType::DataStreams});
         if (it == response.DatabaseDescriptionMap.end()) {
             YDB_LOG_ERROR("Test data streams connection: database is not found for database_id",
-                {"Scope", Scope},
-                {"User", User},
-                {"Ticket", NKikimr::MaskTicket(Token)},
-                {"DatabaseId", ClusterConfig.GetDatabaseId()});
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"databaseId", ClusterConfig.GetDatabaseId()});
             ReplyError(TStringBuilder{} << "Test data streams connection: database is not found for database_id " << ClusterConfig.GetDatabaseId());
             return;
         }
 
         YDB_LOG_TRACE("Resolve datababse id",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)},
-            {"Result", it->second.Database});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"result", it->second.Database});
         ClusterConfig.SetDatabase(it->second.Database);
         ClusterConfig.SetEndpoint(it->second.Endpoint);
         ClusterConfig.SetUseSsl(it->second.Secure);
@@ -225,17 +225,17 @@ private:
         const auto& response = *ev->Get();
         if (!response.IsSuccess) {
             YDB_LOG_TRACE("Open session error",
-                {"Scope", Scope},
-                {"User", User},
-                {"Ticket", NKikimr::MaskTicket(Token)},
-                {"ErrorMessage", response.ErrorMessage});
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"errorMessage", response.ErrorMessage});
             ReplyError(response.ErrorMessage);
             return;
         }
         YDB_LOG_TRACE("Open session: ok",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)});
         SendCheckListStreams();
     }
 
@@ -254,17 +254,17 @@ private:
         const auto& response = *ev->Get();
         if (!response.IsSuccess) {
             YDB_LOG_TRACE("Check list strems error",
-                {"Scope", Scope},
-                {"User", User},
-                {"Ticket", NKikimr::MaskTicket(Token)},
-                {"ErrorMessage", response.ErrorMessage});
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"errorMessage", response.ErrorMessage});
             ReplyError(response.ErrorMessage);
             return;
         }
         YDB_LOG_TRACE("Check list streams: ok",
-            {"Scope", Scope},
-            {"User", User},
-            {"Ticket", NKikimr::MaskTicket(Token)});
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)});
         ReplyOk();
     }
 

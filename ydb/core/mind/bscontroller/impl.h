@@ -359,6 +359,8 @@ public:
         TBoxId BoxId;
         ui32 ExpectedSlotCount = 0;
         bool HasExpectedSlotCount = false;
+        ui64 ExpectedSlotSize = 0;
+        bool HasExpectedSlotSize = false;
         ui32 NumActiveSlots = 0; // sum of owners weights allocated on this PDisk
         ui32 SlotSizeInUnits = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
@@ -468,6 +470,10 @@ public:
 
         void ExtractConfig(ui32 defaultMaxSlots) {
             ExpectedSlotCount = defaultMaxSlots;
+            HasExpectedSlotCount = false;
+            ExpectedSlotSize = 0;
+            HasExpectedSlotSize = false;
+            SlotSizeInUnits = 0;
 
             NKikimrBlobStorage::TPDiskConfig pdiskConfig;
             if (pdiskConfig.ParseFromString(PDiskConfig)) {
@@ -477,6 +483,13 @@ public:
                 }
                 if (pdiskConfig.HasSlotSizeInUnits()) {
                     SlotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
+                }
+                if (pdiskConfig.HasExpectedSlotSize() && pdiskConfig.GetExpectedSlotSize()) {
+                    ExpectedSlotSize = pdiskConfig.GetExpectedSlotSize();
+                    HasExpectedSlotSize = true;
+                }
+                if (HasExpectedSlotSize && !HasExpectedSlotCount) {
+                    ExpectedSlotCount = 0;
                 }
             }
         }
@@ -577,10 +590,28 @@ public:
             if (Metrics.HasSlotCount()) {
                 slotCount = Metrics.GetSlotCount();
                 slotSizeInUnits = Metrics.GetSlotSizeInUnits();
+            } else if (ExpectedSlotSize && Metrics.GetTotalSize()) {
+                slotCount = CalculateExpectedSlotCountFromExpectedSlotSize(Metrics.GetTotalSize(), ExpectedSlotSize);
+                slotSizeInUnits = SlotSizeInUnits;
             } else {
                 slotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
             }
+        }
+
+        ui32 GetEffectiveExpectedSlotCount() const {
+            ui32 slotCount = 0;
+            ui32 slotSizeInUnits = 0;
+            ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
+            return slotCount;
+        }
+
+        ui64 GetEffectiveExpectedSlotSize() const {
+            return Metrics.HasExpectedSlotSize() ? Metrics.GetExpectedSlotSize() : ExpectedSlotSize;
+        }
+
+        ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
+            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, GetEffectiveExpectedSlotSize());
         }
 
         TString PathOrSerial() const {
@@ -2280,6 +2311,7 @@ public:
             pdisk->ExtractInferredPDiskSettings(effectiveSlotCount, effectiveSlotSizeInUnits);
             // Check if we should infer PDisk slot count based on global settings
             bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount &&
+                !pdisk->HasExpectedSlotSize &&
                 StorageConfig && StorageConfig->HasBlobStorageConfig() &&
                 StorageConfig->GetBlobStorageConfig().HasInferPDiskSlotCountSettings() &&
                 (pdisk->Kind.Type() == NPDisk::DEVICE_TYPE_ROT ?
@@ -2292,6 +2324,9 @@ public:
             numWithInferredSettingsUnknown += settingsShouldBeInferred && !effectiveSlotCount;
 
             if (!effectiveSlotCount) {
+                continue;
+            }
+            if (pdisk->GetEffectiveExpectedSlotSize()) {
                 continue;
             }
 
@@ -2523,6 +2558,7 @@ public:
         Schema::PDisk::PDiskConfig::Type PDiskConfig;
         ui32 ExpectedSlotCount = 0; // explicit
         ui32 SlotSizeInUnits = 0; // explicit
+        ui64 ExpectedSlotSize = 0; // explicit
 
         // runtime info
         ui32 StaticSlotUsage = 0;
@@ -2543,6 +2579,7 @@ public:
                 Y_ABORT_UNLESS(success);
                 ExpectedSlotCount = cfg.GetExpectedSlotCount();
                 SlotSizeInUnits = cfg.GetSlotSizeInUnits();
+                ExpectedSlotSize = cfg.GetExpectedSlotSize();
             }
 
             const TPDiskId pdiskId(NodeId, PDiskId);
@@ -2557,10 +2594,27 @@ public:
             if (PDiskMetrics && PDiskMetrics->HasSlotCount()) {
                 slotCount = PDiskMetrics->GetSlotCount();
                 slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
+            } else if (PDiskMetrics && ExpectedSlotSize && PDiskMetrics->GetTotalSize()) {
+                slotCount = CalculateExpectedSlotCountFromExpectedSlotSize(
+                    PDiskMetrics->GetTotalSize(), ExpectedSlotSize);
+                slotSizeInUnits = SlotSizeInUnits;
             } else {
                 slotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
             }
+        }
+
+        ui32 GetEffectiveExpectedSlotCount() const {
+            ui32 slotCount = 0;
+            ui32 slotSizeInUnits = 0;
+            ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
+            return slotCount;
+        }
+
+        ui64 GetEffectiveExpectedSlotSize() const {
+            return PDiskMetrics && PDiskMetrics->HasExpectedSlotSize()
+                ? PDiskMetrics->GetExpectedSlotSize()
+                : ExpectedSlotSize;
         }
     };
 

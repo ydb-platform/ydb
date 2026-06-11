@@ -206,6 +206,14 @@ public:
         ChunkTracker.SetExpectedOwnerCount(newOwnerCount);
     }
 
+    void SetExpectedOwnerSize(i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSize(newOwnerSize);
+    }
+
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
+    }
+
     void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
         ChunkTracker.SetColorBorder(colorBorder);
     }

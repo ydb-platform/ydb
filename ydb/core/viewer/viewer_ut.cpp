@@ -720,6 +720,27 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 50.0, 1e-6);
     }
 
+    Y_UNIT_TEST(StorageGroupUsageWithExpectedSlotSize)
+    {
+        TStorageGroups::TGroup group;
+        group.GroupSizeInUnits = 2;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 25;
+        vdisk.AvailableSize = 900;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.ExpectedSlotSize = 100;
+        pdisk.SlotSizeInUnits = 1;
+        pdisk.TotalSize = 10000;
+        pdisk.AvailableSize = 9000;
+        pdisk.SlotCount = 10;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 100);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 25.0, 1e-6);
+    }
+
     Y_UNIT_TEST(StorageGroupUsageWithoutDynamicSlotSize)
     {
         TStorageGroups::TGroup group;

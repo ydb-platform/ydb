@@ -161,6 +161,9 @@ namespace NKikimr::NStorage {
         struct TPDiskInfo {
             NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk Record;
             ui32 UsedSlots = 0;
+            ui32 ExpectedSlotCount = 0;
+            ui32 SlotSizeInUnits = 0;
+            ui64 ExpectedSlotSize = 0;
             bool Usable = true;
             TString WhyUnusable;
             i64 SpaceAvailable = 0;
@@ -168,6 +171,18 @@ namespace NKikimr::NStorage {
         };
 
         THashMap<TPDiskId, TPDiskInfo> pdisks;
+
+        auto applyPDiskConfig = [](TPDiskInfo& pdiskInfo, const NKikimrBlobStorage::TPDiskConfig& pdiskConfig) {
+            if (pdiskConfig.HasExpectedSlotCount()) {
+                pdiskInfo.ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
+            }
+            if (pdiskConfig.HasSlotSizeInUnits()) {
+                pdiskInfo.SlotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
+            }
+            if (pdiskConfig.HasExpectedSlotSize()) {
+                pdiskInfo.ExpectedSlotSize = pdiskConfig.GetExpectedSlotSize();
+            }
+        };
 
         auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
             if (type == pdiskType) {
@@ -241,6 +256,13 @@ namespace NKikimr::NStorage {
                         pdisk.GetKind()).GetRaw());
                     if (pdisk.HasPDiskConfig()) {
                         r.MutablePDiskConfig()->CopyFrom(pdisk.GetPDiskConfig());
+                        applyPDiskConfig(pdiskInfo, pdisk.GetPDiskConfig());
+                    }
+                    if (pdisk.GetExpectedSlotCount()) {
+                        pdiskInfo.ExpectedSlotCount = pdisk.GetExpectedSlotCount();
+                    }
+                    if (pdisk.GetExpectedSlotSize()) {
+                        pdiskInfo.ExpectedSlotSize = pdisk.GetExpectedSlotSize();
                     }
 
                     // this 'usable' logic repeats the one in BS_CONTROLLER
@@ -258,6 +280,13 @@ namespace NKikimr::NStorage {
 
                     if (!ignoreVSlotQuotaCheck && pdiskInfo.Usable && pdisk.HasPDiskMetrics() && baseConfig->HasSettings()) {
                         const auto& m = pdisk.GetPDiskMetrics();
+                        if (pdiskInfo.ExpectedSlotSize && !pdiskInfo.ExpectedSlotCount && m.GetTotalSize()) {
+                            pdiskInfo.ExpectedSlotCount = CalculateExpectedSlotCountFromExpectedSlotSize(
+                                m.GetTotalSize(), pdiskInfo.ExpectedSlotSize);
+                        }
+                        if (m.HasSlotSizeInUnits()) {
+                            pdiskInfo.SlotSizeInUnits = m.GetSlotSizeInUnits();
+                        }
                         if (m.HasEnforcedDynamicSlotSize() && pdiskSpaceColorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW) {
                             pdiskInfo.SpaceAvailable = m.GetEnforcedDynamicSlotSize() * (1000 - pdiskSpaceMarginPromille) / 1000;
                         } else {
@@ -366,8 +395,12 @@ namespace NKikimr::NStorage {
                 const TPDiskId pdiskId(pdisk.GetNodeID(), pdisk.GetPDiskID());
                 if (requiredPDiskIds.contains(pdiskId)) {
                     if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
-                        auto& r = it->second.Record;
+                        TPDiskInfo& pdiskInfo = it->second;
+                        auto& r = pdiskInfo.Record;
                         r.CopyFrom(pdisk);
+                        if (pdisk.HasPDiskConfig()) {
+                            applyPDiskConfig(pdiskInfo, pdisk.GetPDiskConfig());
+                        }
                     }
                 }
 
@@ -412,7 +445,8 @@ namespace NKikimr::NStorage {
             if (checkMatch(drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
                 const TPDiskId pdiskId(nodeId, ++maxPDiskId[nodeId]);
                 if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
-                    auto& r = it->second.Record;
+                    TPDiskInfo& pdiskInfo = it->second;
+                    auto& r = pdiskInfo.Record;
                     r.SetNodeID(pdiskId.NodeId);
                     r.SetPDiskID(pdiskId.PDiskId);
                     r.SetPath(drive.GetPath());
@@ -421,6 +455,7 @@ namespace NKikimr::NStorage {
                         drive.GetKind()));
                     if (drive.HasPDiskConfig()) {
                         r.MutablePDiskConfig()->CopyFrom(drive.GetPDiskConfig());
+                        applyPDiskConfig(pdiskInfo, drive.GetPDiskConfig());
                     }
                 } else {
                     throw TExConfigError() << "duplicate PDiskId";
@@ -440,14 +475,12 @@ namespace NKikimr::NStorage {
             }
 
             ui32 maxSlots = defaultMaxSlots;
-            ui32 slotSizeInUnits = 0;
-            if (item.Record.HasPDiskConfig()) {
-                const auto& pdiskConfig = item.Record.GetPDiskConfig();
-                if (pdiskConfig.HasExpectedSlotCount()) {
-                    maxSlots = pdiskConfig.GetExpectedSlotCount();
-                }
-                slotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
+            if (item.ExpectedSlotCount) {
+                maxSlots = item.ExpectedSlotCount;
+            } else if (item.ExpectedSlotSize) {
+                maxSlots = 0;
             }
+            const ui32 slotSizeInUnits = item.SlotSizeInUnits;
 
             const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
 
@@ -458,6 +491,7 @@ namespace NKikimr::NStorage {
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
                 .SlotSizeInUnits = slotSizeInUnits,
+                .SlotSizeInBytes = item.ExpectedSlotSize,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,

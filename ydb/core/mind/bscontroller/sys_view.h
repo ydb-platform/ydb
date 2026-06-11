@@ -51,6 +51,7 @@ struct TGroupDiskInfo {
     const NKikimrBlobStorage::TPDiskMetrics *PDiskMetrics;
     const NKikimrBlobStorage::TVDiskMetrics *VDiskMetrics;
     ui32 ExpectedSlotCount;
+    ui64 ExpectedSlotSize;
 };
 
 void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks, TBlobStorageGroupType type, ui32 groupSizeInUnits);

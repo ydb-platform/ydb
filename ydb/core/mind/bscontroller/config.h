@@ -9,6 +9,18 @@
 namespace NKikimr {
     namespace NBsController {
 
+        inline void ValidatePDiskConfigExpectedSlotSettings(const NKikimrBlobStorage::TPDiskConfig& config,
+                TStringBuf context) {
+            const bool hasExpectedSlotCount = config.HasExpectedSlotCount() && config.GetExpectedSlotCount();
+            const bool hasSlotSizeInUnits = config.HasSlotSizeInUnits() && config.GetSlotSizeInUnits();
+            const bool hasExpectedSlotSize = config.HasExpectedSlotSize() && config.GetExpectedSlotSize();
+            if (hasExpectedSlotSize && (hasExpectedSlotCount || hasSlotSizeInUnits)) {
+                throw TExError() << context
+                    << " ExpectedSlotSize is mutually exclusive with ExpectedSlotCount and SlotSizeInUnits"
+                    << " in PDiskConfig";
+            }
+        }
+
         struct TConfigFitAction {
             std::set<TBoxId> Boxes;
             std::multiset<std::tuple<TBoxStoragePoolId, std::optional<TGroupId>>> PoolsAndGroups; // nullopt goes first and means 'cover all groups in the pool'

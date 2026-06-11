@@ -327,10 +327,12 @@ struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::Ev
 struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvBlobStorage::EvChangeExpectedSlotCount> {
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
-    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits)
+    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits, ui64 expectedSlotSize = 0)
         : ExpectedSlotCount(expectedSlotCount)
         , SlotSizeInUnits(slotSizeInUnits)
+        , ExpectedSlotSize(expectedSlotSize)
     {}
 
     TString ToString() const {
@@ -343,6 +345,7 @@ struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvB
         str << "EvChangeExpectedSlotCount ";
         str << " ExpectedSlotCount# " << record.ExpectedSlotCount;
         str << " SlotSizeInUnits# " << record.SlotSizeInUnits;
+        str << " ExpectedSlotSize# " << record.ExpectedSlotSize;
         str << "}";
         return str.Str();
     }

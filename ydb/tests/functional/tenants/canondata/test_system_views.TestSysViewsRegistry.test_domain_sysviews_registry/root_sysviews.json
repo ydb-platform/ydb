@@ -374,6 +374,10 @@
       {
         "name": "MaintenanceStatus",
         "type": "Utf8?"
+      },
+      {
+        "name": "ExpectedSlotSize",
+        "type": "Uint64?"
       }
     ],
     "primary_key": [

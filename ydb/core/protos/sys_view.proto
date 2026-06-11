@@ -192,6 +192,7 @@ message TPDiskInfo {
     optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
     reserved 21;
     optional string MaintenanceStatus = 22;
+    optional uint64 ExpectedSlotSize = 23; // either inferred or user-defined, 0 if not set
     // metrics ?
     // physical location ?
     // config ?

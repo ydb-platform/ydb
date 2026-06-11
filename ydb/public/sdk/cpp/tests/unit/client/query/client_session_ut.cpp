@@ -80,14 +80,14 @@ Y_UNIT_TEST(NodeShutdownDeactivatesSessionAndPessimizesNode) {
     UNIT_ASSERT_VALUES_EQUAL(client->PessimizedNodeId, 42U);
 }
 
-Y_UNIT_TEST(NodeShutdownWithZeroNodeIdIsNoOp) {
+Y_UNIT_TEST(NodeShutdownWithZeroNodeIdSkipsPessimization) {
     TTestKqpSession session("", "host:2136");
     auto client = std::make_shared<TMockSessionClient>();
 
     UNIT_ASSERT(session.GetEndpointKey().GetNodeId() == 0U);
     UNIT_ASSERT(HandleAttachSessionState(MakeNodeShutdownState(), &session, client)
         == EAttachStreamReadAction::Stop);
-    UNIT_ASSERT(session.GetState() == TKqpSessionCommon::S_ACTIVE);
+    UNIT_ASSERT(session.GetState() == TKqpSessionCommon::S_IDLE);
     UNIT_ASSERT_VALUES_EQUAL(client->PessimizeCalls, 0);
 }
 

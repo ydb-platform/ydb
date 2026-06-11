@@ -19,13 +19,10 @@ EAttachStreamReadAction HandleAttachSessionState(
             return EAttachStreamReadAction::Stop;
         }
 
-        const auto nodeId = session->GetEndpointKey().GetNodeId();
-        if (nodeId == 0) {
-            return EAttachStreamReadAction::Stop;
-        }
-
         session->MarkIdle();
-        if (client) {
+
+        const auto nodeId = session->GetEndpointKey().GetNodeId();
+        if (nodeId != 0 && client) {
             client->PessimizeNode(nodeId);
         }
         return EAttachStreamReadAction::Stop;

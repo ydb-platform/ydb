@@ -79,9 +79,11 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
         switch (grpcStatus.GRpcStatusCode) {
             case grpc::StatusCode::OK: {
                 auto impl = holder->TrySharedOwning();
-                if (HandleAttachSessionState(*resp, impl, client.lock()) == EAttachStreamReadAction::Continue) {
-                    StartAsyncRead(ptr, client, holder);
-                } else if (impl) {
+                if (impl) {
+                    const auto action = HandleAttachSessionState(*resp, impl, client.lock());
+                    if (action == EAttachStreamReadAction::Continue) {
+                        StartAsyncRead(ptr, client, holder);
+                    }
                     holder->Release();
                 }
                 break;

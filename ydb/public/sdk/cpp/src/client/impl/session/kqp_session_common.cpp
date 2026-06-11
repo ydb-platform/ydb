@@ -79,6 +79,7 @@ void TKqpSessionCommon::MarkActive() {
 }
 
 void TKqpSessionCommon::MarkIdle() {
+    std::lock_guard guard(Lock_);
     State_ = EState::S_IDLE;
     NeedUpdateActiveCounter_ = false;
 }

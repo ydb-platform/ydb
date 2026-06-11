@@ -48,7 +48,7 @@ def prepare_feature_flags(extra_feature_flags, disabled_feature_flags):
 
     if "enable_drain_on_shutdown" not in disabled_feature_flags:
         # We want to drain tablets before stopping, to prevent "Failed to resolve tablet: 72075186224037909 after several retries"
-        # By default draining is not enabled to faster tests
+        # By default draining is not enabled for faster tests
         extra_feature_flags.append("enable_drain_on_shutdown")
 
     return extra_feature_flags, disabled_feature_flags

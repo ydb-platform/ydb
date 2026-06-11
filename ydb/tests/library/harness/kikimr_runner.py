@@ -340,7 +340,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             logger.info("Killed node %s", self)
 
     def send_signal(self, signal):
-        self.__prepare_to_shutdown()
         self.daemon.process.send_signal(signal)
 
     @property

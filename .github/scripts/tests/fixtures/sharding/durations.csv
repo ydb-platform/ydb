@@ -1,5 +1,3 @@
 full_name,duration_sec
-ydb/core/foo/ut/Suite.Fast,1
-ydb/core/foo/ut/Suite.Slow,100
-ydb/tests/bar/PyTest.case_a,2
-ydb/tests/bar/PyTest.case_b,50
+ydb/core/foo/ut,100
+ydb/tests/bar,50

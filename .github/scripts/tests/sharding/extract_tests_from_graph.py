@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Best-effort extraction of test full_name entries from ya make graph JSON."""
+"""Extract test suite directories from ya make graph JSON."""
 from __future__ import annotations
 
 import argparse
@@ -9,6 +9,18 @@ import sys
 from pathlib import Path
 
 _TEST_PATH_RE = re.compile(r"^ydb/.+")
+_TEST_MODULE_TAGS = frozenset(
+    {
+        "py3test_program",
+        "py2test_program",
+        "gtest_program",
+        "unittest_program",
+    }
+)
+_BUILD_ARTIFACT_TAIL_RE = re.compile(
+    r"(?:\.(?:a|o|so|global\.a|py-|proto|pb\.cc|pb\.h)|^objcopy_|^lib.*\.a$)",
+    re.IGNORECASE,
+)
 
 
 def normalize_target_prefix(prefix: str | None) -> str | None:
@@ -18,93 +30,71 @@ def normalize_target_prefix(prefix: str | None) -> str | None:
     return value or None
 
 
-def in_target_scope(full_name: str, target_prefix: str | None) -> bool:
+def in_target_scope(path: str, target_prefix: str | None) -> bool:
     if target_prefix is None:
         return True
-    return full_name == target_prefix or full_name.startswith(f"{target_prefix}/")
+    return path == target_prefix or path.startswith(f"{target_prefix}/")
 
 
-def _looks_like_test_full_name(value: str) -> bool:
-    if "/" not in value:
+def is_test_module_tag(tag: str | None) -> bool:
+    if not tag:
         return False
-    tail = value.rsplit("/", 1)[1]
-    return "." in tail or "::" in tail
+    if tag in _TEST_MODULE_TAGS:
+        return True
+    return tag.endswith("test_program")
 
 
-def _maybe_add(
-    value: str,
-    tests: set[str],
-    target_prefix: str | None,
-    *,
-    require_test_name: bool = True,
-) -> None:
-    value = value.strip()
-    if not value:
-        return
-    if not _TEST_PATH_RE.match(value):
-        return
-    if require_test_name and not _looks_like_test_full_name(value):
-        return
-    if not in_target_scope(value, target_prefix):
-        return
-    tests.add(value)
+def is_suite_directory(path: str) -> bool:
+    if not _TEST_PATH_RE.match(path):
+        return False
+    tail = path.rsplit("/", 1)[-1]
+    if not tail or tail.startswith("lib") and tail.endswith(".a"):
+        return False
+    return _BUILD_ARTIFACT_TAIL_RE.search(tail) is None
 
 
-def _add_test_node(path: str, subtest: str, tests: set[str], target_prefix: str | None) -> None:
-    path = path.strip()
-    subtest = subtest.strip()
-    if not path or not subtest:
-        return
-    _maybe_add(f"{path}/{subtest}", tests, target_prefix, require_test_name=False)
-
-
-def _walk(obj, tests: set[str], target_prefix: str | None) -> None:
-    if isinstance(obj, dict):
-        path = obj.get("path") or obj.get("target") or obj.get("name")
-        subtest = obj.get("subtest_name") or obj.get("test_filter")
-        if isinstance(path, str) and isinstance(subtest, str):
-            _add_test_node(path, subtest, tests, target_prefix)
-        for key in ("full_name", "test_name"):
-            val = obj.get(key)
-            if isinstance(val, str):
-                _maybe_add(val, tests, target_prefix)
-        for value in obj.values():
-            _walk(value, tests, target_prefix)
-    elif isinstance(obj, list):
-        for item in obj:
-            _walk(item, tests, target_prefix)
-    elif isinstance(obj, str):
-        _maybe_add(obj, tests, target_prefix)
-
-
-def extract_tests(graph: dict, target_prefix: str | None = None) -> list[str]:
+def extract_suite_paths(graph: dict, target_prefix: str | None = None) -> list[str]:
     prefix = normalize_target_prefix(target_prefix)
-    tests: set[str] = set()
-    _walk(graph, tests, prefix)
-    return sorted(tests)
+    suites: set[str] = set()
+
+    stack: list[object] = [graph]
+    while stack:
+        obj = stack.pop()
+        if isinstance(obj, dict):
+            module_dir = obj.get("module_dir")
+            module_tag = obj.get("module_tag")
+            if isinstance(module_dir, str) and is_test_module_tag(str(module_tag)):
+                path = module_dir.strip()
+                if is_suite_directory(path) and in_target_scope(path, prefix):
+                    suites.add(path)
+            stack.extend(obj.values())
+        elif isinstance(obj, list):
+            stack.extend(obj)
+
+    return sorted(suites)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("graph", type=Path, help="graph.json from graph_compare")
+    parser.add_argument("graph", type=Path, help="graph.json from ya make --save-graph-to")
     parser.add_argument(
         "--target-prefix",
         default="ydb/",
-        help="Only include tests under this ya.make path (default: ydb/)",
+        help="Only include suites under this ya.make path (default: ydb/)",
     )
-    parser.add_argument("-o", "--output", type=Path, help="Write one full_name per line")
+    parser.add_argument("-o", "--output", type=Path, help="Write one suite path per line")
     args = parser.parse_args()
 
     graph = json.loads(args.graph.read_text(encoding="utf-8"))
-    tests = extract_tests(graph, args.target_prefix)
+    suites = extract_suite_paths(graph, args.target_prefix)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text("\n".join(tests) + ("\n" if tests else ""), encoding="utf-8")
+        args.output.write_text("\n".join(suites) + ("\n" if suites else ""), encoding="utf-8")
     else:
-        for test in tests:
-            print(test)
+        for suite in suites:
+            print(suite)
     prefix = normalize_target_prefix(args.target_prefix) or "ydb"
-    print(f"Extracted {len(tests)} tests under {prefix}", file=sys.stderr)
+    print(f"Extracted {len(suites)} test suites under {prefix}", file=sys.stderr)
     return 0
 
 

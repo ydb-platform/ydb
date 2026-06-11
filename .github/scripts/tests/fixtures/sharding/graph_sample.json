@@ -1,22 +1,20 @@
 {
-  "nodes": [
+  "graph": [
     {
-      "path": "ydb/tests/olap/suite",
-      "subtest_name": "OlapTest.case_a"
+      "module_dir": "ydb/tests/olap/s3_import",
+      "module_tag": "py3test_program"
     },
     {
-      "path": "ydb/tests/olap/suite",
-      "test_filter": "OlapTest.case_b"
+      "module_dir": "ydb/tests/olap/load",
+      "module_tag": "py3test_program"
     },
     {
-      "path": "ydb/apps/ydb",
-      "subtest_name": "AppTest.smoke"
+      "module_dir": "ydb/apps/ydb",
+      "module_tag": "py3test_program"
     },
     {
-      "path": "ydb/apps/ydb"
-    },
-    {
-      "full_name": "ydb/tests/olap/other/PyTest.chunk_1"
+      "module_dir": "ydb/tests/olap/s3_import/objcopy_deadbeef.o",
+      "module_tag": "py3test_program"
     }
   ]
 }

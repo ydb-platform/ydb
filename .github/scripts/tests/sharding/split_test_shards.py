@@ -14,9 +14,8 @@ from pathlib import Path
 
 
 def suite_path(full_name: str) -> str:
-    if "/" not in full_name:
-        return full_name
-    return full_name.rsplit("/", 1)[0]
+    # Each planned entry is already a ya.make test suite directory.
+    return full_name
 
 
 def load_durations(path: Path | None) -> dict[str, float]:

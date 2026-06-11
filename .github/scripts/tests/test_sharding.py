@@ -38,9 +38,8 @@ class ShardingToolsTest(unittest.TestCase):
             self.assertEqual(
                 tests,
                 [
-                    "ydb/tests/olap/other/PyTest.chunk_1",
-                    "ydb/tests/olap/suite/OlapTest.case_a",
-                    "ydb/tests/olap/suite/OlapTest.case_b",
+                    "ydb/tests/olap/load",
+                    "ydb/tests/olap/s3_import",
                 ],
             )
 
@@ -78,7 +77,7 @@ class ShardingToolsTest(unittest.TestCase):
             loads = [shard["estimated_duration_sec"] for shard in plan["shards"]]
             self.assertLess(max(loads) - min(loads), 60)
 
-    def test_split_keeps_ya_make_suite_together(self):
+    def test_split_keeps_suite_directories_atomic(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"
             _run(
@@ -93,23 +92,14 @@ class ShardingToolsTest(unittest.TestCase):
                 str(plan_path),
             )
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
-            all_tests = FIXTURES.joinpath("tests.txt").read_text().strip().split()
-            by_suite: dict[str, list[str]] = {}
-            for full_name in all_tests:
-                suite = full_name.rsplit("/", 1)[0] if "/" in full_name else full_name
-                by_suite.setdefault(suite, []).append(full_name)
-
-            for suite, suite_tests in by_suite.items():
+            suites = FIXTURES.joinpath("tests.txt").read_text().strip().split()
+            for suite in suites:
                 shard_ids = {
                     shard["id"]
                     for shard in plan["shards"]
-                    if suite_tests[0] in shard["tests"]
+                    if suite in shard["tests"]
                 }
                 self.assertEqual(len(shard_ids), 1, f"suite {suite} split across shards")
-                for test in suite_tests[1:]:
-                    for shard in plan["shards"]:
-                        if test in shard["tests"]:
-                            self.assertIn(shard["id"], shard_ids)
 
     def test_build_shard_blacklist_complement(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -134,7 +124,8 @@ class ShardingToolsTest(unittest.TestCase):
                 str(blacklist_path),
             )
             text = blacklist_path.read_text(encoding="utf-8")
-            self.assertIn("path:", text)
+            self.assertIn("path: ydb/tests/bar", text)
+            self.assertNotIn("test_filter:", text)
 
 
 if __name__ == "__main__":

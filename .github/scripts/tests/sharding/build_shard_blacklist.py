@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build ya make test-blacklist YAML for one shard (complement of shard tests)."""
+"""Build ya make test-blacklist YAML for one shard (complement of shard suites)."""
 from __future__ import annotations
 
 import argparse
@@ -8,13 +8,6 @@ import sys
 from pathlib import Path
 
 import yaml
-
-
-def _split(full_name: str) -> tuple[str, str]:
-    if "/" not in full_name:
-        return "", full_name
-    path, name = full_name.rsplit("/", 1)
-    return path, name
 
 
 def load_plan(path: Path) -> dict:
@@ -35,28 +28,10 @@ def all_tests(plan: dict) -> set[str]:
     return result
 
 
-def build_blacklist_yaml(blocked_tests: set[str]) -> list[dict]:
-    by_suite: dict[tuple[str, str], list[str]] = {}
-    for full_name in sorted(blocked_tests):
-        path, name = _split(full_name)
-        suite_type = ""
-        key = (path, suite_type)
-        filter_name = name.replace(".", "::").replace("::py::", ".py::")
-        by_suite.setdefault(key, []).append(filter_name)
-
+def build_blacklist_yaml(blocked_suites: set[str]) -> list[dict]:
     entries: list[dict] = []
-    for (path, suite_type), filters in sorted(by_suite.items()):
-        entry: dict = {}
-        if path:
-            entry["path"] = path
-        if suite_type:
-            entry["suite_type"] = suite_type
-        unique_filters = sorted(set(filters))
-        if len(unique_filters) == 1:
-            entry["test_filter"] = unique_filters[0]
-        else:
-            entry["test_filter"] = unique_filters
-        entries.append(entry)
+    for path in sorted(blocked_suites):
+        entries.append({"path": path})
     return entries
 
 

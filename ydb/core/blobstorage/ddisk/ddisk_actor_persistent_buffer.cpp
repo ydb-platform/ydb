@@ -266,44 +266,9 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBufferHeader))
             / (sizeof(TPersistentBufferLsnRecordHeader) + TPersistentBufferLsnRecordHeader::MaxSectorsPerPackBufferRecord * sizeof(TPersistentBufferSectorInfo));
 
-        PersistentBufferWaitingTimerIsOn = false;
         STLOG_D("TDDiskActor::ProcessPersistentBufferQueue start processing",
             (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
         while (!PendingPersistentBufferEvents.empty()) {
-            // Collect a batch of consecutive TEvWritePersistentBuffer events
-            {
-                std::vector<TEvWritePersistentBuffer::TPtr> batch;
-                while (!PendingPersistentBufferEvents.empty()
-                    && batch.size() < MaxLsnsPerPack) {
-                    auto& front = PendingPersistentBufferEvents.front();
-                    if (front.Ev->Type != TEvWritePersistentBuffer::EventType) {
-                        break;
-                    }
-                    auto* writeEv = static_cast<TEventHandle<TEvWritePersistentBuffer>*>(front.Ev.get());
-                    const TBlockSelector selector(writeEv->Get()->Record.GetSelector());
-                    if (selector.Size > TPersistentBufferLsnRecordHeader::MaxSectorsPerPackBufferRecord * SectorSize) {
-                        break;
-                    }
-                    front.Ev.release();
-                    PendingPersistentBufferEvents.pop();
-                    Counters.PersistentBuffer.PendingEventsQueueSize->Dec();
-                    batch.emplace_back(writeEv);
-                }
-                if (!batch.empty()) {
-                    auto size = PendingPersistentBufferEvents.size();
-                    ProcessPersistentBufferBatchWrite(std::move(batch));
-                    if (PendingPersistentBufferEvents.size() != size) {
-                        if (IssuePersistentBufferChunkAllocationInflight) {
-                            STLOG_D("TDDiskActor::ProcessPersistentBufferQueue waiting next chunk allocation",
-                                (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()), (size, size));
-                            return;
-                        }
-                        Y_ABORT("TDDiskActor::ProcessPersistentBufferQueue pending queue growth");
-                    }
-                    continue;
-                }
-            }
-
             auto temp = PendingPersistentBufferEvents.front().Release();
             PendingPersistentBufferEvents.pop();
             Counters.PersistentBuffer.PendingEventsQueueSize->Dec();
@@ -427,23 +392,6 @@ namespace NKikimr::NDDisk {
             return false;
         }
         return true;
-    }
-
-    void TDDiskActor::ProcessPersistentBufferBatchWrite(std::vector<TEvWritePersistentBuffer::TPtr> evs) {
-        STLOG_D("TDDiskActor::ProcessPersistentBufferBatchWrite", (evs.size(), evs.size()));
-        std::vector<TEvWritePersistentBuffer::TPtr> evsToWrite;
-        evsToWrite.reserve(evs.size());
-        // ui32 sectorsCnt = 1;
-        for (auto ev : evs) {
-            if (PreprocessPersistentBufferWrite(*ev)) {
-                evsToWrite.push_back(ev);
-                // sectorsCnt += selector.Size / SectorSize;
-            }
-        }
-        // TODO make batch write
-        for (auto ev : evsToWrite) {
-            ProcessPersistentBufferWrite(ev);
-        }
     }
 
     void TDDiskActor::RestorePersistentBufferChunk(TDDiskActor::TEvPrivate::TEvReadPersistentBufferPart::TPtr ev) {
@@ -893,6 +841,24 @@ namespace NKikimr::NDDisk {
         }
     }
 
+    void TDDiskActor::ProcessPersistentBufferBatchWrite() {
+        PersistentBufferWaitingTimerIsOn = false;
+        STLOG_D("TDDiskActor::ProcessPersistentBufferBatchWrite", (evs.size(), evs.size()));
+        // std::vector<TEvWritePersistentBuffer::TPtr> evsToWrite;
+        // evsToWrite.reserve(evs.size());
+        // // ui32 sectorsCnt = 1;
+        // for (auto ev : evs) {
+        //     if (PreprocessPersistentBufferWrite(*ev)) {
+        //         evsToWrite.push_back(ev);
+        //         // sectorsCnt += selector.Size / SectorSize;
+        //     }
+        // }
+        // // TODO make batch write
+        // for (auto ev : evsToWrite) {
+        //     ProcessPersistentBufferWrite(ev);
+        // }
+    }
+
     void TDDiskActor::Handle(TEvWritePersistentBuffer::TPtr ev) {
         if (!CheckQuery(*ev, &Counters.Interface.WritePersistentBuffer)) {
             return;
@@ -930,11 +896,18 @@ namespace NKikimr::NDDisk {
             && PersistentBufferFormat.WritesBatchingPeriodMicroseconds > 0
             && PendingPersistentBufferEvents.size() < PersistentBufferFormat.MaxPendingEventsQueueSize
             && (PersistentBufferWaitingTimerIsOn || PersistentBufferDiskOperationInflight.size() > 0)) {
-            PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
-            Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
+
+
+            if (PersistentBufferBatchWriteInflight.size() == 0) {
+                PersistentBufferBatchWriteCookie = NextCookie++;
+            }
+            auto& inflight = PersistentBufferDiskOperationInflight[PersistentBufferBatchWriteCookie];
+            
+
+
             if (!PersistentBufferWaitingTimerIsOn) {
                 PersistentBufferWaitingTimerIsOn = true;
-                Schedule(TDuration::MicroSeconds(PersistentBufferFormat.WritesBatchingPeriodMicroseconds), new TEvents::TEvWakeup(EWakeupTag::WakeupProcessPersistentBufferQueue));
+                Schedule(TDuration::MicroSeconds(PersistentBufferFormat.WritesBatchingPeriodMicroseconds), new TEvents::TEvWakeup(EWakeupTag::WakeupProcessPersistentBufferBatchWrite));
             }
             return;
         }

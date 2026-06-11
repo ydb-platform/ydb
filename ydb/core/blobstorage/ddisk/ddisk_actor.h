@@ -322,7 +322,7 @@ namespace NKikimr::NDDisk {
             WakeupIoSubmitQueue = 1,
             WakeupUpdateFreeSpaceInfo = 2,
             WakeupCollectPbStats = 3,
-            WakeupProcessPersistentBufferQueue = 4,
+            WakeupProcessPersistentBufferBatchWrite = 4,
         };
 
         struct TPbOpSnapshot {
@@ -752,6 +752,21 @@ namespace NKikimr::NDDisk {
             std::vector<ui64> OperationsCookie;
         };
 
+        struct TPersistentBufferBatchWriteInflight {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId Session;
+            NWilson::TSpan Span;
+
+            TPersistentBufferLsnRecordHeader Header;
+            std::vector<TPersistentBufferSectorInfo> SectorInfos;
+            TRope Data;
+
+            ui64 OperationCookie;
+        };
+
+        ui64 PersistentBufferBatchWriteCookie = 0;
+        std::vector<TPersistentBufferBatchWriteInflight> PersistentBufferBatchWriteInflight;
         std::unordered_map<TPersistentBufferLocation, std::unordered_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
@@ -796,7 +811,7 @@ namespace NKikimr::NDDisk {
 
         bool PreprocessPersistentBufferWrite(NActors::TEventHandle<TEvWritePersistentBuffer>& ev);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
-        void ProcessPersistentBufferBatchWrite(std::vector<TEvWritePersistentBuffer::TPtr> evs);
+        void ProcessPersistentBufferBatchWrite();
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);
         void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn);

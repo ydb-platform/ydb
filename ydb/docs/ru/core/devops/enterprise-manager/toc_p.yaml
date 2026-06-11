@@ -1,3 +1,5 @@
 items:
 - name: Первоначальное развёртывание
   href: initial-deployment.md
+- name: AI-ассистент
+  href: ai-assistant.md

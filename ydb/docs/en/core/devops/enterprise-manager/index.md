@@ -80,3 +80,4 @@ The user interacts with Gateway through a browser or API. Gateway forwards reque
 ## Key topics {#materials}
 
 - [{#T}](initial-deployment.md)
+- [{#T}](ai-assistant.md)

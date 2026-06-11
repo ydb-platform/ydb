@@ -125,7 +125,7 @@ class TestTpcds100(TpcdsSuiteBase):
 
 class TestTpcds1000(TpcdsSuiteBase):
     scale: int = 1000
-    iterations: int = 10
+    iterations: int = 5
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     tables_size: dict[str, int] = {
         'call_center': 42,

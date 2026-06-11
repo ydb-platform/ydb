@@ -6,6 +6,8 @@
 #include <library/cpp/json/writer/json_value.h>
 
 #include <optional>
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
 
 namespace NYql {
 

@@ -160,9 +160,11 @@ struct Schema : NIceDb::Schema {
         struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<2, NScheme::NTypeIds::String> {};
         struct Dropped : Column<3, NScheme::NTypeIds::Bool> {};
+        // serialized NKikimrConsole::TYamlConfigUnknownFields snapshot taken at upload time
+        struct UnknownFields : Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Version>;
-        using TColumns = TableColumns<Version, Config, Dropped>;
+        using TColumns = TableColumns<Version, Config, Dropped, UnknownFields>;
     };
 
     struct DatabaseYamlConfigs : Table<104> {

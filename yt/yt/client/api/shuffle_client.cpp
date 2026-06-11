@@ -39,6 +39,8 @@ void TShuffleHandle::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("schema", &TThis::Schema)
         .Default();
+    registrar.Parameter("push_config", &TThis::PushConfig)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -760,7 +760,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
 
-    if (runConfig.AppConfig.GetTableServiceConfig().GetEnableCompileCacheWarmup()) {
+    const auto& kqpConfig = runConfig.AppConfig.GetKQPConfig();
+    const bool kqpEnabled = runConfig.ServicesMask.EnableKqp
+        && (!kqpConfig.HasEnable() || kqpConfig.GetEnable());
+
+    if (kqpEnabled && runConfig.AppConfig.GetTableServiceConfig().GetEnableCompileCacheWarmup()) {
         auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
             runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
         GRpcWarmupTimeout = warmupConfig.HardDeadline;
@@ -1952,6 +1956,16 @@ void TKikimrRunner::InitializeActorSystem(
     }
 }
 
+void TKikimrRunner::RecordEmptyDomainSensor() {
+    const auto& labels = AppData->Labels;
+    const auto it = labels.find("empty_domain_during_node_registration");
+    if (it != labels.end() && it->second == "true") {
+        GetServiceCounters(AppData->Counters, "ydb")
+            ->GetSubgroup("subsystem", "nodeRegistration")
+            ->GetCounter("EmptyDomainName")->Inc();
+    }
+}
+
 TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializersList(
     const TKikimrRunConfig& runConfig,
     const TBasicKikimrServicesMask& serviceMask) {
@@ -2497,6 +2511,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeControlBoard(runConfig);
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
+    runner->RecordEmptyDomainSensor();
     TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, runConfig.ServicesMask));
     runner->InitializeActorSystem(runConfig, sil, runConfig.ServicesMask);
     runner->InitializeMonitoringLogin(runConfig);

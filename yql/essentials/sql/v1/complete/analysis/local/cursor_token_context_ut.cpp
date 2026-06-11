@@ -46,4 +46,74 @@ Y_UNIT_TEST(Enclosing) {
     UNIT_ASSERT(Context("\"se\"#\"se\"").Enclosing().Empty());
 }
 
+Y_UNIT_TEST(MatchCursorPrefixBlank) {
+    {
+        auto context = Context("#");
+        UNIT_ASSERT(context.MatchCursorPrefix({}).Empty());
+        UNIT_ASSERT(context.MatchCursorPrefix({""}).Empty());
+    }
+    {
+        auto context = Context(" #");
+        UNIT_ASSERT(context.MatchCursorPrefix({}).Empty());
+        UNIT_ASSERT(context.MatchCursorPrefix({""}).Empty());
+    }
+    {
+        auto context = Context("# ");
+        UNIT_ASSERT(context.MatchCursorPrefix({}).Empty());
+        UNIT_ASSERT(context.MatchCursorPrefix({""}).Empty());
+    }
+}
+
+Y_UNIT_TEST(MatchCursorPrefixWS) {
+    {
+        auto context = Context("a#");
+        auto token = context.MatchCursorPrefix({"ID_PLAIN"});
+        UNIT_ASSERT(token.Empty());
+    }
+    {
+        auto context = Context("a#b");
+        auto token = context.MatchCursorPrefix({"ID_PLAIN"});
+        UNIT_ASSERT(token.Empty());
+    }
+    {
+        auto context = Context("a #");
+        auto token = context.MatchCursorPrefix({"ID_PLAIN"});
+        UNIT_ASSERT(token.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(token->Base->Name, "ID_PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(token->Base->Content, "a");
+    }
+    {
+        auto context = Context("a b#");
+        auto token = context.MatchCursorPrefix({"ID_PLAIN", ""});
+        UNIT_ASSERT(token.Empty());
+    }
+}
+
+Y_UNIT_TEST(MatchCursorPrefixDOT) {
+    {
+        auto context = Context("a.#");
+        auto token = context.MatchCursorPrefix({"ID_PLAIN", "DOT", ""});
+        UNIT_ASSERT(token.Empty());
+    }
+    {
+        auto context = Context("a.#");
+        auto token = context.MatchCursorPrefix({"ID_PLAIN", "DOT"});
+        UNIT_ASSERT(token.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(token->Base->Name, "ID_PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(token->Base->Content, "a");
+    }
+    {
+        auto context = Context("a . #");
+        auto token = context.MatchCursorPrefix({"ID_PLAIN", "DOT"});
+        UNIT_ASSERT(token.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(token->Base->Name, "ID_PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(token->Base->Content, "a");
+    }
+    {
+        auto context = Context("a . #");
+        auto token = context.MatchCursorPrefix({"ID_PLAIN", "DOT", ""});
+        UNIT_ASSERT(token.Empty());
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(CursorTokenContextTests)

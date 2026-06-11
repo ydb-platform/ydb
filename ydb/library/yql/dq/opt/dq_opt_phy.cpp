@@ -270,9 +270,13 @@ TDqConnection BuildConnection(
     return buildShuffle();
 }
 
-TExprNode::TPtr BuildPartitionsThenSortDirections(TPositionHandle pos, const TExprNode::TPtr& sortDirectionsNode, TExprContext& ctx) {
+TExprNode::TPtr BuildPartitionsThenSortDirections(TPositionHandle pos, const TExprNode::TPtr& sortDirectionsNode,
+    ui32 partitionKeyCount, TExprContext& ctx)
+{
     TExprNode::TListType dirs;
-    dirs.push_back(ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "true", TNodeFlags::Default)}));
+    for (ui32 i = 0; i < partitionKeyCount; ++i) {
+        dirs.push_back(ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "true", TNodeFlags::Default)}));
+    }
     if (sortDirectionsNode->IsList()) {
         for (ui32 i = 0; i < sortDirectionsNode->ChildrenSize(); ++i) {
             dirs.push_back(sortDirectionsNode->ChildPtr(i));
@@ -291,7 +295,16 @@ TExprNode::TPtr BuildPartitionsThenSortKeySelectorLambda(
 {
     auto itemArg = ctx.NewArgument(pos, "item");
     TExprNode::TListType keys;
-    keys.push_back(ctx.ReplaceNode(partitionKeyLambda->TailPtr(), partitionKeyLambda->Head().Head(), itemArg));
+    auto partitionKeyBody = ctx.ReplaceNode(partitionKeyLambda->TailPtr(), partitionKeyLambda->Head().Head(), itemArg);
+
+    // flatten partition keys
+    if (partitionKeyBody->IsList()) {
+        for (ui32 i = 0; i < partitionKeyBody->ChildrenSize(); ++i) {
+            keys.push_back(partitionKeyBody->ChildPtr(i));
+        }
+    } else {
+        keys.push_back(partitionKeyBody);
+    }
     auto orderWithItem = ctx.ReplaceNode(orderKeyLambda->TailPtr(), orderKeyLambda->Head().Head(), itemArg);
     if (orderKeyLambda->Tail().IsList()) {
         for (ui32 i = 0; i < orderWithItem->ChildrenSize(); ++i) {
@@ -345,7 +358,9 @@ TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const 
     TExprNode::TPtr sortDirections;
     TExprNode::TPtr sortKeySelector;
     if (haveSort) {
-        sortDirections = BuildPartitionsThenSortDirections(pos, partition.SortDirections().Ptr(), ctx);
+        const auto& keyBody = keyExtractor.Body().Ref();
+        ui32 partitionKeyCount = keyBody.IsList() ? keyBody.ChildrenSize() : 1;
+        sortDirections = BuildPartitionsThenSortDirections(pos, partition.SortDirections().Ptr(), partitionKeyCount, ctx);
         sortKeySelector = BuildPartitionsThenSortKeySelectorLambda(pos,
             partition.KeySelectorLambda().Ptr(), partition.SortKeySelectorLambda().Ptr(), ctx);
     } else {

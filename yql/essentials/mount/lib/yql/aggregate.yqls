@@ -561,7 +561,7 @@
                         (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (OptionalItemType (TypeOf value))) parent))))
                     )
                 )
-                'Null (lambda '() defval)
+                'Null (lambda '() (Null))
                 (lambda '() (Apply init value parent))
             )
         )
@@ -581,16 +581,36 @@
                         (Apply init_optional value parent)
                     )
                 )
-                'Null (lambda '() defval)
+                'Null (lambda '() (Null))
                 (lambda '() (Apply update value state parent))
             )
         )
     )
 
-    (let save_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state save)) 'Null (lambda '() defval) (lambda '() (Apply save state)))))
-    (let load_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state load)) 'Null (lambda '() defval) (lambda '() (Apply load state)))))
-    (let merge_optional (lambda '(one two) (MatchType item_type 'Optional (lambda '() (OptionalReduce one two merge)) 'Null (lambda '() defval) (lambda '() (Apply merge one two)))))
-    (let finish_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (FlatMap state finish)) 'Null (lambda '() defval) (lambda '() (Apply finish state)))))
+    (let save_optional (lambda '(state)
+        (MatchType item_type
+            'Optional (lambda '() (Map state save))
+            'Null (lambda '() (Null))
+            (lambda '() (Apply save state)))))
+
+    (let load_optional (lambda '(state)
+        (MatchType item_type
+            'Optional (lambda '() (Map state load))
+            'Null (lambda '() (Null))
+            (lambda '() (Apply load state)))))
+
+    (let merge_optional (lambda '(one two)
+        (MatchType item_type
+            'Optional (lambda '() (OptionalReduce one two merge))
+            'Null (lambda '() (Null))
+            (lambda '() (Apply merge one two)))))
+
+    (let finish_optional (lambda '(state)
+        (MatchType item_type
+            'Optional (lambda '() (FlatMap state finish))
+            'Null (lambda '() defval)
+            (lambda '() (Apply finish state)))))
+
     (return (AggregationTraits item_type init_optional update_optional save_optional load_optional merge_optional finish_optional defval))
 ))))
 
@@ -803,19 +823,27 @@
     (let item_type (ListItemType list_type))
     (let key_type (TypeOf (Apply first (InstanceOf item_type))))
     (let value_type (TypeOf (Apply second (InstanceOf item_type))))
+
     (let null_value (MatchType value_type
         'Optional (lambda '() (Nothing value_type))
         'Null (lambda '() (Null))
         (lambda '() (Nothing (OptionalType value_type)))
     ))
+
     (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type)))
-    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type)))
-        (lambda '(row) (MatchType key_type 'Optional
-            (lambda '() (Unwrap (Apply first row)))
+
+    (let traits (Apply
+        factory
+        (ListType (MatchType item_type
+            'Optional (lambda '() (OptionalItemType item_type))
+            (lambda '() item_type)))
+        (lambda '(row) (MatchType key_type
+            'Optional (lambda '() (Unwrap (Apply first row)))
             (lambda '() (Apply first row))
         ))
         second
     ))
+
     (let init (NthArg '1 traits))
     (let update (NthArg '2 traits))
     (let save (NthArg '3 traits))
@@ -826,18 +854,36 @@
 
     (let init_opt (lambda '(row parent) (MatchType test_type
         'Optional (lambda '() (Map (Apply first row) (lambda '(key) (Apply init row parent))))
-        'Null (lambda '() null_value)
+        'Null (lambda '() (Null))
         (lambda '() (Apply init row parent))
     )))
+
     (let update_opt (lambda '(row state parent) (MatchType test_type
         'Optional (lambda '() (IfPresent state (lambda '(state) (Just (If (Exists (Apply first row)) (Apply update row state parent) state))) (Apply init_opt row parent)))
-        'Null (lambda '() null_value)
+        'Null (lambda '() (Null))
         (lambda '() (Apply update row state parent))
     )))
-    (let save_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state save)) 'Null (lambda '() null_value) (lambda '() (Apply save state)))))
-    (let load_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state load)) 'Null (lambda '() null_value) (lambda '() (Apply load state)))))
-    (let merge_opt (lambda '(one two) (MatchType test_type 'Optional (lambda '() (OptionalReduce one two merge)) 'Null (lambda '() null_value) (lambda '() (Apply merge one two)))))
-    (let finish_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state finish)) 'Null (lambda '() null_value) (lambda '() (Apply finish state)))))
+
+    (let save_opt (lambda '(state) (MatchType test_type
+        'Optional (lambda '() (Map state save))
+        'Null (lambda '() (Null))
+        (lambda '() (Apply save state)))))
+
+    (let load_opt (lambda '(state) (MatchType test_type
+        'Optional (lambda '() (Map state load))
+        'Null (lambda '() (Null))
+        (lambda '() (Apply load state)))))
+
+    (let merge_opt (lambda '(one two) (MatchType test_type
+        'Optional (lambda '() (OptionalReduce one two merge))
+        'Null (lambda '() (Null))
+        (lambda '() (Apply merge one two)))))
+
+    (let finish_opt (lambda '(state) (MatchType test_type
+        'Optional (lambda '() (Map state finish))
+        'Null (lambda '() null_value)
+        (lambda '() (Apply finish state)))))
+
     (return (AggregationTraits item_type init_opt update_opt save_opt load_opt merge_opt finish_opt defval))
 ))))
 
@@ -862,9 +908,10 @@
                 (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (TypeOf row)) parent))))
             )
         )
-        'Null (lambda '() defval)
+        'Null (lambda '() (Null))
         (lambda '() (Apply init row parent))
     )))
+
     (let update_opt (lambda '(row state parent) (MatchType key_type
         'Optional (lambda '()
             (IfPresent state
@@ -877,14 +924,34 @@
                 (Apply init_opt row parent)
             )
         )
-        'Null (lambda '() defval)
+        'Null (lambda '() (Null))
         (lambda '() (Apply update row state parent))
     )))
 
-    (let save_opt (lambda '(state) (MatchType key_type 'Optional (lambda '() (Map state save)) 'Null (lambda '() defval) (lambda '() (Apply save state)))))
-    (let load_opt (lambda '(state) (MatchType key_type 'Optional (lambda '() (Map state load)) 'Null (lambda '() defval) (lambda '() (Apply load state)))))
-    (let merge_opt (lambda '(one two) (MatchType key_type 'Optional (lambda '() (OptionalReduce one two merge)) 'Null (lambda '() defval) (lambda '() (Apply merge one two)))))
-    (let finish_opt (lambda '(state) (MatchType key_type 'Optional (lambda '() (FlatMap state finish)) 'Null (lambda '() defval) (lambda '() (Apply finish state)))))
+    (let save_opt (lambda '(state)
+        (MatchType key_type
+            'Optional (lambda '() (Map state save))
+            'Null (lambda '() (Null))
+            (lambda '() (Apply save state)))))
+
+    (let load_opt (lambda '(state)
+        (MatchType key_type
+            'Optional (lambda '() (Map state load))
+            'Null (lambda '() (Null))
+            (lambda '() (Apply load state)))))
+
+    (let merge_opt (lambda '(one two)
+        (MatchType key_type
+            'Optional (lambda '() (OptionalReduce one two merge))
+            'Null (lambda '() (Null))
+            (lambda '() (Apply merge one two)))))
+
+    (let finish_opt (lambda '(state)
+        (MatchType key_type
+            'Optional (lambda '() (FlatMap state finish))
+            'Null (lambda '() defval)
+            (lambda '() (Apply finish state)))))
+
     (return (AggregationTraits item_type init_opt update_opt save_opt load_opt merge_opt finish_opt defval))
 ))))
 

@@ -58,6 +58,7 @@ struct TScopedState: public TThrRefBase {
     bool WarnUntypedStringLiterals = false;
     bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
+    THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> ActivePragmas;
 
     struct TLocal {
         TVector<std::pair<TString, TDeferredAtom>> UsedClusters;
@@ -432,7 +433,6 @@ public:
         EFlattenAndAggrExprsPersistence::Disable;
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
-    bool StrictWarningAsError = true;
     bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;

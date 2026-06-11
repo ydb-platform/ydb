@@ -194,6 +194,8 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
         req->set_start_timestamp(options.StartTimestamp);
     }
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND(
         [
             =,
@@ -253,6 +255,8 @@ TFuture<bool> TClientBase::NodeExists(
     ToProto(req->mutable_master_read_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspExistsNodePtr& rsp) {
         return rsp->exists();
     }));
@@ -289,6 +293,8 @@ TFuture<TYsonString> TClientBase::GetNode(
         ToProto(req->mutable_options(), *options.Options);
     }
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetNodePtr& rsp) {
         return TYsonString(rsp->value());
     }));
@@ -322,6 +328,8 @@ TFuture<TYsonString> TClientBase::ListNode(
     ToProto(req->mutable_master_read_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListNodePtr& rsp) {
         return TYsonString(rsp->value());
     }));
@@ -353,6 +361,8 @@ TFuture<NCypressClient::TNodeId> TClientBase::CreateNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateNodePtr& rsp) {
         return FromProto<NCypressClient::TNodeId>(rsp->node_id());
     }));
@@ -376,6 +386,8 @@ TFuture<void> TClientBase::RemoveNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -398,6 +410,8 @@ TFuture<void> TClientBase::SetNode(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -428,6 +442,8 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -452,6 +468,8 @@ TFuture<TLockNodeResult> TClientBase::LockNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLockNodePtr& rsp) {
         TLockNodeResult result;
         FromProto(&result.NodeId, rsp->node_id());
@@ -475,6 +493,8 @@ TFuture<void> TClientBase::UnlockNode(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -511,6 +531,8 @@ TFuture<NCypressClient::TNodeId> TClientBase::CopyNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCopyNodePtr& rsp) {
         return FromProto<NCypressClient::TNodeId>(rsp->node_id());
     }));
@@ -546,6 +568,8 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspMoveNodePtr& rsp) {
         return FromProto<NCypressClient::TNodeId>(rsp->node_id());
     }));
@@ -577,6 +601,8 @@ TFuture<NCypressClient::TNodeId> TClientBase::LinkNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLinkNodePtr& rsp) {
         return FromProto<NCypressClient::TNodeId>(rsp->node_id());
     }));
@@ -598,6 +624,8 @@ TFuture<void> TClientBase::ConcatenateNodes(
     // TODO(babenko)
     // ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -647,6 +675,8 @@ TFuture<NObjectClient::TObjectId> TClientBase::CreateObject(
     if (options.Attributes) {
         ToProto(req->mutable_attributes(), *options.Attributes);
     }
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateObjectPtr& rsp) {
         return FromProto<NObjectClient::TObjectId>(rsp->object_id());
@@ -816,6 +846,8 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
     auto req = proxy.StartDistributedWriteSession();
     FillRequest(req.Get(), path, options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke()
         .AsUnique().Apply(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
             std::vector<TSignedWriteFragmentCookiePtr> cookies;
@@ -839,6 +871,9 @@ TFuture<void> TClientBase::PingDistributedWriteSession(
     auto req = proxy.PingDistributedWriteSession();
 
     FillRequest(req.Get(), session, options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().AsVoid();
 }
 
@@ -851,6 +886,9 @@ TFuture<void> TClientBase::FinishDistributedWriteSession(
     auto req = proxy.FinishDistributedWriteSession();
 
     FillRequest(req.Get(), sessionWithResults, options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().AsVoid();
 }
 
@@ -866,6 +904,8 @@ TFuture<TDistributedWriteFileSessionWithCookies> TClientBase::StartDistributedWr
 
     auto req = proxy.StartDistributedWriteFileSession();
     FillRequest(req.Get(), path, options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke()
         .AsUnique().Apply(BIND([] (TRsp&& result) {
@@ -890,6 +930,9 @@ TFuture<void> TClientBase::PingDistributedWriteFileSession(
     auto req = proxy.PingDistributedWriteFileSession();
 
     FillRequest(req.Get(), session, options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().AsVoid();
 }
 
@@ -902,6 +945,9 @@ TFuture<void> TClientBase::FinishDistributedWriteFileSession(
     auto req = proxy.FinishDistributedWriteFileSession();
 
     FillRequest(req.Get(), session, options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().AsVoid();
 }
 

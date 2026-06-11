@@ -9,6 +9,11 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
     TEvStatistics::TEvAnalyze::TPtr Event;
     TActorId ReplyToActorId;
+    // When set, Complete() replays the terminal status to the sender instead of
+    // scheduling a new traversal. Populated when a retry arrives for an operation
+    // that already finished.
+    std::optional<NKikimrStat::TEvAnalyzeResponse::EStatus> TerminalReplay;
+    NYql::TIssues TerminalReplayIssues;
 
     TTxAnalyze(TSelf* self, TEvStatistics::TEvAnalyze::TPtr ev)
         : TTxBase(self)
@@ -40,8 +45,15 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 existingOperation->State == Ydb::Table::AnalyzeState::STATE_DONE ||
                 existingOperation->State == Ydb::Table::AnalyzeState::STATE_CANCELLED;
             if (isTerminal) {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Replace terminal force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
-                Self->DeleteForceTraversalOperation(operationId, db);
+                // Idempotent retry: the operation already finished. Don't redo the
+                // analyze; replay the cached terminal status in Complete() so the
+                // requester sees a stable result and the history entry is preserved.
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Replay terminal response. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
+                TerminalReplay = existingOperation->State == Ydb::Table::AnalyzeState::STATE_DONE
+                    ? NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS
+                    : NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED;
+                TerminalReplayIssues = existingOperation->Issues;
+                return true;
             } else if (existingOperation->ReplyToActorId == Event->Sender) {
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Reattach to existing force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
                 existingOperation->RequestingActorReattached = true;
@@ -118,6 +130,17 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Complete");
+
+        if (TerminalReplay && ReplyToActorId) {
+            auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
+            response->Record.SetOperationId(Record().GetOperationId());
+            response->Record.SetStatus(*TerminalReplay);
+            for (const auto& issue : TerminalReplayIssues) {
+                NYql::IssueToMessage(issue, response->Record.AddIssues());
+            }
+            ctx.Send(ReplyToActorId, response.release());
+            return;
+        }
 
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleTraversal());
     }

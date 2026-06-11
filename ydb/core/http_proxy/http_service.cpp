@@ -13,6 +13,8 @@
 #include <util/stream/file.h>
 #include <util/string/ascii.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
+
 namespace NKikimr::NHttpProxy {
 
     using namespace NActors;
@@ -95,12 +97,13 @@ namespace NKikimr::NHttpProxy {
                                     Driver.Get(),
                                     ServiceAccountCredentialsProvider);
 
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                      " incoming request from [" << context.SourceAddress << "]" <<
-                      " request [" << context.MethodName << "]" <<
-                      " url [" << context.Request->URL << "]" <<
-                      " database [" << context.DatabasePath << "]" <<
-                      " requestId: " << context.RequestId);
+        YDB_LOG_INFO_CTX(ctx, "Incoming request from request url database",
+            {"logPrefix", LogPrefix()},
+            {"sourceAddress", context.SourceAddress},
+            {"methodName", context.MethodName},
+            {"url", context.Request->URL},
+            {"databasePath", context.DatabasePath},
+            {"requestId", context.RequestId});
 
         auto contentType = context.ContentType;
         try {

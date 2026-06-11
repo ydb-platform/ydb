@@ -714,17 +714,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
     }
 
-#if 0 // TODO: switch when inputtransform will be fixed; just log for now
-#define WEAK_UNIT_ASSERT_GT_C UNIT_ASSERT_GT_C
-#define WEAK_UNIT_ASSERT_LE_C UNIT_ASSERT_LE_C
-#define WEAK_UNIT_ASSERT_EQUAL_C UNIT_ASSERT_EQUAL_C
-#define WEAK_UNIT_ASSERT UNIT_ASSERT
-#else
-#define WEAK_UNIT_ASSERT_GT_C(A, B, C) do { if (!((A) > (B))) LOG_E("Assert " #A " > " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT_LE_C(A, B, C) do { if (!((A) <= (B))) LOG_E("Assert " #A " <= " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
-#endif
     void BasicMultichannelTests(ui32 packets, bool waitIntermediateAcks, ui32 numChannels, auto& rng, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets

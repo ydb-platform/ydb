@@ -2177,6 +2177,13 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
         auto &pool = *resources->add_storage_units();
         pool.set_unit_kind(pr.second->Kind);
         pool.set_count(pr.second->Config.GetNumGroups());
+        if (pr.second->Issue) {
+            auto *issue = status.add_issues();
+            issue->set_severity(NYql::TSeverityIds::S_WARNING);
+            issue->set_message(TStringBuilder()
+                << pr.second->Kind << ": failed to allocate storage pool: "
+                << pr.second->Issue);
+        }
         if (pr.second->AllocatedNumGroups) {
             auto &allocatedPool = *status.mutable_allocated_resources()->add_storage_units();
             allocatedPool.set_unit_kind(pr.second->Kind);
@@ -3465,6 +3472,7 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolAllocated::TPtr &ev, const TActo
     Y_ABORT_UNLESS(pool->State != TStoragePool::ALLOCATED);
 
     pool->GroupFitErrors = 0;
+    pool->Issue.clear();
 
     TxProcessor->ProcessTx(CreateTxUpdatePoolState(tenant, pool, ev->Sender,
                                                    TStoragePool::ALLOCATED),
@@ -3505,6 +3513,8 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorCo
         LOG_CRIT_S(ctx, NKikimrServices::CMS_TENANTS,
                    "Couldn't update storage pool " << pool->Config.GetName()
                    << " for tenant " << tenant->Path << ": " << issue);
+
+        pool->Issue = issue;
 
         if (issue.Contains("Group fit error")) {
             if (++pool->GroupFitErrors >= 10) {

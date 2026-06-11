@@ -1,6 +1,5 @@
 # doc_verify на translation PR (ветка в upstream или в fork).
 # QA = тот же пайплайн, что после doc_translate (@v0.1.0).
-# Repair-коммит в head-ветку PR (после фикса push URL в action).
 
 name: ydbdoc-review (doc_verify label)
 
@@ -44,4 +43,24 @@ jobs:
           YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
+
+  trigger-verify-ci:
+    needs: ydbdoc-verify
+    if: ${{ !cancelled() && needs.ydbdoc-verify.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger PR-check and docs rebuild on translation PR
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['ok-to-test', 'rebuild_docs'],
+            });
+            core.info(
+              `Added ok-to-test and rebuild_docs to translation PR #${prNumber}`
+            );

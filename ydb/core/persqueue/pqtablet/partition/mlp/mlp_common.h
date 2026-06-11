@@ -48,15 +48,6 @@ std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     std::optional<ui64> count = std::nullopt
 );
 
-std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
-    const NActors::TActorId& selfId,
-    const TString& consumerName,
-    ui64 startOffset,
-    ui64 count,
-    ui64 cookie,
-    ui64 nextPartNo = 0
-);
-
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
     const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
     ui64 offset,

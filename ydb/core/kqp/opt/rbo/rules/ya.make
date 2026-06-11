@@ -7,6 +7,7 @@ SRCS(
     constant_folding_stage.cpp
     correlated_filter_pullup.cpp
     expand_cbo_tree.cpp
+    expand_distinct_aggregation.cpp
     extract_join_expressions.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp
@@ -47,6 +48,7 @@ SRCS(
     propagate_hash_func_stage.cpp
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
+    rewrite_right_join.cpp
 )
 
 PEERDIR(

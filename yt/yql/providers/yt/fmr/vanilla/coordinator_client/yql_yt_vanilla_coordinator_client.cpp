@@ -90,6 +90,10 @@ public:
         return GetInner()->PrepareOperation(req);
     }
 
+    NThreading::TFuture<TWaitForOperationsResponse> WaitForOperations(const TWaitForOperationsRequest& req) override {
+        return GetInner()->WaitForOperations(req);
+    }
+
 private:
     IFmrCoordinator::TPtr GetInner() const {
         TGuard guard(Mutex_);

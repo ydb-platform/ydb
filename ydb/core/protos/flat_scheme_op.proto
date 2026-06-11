@@ -458,6 +458,9 @@ message TTableDescription {
      *       regardless of the detailed metrics settings at the database level.
      */
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
+
+    // For fulltext indexes - to determine if the table is an impl table of an index
+    optional EIndexType IndexImplType = 52;
 }
 
 message TCompressionOptions {
@@ -1333,6 +1336,9 @@ enum EIndexType {
     EIndexTypeLocalBloomFilter = 8;
     EIndexTypeLocalBloomNgramFilter = 9;
     EIndexTypeLocalMinMax = 10;
+    EIndexTypeGlobalFulltextCompact = 11;
+    EIndexTypeGlobalFulltextCompactRelevance = 12;
+    EIndexTypeGlobalJsonCompact = 13;
 }
 
 enum EIndexState {

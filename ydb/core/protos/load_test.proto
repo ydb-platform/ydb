@@ -496,7 +496,8 @@ message TEvLoadTestRequest {
         // own in-flight map keyed by event cookie) and recovers
         // SizeBytes from the same map.
         message TNbsWriteResult {
-            optional uint32 Status = 1;
+            optional ENbsIoResultStatus Status = 1;
+            optional string Reason = 2;
         }
 
         // Load-actor -> worker: "read SizeBytes at this flat address";
@@ -510,12 +511,14 @@ message TEvLoadTestRequest {
         // TRope payload on the actor event and is referenced by PayloadId,
         // matching the DDisk TReadResult payload convention.
         message TNbsReadResult {
-            optional uint32 Status = 1;
+            optional ENbsIoResultStatus Status = 1;
 
             oneof Payload {
                 uint32 PayloadId = 2;
                 // <-- add RDMA here
             }
+
+            optional string Reason = 3;
         }
 
         // Per-Run workload-shaping configuration.
@@ -612,6 +615,21 @@ enum ENbsLoadTabletStatus {
     NBSLT_BUSY = 3;
     NBSLT_NOT_INITIALIZED = 4;
     NBSLT_INTERNAL_ERROR = 5;
+}
+
+// Per-IO result status for TNbsWriteResult / TNbsReadResult. The tablet sets
+// a descriptive Reason string alongside each non-OK status.
+enum ENbsIoResultStatus {
+    NBSIO_OK                   = 0;
+    NBSIO_NOT_CONFIGURED       = 1; // IoSizeBytes == 0, worker not yet set up
+    NBSIO_TABLET_NOT_READY     = 2; // Phase != Ready or routing state incomplete
+    NBSIO_INVALID_ADDRESS      = 3; // address decodes to wrong DBG / out of range / wrong size
+    NBSIO_MISSING_PAYLOAD      = 4; // write has no PayloadId or out-of-range PayloadId
+    NBSIO_QUORUM_LOST          = 5; // write quorum definitively lost
+    NBSIO_IO_ERROR             = 6; // underlying PB / DDisk returned non-OK status
+    NBSIO_READS_DISABLED       = 7; // DisableReplication=true, reads not supported
+    NBSIO_BACKPRESSURE         = 8; // LSN inflight cap reached
+    NBSIO_READ_DISPATCH_FAILED = 9; // no available PB or DDisk peer for read dispatch
 }
 
 message TEvNbsLoadTabletAllocateGroups {

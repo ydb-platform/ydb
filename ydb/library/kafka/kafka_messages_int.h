@@ -407,7 +407,7 @@ public:
         if (value) {
             const auto& v = *value;
             WriteArraySize<Meta>(writable, version, v.size());
-            writable << v;
+            writable.write(v.data(), v.size());
         } else {
             if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
                 WriteArraySize<Meta>(writable, version, -1);
@@ -420,7 +420,7 @@ public:
     inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TKafkaBytes& value) {
         const auto& v = *value;
         WriteArraySize<Meta>(writable, version, v.size());
-        writable << v;
+        writable.write(v.data(), v.size());
     }
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaBytes& value) {
@@ -484,38 +484,7 @@ public:
             value.emplace();
 
             if (magic < CURRENT_RECORD_VERSION) {
-                size_t end = readable.position() + length;
-
-                TKafkaRecordBatchV0 v0;
-                v0.Read(readable, magic);
-
-                value->Magic = 2;
-                value->Attributes = v0.Record.Attributes & 0x07;
-                value->BaseTimestamp = 0;
-                value->BaseOffset = 0;
-
-                value->Records.resize(1);
-                auto& record = value->Records.front();
-                record.Length = v0.Record.MessageSize;
-                record.OffsetDelta = v0.Offset;
-                record.TimestampDelta = v0.Record.Timestamp;
-                record.Key = v0.Record.Key;
-                record.Value = v0.Record.Value;
-
-                while(readable.position() < end) {
-                    magic = readable.take(16);
-
-                    v0 = {};
-                    v0.Read(readable, magic);
-
-                    value->Records.resize(value->Records.size() + 1);
-                    auto& record = value->Records.back();
-                    record.Length = v0.Record.MessageSize;
-                    record.OffsetDelta = v0.Offset;
-                    record.TimestampDelta = v0.Record.Timestamp;
-                    record.Key = v0.Record.Key;
-                    record.Value = v0.Record.Value;
-                }
+                ReadLegacyRecordBatch(readable, magic, length, *value);
             } else {
                 (*value).Read(readable, magic);
             }

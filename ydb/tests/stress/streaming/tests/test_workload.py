@@ -27,7 +27,7 @@ class TestYdbWorkload(StressFixture):
                 'STREAMS_STORAGE_SERVICE': LogLevels.DEBUG,
                 'FQ_ROW_DISPATCHER': LogLevels.DEBUG,
                 'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTOR': LogLevels.DEBUG}
+                'KQP_EXECUTER': LogLevels.DEBUG}
         )
 
     def test(self):

@@ -39,6 +39,7 @@ public:
     virtual void IncUsefulReadWakeups() = 0;
     virtual void IncSpuriousReadWakeups() = 0;
     virtual void SetPeerInfo(const TString& name, const TString& dataCenterId, const TString& peerLabel) = 0;
+    virtual void SetPeerScopeId(const TScopeId& peerScopeId) = 0;
     virtual void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) = 0;
     virtual void IncInputChannelsIncomingEvents(ui16 channel) = 0;
     virtual void IncScopeErrors() = 0;

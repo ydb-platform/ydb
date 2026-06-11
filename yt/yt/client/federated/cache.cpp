@@ -24,7 +24,7 @@ public:
         TClientsCacheConfigPtr clientsCacheConfig,
         NApi::TClientOptions options,
         TConnectionConfigPtr federationConfig,
-        TString clusterSeparator)
+        std::string clusterSeparator)
         : ClientsCacheConfig_(std::move(clientsCacheConfig))
         , Options_(std::move(options))
         , FederationConfig_(std::move(federationConfig))
@@ -81,7 +81,7 @@ private:
     const TClientsCacheConfigPtr ClientsCacheConfig_;
     const NApi::TClientOptions Options_;
     const NFederated::TConnectionConfigPtr FederationConfig_;
-    const TString ClusterSeparator_;
+    const std::string ClusterSeparator_;
 
     NApi::IConnectionPtr FederatedConnection_;
 };
@@ -94,7 +94,7 @@ IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
     const TClientsCacheConfigPtr& clientsCacheConfig,
     const NApi::TClientOptions& options,
-    TString clusterSeparator)
+    std::string clusterSeparator)
 {
     return NYT::New<TClientsCache>(
         clientsCacheConfig,
@@ -107,7 +107,7 @@ IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
     const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig,
     const NApi::TClientOptions& options,
-    TString clusterSeparator)
+    std::string clusterSeparator)
 {
     auto clientsCacheConfig = New<TClientsCacheConfig>();
     clientsCacheConfig->DefaultConnection = CloneYsonStruct(

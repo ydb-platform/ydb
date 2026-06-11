@@ -3018,6 +3018,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 Y_ASSERT(description.empty());
@@ -3030,7 +3031,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
                 auto success = SpecializedIndexDescription
                     .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
                     .ParseFromString(description);
@@ -3114,6 +3117,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 break;
@@ -3122,6 +3126,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                 alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
                 break;
             case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:

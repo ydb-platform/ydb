@@ -153,6 +153,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                     TABLEH() { out << "Category"; }
                     TABLEH() { out << "Temporary"; }
                     TABLEH() { out << "Pending"; }
+                    TABLEH() { out << "PDiskConfig warning"; }
                 }
             }
             TABLEBODY() {
@@ -175,6 +176,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                         TABLED() { out << value.Record.GetPDiskCategory(); }
                         TABLED() { out << value.Temporary; }
                         TABLED() { out << pending; }
+                        TABLED() { out << value.PDiskConfigWarning; }
                     }
                 }
             }

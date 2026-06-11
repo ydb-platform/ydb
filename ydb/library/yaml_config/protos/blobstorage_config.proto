@@ -69,8 +69,11 @@ message Drive {
     bool read_centric = 4;
     // nontransparent user-defined kind used for filtering when picking up groups
     uint64 kind = 5;
+    // expected_slot_count and expected_slot_size are mutually exclusive.
     // Number of slots to calculate per-vdisk disk space limit.
     uint64 expected_slot_count = 6;
+    // Per-vdisk disk space limit.
+    uint64 expected_slot_size = 7;
 }
 
 message HostConfig {

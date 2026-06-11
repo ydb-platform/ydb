@@ -529,8 +529,8 @@ namespace NKikimr::NBsController {
                 TPDiskInfo* pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
                 Y_ABORT_UNLESS(pdisk);
 
-                pdisk->NumActiveSlots -= TPDiskConfig::GetOwnerWeight(oldSizeInUnits, pdisk->SlotSizeInUnits);
-                pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(newSizeInUnits, pdisk->SlotSizeInUnits);
+                pdisk->NumActiveSlots -= pdisk->GetOwnerWeight(oldSizeInUnits);
+                pdisk->NumActiveSlots += pdisk->GetOwnerWeight(newSizeInUnits);
             }
 
             // update the group size
@@ -640,7 +640,8 @@ namespace NKikimr::NBsController {
                     x->SetGuid(pdisk.Guid);
                     x->SetNumStaticSlots(pdisk.StaticSlotUsage);
                     x->SetDriveStatus(NKikimrBlobStorage::EDriveStatus::ACTIVE);
-                    x->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
+                    x->SetExpectedSlotCount(pdisk.GetEffectiveExpectedSlotCount());
+                    x->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
                     x->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
                     if (pdisk.PDiskMetrics) {
                         x->MutablePDiskMetrics()->CopyFrom(*pdisk.PDiskMetrics);

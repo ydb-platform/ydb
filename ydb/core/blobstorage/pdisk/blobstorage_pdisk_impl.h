@@ -229,6 +229,7 @@ public:
     ui64 LastInitialSectorIdx;
 
     ui32 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui64 ExpectedSlotSize = 0; // Slot size to use for space limit calculation, 0 if not set.
 
     TAtomic TotalOwners = 0; // number of registered owners
 
@@ -383,6 +384,9 @@ public:
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void YardResize(TYardResize &evYardResize);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
+    void NormalizeExpectedSlotSettings();
+    i64 GetExpectedOwnerSizeInChunks() const;
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) const;
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);

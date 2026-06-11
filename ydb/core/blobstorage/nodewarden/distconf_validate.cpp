@@ -1,6 +1,20 @@
 #include "distconf.h"
 
+#include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
+
 namespace NKikimr::NStorage {
+
+    static std::optional<TString> ValidatePDiskConfig(
+            const NKikimrBlobStorage::TPDiskConfig& config, TStringBuf context) {
+        const bool hasExpectedSlotCount = config.HasExpectedSlotCount() && config.GetExpectedSlotCount();
+        const bool hasSlotSizeInUnits = config.HasSlotSizeInUnits() && config.GetSlotSizeInUnits();
+        const bool hasExpectedSlotSize = config.HasExpectedSlotSize() && config.GetExpectedSlotSize();
+        if (hasExpectedSlotSize && (hasExpectedSlotCount || hasSlotSizeInUnits)) {
+            return TStringBuilder() << context
+                << " PDiskConfig has ExpectedSlotSize with ExpectedSlotCount or SlotSizeInUnits";
+        }
+        return {};
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Inter-config validation
@@ -192,6 +206,13 @@ namespace NKikimr::NStorage {
             }
 
             const ui32 pdiskId = pdisk.GetPDiskID();
+            if (pdisk.HasPDiskConfig()) {
+                const TString context = TStringBuilder() << "pdisk NodeID# " << nodeId << " PDiskID# " << pdiskId;
+                if (auto error = ValidatePDiskConfig(pdisk.GetPDiskConfig(), context)) {
+                    return error;
+                }
+            }
+
             if (const auto [_, inserted] = pdisksById.emplace(std::make_tuple(nodeId, pdiskId), pdisk.GetPDiskGuid()); !inserted) {
                 return "duplicate NodeID:PDiskID for pdisk";
             }
@@ -373,6 +394,13 @@ namespace NKikimr::NStorage {
     std::optional<TString> ValidateConfig(const NKikimrConfig::TBlobStorageConfig& config, const THashSet<ui32>& nodeIds) {
         if (config.HasServiceSet()) {
             if (auto error = ValidateConfig(config.GetServiceSet(), nodeIds)) {
+                return error;
+            }
+        }
+
+        if (config.HasInferPDiskSlotCountSettings()) {
+            if (auto error = ValidateInferPDiskSlotCountSettings(
+                    config.GetInferPDiskSlotCountSettings(), "BlobStorageConfig.InferPDiskSlotCountSettings")) {
                 return error;
             }
         }

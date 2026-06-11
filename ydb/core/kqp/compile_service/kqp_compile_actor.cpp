@@ -665,11 +665,12 @@ private:
     }
 
     void HandleTimeout() {
+        const auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(QueryId.Text);
         ALOG_NOTICE(NKikimrServices::KQP_COMPILE_ACTOR, "Compilation timeout"
             << ", self: " << SelfId()
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(QueryId.Text) << "\""
+            << ", text: \"" << EscapeC(protectedQueryText) << "\""
             << ", startTime: " << StartTime);
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -692,10 +693,11 @@ private:
 
 private:
     void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
+        const auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(QueryId.Text);
         LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, logMessage
                 << ", self: " << ctx.SelfID
                 << ", database: " << QueryId.Database
-                << ", text: \"" << EscapeC(QueryId.Text) << "\"");
+                << ", text: \"" << EscapeC(protectedQueryText) << "\"");
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.

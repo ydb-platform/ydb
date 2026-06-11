@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/session_actor/kqp_query_state.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/security/util.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -102,17 +103,26 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
                      const TCompletedFields& fields,
                      bool truncateText)
 {
+    // truncate if needed
     bool wasTruncated = false;
     if (truncateText && requestText.size() > QUERY_TEXT_LIMIT) {
         requestText = requestText.SubStr(0, QUERY_TEXT_LIMIT);
         wasTruncated = true;
     }
 
-    const size_t chunkSize = (truncateText && !requestText.empty())
-        ? requestText.size()
+    // prepare loggingRequestText for actual logging
+    TString protectedRequestText;
+    TStringBuf loggingRequestText = requestText;
+    const bool dataProtected = NKikimr::ProtectQueryForLoggingIfSensitive(loggingRequestText, protectedRequestText);
+    if (dataProtected) {
+        loggingRequestText = protectedRequestText;
+    }
+
+    const size_t chunkSize = (truncateText && !loggingRequestText.empty())
+        ? loggingRequestText.size()
         : SQL_TEXT_MAX_SIZE;
-    const size_t total = requestText.empty() ? 1 :
-        (requestText.size() + chunkSize - 1) / chunkSize;
+    const size_t total = loggingRequestText.empty() ? 1 :
+        (loggingRequestText.size() + chunkSize - 1) / chunkSize;
 
     for (size_t i = 0; i < total; ++i) {
         TStringStream ss;
@@ -129,8 +139,8 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.WriteKey("request").BeginObject();
         json.WriteKey("event").WriteString("completed");
 
-        if (!requestText.empty()) {
-            json.WriteKey("data").WriteString(requestText.SubStr(i * chunkSize, chunkSize));
+        if (!loggingRequestText.empty()) {
+            json.WriteKey("data").WriteString(loggingRequestText.SubStr(i * chunkSize, chunkSize));
         }
 
         bool issuesTruncated = false;
@@ -147,6 +157,9 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
             WriteCompletedFields(json, fields);
             if (wasTruncated) {
                 json.WriteKey("data_truncated").WriteBool(true);
+            }
+            if (dataProtected) {
+                json.WriteKey("data_protected").WriteBool(true);
             }
             if (issuesTruncated) {
                 json.WriteKey("issues_truncated").WriteBool(true);

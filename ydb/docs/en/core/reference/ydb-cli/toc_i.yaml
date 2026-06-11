@@ -142,6 +142,8 @@ items:
       href: workload-query.md
     - name: Fulltext load
       href: workload-fulltext.md
+    - name: Vector load
+      href: workload-vector.md
   - name: Managing configuration
     href: configs.md
     include:

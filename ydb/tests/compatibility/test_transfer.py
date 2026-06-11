@@ -118,10 +118,10 @@ class TestTransferRollingUpdate(RollingUpgradeAndDowngradeFixture):
         #
         yield from self.setup_cluster(
             # # Some feature flags can be passed. And other KikimrConfigGenerator options
-            extra_feature_flags={
-                "enable_column_store": True,
-                "enable_topic_transfer": True,
-            }
+            extra_feature_flags=[
+                "enable_column_store",
+                "enable_topic_transfer",
+            ]
         )
 
     @pytest.mark.parametrize("store, local", [

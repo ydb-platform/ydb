@@ -16244,9 +16244,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlAccess"] = &SqlAccessWrapper;
         Functions["SqlProcess"] = &SqlProcessWrapper;
         Functions["SqlReduce"] = &SqlReduceWrapper;
+        Functions["SqlCombine"] = &SqlCombineWrapper;
         Functions["SqlExternalFunction"] = &SqlExternalFunctionWrapper;
         Functions["SqlExtractKey"] = &SqlExtractKeyWrapper;
         Functions["SqlReduceUdf"] = &SqlReduceUdfWrapper;
+        Functions["SqlCombineInput"] = &SqlCombineInputWrapper;
         Functions["SqlProject"] = &SqlProjectWrapper;
         Functions["SqlTypeFromYson"] = &SqlTypeFromYsonWrapper;
         Functions["SqlColumnOrderFromYson"] = &SqlColumnOrderFromYsonWrapper;

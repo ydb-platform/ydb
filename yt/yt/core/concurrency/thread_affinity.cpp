@@ -6,6 +6,8 @@
 
 #include <yt/yt/core/misc/proc.h>
 
+#include <library/cpp/yt/system/thread_id.h>
+
 namespace NYT::NConcurrency {
 
 using namespace NThreading;
@@ -22,7 +24,7 @@ void TThreadAffinitySlot::Check(TThreadId threadId)
 
 void TThreadAffinitySlot::Check()
 {
-    Check(GetCurrentThreadId());
+    Check(GetSystemThreadId());
 }
 
 TThreadId TThreadAffinitySlot::GetBoundThreadId() const

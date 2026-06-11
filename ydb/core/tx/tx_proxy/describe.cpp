@@ -455,8 +455,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
 
         bool needSysFolder = false;
         if (self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSubDomain ||
-            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnStore ||
-            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnTable)
+            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnStore)
         {
             needSysFolder = true;
         } else if (self.GetPathId() == NSchemeShard::RootPathId) {

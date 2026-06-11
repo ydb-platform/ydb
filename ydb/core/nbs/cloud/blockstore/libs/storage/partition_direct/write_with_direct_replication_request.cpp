@@ -19,27 +19,21 @@ TWriteWithDirectReplicationRequestExecutor::
         TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlockRange64 vChunkRange,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
-        NWilson::TTraceId traceId)
+        std::shared_ptr<TWriteRequestBundle> bundle)
     : TBaseWriteRequestExecutor(
           actorSystem,
           std::move(logTitle),
           vChunkConfig,
           std::move(directBlockGroup),
-          vChunkRange,
-          std::move(callContext),
-          std::move(request),
-          lsn,
-          std::move(traceId))
+          std::move(bundle))
 {}
 
 void TWriteWithDirectReplicationRequestExecutor::Run()
 {
+    Bundle->GetSpan().Event("Run");
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
+
     for (auto host: VChunkConfig.GetDesiredPBuffers()) {
         SendWriteRequest(host);
     }
@@ -79,9 +73,9 @@ void TWriteWithDirectReplicationRequestExecutor::
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteWithDirectReplicationRequestExecutor. Send write request to "
-            "handoff host %u since we "
-            "have %lu completed writes",
+            "%s Send write request to handoff %s since we have %lu completed "
+            "writes",
+            LogTitle.GetWithTime().c_str(),
             PrintHostIndex(host).c_str(),
             CompletedWrites.Count());
 

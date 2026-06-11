@@ -78,7 +78,7 @@ std::optional<std::vector<NYTree::IMapNodePtr>> CollectRawRangeNodes(const TCons
             THROW_ERROR_EXCEPTION("YPath cannot be annotated with both multiple (\"ranges\" attribute) "
                 "and single (\"lower_limit\" or \"upper_limit\" attributes) ranges");
         }
-        THashMap<TString, NYTree::IMapNodePtr> rangeNode;
+        THashMap<std::string, NYTree::IMapNodePtr> rangeNode;
         if (optionalLowerLimitNode) {
             rangeNode["lower_limit"] = optionalLowerLimitNode;
         }
@@ -444,9 +444,9 @@ bool TConstrainedRichYPath<TValidator...>::HasNontrivialRanges() const
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetFileName() const
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetFileName() const
 {
-    return FindAttribute<TString>(*this, "file_name");
+    return FindAttribute<std::string>(*this, "file_name");
 }
 
 template <class... TValidator>
@@ -664,15 +664,15 @@ NTableClient::TVersionedWriteOptions TConstrainedRichYPath<TValidator...>::GetVe
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
 {
-    return FindAttribute<TString>(*this, "access_method");
+    return FindAttribute<std::string>(*this, "access_method");
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetInputQuery() const
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetInputQuery() const
 {
-    return FindAttribute<TString>(*this, "input_query");
+    return FindAttribute<std::string>(*this, "input_query");
 }
 
 template <class... TValidator>

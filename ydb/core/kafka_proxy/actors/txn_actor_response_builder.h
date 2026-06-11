@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kafka_proxy/actors/actors.h>
-#include <ydb/core/kafka_proxy/kafka.h>
+#include <ydb/library/kafka/kafka.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 
 namespace NKafka::NKafkaTransactions {

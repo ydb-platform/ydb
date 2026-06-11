@@ -294,7 +294,7 @@ private:
     NJobTrackerClient::TJobId JobId;
     NYTree::INodePtr Parameters;
     // TODO(bystrovserg): Move ShellName to options parameter.
-    std::optional<TString> ShellName;
+    std::optional<std::string> ShellName;
 
     void DoExecute(ICommandContextPtr context) override;
 };

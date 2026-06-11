@@ -2,8 +2,6 @@
 
 #include "nbs_dbg_like_load_defs.h"
 
-#include <ydb/core/protos/load_test.pb.h>
-
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/load_test.pb.h>
@@ -32,5 +30,26 @@ void BuildAllocateRequest(
 std::expected<std::vector<TDirectBlockGroup>, TString> ParseAllocateResult(
     const NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& rec,
     const TEvLoadTestRequest::TNbsDbgLikeLoad::TAllocConfig& cfg);
+
+// Address routing parameters derived from a TConfigureTablet run config.
+// Shared by the proxy tablet (to route requests) and the per-DBG worker (to
+// decode addresses) so they cannot drift apart.
+struct TRoutingParams {
+    ui32 ActiveDbgs = 0;
+    ui32 IoSizeBytes = 0;
+    ui64 BytesPerDbg = 0;
+    bool IoValid = false;  // true iff the requested IoSizeBytes is usable
+};
+
+// Computes routing params from the run config. ActiveDbgs clamps
+// NumDirectBlockGroupsToUse to [0, numDbgs]; 0 (and values > numDbgs) mean
+// "all", and ActiveDbgs is only 0 when numDbgs is 0. IoValid is true only when
+// IoSizeBytes is non-zero, does not exceed VChunkSizeBytes, evenly divides it,
+// and TargetNumVChunks is non-zero (so BytesPerDbg > 0); when valid, IoSizeBytes
+// and BytesPerDbg are populated.
+TRoutingParams ComputeRoutingParams(
+    const TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet& cfg,
+    const TEvLoadTestRequest::TNbsDbgLikeLoad::TAllocConfig& allocConfig,
+    ui32 numDbgs);
 
 } // namespace NKikimr::NNbsDbgLike

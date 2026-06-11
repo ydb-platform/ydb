@@ -28,9 +28,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
     if (!path.Ranges().Maybe<TCoVoid>()) {
         return node;
     }
-    if (!path.QLFilter().Maybe<TCoVoid>()) {
-        return node;
-    }
     auto maybeInnerReduce = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtReduce>();
     if (!maybeInnerReduce) {
         return node;
@@ -295,11 +292,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
         newPaths.reserve(section.Paths().Size());
         for (const auto& path : section.Paths()) {
             if (fusedMap.Defined() || !path.Ranges().Maybe<TCoVoid>()) {
-                newPaths.push_back(path);
-                continue;
-            }
-
-            if (fusedMap.Defined() || !path.QLFilter().Maybe<TCoVoid>()) {
                 newPaths.push_back(path);
                 continue;
             }
@@ -615,9 +607,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
     if (!path.Ranges().Maybe<TCoVoid>()) {
         return node;
     }
-    if (!path.QLFilter().Maybe<TCoVoid>()) {
-        return node;
-    }
 
     if (NYql::HasNonEmptyKeyFilter(outerMap.Input().Item(0))) {
         return node;
@@ -760,9 +749,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
         return node;
     }
     if (!path.Ranges().Maybe<TCoVoid>()) {
-        return node;
-    }
-    if (!path.QLFilter().Maybe<TCoVoid>()) {
         return node;
     }
     if (inner.Maybe<TYtMapReduce>()) {

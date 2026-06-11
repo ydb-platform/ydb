@@ -77,7 +77,7 @@ public:
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
             YDB_LOG_ERROR("Handle TEvHiveGetTableResult",
-                {"HiveMetastoreFetcher", issues.ToString(true)});
+                {"hiveMetastoreFetcher", issues.ToString(true)});
             request->Get()->Promise.SetException(std::make_exception_ptr(yexception() << issues.ToString(true)));
             PassAway();
             return;
@@ -104,7 +104,7 @@ public:
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
             YDB_LOG_ERROR("Handle TEvHiveGetTableStatisticsResult",
-                {"HiveMetastoreFetcher", issues.ToString(true)});
+                {"hiveMetastoreFetcher", issues.ToString(true)});
             request->Get()->Promise.SetException(std::make_exception_ptr(yexception() << issues.ToString(true)));
             PassAway();
             return;
@@ -134,7 +134,7 @@ public:
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
             YDB_LOG_ERROR("Process TEvHiveGetPartitionsResult",
-                {"HiveMetastoreFetcher", issues.ToString(true)});
+                {"hiveMetastoreFetcher", issues.ToString(true)});
             request->Get()->Promise.SetException(std::make_exception_ptr(yexception() << issues.ToString(true)));
             PassAway();
             return;
@@ -163,7 +163,7 @@ public:
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
             YDB_LOG_ERROR("Process TEvHiveGetPartitionsResult",
-                {"HiveMetastoreFetcher", issues.ToString(true)});
+                {"hiveMetastoreFetcher", issues.ToString(true)});
             request->Get()->Promise.SetException(std::make_exception_ptr(yexception() << issues.ToString(true)));
             PassAway();
             return;

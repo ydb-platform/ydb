@@ -289,7 +289,7 @@ public:
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
         YDB_LOG_DEBUG("TArrowInferencinator",
-            {"SelfId", SelfId()},
+            {"selfId", SelfId()},
             {"ev", ev->Get()->Issues.ToOneLineString()});
         ReplyAndReset(ctx, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
     }

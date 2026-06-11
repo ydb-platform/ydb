@@ -293,7 +293,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (type.has_optional_type() && type.optional_type().item().has_optional_type()) {
                 issues.AddIssue(MakeErrorIssue(
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder{} << "Double optional types are not supported (you have '" 
+                    TStringBuilder{} << "Double optional types are not supported (you have '"
                         << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
             }
         }
@@ -317,7 +317,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (ValidateDateOrTimeType(column.type())) {
                 issues.AddIssue(MakeErrorIssue(
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder{} << "Date, Timestamp and Interval types are not allowed in json_list format (you have '" 
+                    TStringBuilder{} << "Date, Timestamp and Interval types are not allowed in json_list format (you have '"
                         << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
             }
         }
@@ -343,14 +343,14 @@ struct TObjectStorageExternalSource : public IExternalSource {
             if (!ValidateStringType(column.type())) {
                 issues.AddIssue(MakeErrorIssue(
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder{} << TStringBuilder() << "Only string type column in schema supported in raw format (you have '" 
+                    TStringBuilder{} << TStringBuilder() << "Only string type column in schema supported in raw format (you have '"
                         << column.name() << " " << NYdb::TType(column.type()).ToString() << "' field)"));
             }
             ++realSchemaColumnsCount;
         }
 
         if (realSchemaColumnsCount != 1) {
-            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one column in schema supported in raw format (you have " 
+            issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, TStringBuilder{} << TStringBuilder() << "Only one column in schema supported in raw format (you have "
                 << realSchemaColumnsCount << " fields)"));
         }
         return issues;
@@ -654,7 +654,7 @@ private:
         if (!buildStatus.ok() || !finishStatus.ok()) {
             // Couldn't build the in-memory CSV buffer for partition values: fall back
             // to whatever types AppendPartitionColumns assigned (UTF8 by default).
-            YDB_LOG_CTX_WARN(*ActorSystem, "couldn't build arrow buffer for partition column type inference:",
+            YDB_LOG_WARN_CTX(*ActorSystem, "Couldn't build arrow buffer for partition column type inference",
                 {"build", buildStatus.ToString()},
                 {"finish", finishStatus.ToString()});
             return result;
@@ -669,7 +669,7 @@ private:
                         inferredTypes[column.name()] = column.type();
                     }
                 }
-                
+
                 for (auto& destColumn : *meta->Schema.mutable_column()) {
                     if (auto type = inferredTypes.FindPtr(destColumn.name()); type) {
                         destColumn.mutable_type()->set_type_id(type->type_id());

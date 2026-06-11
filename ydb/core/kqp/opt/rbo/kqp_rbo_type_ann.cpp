@@ -84,6 +84,21 @@ TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
     }
     auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
 
+    if (read->OriginalPredicate.has_value()) {
+        auto& lambda = read->OriginalPredicate.value().Node;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {newStructType}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update original filter lambda arg types.";
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok, "Cannot type annotate original filter lambda.");
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+        } while (status == IGraphTransformer::TStatus::Repeat);
+        Y_ENSURE(status == IGraphTransformer::TStatus::Ok && lambda->GetTypeAnn());
+    }
+
     if (IsNeededToUpdateOlapReadType(read->OlapFilterLambda)) {
         auto& lambda = read->OlapFilterLambda;
         if (!UpdateLambdaAllArgumentsTypes(lambda, {ctx.ExprCtx.MakeType<TFlowExprType>(structType)}, ctx.ExprCtx)) {

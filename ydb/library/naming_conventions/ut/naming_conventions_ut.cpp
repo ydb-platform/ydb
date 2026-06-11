@@ -21,4 +21,9 @@ Y_UNIT_TEST_SUITE(NamingConventionsSuite) {
         UNIT_ASSERT_EQUAL("Bfg", SnakeToCamelCase("bfg_"));
     }
 
+    Y_UNIT_TEST(TestRoundTrip) {
+        UNIT_ASSERT_VALUES_EQUAL("ci_check", CamelToSnakeCase("CiCheck"));
+        UNIT_ASSERT_VALUES_EQUAL("CiCheck", SnakeToCamelCase("ci_check"));
+    }
+
 }

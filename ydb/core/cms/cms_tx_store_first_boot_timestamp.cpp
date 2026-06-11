@@ -14,7 +14,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_FIRST_BOOT_TIMESTAMP; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxStoreFirstBootTimestamp Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStoreFirstBootTimestamp Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Param>().Key(Schema::Param::Key)
@@ -24,7 +24,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxStoreFirstBootTimestamp Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStoreFirstBootTimestamp Complete");
     }
 };
 

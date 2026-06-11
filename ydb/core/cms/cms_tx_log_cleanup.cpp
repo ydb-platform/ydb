@@ -15,13 +15,13 @@ public:
     TTxType GetTxType() const override { return TXTYPE_LOG_CLEANUP; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxLogCleanup Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogCleanup Execute");
 
         return Self->Logger.DbCleanupLog(txc, ctx);
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxLogCleanup Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogCleanup Complete");
         Self->ScheduleLogCleanup(ctx);
     }
 

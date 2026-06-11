@@ -18,7 +18,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REJECT_NOTIFICATION; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRejectNotification Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRejectNotification Execute");
 
         auto &rec = Event->Get()->Record;
         Response = new TEvCms::TEvManageNotificationResponse;
@@ -44,15 +44,15 @@ public:
             Response->Record.MutableStatus()->SetReason(error.Reason);
         }
 
-        YDB_LOG_CTX_INFO(ctx, "Response status",
-            {"Status", ToString(Response->Record.GetStatus().GetCode()).data()},
-            {"Reason", Response->Record.GetStatus().GetReason().data()});
+        YDB_LOG_INFO_CTX(ctx, "Response status",
+            {"status", ToString(Response->Record.GetStatus().GetCode()).data()},
+            {"reason", Response->Record.GetStatus().GetReason().data()});
 
         return true;
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRejectNotification Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRejectNotification Complete");
 
         Self->Reply(Event, std::move(Response), ctx);
     }

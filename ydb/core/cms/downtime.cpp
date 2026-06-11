@@ -225,17 +225,17 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
         if (pr.second.Empty()) {
             db.Table<Schema::NodeDowntimes>().Key(pr.first).Delete();
 
-            YDB_LOG_CTX_TRACE(ctx, "Removed downtime for node from local DB",
-                {"Node", pr.first});
+            YDB_LOG_TRACE_CTX(ctx, "Removed downtime for node from local DB",
+                {"node", pr.first});
         } else {
             NKikimrCms::TAvailabilityStats rec;
             pr.second.Serialize(&rec);
             db.Table<Schema::NodeDowntimes>().Key(pr.first)
                 .Update<Schema::NodeDowntimes::Downtime>(rec);
 
-            YDB_LOG_CTX_TRACE(ctx, "Updated downtime for node in local DB",
-                {"Node", pr.first},
-                {"Downtime", pr.second});
+            YDB_LOG_TRACE_CTX(ctx, "Updated downtime for node in local DB",
+                {"node", pr.first},
+                {"downtime", pr.second});
         }
     }
 
@@ -244,17 +244,17 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
             db.Table<Schema::PDiskDowntimes>().Key(pr.first.NodeId, pr.first.DiskId)
                 .Delete();
 
-            YDB_LOG_CTX_TRACE(ctx, "Removed downtime for pdisk from local DB",
-                {"Pdisk", pr.first.ToString()});
+            YDB_LOG_TRACE_CTX(ctx, "Removed downtime for pdisk from local DB",
+                {"pdisk", pr.first});
         } else {
             NKikimrCms::TAvailabilityStats rec;
             pr.second.Serialize(&rec);
             db.Table<Schema::PDiskDowntimes>().Key(pr.first.NodeId, pr.first.DiskId)
                 .Update<Schema::PDiskDowntimes::Downtime>(rec);
 
-            YDB_LOG_CTX_TRACE(ctx, "Updated downtime for pdisk in local DB",
-                {"Pdisk", pr.first.ToString()},
-                {"Downtime", pr.second});
+            YDB_LOG_TRACE_CTX(ctx, "Updated downtime for pdisk in local DB",
+                {"pdisk", pr.first},
+                {"downtime", pr.second});
         }
     }
 }

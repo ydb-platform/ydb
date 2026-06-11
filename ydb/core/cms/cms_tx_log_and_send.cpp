@@ -17,7 +17,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_LOG_AND_SEND; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxLogAndSend Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogAndSend Execute");
 
         Self->Logger.DbLogData(Event->Get()->LogData, txc, ctx);
 
@@ -25,7 +25,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxLogAndSend Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogAndSend Complete");
 
         if (Event->Get()->Event)
             ctx.Send(Event->Get()->Event.Release());

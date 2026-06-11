@@ -32,8 +32,8 @@ bool TLogger::DbCleanupLog(TTransactionContext &txc, const TActorContext &ctx) {
     TInstant fromDate = ctx.Now() - State->Config.LogConfig.TTL;
     ui64 from = Max<ui64>() - fromDate.GetValue();
 
-    YDB_LOG_CTX_DEBUG(ctx, "Cleanup log records until",
-        {"FromDate", fromDate});
+    YDB_LOG_DEBUG_CTX(ctx, "Cleanup log records until",
+        {"fromDate", fromDate});
 
     auto rowset = db.Table<Schema::LogRecords>().GreaterOrEqual(from)
         .Select<Schema::LogRecords::Timestamp>();
@@ -49,8 +49,8 @@ bool TLogger::DbCleanupLog(TTransactionContext &txc, const TActorContext &ctx) {
             return false;
     }
 
-    YDB_LOG_CTX_DEBUG(ctx, "Removing log records",
-        {"Count", ids.size()});
+    YDB_LOG_DEBUG_CTX(ctx, "Removing log records",
+        {"count", ids.size()});
 
     for (auto id : ids)
         db.Table<Schema::LogRecords>().Key(id).Delete();
@@ -112,9 +112,9 @@ void TLogger::DbLogData(const TLogRecordData &data, TTransactionContext &txc, co
         timestamp = State->LastLogRecordTimestamp + 1;
     State->LastLogRecordTimestamp = timestamp;
 
-    YDB_LOG_CTX_TRACE(ctx, "Add log record to local DB",
-        {"Timestamp", timestamp},
-        {"Data", data.ShortDebugString()});
+    YDB_LOG_TRACE_CTX(ctx, "Add log record to local DB",
+        {"timestamp", timestamp},
+        {"data", data.ShortDebugString()});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::LogRecords>().Key(Max<ui64>() - timestamp)

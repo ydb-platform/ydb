@@ -15,7 +15,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_UPDATE_DOWNTIMES; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateDowntimes Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateDowntimes Execute");
 
         Self->State->Downtimes.DbStoreState(txc, ctx);
         Self->State->Downtimes.CleanupEmpty();
@@ -24,7 +24,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateDowntimes Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateDowntimes Complete");
     }
 };
 

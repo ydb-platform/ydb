@@ -27,8 +27,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
-        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request",
-            {"RequestEvent", RequestEvent->Get()->Record.ShortDebugString().data()});
+        YDB_LOG_INFO_CTX(ctx, "Processing Wall-E request",
+            {"requestEvent", RequestEvent->Get()->Record.ShortDebugString().data()});
 
         if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);
@@ -76,9 +76,9 @@ private:
             HFunc(TEvCms::TEvPermissionResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleRemoveTaskAdapter::StateWork ignored event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Event", ev->ToString().data()});
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleRemoveTaskAdapter::StateWork ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 

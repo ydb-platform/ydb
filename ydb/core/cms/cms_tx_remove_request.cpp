@@ -20,7 +20,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_REQUEST; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveRequest Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveRequest Execute");
 
         auto it = Self->State->ScheduledRequests.find(Id);
         if (it != Self->State->ScheduledRequests.end()) {
@@ -44,7 +44,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveRequest Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveRequest Complete");
 
         if (Response) {
             Y_ABORT_UNLESS(Request);

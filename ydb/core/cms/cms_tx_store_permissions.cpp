@@ -27,7 +27,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_PERMISSIONS ; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxStorePermissions Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStorePermissions Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Param>().Key(Schema::Param::Key).Update(
@@ -144,7 +144,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxStorePermissions complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStorePermissions complete");
 
         Self->Reply(Request.Get(), Response, ctx);
         Self->SchedulePermissionsCleanup(ctx);

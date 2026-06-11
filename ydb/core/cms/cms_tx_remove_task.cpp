@@ -21,7 +21,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_TASK; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTask Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveTask Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<TTable>().Key(Id).Delete();
@@ -34,15 +34,15 @@ public:
             Self->AuditLog(ctx, TStringBuilder() << "Remove task"
                 << ": id# " << Id);
         } else {
-            YDB_LOG_CTX_ERROR(ctx, "Can't find task",
-                {"Id", Id.data()});
+            YDB_LOG_ERROR_CTX(ctx, "Can't find task",
+                {"id", Id.data()});
         }
 
         return true;
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTask Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveTask Complete");
     }
 
 private:

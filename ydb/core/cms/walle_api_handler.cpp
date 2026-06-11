@@ -98,9 +98,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateCreateTask ignored event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Event", ev->ToString().data()});
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCreateTask ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -142,9 +142,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateListTasks ignored event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Event", ev->ToString().data()});
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateListTasks ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -190,9 +190,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateCheckTask ignored event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Event", ev->ToString().data()});
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateCheckTask ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -235,9 +235,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
-            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleApiHandler::StateRemoveTask ignored event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Event", ev->ToString().data()});
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleApiHandler::StateRemoveTask ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -351,7 +351,7 @@ private:
     }
 
     void HandlePipeDestroyed(const TActorContext &ctx) {
-        YDB_LOG_CTX_WARN(ctx, "TWalleApiHandler::HandlePipeDestroyed");
+        YDB_LOG_WARN_CTX(ctx, "TWalleApiHandler::HandlePipeDestroyed");
 
         NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe);
         Bootstrap(ctx);

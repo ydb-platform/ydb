@@ -18,15 +18,15 @@ public:
     TTxType GetTxType() const override { return TXTYPE_PROCESS_NOTIFICATION; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxProcessNotification Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxProcessNotification Execute");
 
         auto &rec = Event->Get()->Record;
         Response = new TEvCms::TEvNotificationResponse;
 
-        YDB_LOG_CTX_INFO(ctx, "Processing notification",
-            {"FromUser", rec.GetUser().data()},
-            {"Time", TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data()},
-            {"Reason", rec.GetReason().data()});
+        YDB_LOG_INFO_CTX(ctx, "Processing notification",
+            {"fromUser", rec.GetUser().data()},
+            {"time", TInstant::MicroSeconds(rec.GetTime()).ToStringLocalUpToSeconds().data()},
+            {"reason", rec.GetReason().data()});
 
         if (Self->CheckNotification(rec, Response->Record, ctx)) {
             TString id = Self->AcceptNotification(rec, ctx);
@@ -52,8 +52,8 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxProcessNotification complete with response",
-            {"Response", Response->Record.ShortDebugString().data()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxProcessNotification complete with response",
+            {"response", Response->Record.ShortDebugString().data()});
 
         Self->Reply(Event, std::move(Response), ctx);
         Self->ScheduleNotificationsCleanup(ctx);

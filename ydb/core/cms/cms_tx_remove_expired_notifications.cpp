@@ -17,7 +17,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_EXPIRED_NOTIFICATION; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveExpiredNotifications Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveExpiredNotifications Execute");
 
         TInstant now = ctx.Now();
         for (auto entry = Self->State->Notifications.begin(); entry != Self->State->Notifications.end();) {
@@ -33,9 +33,9 @@ public:
                 TInstant deadline = time + TDuration::MicroSeconds(i->GetDuration());
 
                 if (deadline <= now) {
-                    YDB_LOG_CTX_INFO(ctx, "Removing expired action from notification",
-                        {"NotificationId", info.NotificationId.data()},
-                        {"Action", i->ShortDebugString().data()});
+                    YDB_LOG_INFO_CTX(ctx, "Removing expired action from notification",
+                        {"notificationId", info.NotificationId.data()},
+                        {"action", i->ShortDebugString().data()});
 
                     i = actions->erase(i);
                     modified = true;
@@ -72,7 +72,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveExpiredNotifications Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveExpiredNotifications Complete");
     }
 };
 

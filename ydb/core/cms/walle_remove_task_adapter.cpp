@@ -27,8 +27,8 @@ public:
         TAutoPtr<TEvCms::TEvWalleRemoveTaskResponse> response = new TEvCms::TEvWalleRemoveTaskResponse;
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
-        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request",
-            {"Request", RequestEvent->Get()->Record.ShortDebugString().data()});
+        YDB_LOG_INFO_CTX(ctx, "Processing Wall-E request",
+            {"request", RequestEvent->Get()->Record.ShortDebugString().data()});
 
         if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);
@@ -48,9 +48,9 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
             CFunc(TEvCms::EvWalleTaskRemoved, Finish);
         default:
-            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleRemoveTaskAdapter::StateWork ignored event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Event", ev->ToString().data()});
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleRemoveTaskAdapter::StateWork ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 

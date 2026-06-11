@@ -22,7 +22,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_WALLE_TASK; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxStoreWalleTask Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStoreWalleTask Execute");
 
         for (auto &perm : Task.Permissions) {
             if (Self->State->Permissions.find(perm) == Self->State->Permissions.end()) {
@@ -52,7 +52,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxStoreWalleTask Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStoreWalleTask Complete");
         Self->Reply(Request.Get(), Response, ctx);
     }
 

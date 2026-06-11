@@ -68,8 +68,8 @@ private:
 
         default:
             YDB_LOG_ERROR("[InfoCollector] Unexpected event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Event", ev->ToString()});
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
         }
     }
 
@@ -239,7 +239,7 @@ void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev
         const auto& currentBootstrapConfig = config->GetBootstrapConfig();
 
         YDB_LOG_TRACE("[InfoCollector] Got Bootstrap config",
-            {"Record", currentBootstrapConfig.ShortDebugString()});
+            {"record", currentBootstrapConfig.ShortDebugString()});
 
         if (!::google::protobuf::util::MessageDifferencer::Equals(initialBootstrapConfig, currentBootstrapConfig)) {
             YDB_LOG_DEBUG("[InfoCollector] Local Bootstrap config is different from the config from the console");
@@ -289,7 +289,7 @@ void TInfoCollector::RequestBaseConfig() {
 void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
     const auto& record = ev->Get()->Record.GetResponse();
     YDB_LOG_TRACE("[InfoCollector] Got base config",
-        {"Record", record.ShortDebugString()});
+        {"record", record.ShortDebugString()});
 
     if (!record.GetSuccess() || !record.StatusSize() || !record.GetStatus(0).GetSuccess()) {
         YDB_LOG_ERROR("[InfoCollector] Couldn't get base config");
@@ -363,7 +363,7 @@ bool TInfoCollector::IsNodeInfoRequired(ui32 nodeId, ui32 eventType) const {
     auto it = NodeEvents.find(nodeId);
     if (it == NodeEvents.end()) {
         YDB_LOG_WARN("[InfoCollector] Got info from unknown node",
-            {"NodeId", nodeId});
+            {"nodeId", nodeId});
         return false;
     }
 
@@ -388,8 +388,8 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
     const auto& record = ev->Get()->Record;
 
     YDB_LOG_TRACE("[InfoCollector] Got system state",
-        {"NodeId", nodeId},
-        {"Record", record.DebugString()});
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -397,8 +397,8 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
 
     if (record.SystemStateInfoSize() != 1) {
         YDB_LOG_ERROR("[InfoCollector] Unexpected system state's size",
-            {"NodeId", nodeId},
-            {"Size", record.SystemStateInfoSize()});
+            {"nodeId", nodeId},
+            {"size", record.SystemStateInfoSize()});
         return;
     }
 
@@ -411,8 +411,8 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
     const auto& record = ev->Get()->Record;
 
     YDB_LOG_TRACE("[InfoCollector] Got tablet state",
-        {"NodeId", nodeId},
-        {"Record", record.DebugString()});
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -430,8 +430,8 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
 
     YDB_LOG_TRACE("[InfoCollector] Got PDisk state",
-        {"NodeId", nodeId},
-        {"Record", record.DebugString()});
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -451,8 +451,8 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
 
     YDB_LOG_TRACE("[InfoCollector] Got VDisk state",
-        {"NodeId", nodeId},
-        {"Record", record.DebugString()});
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -472,8 +472,8 @@ void TInfoCollector::Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev) {
     const auto& record = ev->Get()->Record;
 
     YDB_LOG_TRACE("[InfoCollector] Got TenantPoolStatus",
-        {"NodeId", nodeId},
-        {"Record", record.DebugString()});
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -488,13 +488,13 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     const ui32 nodeId = ev->Cookie;
 
     YDB_LOG_TRACE("[InfoCollector] Undelivered",
-        {"NodeId", nodeId},
-        {"Source", msg.SourceType},
-        {"Reason", msg.Reason});
+        {"nodeId", nodeId},
+        {"source", msg.SourceType},
+        {"reason", msg.Reason});
 
     if (!NodeEvents.contains(nodeId)) {
         YDB_LOG_ERROR("[InfoCollector] Undelivered to unknown node",
-            {"NodeId", nodeId});
+            {"nodeId", nodeId});
         return;
     }
 
@@ -514,11 +514,11 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     const ui32 nodeId = ev->Get()->NodeId;
 
     YDB_LOG_TRACE("[InfoCollector] Disconnected",
-        {"NodeId", nodeId});
+        {"nodeId", nodeId});
 
     if (!NodeEvents.contains(nodeId)) {
         YDB_LOG_ERROR("[InfoCollector] Disconnected unknown node",
-            {"NodeId", nodeId});
+            {"nodeId", nodeId});
         return;
     }
 

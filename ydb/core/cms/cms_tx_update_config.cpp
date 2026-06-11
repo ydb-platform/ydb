@@ -22,7 +22,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_UPDATE_CONFIG; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfig Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Execute");
 
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->State->ConfigProto)) {
             NIceDb::TNiceDb db(txc.DB);
@@ -36,14 +36,14 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Complete");
 
         if (Modify) {
             Self->State->ConfigProto = Config;
             Self->State->Config.Deserialize(Config);
 
-            YDB_LOG_CTX_DEBUG(ctx, "Updated",
-                {"Config", Config.ShortDebugString()});
+            YDB_LOG_DEBUG_CTX(ctx, "Updated",
+                {"config", Config.ShortDebugString()});
         }
 
         ctx.Send(Response.Release());

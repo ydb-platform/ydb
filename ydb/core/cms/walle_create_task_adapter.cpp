@@ -28,8 +28,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         auto &rec = RequestEvent->Get()->Record;
 
-        YDB_LOG_CTX_INFO(ctx, "Processing Wall-E request",
-            {"Request", rec.ShortDebugString().data()});
+        YDB_LOG_INFO_CTX(ctx, "Processing Wall-E request",
+            {"request", rec.ShortDebugString().data()});
 
         if (!Actions.contains(rec.GetAction())) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unsupported action", ctx);
@@ -54,9 +54,9 @@ private:
             CFunc(TEvCms::EvWalleTaskStored, Finish);
             HFunc(TEvCms::TEvStoreWalleTaskFailed, Handle);
         default:
-            YDB_LOG_CTX_DEBUG(*TlsActivationContext, "TWalleCreateTaskAdapter::StateWork ignored event",
-                {"Type", ev->GetTypeRewrite()},
-                {"Event", ev->ToString().data()});
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleCreateTaskAdapter::StateWork ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 

@@ -26,7 +26,7 @@ YT_DEFINE_GLOBAL(const NLogging::TLogger, RpcProxyClientLogger, "RpcProxyClient"
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const TString& envConfig);
+THashMap<std::string, std::string> ParseProxyUrlAliasingRules(const std::string& envConfig);
 void ApplyProxyUrlAliasingRules(
     std::string& url,
     const THashMap<std::string, std::string>& proxyUrlAliasingRules = {});

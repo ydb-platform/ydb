@@ -65,6 +65,7 @@ RECURSE_FOR_TESTS(
     ut_split_merge_reboots
     ut_secret
     ut_secret_reboots
+    ut_set_column_constraint
     ut_stats
     ut_streaming_query
     ut_streaming_query_reboots
@@ -106,6 +107,8 @@ SRCS(
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
     schemeshard__list_users.cpp
+    schemeshard__local_index_migration.cpp
+    schemeshard__local_index_migration.h
     schemeshard__login.cpp
     schemeshard__login_finalize.cpp
     schemeshard__make_access_database_no_inheritable.cpp
@@ -116,7 +119,6 @@ SRCS(
     schemeshard__operation.cpp
     schemeshard__operation.h
     schemeshard__op_traits.cpp
-    schemeshard__op_traits.h
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp
@@ -305,6 +307,10 @@ SRCS(
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h
+    schemeshard_set_column_constraint.cpp
+    schemeshard_set_column_constraint.h
+    schemeshard_set_column_constraint__create.cpp
+    schemeshard_set_column_constraint__progress.cpp
     schemeshard_shard_deleter.cpp
     schemeshard_shard_deleter.h
     schemeshard_subop_state_types.cpp

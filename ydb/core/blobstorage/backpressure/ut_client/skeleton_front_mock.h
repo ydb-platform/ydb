@@ -48,7 +48,7 @@ public:
     }
 
     void HandleWakeup() {
-        YDB_LOG_CTX_COMP_DEBUG(*TlsActivationContext, NActorsServices::TEST, "HandleWakeup");
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NActorsServices::TEST, "HandleWakeup");
         Ready = true;
         for (const TActorId& id : std::exchange(Notify, {})) {
             Send(id, new TEvBlobStorage::TEvVReadyNotify);
@@ -106,8 +106,8 @@ public:
             &record, nullptr, nullptr, nullptr, ev->Get()->GetBufferBytes(), 0, TString()));
 
         auto *qos = reply->Record.MutableMsgQoS();
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "Received",
-            {"Qos", SingleLineProto(*qos)});
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Received",
+            {"qos", SingleLineProto(*qos)});
 
         if (qos->GetSendMeCostSettings()) {
             FillInCostSettings(qos->MutableCostSettings());
@@ -129,8 +129,8 @@ public:
             reply->Record.SetStatus(feedback.first.Status == NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId
                 ? NKikimrProto::TRYLATER : NKikimrProto::TRYLATER_SIZE);
 
-            YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "Sending bad",
-                {"Reply", SingleLineProto(reply->Record)});
+            YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Sending bad",
+                {"reply", SingleLineProto(reply->Record)});
 
             Reply(*ev, reply.release());
         }
@@ -139,8 +139,8 @@ public:
     void HandleProcessQueue() {
         TOperation& op = Operations.front();
 
-        YDB_LOG_COMP_DEBUG(NActorsServices::TEST, "Sending",
-            {"Op", SingleLineProto(op.Result->Get<TEvBlobStorage::TEvVPutResult>()->Record)});
+        YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Sending",
+            {"op", SingleLineProto(op.Result->Get<TEvBlobStorage::TEvVPutResult>()->Record)});
 
         TActivationContext::Send(op.Result.release());
 

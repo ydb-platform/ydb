@@ -172,30 +172,30 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             }
         };
 
-        YDB_LOG_CTX_DEBUG(ctx, "Marker# BSQ25 sending",
-            {"LogPrefix", LogPrefix},
-            {"Func", __func__},
-            {"T", getTypeName()},
-            {"SequenceId", item.SequenceId},
-            {"MsgId", item.MsgId},
-            {"Cookie", item.QueueCookie},
-            {"InFlightCost", InFlightCost},
-            {"Cost", item.Cost},
-            {"WindowSize", WindowSize},
-            {"InFlightCount", InFlightCount()},
-            {"Postpone", (postpone ? "true" : "false")},
-            {"SendMeCostSettings", (sendMeCostSettings ? "true" : "false")});
+        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ25 sending",
+            {"logPrefix", LogPrefix},
+            {"func", __func__},
+            {"t", getTypeName()},
+            {"sequenceId", item.SequenceId},
+            {"msgId", item.MsgId},
+            {"cookie", item.QueueCookie},
+            {"inFlightCost", InFlightCost},
+            {"cost", item.Cost},
+            {"windowSize", WindowSize},
+            {"inFlightCount", InFlightCount()},
+            {"postpone", (postpone ? "true" : "false")},
+            {"sendMeCostSettings", (sendMeCostSettings ? "true" : "false")});
 
         // check if window has enough space for such item
         if (postpone) {
             // can't send more items now
-            YDB_LOG_CTX_DEBUG(ctx, "Marker# BSQ26 Queue overflow",
-                {"LogPrefix", LogPrefix},
-                {"Func", __func__},
-                {"InFlightCost", InFlightCost},
-                {"WindowSize", WindowSize},
+            YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ26 Queue overflow",
+                {"logPrefix", LogPrefix},
+                {"func", __func__},
+                {"inFlightCost", InFlightCost},
+                {"windowSize", WindowSize},
                 {"item.Cost", item.Cost},
-                {"InFlightCount", InFlightCount()});
+                {"inFlightCount", InFlightCount()});
             ++*QueueOverflow;
             break;
         }
@@ -244,13 +244,13 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
 void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason,
         const TActorContext& ctx) {
     const TDuration processingTime = TDuration::Seconds(item.ProcessingTimer.Passed());
-    YDB_LOG_CTX_INFO(ctx, "Marker# BSQ03 Reply error errorReason#",
-        {"LogPrefix", LogPrefix},
-        {"Func", __func__},
-        {"Type", item.Event.GetType()},
-        {"Status", NKikimrProto::EReplyStatus_Name(status)},
-        {"Cookie", item.Event.GetCookie()},
-        {"ProcessingTime", processingTime});
+    YDB_LOG_INFO_CTX(ctx, "Marker# BSQ03 Reply error",
+        {"logPrefix", LogPrefix},
+        {"func", __func__},
+        {"type", item.Event.GetType()},
+        {"status", NKikimrProto::EReplyStatus_Name(status)},
+        {"cookie", item.Event.GetCookie()},
+        {"processingTime", processingTime});
 
     if (item.Span) {
         item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);

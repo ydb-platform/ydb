@@ -62,7 +62,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             typeInfoProto = NKikimr::NScheme::DefaultDecimalProto();
         }
         changes |= AddColumnWithTypeInfo(table, delta.GetColumnName(), delta.GetColumnId(),
-            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), delta.GetIsSensitive(), delta.GetSetNotNullInProgress(), null);
+            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), delta.GetIsSensitive(), null, delta.GetSetNotNullInProgress());
     } else if (action == TAlterRecord::DropColumn) {
         changes |= DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {
@@ -302,14 +302,14 @@ bool TSchemeModifier::DropTable(ui32 id)
     return false;
 }
 
-bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, bool isSensitive, bool setNotNullInProgress, TCell null)
+bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
-    return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, isSensitive, setNotNullInProgress, null);
+    return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, isSensitive, null, setNotNullInProgress);
 }
 
 bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 id, ui32 type,
-        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, bool setNotNullInProgress, TCell null)
+        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     auto *table = Table(tid);
 

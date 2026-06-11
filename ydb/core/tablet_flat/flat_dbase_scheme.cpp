@@ -43,17 +43,17 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             case NScheme::NTypeIds::Pg: {
                 NKikimrProto::TTypeInfo typeInfo;
                 NScheme::ProtoFromTypeInfo(col.PType, col.PTypeMod, typeInfo);
-                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.SetNotNullInProgress, col.Null);
+                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
             }
             case NScheme::NTypeIds::Decimal: {
                 NKikimrProto::TTypeInfo typeInfo;
                 NScheme::ProtoFromTypeInfo(col.PType, {}, typeInfo);
-                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.SetNotNullInProgress, col.Null);
+                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
             }
             default: {
-                delta.AddColumn(table, col.Name, it.first, col.PType.GetTypeId(), col.NotNull, col.IsSensitive, col.SetNotNullInProgress, col.Null);
+                delta.AddColumn(table, col.Name, it.first, col.PType.GetTypeId(), col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
             }
             }
@@ -136,14 +136,14 @@ TAlter& TAlter::DropTable(ui32 id)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, bool setNotNullInProgress, TCell null)
+TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
-    return AddColumnWithTypeInfo(table, name, id, type, {}, notNull, isSensitive, setNotNullInProgress, null);
+    return AddColumnWithTypeInfo(table, name, id, type, {}, notNull, isSensitive, null, setNotNullInProgress);
 }
 
 TAlter& TAlter::AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type,
-        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, bool setNotNullInProgress, TCell null)
+        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumn);

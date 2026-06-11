@@ -757,7 +757,7 @@ struct Schema {
             }
 
             static void Materialize(TToughDb& database) {
-                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSensitive, T::IsSetNotNullInProgress);
+                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSensitive, { }, T::IsSetNotNullInProgress);
             }
 
             static constexpr bool HaveColumn(ui32 columnId) {

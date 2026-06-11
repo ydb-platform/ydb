@@ -77,8 +77,8 @@ check-running-allowed
 | Mechanism | Notes |
 |-----------|--------|
 | **build_target** | Space-separated suite paths from `shard_plan.json` for this shard id |
-| **Graph** | `--build-custom-json` + `--custom-context` from `build_rwdi` / `shard_build` |
-| **save_test_graph** | Build job saves graph **with `-A`** so `result` includes test UIDs (without running test loop) |
+| **Graph** | Build saves graph for **plan only** (no `-A` on build). Shards run `ya make -A` on their suite targets **without** `--build-custom-json` |
+| **save_test_graph** | Build-only mode: compile + save graph, skip test loop; graph JSON used by `extract_tests_from_graph`, not replayed on shards |
 | **Blacklist** | **Not used** — `--test-blacklist-path` is ignored with `--build-custom-json` on try 1 |
 | **S3** | `s3_subdir=shard_<id>` → `.../x86-64/shard_0/try_1/` (parallel shards do not overwrite) |
 | **Build S3** | `s3_subdir=build` → `.../x86-64/build/` (graph save only; no `try_1` test report) |
@@ -140,7 +140,8 @@ Inspect **Plan test shards** job summary and artifact `debug-shard-plan-<run_id>
 
 ## Lessons / pitfalls (fixed)
 
-- **Graph without `-A`:** cut graph `result` had 0 test UIDs → shards ran 0 tests. Fixed via `save_test_graph`.
+- **Graph without `-A` on build:** plan reads graph JSON structure (`module_dir`), not `result` UIDs. Build graph is not replayed on shards.
+- **`--build-custom-json` ignores shard targets:** both shards ran 4333 tests each (3× total work). Fixed: shards run explicit suite targets with remote cache only.
 - **Blacklist + custom graph:** complement blacklist did not split work; both shards ran full scope. Fixed: explicit suite `build_target` per shard.
 - **Scope root in plan:** `ydb/tests/olap` parent suite + RECURSE duplicated entire tree. Fixed: drop scope root when nested suites exist.
 - **S3 collision:** parallel shards uploaded to the same `try_1/` prefix. Fixed: `s3_subdir=shard_<id>`.

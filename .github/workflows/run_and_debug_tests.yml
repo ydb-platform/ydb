@@ -261,11 +261,6 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sharding_branch }}
           fetch-depth: 2
-      - name: Download graph
-        uses: actions/download-artifact@v4
-        with:
-          name: debug-shard-graph-${{ github.run_id }}
-          path: .
       - name: Download shard plan
         uses: actions/download-artifact@v4
         with:
@@ -300,8 +295,6 @@ jobs:
           custom_branch_name: ${{ needs.prepare.outputs.sharding_branch }}
           put_build_results_to_cache: true
           skip_graph_compare: true
-          prebuilt_graph_path: graph.json
-          prebuilt_context_path: context.json
           publish_github_status: false
           publish_pr_comment: false
           single_attempt: true

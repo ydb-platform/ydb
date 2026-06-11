@@ -114,7 +114,7 @@ inputs:
   save_test_graph:
     type: boolean
     default: false
-    description: "Include test nodes in saved graph for sharded test jobs (does not run tests)"
+    description: "Build job saves graph for shard planning only; skip test loop (no -A on save)"
 
 outputs:
   success:
@@ -359,17 +359,19 @@ runs:
         fi
 
         GRAPH_SAVE_PARAMS=("${params[@]}")
-        if [ "${{ inputs.save_test_graph }}" = "true" ] && [ "${{ inputs.run_tests }}" != "true" ]; then
-          GRAPH_SAVE_PARAMS+=(-A)
-        fi
         GRAPH_YA_MAKE_COMMAND="./ya make ${GRAPH_SAVE_PARAMS[@]}"
 
         YA_MAKE_COMMAND="./ya make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.skip_graph_compare }}" = "true" ]; then
-          GRAPH_PATH=$(realpath "${{ inputs.prebuilt_graph_path }}")
-          CONTEXT_PATH=$(realpath "${{ inputs.prebuilt_context_path }}")
+          if [ -n "${{ inputs.prebuilt_graph_path }}" ] && [ -f "${{ inputs.prebuilt_graph_path }}" ]; then
+            GRAPH_PATH=$(realpath "${{ inputs.prebuilt_graph_path }}")
+            CONTEXT_PATH=$(realpath "${{ inputs.prebuilt_context_path }}")
+          else
+            GRAPH_PATH=""
+            CONTEXT_PATH=""
+          fi
           YA_MAKE_TARGET=""
           for TARGET in ${{ inputs.build_target }}; do
             if [ -e "$TARGET" ]; then

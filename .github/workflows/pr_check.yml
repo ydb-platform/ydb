@@ -343,11 +343,6 @@ jobs:
         with:
           ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
           fetch-depth: 2
-      - name: Download increment graph
-        uses: actions/download-artifact@v4
-        with:
-          name: pr-check-rwdi-graph
-          path: .
       - name: Download shard plan
         uses: actions/download-artifact@v4
         with:
@@ -381,8 +376,6 @@ jobs:
           test_threads: 52
           put_build_results_to_cache: true
           skip_graph_compare: true
-          prebuilt_graph_path: graph.json
-          prebuilt_context_path: context.json
           publish_github_status: false
           publish_pr_comment: false
           single_attempt: true

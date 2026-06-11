@@ -15,10 +15,9 @@ class TestBloomIndex(RollingUpgradeAndDowngradeFixture):
         self.rows_count = 20
         self._use_sql_index_syntax = min(self.versions) >= (26, 1)
 
-        extra_flags = {}
+        extra_flags = []
         if self._use_sql_index_syntax:
-            extra_flags["enable_local_bloom_filter_index"] = True
-            extra_flags["enable_local_bloom_ngram_filter_index"] = True
+            extra_flags = ["enable_local_bloom_filter_index", "enable_local_bloom_ngram_filter_index"]
 
         yield from self.setup_cluster(
             extra_feature_flags=extra_flags,

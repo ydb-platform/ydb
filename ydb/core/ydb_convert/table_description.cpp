@@ -158,9 +158,11 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
     }
 
     THashMap<TString, ui32> nameToId;
-    ui32 nextColumnId = 1;
+    ui32 nextEntityId = 1;
     for (const auto& col : tableDesc.GetSchema().GetColumns()) {
-        nameToId[col.GetName()] = nextColumnId++;
+        const ui32 columnId = col.HasId() ? col.GetId() : nextEntityId++;
+        nameToId.emplace(col.GetName(), columnId);
+        nextEntityId = Max(nextEntityId, columnId + 1);
     }
 
     auto fail = [&status, &error](const TString& msg) -> bool {
@@ -169,7 +171,6 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         return false;
     };
 
-    ui32 nextIndexId = 1;
     for (const auto& index : in.indexes()) {
         if (index.name().empty()) {
             if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
@@ -208,7 +209,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         const ui32 columnId = idIt->second;
 
         auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
-        olapIndex->SetId(nextIndexId++);
+        olapIndex->SetId(nextEntityId++);
         olapIndex->SetName(index.name());
 
         switch (index.type_case()) {
@@ -1832,6 +1833,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_plain_index()->mutable_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
@@ -1841,6 +1843,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_dict_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition)
@@ -1862,6 +1865,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
             FillGlobalIndexSettings(
                 *index->mutable_global_json_index()->mutable_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)

@@ -161,7 +161,7 @@ public:
         // need to initialize expr before checking whether it is a column
         auto clone = expr->Clone();
         if (!clone->Init(ctx, &src)) {
-            return !ctx.StrictWarningAsError;
+            return false;
         }
 
         const auto column = clone->GetColumnName();

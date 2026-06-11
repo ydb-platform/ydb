@@ -23,9 +23,9 @@ public:
 
     static TPtr Make(const NKikimr::NMiniKQL::IFunctionRegistry* registry, const THashMap<TString, TString>& mapping = {},
         TFileStoragePtr fileStorage = {}, const TString& tmpDir = {}, bool keepTempTables = false, const THashMap<TString, TString>& dirMapping = {},
-        const THashMap<TString, TString>& secureParams = {})
+        bool writeOutputRowCount = false)
     {
-        return new TYtFileServices(registry, mapping, fileStorage, tmpDir.empty() ? GetSystemTempDir() : tmpDir, keepTempTables, dirMapping, secureParams);
+        return new TYtFileServices(registry, mapping, fileStorage, tmpDir.empty() ? GetSystemTempDir() : tmpDir, keepTempTables, dirMapping, writeOutputRowCount);
     }
 
     const NKikimr::NMiniKQL::IFunctionRegistry* GetFunctionRegistry() const {
@@ -44,6 +44,10 @@ public:
         return KeepTempTables_;
     }
 
+    bool GetWriteOutputRowCount() const {
+        return WriteOutputRowCount_;
+    }
+
     TString GetTmpTablePath(TStringBuf table);
     TString GetTablePath(TStringBuf cluster, TStringBuf table, bool isAnonimous);
     TString GetTableSnapshotPath(TStringBuf cluster, TStringBuf table, bool isAnonimous, ui32 epoch = 0);
@@ -57,10 +61,6 @@ public:
         return FileStorage_;
     }
 
-    const THashMap<TString, TString>& GetSecureParams() const {
-        return SecureParams_;
-    }
-
 private:
     TYtFileServices(
         const NKikimr::NMiniKQL::IFunctionRegistry* registry,
@@ -69,16 +69,16 @@ private:
         const TString& tmpDir,
         bool keepTempTables,
         const THashMap<TString, TString>& dirMapping,
-        const THashMap<TString, TString>& secureParams
+        bool writeOutputRowCount
     );
 
     TFileStoragePtr FileStorage_;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     THashMap<TString, TString> TablesMapping_; // [cluster].[name] -> [file path]
     THashMap<TString, TString> TablesDirMapping_; // [cluster] -> [dir path]
-    THashMap<TString, TString> SecureParams_;
     TString TmpDir_;
     bool KeepTempTables_;
+    bool WriteOutputRowCount_;
 
     std::unordered_multimap<TString, TString> Contents_; // path -> pickled content
     THashMap<std::pair<TString, ui32>, TString> Snapshots_;

@@ -138,7 +138,7 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
         Precalculate();
     }
     for (auto&& [id, column] : columns) {
-        Columns.emplace_back(TNameTypeInfo(column.Name, column.PType));
+        Columns[id] = TNameTypeInfo(column.Name, column.PType);
     }
 }
 

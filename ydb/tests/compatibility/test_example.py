@@ -12,9 +12,9 @@ class TestExampleMixedClusterFixture(MixedClusterFixture):
         #
         yield from self.setup_cluster(
             # # Some feature flags can be passed. And other KikimrConfigGenerator options
-            # extra_feature_flags={
-            #     "some_feature_flag": True,
-            # }
+            # extra_feature_flags=[
+            #     "some_feature_flag",
+            # ]
         )
 
     def test_example(self):
@@ -54,9 +54,9 @@ class TestExampleRestartToAnotherVersion(RestartToAnotherVersionFixture):
         #
         yield from self.setup_cluster(
             # # Some feature flags can be passed. And other KikimrConfigGenerator options
-            # extra_feature_flags={
-            #     "some_feature_flag": True,
-            # }
+            # extra_feature_flags=[
+            #     "some_feature_flag",
+            # ]
         )
 
     def test_example(self):
@@ -107,9 +107,9 @@ class TestExampleRollingUpdate(RollingUpgradeAndDowngradeFixture):
         #
         yield from self.setup_cluster(
             # # Some feature flags can be passed. And other KikimrConfigGenerator options
-            # extra_feature_flags={
-            #     "some_feature_flag": True,
-            # }
+            # extra_feature_flags=[
+            #     "some_feature_flag",
+            # ]
         )
 
     def test_example(self):

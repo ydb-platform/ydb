@@ -101,6 +101,7 @@ namespace NKikimr::NHttpProxy {
                     {NYmq::V1::USER_SID, UserSid},
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                     {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
+                    {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
                 };
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                         std::move(Request),

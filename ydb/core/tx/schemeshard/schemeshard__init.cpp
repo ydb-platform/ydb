@@ -6427,11 +6427,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .FullBackupIds = std::move(FullBackupsToResume),
         });
 
-        Self->ProcessForcedCompactionQueues();
-        if (Self->ForcedCompactionsDoneShardsToPersist || Self->CancellingForcedCompactions) {
-            // for cleanup and to progress cancelling forced compactions after restart
-            Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
-        }
+        Self->ScheduleForcedCompactionProgress(ctx);
     }
 };
 

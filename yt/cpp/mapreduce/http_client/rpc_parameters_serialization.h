@@ -266,7 +266,8 @@ TNode SerializeParamsForAbortTransaction(
     const TTransactionId& transactionId);
 
 TNode SerializeParamsForCommitTransaction(
-    const TTransactionId& transactionId);
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options);
 
 TNode SerializeParamsForStartTransaction(
     const TTransactionId& parentTransactionId,

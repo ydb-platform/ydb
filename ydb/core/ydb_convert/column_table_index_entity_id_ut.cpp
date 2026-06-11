@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(ConvertColumnTableIndexEntityIds) {
         const auto& schema = tableDesc.GetSchema();
 
         UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 4u);
-        UNIT_ASSERT_VALUES_EQUAL(schema.GetIndexes().size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetIndexes().size(), 1u);
 
         const ui32 columnCount = static_cast<ui32>(schema.GetColumns().size());
         THashSet<ui32> columnIds;

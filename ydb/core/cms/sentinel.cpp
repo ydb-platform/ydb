@@ -591,7 +591,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                 }
             }
 
-            YDB_LOG_ERROR("[Sentinel] Unsuccesful response from CMS",
+            YDB_LOG_ERROR("[Sentinel] Unsuccessful response from CMS",
                 {"name", Name()},
                 {"error", error});
             return RetryCMS();

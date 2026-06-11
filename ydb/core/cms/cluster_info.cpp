@@ -445,7 +445,7 @@ void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THash
         TString tenant = pr.second;
 
         if (!HasNode(nodeId)) {
-            YDB_LOG_ERROR_CTX(ctx, "Forgoten node tenant at node. Node is unknown",
+            YDB_LOG_ERROR_CTX(ctx, "Forgotten node tenant at node. Node is unknown",
                 {"tenant", tenant.data()},
                 {"nodeId", nodeId});
             continue;
@@ -594,9 +594,9 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         Y_DEBUG_ABORT_UNLESS(pdisk.VSlots.contains(vdisk.GetVSlotId()));
         if (!pdisk.VSlots.contains(vdisk.GetVSlotId())) {
             YDB_LOG_ERROR("Group refers unknown slot in disk",
-                {"groupId", bsgroup.GroupId},
-                {"VSlotId", vdisk.GetVSlotId()},
-                {"pdiskId", pdiskId});
+                {"GroupId", bsgroup.GroupId},
+                {"vslotId", vdisk.GetVSlotId()},
+                {"pdiskId", pdiskId.ToString()});
             return;
         }
 

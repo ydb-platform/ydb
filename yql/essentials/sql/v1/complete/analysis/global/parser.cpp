@@ -5,6 +5,8 @@
 #include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <util/system/yassert.h>
+#include <util/charset/utf8.h>
+#include <util/string/builder.h>
 
 namespace NSQLComplete {
 
@@ -46,8 +48,15 @@ public:
             input.Text = Recovered_;
         }
 
+        input.CursorPosition = GetNumberOfUTF8Chars(input.Text.Head(input.CursorPosition));
+
         SQLv1::Sql_queryContext* sqlQuery = ParseText(input.Text);
         Y_ENSURE(sqlQuery);
+
+#ifdef YQL_DEBUG_GLOBAL_ANALYSIS
+        Cerr << DebugDisplay(Tokens_) << Endl;
+        Cerr << DebugDisplay(sqlQuery) << Endl;
+#endif
 
         return TParsedInput{
             .Original = input,
@@ -70,6 +79,27 @@ private:
         Tokens_.setTokenSource(&Lexer_);
         Parser_.reset();
         return Parser_.sql_query();
+    }
+
+    TString DebugDisplay(antlr4::CommonTokenStream& tokens) {
+        TStringBuilder sb;
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            sb << DebugDisplay(tokens.get(i)) << '\n';
+        }
+        return sb;
+    }
+
+    TString DebugDisplay(const antlr4::Token* token) {
+        return TStringBuilder()
+               << token->getStartIndex()
+               << "\t"
+               << token->getStopIndex()
+               << "\t"
+               << Parser_.getVocabulary().getSymbolicName(token->getType());
+    }
+
+    TString DebugDisplay(antlr4::tree::ParseTree* tree) {
+        return tree->toStringTree(&Parser_, /*pretty=*/true);
     }
 
     antlr4::ANTLRInputStream Chars_;

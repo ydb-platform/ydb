@@ -1,5 +1,10 @@
 #include "kqp_opt_join.h"
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
+
+#include <yql/essentials/core/yql_cost_function.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;

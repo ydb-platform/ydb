@@ -255,7 +255,7 @@ IComputationNode* WrapBlockGetElement(TCallable& callable, const TComputationNod
     TComputationNodePtrVector argsNodes = {objectNode};
     TVector<TType*> argsTypes = {blockTupleType};
     auto kernel = MakeBlockGetElementKernel(argsTypes, returnType, index, strategy, std::move(addOptionalHelper));
-    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 } // namespace

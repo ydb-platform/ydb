@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/concurrency/scheduler.h>
 
-#include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/system/thread_name.h>
 
 #include <util/system/thread.h>
 

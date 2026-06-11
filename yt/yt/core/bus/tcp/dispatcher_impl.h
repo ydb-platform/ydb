@@ -58,7 +58,7 @@ public:
 
     NYTree::IYPathServicePtr GetOrchidService();
 
-    std::optional<TString> GetBusCertsDirectoryPath() const;
+    std::optional<std::string> GetBusCertsDirectoryPath() const;
 
     void RegisterLocalMessageHandler(int port, const ILocalMessageHandlerPtr& handler);
     void UnregisterLocalMessageHandler(int port);

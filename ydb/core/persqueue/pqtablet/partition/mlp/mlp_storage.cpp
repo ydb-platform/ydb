@@ -1033,8 +1033,8 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, const TInstant deadline) {
     message.DeadlineDelta = NormalizeDeadline(deadline);
     if (message.ProcessingCount < MAX_PROCESSING_COUNT) {
         ++message.ProcessingCount;
-        Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
+    Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
 
     SetMessageLockingTime(message, now, BaseDeadline);
 

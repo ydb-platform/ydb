@@ -242,7 +242,7 @@ def _for_text(field):
     # We can infer a vastly more precise strategy by considering the
     # validators as well as the field type.  This is a minimal proof of
     # concept, but we intend to leverage the idea much more heavily soon.
-    # See https://github.com/HypothesisWorks/hypothesis-python/issues/1116
+    # See https://github.com/HypothesisWorks/hypothesis/issues/1116
     regexes = [
         re.compile(v.regex, v.flags) if isinstance(v.regex, str) else v.regex
         for v in field.validators
@@ -368,6 +368,7 @@ def from_field(field: F) -> st.SearchStrategy[F | None]:
     """
     check_type((dm.Field, df.Field), field, "field")
 
+    strategy: st.SearchStrategy[Any]
     # The following isinstance check must occur *before* the getattr
     # check. In the case of ModelChoicesField, evaluating
     # field.choices causes database access, which we want to avoid if

@@ -135,7 +135,7 @@ public:
         TMaybe<ui64> GetColumnarStat(NYT::TRichYPath ytPath) const;
         TMaybe<NYT::TTableColumnarStatistics> GetExtendedColumnarStat(NYT::TRichYPath ytPath) const;
 
-        void UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 size);
+        void UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 size, bool extended = false);
         void UpdateColumnarStat(NYT::TRichYPath ytPath, const NYT::TTableColumnarStatistics& columnStat, bool extended = false);
 
         std::pair<TString, NYT::TTransactionId> GetBinarySnapshot(TString remoteTmpFolder, const TString& md5, const TString& localPath, TDuration expirationInterval);

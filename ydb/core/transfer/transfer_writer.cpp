@@ -328,21 +328,23 @@ private:
             }
         }
 
-        if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval || RequiredFlush)) {
-            if (TableState->Flush()) {
-                SendStats(EWorkerOperation::WRITE);
-                LastWriteTime.reset();
-                return Become(&TThis::StateWrite);
+        if (ProcessingError) {
+            SendStats(EWorkerOperation::NONE);
+            return LogCritAndLeave(*ProcessingError);
+        } else {
+            if (TableState->BatchSize() == 0 && LastProcessedOffset) {
+                Send(Worker, new TEvWorker::TEvCommit(LastProcessedOffset.value() + 1));
+            } else if (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval || RequiredFlush) {
+                if (TableState->Flush()) {
+                    SendStats(EWorkerOperation::WRITE);
+                    LastWriteTime.reset();
+                    return Become(&TThis::StateWrite);
+                }
             }
         }
 
-        if (ProcessingError) {
-            SendStats(EWorkerOperation::NONE);
-            LogCritAndLeave(*ProcessingError);
-        } else {
-            PollSent = true;
-            Send(Worker, new TEvWorker::TEvPoll(true));
-        }
+        PollSent = true;
+        Send(Worker, new TEvWorker::TEvPoll(true));
     }
 
     void TryFlush() {

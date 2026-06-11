@@ -1,0 +1,38 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$lambda = ($row) -> {
+    $row_type = TypeOf($row);
+    $variant_type = Variant<$row_type, $row_type>;
+
+    return If(
+        $row.key != "foobar",
+        Variant($row, "0", $variant_type),
+        Variant($row, "1", $variant_type)
+    );
+};
+
+$left_stream, $right_stream = process Input using $lambda(TableRow());
+
+$joined_stream =
+    select
+        left_arg.value as value,
+        right_arg.kv_value as kv_value
+    from $left_stream as left_arg
+    left join InputKeyValueTable as right_arg
+    on left_arg.key = right_arg.key;
+
+insert into OutputA
+select value from $joined_stream;
+
+insert into OutputB
+select value + 1 as value, kv_value from $joined_stream;
+
+insert into OutputC
+select value from $right_stream;

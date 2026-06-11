@@ -298,8 +298,9 @@ if __name__ == "__main__":
     )
     parser.add_argument('--dry-run', action='store_true',
                         help='Debug mode without sending to Telegram')
-    parser.add_argument('--bot-token',
-                        help='Telegram bot token (or use TELEGRAM_BOT_TOKEN env var)')
+    parser.add_argument('--bot-token-file',
+                        help='Path to file with Telegram bot token',
+                        type=argparse.FileType('r'))
     parser.add_argument('--chat-id',
                         help='Telegram chat ID')
     parser.add_argument('--channel',
@@ -328,7 +329,7 @@ if __name__ == "__main__":
     if max_used_ram > max_agent_ram_with_threshold:
         print(f"Max used RAM {max_used_ram} is greater than max agent RAM {max_agent_ram}")
 
-        bot_token = args.bot_token or os.getenv('TELEGRAM_BOT_TOKEN')
+        bot_token = args.bot_token_file.read().strip() if args.bot_token_file else None
         chat_id = args.channel or args.chat_id or os.getenv('TELEGRAM_CHAT_ID')
         thread_id = args.thread_id or os.getenv('TELEGRAM_THREAD_ID')
         dry_run = args.dry_run or os.getenv('DRY_RUN', 'false').lower() == 'true'

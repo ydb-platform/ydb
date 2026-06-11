@@ -144,7 +144,7 @@ void AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(TTopi
         .Strategy = std::make_unique<TAlterTopicSetPartitionWriteSpeedInMessagesStrategy>(TString{TEST_TOPIC}, writeSpeedInMessagesPerSecond),
     }));
     runtime.EnableScheduleForActor(aid);
-    auto reply = runtime.GrabEdgeEvent<NKikimr::NPQ::NSchema::TEvAlterTopicResponse>(parent, TDuration::Seconds(120));
+    auto reply = runtime.GrabEdgeEvent<NKikimr::NPQ::NSchema::TEvSchemaResponse>(parent, TDuration::Seconds(120));
     UNIT_ASSERT(reply);
     const auto& alter = *reply->Get();
     UNIT_ASSERT_C(alter.Status == Ydb::StatusIds::SUCCESS,

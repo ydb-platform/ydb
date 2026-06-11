@@ -65,7 +65,7 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
     auto& rec = ev->Get()->Record;
 
     YDB_LOG_INFO_CTX(ctx, "TJaegerTracingConfigurator: got new",
-        {"config", rec.GetConfig().ShortDebugString()});
+        {"config", rec.GetConfig()});
 
     ApplyConfigs(rec.GetConfig().GetTracingConfig());
 
@@ -119,13 +119,13 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         auto requestTypes = GetRequestTypes(scope);
         if (requestTypes.empty()) {
             YDB_LOG_ERROR("Failed to parse request type in the rule. Skipping the rule",
-                {"rule", samplingRule.ShortDebugString()});
+                {"rule", samplingRule});
             continue;
         }
 
         if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || !samplingRule.HasMaxTracesPerMinute()) {
             YDB_LOG_ERROR("Missing required fields in rule (required fields are: level, fraction, max_traces_per_minute). Skipping the rule",
-                {"rule", samplingRule.ShortDebugString()});
+                {"rule", samplingRule});
             continue;
         }
         if (samplingRule.GetMaxTracesPerMinute() == 0) {
@@ -177,7 +177,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
         auto requestTypes = GetRequestTypes(throttlingRule.GetScope());
         if (requestTypes.empty()) {
             YDB_LOG_ERROR("Failed to parse request type in rule. Skipping the rule",
-                {"rule", throttlingRule.ShortDebugString()});
+                {"rule", throttlingRule});
             continue;
         }
 
@@ -191,7 +191,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
 
         if (!throttlingRule.HasMaxTracesPerMinute()) {
             YDB_LOG_ERROR("Missing required field max_traces_per_minute in rule. Skipping the rule",
-                {"rule", throttlingRule.ShortDebugString()});
+                {"rule", throttlingRule});
             continue;
         }
         if (throttlingRule.GetMaxTracesPerMinute() == 0) {

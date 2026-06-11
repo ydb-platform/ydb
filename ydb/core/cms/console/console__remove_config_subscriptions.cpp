@@ -19,7 +19,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveConfigSubscriptions",
-            {"execute", rec.ShortDebugString()});
+            {"execute", rec});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -54,7 +54,7 @@ public:
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
             YDB_LOG_TRACE_CTX(ctx, "Send",
-                {"TEvRemoveConfigSubscriptionsResponse", Response->Record.ShortDebugString()});
+                {"TEvRemoveConfigSubscriptionsResponse", Response->Record});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

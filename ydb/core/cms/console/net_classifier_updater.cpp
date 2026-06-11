@@ -117,7 +117,7 @@ private:
             CompleteInitialization();
         } else {
             YDB_LOG_ERROR("NetClassifierUpdater failed to add config",
-                {"item", record.ShortDebugString()});
+                {"item", record});
             InitializeAgain();
         }
     }
@@ -137,7 +137,7 @@ private:
             }
         } else {
             YDB_LOG_ERROR("NetClassifierUpdater failed get current distributable config",
-                {"version", record.ShortDebugString()});
+                {"version", record});
             InitializeAgain();
         }
     }
@@ -282,7 +282,7 @@ private:
             ScheduleNextUpdate();
         } else {
             YDB_LOG_ERROR("NetClassifierUpdater failed to update distributable",
-                {"config", record.ShortDebugString()});
+                {"config", record});
             InitializeAgain();
         }
     }
@@ -307,7 +307,7 @@ private:
             Send(LocalConsole, event.Release());
         } else {
             YDB_LOG_ERROR("NetClassifierUpdater failed to get current distributable config",
-                {"version", record.ShortDebugString()});
+                {"version", record});
             InitializeAgain();
         }
     }

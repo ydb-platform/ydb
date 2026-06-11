@@ -34,7 +34,7 @@ public:
     {
         auto &rec = Request->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "Dump txSetConfig",
-            {"txSetConfig", rec.ShortDebugString()});
+            {"txSetConfig", rec});
 
         Response = new TEvConsole::TEvSetConfigResponse;
 

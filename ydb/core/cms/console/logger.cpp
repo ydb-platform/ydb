@@ -172,7 +172,7 @@ void TLogger::DbLogData(const TString &userSID,
 
     YDB_LOG_TRACE_CTX(ctx, "Add log record to local DB",
         {"timestamp", timestamp},
-        {"data", data.ShortDebugString()});
+        {"data", data});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::LogRecords>().Key(NextLogItemId)

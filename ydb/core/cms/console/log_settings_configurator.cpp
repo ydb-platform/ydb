@@ -82,7 +82,7 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
     auto &rec = ev->Get()->Record;
 
     YDB_LOG_INFO_CTX(ctx, "TLogSettingsConfigurator: got new",
-        {"config", rec.GetConfig().ShortDebugString()});
+        {"config", rec.GetConfig()});
 
     const auto& logConfig = rec.GetConfig().GetLogConfig();
 
@@ -95,7 +95,7 @@ void TLogSettingsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE_CTX(ctx, "TLogSettingsConfigurator: Send",
-        {"TEvConfigNotificationResponse", resp->Record.ShortDebugString()});
+        {"TEvConfigNotificationResponse", resp->Record});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }

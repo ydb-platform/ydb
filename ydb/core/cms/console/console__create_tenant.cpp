@@ -71,7 +71,7 @@ public:
         auto &peer = Request->Get()->Record.GetPeerName();
 
         YDB_LOG_DEBUG_CTX(ctx, "Dump TTxCreateTenant",
-            {"TTxCreateTenant", Request->Get()->Record.ShortDebugString()});
+            {"TTxCreateTenant", Request->Get()->Record});
 
         Response = new TEvConsole::TEvCreateTenantResponse;
 

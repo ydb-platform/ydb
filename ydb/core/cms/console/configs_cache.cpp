@@ -81,7 +81,7 @@ void TConfigsCache::Bootstrap(const TActorContext &ctx) {
     Load(CurrentConfig);
 
     YDB_LOG_DEBUG("Restored",
-        {"configuration", CurrentConfig.ShortDebugString()});
+        {"configuration", CurrentConfig});
 
     const auto minKind = NKikimrConsole::TConfigItem::EKind_MIN;
     const auto maxKind = NKikimrConsole::TConfigItem::EKind_MAX;
@@ -109,7 +109,7 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
     CurrentConfig.Swap(rec.MutableConfig());
 
     YDB_LOG_DEBUG("Saving",
-        {"configuration", CurrentConfig.ShortDebugString()});
+        {"configuration", CurrentConfig});
 
     Save(CurrentConfig);
 

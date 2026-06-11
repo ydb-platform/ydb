@@ -72,14 +72,14 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
     auto &rec = ev->Get()->Record;
 
     YDB_LOG_INFO_CTX(ctx, "TImmediateControlsConfigurator: got new",
-        {"config", rec.GetConfig().ShortDebugString()});
+        {"config", rec.GetConfig()});
 
     ApplyConfig(rec.GetConfig().GetImmediateControlsConfig(), AppData(ctx)->Icb);
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE_CTX(ctx, "TImmediateControlsConfigurator: Send",
-        {"TEvConfigNotificationResponse", resp->Record.ShortDebugString()});
+        {"TEvConfigNotificationResponse", resp->Record});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }

@@ -19,7 +19,7 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateLastProvidedConfig",
-            {"execute", rec.ShortDebugString()});
+            {"execute", rec});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 

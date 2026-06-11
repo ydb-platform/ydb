@@ -200,7 +200,7 @@ public:
             BuildSubscription(*request->Record.MutableSubscription());
 
             YDB_LOG_TRACE_CTX(ctx, "TConfigHelper send",
-                {"TEvReplaceConfigSubscriptionsRequest", request->Record.ShortDebugString()});
+                {"TEvReplaceConfigSubscriptionsRequest", request->Record});
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::ADD_SUBSCRIPTION) {
@@ -208,7 +208,7 @@ public:
             BuildSubscription(*request->Record.MutableSubscription());
 
             YDB_LOG_TRACE_CTX(ctx, "TConfigHelper send",
-                {"TEvAddConfigSubscriptionRequest", request->Record.ShortDebugString()});
+                {"TEvAddConfigSubscriptionRequest", request->Record});
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::REMOVE_SUBSCRIPTION) {
@@ -216,7 +216,7 @@ public:
             request->Record.SetSubscriptionId(SubscriptionId);
 
             YDB_LOG_TRACE_CTX(ctx, "TConfigHelper send",
-                {"TEvRemoveConfigSubscriptionRequest", request->Record.ShortDebugString()});
+                {"TEvRemoveConfigSubscriptionRequest", request->Record});
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::GET_NODE_CONFIG) {
@@ -229,7 +229,7 @@ public:
                 request->Record.AddItemKinds(kind);
 
             YDB_LOG_TRACE_CTX(ctx, "TConfigHelper send",
-                {"TEvGetNodeConfigRequest", request->Record.ShortDebugString()});
+                {"TEvGetNodeConfigRequest", request->Record});
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else {
@@ -299,7 +299,7 @@ public:
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "TConfigHelper got status",
-            {"fromTenantPool", rec.ShortDebugString()});
+            {"fromTenantPool", rec});
 
         NodeType = rec.GetNodeType();
         if (DetectTenant) {

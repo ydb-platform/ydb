@@ -110,7 +110,7 @@ public:
 
         YDB_LOG_DEBUG("Read pool",
             {"logPrefix", LogPrefix},
-            {"state", request->Record.ShortDebugString()});
+            {"state", request->Record});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -126,7 +126,7 @@ public:
 
         YDB_LOG_DEBUG("Send pool",
             {"logPrefix", LogPrefix},
-            {"request", request->Record.ShortDebugString()});
+            {"request", request->Record});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -150,7 +150,7 @@ public:
 
         YDB_LOG_DEBUG("Send pool",
             {"logPrefix", LogPrefix},
-            {"request", request->Record.ShortDebugString()});
+            {"request", request->Record});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -202,7 +202,7 @@ public:
 
         YDB_LOG_DEBUG("Got read",
             {"logPrefix", LogPrefix},
-            {"response", rec.ShortDebugString()});
+            {"response", rec});
 
         if (!CheckReadStatus(rec)) {
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -253,7 +253,7 @@ public:
 
         YDB_LOG_DEBUG("Got config",
             {"logPrefix", LogPrefix},
-            {"response", rec.ShortDebugString()});
+            {"response", rec});
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
@@ -290,7 +290,7 @@ public:
 
         YDB_LOG_DEBUG("Got check",
             {"logPrefix", LogPrefix},
-            {"response", rec.ShortDebugString()});
+            {"response", rec});
 
         if (!CheckReadStatus(rec)) {
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -309,7 +309,7 @@ public:
             YDB_LOG_ERROR("Scope id check failure vs",
                 {"logPrefix", LogPrefix},
                 {"tenantDomainId", Tenant->DomainId},
-                {"scope", scope.ShortDebugString()});
+                {"scope", scope});
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
             return;
         }
@@ -324,7 +324,7 @@ public:
 
         YDB_LOG_DEBUG("Got config",
             {"logPrefix", LogPrefix},
-            {"response", rec.ShortDebugString()});
+            {"response", rec});
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
@@ -833,13 +833,13 @@ public:
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr &ev, const TActorContext&) {
         YDB_LOG_DEBUG("TSubdomainManip( got",
             {"tenantPath", Tenant->Path},
-            {"TEvNotifyTxCompletionRegistered", ev->Get()->Record.ShortDebugString()});
+            {"TEvNotifyTxCompletionRegistered", ev->Get()->Record});
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("TSubdomainManip( got",
             {"tenantPath", Tenant->Path},
-            {"TEvNotifyTxCompletionResult", ev->Get()->Record.ShortDebugString()});
+            {"TEvNotifyTxCompletionResult", ev->Get()->Record});
 
         if (Action == CONFIGURE && Tenant->Attributes.UserAttributesSize()) {
             AlterUserAttribute(ctx);
@@ -863,7 +863,7 @@ public:
     {
         YDB_LOG_DEBUG("TSubdomainManip( got propose",
             {"tenantPath", Tenant->Path},
-            {"result", ev->Get()->Record.ShortDebugString()});
+            {"result", ev->Get()->Record});
 
         auto &rec = ev->Get()->Record;
         switch (rec.GetStatus()) {
@@ -914,7 +914,7 @@ public:
 
         YDB_LOG_DEBUG("TSubdomainManip( got describe",
             {"tenantPath", Tenant->Path},
-            {"result", rec.ShortDebugString()});
+            {"result", rec});
 
         if (Action == REMOVE) {
             switch (rec.GetStatus()) {
@@ -1110,7 +1110,7 @@ public:
                         default:
                             YDB_LOG_ERROR_CTX(ctx, "TScaleRecommenderManip got unknown target for target tracking policy",
                                 {"tenantPath", Tenant->Path},
-                                {"policy", p.target_tracking_policy().ShortDebugString()});
+                                {"policy", p.target_tracking_policy()});
                             Finish();
                             break;
                     }
@@ -1126,7 +1126,7 @@ public:
         }
 
         YDB_LOG_TRACE_CTX(ctx, "Send TEvHive::TEvConfigureScaleRecommender",
-            {"request", request->Record.ShortDebugString()});
+            {"request", request->Record});
 
         NTabletPipe::SendData(ctx, HivePipe, request.release());
     }
@@ -1174,7 +1174,7 @@ public:
             case NKikimrProto::UNKNOWN:
                 YDB_LOG_ERROR_CTX(ctx, "TScaleRecommenderManip got error reply during configuring hive",
                     {"tenantPath", Tenant->Path},
-                    {"reply", ev->Get()->Record.ShortDebugString()});
+                    {"reply", ev->Get()->Record});
                 Finish();
                 break;
         }
@@ -2137,7 +2137,7 @@ void TTenantsManager::RequestTenantResources(TTenant::TPtr tenant, const TActorC
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvTenantSlotBroker::TEvAlterTenant",
-        {"request", request->Record.ShortDebugString()});
+        {"request", request->Record});
 
     NTabletPipe::SendData(ctx, TenantSlotBrokerPipe, request.Release());
 }
@@ -2152,7 +2152,7 @@ void TTenantsManager::RequestTenantSlotsState(TTenant::TPtr tenant, const TActor
     request->Record.SetTenantName(tenant->Path);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvTenantSlotBroker::TEvGetTenantState",
-        {"request", request->Record.ShortDebugString()});
+        {"request", request->Record});
 
     NTabletPipe::SendData(ctx, TenantSlotBrokerPipe, request.Release());
 }
@@ -2165,7 +2165,7 @@ void TTenantsManager::RequestTenantSlotsStats(const TActorContext &ctx)
     auto request = MakeHolder<TEvTenantSlotBroker::TEvGetSlotStats>();
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvTenantSlotBroker::TEvGetSlotStats",
-        {"request", request->Record.ShortDebugString()});
+        {"request", request->Record});
 
     NTabletPipe::SendData(ctx, TenantSlotBrokerPipe, request.Release());
 }
@@ -2460,7 +2460,7 @@ void TTenantsManager::SendTenantNotifications(TTenant::TPtr tenant,
         YDB_LOG_TRACE_CTX(ctx, "Send notification",
             {"tenantPath", tenant->Path},
             {"subscriber", subscriber},
-            {"notification", notification->Record.ShortDebugString()});
+            {"notification", notification->Record});
 
         ctx.Send(subscriber, notification.Release());
 
@@ -2598,7 +2598,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
         {"txid", tenant->TxId},
         {"subdomainversion", tenant->SubdomainVersion},
         {"confirmedsubdomain", tenant->ConfirmedSubdomain},
-        {"attrs", tenant->Attributes.ShortDebugString()},
+        {"attrs", tenant->Attributes},
         {"generation", tenant->Generation},
         {"errorcode", tenant->ErrorCode},
         {"isExternalSubDomain", tenant->IsExternalSubdomain},
@@ -2664,7 +2664,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
         YDB_LOG_TRACE_CTX(ctx, "Add tenant pool to database",
             {"poolName", pool.Config.GetName()},
             {"kind", pool.Kind},
-            {"config", pool.Config.ShortDebugString()},
+            {"config", pool.Config},
             {"allocatednumgroups", pool.AllocatedNumGroups},
             {"state", pool.State});
 
@@ -3035,7 +3035,7 @@ void TTenantsManager::DbUpdatePool(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Update database for pool",
         {"poolName", pool->Config.GetName()},
-        {"config", pool->Config.ShortDebugString()},
+        {"config", pool->Config},
         {"state", pool->State});
 
     TString config;
@@ -3054,7 +3054,7 @@ void TTenantsManager::DbUpdatePoolConfig(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Update pool config in database",
         {"poolName", pool->Config.GetName()},
-        {"config", config.ShortDebugString()});
+        {"config", config});
 
     TString val;
     Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&val);
@@ -3156,7 +3156,7 @@ void TTenantsManager::DbUpdateTenantUserAttributes(TTenant::TPtr tenant,
 {
     YDB_LOG_TRACE_CTX(ctx, "Update alter user attributes",
         {"tenantPath", tenant->Path},
-        {"userAttributes", attributes.ShortDebugString()});
+        {"userAttributes", attributes});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Tenants>().Key(tenant->Path)
@@ -3375,7 +3375,7 @@ void TTenantsManager::Handle(TEvConsole::TEvDescribeTenantOptionsRequest::TPtr &
     operation.mutable_result()->PackFrom(result);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvDescribeTenantOptionsResponse",
-        {"response", resp->Record.ShortDebugString()});
+        {"response", resp->Record});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -3392,7 +3392,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetOperationRequest::TPtr &ev, const
         Counters.Inc(operation.status(), COUNTER_CREATE_RESPONSES);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvGetOperationResponse",
-        {"resp", resp->Record.ShortDebugString()});
+        {"resp", resp->Record});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -3415,7 +3415,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
         issue->set_message(Sprintf("Unknown tenant %s", path.data()));
 
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvGetTenantStatusResponse",
-            {"resp", resp->Record.ShortDebugString()});
+            {"resp", resp->Record});
 
         Counters.Inc(Ydb::StatusIds::NOT_FOUND, COUNTER_STATUS_RESPONSES);
 
@@ -3429,7 +3429,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
         operation.mutable_result()->PackFrom(result);
 
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvGetTenantStatusResponse",
-            {"resp", resp->Record.ShortDebugString()});
+            {"resp", resp->Record});
 
         Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_STATUS_RESPONSES);
 
@@ -3457,7 +3457,7 @@ void TTenantsManager::Handle(TEvConsole::TEvListTenantsRequest::TPtr &ev, const 
     operation.mutable_result()->PackFrom(result);
 
     YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvListTenantsResponse",
-        {"resp", resp->Record.ShortDebugString()});
+        {"resp", resp->Record});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -3472,7 +3472,7 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
         auto resp = MakeHolder<TEvConsole::TEvOperationCompletionNotification>();
         resp->Record.MutableResponse()->mutable_operation()->CopyFrom(operation);
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvOperationCompletionNotification",
-            {"resp", resp->Record.ShortDebugString()});
+            {"resp", resp->Record});
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     } else {
         if (!operation.ready()) {
@@ -3486,7 +3486,7 @@ void TTenantsManager::Handle(TEvConsole::TEvNotifyOperationCompletionRequest::TP
         auto resp = MakeHolder<TEvConsole::TEvNotifyOperationCompletionResponse>();
         resp->Record.MutableResponse()->mutable_operation()->CopyFrom(operation);
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvNotifyOperationCompletionResponse",
-            {"resp", resp->Record.ShortDebugString()});
+            {"resp", resp->Record});
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
 }
@@ -3795,7 +3795,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
         Counters.Inc(Ydb::StatusIds::SUCCESS, COUNTER_STATUS_RESPONSES);
 
         YDB_LOG_TRACE_CTX(ctx, "Send TEvConsole::TEvGetTenantStatusResponse",
-            {"resp", resp->Record.ShortDebugString()});
+            {"resp", resp->Record});
 
         ctx.Send(req->Sender, resp.Release(), 0, req->Cookie);
     }

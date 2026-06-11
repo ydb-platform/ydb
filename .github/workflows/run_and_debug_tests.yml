@@ -46,6 +46,7 @@ jobs:
       branches_json: ${{ steps.format-branches.outputs.branches_json }}
       build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
       sharding_branch: ${{ steps.sharding-branch.outputs.branch }}
+      history_branch: ${{ steps.sharding-branch.outputs.history_branch }}
       shard_ids: ${{ steps.shard-ids.outputs.shard_ids }}
     steps:
       - name: Format branches
@@ -110,10 +111,19 @@ jobs:
           if [ -n "$BJ" ]; then
             branch=$(echo "$BJ" | jq -r '.[0]')
           else
-            branch=main
+            branch="${GITHUB_REF_NAME:-main}"
           fi
+          case "$branch" in
+            main|stable-*|stream-*|prestable-*|release-*)
+              history_branch="$branch"
+              ;;
+            *)
+              history_branch=main
+              ;;
+          esac
           echo "branch=$branch" >> $GITHUB_OUTPUT
-          echo "Sharding branch: $branch"
+          echo "history_branch=$history_branch" >> $GITHUB_OUTPUT
+          echo "Sharding branch: $branch (history: $history_branch)"
 
       - name: Build shard id list
         id: shard-ids
@@ -171,7 +181,7 @@ jobs:
           s3_subdir: build
           test_size: small,medium
           test_threads: 52
-          custom_branch_name: ${{ needs.prepare.outputs.sharding_branch }}
+          custom_branch_name: ${{ needs.prepare.outputs.history_branch }}
           put_build_results_to_cache: true
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
@@ -298,7 +308,7 @@ jobs:
           run_tests: true
           test_size: small,medium
           test_threads: 52
-          custom_branch_name: ${{ needs.prepare.outputs.sharding_branch }}
+          custom_branch_name: ${{ needs.prepare.outputs.history_branch }}
           put_build_results_to_cache: true
           skip_graph_compare: true
           publish_github_status: false
@@ -424,7 +434,7 @@ jobs:
         if: steps.merge.outcome == 'success'
         env:
           BUILD_PRESET: relwithdebinfo
-          BRANCH_NAME: ${{ needs.prepare.outputs.sharding_branch }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.history_branch }}
           PUBLIC_DIR: tmp/results
           PUBLIC_DIR_URL: ${{ env.S3_URL_PREFIX }}
           S3_BUCKET_PATH: ${{ env.S3_BUCKET_PATH }}
@@ -492,7 +502,7 @@ jobs:
           run_tests: true
           test_size: small,medium
           test_threads: 52
-          custom_branch_name: ${{ needs.prepare.outputs.sharding_branch }}
+          custom_branch_name: ${{ needs.prepare.outputs.history_branch }}
           put_build_results_to_cache: true
           skip_graph_compare: true
           prebuilt_graph_path: graph.json

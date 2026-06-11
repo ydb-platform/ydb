@@ -176,7 +176,6 @@ ui64 GetShardOwnerLocalPathId(TTestActorRuntime& runtime, ui64 localShardIdx) {
     )___", localShardIdx, localShardIdx);
     auto status = NSchemeShardUT_Private::LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, query, result, err);
     UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
-    Cerr << "DBG Shards query: " << result.DebugString() << Endl;
     const auto& list = result.GetValue().GetStruct(0).GetOptional().GetStruct(0);
     if (list.ListSize() == 0) {
         return 0;

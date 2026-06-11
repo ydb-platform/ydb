@@ -237,15 +237,15 @@ void TStorageProxy::Bootstrap() {
     Become(&TStorageProxy::StateFunc);
     FeatureFlags = NKikimr::AppData()->FeatureFlags;
 
-    YDB_LOG_INFO("Successfully bootstrapped TStorageProxy with connection to",
-        {"ActorId", SelfId()},
-        {"Endpoint", StorageConfig.GetEndpoint().data()},
-        {"Database", StorageConfig.GetDatabase().data()});
+    YDB_LOG_INFO("Successfully bootstrapped TStorageProxy with connection",
+        {"actorId", SelfId()},
+        {"endpoint", StorageConfig.GetEndpoint().data()},
+        {"database", StorageConfig.GetDatabase().data()});
 }
 
 void TStorageProxy::StartInitialization() {
     YDB_LOG_INFO("StartInitialization,",
-        {"EnableSecureScriptExecutions", FeatureFlags.GetEnableSecureScriptExecutions()});
+        {"enableSecureScriptExecutions", FeatureFlags.GetEnableSecureScriptExecutions()});
 
     NACLib::TDiffACL acl;
     acl.ClearAccess();
@@ -264,7 +264,7 @@ void TStorageProxy::StartInitialization() {
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
     const auto* event = ev->Get();
     YDB_LOG_DEBUG("Got TEvRegisterCoordinatorRequest",
-        {"CoordinatorId", event->CoordinatorId});
+        {"coordinatorId", event->CoordinatorId});
     if (!CheckStatus(ev)) {
         return;
     }
@@ -280,15 +280,15 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::
             response->Issues = issuesFuture.GetValue();
             if (response->Issues) {
                 context->IncError();
-                YDB_LOG_CTX_WARN(*actorSystem, "Failed to register",
-                    {"CoordinatorId", coordinatorId},
-                    {"Graph", response->Issues.ToString()});
+                YDB_LOG_WARN_CTX(*actorSystem, "Failed to register",
+                    {"coordinatorId", coordinatorId},
+                    {"graph", response->Issues});
             } else {
-                YDB_LOG_CTX_INFO(*actorSystem, "Graph registered",
-                    {"CoordinatorId", coordinatorId});
+                YDB_LOG_INFO_CTX(*actorSystem, "Graph registered",
+                    {"coordinatorId", coordinatorId});
             }
-            YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvRegisterCoordinatorResponse",
-                {"CoordinatorId", coordinatorId});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvRegisterCoordinatorResponse",
+                {"coordinatorId", coordinatorId});
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -296,8 +296,8 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPtr& ev) {
     const auto* event = ev->Get();
     YDB_LOG_DEBUG("Got TEvCreateCheckpointRequest",
-        {"CoordinatorId", event->CoordinatorId},
-        {"CheckpointId", event->CheckpointId});
+        {"coordinatorId", event->CoordinatorId},
+        {"checkpointId", event->CheckpointId});
     if (!CheckStatus(ev)) {
         return;
     }
@@ -342,18 +342,18 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
             auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(checkpointId, std::move(issues), std::move(graphDescId), context->AllCheckpointsSizeBytes);
             if (response->Issues) {
                 context->IncError();
-                YDB_LOG_CTX_WARN(*actorSystem, "Failed to create",
-                    {"CoordinatorId", coordinatorId},
-                    {"CheckpointId", checkpointId},
-                    {"Checkpoint", response->Issues.ToString()});
+                YDB_LOG_WARN_CTX(*actorSystem, "Failed to create",
+                    {"coordinatorId", coordinatorId},
+                    {"checkpointId", checkpointId},
+                    {"checkpoint", response->Issues});
             } else {
-                YDB_LOG_CTX_INFO(*actorSystem, "Checkpoint created",
-                    {"CoordinatorId", coordinatorId},
-                    {"CheckpointId", checkpointId});
+                YDB_LOG_INFO_CTX(*actorSystem, "Checkpoint created",
+                    {"coordinatorId", coordinatorId},
+                    {"checkpointId", checkpointId});
             }
-            YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvCreateCheckpointResponse",
-                {"CoordinatorId", coordinatorId},
-                {"CheckpointId", checkpointId});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvCreateCheckpointResponse",
+                {"coordinatorId", coordinatorId},
+                {"checkpointId", checkpointId});
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -361,8 +361,8 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest::TPtr& ev) {
     const auto* event = ev->Get();
     YDB_LOG_DEBUG("Got TEvSetCheckpointPendingCommitStatusRequest",
-        {"CoordinatorId", event->CoordinatorId},
-        {"CheckpointId", event->CheckpointId});
+        {"coordinatorId", event->CoordinatorId},
+        {"checkpointId", event->CheckpointId});
     if (!CheckStatus(ev)) {
         return;
     }
@@ -379,18 +379,18 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvSetCheckpointPendingCommitSt
             auto response = std::make_unique<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>(checkpointId, std::move(issues));
             if (response->Issues) {
                 context->IncError();
-                YDB_LOG_CTX_WARN(*actorSystem, "Failed to set 'PendingCommit'",
-                    {"CoordinatorId", coordinatorId},
-                    {"CheckpointId", checkpointId},
-                    {"Status", response->Issues.ToString()});
+                YDB_LOG_WARN_CTX(*actorSystem, "Failed to set 'PendingCommit'",
+                    {"coordinatorId", coordinatorId},
+                    {"checkpointId", checkpointId},
+                    {"status", response->Issues});
             } else {
-                YDB_LOG_CTX_INFO(*actorSystem, "Status updated to 'PendingCommit'",
-                    {"CoordinatorId", coordinatorId},
-                    {"CheckpointId", checkpointId});
+                YDB_LOG_INFO_CTX(*actorSystem, "Status updated to 'PendingCommit'",
+                    {"coordinatorId", coordinatorId},
+                    {"checkpointId", checkpointId});
             }
-            YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvSetCheckpointPendingCommitStatusResponse",
-                {"CoordinatorId", coordinatorId},
-                {"CheckpointId", checkpointId});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvSetCheckpointPendingCommitStatusResponse",
+                {"coordinatorId", coordinatorId},
+                {"checkpointId", checkpointId});
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -398,8 +398,8 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvSetCheckpointPendingCommitSt
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::TPtr& ev) {
     const auto* event = ev->Get();
     YDB_LOG_DEBUG("Got TEvCompleteCheckpointRequest",
-        {"CoordinatorId", event->CoordinatorId},
-        {"CheckpointId", event->CheckpointId});
+        {"coordinatorId", event->CoordinatorId},
+        {"checkpointId", event->CheckpointId});
     if (!CheckStatus(ev)) {
         return;
     }
@@ -419,25 +419,25 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
             auto response = std::make_unique<TEvCheckpointStorage::TEvCompleteCheckpointResponse>(checkpointId, std::move(issues));
             if (response->Issues) {
                 context->IncError();
-                YDB_LOG_CTX_DEBUG(*actorSystem, "Failed to set 'Completed'",
-                    {"CoordinatorId", coordinatorId},
-                    {"CheckpointId", checkpointId},
-                    {"Status", response->Issues.ToString()});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Failed to set 'Completed'",
+                    {"coordinatorId", coordinatorId},
+                    {"checkpointId", checkpointId},
+                    {"status", response->Issues});
             } else {
-                YDB_LOG_CTX_INFO(*actorSystem, "Status updated to 'Completed'",
-                    {"CoordinatorId", coordinatorId},
-                    {"CheckpointId", checkpointId});
+                YDB_LOG_INFO_CTX(*actorSystem, "Status updated to 'Completed'",
+                    {"coordinatorId", coordinatorId},
+                    {"checkpointId", checkpointId});
                 if (gcEnabled) {
                     auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId, type);
-                    YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvNewCheckpointSucceeded",
-                        {"CoordinatorId", coordinatorId},
-                        {"CheckpointId", checkpointId});
+                    YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvNewCheckpointSucceeded",
+                        {"coordinatorId", coordinatorId},
+                        {"checkpointId", checkpointId});
                     actorSystem->Send(actorGC, request.release(), 0);
                 }
             }
-            YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvCompleteCheckpointResponse",
-                {"CoordinatorId", coordinatorId},
-                {"CheckpointId", checkpointId});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvCompleteCheckpointResponse",
+                {"coordinatorId", coordinatorId},
+                {"checkpointId", checkpointId});
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -445,8 +445,8 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvAbortCheckpointRequest::TPtr& ev) {
     const auto* event = ev->Get();
     YDB_LOG_DEBUG("Got TEvAbortCheckpointRequest",
-        {"CoordinatorId", event->CoordinatorId},
-        {"CheckpointId", event->CheckpointId});
+        {"coordinatorId", event->CoordinatorId},
+        {"checkpointId", event->CheckpointId});
     if (!CheckStatus(ev)) {
         return;
     }
@@ -462,18 +462,18 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvAbortCheckpointRequest::TPtr
             auto response = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointResponse>(checkpointId, std::move(issues));
             if (response->Issues) {
                 context->IncError();
-                YDB_LOG_CTX_WARN(*actorSystem, "Failed to abort",
-                    {"CoordinatorId", coordinatorId},
-                    {"CheckpointId", checkpointId},
-                    {"Checkpoint", response->Issues.ToString()});
+                YDB_LOG_WARN_CTX(*actorSystem, "Failed to abort",
+                    {"coordinatorId", coordinatorId},
+                    {"checkpointId", checkpointId},
+                    {"checkpoint", response->Issues});
             } else {
-                YDB_LOG_CTX_INFO(*actorSystem, "Checkpoint aborted",
-                    {"CoordinatorId", coordinatorId},
-                    {"CheckpointId", checkpointId});
+                YDB_LOG_INFO_CTX(*actorSystem, "Checkpoint aborted",
+                    {"coordinatorId", coordinatorId},
+                    {"checkpointId", checkpointId});
             }
-            YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvAbortCheckpointResponse",
-                {"CoordinatorId", coordinatorId},
-                {"CheckpointId", checkpointId});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvAbortCheckpointResponse",
+                {"coordinatorId", coordinatorId},
+                {"checkpointId", checkpointId});
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -481,7 +481,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvAbortCheckpointRequest::TPtr
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest::TPtr& ev) {
     const auto* event = ev->Get();
     YDB_LOG_DEBUG("Got TEvGetCheckpointsMetadataRequest",
-        {"GraphId", event->GraphId});
+        {"graphId", event->GraphId});
     if (!CheckStatus(ev)) {
         return;
     }
@@ -496,12 +496,12 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvGetCheckpointsMetadataReques
             auto response = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(result.first, result.second);
             if (response->Issues) {
                 context->IncError();
-                YDB_LOG_CTX_WARN(*actorSystem, "Failed to get",
-                    {"GraphId", graphId},
-                    {"Checkpoints", response->Issues.ToString()});
+                YDB_LOG_WARN_CTX(*actorSystem, "Failed to get",
+                    {"graphId", graphId},
+                    {"checkpoints", response->Issues});
             }
-            YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvGetCheckpointsMetadataResponse",
-                {"GraphId", graphId});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvGetCheckpointsMetadataResponse",
+                {"graphId", graphId});
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -511,18 +511,18 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
     auto* event = ev->Get();
     const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId());
     YDB_LOG_DEBUG("Got TEvSaveTaskState: task",
-        {"GraphId", event->GraphId},
-        {"CheckpointId", checkpointId},
-        {"TaskId", event->TaskId});
+        {"graphId", event->GraphId},
+        {"checkpointId", checkpointId},
+        {"taskId", event->TaskId});
 
     const size_t stateSize = event->State.ByteSizeLong();
     if (stateSize > Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()) {
         YDB_LOG_WARN("Won't save task state because it's too big:, state /",
-            {"GraphId", event->GraphId},
-            {"CheckpointId", checkpointId},
-            {"Task", event->TaskId},
-            {"Size", stateSize},
-            {"MaxTaskStateSizeBytes", Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()});
+            {"graphId", event->GraphId},
+            {"checkpointId", checkpointId},
+            {"task", event->TaskId},
+            {"size", stateSize},
+            {"maxTaskStateSizeBytes", Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()});
         auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
         response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
         response->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
@@ -541,10 +541,10 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
                 sender = ev->Sender,
                 actorSystem = TActivationContext::ActorSystem(),
                 context](const NThreading::TFuture<IStateStorage::TSaveStateResult>& futureResult) {
-            YDB_LOG_CTX_DEBUG(*actorSystem, "TEvSaveTaskState Apply",
-                {"GraphId", graphId},
-                {"CheckpointId", checkpointId},
-                {"Task", taskId});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "TEvSaveTaskState Apply",
+                {"graphId", graphId},
+                {"checkpointId", checkpointId},
+                {"task", taskId});
             const auto& issues = futureResult.GetValue().second;
             auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
             response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
@@ -554,19 +554,19 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
 
             if (issues) {
                 context->IncError();
-                YDB_LOG_CTX_WARN(*actorSystem, "Failed to save task state",
-                    {"GraphId", graphId},
-                    {"CheckpointId", checkpointId},
-                    {"Task", taskId},
-                    {"Issues", issues.ToString()});
+                YDB_LOG_WARN_CTX(*actorSystem, "Failed to save task state",
+                    {"graphId", graphId},
+                    {"checkpointId", checkpointId},
+                    {"task", taskId},
+                    {"issues", issues});
                 response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STORAGE_ERROR);
             } else {
                 response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::OK);
             }
-            YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvSaveTaskStateResult",
-                {"GraphId", graphId},
-                {"CheckpointId", checkpointId},
-                {"Task", taskId});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvSaveTaskStateResult",
+                {"graphId", graphId},
+                {"checkpointId", checkpointId},
+                {"task", taskId});
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -576,9 +576,9 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
     const auto* event = ev->Get();
     const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId());
     YDB_LOG_DEBUG("Got TEvGetTaskState: tasks",
-        {"GraphId", event->GraphId},
-        {"CheckpointId", checkpointId},
-        {"TaskIds", JoinSeq(", ", event->TaskIds)});
+        {"graphId", event->GraphId},
+        {"checkpointId", checkpointId},
+        {"taskIds", JoinSeq(", ", event->TaskIds)});
 
     StateStorage->GetState(event->TaskIds, event->GraphId, checkpointId)
         .Apply([checkpointId = event->Checkpoint,
@@ -595,16 +595,16 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
             std::swap(response->States, result.first);
             if (response->Issues) {
                 context->IncError();
-                YDB_LOG_CTX_WARN(*actorSystem, "Failed to get task state: tasks: },",
-                    {"GraphId", graphId},
-                    {"CheckpointId", checkpointId},
-                    {"TaskIds", JoinSeq(", ", taskIds)},
-                    {"Issues", response->Issues.ToString()});
+                YDB_LOG_WARN_CTX(*actorSystem, "Failed to get task state: tasks",
+                    {"graphId", graphId},
+                    {"checkpointId", checkpointId},
+                    {"taskIds", JoinSeq(", ", taskIds)},
+                    {"issues", response->Issues});
             }
-            YDB_LOG_CTX_DEBUG(*actorSystem, "Send TEvGetTaskStateResult: tasks",
-                {"GraphId", graphId},
-                {"CheckpointId", checkpointId},
-                {"TaskIds", JoinSeq(", ", taskIds)});
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Send TEvGetTaskStateResult: tasks",
+                {"graphId", graphId},
+                {"checkpointId", checkpointId},
+                {"taskIds", JoinSeq(", ", taskIds)});
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
 }
@@ -620,11 +620,11 @@ void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
     const auto* event = ev->Get();
     if (!event->StorageIssues.Empty()) {
         YDB_LOG_ERROR("Failed to init checkpoint",
-            {"Storage", event->StorageIssues.ToOneLineString()});
+            {"storage", event->StorageIssues.ToOneLineString()});
     }
     if (!event->StateIssues.Empty()) {
         YDB_LOG_ERROR("Failed to init state",
-            {"Storage", event->StateIssues.ToOneLineString()});
+            {"storage", event->StateIssues.ToOneLineString()});
     }
     bool success = event->StorageIssues.Empty() && event->StateIssues.Empty();
     if (!success) {
@@ -633,7 +633,7 @@ void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
         }
         if (auto delay = RetryState->GetNextRetryDelay()) {
             YDB_LOG_INFO("Schedule init retry after",
-                {"Delay", delay});
+                {"delay", delay});
             Schedule(*delay, new TEvPrivate::TEvInitialize());
         }
     } else {
@@ -681,14 +681,14 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
     switch (ev->GetTypeRewrite()) {
         case TEvCheckpointStorage::TEvRegisterCoordinatorRequest::EventType: {
             YDB_LOG_WARN("Send TEvRegisterCoordinatorResponse with",
-                {"Issues", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
             auto response = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorResponse>(std::move(issues));
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             break;
         }
         case TEvCheckpointStorage::TEvCreateCheckpointRequest::EventType: {
             YDB_LOG_WARN("Send TEvCreateCheckpointResponse with",
-                {"Issues", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvCreateCheckpointRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(event->CheckpointId, std::move(issues), TString(), 0);
             Send(ev->Sender, response.release(), 0, ev->Cookie);
@@ -696,14 +696,14 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
         }
         case TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest::EventType: {
             YDB_LOG_WARN("Send TEvGetCheckpointsMetadataResponse with",
-                {"Issues", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
             auto response = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(TVector<TCheckpointMetadata>{}, std::move(issues));
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             break;
         }
         case TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest::EventType: {
             YDB_LOG_WARN("Send TEvSetCheckpointPendingCommitStatusResponse with",
-                {"Issues", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>(event->CheckpointId, std::move(issues));
             Send(ev->Sender, response.release(), 0, ev->Cookie);
@@ -711,7 +711,7 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
         }
         case TEvCheckpointStorage::TEvCompleteCheckpointRequest::EventType: {
             YDB_LOG_WARN("Send TEvCompleteCheckpointResponse with",
-                {"Issues", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvCompleteCheckpointRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvCompleteCheckpointResponse>(event->CheckpointId, std::move(issues));
             Send(ev->Sender, response.release(), 0, ev->Cookie);
@@ -719,7 +719,7 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
         }
         case TEvCheckpointStorage::TEvAbortCheckpointRequest::EventType: {
             YDB_LOG_WARN("Send TEvAbortCheckpointRequest with",
-                {"Issues", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvAbortCheckpointRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointResponse>(event->CheckpointId, std::move(issues));
             Send(ev->Sender, response.release(), 0, ev->Cookie);

@@ -407,11 +407,11 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
     taskInfo.States.push_front({});
     NYql::NDq::TComputeActorState& state = taskInfo.States.front();
 
-    YDB_LOG_CTX_DEBUG(*context->ActorSystem, "DeserializeState, task id, blob size",
-        {"GraphId", context->GraphId},
-        {"CheckpointId", context->CheckpointId},
-        {"TaskId", taskInfo.TaskId},
-        {"BlobSize", blob.size()});
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState, task id, blob size",
+        {"graphId", context->GraphId},
+        {"checkpointId", context->CheckpointId},
+        {"taskId", taskInfo.TaskId},
+        {"blobSize", blob.size()});
 
     auto res = state.ParseFromString(blob);
     Y_ENSURE(res, "Parsing error");
@@ -520,10 +520,10 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         graphId,
         checkpointId);
 
-    YDB_LOG_CTX_DEBUG(*context->ActorSystem, "GetState,",
-        {"GraphId", context->GraphId},
-        {"CheckpointId", context->CheckpointId},
-        {"Tasks", JoinSeq(", ", taskIds)});
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "GetState,",
+        {"graphId", context->GraphId},
+        {"checkpointId", context->CheckpointId},
+        {"tasks", JoinSeq(", ", taskIds)});
 
     return ListStates(context)
         .Apply([context, thisPtr = TIntrusivePtr(this)] (const TFuture<TStatus>& result) mutable {
@@ -658,9 +658,9 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                         return status;
                     }
 
-                    YDB_LOG_CTX_DEBUG(*context->ActorSystem, "ListOfStates results",
-                        {"GraphId", context->GraphId},
-                        {"CheckpointId", context->CheckpointId});
+                    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListOfStates results",
+                        {"graphId", context->GraphId},
+                        {"checkpointId", context->CheckpointId});
                     try {
                         const auto& selectResult = future.GetValue();
                         TResultSetParser parser(selectResult.GetResultSet(0));
@@ -681,12 +681,12 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
                             taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            YDB_LOG_CTX_DEBUG(*context->ActorSystem, "taskId checkpoint, rows",
-                                {"GraphId", context->GraphId},
-                                {"CheckpointId", context->CheckpointId},
-                                {"TaskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
-                                {"Id", checkpointId},
-                                {"Count", cnt});
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "TaskId checkpoint, rows",
+                                {"graphId", context->GraphId},
+                                {"checkpointId", context->CheckpointId},
+                                {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
+                                {"id", checkpointId},
+                                {"count", cnt});
                         }
                     }
                     catch (const std::exception& e) {
@@ -806,12 +806,12 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    YDB_LOG_CTX_DEBUG(*context->ActorSystem, "SelectState: task_id, seq_no, blob_seq_num",
-        {"GraphId", context->GraphId},
-        {"CheckpointId", context->CheckpointId},
-        {"TaskId", taskInfo.TaskId},
-        {"SeqNo", taskInfo.ListOfStatesForReading.front().CheckpointId.SeqNo},
-        {"CurrentProcessingRow", taskInfo.CurrentProcessingRow});
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState: task_id, seq_no, blob_seq_num",
+        {"graphId", context->GraphId},
+        {"checkpointId", context->CheckpointId},
+        {"taskId", taskInfo.TaskId},
+        {"seqNo", taskInfo.ListOfStatesForReading.front().CheckpointId.SeqNo},
+        {"currentProcessingRow", taskInfo.CurrentProcessingRow});
     paramsBuilder->AddParam("$task_id").Uint64(taskInfo.TaskId).Build();
     paramsBuilder->AddParam("$graph_id").String(context->GraphId).Build();
     paramsBuilder->AddParam("$coordinator_generation").Uint64(taskInfo.ListOfStatesForReading.front().CheckpointId.CoordinatorGeneration).Build();
@@ -916,10 +916,10 @@ TFuture<TStatus> TStateStorage::SkipStatesInFuture(const TContextPtr& context) {
             return MakeFuture(TStatus{EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Checkpoint is not found"}}});
         }
     }
-    YDB_LOG_CTX_DEBUG(*context->ActorSystem, "SkipStatesInFuture, skip checkpoints",
-        {"GraphId", context->GraphId},
-        {"CheckpointId", context->CheckpointId},
-        {"EraseCount", eraseCount});
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SkipStatesInFuture, skip checkpoints",
+        {"graphId", context->GraphId},
+        {"checkpointId", context->CheckpointId},
+        {"eraseCount", eraseCount});
     return MakeFuture(TStatus{EStatus::SUCCESS, NYdb::NIssue::TIssues{}});
 }
 
@@ -978,9 +978,9 @@ TFuture<TStatus> TStateStorage::ReadRows(const TContextPtr& context) {
 std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     const TContextPtr& context,
     NYql::TIssues& issues) {
-    YDB_LOG_CTX_DEBUG(*context->ActorSystem, "ApplyIncrements",
-        {"GraphId", context->GraphId},
-        {"CheckpointId", context->CheckpointId});
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ApplyIncrements",
+        {"graphId", context->GraphId},
+        {"checkpointId", context->CheckpointId});
 
     std::vector<NYql::NDq::TComputeActorState> states;
     try {

@@ -83,7 +83,7 @@ void TActorGC::Bootstrap()
     Become(&TActorGC::StateFunc);
 
     YDB_LOG_INFO("Successfully bootstrapped storage GC",
-        {"ActorId", SelfId()});
+        {"actorId", SelfId()});
 }
 
 void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
@@ -93,12 +93,12 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
     const auto& checkpointUpperBound = event->CheckpointId;
 
     YDB_LOG_DEBUG("GC received upperbound checkpoint for graph",
-        {"CheckpointUpperBound", checkpointUpperBound},
-        {"GraphId", graphId});
+        {"checkpointUpperBound", checkpointUpperBound},
+        {"graphId", graphId});
 
     if (event->Type != NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
         YDB_LOG_DEBUG("GC skip increment checkpoint for graph",
-            {"GraphId", graphId});
+            {"graphId", graphId});
         return;
     }
 
@@ -123,8 +123,8 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to mark checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                YDB_LOG_CTX_DEBUG(*context->ActorSystem, "",
-                    {"Details", ss.Str()});
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, "Dump details",
+                    {"details", ss.Str()});
                 context->Stage = TContext::StageFailed;
                 return future;
             }
@@ -145,8 +145,8 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to delete states of checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                YDB_LOG_CTX_DEBUG(*context->ActorSystem, "",
-                    {"Details", ss.Str()});
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, "Dump details",
+                    {"details", ss.Str()});
                 context->Stage = TContext::StageFailed;
                 return future;
             }
@@ -167,16 +167,16 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to delete marked checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                YDB_LOG_CTX_DEBUG(*context->ActorSystem, "",
-                    {"Details", ss.Str()});
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, "Dump details",
+                    {"details", ss.Str()});
                 context->Stage = TContext::StageFailed;
                 return future;
             }
             TStringStream ss;
             ss << "GC deleted checkpoints of graph '" << context->GraphId
                << "' up to " << context->UpperBound;
-            YDB_LOG_CTX_DEBUG(*context->ActorSystem, "",
-                {"Details", ss.Str()});
+            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "Dump details",
+                {"details", ss.Str()});
             return future;
         });
 }

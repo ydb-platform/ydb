@@ -118,7 +118,7 @@ public:
     void Bootstrap() {
         Become(&TYqQuoterService::StateFunc);
         YDB_LOG_INFO("Bootstraping with",
-            {"Config", Config});
+            {"config", Config});
         Config.MutableDatabase()->SetDatabase(NKikimr::CanonizePath(Config.GetDatabase().GetDatabase())); // Crutch for rate limiter grpc
         YdbConnection = NewYdbConnection(Config.GetDatabase(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
 
@@ -144,11 +144,11 @@ public:
         }
 
         const ui64 amount = ev->Get()->Reqs[0].Amount;
-        YDB_LOG_TRACE("Quota request {, }",
-            {"Quoter", quoter},
-            {"Resource", resource},
-            {"Amount", amount},
-            {"Sender", ev->Sender});
+        YDB_LOG_TRACE("Quota request",
+            {"quoter", quoter},
+            {"resource", resource},
+            {"amount", amount},
+            {"sender", ev->Sender});
 
         TResourceProcessor& proc = Resources[key];
         proc.RequiredAmount += amount;
@@ -159,11 +159,11 @@ public:
     }
 
     void AcquireResource(const TResourceKey& key, ui64 amount, ui64 cookie) {
-        YDB_LOG_TRACE("Send acquire resource request to {, }",
-            {"Key", key.first},
-            {"Value", key.second},
-            {"Amount", amount},
-            {"Cookie", cookie});
+        YDB_LOG_TRACE("Send acquire resource request to",
+            {"key", key.first},
+            {"value", key.second},
+            {"amount", amount},
+            {"cookie", cookie});
         auto asyncStatus = YdbConnection->RateLimiterClient.AcquireResource(key.first, key.second, NYdb::NRateLimiter::TAcquireResourceSettings().Amount(amount));
         Counters.InFlySubscribe->Inc();
         asyncStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), cookie, key, amount](const NYdb::TAsyncStatus& status) {
@@ -172,14 +172,14 @@ public:
     }
 
     void ProcessRequests(TResourceProcessor& proc, const TResourceKey& key) {
-        YDB_LOG_TRACE("Process requests for {, }....",
-            {"Key", key.first},
-            {"Value", key.second},
-            {"Requests", proc.Requests.size()},
-            {"RateLimiterInflight", proc.RateLimiterRequests.size()},
-            {"AvailableAmount", proc.AvailableAmount},
-            {"RequiredAmount", proc.RequiredAmount},
-            {"RequestedAmount", proc.RequestedAmount});
+        YDB_LOG_TRACE("Process requests for",
+            {"key", key.first},
+            {"value", key.second},
+            {"requests", proc.Requests.size()},
+            {"rateLimiterInflight", proc.RateLimiterRequests.size()},
+            {"availableAmount", proc.AvailableAmount},
+            {"requiredAmount", proc.RequiredAmount},
+            {"requestedAmount", proc.RequestedAmount});
         while (!proc.Requests.empty() && proc.AvailableAmount >= proc.Requests.front()->Get()->Reqs[0].Amount) {
             Send(proc.Requests.front()->Sender, new NKikimr::TEvQuota::TEvClearance(NKikimr::TEvQuota::TEvClearance::EResult::Success));
             proc.AvailableAmount -= proc.Requests.front()->Get()->Reqs[0].Amount;
@@ -241,12 +241,12 @@ public:
             retryState = RetryPolicy->CreateRetryState();
         }
         if (const TMaybe<TDuration> delay = retryState->GetNextRetryDelay(ev->Get()->Status)) {
-            YDB_LOG_DEBUG("Scheduled retry in for resource {, }",
-                {"Delay", *delay},
-                {"Key", key.first},
-                {"Value", key.second},
-                {"Status", ev->Get()->Status.GetStatus()},
-                {"Issues", ev->Get()->Status.GetIssues().ToOneLineString()});
+            YDB_LOG_DEBUG("Scheduled retry in for resource",
+                {"delay", *delay},
+                {"key", key.first},
+                {"value", key.second},
+                {"status", ev->Get()->Status.GetStatus()},
+                {"issues", ev->Get()->Status.GetIssues().ToOneLineString()});
             Schedule(*delay, new TEvPrivate::TEvRetryQuotaRequest(key.first, key.second, ev->Get()->Amount, ev->Cookie));
             return true;
         } else {
@@ -259,13 +259,13 @@ public:
         Counters.InFlySubscribe->Dec();
         const TResourceKey key(ev->Get()->RateLimiter, ev->Get()->Resource);
         TResourceProcessor& proc = Resources[key];
-        YDB_LOG_TRACE("Received quota for resource {, }..",
-            {"Key", key.first},
-            {"Value", key.second},
-            {"Amount", ev->Get()->Amount},
-            {"Cookie", ev->Cookie},
-            {"Status", ev->Get()->Status.GetStatus()},
-            {"Issues", ev->Get()->Status.GetIssues().ToOneLineString()});
+        YDB_LOG_TRACE("Received quota for resource",
+            {"key", key.first},
+            {"value", key.second},
+            {"amount", ev->Get()->Amount},
+            {"cookie", ev->Cookie},
+            {"status", ev->Get()->Status.GetStatus()},
+            {"issues", ev->Get()->Status.GetIssues().ToOneLineString()});
         if (ev->Get()->Status.IsSuccess()) {
             proc.RateLimiterRequests.erase(ev->Cookie);
             proc.RequestedAmount -= ev->Get()->Amount;
@@ -280,11 +280,11 @@ public:
     void Handle(TEvPrivate::TEvRetryQuotaRequest::TPtr& ev) {
         const TResourceKey key(ev->Get()->RateLimiter, ev->Get()->Resource);
         const ui64 cookie = ev->Get()->Cookie;
-        YDB_LOG_TRACE("Retry acquire quota for resource {, }",
-            {"Key", key.first},
-            {"Value", key.second},
-            {"Amount", ev->Get()->Amount},
-            {"Cookie", cookie});
+        YDB_LOG_TRACE("Retry acquire quota for resource",
+            {"key", key.first},
+            {"value", key.second},
+            {"amount", ev->Get()->Amount},
+            {"cookie", cookie});
         AcquireResource(key, ev->Get()->Amount, cookie);
     }
 
@@ -346,8 +346,8 @@ public:
         }
         if (deletedRes || deletedSenders) {
             YDB_LOG_INFO("CleanupEmpty. Deleted resources and senders",
-                {"DeletedRes", deletedRes},
-                {"DeletedSenders", deletedSenders});
+                {"deletedRes", deletedRes},
+                {"deletedSenders", deletedSenders});
         }
         Counters.ResourceCount->Set(Resources.size());
         Counters.SenderCount->Set(SenderToResource.size());

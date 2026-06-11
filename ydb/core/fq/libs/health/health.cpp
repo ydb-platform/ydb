@@ -37,7 +37,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_DEBUG("Starting yandex query health. Actor",
-            {"Id", SelfId()});
+            {"id", SelfId()});
 
         NActors::TMon* mon = NKikimr::AppData()->Mon;
         if (mon) {

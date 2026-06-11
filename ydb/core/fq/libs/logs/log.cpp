@@ -59,7 +59,7 @@ private:
 
             default:
                 YDB_LOG_ERROR("Undelivered event with unexpected source",
-                    {"Type", ev->Get()->SourceType});
+                    {"type", ev->Get()->SourceType});
                 break;
         }
     }
@@ -90,7 +90,7 @@ private:
                 auto yqlPriority = static_cast<NActors::NLog::EPriority>(entry.GetLevel());
                 NYql::NDq::SetYqlLogLevels(yqlPriority);
                 YDB_LOG_DEBUG("Updated YQL logs",
-                    {"Priority", (ui32)yqlPriority});
+                    {"priority", (ui32)yqlPriority});
                 return;
             }
         }
@@ -99,8 +99,8 @@ private:
         ui8 currentLevel = TActivationContext::AsActorContext().LoggerSettings()->GetComponentSettings(NKikimrServices::KQP_YQL).Raw.X.Level;
         auto yqlPriority = static_cast<NActors::NLog::EPriority>(currentLevel);
 
-        YDB_LOG_DEBUG("Updated YQL logs priority to",
-            {"CurrentLevel", (ui32)yqlPriority});
+        YDB_LOG_DEBUG("Updated YQL logs priority",
+            {"currentLevel", (ui32)yqlPriority});
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 

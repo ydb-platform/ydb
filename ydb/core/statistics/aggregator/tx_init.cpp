@@ -206,6 +206,16 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 ui64 endTime = rowset.GetValueOrDefault<Schema::ForceTraversalOperations::EndTime>(0);
                 ui64 stateVal = rowset.GetValueOrDefault<Schema::ForceTraversalOperations::State>(0);
 
+                // Guard against a corrupted/future enum value
+                auto state = Ydb::Table::AnalyzeState::STATE_UNSPECIFIED;
+                if (Ydb::Table::AnalyzeState::State_IsValid(static_cast<int>(stateVal))) {
+                    state = static_cast<Ydb::Table::AnalyzeState::State>(stateVal);
+                } else {
+                    SA_LOG_W("[" << Self->TabletID() << "] tx_init: invalid persisted"
+                        " AnalyzeState=" << stateVal << " for operationId="
+                        << operationId.Quote() << ", clamping to STATE_UNSPECIFIED");
+                }
+
                 TForceTraversalOperation operation {
                     .OperationId = operationId,
                     .DatabaseName = databaseName,
@@ -214,7 +224,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .ReplyToActorId = replyToActorId,
                     .RequestingActorReattached = false,
                     .CreatedAt = TInstant::FromValue(createdAt),
-                    .State = static_cast<Ydb::Table::AnalyzeState::State>(stateVal),
+                    .State = state,
                     .EndTime = TInstant::FromValue(endTime),
                 };
                 Self->ForceTraversals.emplace_back(operation);

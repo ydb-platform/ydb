@@ -811,7 +811,7 @@ private:
                         .StartOffset = 0,
                     };
                     Builders_[j]->AddMany(&dataItem, 1, indexes, outputBlockLen);
-                    ScratchOutput_.emplace_back(Builders_[j]->Build(true));
+                    ScratchOutput_.emplace_back(Builders_[j]->Build(false));
                 }
             }
             OutputData_.emplace_back(std::make_unique<TArgsDechunker>(std::move(ScratchOutput_)));

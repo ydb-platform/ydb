@@ -785,7 +785,7 @@ public:
         return GetHttpResolverConfig(*s3Config);
     }
 
-    EDataFormat DataFormatFromS3Settings(const NKikimrSchemeOp::TS3Settings& s3Settings) {
+    static EDataFormat DataFormatFromS3Settings(const NKikimrSchemeOp::TS3Settings& s3Settings) {
         switch (s3Settings.GetFormatCase()) {
             case NKikimrSchemeOp::TS3Settings::FORMAT_NOT_SET:
             case NKikimrSchemeOp::TS3Settings::kYdbDump:

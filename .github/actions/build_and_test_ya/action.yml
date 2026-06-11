@@ -95,6 +95,10 @@ inputs:
     type: boolean
     default: false
     description: "Include test nodes in saved graph for sharded test jobs"
+  s3_subdir:
+    type: string
+    default: ""
+    description: "Optional S3 subfolder under preset path (e.g. shard_0)"
 defaults:
   run:
     shell: bash
@@ -131,6 +135,7 @@ runs:
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
         folder_prefix: ${{ env.folder_prefix }}
         build_preset: ${{ inputs.build_preset }}
+        s3_subdir: ${{ inputs.s3_subdir }}
 
     - name: Run build and tests
       id: build

@@ -11,7 +11,7 @@ namespace NBsController {
 
 namespace {
 
-bool IsBsControllerDevUiAdminRequest(const TCgiParameters& cgi, const TActorContext& ctx) {
+bool IsBsControllerDevUiAdminRequest(const TCgiParameters& cgi) {
     if (cgi.Has("exec")) {
         return true;
     }
@@ -815,7 +815,7 @@ void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInf
             AppData(),
             query.GetPath(),
             query.GetUserToken(),
-            !IsBsControllerDevUiAdminRequest(params, TActivationContext::AsActorContext())))
+            !IsBsControllerDevUiAdminRequest(params)))
     {
         Send(sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return;
@@ -926,7 +926,7 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
             AppData(),
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            !IsBsControllerDevUiAdminRequest(cgi, ctx)))
+            !IsBsControllerDevUiAdminRequest(cgi)))
     {
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

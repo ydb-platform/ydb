@@ -14,6 +14,8 @@
 # Docs-related workflows are owned by the docs team and don't require CI review
 /.github/workflows/docs_* @ydb-platform/docs
 /.github/workflows/ydbdoc-* @ydb-platform/docs
+# Mute lists have no owner: no code owner review required
+/.github/config/muted_ya*
 /.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/ci

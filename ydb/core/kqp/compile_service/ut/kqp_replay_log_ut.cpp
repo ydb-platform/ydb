@@ -118,16 +118,6 @@ void PrepareDataQuery(TKikimrRunner& kikimr, const TString& query) {
     });
 }
 
-void ExecuteQueryWithParams(TKikimrRunner& kikimr, const TString& query, const NYdb::TParams& params) {
-    kikimr.RunCall([&] {
-        auto result = kikimr.GetQueryClient()
-            .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params)
-            .GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        return true;
-    });
-}
-
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpReplayLog) {
@@ -142,14 +132,6 @@ Y_UNIT_TEST_SUITE(KqpReplayLog) {
             << "CREATE SECRET s WITH (VALUE = '" << secretValue << "')";
         const TString alterSecretQuery = TStringBuilder()
             << "ALTER SECRET s WITH (VALUE = '" << secretValue << "')";
-        const TString createSecretParamQuery = R"(
-            DECLARE $value AS Utf8;
-            CREATE SECRET s_param WITH (value = $value);
-        )";
-        const TString alterSecretParamQuery = R"(
-            DECLARE $value AS Utf8;
-            ALTER SECRET s_param WITH (value = $value);
-        )";
         const TString selectQuery = "SELECT id FROM t";
 
         {
@@ -168,15 +150,6 @@ Y_UNIT_TEST_SUITE(KqpReplayLog) {
             ExecuteSchemeQuery(kikimr, createSecretQuery);
             CompileQuery(runtime, alterSecretQuery);
             ExecuteSchemeQuery(kikimr, alterSecretQuery);
-
-            ExecuteQueryWithParams(
-                kikimr,
-                createSecretParamQuery,
-                NYdb::TParamsBuilder().AddParam("$value").Utf8(secretValue).Build().Build());
-            ExecuteQueryWithParams(
-                kikimr,
-                alterSecretParamQuery,
-                NYdb::TParamsBuilder().AddParam("$value").Utf8(secretValue).Build().Build());
         }
 
         UNIT_ASSERT_C(

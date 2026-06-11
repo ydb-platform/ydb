@@ -657,7 +657,7 @@
 
   - IWriteSession (низкоуровневое API)
 
-    Подключение к топику на запись представлено объектом сессии записи с интерфейсом `IWriteSession` или `ISimpleBlockingWriteSession` (вариант для простой записи по одному сообщению без подтверждения, блокирующейся при превышении числа inflight записей или размера буфера SDK). Настройки сессии записи представлены структурой `TWriteSessionSettings`, для варианта `ISimpleBlockingWriteSession` часть настроек не поддерживается.
+    Подключение к топику на запись представлено объектом сессии записи с интерфейсом `IWriteSession`. Настройки сессии записи представлены структурой `TWriteSessionSettings`, для варианта `ISimpleBlockingWriteSession` часть настроек не поддерживается.
 
     Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
 
@@ -669,6 +669,21 @@
         .MessageGroupId(producerAndGroupID);
 
     auto session = topicClient.CreateWriteSession(settings);
+    ```
+  - ISimpleBlockingWriteSession (низкоуровневое API)
+
+    Вариант для простой записи по одному сообщению без подтверждения представлен интерфейсом `ISimpleBlockingWriteSession`. Метод `Write` блокируется при превышении числа inflight записей или размера буфера SDK. Настройки сессии записи представлены структурой `TWriteSessionSettings`, как и в случае `IWriteSession`, однако часть настроек не поддерживается.
+
+    Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
+
+    ```cpp
+    std::string producerAndGroupID = "group-id";
+    auto settings = NYdb::NTopic::TWriteSessionSettings()
+        .Path("my-topic")
+        .ProducerId(producerAndGroupID)
+        .MessageGroupId(producerAndGroupID);
+
+    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
     ```
 
   - IProducer (высокоуровневое API)
@@ -864,6 +879,18 @@
             break;
         }
     }
+    ```
+
+  - ISimpleBlockingWriteSession (низкоуровневое API)
+
+    Упрощённый вариант записи без цикла событий: не использует `ContinuationToken` и не возвращает подтверждения через `TAcksEvent`. Метод `Write` кладёт сообщение во внутренний буфер; если буфер переполнен, вызов блокируется до появления места. Параметр `blockTimeout` ограничивает время ожидания. Метод возвращает `true`, если сообщение принято в буфер, и `false`, если за отведённое время записать не удалось.
+
+    Отправка на сервер, как и у `IWriteSession`, выполняется в фоне. Чтобы дождаться завершения всех записей и закрыть сессию, вызовите `Close()`.
+
+    ```cpp
+    auto messageData = std::string("message");
+    NYdb::NTopic::TWriteMessage writeMessage(messageData);
+    session->Write(std::move(writeMessage));
     ```
 
   - IProducer (высокоуровневое API)
@@ -1099,6 +1126,10 @@
 
     В такой сессии записи события `TAcksEvent` не будут приходить пользователю в `GetEvent` / `GetEvents`, вместо этого SDK при получении подтверждений от сервера будет вызывать переданный обработчик. Аналогично можно настраивать обработчики на остальные типы событий.
 
+  - ISimpleBlockingWriteSession (низкоуровневое API)
+
+    `ISimpleBlockingWriteSession` не возвращает подтверждения по отдельным сообщениям: события `TAcksEvent` и обработчики для них недоступны. Чтобы дождаться, пока все сообщения из буфера будут записаны на сервер, вызовите `Close()` — метод дожидается подтверждения от сервера и закрывает сессию.
+
   - IProducer (высокоуровневое API)
 
     Подтверждения от сервера приходят так же, как у `IWriteSession`: через обработчик `AcksHandler` в `TProducerSettings::EventHandlers`. Чтобы дождаться доставки накопленного буфера на сервер, вызовите `Flush()`.
@@ -1285,6 +1316,18 @@
 
     Если необходимо в рамках сессии записи отправить сообщение, сжатое другим кодеком, можно использовать метод `WriteEncoded` с указанием кодека и размера расжатого сообщения. Для успешной записи этим способом используемый кодек должен быть разрешён в настройках топика.
 
+  - ISimpleBlockingWriteSession (низкоуровневое API)
+
+    Кодек задаётся при [создании сессии записи](#start-writer) в `TWriteSessionSettings` — те же настройки `Codec` и `CompressionLevel`, что и у `IWriteSession`. Метод `WriteEncoded` недоступен.
+
+    ```cpp
+    auto settings = NYdb::NTopic::TWriteSessionSettings()
+        .Path("my-topic")
+        .Codec(ECodec::RAW);
+
+    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
+    ```
+
   - IProducer (высокоуровневое API)
 
     Кодек задаётся в `TProducerSettings` при [создании продюсера](#start-writer) — те же настройки `Codec` и `CompressionLevel`, что и у `IWriteSession`.
@@ -1396,9 +1439,20 @@
 
     Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
 
+  - ISimpleBlockingWriteSession (низкоуровневое API)
+
+    Поведение такое же, как у `IWriteSession`: если не указывать `ProducerId`, сессия создаётся без дедупликации.
+
+    ```cpp
+    auto settings = NYdb::NTopic::TWriteSessionSettings()
+        .Path(myTopicPath);
+
+    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
+    ```
+
   - IProducer (высокоуровневое API)
 
-    `IProducer` всегда записывает с дедупликацией: идентификатор продюсера формируется из `ProducerIdPrefix` и id партиции. Для записи без дедупликации используйте `IWriteSession`.
+    `IProducer` всегда записывает с дедупликацией: идентификатор продюсера формируется из `ProducerIdPrefix` и id партиции. Для записи без дедупликации используйте `IWriteSession` или `ISimpleBlockingWriteSession`.
 
   {% endlist %}
 

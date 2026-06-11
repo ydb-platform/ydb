@@ -67,6 +67,30 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  skip_graph_compare:
+    type: boolean
+    default: false
+  prebuilt_graph_path:
+    type: string
+    default: ""
+  prebuilt_context_path:
+    type: string
+    default: ""
+  publish_github_status:
+    type: boolean
+    default: true
+  publish_pr_comment:
+    type: boolean
+    default: true
+  single_attempt:
+    type: boolean
+    default: false
+  start_retry:
+    type: string
+    default: "1"
+  previous_report_path:
+    type: string
+    default: ""
 defaults:
   run:
     shell: bash
@@ -129,3 +153,11 @@ runs:
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps }}
         pull_number: ${{ inputs.pull_number }}
+        skip_graph_compare: ${{ inputs.skip_graph_compare }}
+        prebuilt_graph_path: ${{ inputs.prebuilt_graph_path }}
+        prebuilt_context_path: ${{ inputs.prebuilt_context_path }}
+        publish_github_status: ${{ inputs.publish_github_status }}
+        publish_pr_comment: ${{ inputs.publish_pr_comment }}
+        single_attempt: ${{ inputs.single_attempt }}
+        start_retry: ${{ inputs.start_retry }}
+        previous_report_path: ${{ inputs.previous_report_path }}

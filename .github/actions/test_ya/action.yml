@@ -79,6 +79,38 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  skip_graph_compare:
+    type: boolean
+    default: false
+    description: "Use prebuilt graph/context instead of running graph_compare.py"
+  prebuilt_graph_path:
+    type: string
+    default: ""
+    description: "Path to graph.json when skip_graph_compare is true"
+  prebuilt_context_path:
+    type: string
+    default: ""
+    description: "Path to context.json when skip_graph_compare is true"
+  publish_github_status:
+    type: boolean
+    default: true
+    description: "Post build_* and test_* commit statuses"
+  publish_pr_comment:
+    type: boolean
+    default: true
+    description: "Append progress and summary to the PR comment"
+  single_attempt:
+    type: boolean
+    default: false
+    description: "Run a single ya make attempt (for test shards)"
+  start_retry:
+    type: string
+    default: "1"
+    description: "First retry attempt number (aggregate retry uses 2)"
+  previous_report_path:
+    type: string
+    default: ""
+    description: "build-results-report for retries when start_retry > 1"
 
 outputs:
   success:
@@ -89,7 +121,7 @@ runs:
   using: "composite"
   steps:
     - name: comment-build-start
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && inputs.publish_pr_comment
       shell: bash
       env:
         BUILD_PRESET: ${{ inputs.build_preset }}
@@ -106,7 +138,7 @@ runs:
           https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
           -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
 
-        if [[ "${{inputs.run_tests}}" == "true" ]]; then
+        if [[ "${{inputs.run_tests}}" == "true" && "${{ inputs.publish_github_status }}" == "true" ]]; then
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
@@ -243,6 +275,21 @@ runs:
           TEST_RETRY_COUNT=3
         fi
 
+        if [ "${{ inputs.single_attempt }}" = "true" ]; then
+          TEST_RETRY_COUNT=1
+        fi
+
+        START_RETRY=${{ inputs.start_retry }}
+        if [ -z "$START_RETRY" ]; then
+          START_RETRY=1
+        fi
+
+        PUBLISH_PR_COMMENT=${{ inputs.publish_pr_comment }}
+        PUBLISH_GITHUB_STATUS=${{ inputs.publish_github_status }}
+        echo "PUBLISH_PR_COMMENT=$PUBLISH_PR_COMMENT" >> $GITHUB_ENV
+        echo "PUBLISH_GITHUB_STATUS=$PUBLISH_GITHUB_STATUS" >> $GITHUB_ENV
+        echo "START_RETRY=$START_RETRY" >> $GITHUB_ENV
+
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
         fi
@@ -291,7 +338,11 @@ runs:
         YA_MAKE_COMMAND="./ya make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
-        if [ "${{ inputs.increment }}" = "true" ]; then
+        if [ "${{ inputs.skip_graph_compare }}" = "true" ]; then
+          GRAPH_PATH=$(realpath "${{ inputs.prebuilt_graph_path }}")
+          CONTEXT_PATH=$(realpath "${{ inputs.prebuilt_context_path }}")
+          YA_MAKE_TARGET="ydb"
+        elif [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
@@ -352,7 +403,13 @@ runs:
 
         BUILD_FAILED=0
 
-        for RETRY in $(seq 1 $TEST_RETRY_COUNT)
+        if [ "$START_RETRY" -gt 1 ] && [ -n "${{ inputs.previous_report_path }}" ]; then
+          PREV_REPORT="${{ inputs.previous_report_path }}"
+          GRAPH_PATH=""
+          CONTEXT_PATH=""
+        fi
+
+        for RETRY in $(seq $START_RETRY $TEST_RETRY_COUNT)
         do
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
@@ -386,7 +443,9 @@ runs:
             fi
           fi
 
-          echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+          if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+            echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+          fi
 
           monitor_memory() {
               set +x
@@ -544,7 +603,7 @@ runs:
 
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
 
-          if [ "${{ inputs.run_tests }}" = "true" ]; then
+          if [ "${{ inputs.run_tests }}" = "true" ] && [ "$PUBLISH_PR_COMMENT" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
           fi
 
@@ -599,7 +658,7 @@ runs:
         echo "STATUS_SHA=$status_sha" >> $GITHUB_ENV
 
     - name: comment-build-status
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && inputs.publish_github_status
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -617,6 +676,7 @@ runs:
         fi
 
     - name: analyze tests results
+      if: inputs.publish_github_status
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}

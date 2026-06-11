@@ -1,0 +1,18 @@
+{
+  "results": [
+    {
+      "path": "ydb/tests/bar",
+      "name": "PyTest",
+      "subtest_name": "case_a",
+      "status": "OK",
+      "type": "test"
+    },
+    {
+      "path": "ydb/tests/bar",
+      "name": "PyTest",
+      "subtest_name": "case_b",
+      "status": "ERROR",
+      "type": "test"
+    }
+  ]
+}

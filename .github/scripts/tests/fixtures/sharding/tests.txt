@@ -1,0 +1,4 @@
+ydb/core/foo/ut/Suite.Fast
+ydb/core/foo/ut/Suite.Slow
+ydb/tests/bar/PyTest.case_a
+ydb/tests/bar/PyTest.case_b

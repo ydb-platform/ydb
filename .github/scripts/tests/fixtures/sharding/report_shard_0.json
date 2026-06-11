@@ -1,0 +1,18 @@
+{
+  "results": [
+    {
+      "path": "ydb/core/foo/ut",
+      "name": "Suite",
+      "subtest_name": "Fast",
+      "status": "OK",
+      "type": "test"
+    },
+    {
+      "path": "ydb/core/foo/ut",
+      "name": "Suite",
+      "subtest_name": "Slow",
+      "status": "FAILED",
+      "type": "test"
+    }
+  ]
+}

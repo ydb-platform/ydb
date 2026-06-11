@@ -393,7 +393,7 @@ TUnversionedOwningRow YsonToKey(TStringBuf yson)
     return keyBuilder.FinishRow();
 }
 
-TString KeyToYson(TUnversionedRow row)
+std::string KeyToYson(TUnversionedRow row)
 {
     return ConvertToYsonString(row, EYsonFormat::Text).ToString();
 }
@@ -767,7 +767,7 @@ void FromUnversionedValue(TIP6Address* value, TUnversionedValue unversionedValue
         *value = TIP6Address();
         return;
     }
-    auto strValue = FromUnversionedValue<TString>(unversionedValue);
+    auto strValue = FromUnversionedValue<std::string>(unversionedValue);
     *value = TIP6Address::FromString(strValue);
 }
 
@@ -1205,7 +1205,7 @@ void MapToUnversionedValueImpl(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<google::protobuf::Message*(TString)> appender,
+    std::function<google::protobuf::Message*(std::string)> appender,
     const TProtobufMessageType* type,
     TUnversionedValue unversionedValue)
 {
@@ -1223,7 +1223,7 @@ void UnversionedValueToMapImpl(
     {
     public:
         TConsumer(
-            std::function<google::protobuf::Message*(TString)> appender,
+            std::function<google::protobuf::Message*(std::string)> appender,
             const TProtobufMessageType* type)
             : Appender_(std::move(appender))
             , Type_(type)
@@ -1374,7 +1374,7 @@ void UnversionedValueToMapImpl(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<void(TString, TUnversionedValue)> appender,
+    std::function<void(std::string, TUnversionedValue)> appender,
     TUnversionedValue unversionedValue)
 {
     if (unversionedValue.Type == EValueType::Null) {
@@ -1390,7 +1390,7 @@ void UnversionedValueToMapImpl(
         : public TYsonConsumerBase
     {
     public:
-        explicit TConsumer(std::function<void(TString, TUnversionedValue)> appender)
+        explicit TConsumer(std::function<void(std::string, TUnversionedValue)> appender)
             : Appender_(std::move(appender))
         { }
 
@@ -1454,7 +1454,7 @@ void UnversionedValueToMapImpl(
             if (PendingKey_) {
                 THROW_ERROR_EXCEPTION("Previous map item value is missing");
             }
-            PendingKey_ = TString(key);
+            PendingKey_ = std::string(key);
         }
 
         void OnEndMap() override
@@ -1477,10 +1477,10 @@ void UnversionedValueToMapImpl(
         }
 
     private:
-        const std::function<void(TString, TUnversionedValue)> Appender_;
+        const std::function<void(std::string, TUnversionedValue)> Appender_;
 
         bool InMap_ = false;
-        std::optional<TString> PendingKey_;
+        std::optional<std::string> PendingKey_;
 
         void EnsureInMap() const
         {

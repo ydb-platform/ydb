@@ -143,7 +143,8 @@ public:
 
     virtual void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) = 0;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) = 0;
 
     // Operations
 

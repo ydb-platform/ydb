@@ -77,6 +77,10 @@ struct TPhysicalOpProps {
     std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
 
+    // Selectivity of a single-table predicate that was pushed down into a TOpRead.
+    // It is computed at pushdown time while the predicate expression is still live and type-annotated.
+    std::optional<double> PushedDownFilterSelectivity;
+
     // CBO decision for this join's input edges.
     // std::nullopt means there was no explicit decision.
     // Empty vector means shuffle is eliminated.

@@ -105,7 +105,7 @@ inline void StructFieldList(std::vector<TStructField>* /*fields*/)
 template <typename... T>
 inline void StructFieldList(
     std::vector<TStructField>* fields,
-    const TString& name,
+    const std::string& name,
     const TLogicalTypePtr& type,
     const T&... args)
 {
@@ -148,7 +148,7 @@ inline TLogicalTypePtr Dict(const TLogicalTypePtr& key, const TLogicalTypePtr& v
     return DictLogicalType(key, value);
 }
 
-inline TLogicalTypePtr Tagged(TString tag, const TLogicalTypePtr& element)
+inline TLogicalTypePtr Tagged(std::string tag, const TLogicalTypePtr& element)
 {
     return TaggedLogicalType(std::move(tag), element);
 }

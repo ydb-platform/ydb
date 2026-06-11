@@ -614,7 +614,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const ui64 cookie = ev->Cookie;
         YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig undelivered",
             {"ringGroup", RingGroupIndex},
-            {"for", cookie});
+            {"cookie", cookie});
         return UpdateSigFor(cookie, Max<ui64>());
     }
 

@@ -185,10 +185,9 @@ bool THive::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorCo
 
     if (!IsTabletDevUiAccessAllowed(
             AppData(ctx),
-            AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath(),
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            /*isPublicRequest=*/false))
+            /*isMonitoringDevUiRequest=*/false))
     {
         ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

@@ -280,24 +280,28 @@ def _hive_get_status(cluster, endpoint_path, token=None):
     return response.status_code
 
 
-def _hive_monitoring_devui_cases(tablet_id):
-    q = f'TabletID={tablet_id}'
-    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
-    return _hive_endpoint_cases(
-        [f'/tablets/app?{q}', f'/tablets?{q}', f'/tablets/app?{q}&page=LandingData'],
-        monitoring_allowed,
-    )
-
-
-def _hive_admin_devui_cases(tablet_id, secure_path_mode):
+def _hive_devui_cases(tablet_id, secure_path_mode):
     q = f'TabletID={tablet_id}'
     all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    # Without the flag: monitoring users can access /tablets/app (legacy compatibility).
+    # With the flag: /tablets/app is forbidden for everyone; all Hive DevUI moves to /app/secure.
     expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
     return (
-        _hive_endpoint_cases([f'/tablets/app?{q}&page=Settings'], expected_on_app)
-        + _hive_endpoint_cases([f'/tablets/app/secure?{q}&page=Settings'], admin_allowed)
-        + _hive_endpoint_cases([f'/tablets/app?{q}&page=SetDown&node=0&down=1'], expected_on_app)
-        + _hive_endpoint_cases([f'/tablets/app/secure?{q}&page=SetDown&node=0&down=1'], admin_allowed)
+        # Tablets summary page keeps monitoring-level access (different handler).
+        _hive_endpoint_cases([f'/tablets?{q}'], monitoring_allowed)
+        # All /tablets/app?... pages — behavior depends on flag.
+        + _hive_endpoint_cases(
+            [f'/tablets/app?{q}', f'/tablets/app?{q}&page=LandingData',
+             f'/tablets/app?{q}&page=Settings', f'/tablets/app?{q}&page=SetDown&node=0&down=1'],
+            expected_on_app,
+        )
+        # Secure path — admin-only in both modes.
+        + _hive_endpoint_cases(
+            [f'/tablets/app/secure?{q}', f'/tablets/app/secure?{q}&page=LandingData',
+             f'/tablets/app/secure?{q}&page=Settings',
+             f'/tablets/app/secure?{q}&page=SetDown&node=0&down=1'],
+            admin_allowed,
+        )
     )
 
 
@@ -306,10 +310,7 @@ def test_hive_tablet_devui_mon_paths_with_enforce_user_token(
 ):
     cluster = ydb_cluster_with_enforce_user_token_and_hive_tablet
     tid = cluster.hive_tablet_id
-    cases = (
-        _hive_monitoring_devui_cases(tid)
-        + _hive_admin_devui_cases(tid, secure_path_mode=False)
-    )
+    cases = _hive_devui_cases(tid, secure_path_mode=False)
 
     for endpoint_path, token, expected_status in cases:
         status = _hive_get_status(cluster, endpoint_path, token)
@@ -324,10 +325,7 @@ def test_hive_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mod
 ):
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
     tid = cluster.hive_tablet_id
-    cases = (
-        _hive_monitoring_devui_cases(tid)
-        + _hive_admin_devui_cases(tid, secure_path_mode=True)
-    )
+    cases = _hive_devui_cases(tid, secure_path_mode=True)
 
     for endpoint_path, token, expected_status in cases:
         status = _hive_get_status(cluster, endpoint_path, token)

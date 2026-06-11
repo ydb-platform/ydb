@@ -12,6 +12,9 @@ from security_test_helpers import (
 )
 from ydb.tests.oss.ydb_sdk_import import ydb
 
+# MakeBSControllerID(): (1 << 56) | 0x1001
+BSC_TABLET_ID = 72057594037932033
+
 
 def _is_valid_tablet_id(tablet_id):
     return tablet_id not in (None, 0)
@@ -585,6 +588,245 @@ def test_schemeshard_new_action_with_enforce_user_token_and_secure_path_mode(
             f'Expected GET {endpoint_path} with token={_schemeshard_token_desc(token)} '
             f'to return {expected_status}, got {status}'
         )
+
+
+def _bscontroller_endpoint_cases(endpoint_paths, token_statuses):
+    return [
+        (endpoint_path, token, expected_status)
+        for endpoint_path in endpoint_paths
+        for token, expected_status in token_statuses.items()
+    ]
+
+
+def _bscontroller_token_desc(token):
+    return token if token is not None else 'null'
+
+
+def _bscontroller_mon_base_url(cluster):
+    node = cluster.nodes[1]
+    return f'https://{node.host}:{node.mon_port}'
+
+
+def _bscontroller_get_status(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.get(
+        f'{_bscontroller_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+    return response.status_code
+
+
+def _bscontroller_monitoring_page_access_cases(
+    tablet_id,
+    pages=(
+        ('Main', ''),
+        ('OperationLog', 'page=OperationLog'),
+        ('OperationLogEntry', 'page=OperationLogEntry'),
+        ('HealthEvents', 'page=HealthEvents'),
+        ('Groups', 'page=Groups'),
+        ('GroupDetail', 'page=GroupDetail'),
+        ('Scrub', 'page=Scrub'),
+        ('InternalTables', 'page=InternalTables'),
+        ('Bridge', 'page=Bridge'),
+        ('VirtualGroups', 'page=VirtualGroups'),
+        ('GetDown', 'page=GetDown'),
+        ('SelfHeal', 'page=SelfHeal'),
+        ('Shred', 'page=Shred'),
+    ),
+):
+    q_base = f'TabletID={tablet_id}'
+    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    cases = []
+    for _page_name, query_suffix in pages:
+        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], monitoring_allowed))
+    cases.extend(_bscontroller_endpoint_cases([f'/tablets?{q_base}'], monitoring_allowed))
+    return cases
+
+
+def _bscontroller_admin_page_access_cases(
+    tablet_id,
+    secure_path_mode,
+    pages=(
+        ('SetDown', 'page=SetDown&group=0&down=1'),
+        ('SelfHealDisable', 'page=SelfHeal&disable=1&action=disableSelfHeal'),
+        ('ShredStart', 'page=Shred&startshred=1&generation=0'),
+        ('StopGivingGroups', 'page=StopGivingGroups'),
+        ('StartGivingGroups', 'page=StartGivingGroups'),
+        ('NewAction', 'page=NewAction'),
+    ),
+):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    cases = []
+    for _page_name, query_suffix in pages:
+        q = f'{q_base}&{query_suffix}'
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], expected_on_app))
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    return cases
+
+
+def _bscontroller_post_exec_paths(tablet_id):
+    q = f'TabletID={tablet_id}&exec=1'
+    all_forbidden, _, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    return {
+        f'/tablets/app?{q}': all_forbidden,
+        f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
+    }
+
+
+def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    cluster = ydb_cluster_with_enforce_user_token
+    cases = (
+        _bscontroller_monitoring_page_access_cases(BSC_TABLET_ID)
+        + _bscontroller_admin_page_access_cases(BSC_TABLET_ID, secure_path_mode=False)
+    )
+
+    for endpoint_path, token, expected_status in cases:
+        status = _bscontroller_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_bscontroller_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    cases = (
+        _bscontroller_monitoring_page_access_cases(BSC_TABLET_ID)
+        + _bscontroller_admin_page_access_cases(BSC_TABLET_ID, secure_path_mode=True)
+    )
+
+    for endpoint_path, token, expected_status in cases:
+        status = _bscontroller_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_bscontroller_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_bscontroller_post_exec_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+    for endpoint_path, expected_statuses in _bscontroller_post_exec_paths(BSC_TABLET_ID).items():
+        endpoint_url = f'{base_url}{endpoint_path}'
+        for token, expected_status in expected_statuses.items():
+            headers = {'Content-Type': 'application/json'}
+            if token is not None:
+                headers['Authorization'] = token
+            response = requests.post(endpoint_url, headers=headers, data='{}', verify=False)
+            token_desc = token if token is not None else 'null'
+            if endpoint_path.startswith('/tablets/app/secure') and token == 'root@builtin':
+                # Auth passed; empty config body may be rejected later with 400.
+                assert response.status_code in (200, 400), (
+                    f'Expected POST {endpoint_path} with token={token_desc} to pass auth, got {response.status_code}'
+                )
+            else:
+                assert response.status_code == expected_status, (
+                    f'Expected POST {endpoint_path} with token={token_desc} to return {expected_status}, '
+                    f'got {response.status_code}'
+                )
+
+
+def test_bscontroller_shred_form_uses_secure_path(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    url = f'https://{host}:{mon_port}/tablets/app?TabletID={BSC_TABLET_ID}&page=Shred'
+    response = requests.get(url, headers={'Authorization': 'monitoring@builtin'}, verify=False)
+    assert response.status_code == 200, response.text
+    assert "action='app/secure'" in response.text or 'action="app/secure"' in response.text
+    assert 'name=\'startshred\'' in response.text or 'name="startshred"' in response.text
+
+
+def test_bscontroller_self_heal_disable_link_uses_secure_path(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    url = f'https://{host}:{mon_port}/tablets/app?TabletID={BSC_TABLET_ID}&page=SelfHeal'
+    response = requests.get(url, headers={'Authorization': 'monitoring@builtin'}, verify=False)
+    assert response.status_code == 200, response.text
+    if 'DISABLE NOW' in response.text:
+        assert 'app/secure?TabletID=' in response.text
+        assert 'action=disableSelfHeal' in response.text
+
+
+def test_bscontroller_read_only_links_keep_current_app_path(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+
+    response = requests.get(
+        f'https://{host}:{mon_port}/tablets/app?TabletID={BSC_TABLET_ID}',
+        headers={'Authorization': 'monitoring@builtin'},
+        verify=False,
+    )
+    assert response.status_code == 200, response.text
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=OperationLog'" in response.text
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=SelfHeal'" in response.text
+    assert f"href='app?TabletID={BSC_TABLET_ID}" not in response.text
+
+    response = requests.get(
+        f'https://{host}:{mon_port}/tablets/app?TabletID={BSC_TABLET_ID}&page=InternalTables',
+        headers={'Authorization': 'monitoring@builtin'},
+        verify=False,
+    )
+    assert response.status_code == 200, response.text
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=InternalTables&table=pdisks'" in response.text
+    assert f"href='app?TabletID={BSC_TABLET_ID}" not in response.text
+
+
+def test_bscontroller_self_heal_disable_redirect_keeps_current_app_path(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    host = cluster.nodes[1].host
+    mon_port = cluster.nodes[1].mon_port
+    response = requests.get(
+        f'https://{host}:{mon_port}/tablets/app/secure'
+        f'?TabletID={BSC_TABLET_ID}&page=SelfHeal&disable=1&action=disableSelfHeal',
+        headers={'Authorization': 'root@builtin'},
+        verify=False,
+    )
+    assert response.status_code == 200, response.text
+    assert f'content="0; ?TabletID={BSC_TABLET_ID}&page=SelfHeal"' in response.text
+    assert 'content="0; app' not in response.text
+
+
+def test_bscontroller_new_action_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        tablet_devui_new_action_paths(BSC_TABLET_ID, 'page=NewAction', secure_path_mode=False),
+    )
+
+
+def test_bscontroller_new_action_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+        tablet_devui_new_action_paths(BSC_TABLET_ID, 'page=NewAction', secure_path_mode=True),
+    )
 
 
 def _graph_shard_devui_mon_paths(graph_shard_tablet_id, secure_path_mode):

@@ -84,13 +84,13 @@ namespace NKikimr::NBlobDepot {
     template<typename TEvent>
     void TBlobDepotAgent::HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
         YDB_LOG_DEBUG("HandleTabletResponse",
-            {"Marker", "BDA16"},
-            {"AgentId", LogId},
-            {"Id", ev->Cookie},
-            {"Type", TypeName<TEvent>()},
-            {"Sender", ev->Sender},
-            {"PipeServerId", PipeServerId},
-            {"Match", ev->Sender == PipeServerId});
+            {"marker", "BDA16"},
+            {"agentId", LogId},
+            {"id", ev->Cookie},
+            {"type", TypeName<TEvent>()},
+            {"sender", ev->Sender},
+            {"pipeServerId", PipeServerId},
+            {"match", ev->Sender == PipeServerId});
         if (ev->Sender == PipeServerId) {
             Y_ABORT_UNLESS(IsConnected || ev->GetTypeRewrite() == TEvBlobDepot::EvRegisterAgentResult);
             OnRequestComplete(ev->Cookie, ev->Get(), TabletRequestInFlight);
@@ -109,11 +109,11 @@ namespace NKikimr::NBlobDepot {
     template<typename TEvent>
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
         YDB_LOG_DEBUG("HandleOtherResponse",
-            {"Marker", "BDA17"},
-            {"AgentId", LogId},
-            {"Id", ev->Cookie},
-            {"Type", TypeName<TEvent>()},
-            {"Msg", *ev->Get()});
+            {"marker", "BDA17"},
+            {"agentId", LogId},
+            {"id", ev->Cookie},
+            {"type", TypeName<TEvent>()},
+            {"msg", *ev->Get()});
         Y_ABORT_UNLESS(ev->Get()->ExecutionRelay);
         OnRequestComplete(ev->Cookie, ev->Get(), OtherRequestInFlight, std::move(ev->Get()->ExecutionRelay));
     }

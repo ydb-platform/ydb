@@ -170,9 +170,9 @@ namespace NKikimr::NBlobDepot {
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
-            YDB_LOG_COMP_DEBUG(BLOB_DEPOT, "OnActivateExecutor",
-                {"Marker", "BDT24"},
-                {"Id", GetLogId()});
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnActivateExecutor",
+                {"marker", "BDT24"},
+                {"id", GetLogId()});
             if (AppData()->Icb) {
                 TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, AppData()->Icb->BlobDepotControls.MaxLoadedTrashRecords);
             }
@@ -182,9 +182,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void OnLoadFinished() {
-            YDB_LOG_COMP_DEBUG(BLOB_DEPOT, "OnLoadFinished",
-                {"Marker", "BDT25"},
-                {"Id", GetLogId()});
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnLoadFinished",
+                {"marker", "BDT25"},
+                {"id", GetLogId()});
             Become(&TThis::StateWork);
             SignalTabletActive(TActivationContext::AsActorContext());
         }
@@ -206,18 +206,18 @@ namespace NKikimr::NBlobDepot {
         void OnDataLoadComplete();
 
         void OnDetach(const TActorContext&) override {
-            YDB_LOG_COMP_DEBUG(BLOB_DEPOT, "OnDetach",
-                {"Marker", "BDT26"},
-                {"Id", GetLogId()});
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnDetach",
+                {"marker", "BDT26"},
+                {"id", GetLogId()});
 
             // TODO: what does this callback mean
             PassAway();
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& /*ev*/, const TActorContext&) override {
-            YDB_LOG_COMP_DEBUG(BLOB_DEPOT, "OnTabletDead",
-                {"Marker", "BDT27"},
-                {"Id", GetLogId()});
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnTabletDead",
+                {"marker", "BDT27"},
+                {"id", GetLogId()});
             PassAway();
         }
 

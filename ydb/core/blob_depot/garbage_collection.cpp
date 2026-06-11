@@ -34,10 +34,10 @@ namespace NKikimr::NBlobDepot {
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             YDB_LOG_DEBUG("TTxCollectGarbage::Execute",
-                {"Marker", "BDT77"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Request->Sender},
-                {"Cookie", Request->Cookie});
+                {"marker", "BDT77"},
+                {"id", Self->GetLogId()},
+                {"sender", Request->Sender},
+                {"cookie", Request->Cookie});
 
             Y_ABORT_UNLESS(Self->Data->IsLoaded());
 
@@ -56,12 +56,12 @@ namespace NKikimr::NBlobDepot {
 
         void Complete(const TActorContext&) override {
             YDB_LOG_DEBUG("TTxCollectGarbage::Complete",
-                {"Marker", "BDT78"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Request->Sender},
-                {"Cookie", Request->Cookie},
-                {"Finished", Finished},
-                {"MoreData", MoreData});
+                {"marker", "BDT78"},
+                {"id", Self->GetLogId()},
+                {"sender", Request->Sender},
+                {"cookie", Request->Cookie},
+                {"finished", Finished},
+                {"moreData", MoreData});
 
             Self->Data->CommitTrash(this);
 
@@ -190,11 +190,11 @@ namespace NKikimr::NBlobDepot {
             auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, status.value_or(error ? NKikimrProto::ERROR :
                 NKikimrProto::OK), std::move(error));
             YDB_LOG_DEBUG("TTxCollectGarbage::Finish",
-                {"Marker", "BDT82"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Request->Sender},
-                {"Cookie", Request->Cookie},
-                {"Error", error});
+                {"marker", "BDT82"},
+                {"id", Self->GetLogId()},
+                {"sender", Request->Sender},
+                {"cookie", Request->Cookie},
+                {"error", error});
             TActivationContext::Send(response.release());
             Finished = true;
         }
@@ -270,11 +270,11 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("TBarrierServer::Handle(TEvCollectGarbage)",
-            {"Marker", "BDT74"},
-            {"Id", Self->GetLogId()},
-            {"Sender", ev->Sender},
-            {"Cookie", ev->Cookie},
-            {"Msg", record});
+            {"marker", "BDT74"},
+            {"id", Self->GetLogId()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"msg", record});
         if (Self->Data->IsLoaded()) {
             Self->Execute(std::make_unique<TTxCollectGarbage>(Self,
                 std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));

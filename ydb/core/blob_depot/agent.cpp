@@ -9,19 +9,19 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
         YDB_LOG_DEBUG("TEvServerConnected",
-            {"Marker", "BDT01"},
-            {"Id", GetLogId()},
-            {"ClientId", ev->Get()->ClientId},
-            {"ServerId", ev->Get()->ServerId});
+            {"marker", "BDT01"},
+            {"id", GetLogId()},
+            {"clientId", ev->Get()->ClientId},
+            {"serverId", ev->Get()->ServerId});
         const auto [it, inserted] = PipeServers.try_emplace(ev->Get()->ServerId);
         Y_ABORT_UNLESS(inserted);
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
         YDB_LOG_DEBUG("TEvServerDisconnected",
-            {"Marker", "BDT02"},
-            {"Id", GetLogId()},
-            {"PipeServerId", ev->Get()->ServerId});
+            {"marker", "BDT02"},
+            {"id", GetLogId()},
+            {"pipeServerId", ev->Get()->ServerId});
 
         const auto it = PipeServers.find(ev->Get()->ServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());
@@ -53,12 +53,12 @@ namespace NKikimr::NBlobDepot {
         const auto& req = ev->Get()->Record;
 
         YDB_LOG_DEBUG("TEvRegisterAgent",
-            {"Marker", "BDT03"},
-            {"Id", GetLogId()},
-            {"Msg", req},
-            {"NodeId", nodeId},
-            {"PipeServerId", pipeServerId},
-            {"Cookie", ev->Cookie});
+            {"marker", "BDT03"},
+            {"id", GetLogId()},
+            {"msg", req},
+            {"nodeId", nodeId},
+            {"pipeServerId", pipeServerId},
+            {"cookie", ev->Cookie});
 
         const auto it = PipeServers.find(pipeServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());
@@ -157,10 +157,10 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
         YDB_LOG_DEBUG("TEvAllocateIds",
-            {"Marker", "BDT04"},
-            {"Id", GetLogId()},
-            {"Msg", ev->Get()->Record},
-            {"PipeServerId", ev->Recipient});
+            {"marker", "BDT04"},
+            {"id", GetLogId()},
+            {"msg", ev->Get()->Record},
+            {"pipeServerId", ev->Recipient});
 
         const ui32 generation = Executor()->Generation();
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, ev->Get()->Record.GetChannelKind(), generation);
@@ -191,12 +191,12 @@ namespace NKikimr::NBlobDepot {
                 Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
 
                 YDB_LOG_DEBUG("IssueNewRange",
-                    {"Marker", "BDT05"},
-                    {"Id", GetLogId()},
-                    {"AgentId", agent.Connection->NodeId},
-                    {"Channel", range.GetChannel()},
-                    {"Begin", range.GetBegin()},
-                    {"End", range.GetEnd()});
+                    {"marker", "BDT05"},
+                    {"id", GetLogId()},
+                    {"agentId", agent.Connection->NodeId},
+                    {"channel", range.GetChannel()},
+                    {"begin", range.GetBegin()},
+                    {"end", range.GetEnd()});
             }
         }
 
@@ -230,13 +230,13 @@ namespace NKikimr::NBlobDepot {
             const bool unblock = givenIdRanges.GetMinimumValue() == agentGivenIdRange.GetMinimumValue();
 
             YDB_LOG_DEBUG("ResetAgent",
-                {"Marker", "BDT06"},
-                {"Id", GetLogId()},
-                {"AgentId", agent.Connection->NodeId},
-                {"Channel", int(channel)},
-                {"GivenIdRanges", givenIdRanges},
+                {"marker", "BDT06"},
+                {"id", GetLogId()},
+                {"agentId", agent.Connection->NodeId},
+                {"channel", int(channel)},
+                {"givenIdRanges", givenIdRanges},
                 {"Agent.GivenIdRanges", agentGivenIdRange},
-                {"Unblock", unblock});
+                {"unblock", unblock});
 
             givenIdRanges.Subtract(std::exchange(agentGivenIdRange, {}));
 

@@ -135,12 +135,12 @@ namespace NKikimr::NBlobDepot {
                     }
 
                     YDB_LOG_DEBUG("TTxCommitBlobSeq process key",
-                        {"Marker", "BDT68"},
-                        {"Id", Self->GetLogId()},
-                        {"Key", key},
-                        {"Item", item},
-                        {"CanBeCollected", canBeCollected},
-                        {"Generation", generation});
+                        {"marker", "BDT68"},
+                        {"id", Self->GetLogId()},
+                        {"key", key},
+                        {"item", item},
+                        {"canBeCollected", canBeCollected},
+                        {"generation", generation});
 
                     if (canBeCollected) {
                         // we can't accept this record, because it is potentially under already issued barrier
@@ -225,10 +225,10 @@ namespace NKikimr::NBlobDepot {
         const ui32 generation = Executor()->Generation();
 
         YDB_LOG_DEBUG("TEvDiscardSpoiledBlobSeq",
-            {"Marker", "BDT57"},
-            {"Id", GetLogId()},
-            {"AgentId", agent.Connection->NodeId},
-            {"Msg", ev->Get()->Record});
+            {"marker", "BDT57"},
+            {"id", GetLogId()},
+            {"agentId", agent.Connection->NodeId},
+            {"msg", ev->Get()->Record});
 
         // FIXME(alexvru): delete uncertain keys containing this BlobSeqId as they were never written
 

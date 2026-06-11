@@ -57,15 +57,15 @@ namespace NKikimr::NBlobDepot {
                 ? std::nullopt
                 : std::make_optional(*--record.Trash.end());
 
-            YDB_LOG_DEBUG("issuing hard barrier TEvCollectGarbage",
-                {"Marker", "BDT85"},
-                {"Id", Self->GetLogId()},
-                {"Channel", int(record.Channel)},
-                {"GroupId", record.GroupId},
-                {"Msg", ev->ToString()},
-                {"HardGenStep", hardGenStep},
-                {"MinTrashId", minTrashId},
-                {"MaxTrashId", maxTrashId});
+            YDB_LOG_DEBUG("Issuing hard barrier TEvCollectGarbage",
+                {"marker", "BDT85"},
+                {"id", Self->GetLogId()},
+                {"channel", int(record.Channel)},
+                {"groupId", record.GroupId},
+                {"msg", ev->ToString()},
+                {"hardGenStep", hardGenStep},
+                {"minTrashId", minTrashId},
+                {"maxTrashId", maxTrashId});
 
             ++record.CollectGarbageRequestsInFlight;
 
@@ -187,15 +187,15 @@ namespace NKikimr::NBlobDepot {
             record.TrashInFlight.swap(trashInFlight);
             record.IssuedGenStep = nextGenStep;
 
-            YDB_LOG_DEBUG("issuing TEvCollectGarbage",
-                {"Marker", "BDT11"},
-                {"Id", Self->GetLogId()},
-                {"Channel", int(record.Channel)},
-                {"GroupId", record.GroupId},
-                {"Msg", ev->ToString()},
-                {"LastConfirmedGenStep", record.LastConfirmedGenStep},
-                {"IssuedGenStep", record.IssuedGenStep},
-                {"LeastExpectedBlobId", leastExpectedBlobId},
+            YDB_LOG_DEBUG("Issuing TEvCollectGarbage",
+                {"marker", "BDT11"},
+                {"id", Self->GetLogId()},
+                {"channel", int(record.Channel)},
+                {"groupId", record.GroupId},
+                {"msg", ev->ToString()},
+                {"lastConfirmedGenStep", record.LastConfirmedGenStep},
+                {"issuedGenStep", record.IssuedGenStep},
+                {"leastExpectedBlobId", leastExpectedBlobId},
                 {"TrashInFlight.size", record.TrashInFlight.size()});
 
             const ui64 id = ++LastCollectCmdId;
@@ -206,42 +206,42 @@ namespace NKikimr::NBlobDepot {
                 if (ev->Keep) {
                     for (const TLogoBlobID& blobId : *ev->Keep) {
                         Y_ABORT_UNLESS(blobId.Channel() == record.Channel);
-                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TrashManager_issueKeep",
-                            {"Marker", "BDEV00"},
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TrashManager_issueKeep",
+                            {"marker", "BDEV00"},
                             {"BDT", Self->TabletID()},
-                            {"GroupId", record.GroupId},
-                            {"Channel", int(record.Channel)},
+                            {"groupId", record.GroupId},
+                            {"channel", int(record.Channel)},
                             {"Q", queryId},
-                            {"Cookie", id},
-                            {"BlobId", blobId});
+                            {"cookie", id},
+                            {"blobId", blobId});
                     }
                 }
                 if (ev->DoNotKeep) {
                     for (const TLogoBlobID& blobId : *ev->DoNotKeep) {
                         Y_ABORT_UNLESS(blobId.Channel() == record.Channel);
-                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TrashManager_issueDoNotKeep",
-                            {"Marker", "BDEV01"},
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TrashManager_issueDoNotKeep",
+                            {"marker", "BDEV01"},
                             {"BDT", Self->TabletID()},
-                            {"GroupId", record.GroupId},
-                            {"Channel", int(record.Channel)},
+                            {"groupId", record.GroupId},
+                            {"channel", int(record.Channel)},
                             {"Q", queryId},
-                            {"Cookie", id},
-                            {"BlobId", blobId});
+                            {"cookie", id},
+                            {"blobId", blobId});
                     }
                 }
                 if (collect) {
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TrashManager_issueCollect",
-                        {"Marker", "BDEV02"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TrashManager_issueCollect",
+                        {"marker", "BDEV02"},
                         {"BDT", Self->TabletID()},
-                        {"GroupId", record.GroupId},
-                        {"Channel", int(ev->Channel)},
+                        {"groupId", record.GroupId},
+                        {"channel", int(ev->Channel)},
                         {"Q", queryId},
-                        {"Cookie", id},
-                        {"RecordGeneration", ev->RecordGeneration},
-                        {"PerGenerationCounter", ev->PerGenerationCounter},
-                        {"Hard", ev->Hard},
-                        {"CollectGeneration", ev->CollectGeneration},
-                        {"CollectStep", ev->CollectStep});
+                        {"cookie", id},
+                        {"recordGeneration", ev->RecordGeneration},
+                        {"perGenerationCounter", ev->PerGenerationCounter},
+                        {"hard", ev->Hard},
+                        {"collectGeneration", ev->CollectGeneration},
+                        {"collectStep", ev->CollectStep});
                 }
             }
 
@@ -269,22 +269,22 @@ namespace NKikimr::NBlobDepot {
         const ui32 groupId = info.GroupId;
 
         YDB_LOG_DEBUG("TEvCollectGarbageResult",
-            {"Marker", "BDT12"},
-            {"Id", Self->GetLogId()},
-            {"Channel", ev->Get()->Channel},
-            {"GroupId", groupId},
-            {"Hard", info.Hard},
-            {"Msg", ev->Get()->ToString()});
+            {"marker", "BDT12"},
+            {"id", Self->GetLogId()},
+            {"channel", ev->Get()->Channel},
+            {"groupId", groupId},
+            {"hard", info.Hard},
+            {"msg", ev->Get()->ToString()});
 
-        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TrashManager_collectResult",
-            {"Marker", "BDEV03"},
+        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TrashManager_collectResult",
+            {"marker", "BDEV03"},
             {"BDT", Self->TabletID()},
-            {"GroupId", groupId},
-            {"Channel", ev->Get()->Channel},
+            {"groupId", groupId},
+            {"channel", ev->Get()->Channel},
             {"Q", info.QueryId},
-            {"Cookie", ev->Cookie},
-            {"Status", ev->Get()->Status},
-            {"ErrorReason", ev->Get()->ErrorReason});
+            {"cookie", ev->Cookie},
+            {"status", ev->Get()->Status},
+            {"errorReason", ev->Get()->ErrorReason});
 
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(ev->Get()->Channel, groupId);
         Y_ABORT_UNLESS(record.CollectGarbageRequestsInFlight);

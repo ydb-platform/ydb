@@ -68,86 +68,86 @@ namespace NKikimr::NBlobDepot {
                 for (const Aws::S3::Model::DeletedObject& deleted : result.GetDeleted()) {
                     if (deleted.KeyHasBeenSet()) {
                         if (const auto it = Locators.find(deleted.GetKey().c_str()); it != Locators.end()) {
-                            YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "deleted_from_S3",
-                                {"Marker", "BDEV29"},
+                            YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3",
+                                {"marker", "BDEV29"},
                                 {"BDT", TabletId},
-                                {"Locator", it->second});
+                                {"locator", it->second});
                             locatorsOk.push_back(it->second);
                             Locators.erase(it);
                         } else {
-                            YDB_LOG_WARN("key not found",
-                                {"Marker", "BDTS09"},
-                                {"Id", LogId},
-                                {"Key", deleted.KeyHasBeenSet() ? std::make_optional<TString>(deleted.GetKey().c_str()) : std::nullopt});
+                            YDB_LOG_WARN("Key not found",
+                                {"marker", "BDTS09"},
+                                {"id", LogId},
+                                {"key", deleted.KeyHasBeenSet() ? std::make_optional<TString>(deleted.GetKey().c_str()) : std::nullopt});
                         }
                     } else {
-                        YDB_LOG_WARN("key not set",
-                            {"Marker", "BDTS10"},
-                            {"Id", LogId});
+                        YDB_LOG_WARN("Key not set",
+                            {"marker", "BDTS10"},
+                            {"id", LogId});
                     }
                 }
                 for (const Aws::S3::Model::Error& error : result.GetErrors()) {
                     if (error.KeyHasBeenSet() && error.GetCode() == "NoSuchKey") { // this key has already been deleted
                         if (const auto it = Locators.find(error.GetKey().c_str()); it != Locators.end()) {
-                            YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "deleted_from_S3:NoSuchKey",
-                                {"Marker", "BDEV30"},
+                            YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3:NoSuchKey",
+                                {"marker", "BDEV30"},
                                 {"BDT", TabletId},
-                                {"Locator", it->second});
+                                {"locator", it->second});
                             locatorsOk.push_back(it->second);
                             Locators.erase(it);
                         }
                     } else if (error.KeyHasBeenSet() && error.GetCode() == "SlowDown") {
                         if (const auto it = Locators.find(error.GetKey().c_str()); it != Locators.end()) {
                             YDB_LOG_WARN("S3 SlowDown for object",
-                                {"Marker", "BDTS19"},
-                                {"Id", LogId},
-                                {"Locator", it->second},
-                                {"Error", error.GetMessage().c_str()});
-                            YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "deleted_from_S3:SlowDown",
-                                {"Marker", "BDEV39"},
+                                {"marker", "BDTS19"},
+                                {"id", LogId},
+                                {"locator", it->second},
+                                {"error", error.GetMessage().c_str()});
+                            YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3:SlowDown",
+                                {"marker", "BDEV39"},
                                 {"BDT", TabletId},
-                                {"Locator", it->second});
+                                {"locator", it->second});
                             locatorsThrottled.push_back(it->second);
                             Locators.erase(it);
                         }
                     } else {
-                        YDB_LOG_WARN("failed to delete object from S3",
-                            {"Marker", "BDTS11"},
-                            {"Id", LogId},
-                            {"Key", error.KeyHasBeenSet() ? std::make_optional<TString>(error.GetKey().c_str()) : std::nullopt},
-                            {"Error", error.GetMessage().c_str()});
+                        YDB_LOG_WARN("Failed to delete object from S3",
+                            {"marker", "BDTS11"},
+                            {"id", LogId},
+                            {"key", error.KeyHasBeenSet() ? std::make_optional<TString>(error.GetKey().c_str()) : std::nullopt},
+                            {"error", error.GetMessage().c_str()});
                     }
                 }
             } else if (IsSlowDown(msg.GetError())) {
                 requestThrottled = true;
                 YDB_LOG_WARN("S3 SlowDown for batch delete",
-                    {"Marker", "BDTS20"},
-                    {"Id", LogId},
-                    {"Error", msg.GetError().GetMessage().c_str()});
+                    {"marker", "BDTS20"},
+                    {"id", LogId},
+                    {"error", msg.GetError().GetMessage().c_str()});
             } else {
-                YDB_LOG_WARN("failed to delete object(s) from S3",
-                    {"Marker", "BDTS12"},
-                    {"Id", LogId},
-                    {"Error", msg.GetError().GetMessage().c_str()});
+                YDB_LOG_WARN("Failed to delete object(s) from S3",
+                    {"marker", "BDTS12"},
+                    {"id", LogId},
+                    {"error", msg.GetError().GetMessage().c_str()});
             }
 
             auto *remainingTarget = requestThrottled ? &locatorsThrottled : &locatorsError;
             for (const auto& [key, locator] : Locators) {
                 remainingTarget->push_back(locator);
                 if (requestThrottled) {
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "deleted_from_S3:SlowDown",
-                        {"Marker", "BDEV40"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3:SlowDown",
+                        {"marker", "BDEV40"},
                         {"BDT", TabletId},
-                        {"Locator", locator});
+                        {"locator", locator});
                 } else {
-                    YDB_LOG_WARN("failed to delete object from S3",
-                        {"Marker", "BDTS08"},
-                        {"Id", LogId},
-                        {"Locator", locator});
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "deleted_from_S3:error",
-                        {"Marker", "BDEV31"},
+                    YDB_LOG_WARN("Failed to delete object from S3",
+                        {"marker", "BDTS08"},
+                        {"id", LogId},
+                        {"locator", locator});
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3:error",
+                        {"marker", "BDEV31"},
                         {"BDT", TabletId},
-                        {"Locator", locator});
+                        {"locator", locator});
                 }
             }
 
@@ -162,12 +162,12 @@ namespace NKikimr::NBlobDepot {
 
         void Finish(std::optional<TString> error, bool throttled = false) {
             if (error) {
-                YDB_LOG_WARN("failed to delete object(s) from S3",
-                    {"Marker", "BDTS03"},
-                    {"Id", LogId},
-                    {"Locators", Locators},
-                    {"Error", error},
-                    {"Throttled", throttled});
+                YDB_LOG_WARN("Failed to delete object(s) from S3",
+                    {"marker", "BDTS03"},
+                    {"id", LogId},
+                    {"locators", Locators},
+                    {"error", error},
+                    {"throttled", throttled});
             }
             std::vector<TS3Locator> locatorsOk;
             std::vector<TS3Locator> locatorsThrottled;
@@ -216,9 +216,9 @@ namespace NKikimr::NBlobDepot {
 
         void Complete(const TActorContext&) override {
             YDB_LOG_INFO("TTxDeleteTrashS3 complete",
-                {"Marker", "BDTS04"},
-                {"Id", Self->GetLogId()},
-                {"Locators", Locators});
+                {"marker", "BDTS04"},
+                {"id", Self->GetLogId()},
+                {"locators", Locators});
 
             size_t len = 0;
             for (const TS3Locator& locator : Locators) {
@@ -238,13 +238,13 @@ namespace NKikimr::NBlobDepot {
 
     void TS3Manager::AddTrashToCollect(TS3Locator locator) {
         YDB_LOG_INFO("AddTrashToCollect",
-            {"Marker", "BDTS06"},
-            {"Id", Self->GetLogId()},
-            {"Locator", locator});
-        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "add_S3_trash_to_collect",
-            {"Marker", "BDEV32"},
+            {"marker", "BDTS06"},
+            {"id", Self->GetLogId()},
+            {"locator", locator});
+        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Add_S3_trash_to_collect",
+            {"marker", "BDEV32"},
             {"BDT", Self->TabletID()},
-            {"Locator", locator});
+            {"locator", locator});
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = ++TotalS3TrashObjects;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_SIZE] = TotalS3TrashSize += locator.Len;
         DeleteQueue.push_back(locator);
@@ -284,10 +284,10 @@ namespace NKikimr::NBlobDepot {
             ActiveDeleters.insert(actorId);
 
             if (locators.size() == 1) {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "issue_S3_delete",
-                    {"Marker", "BDEV33"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete",
+                    {"marker", "BDEV33"},
                     {"BDT", Self->TabletID()},
-                    {"Locator", locators.begin()->second});
+                    {"locator", locators.begin()->second});
                 TActivationContext::Send(new IEventHandle(WrapperId, actorId,
                     new TEvExternalStorage::TEvDeleteObjectRequest(
                         Aws::S3::Model::DeleteObjectRequest()
@@ -300,10 +300,10 @@ namespace NKikimr::NBlobDepot {
                 auto del = Aws::S3::Model::Delete();
                 for (const auto& [key, locator] : locators) {
                     del.AddObjects(Aws::S3::Model::ObjectIdentifier().WithKey(key));
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "issue_S3_delete:multi",
-                        {"Marker", "BDEV34"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Issue_S3_delete:multi",
+                        {"marker", "BDEV34"},
                         {"BDT", Self->TabletID()},
-                        {"Locator", locator});
+                        {"locator", locator});
                 }
 
                 TActivationContext::Send(new IEventHandle(WrapperId, actorId,
@@ -340,16 +340,16 @@ namespace NKikimr::NBlobDepot {
                     const TDuration delay = DeleteBackoff.Next();
                     DeleteThrottleUntil = TActivationContext::Monotonic() + delay;
                     YDB_LOG_WARN("S3 delete throttled",
-                        {"Marker", "BDTS21"},
-                        {"Id", Self->GetLogId()},
-                        {"Delay", delay},
-                        {"Throttled", msg.LocatorsThrottled.size()},
-                        {"CurrentMaxDeletesInFlight", CurrentMaxDeletesInFlight});
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "S3_delete_throttled",
-                        {"Marker", "BDEV36"},
+                        {"marker", "BDTS21"},
+                        {"id", Self->GetLogId()},
+                        {"delay", delay},
+                        {"throttled", msg.LocatorsThrottled.size()},
+                        {"currentMaxDeletesInFlight", CurrentMaxDeletesInFlight});
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_delete_throttled",
+                        {"marker", "BDEV36"},
                         {"BDT", Self->TabletID()},
-                        {"DelayMs", delay.MilliSeconds()},
-                        {"Throttled", msg.LocatorsThrottled.size()});
+                        {"delayMs", delay.MilliSeconds()},
+                        {"throttled", msg.LocatorsThrottled.size()});
                 } else if (!msg.LocatorsOk.empty()) {
                     // Pure success: gradually restore concurrency.
                     if (CurrentMaxDeletesInFlight < MaxDeletesInFlight) {

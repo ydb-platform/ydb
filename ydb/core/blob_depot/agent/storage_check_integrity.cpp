@@ -14,8 +14,8 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCheckIntegrity_new",
-                    {"Marker", "BDEV25"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCheckIntegrity_new",
+                    {"marker", "BDEV25"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
@@ -28,20 +28,20 @@ namespace NKikimr::NBlobDepot {
                         std::make_shared<TRequestContext>(), false)) {
                     ProcessResolveResult(value);
                 } else {
-                    YDB_LOG_DEBUG("resolve pending",
-                        {"Marker", "BDA58"},
-                        {"AgentId", Agent.LogId},
-                        {"QueryId", GetQueryId()},
-                        {"BlobId", Request.Id});
+                    YDB_LOG_DEBUG("Resolve pending",
+                        {"marker", "BDA58"},
+                        {"agentId", Agent.LogId},
+                        {"queryId", GetQueryId()},
+                        {"blobId", Request.Id});
                 }
             }
 
             void ProcessResolveResult(const TKeyResolved& result) {
                 YDB_LOG_DEBUG("ProcessResolveResult",
-                    {"Marker", "BDA59"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"Result", result});
+                    {"marker", "BDA59"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"result", result});
 
                 if (result.Error()) {
                     EndWithError(NKikimrProto::ERROR, result.GetErrorReason());
@@ -64,10 +64,10 @@ namespace NKikimr::NBlobDepot {
 
             void OnCheckIntegrity(TCheckOutcome&& outcome) override {
                 YDB_LOG_DEBUG("OnCheckIntegrity",
-                    {"Marker", "BDA60"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"Outcome", outcome});
+                    {"marker", "BDA60"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"outcome", outcome});
                 TraceResponse(outcome.Result->Status);
                 TBlobStorageQuery::EndWithSuccess(std::move(outcome.Result));
             }
@@ -78,14 +78,14 @@ namespace NKikimr::NBlobDepot {
             }
 
             void TraceResponse(NKikimrProto::EReplyStatus status) {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCheckIntegrity_end",
-                    {"Marker", "BDEV26"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCheckIntegrity_end",
+                    {"marker", "BDEV26"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
                     {"Q", QueryId},
-                    {"BlobId", Request.Id},
-                    {"Status", status});
+                    {"blobId", Request.Id},
+                    {"status", status});
             }
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
@@ -95,9 +95,9 @@ namespace NKikimr::NBlobDepot {
                     TQuery::HandleCheckIntegrityResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     YDB_LOG_DEBUG("TTabletDisconnected",
-                        {"Marker", "BDA61"},
-                        {"AgentId", Agent.LogId},
-                        {"QueryId", GetQueryId()});
+                        {"marker", "BDA61"},
+                        {"agentId", Agent.LogId},
+                        {"queryId", GetQueryId()});
                     EndWithError(NKikimrProto::ERROR, "Tablet disconnected");
                 } else {
                     Y_ABORT();

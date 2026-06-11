@@ -19,8 +19,8 @@ namespace NKikimr::NBlobDepot {
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 YDB_LOG_DEBUG("TTxLoad::Execute",
-                    {"Marker", "BDT19"},
-                    {"Id", Self->GetLogId()});
+                    {"marker", "BDT19"},
+                    {"id", Self->GetLogId()});
 
                 NIceDb::TNiceDb db(txc.DB);
 
@@ -121,9 +121,9 @@ namespace NKikimr::NBlobDepot {
 
             void Complete(const TActorContext&) override {
                 YDB_LOG_DEBUG("TTxLoad::Complete",
-                    {"Marker", "BDT20"},
-                    {"Id", Self->GetLogId()},
-                    {"Configured", Self->Configured});
+                    {"marker", "BDT20"},
+                    {"id", Self->GetLogId()},
+                    {"configured", Self->Configured});
 
                 Self->OnUpdateDecommitState();
 

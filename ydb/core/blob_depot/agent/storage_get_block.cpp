@@ -22,9 +22,9 @@ namespace NKikimr::NBlobDepot {
 
             void OnUpdateBlock() override {
                 YDB_LOG_DEBUG("OnUpdateBlock",
-                    {"Marker", "BDA52"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()});
+                    {"marker", "BDA52"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()});
                 Initiate();
             }
 
@@ -33,27 +33,27 @@ namespace NKikimr::NBlobDepot {
             }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvGetBlock_end",
-                    {"Marker", "BDEV23"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvGetBlock_end",
+                    {"marker", "BDEV23"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
                     {"Q", QueryId},
-                    {"Status", status},
-                    {"ErrorReason", errorReason});
+                    {"status", status},
+                    {"errorReason", errorReason});
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess(std::unique_ptr<TEvBlobStorage::TEvGetBlockResult> result) {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvGetBlock_end",
-                    {"Marker", "BDEV24"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvGetBlock_end",
+                    {"marker", "BDEV24"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
                     {"Q", QueryId},
-                    {"Status", NKikimrProto::OK},
-                    {"TabletId", Request.TabletId},
-                    {"Generation", BlockedGeneration});
+                    {"status", NKikimrProto::OK},
+                    {"tabletId", Request.TabletId},
+                    {"generation", BlockedGeneration});
                 TBlobStorageQuery::EndWithSuccess(std::move(result));
             }
 

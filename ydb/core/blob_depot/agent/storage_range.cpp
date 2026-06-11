@@ -23,8 +23,8 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvRange_new",
-                    {"Marker", "BDEV21"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvRange_new",
+                    {"marker", "BDEV21"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
@@ -78,10 +78,10 @@ namespace NKikimr::NBlobDepot {
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, NKikimrBlobDepot::TEvResolveResult& msg) {
                 YDB_LOG_DEBUG("HandleResolveResult",
-                    {"Marker", "BDA47"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"Msg", msg});
+                    {"marker", "BDA47"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"msg", msg});
 
                 if (msg.GetStatus() != NKikimrProto::OK && msg.GetStatus() != NKikimrProto::OVERRUN) {
                     return EndWithError(msg.GetStatus(), msg.GetErrorReason());
@@ -177,36 +177,36 @@ namespace NKikimr::NBlobDepot {
             void EndWithSuccess() {
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (const auto& r : Response->Responses) {
-                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvRange_item",
-                            {"Marker", "BDEV22"},
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvRange_item",
+                            {"marker", "BDEV22"},
                             {"VG", Agent.VirtualGroupId},
                             {"BDT", Agent.TabletId},
                             {"G", Agent.BlobDepotGeneration},
                             {"Q", QueryId},
-                            {"BlobId", r.Id},
+                            {"blobId", r.Id},
                             {"Buffer.size", r.Buffer.size()});
                     }
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvRange_end",
-                        {"Marker", "BDEV14"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvRange_end",
+                        {"marker", "BDEV14"},
                         {"VG", Agent.VirtualGroupId},
                         {"BDT", Agent.TabletId},
                         {"G", Agent.BlobDepotGeneration},
                         {"Q", QueryId},
-                        {"Status", NKikimrProto::OK},
-                        {"ErrorReason", ""});
+                        {"status", NKikimrProto::OK},
+                        {"errorReason", ""});
                 }
                 TBlobStorageQuery::EndWithSuccess(std::move(Response));
             }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvRange_end",
-                    {"Marker", "BDEV15"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvRange_end",
+                    {"marker", "BDEV15"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
                     {"Q", QueryId},
-                    {"Status", status},
-                    {"ErrorReason", errorReason});
+                    {"status", status},
+                    {"errorReason", errorReason});
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 

@@ -56,10 +56,10 @@ namespace NKikimr::NBlobDepot {
             request.SetMaxKeys(100);
 
             YDB_LOG_DEBUG("TScannerActor::IssueNextRequest",
-                {"Marker", "BDTS18"},
-                {"Id", LogId},
-                {"Prefix", Prefix},
-                {"RequestMarker", Marker});
+                {"marker", "BDTS18"},
+                {"id", LogId},
+                {"prefix", Prefix},
+                {"requestMarker", Marker});
 
             Send(WrapperId, new TEvExternalStorage::TEvListObjectsRequest(request), IEventHandle::FlagTrackDelivery);
         }
@@ -137,10 +137,10 @@ namespace NKikimr::NBlobDepot {
                 } else if (!row.IsValid()) {
                     const bool useful = Self->Data->IsUseful(*it);
                     if (useful) {
-                        YDB_LOG_CRIT("trying to delete useful S3 locator",
-                            {"Marker", "BDTS13"},
-                            {"Id", Self->GetLogId()},
-                            {"Locator", *it});
+                        YDB_LOG_CRIT("Trying to delete useful S3 locator",
+                            {"marker", "BDTS13"},
+                            {"id", Self->GetLogId()},
+                            {"locator", *it});
                         Y_DEBUG_ABORT("trying to delete useful S3 locator");
                     } else {
                         LocatorsToDelete.insert(*it);
@@ -179,20 +179,20 @@ namespace NKikimr::NBlobDepot {
                 auto& msg = *ev->Get();
 
                 YDB_LOG_DEBUG("TEvScanFound received",
-                    {"Marker", "BDTS17"},
-                    {"Id", Self->GetLogId()},
-                    {"IsFinal", msg.IsFinal},
-                    {"Error", msg.Error},
+                    {"marker", "BDTS17"},
+                    {"id", Self->GetLogId()},
+                    {"isFinal", msg.IsFinal},
+                    {"error", msg.Error},
                     {"KeysWithoutPrefix.size", msg.KeysWithoutPrefix.size()});
 
                 Y_ABORT_UNLESS(ScannerActorId);
                 Y_ABORT_UNLESS(ev->Sender == ScannerActorId);
 
                 if (msg.Error) {
-                    YDB_LOG_WARN("scanner error",
-                        {"Marker", "BDTS14"},
-                        {"Id", Self->GetLogId()},
-                        {"Error", msg.Error});
+                    YDB_LOG_WARN("Scanner error",
+                        {"marker", "BDTS14"},
+                        {"id", Self->GetLogId()},
+                        {"error", msg.Error});
                     // TODO(alexvru): restart scanner in some time
                 }
 
@@ -206,27 +206,27 @@ namespace NKikimr::NBlobDepot {
                         const bool useful = Self->Data->IsUseful(*locator);
                         const bool allow = locator->Generation < generation;
                         YDB_LOG_DEBUG("TEvScanFound: found key",
-                            {"Marker", "BDTS15"},
-                            {"Id", Self->GetLogId()},
-                            {"Locator", *locator},
-                            {"Useful", useful},
-                            {"Allow", allow},
-                            {"Error", error});
-                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "scan_S3_found_key",
-                            {"Marker", "BDEV35"},
+                            {"marker", "BDTS15"},
+                            {"id", Self->GetLogId()},
+                            {"locator", *locator},
+                            {"useful", useful},
+                            {"allow", allow},
+                            {"error", error});
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Scan_S3_found_key",
+                            {"marker", "BDEV35"},
                             {"BDT", Self->TabletID()},
-                            {"Locator", *locator},
-                            {"Useful", useful},
-                            {"Allow", allow});
+                            {"locator", *locator},
+                            {"useful", useful},
+                            {"allow", allow});
                         if (!useful && allow) {
                             trash.insert(*locator);
                         }
                     } else {
                         YDB_LOG_WARN("TEvScanFound: incorrect key name",
-                            {"Marker", "BDTS16"},
-                            {"Id", Self->GetLogId()},
-                            {"Key", key},
-                            {"Len", len});
+                            {"marker", "BDTS16"},
+                            {"id", Self->GetLogId()},
+                            {"key", key},
+                            {"len", len});
                     }
                 }
 

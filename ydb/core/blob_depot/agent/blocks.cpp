@@ -29,16 +29,16 @@ namespace NKikimr::NBlobDepot {
             block.PendingBlockChecks.PushBack(query);
         }
         YDB_LOG_DEBUG("CheckBlockForTablet",
-            {"Marker", "BDA01"},
-            {"AgentId", Agent.LogId},
-            {"QueryId", query->GetQueryId()},
-            {"TabletId", tabletId},
-            {"Generation", generation},
-            {"Status", status},
-            {"Now", now},
-            {"ExpirationTimestamp", block.ExpirationTimestamp},
-            {"RefreshQueried", refreshQueried},
-            {"RefreshId", block.RefreshId});
+            {"marker", "BDA01"},
+            {"agentId", Agent.LogId},
+            {"queryId", query->GetQueryId()},
+            {"tabletId", tabletId},
+            {"generation", generation},
+            {"status", status},
+            {"now", now},
+            {"expirationTimestamp", block.ExpirationTimestamp},
+            {"refreshQueried", refreshQueried},
+            {"refreshId", block.RefreshId});
         return status;
     }
 
@@ -49,10 +49,10 @@ namespace NKikimr::NBlobDepot {
             auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
             auto& block = Blocks[queryBlockContext.TabletId];
             YDB_LOG_DEBUG("TBlocksManager::TTabletDisconnected",
-                {"Marker", "BDA36"},
-                {"AgentId", Agent.LogId},
-                {"TabletId", queryBlockContext.TabletId},
-                {"RefreshId", block.RefreshId});
+                {"marker", "BDA36"},
+                {"agentId", Agent.LogId},
+                {"tabletId", queryBlockContext.TabletId},
+                {"refreshId", block.RefreshId});
             block.RefreshId = 0;
             IssueOnUpdateBlock(block);
         } else {
@@ -63,10 +63,10 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::TBlocksManager::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg) {
         auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
         YDB_LOG_DEBUG("TEvQueryBlocksResult",
-            {"Marker", "BDA02"},
-            {"AgentId", Agent.LogId},
-            {"Msg", msg},
-            {"TabletId", queryBlockContext.TabletId});
+            {"marker", "BDA02"},
+            {"agentId", Agent.LogId},
+            {"msg", msg},
+            {"tabletId", queryBlockContext.TabletId});
         auto& block = Blocks[queryBlockContext.TabletId];
         Y_ABORT_UNLESS(block.RefreshId);
         Y_ABORT_UNLESS(msg.BlockedGenerationsSize() == 1);
@@ -111,12 +111,12 @@ namespace NKikimr::NBlobDepot {
             if (const auto it = Blocks.find(tablet.GetTabletId()); it != Blocks.end()) {
                 auto& block = it->second;
                 YDB_LOG_DEBUG("OnBlockedTablets",
-                    {"Marker", "BDA37"},
-                    {"AgentId", Agent.LogId},
-                    {"TabletId", it->first},
-                    {"RefreshId", block.RefreshId},
-                    {"BlockedGeneration", tablet.GetBlockedGeneration()},
-                    {"IssuerGuid", tablet.GetIssuerGuid()});
+                    {"marker", "BDA37"},
+                    {"agentId", Agent.LogId},
+                    {"tabletId", it->first},
+                    {"refreshId", block.RefreshId},
+                    {"blockedGeneration", tablet.GetBlockedGeneration()},
+                    {"issuerGuid", tablet.GetIssuerGuid()});
                 block.BlockedGeneration = tablet.GetBlockedGeneration();
                 block.IssuerGuid = tablet.GetIssuerGuid();
                 block.ExpirationTimestamp = TMonotonic::Zero();

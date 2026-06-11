@@ -28,9 +28,9 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev) {
         YDB_LOG_DEBUG("TEvControllerGroupMetricsExchange",
-            {"Marker", "BDT58"},
-            {"Id", GetLogId()},
-            {"Msg", ev->Get()->Record});
+            {"marker", "BDT58"},
+            {"id", GetLogId()},
+            {"msg", ev->Get()->Record});
 
         if (Config.HasVirtualGroupId()) {
             auto response = std::make_unique<TEvBlobStorage::TEvControllerGroupMetricsExchange>();

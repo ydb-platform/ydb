@@ -28,13 +28,13 @@ namespace NKikimr::NBlobDepot {
             return p ? std::make_optional(p->GetQueryId()) : std::nullopt;
         };
         YDB_LOG_DEBUG("SendToProxy",
-            {"Marker", "BDA46"},
-            {"AgentId", LogId},
-            {"QueryId", getQueryId()},
-            {"GroupId", groupId},
-            {"DecommitGroupId", DecommitGroupId},
-            {"Type", event->Type()},
-            {"Cookie", id});
+            {"marker", "BDA46"},
+            {"agentId", LogId},
+            {"queryId", getQueryId()},
+            {"groupId", groupId},
+            {"decommitGroupId", DecommitGroupId},
+            {"type", event->Type()},
+            {"cookie", id});
         if (groupId != DecommitGroupId) {
             SendToBSProxy(SelfId(), groupId, event.release(), id);
         } else if (ProxyId) {

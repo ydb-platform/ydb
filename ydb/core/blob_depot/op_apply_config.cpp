@@ -7,9 +7,9 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev) {
         YDB_LOG_DEBUG("TEvApplyConfig",
-            {"Marker", "BDT15"},
-            {"Id", GetLogId()},
-            {"Msg", ev->Get()->Record});
+            {"marker", "BDT15"},
+            {"id", GetLogId()},
+            {"msg", ev->Get()->Record});
 
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
@@ -32,8 +32,8 @@ namespace NKikimr::NBlobDepot {
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 YDB_LOG_DEBUG("TTxApplyConfig::Execute",
-                    {"Marker", "BDT16"},
-                    {"Id", Self->GetLogId()});
+                    {"marker", "BDT16"},
+                    {"id", Self->GetLogId()});
 
                 NIceDb::TNiceDb db(txc.DB);
 
@@ -54,8 +54,8 @@ namespace NKikimr::NBlobDepot {
 
             void Complete(const TActorContext&) override {
                 YDB_LOG_DEBUG("TTxApplyConfig::Complete",
-                    {"Marker", "BDT17"},
-                    {"Id", Self->GetLogId()});
+                    {"marker", "BDT17"},
+                    {"id", Self->GetLogId()});
 
                 if (!std::exchange(Self->Configured, true)) {
                     Self->StartOperation();

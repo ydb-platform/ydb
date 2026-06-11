@@ -142,12 +142,12 @@ namespace NKikimr::NBlobDepot {
                 auto& kind = it->second;
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
-                YDB_LOG_DEBUG("allocated BlobSeqId",
-                    {"Marker", "BDA21"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"BlobSeqId", blobSeqId},
-                    {"BlobId", Request.Id});
+                YDB_LOG_DEBUG("Allocated BlobSeqId",
+                    {"marker", "BDA21"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"blobSeqId", blobSeqId},
+                    {"blobId", Request.Id});
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
                 }
@@ -159,8 +159,8 @@ namespace NKikimr::NBlobDepot {
                     IsInFlight = true;
                 }
 
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvPut_new",
-                    {"Marker", "BDEV09"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_new",
+                    {"marker", "BDEV09"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
@@ -193,15 +193,15 @@ namespace NKikimr::NBlobDepot {
                     auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), Request.Deadline, Request.HandleClass, Request.Tactic);
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvPut_sendToProxy",
-                        {"Marker", "BDEV10"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_sendToProxy",
+                        {"marker", "BDEV10"},
                         {"VG", Agent.VirtualGroupId},
                         {"BDT", Agent.TabletId},
                         {"G", Agent.BlobDepotGeneration},
                         {"Q", QueryId},
-                        {"BlobSeqId", BlobSeqId},
-                        {"GroupId", groupId},
-                        {"BlobId", id});
+                        {"blobSeqId", BlobSeqId},
+                        {"groupId", groupId},
+                        {"blobId", id});
                     Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
                     Agent.BytesWritten += id.BlobSize();
                     ++PutsInFlight;
@@ -238,11 +238,11 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 YDB_LOG_DEBUG("IssueCommitBlobSeq",
-                    {"Marker", "BDA30"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"UncertainWrite", uncertainWrite},
-                    {"Msg", CommitBlobSeq});
+                    {"marker", "BDA30"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"uncertainWrite", uncertainWrite},
+                    {"msg", CommitBlobSeq});
 
                 Agent.Issue(CommitBlobSeq, this, nullptr);
 
@@ -252,9 +252,9 @@ namespace NKikimr::NBlobDepot {
 
             void RemoveBlobSeqFromInFlight() {
                 YDB_LOG_DEBUG("RemoveBlobSeqFromInFlight",
-                    {"Marker", "BDA32"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()});
+                    {"marker", "BDA32"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()});
 
                 Y_ABORT_UNLESS(IsInFlight);
                 IsInFlight = false;
@@ -304,20 +304,20 @@ namespace NKikimr::NBlobDepot {
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
                 YDB_LOG_DEBUG("TEvPutResult",
-                    {"Marker", "BDA22"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"Msg", msg});
+                    {"marker", "BDA22"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"msg", msg});
 
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvPut_resultFromProxy",
-                    {"Marker", "BDEV11"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_resultFromProxy",
+                    {"marker", "BDEV11"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
                     {"Q", QueryId},
-                    {"BlobId", msg.Id},
-                    {"Status", msg.Status},
-                    {"ErrorReason", msg.ErrorReason});
+                    {"blobId", msg.Id},
+                    {"status", msg.Status},
+                    {"errorReason", msg.ErrorReason});
 
                 if (msg.Status == NKikimrProto::OK && msg.WrittenBeyondBarrier) {
                     WrittenBeyondBarrier = true;
@@ -344,10 +344,10 @@ namespace NKikimr::NBlobDepot {
 
             void HandleCommitBlobSeqResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCommitBlobSeqResult& msg) {
                 YDB_LOG_DEBUG("TEvCommitBlobSeqResult",
-                    {"Marker", "BDA31"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"Msg", msg});
+                    {"marker", "BDA31"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"msg", msg});
 
                 Y_ABORT_UNLESS(WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = false;
@@ -370,27 +370,27 @@ namespace NKikimr::NBlobDepot {
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
                 if (BlobSeqId) {
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvPut_end",
-                        {"Marker", "BDEV12"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_end",
+                        {"marker", "BDEV12"},
                         {"VG", Agent.VirtualGroupId},
                         {"BDT", Agent.TabletId},
                         {"G", Agent.BlobDepotGeneration},
                         {"Q", QueryId},
-                        {"Status", status},
-                        {"ErrorReason", errorReason});
+                        {"status", status},
+                        {"errorReason", errorReason});
                 }
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess() {
                 if (BlobSeqId) {
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvPut_end",
-                        {"Marker", "BDEV13"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_end",
+                        {"marker", "BDEV13"},
                         {"VG", Agent.VirtualGroupId},
                         {"BDT", Agent.TabletId},
                         {"G", Agent.BlobDepotGeneration},
                         {"Q", QueryId},
-                        {"Status", NKikimrProto::OK});
+                        {"status", NKikimrProto::OK});
                 }
 
                 if (IssueUncertainWrites) { // send a notification
@@ -443,11 +443,11 @@ namespace NKikimr::NBlobDepot {
                 const TS3Locator temp = TS3Locator::FromProto(*locator);
                 TString key = temp.MakeObjectName(Agent.S3BasePath);
 
-                YDB_LOG_DEBUG("starting WriteActor",
-                    {"Marker", "BDA54"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"Key", key});
+                YDB_LOG_DEBUG("Starting WriteActor",
+                    {"marker", "BDA54"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"key", key});
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
                 WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
@@ -461,11 +461,11 @@ namespace NKikimr::NBlobDepot {
 
             void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) override {
                 YDB_LOG_COMP(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, "OnPutS3ObjectResponse",
-                    {"Marker", "BDA53"},
-                    {"AgentId", Agent.LogId},
-                    {"QueryId", GetQueryId()},
-                    {"Error", error},
-                    {"SlowDown", slowDown});
+                    {"marker", "BDA53"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"error", error},
+                    {"slowDown", slowDown});
 
                 WriterActorId = {};
 
@@ -493,14 +493,14 @@ namespace NKikimr::NBlobDepot {
                     // Transparent retry: report SlowDown to the tablet via the discard message, then immediately
                     // re-issue TEvPrepareWriteS3. Pipe ordering guarantees the discard (which arms throttling) is
                     // processed before the retry, so the retry will be parked by the tablet until backoff clears.
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "S3_put_slow_down",
-                        {"Marker", "BDEV41"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_put_slow_down",
+                        {"marker", "BDEV41"},
                         {"VG", Agent.VirtualGroupId},
                         {"BDT", Agent.TabletId},
                         {"G", Agent.BlobDepotGeneration},
                         {"Q", QueryId},
-                        {"Locator", LocatorInFlight},
-                        {"Retry", S3SlowDownRetries});
+                        {"locator", LocatorInFlight},
+                        {"retry", S3SlowDownRetries});
                     ++S3SlowDownRetries;
                     SendDiscardSpoiled(/*s3SlowDown=*/true);
                     // Reset the per-attempt S3Locator from CommitBlobSeq so HandlePrepareWriteS3Result repopulates it.

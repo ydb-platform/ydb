@@ -203,10 +203,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             YDB_LOG_DEBUG("TResolveDecommitActor::Bootstrap",
-                {"Marker", "BDT42"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie});
+                {"marker", "BDT42"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie});
 
             std::deque<TScan> scans;
 
@@ -277,15 +277,15 @@ namespace NKikimr::NBlobDepot {
         // recover any data; thus they are IsIndexOnly and not MustRestoreFirst range queries
 
         void IssueRange(ui64 tabletId, TLogoBlobID from, TLogoBlobID to, bool mustRestoreFirst) {
-            YDB_LOG_DEBUG("going to TEvRange",
-                {"Marker", "BDT50"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie},
-                {"TabletId", tabletId},
-                {"From", from},
-                {"To", to},
-                {"MustRestoreFirst", mustRestoreFirst});
+            YDB_LOG_DEBUG("Going to TEvRange",
+                {"marker", "BDT50"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"tabletId", tabletId},
+                {"from", from},
+                {"to", to},
+                {"mustRestoreFirst", mustRestoreFirst});
             auto ev = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, TInstant::Max(), true);
             ev->Decommission = true;
             SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), mustRestoreFirst);
@@ -295,15 +295,15 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev) {
             auto& msg = *ev->Get();
             YDB_LOG_DEBUG("TEvRangeResult",
-                {"Marker", "BDT55"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie},
-                {"Msg", msg},
-                {"GetsInFlight", GetsInFlight},
-                {"RangesInFlight", RangesInFlight},
-                {"TxInFlight", TxInFlight},
-                {"PutsInFlight", PutsInFlight},
+                {"marker", "BDT55"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"msg", msg},
+                {"getsInFlight", GetsInFlight},
+                {"rangesInFlight", RangesInFlight},
+                {"txInFlight", TxInFlight},
+                {"putsInFlight", PutsInFlight},
                 {"GetQ.size", GetQ.size()});
 
             if (msg.Status == NKikimrProto::OK) {
@@ -335,13 +335,13 @@ namespace NKikimr::NBlobDepot {
         // have to put it to BlobDepot storage
 
         void IssueGet(TLogoBlobID id, bool mustRestoreFirst) {
-            YDB_LOG_DEBUG("going to TEvGet",
-                {"Marker", "BDT86"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie},
-                {"BlobId", id},
-                {"MustRestoreFirst", mustRestoreFirst});
+            YDB_LOG_DEBUG("Going to TEvGet",
+                {"marker", "BDT86"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"blobId", id},
+                {"mustRestoreFirst", mustRestoreFirst});
             GetQ.emplace_back(id, mustRestoreFirst);
             ProcessGetQueue();
         }
@@ -369,15 +369,15 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
             auto& msg = *ev->Get();
             YDB_LOG_DEBUG("TEvGetResult",
-                {"Marker", "BDT87"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie},
-                {"Msg", msg},
-                {"GetsInFlight", GetsInFlight},
-                {"RangesInFlight", RangesInFlight},
-                {"TxInFlight", TxInFlight},
-                {"PutsInFlight", PutsInFlight},
+                {"marker", "BDT87"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"msg", msg},
+                {"getsInFlight", GetsInFlight},
+                {"rangesInFlight", RangesInFlight},
+                {"txInFlight", TxInFlight},
+                {"putsInFlight", PutsInFlight},
                 {"GetQ.size", GetQ.size()});
 
             for (ui32 i = 0; i < msg.ResponseSz; ++i) {
@@ -416,13 +416,13 @@ namespace NKikimr::NBlobDepot {
                 const ui64 value = channel.NextBlobSeqId++;
                 const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
                 const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, buffer.size());
-                YDB_LOG_DEBUG("going to TEvPut",
-                    {"Marker", "BDT91"},
-                    {"Id", Self->GetLogId()},
-                    {"Sender", Ev->Sender},
-                    {"Cookie", Ev->Cookie},
-                    {"Key", key},
-                    {"BlobId", id});
+                YDB_LOG_DEBUG("Going to TEvPut",
+                    {"marker", "BDT91"},
+                    {"id", Self->GetLogId()},
+                    {"sender", Ev->Sender},
+                    {"cookie", Ev->Cookie},
+                    {"key", key},
+                    {"blobId", id});
                 SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, TRcBuf(buffer), TInstant::Max()),
                     (ui64)keep | (ui64)doNotKeep << 1);
                 const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
@@ -446,19 +446,19 @@ namespace NKikimr::NBlobDepot {
             const bool keep = ev->Cookie & 1;
             const bool doNotKeep = ev->Cookie >> 1 & 1;
 
-            YDB_LOG_DEBUG("got TEvPutResult",
-                {"Marker", "BDT88"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie},
-                {"Msg", msg},
-                {"Key", key},
-                {"Keep", keep},
-                {"DoNotKeep", doNotKeep},
-                {"GetsInFlight", GetsInFlight},
-                {"RangesInFlight", RangesInFlight},
-                {"TxInFlight", TxInFlight},
-                {"PutsInFlight", PutsInFlight},
+            YDB_LOG_DEBUG("Got TEvPutResult",
+                {"marker", "BDT88"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"msg", msg},
+                {"key", key},
+                {"keep", keep},
+                {"doNotKeep", doNotKeep},
+                {"getsInFlight", GetsInFlight},
+                {"rangesInFlight", RangesInFlight},
+                {"txInFlight", TxInFlight},
+                {"putsInFlight", PutsInFlight},
                 {"GetQ.size", GetQ.size()});
 
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
@@ -477,14 +477,14 @@ namespace NKikimr::NBlobDepot {
 
         void HandleTxComplete() {
             YDB_LOG_DEBUG("HandleTxComplete",
-                {"Marker", "BDT84"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie},
-                {"GetsInFlight", GetsInFlight},
-                {"RangesInFlight", RangesInFlight},
-                {"TxInFlight", TxInFlight},
-                {"PutsInFlight", PutsInFlight},
+                {"marker", "BDT84"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"getsInFlight", GetsInFlight},
+                {"rangesInFlight", RangesInFlight},
+                {"txInFlight", TxInFlight},
+                {"putsInFlight", PutsInFlight},
                 {"GetQ.size", GetQ.size()});
 
             Y_ABORT_UNLESS(TxInFlight);
@@ -503,11 +503,11 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
-            YDB_LOG_DEBUG("request succeeded",
-                {"Marker", "BDT92"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie},
+            YDB_LOG_DEBUG("Request succeeded",
+                {"marker", "BDT92"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
                 {"ResolutionErrors.size", ResolutionErrors.size()},
                 {"DecommitBlobs.size", DecommitBlobs.size()});
 
@@ -525,12 +525,12 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
-            YDB_LOG(prio, "request failed",
-                {"Marker", "BDT89"},
-                {"Id", Self->GetLogId()},
-                {"Sender", Ev->Sender},
-                {"Cookie", Ev->Cookie},
-                {"ErrorReason", errorReason});
+            YDB_LOG(prio, "Request failed",
+                {"marker", "BDT89"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"errorReason", errorReason});
             auto [response, record] = TEvBlobDepot::MakeResponseFor(*Ev, NKikimrProto::ERROR, std::move(errorReason));
             TActivationContext::Send(response.release());
             PassAway();
@@ -549,10 +549,10 @@ namespace NKikimr::NBlobDepot {
 
                 default:
                     Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
-                    YDB_LOG_CRIT("unexpected event",
-                        {"Marker", "BDT90"},
-                        {"Id", Self->GetLogId()},
-                        {"Type", type});
+                    YDB_LOG_CRIT("Unexpected event",
+                        {"marker", "BDT90"},
+                        {"id", Self->GetLogId()},
+                        {"type", type});
                     break;
             }
 

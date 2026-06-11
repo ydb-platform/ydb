@@ -30,10 +30,10 @@ namespace NKikimr::NBlobDepot {
 
             default:
                 Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
-                YDB_LOG_CRIT("unexpected event",
-                    {"Marker", "BDT00"},
-                    {"Id", Self->GetLogId()},
-                    {"Type", type});
+                YDB_LOG_CRIT("Unexpected event",
+                    {"marker", "BDT00"},
+                    {"id", Self->GetLogId()},
+                    {"type", type});
                 break;
         }
     }

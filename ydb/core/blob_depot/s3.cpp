@@ -18,8 +18,8 @@ namespace NKikimr::NBlobDepot {
 
     void TS3Manager::Init(const NKikimrBlobDepot::TS3BackendSettings *settings) {
         YDB_LOG_DEBUG("Init",
-            {"Marker", "BDTS05"},
-            {"Settings", settings});
+            {"marker", "BDTS05"},
+            {"settings", settings});
         if (settings) {
             // All S3 traffic goes through the per-node router managed by NodeWarden.
             // Acquire is fire-and-forget: NodeWarden registers the router under its

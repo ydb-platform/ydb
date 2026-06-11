@@ -208,25 +208,25 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SendBlock(ui32 groupId) {
-            YDB_LOG_DEBUG("issing TEvBlock",
-                {"Marker", "BDT08"},
-                {"Id", Self->GetLogId()},
-                {"BlockedTabletId", TabletId},
-                {"BlockedGeneration", BlockedGeneration},
-                {"GroupId", groupId},
-                {"IssuerGuid", IssuerGuid});
+            YDB_LOG_DEBUG("Issing TEvBlock",
+                {"marker", "BDT08"},
+                {"id", Self->GetLogId()},
+                {"blockedTabletId", TabletId},
+                {"blockedGeneration", BlockedGeneration},
+                {"groupId", groupId},
+                {"issuerGuid", IssuerGuid});
             SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
                 IssuerGuid), groupId);
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
             YDB_LOG_DEBUG("TEvBlockResult",
-                {"Marker", "BDT09"},
-                {"Id", Self->GetLogId()},
-                {"Msg", ev->Get()->ToString()},
-                {"BlockedTabletId", TabletId},
-                {"BlockedGeneration", BlockedGeneration},
-                {"GroupId", ev->Cookie});
+                {"marker", "BDT09"},
+                {"id", Self->GetLogId()},
+                {"msg", ev->Get()->ToString()},
+                {"blockedTabletId", TabletId},
+                {"blockedGeneration", BlockedGeneration},
+                {"groupId", ev->Cookie});
             switch (ev->Get()->Status) {
                 case NKikimrProto::OK:
                     if (!--BlocksPending) {
@@ -291,10 +291,10 @@ namespace NKikimr::NBlobDepot {
             NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
         );
 
-        YDB_LOG_DEBUG("adding block through decommission",
-            {"Marker", "BDT44"},
-            {"Id", Self->GetLogId()},
-            {"Block", block});
+        YDB_LOG_DEBUG("Adding block through decommission",
+            {"marker", "BDT44"},
+            {"id", Self->GetLogId()},
+            {"block", block});
     }
 
     void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,

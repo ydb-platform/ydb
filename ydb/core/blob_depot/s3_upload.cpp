@@ -35,9 +35,9 @@ namespace NKikimr::NBlobDepot {
 
         void Bootstrap() {
             YDB_LOG_DEBUG("TUploaderActor::Bootstrap",
-                {"Marker", "BDTS00"},
-                {"Key", Key},
-                {"ValueChain", ValueChain});
+                {"marker", "BDTS00"},
+                {"key", Key},
+                {"valueChain", ValueChain});
             size_t targetOffset = 0;
             EnumerateBlobsForValueChain(ValueChain, Info->TabletID, TOverloaded{
                 [&](TLogoBlobID id, ui32 shift, ui32 size) {
@@ -61,8 +61,8 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
             auto *msg = ev->Get();
             YDB_LOG_DEBUG("TUploaderActor::Handle(TEvGetResult)",
-                {"Marker", "BDTS01"},
-                {"Msg", *msg});
+                {"marker", "BDTS01"},
+                {"msg", *msg});
             if (msg->Status == NKikimrProto::OK && msg->ResponseSz == 1 && msg->Responses->Status == NKikimrProto::OK) {
                 TRope& rope = msg->Responses->Buffer;
                 char *ptr = Buffer.Detach() + ev->Cookie;
@@ -82,8 +82,8 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr ev) {
             YDB_LOG_DEBUG("TUploaderActor::Handle(TEvPutObjectResponse)",
-                {"Marker", "BDTS02"},
-                {"Result", ev->Get()->Result});
+                {"marker", "BDTS02"},
+                {"result", ev->Get()->Result});
             if (auto& result = ev->Get()->Result; result.IsSuccess()) {
             } else {
             }

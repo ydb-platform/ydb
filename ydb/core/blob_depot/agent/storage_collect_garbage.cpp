@@ -37,8 +37,8 @@ namespace NKikimr::NBlobDepot {
 
                 for (; KeepIndex < NumKeep && numItemsIssued < MaxCollectGarbageFlagsPerMessage; ++KeepIndex) {
                     LogoBlobIDFromLogoBlobID((*Request.Keep)[KeepIndex], record.AddKeep());
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_keep",
-                        {"Marker", "BDEV05"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_keep",
+                        {"marker", "BDEV05"},
                         {"VG", Agent.VirtualGroupId},
                         {"BDT", Agent.TabletId},
                         {"G", Agent.BlobDepotGeneration},
@@ -48,8 +48,8 @@ namespace NKikimr::NBlobDepot {
                 }
                 for (; DoNotKeepIndex < NumDoNotKeep && numItemsIssued < MaxCollectGarbageFlagsPerMessage; ++DoNotKeepIndex) {
                     LogoBlobIDFromLogoBlobID((*Request.DoNotKeep)[DoNotKeepIndex], record.AddDoNotKeep());
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_doNotKeep",
-                        {"Marker", "BDEV06"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_doNotKeep",
+                        {"marker", "BDEV06"},
                         {"VG", Agent.VirtualGroupId},
                         {"BDT", Agent.TabletId},
                         {"G", Agent.BlobDepotGeneration},
@@ -73,8 +73,8 @@ namespace NKikimr::NBlobDepot {
                         record.SetIgnoreBlock(true);
                     }
 
-                    YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_barrier",
-                        {"Marker", "BDEV04"},
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_barrier",
+                        {"marker", "BDEV04"},
                         {"VG", Agent.VirtualGroupId},
                         {"BDT", Agent.TabletId},
                         {"G", Agent.BlobDepotGeneration},
@@ -124,25 +124,25 @@ namespace NKikimr::NBlobDepot {
             }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_end",
-                    {"Marker", "BDEV07"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_end",
+                    {"marker", "BDEV07"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
                     {"Q", QueryId},
-                    {"Status", status},
-                    {"ErrorReason", errorReason});
+                    {"status", status},
+                    {"errorReason", errorReason});
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess() {
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_end",
-                    {"Marker", "BDEV08"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_end",
+                    {"marker", "BDEV08"},
                     {"VG", Agent.VirtualGroupId},
                     {"BDT", Agent.TabletId},
                     {"G", Agent.BlobDepotGeneration},
                     {"Q", QueryId},
-                    {"Status", NKikimrProto::OK});
+                    {"status", NKikimrProto::OK});
                 TBlobStorageQuery::EndWithSuccess(std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(
                     NKikimrProto::OK, Request.TabletId, Request.RecordGeneration, Request.PerGenerationCounter,
                     Request.Channel));

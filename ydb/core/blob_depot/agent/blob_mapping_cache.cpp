@@ -17,20 +17,20 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::TBlobMappingCache::HandleResolveResult(ui64 tag, const NKikimrBlobDepot::TEvResolveResult& msg,
             TRequestContext::TPtr context) {
         YDB_LOG_DEBUG("HandleResolveResult",
-            {"Marker", "BDA28"},
-            {"AgentId", Agent.LogId},
-            {"Cookie", tag},
-            {"Msg", msg});
+            {"marker", "BDA28"},
+            {"agentId", Agent.LogId},
+            {"cookie", tag},
+            {"msg", msg});
 
         auto process = [&](const auto& item, bool nodata) {
             // check if there is an error or no data attached
             if (item.HasErrorReason() || item.GetValueChain().empty() || nodata) {
                 YDB_LOG_DEBUG("HandleResolveResult error",
-                    {"Marker", "BDA43"},
-                    {"AgentId", Agent.LogId},
-                    {"Item", item},
-                    {"NoData", nodata},
-                    {"Key", Agent.PrettyKey(item.GetKey())});
+                    {"marker", "BDA43"},
+                    {"agentId", Agent.LogId},
+                    {"item", item},
+                    {"noData", nodata},
+                    {"key", Agent.PrettyKey(item.GetKey())});
 
                 const TString errorReason = item.HasErrorReason() ? item.GetErrorReason() : "no data attached to the key";
                 const auto it = Cache.find(item.GetKey());
@@ -49,12 +49,12 @@ namespace NKikimr::NBlobDepot {
                 auto& [key_, entry] = *it;
 
                 YDB_LOG_DEBUG("HandleResolveResult success",
-                    {"Marker", "BDA44"},
-                    {"AgentId", Agent.LogId},
-                    {"Item", item},
-                    {"NoData", nodata},
-                    {"Key", Agent.PrettyKey(key_)},
-                    {"CurrentValue", entry.Value});
+                    {"marker", "BDA44"},
+                    {"agentId", Agent.LogId},
+                    {"item", item},
+                    {"noData", nodata},
+                    {"key", Agent.PrettyKey(key_)},
+                    {"currentValue", entry.Value});
 
                 // update value if it supersedes current one
                 if (TResolvedValue value(item); value.Supersedes(entry.Value)) {
@@ -118,13 +118,13 @@ namespace NKikimr::NBlobDepot {
         auto& entry = it->second;
 
         YDB_LOG_DEBUG("ResolveKey",
-            {"Marker", "BDA45"},
-            {"AgentId", Agent.LogId},
-            {"Key", Agent.PrettyKey(it->first)},
-            {"MustRestoreFirst", mustRestoreFirst},
-            {"Value", entry.Value},
-            {"OrdinaryResolvePending", entry.OrdinaryResolvePending},
-            {"MustRestoreFirstResolvePending", entry.MustRestoreFirstResolvePending});
+            {"marker", "BDA45"},
+            {"agentId", Agent.LogId},
+            {"key", Agent.PrettyKey(it->first)},
+            {"mustRestoreFirst", mustRestoreFirst},
+            {"value", entry.Value},
+            {"ordinaryResolvePending", entry.OrdinaryResolvePending},
+            {"mustRestoreFirstResolvePending", entry.MustRestoreFirstResolvePending});
 
         // return cached value if we have all conditions met for this query
         if (!entry.Value.IsEmpty() && mustRestoreFirst <= entry.Value.ReliablyWritten) {
@@ -164,9 +164,9 @@ namespace NKikimr::NBlobDepot {
             HandleResolveResult(tag, (*p)->Record, std::move(context));
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
             YDB_LOG_DEBUG("TBlobMappingCache::TTabletDisconnected",
-                {"Marker", "BDA38"},
-                {"AgentId", Agent.LogId},
-                {"Cookie", tag});
+                {"marker", "BDA38"},
+                {"agentId", Agent.LogId},
+                {"cookie", tag});
             auto& resolveContext = context->Obtain<TResolveContext>();
             if (const auto it = Cache.find(resolveContext.Key); it != Cache.end()) {
                 for (const auto& [id, mustRestoreFirst] : std::exchange(it->second.PendingQueries, {})) {

@@ -44,11 +44,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         Y_ABORT_UNLESS(yellowMove || yellowStop);
-        YDB_LOG_INFO("asking to reassign channels",
-            {"Marker", "BDT28"},
-            {"Id", Self->GetLogId()},
-            {"YellowMove", FormatList(yellowMove)},
-            {"YellowStop", FormatList(yellowStop)});
+        YDB_LOG_INFO("Asking to reassign channels",
+            {"marker", "BDT28"},
+            {"id", Self->GetLogId()},
+            {"yellowMove", FormatList(yellowMove)},
+            {"yellowStop", FormatList(yellowStop)});
         Self->Executor()->OnYellowChannels(std::move(yellowMove), std::move(yellowStop));
     }
 

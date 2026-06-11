@@ -98,10 +98,10 @@ namespace NKikimr::NBlobDepot {
         }
         if (underHard && !Data.contains(key)) {
             YDB_LOG_DEBUG("UpdateKey: key under hard barrier, will not be created",
-                {"Marker", "BDT59"},
-                {"Id", Self->GetLogId()},
-                {"Key", key},
-                {"Reason", reason});
+                {"marker", "BDT59"},
+                {"id", Self->GetLogId()},
+                {"key", key},
+                {"reason", reason});
             return false; // no such key existed and will not be created as it hits the barrier
         }
 
@@ -159,15 +159,15 @@ namespace NKikimr::NBlobDepot {
                 }
             };
             YDB_LOG_DEBUG("UpdateKey",
-                {"Marker", "BDT60"},
-                {"Id", Self->GetLogId()},
-                {"Key", key},
-                {"Reason", reason},
-                {"Outcome", outcomeToString()},
-                {"UnderSoft", underSoft},
-                {"Inserted", inserted},
-                {"Value", value},
-                {"UncertainWriteBefore", uncertainWriteBefore});
+                {"marker", "BDT60"},
+                {"id", Self->GetLogId()},
+                {"key", key},
+                {"reason", reason},
+                {"outcome", outcomeToString()},
+                {"underSoft", underSoft},
+                {"inserted", inserted},
+                {"value", value},
+                {"uncertainWriteBefore", uncertainWriteBefore});
 
             auto returnRefCount = [&](auto& map, auto&& key, auto& deleteQ) {
                 const auto [it, inserted] = map.try_emplace(std::move(key));
@@ -241,11 +241,11 @@ namespace NKikimr::NBlobDepot {
                 RefCountS3.erase(it);
                 TotalS3DataSize -= locator.Len;
 
-                YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "delete_S3",
-                    {"Marker", "BDEV27"},
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Delete_S3",
+                    {"marker", "BDEV27"},
                     {"BDT", Self->TabletID()},
-                    {"Key", key},
-                    {"Locator", locator});
+                    {"key", key},
+                    {"locator", locator});
                 AddToS3Trash(locator, txc, cookie);
                 return false; // keep this blob in deletion queue
             };
@@ -293,11 +293,11 @@ namespace NKikimr::NBlobDepot {
                             });
                             return locators;
                         };
-                        YDB_LOG_COMP_TRACE(BLOB_DEPOT_EVENTS, "change_key",
-                            {"Marker", "BDEV28"},
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Change_key",
+                            {"marker", "BDEV28"},
                             {"BDT", Self->TabletID()},
-                            {"Key", key},
-                            {"Locators", makeLocators()});
+                            {"key", key},
+                            {"locators", makeLocators()});
                     }
                     row.template Update<Schema::Data::Value>(value.SerializeToString());
                     if (inserted || uncertainWriteBefore != value.UncertainWrite) {
@@ -334,10 +334,10 @@ namespace NKikimr::NBlobDepot {
     void TData::UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         YDB_LOG_DEBUG("UpdateKey",
-            {"Marker", "BDT10"},
-            {"Id", Self->GetLogId()},
-            {"Key", key},
-            {"Item", item});
+            {"marker", "BDT10"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"item", item});
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "UpdateKey", [&](TValue& value, bool inserted) {
             if (!inserted) { // update value items
@@ -354,12 +354,12 @@ namespace NKikimr::NBlobDepot {
 
     void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         YDB_LOG_DEBUG("BindToBlob",
-            {"Marker", "BDT49"},
-            {"Id", Self->GetLogId()},
-            {"Key", key},
-            {"BlobSeqId", blobSeqId},
-            {"Keep", keep},
-            {"DoNotKeep", doNotKeep});
+            {"marker", "BDT49"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"blobSeqId", blobSeqId},
+            {"keep", keep},
+            {"doNotKeep", doNotKeep});
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "BindToBlob", [&](TValue& value, bool /*inserted*/) {
             EUpdateOutcome outcome = EUpdateOutcome::NO_CHANGE;
@@ -468,10 +468,10 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(success);
 
         YDB_LOG_DEBUG("AddDataOnLoad",
-            {"Marker", "BDT79"},
-            {"Id", Self->GetLogId()},
-            {"Key", key},
-            {"Value", proto});
+            {"marker", "BDT79"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"value", proto});
 
         // we can only add key that is not loaded before; if key exists, it MUST have been loaded from the dataset
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::move(proto), uncertainWrite);
@@ -546,11 +546,11 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         return UpdateKey(std::move(key), txc, cookie, "UpdateKeepState", [&](TValue& value, bool inserted) {
              YDB_LOG_DEBUG("UpdateKeepState",
-                 {"Marker", "BDT51"},
-                 {"Id", Self->GetLogId()},
-                 {"Key", key},
-                 {"KeepState", keepState},
-                 {"Value", value});
+                 {"marker", "BDT51"},
+                 {"id", Self->GetLogId()},
+                 {"key", key},
+                 {"keepState", keepState},
+                 {"value", value});
              if (inserted) {
                 return EUpdateOutcome::CHANGE;
              } else if (value.KeepState < keepState) {
@@ -564,9 +564,9 @@ namespace NKikimr::NBlobDepot {
 
     void TData::DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         YDB_LOG_DEBUG("DeleteKey",
-            {"Marker", "BDT14"},
-            {"Id", Self->GetLogId()},
-            {"Key", key});
+            {"marker", "BDT14"},
+            {"id", Self->GetLogId()},
+            {"key", key});
         UpdateKey(key, txc, cookie, "DeleteKey", [&](TValue&, bool inserted) {
             Y_ABORT_UNLESS(!inserted);
             return EUpdateOutcome::DROP;
@@ -607,15 +607,15 @@ namespace NKikimr::NBlobDepot {
             };
 
             YDB_LOG_DEBUG("Trim",
-                {"Marker", "BDT13"},
-                {"Id", Self->GetLogId()},
-                {"AgentId", agent.Connection->NodeId},
-                {"Cookie", ev->Cookie},
-                {"Channel", int(channelIndex)},
-                {"InvalidatedStep", invalidatedStep},
-                {"GivenIdRanges", channel.GivenIdRanges},
+                {"marker", "BDT13"},
+                {"id", Self->GetLogId()},
+                {"agentId", agent.Connection->NodeId},
+                {"cookie", ev->Cookie},
+                {"channel", int(channelIndex)},
+                {"invalidatedStep", invalidatedStep},
+                {"givenIdRanges", channel.GivenIdRanges},
                 {"Agent.GivenIdRanges", agent.GivenIdRanges[channelIndex]},
-                {"WritesInFlight", makeWritesInFlight()});
+                {"writesInFlight", makeWritesInFlight()});
 
             // sanity check -- ensure that current writes in flight would be conserved when processing garbage
             for (auto it = begin; it != writesInFlight.end() && it->Channel == channelIndex; ++it) {
@@ -643,14 +643,14 @@ namespace NKikimr::NBlobDepot {
     bool TData::OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         YDB_LOG_DEBUG("OnBarrierShift",
-            {"Marker", "BDT18"},
-            {"Id", Self->GetLogId()},
-            {"TabletId", tabletId},
-            {"Channel", int(channel)},
-            {"Hard", hard},
-            {"Previous", previous},
-            {"Current", current},
-            {"MaxItems", maxItems});
+            {"marker", "BDT18"},
+            {"id", Self->GetLogId()},
+            {"tabletId", tabletId},
+            {"channel", int(channel)},
+            {"hard", hard},
+            {"previous", previous},
+            {"current", current},
+            {"maxItems", maxItems});
 
         Y_ABORT_UNLESS(Loaded);
 
@@ -685,9 +685,9 @@ namespace NKikimr::NBlobDepot {
 
     void TData::AddFirstMentionedBlob(TLogoBlobID id) {
         YDB_LOG_DEBUG("AddFirstMentionedBlob",
-            {"Marker", "BDT80"},
-            {"Id", Self->GetLogId()},
-            {"BlobId", id});
+            {"marker", "BDT80"},
+            {"id", Self->GetLogId()},
+            {"blobId", id});
         auto& record = GetRecordsPerChannelGroup(id);
         const auto [_, inserted] = record.Used.insert(id);
         Y_ABORT_UNLESS(inserted);
@@ -705,10 +705,10 @@ namespace NKikimr::NBlobDepot {
     void TData::AccountBlob(TLogoBlobID id, bool add) {
         // account record
         YDB_LOG_DEBUG("AccountBlob",
-            {"Marker", "BDT81"},
-            {"Id", Self->GetLogId()},
-            {"BlobId", id},
-            {"Add", add});
+            {"marker", "BDT81"},
+            {"id", Self->GetLogId()},
+            {"blobId", id},
+            {"add", add});
         const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
         auto& groupStat = Self->Groups[groupId];
         if (add) {

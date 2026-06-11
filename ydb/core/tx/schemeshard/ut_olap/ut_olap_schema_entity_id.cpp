@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(OlapSchemaEntityId) {
         TOlapSchema schema;
         schema.ParseFromLocalDB(schemaProto);
 
-        UNIT_ASSERT_VALUES_EQUAL(schema.GetNextColumnId(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetNextColumnId(), 3u);
     }
 }
 

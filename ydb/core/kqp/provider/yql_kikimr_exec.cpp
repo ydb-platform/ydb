@@ -2037,8 +2037,8 @@ public:
                             }
                         }
 
-                        // Auto-bind ALTER ADD COLUMN __rowId Uint64 NOT NULL to a server-side
-                        // sequence: __rowId is a reserved name for the fulltext UseRowIdAsDocId
+                        // Auto-bind ALTER ADD COLUMN __ydb_row_id Uint64 NOT NULL to a server-side
+                        // sequence: __ydb_row_id is a reserved name for the fulltext UseRowIdAsDocId
                         // opt-in (NFulltext::RowIdColumn). The schemeshard creates the sequence,
                         // backfills existing rows via the column-build scan, and bit-reverses
                         // each value to spread inserts across posting-table shards.

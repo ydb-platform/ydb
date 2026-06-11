@@ -2986,9 +2986,9 @@ Y_UNIT_TEST(ExplainHybridFulltextVectorQuery) {
     UNIT_ASSERT_C(itemsLimit.IsDefined(), "Pushed limit (ItemsLimit) not found on ReadFullTextIndex node");
 }
 
-// __rowId opt-in: tests for fulltext search over a table with non-integer PK,
-// using a __rowId Uint64 NOT NULL column plus a unique secondary index on __rowId.
-// The runtime actor must resolve __rowId -> PK via the unique index before reading the main table.
+// __ydb_row_id opt-in: tests for fulltext search over a table with non-integer PK,
+// using a __ydb_row_id Uint64 NOT NULL column plus a unique secondary index on __ydb_row_id.
+// The runtime actor must resolve __ydb_row_id -> PK via the unique index before reading the main table.
 
 namespace {
 
@@ -2997,7 +2997,7 @@ TKikimrRunner KikimrRowIdOptIn() {
     featureFlags.SetEnableFulltextIndex(true);
     featureFlags.SetEnableUniqConstraint(true);
     // EnableAddUniqueIndex gates `ALTER TABLE ADD INDEX ... GLOBAL UNIQUE`. The unique index over
-    // __rowId is added after the table exists, so this flag must be on.
+    // __ydb_row_id is added after the table exists, so this flag must be on.
     featureFlags.SetEnableAddUniqueIndex(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()
@@ -3011,7 +3011,7 @@ void CreateRowIdTable(NQuery::TQueryClient& db) {
             Pk Utf8 NOT NULL,
             Text Utf8,
             Data Utf8,
-            __rowId Uint64 NOT NULL,
+            __ydb_row_id Uint64 NOT NULL,
             PRIMARY KEY (Pk)
         );
     )sql";
@@ -3021,7 +3021,7 @@ void CreateRowIdTable(NQuery::TQueryClient& db) {
 
 void AddUniqueRowIdIndex(NQuery::TQueryClient& db) {
     TString query = R"sql(
-        ALTER TABLE `/Root/RowIdTexts` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__rowId);
+        ALTER TABLE `/Root/RowIdTexts` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3029,7 +3029,7 @@ void AddUniqueRowIdIndex(NQuery::TQueryClient& db) {
 
 void UpsertRowIdData(NQuery::TQueryClient& db) {
     TString query = R"sql(
-        UPSERT INTO `/Root/RowIdTexts` (Pk, Text, Data, __rowId) VALUES
+        UPSERT INTO `/Root/RowIdTexts` (Pk, Text, Data, __ydb_row_id) VALUES
             ("pk-100"u, "cats love cats"u,         "cats data"u,    100),
             ("pk-200"u, "dogs chase small cats"u,  "dogs data"u,    200),
             ("pk-300"u, "foxes love dogs"u,        "foxes data"u,   300),
@@ -3064,8 +3064,8 @@ void AddFulltextIndexRelevance(NQuery::TQueryClient& db) {
 } // anonymous namespace
 
 Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_Plain) {
-    // End-to-end: a table keyed by string PK plus __rowId Uint64 NOT NULL and a unique secondary
-    // index on __rowId must support fulltext search. The runtime must resolve __rowId -> PK before
+    // End-to-end: a table keyed by string PK plus __ydb_row_id Uint64 NOT NULL and a unique secondary
+    // index on __ydb_row_id must support fulltext search. The runtime must resolve __ydb_row_id -> PK before
     // reading the main table and surface the original PK + text to the caller.
     auto kikimr = KikimrRowIdOptIn();
     auto db = kikimr.GetQueryClient();
@@ -3135,8 +3135,8 @@ Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CoveredAvoidsResolve) {
 }
 
 Y_UNIT_TEST(SelectWithFulltextRelevance_RowIdOptIn_TopK) {
-    // Relevance variant with ORDER BY score LIMIT N must work over __rowId opt-in. Once the TopK
-    // is selected the runtime resolves __rowId -> PK only for the final N rows.
+    // Relevance variant with ORDER BY score LIMIT N must work over __ydb_row_id opt-in. Once the TopK
+    // is selected the runtime resolves __ydb_row_id -> PK only for the final N rows.
     auto kikimr = KikimrRowIdOptIn();
     auto db = kikimr.GetQueryClient();
 
@@ -3171,11 +3171,11 @@ Y_UNIT_TEST(SelectWithFulltextRelevance_RowIdOptIn_TopK) {
 }
 
 Y_UNIT_TEST(InsertWithFulltextRowIdSequenceBitReversed) {
-    // When __rowId is fed from the auto-bound sequence on a table with a fulltext UseRowIdAsDocId
+    // When __ydb_row_id is fed from the auto-bound sequence on a table with a fulltext UseRowIdAsDocId
     // index, the sequencer actor must bit-reverse the monotonic sequence value before placing it
     // in the row. This keeps consecutive INSERTs from concentrating on the same posting impl-shard.
-    // We verify the salting by inserting a few rows without specifying __rowId and asserting that
-    // adjacent rows do not get adjacent __rowId values (the hallmark of bit-reversal).
+    // We verify the salting by inserting a few rows without specifying __ydb_row_id and asserting that
+    // adjacent rows do not get adjacent __ydb_row_id values (the hallmark of bit-reversal).
     auto kikimr = KikimrRowIdOptIn();
     auto db = kikimr.GetQueryClient();
 
@@ -3197,7 +3197,7 @@ Y_UNIT_TEST(InsertWithFulltextRowIdSequenceBitReversed) {
 
     {
         TString query = R"sql(
-            SELECT Pk, __rowId FROM `/Root/RowIdTexts` ORDER BY Pk;
+            SELECT Pk, __ydb_row_id FROM `/Root/RowIdTexts` ORDER BY Pk;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3208,13 +3208,13 @@ Y_UNIT_TEST(InsertWithFulltextRowIdSequenceBitReversed) {
         NYdb::TResultSetParser parser(resultSet);
         TVector<ui64> rowIds;
         while (parser.TryNextRow()) {
-            rowIds.push_back(parser.ColumnParser("__rowId").GetUint64());
+            rowIds.push_back(parser.ColumnParser("__ydb_row_id").GetUint64());
         }
         // Bit-reversed values of consecutive small ints land in the high bits — they all become
         // very large numbers and no two are adjacent. Plain monotonic 1,2,3,4 would fail this.
         for (ui64 v : rowIds) {
             UNIT_ASSERT_C(v > (ui64{1} << 60),
-                "Expected bit-reversed __rowId, got " << v << " — sequence value was not salted");
+                "Expected bit-reversed __ydb_row_id, got " << v << " — sequence value was not salted");
         }
     }
 
@@ -3237,8 +3237,8 @@ Y_UNIT_TEST(InsertWithFulltextRowIdSequenceBitReversed) {
 }
 
 Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
-    // Edge case: explicit __rowId in INSERT/UPSERT must NOT be bit-reversed — the salting only
-    // applies inside the sequencer path. A user who writes __rowId = 100 must see 100 back.
+    // Edge case: explicit __ydb_row_id in INSERT/UPSERT must NOT be bit-reversed — the salting only
+    // applies inside the sequencer path. A user who writes __ydb_row_id = 100 must see 100 back.
     auto kikimr = KikimrRowIdOptIn();
     auto db = kikimr.GetQueryClient();
 
@@ -3248,7 +3248,7 @@ Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
     AddFulltextIndexPlain(db);
 
     TString query = R"sql(
-        SELECT Pk, __rowId FROM `/Root/RowIdTexts` ORDER BY __rowId;
+        SELECT Pk, __ydb_row_id FROM `/Root/RowIdTexts` ORDER BY __ydb_row_id;
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3259,7 +3259,7 @@ Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
     NYdb::TResultSetParser parser(resultSet);
     TVector<ui64> rowIds;
     while (parser.TryNextRow()) {
-        rowIds.push_back(parser.ColumnParser("__rowId").GetUint64());
+        rowIds.push_back(parser.ColumnParser("__ydb_row_id").GetUint64());
     }
     // UpsertRowIdData() writes 100, 200, 300, 400 — values must come back unchanged.
     UNIT_ASSERT_VALUES_EQUAL(rowIds[0], 100u);
@@ -3269,7 +3269,7 @@ Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
 }
 
 Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
-    // ALTER TABLE t ADD COLUMN __rowId Uint64 NOT NULL on a table without a sequence default
+    // ALTER TABLE t ADD COLUMN __ydb_row_id Uint64 NOT NULL on a table without a sequence default
     // must be accepted: schemeshard creates a sequence, the column-build scan backfills every
     // existing row from that sequence, and each value is bit-reversed for hot-shard mitigation.
     auto kikimr = KikimrRowIdOptIn();
@@ -3301,9 +3301,9 @@ Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
 
     {
         // Without an explicit DEFAULT this would normally fail with "Cannot add not null column
-        // without default value". The autobind for __rowId Uint64 NOT NULL must accept it.
+        // without default value". The autobind for __ydb_row_id Uint64 NOT NULL must accept it.
         TString query = R"sql(
-            ALTER TABLE `/Root/Articles` ADD COLUMN __rowId Uint64 NOT NULL;
+            ALTER TABLE `/Root/Articles` ADD COLUMN __ydb_row_id Uint64 NOT NULL;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3311,7 +3311,7 @@ Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
 
     {
         TString query = R"sql(
-            SELECT Pk, __rowId FROM `/Root/Articles` ORDER BY Pk;
+            SELECT Pk, __ydb_row_id FROM `/Root/Articles` ORDER BY Pk;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3322,25 +3322,25 @@ Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
         NYdb::TResultSetParser parser(resultSet);
         TVector<ui64> rowIds;
         while (parser.TryNextRow()) {
-            rowIds.push_back(parser.ColumnParser("__rowId").GetUint64());
+            rowIds.push_back(parser.ColumnParser("__ydb_row_id").GetUint64());
         }
         // Bit-reversal of small monotonic counter values produces values dominated by the high
         // bits — plain 1,2,3,4 would all land below 1<<60, the salted versions land above it.
         for (ui64 v : rowIds) {
             UNIT_ASSERT_C(v > (ui64{1} << 60),
-                "Backfilled __rowId must be bit-reversed; saw raw value " << v);
+                "Backfilled __ydb_row_id must be bit-reversed; saw raw value " << v);
         }
         std::sort(rowIds.begin(), rowIds.end());
         for (size_t i = 1; i < rowIds.size(); ++i) {
             UNIT_ASSERT_C(rowIds[i] != rowIds[i - 1],
-                "Backfilled __rowId values must be unique across rows");
+                "Backfilled __ydb_row_id values must be unique across rows");
         }
     }
 
     {
-        // The unique index + fulltext index over the now-populated __rowId column must work.
+        // The unique index + fulltext index over the now-populated __ydb_row_id column must work.
         TString query = R"sql(
-            ALTER TABLE `/Root/Articles` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__rowId);
+            ALTER TABLE `/Root/Articles` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3372,9 +3372,9 @@ Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
 }
 
 Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
-    // End-to-end: adding a fulltext index to a table with a custom (Utf8) PK and NO __rowId column /
+    // End-to-end: adding a fulltext index to a table with a custom (Utf8) PK and NO __ydb_row_id column /
     // unique index must auto-provision both transparently, backfill existing rows, and serve search.
-    // A second fulltext index must reuse the same __rowId + unique index.
+    // A second fulltext index must reuse the same __ydb_row_id + unique index.
     auto kikimr = KikimrRowIdOptIn();
     auto db = kikimr.GetQueryClient();
 
@@ -3402,7 +3402,7 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
     {
-        // No manual __rowId column / unique index - this single statement auto-provisions both.
+        // No manual __ydb_row_id column / unique index - this single statement auto-provisions both.
         TString query = R"sql(
             ALTER TABLE `/Root/AutoTexts` ADD INDEX fulltext_idx
                 GLOBAL USING fulltext_plain
@@ -3432,7 +3432,7 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
         UNIT_ASSERT(seenPks.contains("pk-200"));
     }
     {
-        // A second fulltext index reuses the existing __rowId + unique index.
+        // A second fulltext index reuses the existing __ydb_row_id + unique index.
         TString query = R"sql(
             ALTER TABLE `/Root/AutoTexts` ADD INDEX fulltext_data_idx
                 GLOBAL USING fulltext_plain

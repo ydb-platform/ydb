@@ -171,7 +171,7 @@ public:
 
             // Decide how a fulltext index on this table obtains its doc_id. For a custom (non single
             // integer) PK without the rowid infrastructure we auto-provision it: the build first spawns
-            // child builds for the __rowId column and/or the unique index on it (under this build's
+            // child builds for the __ydb_row_id column and/or the unique index on it (under this build's
             // shared lock), then builds the fulltext index in rowid mode. See the provisioning prefix
             // in build_index__progress.cpp.
             const auto classification = NTableIndex::ClassifyFulltextRowId(

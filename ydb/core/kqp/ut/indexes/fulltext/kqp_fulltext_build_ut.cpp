@@ -3378,7 +3378,7 @@ Y_UNIT_TEST(FulltextIndexBuildCustomParallel) {
 }
 
 Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
-    // BulkUpsert must hard-reject requests that try to set __rowId explicitly on a table whose
+    // BulkUpsert must hard-reject requests that try to set __ydb_row_id explicitly on a table whose
     // fulltext index uses UseRowIdAsDocId. The value is generated server-side; client-supplied
     // values would break the unique-index invariant.
     NKikimrConfig::TFeatureFlags featureFlags;
@@ -3393,7 +3393,7 @@ Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
             CREATE TABLE `/Root/RowIdTexts` (
                 Pk Utf8 NOT NULL,
                 Text Utf8,
-                __rowId Uint64 NOT NULL,
+                __ydb_row_id Uint64 NOT NULL,
                 PRIMARY KEY (Pk)
             );
         )sql";
@@ -3402,7 +3402,7 @@ Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
     }
     {
         TString query = R"sql(
-            ALTER TABLE `/Root/RowIdTexts` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__rowId);
+            ALTER TABLE `/Root/RowIdTexts` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3424,14 +3424,14 @@ Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
         .BeginStruct()
         .AddMember("Pk").Utf8("pk-1")
         .AddMember("Text").OptionalUtf8("hello")
-        .AddMember("__rowId").Uint64(42)
+        .AddMember("__ydb_row_id").Uint64(42)
         .EndStruct();
     rows.EndList();
 
     auto result = kikimr.GetTableClient().BulkUpsert("/Root/RowIdTexts", rows.Build()).GetValueSync();
     UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-        "__rowId is generated server-side for tables with fulltext indexes");
+        "__ydb_row_id is generated server-side for tables with fulltext indexes");
 }
 
 TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(bool isRelevance) {

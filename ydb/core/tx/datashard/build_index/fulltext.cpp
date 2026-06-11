@@ -86,7 +86,7 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
     bool IsBinaryJson = false;
     bool UseRowIdAsDocId = false;
-    size_t RowIdRowIndex = 0; // position of __rowId in the row returned by the scan
+    size_t RowIdRowIndex = 0; // position of __ydb_row_id in the row returned by the scan
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -197,7 +197,7 @@ public:
         MaxSegmentDocuments = gFulltextMaxSegment;
     }
 
-    // Emit the doc-id key columns for an upload destination: a single __rowId (UINT64) when the
+    // Emit the doc-id key columns for an upload destination: a single __ydb_row_id (UINT64) when the
     // fulltext index uses rowid-as-docid, otherwise the base table primary-key columns.
     void AddDocIdColumns(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TUserTable& table,
         const std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>&, const TString&)>& addType)
@@ -332,7 +332,7 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
-        // Effective doc-id key cells: either the table PK or the single __rowId cell.
+        // Effective doc-id key cells: either the table PK or the single __ydb_row_id cell.
         TArrayRef<const TCell> docIdKey = key;
         TCell rowIdCell;
         if (UseRowIdAsDocId) {

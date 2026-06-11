@@ -199,8 +199,8 @@ private:
 // sequentially and before acquiring its own lock, to provision the rowid infrastructure. Each child is
 // a fully normal build (it takes and releases its own lock + snapshot via the standard pipeline) and
 // reports completion back to ParentBuildId. `buildColumn` selects between a BuildColumns child (adds +
-// backfills __rowId from a sequence) and a BuildSecondaryUniqueIndex child (the unique index over
-// [__rowId]). The caller has already allocated childId and persisted it on the parent; here we
+// backfills __ydb_row_id from a sequence) and a BuildSecondaryUniqueIndex child (the unique index over
+// [__ydb_row_id]). The caller has already allocated childId and persisted it on the parent; here we
 // construct, persist, and register the child, then return it for the caller to Progress.
 std::shared_ptr<TIndexBuildInfo> CreateRowIdProvisioningChild(
     TSchemeShard* ss, NIceDb::TNiceDb& db, const TIndexBuildInfo& parent, bool buildColumn, TIndexBuildId childId)

@@ -174,22 +174,22 @@ bool CheckSingleIntegerPrimaryKey(
 // Classification of how a fulltext index build should obtain its document id.
 enum class EFulltextRowIdPlan {
     NotApplicable,    // the index is not a fulltext index - nothing to decide
-    LegacyIntegerPk,  // no __rowId column and a single integer PK - use the PK as doc_id (legacy)
-    Reuse,            // a valid __rowId column + Ready unique index on it already exist - reuse them
+    LegacyIntegerPk,  // no __ydb_row_id column and a single integer PK - use the PK as doc_id (legacy)
+    Reuse,            // a valid __ydb_row_id column + Ready unique index on it already exist - reuse them
     Provision,        // a custom (non-single-integer) PK without the full rowid infrastructure - the
                       // schemeshard must auto-provision the missing parts (see NeedColumn/NeedUniqueIndex)
-    Error,            // an invalid state (e.g. malformed __rowId, or a half-built unique index)
+    Error,            // an invalid state (e.g. malformed __ydb_row_id, or a half-built unique index)
 };
 
 struct TFulltextRowIdClassification {
     EFulltextRowIdPlan Plan = EFulltextRowIdPlan::NotApplicable;
-    bool NeedColumn = false;       // the __rowId column must be added (and backfilled)
-    bool NeedUniqueIndex = false;  // the unique secondary index on __rowId must be created
+    bool NeedColumn = false;       // the __ydb_row_id column must be added (and backfilled)
+    bool NeedUniqueIndex = false;  // the unique secondary index on __ydb_row_id must be created
 };
 
 // Classifies a fulltext index build against the main table's current schema. The rules mirror the
-// historical opt-in (a __rowId Uint64 NOT NULL column plus a Ready single-column GlobalUnique index on
-// __rowId enables rowid mode), but additionally distinguishes the "custom PK, infrastructure missing"
+// historical opt-in (a __ydb_row_id Uint64 NOT NULL column plus a Ready single-column GlobalUnique index on
+// __ydb_row_id enables rowid mode), but additionally distinguishes the "custom PK, infrastructure missing"
 // case so the schemeshard can auto-provision it. See EFulltextRowIdPlan. For a non-fulltext index the
 // plan is NotApplicable.
 TFulltextRowIdClassification ClassifyFulltextRowId(
@@ -282,8 +282,8 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-            // __rowId opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
-            // skip the single-integer-PK requirement (the doc_id is __rowId, not the PK).
+            // __ydb_row_id opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
+            // skip the single-integer-PK requirement (the doc_id is __ydb_row_id, not the PK).
             if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
                 if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "Fulltext", error)) {
                     status = NKikimrScheme::EStatus::StatusInvalidParameter;

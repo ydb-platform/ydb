@@ -481,7 +481,7 @@ public:
     }
 
     // Replace the doc-id key with the resolved primary-key cells from the
-    // unique secondary index over __rowId.  After this, KeyCells targets the
+    // unique secondary index over __ydb_row_id.  After this, KeyCells targets the
     // base table directly and RowCells contains the PK cells (which is enough
     // for the "covered" path; main-table reads will overwrite RowCells with
     // the full row when non-PK columns are requested).
@@ -1752,7 +1752,7 @@ enum EReadKind : ui32 {
     EReadKind_Document = 3,       // Main table: full row data for matched docs
     EReadKind_TotalStats = 4,     // Stats table: corpus-wide aggregates
     EReadKind_Word_L2 = 5,        // L2 posting list point lookups
-    EReadKind_RowIdResolve = 6,   // Unique index: __rowId -> PK resolution
+    EReadKind_RowIdResolve = 6,   // Unique index: __ydb_row_id -> PK resolution
 };
 
 // Metadata stored for each in-flight read so we can route the response.
@@ -1867,13 +1867,13 @@ public:
 };
 
 /**
- * TUniqueIndexReader -- reader for the unique secondary index over __rowId,
- * used to resolve __rowId -> primary-key when the fulltext index uses __rowId
+ * TUniqueIndexReader -- reader for the unique secondary index over __ydb_row_id,
+ * used to resolve __ydb_row_id -> primary-key when the fulltext index uses __ydb_row_id
  * as its synthetic doc_id (UseRowIdAsDocId path).
  *
- * Schema of the impl-table: key = (__rowId, pk_cols...), value = (...). For
- * lookups we issue a prefix range scan keyed by [__rowId] (one cell); the
- * uniqueness of __rowId guarantees exactly one matching row, which contains
+ * Schema of the impl-table: key = (__ydb_row_id, pk_cols...), value = (...). For
+ * lookups we issue a prefix range scan keyed by [__ydb_row_id] (one cell); the
+ * uniqueness of __ydb_row_id guarantees exactly one matching row, which contains
  * the corresponding primary-key cells in the remaining key columns.
  */
 class TUniqueIndexReader : public TTableReader<TUniqueIndexReader> {
@@ -1918,7 +1918,7 @@ public:
         }
 
         YQL_ENSURE(keyColumnTypes.size() >= 2,
-            "Unique-index impl-table must have at least 2 key columns (__rowId, pk...)");
+            "Unique-index impl-table must have at least 2 key columns (__ydb_row_id, pk...)");
 
         return MakeIntrusive<TUniqueIndexReader>(
             counters, FromProto(info.GetTable()), info.GetTable().GetPath(),
@@ -2463,9 +2463,9 @@ private:
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TDictTableReader> DictTableReader;
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
-    TIntrusivePtr<TUniqueIndexReader> UniqueIndexReader;  // Resolves __rowId -> PK via unique secondary index
+    TIntrusivePtr<TUniqueIndexReader> UniqueIndexReader;  // Resolves __ydb_row_id -> PK via unique secondary index
 
-    // True when the fulltext index uses __rowId as the synthetic doc_id, and the
+    // True when the fulltext index uses __ydb_row_id as the synthetic doc_id, and the
     // primary key must be resolved through UniqueIndexReader before main-table reads.
     bool UseRowIdAsDocId = false;
 
@@ -2570,7 +2570,7 @@ private:
             TopKQueue.clear();
         }
 
-        // __rowId mode: resolve doc_id (__rowId) -> primary key via the unique
+        // __ydb_row_id mode: resolve doc_id (__ydb_row_id) -> primary key via the unique
         // index before doing main-table reads.  Skipped once docs are resolved
         // (HasPkResolved == true), so re-entry from RowIdResolveResult proceeds
         // straight to the covered check / main-table read.
@@ -3215,8 +3215,8 @@ public:
     }
 
     // Issue prefix range scans on the unique-index impl-table to resolve
-    // __rowId -> primary key for a batch of matched documents.  The impl-table
-    // key is (__rowId, pk_cols...), so a prefix scan keyed by [__rowId] is a
+    // __ydb_row_id -> primary key for a batch of matched documents.  The impl-table
+    // key is (__ydb_row_id, pk_cols...), so a prefix scan keyed by [__ydb_row_id] is a
     // point lookup that returns the row containing all primary-key cells.
     void EnqueueRowIdResolve(std::vector<TDocInfoPtr>& docInfos) {
         YQL_ENSURE(UniqueIndexReader);
@@ -3226,7 +3226,7 @@ public:
             TVector<TCell> rowIdCells = {TCell::Make(doc->DocumentNumId)};
             TTableRange range(rowIdCells, true, rowIdCells, true, false /*not a point*/);
             auto partitions = UniqueIndexReader->GetRangePartitioning(range);
-            YQL_ENSURE(partitions.size() == 1, "Expected single partition for __rowId resolve, got " << partitions.size());
+            YQL_ENSURE(partitions.size() == 1, "Expected single partition for __ydb_row_id resolve, got " << partitions.size());
             ui64 shardId = partitions[0].ShardId;
             auto& [readId, ranges] = byShard[shardId];
             if (readId == 0) {
@@ -3245,7 +3245,7 @@ public:
         }
     }
 
-    // Process unique-index resolve results: match returned rows by __rowId
+    // Process unique-index resolve results: match returned rows by __ydb_row_id
     // (the first cell of the impl-table key) to the corresponding docs and
     // assign their primary-key cells from the remaining key columns.  When the
     // read is finished, all docs in the batch must be resolved; then resume
@@ -3269,10 +3269,10 @@ public:
                 bytes += std::max(cell.Size(), (ui32)8);
             }
             rows++;
-            YQL_ENSURE(row.size() >= 2, "Unique-index row must have at least 2 cells (__rowId, pk...)");
+            YQL_ENSURE(row.size() >= 2, "Unique-index row must have at least 2 cells (__ydb_row_id, pk...)");
             TDocId rowId = row.at(0).AsValue<TDocId>();
             auto docIt = docsByRowId.find(rowId);
-            YQL_ENSURE(docIt != docsByRowId.end(), "Unique-index resolve returned unexpected __rowId");
+            YQL_ENSURE(docIt != docsByRowId.end(), "Unique-index resolve returned unexpected __ydb_row_id");
             docIt->second->SetPkCells(row.subspan(1));
         }
 
@@ -3283,7 +3283,7 @@ public:
             RowIdResolveItems.erase(it);
             for (auto& doc : resolvedDocs) {
                 YQL_ENSURE(doc->HasPkResolved(),
-                    "Missing __rowId " << doc->DocumentNumId << " in unique index (orphan posting entry)");
+                    "Missing __ydb_row_id " << doc->DocumentNumId << " in unique index (orphan posting entry)");
             }
             FetchDocumentDetails(resolvedDocs);
         }

@@ -162,7 +162,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
         .Done();
     tokenRowTuples.emplace_back(tokenTuple);
 
-    // Add document-id columns (main-table PK, or __rowId when UseRowIdAsDocId is set)
+    // Add document-id columns (main-table PK, or __ydb_row_id when UseRowIdAsDocId is set)
     ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
         addIndexColumn(column);
     });
@@ -246,7 +246,7 @@ TExprBase BuildFulltextDocsRows(const TKikimrTableDescription& table, const TInd
 
     // During delete, we only care about total document length and that's all
     if (!forDelete) {
-        // Add document-id columns (main-table PK, or __rowId when UseRowIdAsDocId is set)
+        // Add document-id columns (main-table PK, or __ydb_row_id when UseRowIdAsDocId is set)
         ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
             addIndexColumn(column);
         });

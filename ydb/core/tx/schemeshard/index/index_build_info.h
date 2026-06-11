@@ -70,7 +70,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         AlterMainTable = 5,
         CreateBuildSequence = 6,
         // Fulltext rowid auto-provisioning: parent fulltext build spawns + awaits child builds for the
-        // __rowId column and the unique index on it, under the parent's shared lock.
+        // __ydb_row_id column and the unique index on it, under the parent's shared lock.
         ProvisioningRowIdColumn = 7,
         ProvisioningRowIdUniqueIndex = 8,
         Locking = 10,
@@ -322,8 +322,8 @@ public:
 
     // Fulltext rowid auto-provisioning (parent fulltext build): when a fulltext index is built on a
     // custom-PK table without the rowid infrastructure, the parent build first spawns child builds -
-    // a BuildColumns child for the __rowId column (NeedColumn) and/or a BuildSecondaryUniqueIndex child
-    // for the unique index on __rowId (NeedUniqueIndex) - that run under the parent's shared lock,
+    // a BuildColumns child for the __ydb_row_id column (NeedColumn) and/or a BuildSecondaryUniqueIndex child
+    // for the unique index on __ydb_row_id (NeedUniqueIndex) - that run under the parent's shared lock,
     // before the fulltext index itself is built. The child build ids are remembered for await + resume.
     bool FulltextNeedsRowIdColumn = false;
     bool FulltextNeedsUniqueIndex = false;

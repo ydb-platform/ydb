@@ -978,7 +978,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
         return result;
     }
 
-    // Look for a live __rowId column on the main table.
+    // Look for a live __ydb_row_id column on the main table.
     const NSchemeShard::TTableInfo::TColumn* rowIdColumn = nullptr;
     for (const auto& [_, column] : tableInfo->Columns) {
         if (column.IsDropped()) {
@@ -990,7 +990,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
         }
     }
 
-    // Scan the table children for a single-column GlobalUnique index over __rowId.
+    // Scan the table children for a single-column GlobalUnique index over __ydb_row_id.
     bool hasReadyUniqueIndexOnRowId = false;
     bool hasUnreadyUniqueIndexOnRowId = false;
     for (const auto& [_, childPathId] : tableChildren) {
@@ -1016,7 +1016,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
     }
 
     if (rowIdColumn) {
-        // A user-managed or previously auto-provisioned __rowId column exists: it must be well-formed.
+        // A user-managed or previously auto-provisioned __ydb_row_id column exists: it must be well-formed.
         if (rowIdColumn->PType.GetTypeId() != NScheme::NTypeIds::Uint64) {
             error = TStringBuilder()
                 << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn
@@ -1036,7 +1036,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
             return result;
         }
         if (hasUnreadyUniqueIndexOnRowId) {
-            // A unique index on __rowId exists but is not Ready - either a concurrent build or an
+            // A unique index on __ydb_row_id exists but is not Ready - either a concurrent build or an
             // interrupted prior auto-provisioning. Refuse rather than create a duplicate.
             error = TStringBuilder()
                 << "Fulltext index over '" << NFulltext::RowIdColumn << "' found a not-yet-Ready unique"
@@ -1052,7 +1052,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
         return result;
     }
 
-    // No __rowId column. A single integer PK keeps the legacy doc_id=PK behaviour.
+    // No __ydb_row_id column. A single integer PK keeps the legacy doc_id=PK behaviour.
     const TTableColumns baseTableColumns = ExtractInfo(tableInfo);
     TColumnTypes baseColumnTypes;
     if (!ExtractTypes(tableInfo, baseColumnTypes, error)) {
@@ -1066,7 +1066,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
         return result;
     }
 
-    // Custom PK and no __rowId infrastructure at all - provision both the column and the unique index.
+    // Custom PK and no __ydb_row_id infrastructure at all - provision both the column and the unique index.
     result.Plan = EFulltextRowIdPlan::Provision;
     result.NeedColumn = true;
     result.NeedUniqueIndex = true;

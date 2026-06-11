@@ -57,18 +57,6 @@ table_service_config:
       enable: true
 ```
 
-#### enable_spilling_nodes
-
-**Location:** `table_service_config.enable_spilling_nodes`
-**Type:** `string`
-**Default:** `"All"`
-**Description:** Enables spilling on database nodes. When set to `"None"`, spilling does not function on database nodes.
-
-```yaml
-table_service_config:
-  enable_spilling_nodes: "All"
-```
-
 #### enable_query_service_spilling
 
 **Location:** `table_service_config.enable_query_service_spilling`
@@ -215,7 +203,6 @@ table_service_config:
 
 ```yaml
 table_service_config:
-  enable_spilling_nodes: "All"
   enable_query_service_spilling: true
   spilling_service_config:
     local_file_config:

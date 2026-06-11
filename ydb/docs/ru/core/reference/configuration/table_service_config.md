@@ -57,18 +57,6 @@ table_service_config:
       enable: true
 ```
 
-#### enable_spilling_nodes
-
-**Расположение:** `table_service_config.enable_spilling_nodes`
-**Тип:** `string`
-**По умолчанию:** `"All"`
-**Описание:** Включает спиллинг на узлах базы данных. При установке значения `"None"` спиллинг не функционирует на узлах базы данных.
-
-```yaml
-table_service_config:
-  enable_spilling_nodes: "All"
-```
-
 #### enable_query_service_spilling
 
 **Расположение:** `table_service_config.enable_query_service_spilling`
@@ -215,7 +203,6 @@ table_service_config:
 
 ```yaml
 table_service_config:
-  enable_spilling_nodes: "All"
   enable_query_service_spilling: true
   spilling_service_config:
     local_file_config:

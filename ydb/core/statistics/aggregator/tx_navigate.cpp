@@ -29,9 +29,8 @@ struct TStatisticsAggregator::TTxNavigate : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                // Navigate failure -> traversal cannot proceed; mark the operation as terminal
-                // CANCELLED (errors map to CANCELLED since AnalyzeState has no STATE_FAILED).
-                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_CANCELLED);
+                // Navigate failure -> traversal cannot proceed; mark the operation FAILED.
+                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_FAILED);
             }
             return true;
         }

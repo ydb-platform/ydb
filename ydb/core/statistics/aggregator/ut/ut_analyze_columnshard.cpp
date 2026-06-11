@@ -249,7 +249,20 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "operationId");
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
         UNIT_ASSERT(!record.GetIssues().empty());
-    }    
+
+        // The operation is persisted in the SA as STATE_FAILED (distinct from
+        // STATE_CANCELLED, which is reserved for explicit user cancels).
+        // MakeAnalyzeRequest defaults DatabaseName to empty, so look it up the same way.
+        auto opResult = TestGetAnalyzeOp(runtime, tableInfo.SaTabletId,
+            /*dbName=*/"", "operationId");
+        UNIT_ASSERT_VALUES_EQUAL_C(opResult.GetStatus(), Ydb::StatusIds::SUCCESS,
+            opResult.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            opResult.GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_FAILED,
+            "deadline failure must land STATE_FAILED, not STATE_CANCELLED");
+        UNIT_ASSERT_GT(opResult.GetAnalyzeOperation().IssuesSize(), 0);
+    }
 
     Y_UNIT_TEST(AnalyzeCancel) {
         TTestEnv env(1, 1);

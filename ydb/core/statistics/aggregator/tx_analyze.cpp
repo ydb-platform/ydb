@@ -41,17 +41,22 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         // update existing force traversal
         if (existingOperation) {
-            const bool isTerminal =
-                existingOperation->State == Ydb::Table::AnalyzeState::STATE_DONE ||
-                existingOperation->State == Ydb::Table::AnalyzeState::STATE_CANCELLED;
-            if (isTerminal) {
+            if (IsTerminalAnalyzeState(existingOperation->State)) {
                 // Idempotent retry: the operation already finished. Don't redo the
                 // analyze; replay the cached terminal status in Complete() so the
                 // requester sees a stable result and the history entry is preserved.
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Replay terminal response. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
-                TerminalReplay = existingOperation->State == Ydb::Table::AnalyzeState::STATE_DONE
-                    ? NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS
-                    : NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED;
+                switch (existingOperation->State) {
+                    case Ydb::Table::AnalyzeState::STATE_DONE:
+                        TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS;
+                        break;
+                    case Ydb::Table::AnalyzeState::STATE_CANCELLED:
+                        TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED;
+                        break;
+                    default: // STATE_FAILED
+                        TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
+                        break;
+                }
                 TerminalReplayIssues = existingOperation->Issues;
                 return true;
             } else if (existingOperation->ReplyToActorId == Event->Sender) {

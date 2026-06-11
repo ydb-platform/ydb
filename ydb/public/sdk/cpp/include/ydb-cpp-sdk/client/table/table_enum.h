@@ -58,6 +58,7 @@ enum class EAnalyzeState {
     InProgress = 2,
     Done = 3,
     Cancelled = 4,
+    Failed = 5,
 };
 
 enum class EChangefeedMode {

@@ -503,8 +503,7 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
         auto forceTraversalOperation = ForceTraversalOperation(operationId);
         // Terminal operations are preserved in history but no longer "in-progress"
         const bool isTerminal = forceTraversalOperation &&
-            (forceTraversalOperation->State == Ydb::Table::AnalyzeState::STATE_DONE ||
-             forceTraversalOperation->State == Ydb::Table::AnalyzeState::STATE_CANCELLED);
+            IsTerminalAnalyzeState(forceTraversalOperation->State);
         if (forceTraversalOperation && !isTerminal) {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
         } else {
@@ -620,8 +619,7 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev) {
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorProgress::TPtr& ev) {
     const auto& msg = *ev->Get();
     auto* op = ForceTraversalOperation(msg.OperationId);
-    if (!op || op->State == Ydb::Table::AnalyzeState::STATE_DONE
-            || op->State == Ydb::Table::AnalyzeState::STATE_CANCELLED) {
+    if (!op || IsTerminalAnalyzeState(op->State)) {
         return;
     }
     auto* table = ForceTraversalTable(msg.OperationId, msg.PathId);
@@ -766,9 +764,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
 
     for (TForceTraversalOperation& operation : ForceTraversals) {
         // Skip terminal operations (history entries) — they have no pending work.
-        if (operation.State == Ydb::Table::AnalyzeState::STATE_DONE ||
-            operation.State == Ydb::Table::AnalyzeState::STATE_CANCELLED)
-        {
+        if (IsTerminalAnalyzeState(operation.State)) {
             continue;
         }
 
@@ -997,9 +993,7 @@ void TStatisticsAggregator::MarkForceTraversalOperationFinished(
     if (!op) {
         return;
     }
-    if (op->State == Ydb::Table::AnalyzeState::STATE_DONE ||
-        op->State == Ydb::Table::AnalyzeState::STATE_CANCELLED)
-    {
+    if (IsTerminalAnalyzeState(op->State)) {
         return;
     }
 
@@ -1037,9 +1031,7 @@ void TStatisticsAggregator::FillAnalyzeOperationProto(
 
     // Derive state
     Ydb::Table::AnalyzeState::State state;
-    if (op.State == Ydb::Table::AnalyzeState::STATE_DONE ||
-        op.State == Ydb::Table::AnalyzeState::STATE_CANCELLED)
-    {
+    if (IsTerminalAnalyzeState(op.State)) {
         state = op.State;
         auto* ts = proto.MutableEndTime();
         ts->set_seconds(op.EndTime.Seconds());
@@ -1079,6 +1071,7 @@ void TStatisticsAggregator::FillAnalyzeOperationProto(
     if (state == Ydb::Table::AnalyzeState::STATE_DONE) {
         proto.SetProgress(100.0f);
     } else if (state == Ydb::Table::AnalyzeState::STATE_CANCELLED ||
+               state == Ydb::Table::AnalyzeState::STATE_FAILED ||
                state == Ydb::Table::AnalyzeState::STATE_ENQUEUED)
     {
         proto.SetProgress(0.0f);

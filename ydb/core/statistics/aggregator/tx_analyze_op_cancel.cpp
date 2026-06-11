@@ -25,9 +25,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
             return true; // NOT_FOUND handled in Complete
         }
 
-        if (op->State == Ydb::Table::AnalyzeState::STATE_DONE ||
-            op->State == Ydb::Table::AnalyzeState::STATE_CANCELLED)
-        {
+        if (IsTerminalAnalyzeState(op->State)) {
             return true; // idempotent
         }
 

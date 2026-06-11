@@ -28,9 +28,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpForget : public TTxBase {
             return true;
         }
 
-        if (op->State != Ydb::Table::AnalyzeState::STATE_DONE &&
-            op->State != Ydb::Table::AnalyzeState::STATE_CANCELLED)
-        {
+        if (!IsTerminalAnalyzeState(op->State)) {
             Result = EResult::NonTerminal;
             return true;
         }

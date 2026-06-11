@@ -29,6 +29,12 @@
 
 namespace NKikimr::NStat {
 
+inline bool IsTerminalAnalyzeState(Ydb::Table::AnalyzeState::State state) {
+    return state == Ydb::Table::AnalyzeState::STATE_DONE
+        || state == Ydb::Table::AnalyzeState::STATE_CANCELLED
+        || state == Ydb::Table::AnalyzeState::STATE_FAILED;
+}
+
 class TStatisticsAggregator : public TActor<TStatisticsAggregator>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

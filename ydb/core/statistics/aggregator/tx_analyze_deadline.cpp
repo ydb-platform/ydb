@@ -26,15 +26,11 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         const auto now = ctx.Now();
 
         // Collect ids to avoid mutating ForceTraversals during iteration
-        std::vector<TString> toMarkCancelled;  // non-terminal queued, deadline exceeded
-        std::vector<TString> toDelete;         // terminal, retention exceeded
+        std::vector<TString> toFailDeadline;  // non-terminal queued, deadline exceeded
+        std::vector<TString> toDelete;        // terminal, retention exceeded
 
         for (const auto& operation : Self->ForceTraversals) {
-            const bool isTerminal =
-                operation.State == Ydb::Table::AnalyzeState::STATE_DONE ||
-                operation.State == Ydb::Table::AnalyzeState::STATE_CANCELLED;
-
-            if (isTerminal) {
+            if (IsTerminalAnalyzeState(operation.State)) {
                 if (operation.EndTime && now - operation.EndTime >= Self->AnalyzeOpHistoryRetention) {
                     toDelete.push_back(operation.OperationId);
                 }
@@ -43,7 +39,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
                     if (Self->ForceTraversalOperationId == operation.OperationId) {
                         ActiveDeadlineExceeded = true;
                     } else {
-                        toMarkCancelled.push_back(operation.OperationId);
+                        toFailDeadline.push_back(operation.OperationId);
                     }
                 }
             }
@@ -52,12 +48,12 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         NYql::TIssues deadlineIssues;
         deadlineIssues.AddIssue(NYql::TIssue("ANALYZE deadline exceeded"));
 
-        for (const auto& operationId : toMarkCancelled) {
+        for (const auto& operationId : toFailDeadline) {
             auto* op = Self->ForceTraversalOperation(operationId);
             if (!op) continue;
             DeadlineExceeded.push_back({operationId, op->ReplyToActorId});
             Self->MarkForceTraversalOperationFinished(operationId,
-                Ydb::Table::AnalyzeState::STATE_CANCELLED, now, db, deadlineIssues);
+                Ydb::Table::AnalyzeState::STATE_FAILED, now, db, deadlineIssues);
         }
 
         for (const auto& operationId : toDelete) {

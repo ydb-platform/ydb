@@ -31,9 +31,8 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                // Resolve failure -> mark the operation terminal CANCELLED (proto has no
-                // STATE_FAILED; errors are represented as CANCELLED with attached issues).
-                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_CANCELLED);
+                // Resolve failure -> mark the operation FAILED.
+                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_FAILED);
             }
             return true;
         }

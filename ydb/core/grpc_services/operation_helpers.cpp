@@ -174,6 +174,10 @@ void ToOperation(const NKikimrAnalyzeOp::TAnalyzeOperation& op, Ydb::Operations:
             operation->set_ready(true);
             operation->set_status(Ydb::StatusIds::CANCELLED);
             break;
+        case Ydb::Table::AnalyzeState::STATE_FAILED:
+            operation->set_ready(true);
+            operation->set_status(Ydb::StatusIds::GENERIC_ERROR);
+            break;
         default:
             operation->set_ready(false);
             break;

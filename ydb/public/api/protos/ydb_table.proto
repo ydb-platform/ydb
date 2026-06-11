@@ -1106,6 +1106,7 @@ message AnalyzeState {
         STATE_IN_PROGRESS = 2;
         STATE_DONE = 3;
         STATE_CANCELLED = 4;
+        STATE_FAILED = 5;
     }
 }
 

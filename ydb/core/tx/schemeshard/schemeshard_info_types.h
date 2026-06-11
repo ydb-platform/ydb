@@ -4427,7 +4427,13 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
 NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
-    if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
+    // The fulltext rowid column carries the system prefix but is user-facing: callers may
+    // pre-create it (or ALTER ADD it) and the schemeshard auto-provisions it. Always accept it,
+    // so a plain user CREATE/ALTER naming it is not rejected as a forbidden system column.
+    if (!allowSystemColumnNames
+        && name != NTableIndex::NFulltext::RowIdColumn
+        && name.StartsWith(SYSTEM_COLUMN_PREFIX))
+    {
         return false;
     }
 

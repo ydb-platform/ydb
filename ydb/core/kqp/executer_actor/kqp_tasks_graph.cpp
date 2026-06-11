@@ -2573,6 +2573,14 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         indexTableProto->MutableColumns()->CopyFrom(indexTable.GetColumns());
     }
 
+    if (fullTextSource.HasUniqueIndexImplTable()) {
+        const auto& uniqueIdx = fullTextSource.GetUniqueIndexImplTable();
+        auto* uniqueProto = settings->MutableUniqueIndexImplTable();
+        uniqueProto->MutableTable()->CopyFrom(uniqueIdx.GetTable());
+        uniqueProto->MutableKeyColumns()->CopyFrom(uniqueIdx.GetKeyColumns());
+        uniqueProto->MutableColumns()->CopyFrom(uniqueIdx.GetColumns());
+    }
+
     settings->MutableKeyColumns()->CopyFrom(fullTextSource.GetKeyColumns());
     settings->MutableColumns()->CopyFrom(fullTextSource.GetColumns());
     if (GetMeta().Snapshot.IsValid()) {

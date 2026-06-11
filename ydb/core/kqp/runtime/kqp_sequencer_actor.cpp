@@ -17,6 +17,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 
+#include <util/generic/bitops.h>
+
 #include <list>
 
 namespace NKikimr {
@@ -45,15 +47,17 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
         NUdf::TUnboxedValue UvLiteral;
         Ydb::TypedValue Literal;
         bool InitialiedLiteral = false;
-        TCProto::EDefaultKind DefaultKind = TCProto::DEFAULT_KIND_UNSPECIFIED; 
+        bool BitReverseSequenceValue = false;
+        TCProto::EDefaultKind DefaultKind = TCProto::DEFAULT_KIND_UNSPECIFIED;
 
         explicit TColumnSequenceInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& proto)
             : TypeInfo(BuildTypeInfo(proto))
+            , BitReverseSequenceValue(proto.GetBitReverseSequenceValue())
             , DefaultKind(proto.GetDefaultKind())
         {
             if (DefaultKind == TCProto::DEFAULT_KIND_SEQUENCE) {
                 DefaultFromSequence = proto.GetDefaultFromSequence();
-                DefaultFromSequencePathId = TPathId(proto.GetDefaultFromSequencePathId().GetOwnerId(), 
+                DefaultFromSequencePathId = TPathId(proto.GetDefaultFromSequencePathId().GetOwnerId(),
                     proto.GetDefaultFromSequencePathId().GetTableId());
             }
 
@@ -234,6 +238,9 @@ private:
                     *rowItems++ = defaultV;
                 } else if (columnInfo.IsDefaultFromSequence()) {
                     i64 nextVal = columnInfo.AcquireNextVal();
+                    if (columnInfo.BitReverseSequenceValue) {
+                        nextVal = static_cast<i64>(ReverseBits(static_cast<ui64>(nextVal)));
+                    }
                     *rowItems++ = NUdf::TUnboxedValuePod(nextVal);
                     rowSize += sizeof(NUdf::TUnboxedValuePod);
                     hasSequences &= columnInfo.HasValues();

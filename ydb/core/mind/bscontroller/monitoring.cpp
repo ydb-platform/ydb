@@ -3,12 +3,60 @@
 
 #include <library/cpp/json/json_writer.h>
 #include <google/protobuf/util/json_util.h>
+#include <ydb/core/base/mon_auth.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 
 namespace NKikimr {
 namespace NBsController {
+
+namespace {
+
+bool IsBsControllerDevUiAdminRequest(const TCgiParameters& cgi, const TActorContext& ctx) {
+    if (cgi.Has("exec")) {
+        return true;
+    }
+
+    const TString page = cgi.Has("page") ? cgi.Get("page") : TString();
+    if (page.empty()
+        || page == "GetDown"
+        || page == "OperationLog"
+        || page == "OperationLogEntry"
+        || page == "HealthEvents"
+        || page == "Groups"
+        || page == "GroupDetail"
+        || page == "Scrub"
+        || page == "InternalTables"
+        || page == "Bridge"
+        || page == "VirtualGroups")
+    {
+        return false;
+    }
+
+    if (page == "SelfHeal") {
+        const bool isDisableSelfHealAction = cgi.Get("disable") == "1"
+            && cgi.Has("action") && cgi.Get("action") == "disableSelfHeal";
+        return isDisableSelfHealAction;
+    }
+
+    if (page == "Shred") {
+        return cgi.Has("startshred");
+    }
+
+    if (page == "SetDown"
+        || page == "StopGivingGroups"
+        || page == "StartGivingGroups")
+    {
+        return true;
+    }
+
+    STLOG(PRI_WARN, BS_CONTROLLER, BSCTXMO03, "BlobStorageController DevUI request to unknown page",
+        (Page, page), (Cgi, cgi.Print()));
+    return true;
+}
+
+} // namespace
 
 static const char *DataSizeSuffix[] = {"B", "KiB", "MiB", "GiB", nullptr};
 
@@ -771,6 +819,16 @@ void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInf
         params.emplace(param.GetKey(), param.GetValue());
     }
 
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(),
+            query.GetPath(),
+            query.GetUserToken(),
+            !IsBsControllerDevUiAdminRequest(params, TActivationContext::AsActorContext())))
+    {
+        Send(sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return;
+    }
+
     auto sendResponse = [&](TString message, TString contentType, TString content) {
         Send(sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder() << "HTTP/1.1 " << message << "\r\n"
             "Content-Type: " << contentType << "\r\n"
@@ -864,11 +922,21 @@ void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInf
     }
 }
 
-bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) {
+bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive) {
         return false;
     }
     if (!ev) {
+        return true;
+    }
+    const TCgiParameters& cgi(ev->Get()->Cgi());
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            !IsBsControllerDevUiAdminRequest(cgi, ctx)))
+    {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;
     }
     if (const auto& ext = ev->Get()->ExtendedQuery; ext && ext->GetMethod() == HTTP_METHOD_POST) {
@@ -878,7 +946,6 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
 
     THolder<TTransactionBase<TBlobStorageController>> tx;
     TStringStream str;
-    const TCgiParameters& cgi(ev->Get()->Cgi());
 
     if (!cgi.count("page")) {
         RenderMonPage(str);
@@ -1020,15 +1087,15 @@ void TBlobStorageController::RenderFooter(IOutputStream& out) {
 void TBlobStorageController::RenderMonPage(IOutputStream& out) {
     RenderHeader(out);
 
-    out << "<a href='app?TabletID=" << TabletID() << "&page=OperationLog'>Operation Log</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=SelfHeal'>Self Heal Status</a> (" <<
+    out << "<a href='?TabletID=" << TabletID() << "&page=OperationLog'>Operation Log</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=SelfHeal'>Self Heal Status</a> (" <<
         (SelfHealEnable ? "enabled" : "disabled") << ")<br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=Bridge'>Bridge state</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=Bridge'>Bridge state</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
 
     HTML(out) {
         DIV_CLASS("panel panel-info") {
@@ -1152,7 +1219,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
 
     auto gen_li = [&](const TString& component) {
         out << "<li" << (component == table ? " class='active'" : "") << ">";
-        out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables&table=" << component << "'>";
+        out << "<a href='?TabletID=" << TabletID() << "&page=InternalTables&table=" << component << "'>";
         out << component << "</a>";
         out << "</li>";
     };

@@ -6,6 +6,7 @@
 #include "layout_helpers.h"
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/debug_tools/operation_log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SELFHEAL
@@ -815,6 +816,12 @@ namespace NKikimr::NBsController {
                             out << "'>" << Endl;
                             out << "<input class='btn btn-primary' type='submit' value='DISABLE NOW'/>" << Endl;
                             out << "</form>";
+                            // надо понять, как фиксить здесь merge-конфликт: сережа при введении UsesTabletDevUiSecurePath удалял все строчки вида out << "<input type='hidden' name='page' value='SelfHeal'>" << Endl;
+                            // const TStringBuf tabletAppPath = UsesTabletDevUiSecurePath(AppData(), TTabletTypes::BSController)
+                            //     ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+                            //     : TStringBuf("app");
+                            // out << "<a class='btn btn-primary' href='" << tabletAppPath << "?TabletID=" << TabletId
+                            //     << "&page=SelfHeal&disable=1&action=disableSelfHeal'>DISABLE NOW</a>";
                         }
                     }
                 }

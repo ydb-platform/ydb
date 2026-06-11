@@ -665,6 +665,25 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
         }
 
+        Y_UNIT_TEST_F(TestReceiveMessageNotUtf8, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            const TString messageBody = "\xc3\x28";
+            WriteMessageViaTopicSdk(driver, path.TopicPath, messageBody, NYdb::NTopic::ECodec::RAW);
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+
+            const auto& message = jsonReceived["Messages"][0];
+            UNIT_ASSERT_VALUES_EQUAL(message["Attributes"]["BodyEncoding"].GetString(), "base64");
+
+            const TString decompressed = Base64Decode(message["Body"].GetString());
+            UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
+        }
+
         Y_UNIT_TEST_F(TestReceiveMessageReturnToQueue, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;

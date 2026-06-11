@@ -11,7 +11,11 @@ from pathlib import Path
 def render(plan: dict, title: str = "Shard plan") -> str:
     lines = [f"## {title}", ""]
     shard_count = plan.get("shard_count", len(plan.get("shards") or []))
-    lines.append(f"**Shard count:** {shard_count}")
+    requested = plan.get("requested_shard_count")
+    if requested is not None and requested != shard_count:
+        lines.append(f"**Shard count:** {shard_count} (requested {requested}, capped to suite count)")
+    else:
+        lines.append(f"**Shard count:** {shard_count}")
     lines.append("")
     lines.append("| Shard | Suites | Tests | Est. duration (sec) | Sample suites |")
     lines.append("| ---: | ---: | ---: | ---: | --- |")

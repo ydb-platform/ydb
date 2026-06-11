@@ -194,6 +194,9 @@ jobs:
     if: inputs.use_sharding == true
     runs-on: [self-hosted, tiny-worker]
     name: Plan test shards
+    outputs:
+      shard_ids: ${{ steps.plan.outputs.shard_ids }}
+      active_shard_count: ${{ steps.plan.outputs.active_shard_count }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -205,6 +208,7 @@ jobs:
           name: debug-shard-graph-${{ github.run_id }}
           path: graph
       - name: Build shard plan
+        id: plan
         env:
           SHARD_COUNT: ${{ inputs.shard_count }}
         run: |
@@ -236,6 +240,8 @@ jobs:
             /tmp/shard_plan.json \
             --title "$plan_title" \
             >> "$GITHUB_STEP_SUMMARY"
+          echo "shard_ids=$(jq -c '[.shards[].id]' /tmp/shard_plan.json)" >> "$GITHUB_OUTPUT"
+          echo "active_shard_count=$(jq '.shard_count' /tmp/shard_plan.json)" >> "$GITHUB_OUTPUT"
       - name: Upload shard plan
         uses: actions/upload-artifact@v4
         with:
@@ -252,7 +258,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard_id: ${{ fromJSON(needs.prepare.outputs.shard_ids) }}
+        shard_id: ${{ fromJSON(needs.shard_plan.outputs.shard_ids) }}
     runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
     name: Sharded test shard ${{ matrix.shard_id }}
     steps:
@@ -354,7 +360,7 @@ jobs:
       - name: Merge shard reports
         id: merge
         env:
-          EXPECTED_SHARDS: ${{ inputs.shard_count }}
+          EXPECTED_SHARDS: ${{ needs.shard_plan.outputs.active_shard_count }}
         run: |
           set -eux
           mkdir -p merged

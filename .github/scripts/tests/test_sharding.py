@@ -77,6 +77,24 @@ class ShardingToolsTest(unittest.TestCase):
             loads = [shard["estimated_duration_sec"] for shard in plan["shards"]]
             self.assertLess(max(loads) - min(loads), 60)
 
+    def test_split_caps_shard_count_to_suite_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            _run(
+                "split_test_shards.py",
+                "--tests-file",
+                str(FIXTURES / "tests.txt"),
+                "--shard-count",
+                "4",
+                "-o",
+                str(plan_path),
+            )
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["requested_shard_count"], 4)
+            self.assertEqual(plan["shard_count"], 2)
+            self.assertEqual(len(plan["shards"]), 2)
+            self.assertTrue(all(shard["tests"] for shard in plan["shards"]))
+
     def test_split_keeps_suite_directories_atomic(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"

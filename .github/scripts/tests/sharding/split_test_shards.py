@@ -63,27 +63,36 @@ def suite_weight(suite_tests: list[str], durations: dict[str, float]) -> float:
     return sum(durations.get(name, 1.0) for name in suite_tests)
 
 
-def assign_shards(tests: list[str], shard_count: int, durations: dict[str, float]) -> list[list[str]]:
+def assign_shards(tests: list[str], shard_count: int, durations: dict[str, float]) -> tuple[list[list[str]], int]:
     if shard_count < 1:
         raise ValueError("shard_count must be >= 1")
-    buckets: list[list[str]] = [[] for _ in range(shard_count)]
-    bucket_load = [0.0] * shard_count
-
     groups = group_tests_by_suite(tests)
+    if not groups:
+        raise ValueError("no test suites to shard")
+    effective_shard_count = min(shard_count, len(groups))
+    if effective_shard_count < shard_count:
+        print(
+            f"warning: requested {shard_count} shards but only {len(groups)} suite(s); "
+            f"using {effective_shard_count}",
+            file=sys.stderr,
+        )
+    buckets: list[list[str]] = [[] for _ in range(effective_shard_count)]
+    bucket_load = [0.0] * effective_shard_count
+
     sorted_groups = sorted(
         groups.items(),
         key=lambda item: suite_weight(item[1], durations),
         reverse=True,
     )
     for _path, suite_tests in sorted_groups:
-        idx = min(range(shard_count), key=lambda i: bucket_load[i])
+        idx = min(range(effective_shard_count), key=lambda i: bucket_load[i])
         buckets[idx].extend(sorted(suite_tests))
         bucket_load[idx] += suite_weight(suite_tests, durations)
-    return buckets
+    return buckets, effective_shard_count
 
 
 def build_plan(tests: list[str], shard_count: int, durations: dict[str, float]) -> dict:
-    buckets = assign_shards(tests, shard_count, durations)
+    buckets, effective_shard_count = assign_shards(tests, shard_count, durations)
     shards = []
     for shard_id, bucket in enumerate(buckets):
         suites = sorted({suite_path(name) for name in bucket})
@@ -95,7 +104,11 @@ def build_plan(tests: list[str], shard_count: int, durations: dict[str, float]) 
                 "estimated_duration_sec": sum(durations.get(name, 1.0) for name in bucket),
             }
         )
-    return {"shard_count": shard_count, "shards": shards}
+    return {
+        "requested_shard_count": shard_count,
+        "shard_count": effective_shard_count,
+        "shards": shards,
+    }
 
 
 def main() -> int:

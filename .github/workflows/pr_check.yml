@@ -271,6 +271,7 @@ jobs:
     name: Plan relwithdebinfo shards
     outputs:
       shard_ids: ${{ steps.plan.outputs.shard_ids }}
+      active_shard_count: ${{ steps.plan.outputs.active_shard_count }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -318,6 +319,7 @@ jobs:
             --title "$plan_title" \
             >> "$GITHUB_STEP_SUMMARY"
           echo "shard_ids=$(jq -c '[.shards[].id]' /tmp/shard_plan.json)" >> "$GITHUB_OUTPUT"
+          echo "active_shard_count=$(jq '.shard_count' /tmp/shard_plan.json)" >> "$GITHUB_OUTPUT"
       - name: Upload shard plan
         uses: actions/upload-artifact@v4
         with:
@@ -441,7 +443,7 @@ jobs:
       - name: Merge shard reports
         id: merge
         env:
-          EXPECTED_SHARDS: ${{ needs.check-running-allowed.outputs.shard_count }}
+          EXPECTED_SHARDS: ${{ needs.plan_rwdi_shards.outputs.active_shard_count }}
         run: |
           set -eux
           mkdir -p merged

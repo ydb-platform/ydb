@@ -156,11 +156,9 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
             yexception);
     }
 
-    Y_UNIT_TEST(CutFailsOnUncompressedSize) {
+    Y_UNIT_TEST(CutIgnoresOuterUncompressedSize) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), NPersQueueCommon::RAW, 123);
-        UNIT_ASSERT_EXCEPTION(
-            TKafkaBatchCutter().Cut(readResult, 10),
-            yexception);
+        AssertKafkaBatchCut(TKafkaBatchCutter().Cut(readResult, 10));
     }
 
     Y_UNIT_TEST(CutSkipsRecordsBeforeReadStartOffset) {

@@ -45,17 +45,41 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
     }
     results->Clear();
 
+    ui32 resultsCount = 0;
+    auto addResult = [&](TReadResult& result) {
+        if (result.GetOffset() < context.Offset) {
+            return false;
+        }
+        if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
+            return false;
+        }
+        if (resultsCount >= context.Count) {
+            return true;
+        }
+
+        resultsCount += result.GetMessageCount();
+        readResult->AddResult()->Swap(&result);
+        return resultsCount >= context.Count;
+    };
+
     for (auto& originalResult : originalResults) {
         const auto messageFormat = static_cast<NKikimrClient::EMessageFormat>(originalResult.GetMessageFormat());
         auto it = BatchCutters.find(messageFormat);
         if (it == BatchCutters.end()) {
-            readResult->AddResult()->Swap(&originalResult);
+            if (addResult(originalResult)) {
+                break;
+            }
             continue;
         }
 
         auto cutResults = it->second->Cut(originalResult, context.Offset);
         for (auto& cutResult : cutResults) {
-            readResult->AddResult()->Swap(&cutResult);
+            if (addResult(cutResult)) {
+                break;
+            }
+        }
+        if (resultsCount >= context.Count) {
+            break;
         }
     }
 

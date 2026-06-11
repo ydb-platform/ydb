@@ -468,6 +468,53 @@ Y_UNIT_TEST(KafkaBatchReadFromMiddleOfBatchIsCut) {
     AssertKafkaBatchCutMessage(readResult.GetResult(1), 2, 3, values[2]);
 }
 
+Y_UNIT_TEST(KafkaBatchReadCountLimitAfterCutIsApplied) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_kafka_batch_cut_count";
+    const TVector<TString> values = {"value0", "value1", "value2"};
+
+    CmdWriteKafkaBatch(0, sourceId, 1, values, tc, 0);
+    PQGetPartInfo(0, values.size(), tc);
+
+    TPQCmdReadSettings readSettings{"", 0, 1, 1, 16_MB, 1, false, {1}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 1u);
+    AssertKafkaBatchCutMessage(readResult.GetResult(0), 1, 2, values[1]);
+}
+
+Y_UNIT_TEST(KafkaBatchReadLastOffsetAfterCutIsApplied) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_kafka_batch_cut_last_offset";
+    const TVector<TString> values = {"value0", "value1", "value2"};
+
+    CmdWriteKafkaBatch(0, sourceId, 1, values, tc, 0);
+    PQGetPartInfo(0, values.size(), tc);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, 10, 16_MB, 2, false, {0, 1}, 0, 0, "user1", 2};
+    readSettings.CanReadBatches = false;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 2u);
+    AssertKafkaBatchCutMessage(readResult.GetResult(0), 0, 1, values[0]);
+    AssertKafkaBatchCutMessage(readResult.GetResult(1), 1, 2, values[1]);
+}
+
 Y_UNIT_TEST(KafkaBatchReadGzipCompressedBatchIsCut) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

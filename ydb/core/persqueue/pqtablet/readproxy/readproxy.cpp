@@ -11,6 +11,8 @@
 
 #include <util/generic/algorithm.h>
 
+#include <limits>
+
 namespace NKikimr::NPQ {
 
 using namespace NActors;
@@ -107,10 +109,13 @@ private:
             auto proxyEvent = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
             proxyEvent->Response->CopyFrom(responseRecord);
 
+            const auto& cmdRead = Request.GetPartitionRequest().GetCmdRead();
             ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
-                .User = Request.GetPartitionRequest().GetCmdRead().GetClientId(),
+                .User = cmdRead.GetClientId(),
                 .Destination = 0,
                 .Offset = InitialReadOffset,
+                .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),
+                .LastOffset = cmdRead.GetLastOffset() > 0 ? static_cast<ui64>(cmdRead.GetLastOffset()) : 0,
                 .PartNo = 0,
                 .Size = static_cast<ui64>(proxyEvent->Response->ByteSize()),
                 .IsInternal = false,

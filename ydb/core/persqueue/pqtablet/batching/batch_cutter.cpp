@@ -61,7 +61,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
         return {readResult};
     }
 
-    Y_ENSURE((!dataChunk.HasCodec() || dataChunk.GetCodec() == NPersQueueCommon::RAW) && readResult.GetUncompressedSize() == 0);
+    Y_ENSURE(!dataChunk.HasCodec() || dataChunk.GetCodec() == NPersQueueCommon::RAW);
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     if (batch.Records.empty()) {

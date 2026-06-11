@@ -291,15 +291,38 @@ def _hive_devui_cases(tablet_id, secure_path_mode):
         _hive_endpoint_cases([f'/tablets?{q}'], monitoring_allowed)
         # All /tablets/app?... pages — behavior depends on flag.
         + _hive_endpoint_cases(
-            [f'/tablets/app?{q}', f'/tablets/app?{q}&page=LandingData',
-             f'/tablets/app?{q}&page=Settings', f'/tablets/app?{q}&page=SetDown&node=0&down=1'],
+            [
+                f'/tablets/app?{q}',
+                f'/tablets/app?{q}&page=LandingData',
+                f'/tablets/app?{q}&page=Settings',
+                # Node management actions
+                f'/tablets/app?{q}&page=SetDown&node=0&down=1',
+                f'/tablets/app?{q}&page=SetFreeze&node=0&freeze=1',
+                f'/tablets/app?{q}&page=KickNode&node=0',
+                f'/tablets/app?{q}&page=DrainNode&node=0',
+                # Cluster management actions
+                f'/tablets/app?{q}&page=Rebalance',
+                f'/tablets/app?{q}&page=StopDomain',
+                f'/tablets/app?{q}&page=ReassignTablet',
+            ],
             expected_on_app,
         )
         # Secure path — admin-only in both modes.
         + _hive_endpoint_cases(
-            [f'/tablets/app/secure?{q}', f'/tablets/app/secure?{q}&page=LandingData',
-             f'/tablets/app/secure?{q}&page=Settings',
-             f'/tablets/app/secure?{q}&page=SetDown&node=0&down=1'],
+            [
+                f'/tablets/app/secure?{q}',
+                f'/tablets/app/secure?{q}&page=LandingData',
+                f'/tablets/app/secure?{q}&page=Settings',
+                # Node management actions
+                f'/tablets/app/secure?{q}&page=SetDown&node=0&down=1',
+                f'/tablets/app/secure?{q}&page=SetFreeze&node=0&freeze=1',
+                f'/tablets/app/secure?{q}&page=KickNode&node=0',
+                f'/tablets/app/secure?{q}&page=DrainNode&node=0',
+                # Cluster management actions
+                f'/tablets/app/secure?{q}&page=Rebalance',
+                f'/tablets/app/secure?{q}&page=StopDomain',
+                f'/tablets/app/secure?{q}&page=ReassignTablet',
+            ],
             admin_allowed,
         )
     )

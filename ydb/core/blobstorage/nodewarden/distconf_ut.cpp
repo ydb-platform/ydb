@@ -23,6 +23,125 @@ namespace NBlobStorageNodeWardenTest{
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
+    Y_UNIT_TEST(AllocateStaticGroupRespectsExpectedSlotSizeFromBaseConfig) {
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+
+        NKikimrBlobStorage::TStorageConfig config;
+        auto *node = config.AddAllNodes();
+        node->SetNodeId(1);
+        node->MutableLocation()->SetDataCenter("dc-1");
+        node->MutableLocation()->SetRack("rack-1");
+        node->MutableLocation()->SetUnit("unit-1");
+
+        NKikimrBlobStorage::TBaseConfig baseConfig;
+        baseConfig.MutableSettings()->AddDefaultMaxSlots(16);
+
+        auto *pdisk = baseConfig.AddPDisk();
+        pdisk->SetNodeId(1);
+        pdisk->SetPDiskId(1);
+        pdisk->SetPath("/dev/disk1");
+        pdisk->SetType(NKikimrBlobStorage::SSD);
+        pdisk->SetKind(0);
+        pdisk->SetGuid(1);
+        pdisk->SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+        pdisk->SetDecommitStatus(NKikimrBlobStorage::DECOMMIT_NONE);
+        pdisk->SetExpectedSlotCount(4);
+        pdisk->SetExpectedSlotSize(100);
+        pdisk->MutablePDiskConfig()->SetExpectedSlotSize(100);
+        pdisk->MutablePDiskConfig()->SetMaxSlots(4);
+        pdisk->MutablePDiskMetrics()->SetTotalSize(1000);
+        pdisk->MutablePDiskMetrics()->SetAvailableSize(1000);
+
+        NKikimrBlobStorage::TGroupGeometry geometry;
+        geometry.SetNumFailRealms(1);
+        geometry.SetNumFailDomainsPerFailRealm(1);
+        geometry.SetNumVDisksPerFailDomain(1);
+
+        try {
+            keeper.AllocateStaticGroup(
+                &config,
+                TGroupId::Zero(),
+                1,
+                TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+                geometry,
+                {},
+                NKikimrBlobStorage::SSD,
+                {},
+                {},
+                200,
+                &baseConfig,
+                false,
+                false,
+                false,
+                TBridgePileId(),
+                std::nullopt);
+            UNIT_FAIL("Expected group allocation to fail");
+        } catch (const NStorage::TDistributedConfigKeeper::TExConfigError& ex) {
+            const TString error = ex.what();
+            UNIT_ASSERT_C(error.Contains("group allocation failed"), error);
+            UNIT_ASSERT_C(error.Contains("-v"), error);
+        }
+    }
+
+    Y_UNIT_TEST(AllocateStaticGroupOnFreshDrivesWithExpectedSlotSize) {
+        // Bootstrap self-assembly: the static group must be allocatable on drives that come
+        // straight from the config with expected_slot_size + max_slots, when neither the
+        // materialized ExpectedSlotCount nor PDisk metrics exist yet. MaxSlots serves as the
+        // slot count upper bound until NodeWarden computes the real value from the drive size.
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+
+        NKikimrBlobStorage::TStorageConfig config;
+        auto *node = config.AddAllNodes();
+        node->SetNodeId(1);
+        node->MutableLocation()->SetDataCenter("dc-1");
+        node->MutableLocation()->SetRack("rack-1");
+        node->MutableLocation()->SetUnit("unit-1");
+
+        auto *bsConfig = config.MutableBlobStorageConfig();
+        auto *hostConfig = bsConfig->AddDefineHostConfig();
+        hostConfig->SetHostConfigId(1);
+        auto *drive = hostConfig->AddDrive();
+        drive->SetPath("/dev/disk1");
+        drive->SetType(NKikimrBlobStorage::SSD);
+        drive->MutablePDiskConfig()->SetExpectedSlotSize(100ull << 30);
+        drive->MutablePDiskConfig()->SetMaxSlots(4);
+
+        auto *host = bsConfig->MutableDefineBox()->AddHost();
+        host->SetHostConfigId(1);
+        host->SetEnforcedNodeId(1);
+
+        NKikimrBlobStorage::TGroupGeometry geometry;
+        geometry.SetNumFailRealms(1);
+        geometry.SetNumFailDomainsPerFailRealm(1);
+        geometry.SetNumVDisksPerFailDomain(1);
+
+        keeper.AllocateStaticGroup(
+            &config,
+            TGroupId::Zero(),
+            1,
+            TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+            geometry,
+            {},
+            NKikimrBlobStorage::SSD,
+            {},
+            {},
+            0,
+            nullptr,
+            false,
+            false,
+            false,
+            TBridgePileId(),
+            std::nullopt);
+
+        const auto& serviceSet = config.GetBlobStorageConfig().GetServiceSet();
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.PDisksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.GetPDisks(0).GetPath(), "/dev/disk1");
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.GetPDisks(0).GetPDiskConfig().GetExpectedSlotSize(), 100ull << 30);
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.GetPDisks(0).GetPDiskConfig().GetMaxSlots(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.VDisksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(serviceSet.GroupsSize(), 1);
+    }
+
     NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200, std::unordered_set<ui32> nodesToUse = {}, bool *goodConfigOut = nullptr, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSS = {}, bool automaticManagement = true) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         NKikimrConfig::TDomainsConfig::TStateStorage ss;

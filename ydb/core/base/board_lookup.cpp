@@ -269,7 +269,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             YDB_LOG_DEBUG("Handle TEvResolveReplicasList",
                 {"mode", (ui32)Mode},
                 {"groupIdx", replicaGroupIdx},
-                {"group", replicaGroups},
+                {"group", replicaGroups.ToString()},
                 {"path", Path});
         }
         Become(&TThis::StateLookup);

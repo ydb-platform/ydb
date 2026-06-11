@@ -1261,7 +1261,7 @@ public:
     {}
 
     STATEFN(StateInit) {
-        YDB_LOG_TRACE("Proxy::StateInit ev",
+        YDB_LOG_TRACE("Proxy::StateInit",
             {"type", ev->GetTypeRewrite()},
             {"event", ev->ToString()});
 

@@ -404,7 +404,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaRegFollower::TPtr &ev) {
         const NKikimrStateStorage::TEvRegisterFollower &record = ev->Get()->Record;
 
-        YDB_LOG_DEBUG("Replica::Handle received TEvReplicaRegFollower for tabletId, followerId, followerActorId, followerTabletActorId",
+        YDB_LOG_DEBUG("Replica::Handle received TEvReplicaRegFollower",
             {"tabletId", record.GetTabletID()},
             {"followerId", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
             {"followerActorId", record.GetFollower()},
@@ -459,7 +459,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaUnregFollower::TPtr &ev) {
         const NKikimrStateStorage::TEvUnregisterFollower &record = ev->Get()->Record;
 
-        YDB_LOG_DEBUG("Replica::Handle received TEvReplicaUnregFollower for tabletId, followerId, followerActorId",
+        YDB_LOG_DEBUG("Replica::Handle received TEvReplicaUnregFollower",
             {"tabletId", record.GetTabletID()},
             {"followerId", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
             {"followerActorId", record.GetFollower()});

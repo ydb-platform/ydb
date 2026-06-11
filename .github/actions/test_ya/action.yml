@@ -300,6 +300,22 @@ runs:
           params+=(${{ inputs.additional_ya_make_args }})
         fi
 
+        GRAPH_SAVE_REMOTE_OPTS=()
+        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-store)
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+          GRAPH_SAVE_REMOTE_OPTS+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
+        fi
+
+        GRAPH_ONLY_MODE=false
+        if [ "${{ inputs.save_test_graph }}" = "true" ] && [ "${{ inputs.run_tests }}" != "true" ]; then
+          GRAPH_ONLY_MODE=true
+        fi
+
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all
@@ -394,9 +410,27 @@ runs:
           if [ true = ${{ inputs.run_tests }} ]; then
             GRAPH_YA_MAKE_COMMAND+=" --retest"
           fi
-          $GRAPH_YA_MAKE_COMMAND -k --cache-tests \
-            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
-            $YA_MAKE_TARGET
+          if [ "$GRAPH_ONLY_MODE" = "true" ]; then
+            $GRAPH_YA_MAKE_COMMAND --cache-tests \
+              --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+              "${GRAPH_SAVE_REMOTE_OPTS[@]}" \
+              $YA_MAKE_TARGET
+          else
+            $GRAPH_YA_MAKE_COMMAND -k --cache-tests \
+              --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+              "${GRAPH_SAVE_REMOTE_OPTS[@]}" \
+              $YA_MAKE_TARGET
+          fi
+        fi
+
+        if [ "$GRAPH_ONLY_MODE" = "true" ]; then
+          if [ "${{ inputs.increment }}" = "true" ]; then
+            echo "10 [Graph compare log]($PUBLIC_DIR_URL/graph_compare_log.txt)" >> $SUMMARY_LINKS
+          fi
+          echo "status=true" >> $GITHUB_OUTPUT
+          SKIP_TEST_LOOP=1
+        else
+          SKIP_TEST_LOOP=0
         fi
 
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
@@ -422,7 +456,9 @@ runs:
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
-        echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+        if [ "$SKIP_TEST_LOOP" != "1" ]; then
+          echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+        fi
 
         BUILD_FAILED=0
 
@@ -432,6 +468,9 @@ runs:
           CONTEXT_PATH=""
         fi
 
+        if [ "$SKIP_TEST_LOOP" = "1" ]; then
+          :
+        else
         for RETRY in $(seq $START_RETRY $TEST_RETRY_COUNT)
         do
           if [ $RETRY != 1 ]; then
@@ -671,8 +710,9 @@ runs:
               CONTEXT_PATH=""
           fi
         done;
+        fi
 
-        if [ $BUILD_FAILED = 0 ]; then
+        if [ $BUILD_FAILED = 0 ] && [ "$SKIP_TEST_LOOP" != "1" ]; then
           echo "status=true" >> $GITHUB_OUTPUT
           if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
             echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
@@ -744,7 +784,15 @@ runs:
         set -x
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
-        echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+        if [ true = ${{ inputs.run_tests }} ]; then
+          if [ -n "${S3_SUBDIR:-}" ]; then
+            echo "00 [Shard artifacts (${S3_SUBDIR})](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+          else
+            echo "00 [Test artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+          fi
+        else
+          echo "00 [Build logs](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
+        fi
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"

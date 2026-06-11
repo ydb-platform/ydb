@@ -168,6 +168,7 @@ jobs:
           increment: ${{ inputs.increment }}
           run_tests: false
           save_test_graph: true
+          s3_subdir: build
           test_size: small,medium
           test_threads: 52
           custom_branch_name: ${{ needs.prepare.outputs.sharding_branch }}

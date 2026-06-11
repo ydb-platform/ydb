@@ -125,6 +125,9 @@ runs:
         fi
         # Output the folder_prefix for use in subsequent steps
         echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
+        if [ -n "${{ inputs.s3_subdir }}" ]; then
+          echo "S3_SUBDIR=${{ inputs.s3_subdir }}" >> $GITHUB_ENV
+        fi
 
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd

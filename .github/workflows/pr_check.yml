@@ -244,6 +244,7 @@ jobs:
           increment: true
           run_tests: false
           save_test_graph: true
+          s3_subdir: build
           test_size: small,medium
           test_threads: 52
           put_build_results_to_cache: true

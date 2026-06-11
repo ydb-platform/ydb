@@ -38,9 +38,7 @@ END DO
 
 {% include [consumer-usage](../../../_includes/consumer-usage.md) %}
 
-
 Независимо от наличия читателя позиция чтения потокового запроса сохраняется в [чекпоинте](../../../dev/streaming-query/checkpoints.md).
-
 
 ## Примеры {#examples}
 

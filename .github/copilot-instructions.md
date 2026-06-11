@@ -36,7 +36,7 @@ When you change anything under **`.github/`** (workflows, scripts, config files,
 - **Mute pipeline:** `update_muted_ya.yml` and `create_issues_for_muted_tests.yml` depend on: `create_new_muted_ya.py`, `get_muted_tests.py`, `flaky_tests_history.py`, `tests_monitor.py`, and on **`.github/config/muted_ya.txt`** path and format. Changing mute/unmute rules (in code or in `mute_rules.md`) can change which tests get muted and affect analytics and Telegram notifications.
 - **Paths and interfaces:** Renaming or moving **`.github/config/muted_ya.txt`**, or changing the format expected by `mute_utils.py` / `transform_build_results.py` / `create_new_muted_ya.py`, will break workflows and the **test_ya** action unless all call sites are updated.
 - **Muted tests and real bugs:** Tests in `muted_ya.txt` are disabled (broken product/test/infra). When reviewing code or investigating failures, if a **muted test could be hiding a real bug** (e.g. the change or fix touches the same area as that test), **warn explicitly** and suggest verifying (e.g. run the test locally or consider unmuting to confirm no regression).
-- **Secrets and vars:** Workflows use `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`, `YDBOT_TOKEN`, `GH_PERSONAL_ACCESS_TOKEN`, `TELEGRAM_YDBOT_TOKEN`, `TELEGRAM_MUTE_CHAT_ID`, `TEAM_TO_RESPONSIBLE_TG`, etc. Changing step logic that uses these can cause auth/notification failures.
+- **Secrets and vars:** Workflows use `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`, `YDBOT_TOKEN`, `GH_PERSONAL_ACCESS_TOKEN`, `YDBOT_TELEGRAM_BOT_TOKEN`, `TELEGRAM_MUTE_CHAT_ID`, `TEAM_TO_RESPONSIBLE_TG`, etc. Changing step logic that uses these can cause auth/notification failures.
 
 ### 3. Potential problems (warn, suggest verification)
 

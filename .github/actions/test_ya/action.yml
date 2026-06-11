@@ -206,8 +206,6 @@ runs:
           ulimit -c 0
         fi
 
-        echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
         # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
@@ -290,6 +288,10 @@ runs:
         echo "PUBLISH_GITHUB_STATUS=$PUBLISH_GITHUB_STATUS" >> $GITHUB_ENV
         echo "START_RETRY=$START_RETRY" >> $GITHUB_ENV
 
+        if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+          echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
+        fi
+
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
         fi
@@ -355,7 +357,9 @@ runs:
             echo "graph_compare.py returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+              echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            fi
             exit $RC
           fi
 
@@ -426,7 +430,9 @@ runs:
           mkdir $TEST_META_INFO
 
           CURRENT_MESSAGE="ya make is running..."
-          PREV_REPORT="$CURRENT_REPORT"
+          if [ "$RETRY" -gt "$START_RETRY" ]; then
+            PREV_REPORT="$CURRENT_REPORT"
+          fi
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           if [ $IS_RETRY = 0 ]; then
@@ -538,7 +544,9 @@ runs:
               | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type = "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
-            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+              echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            fi
             break
           fi
 
@@ -570,7 +578,9 @@ runs:
           if [ $FAILED_TESTS_COUNT -gt 500 ]; then
             IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
-            echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+              echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            fi
           fi
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
@@ -645,7 +655,9 @@ runs:
 
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
-          echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
+          if [ "$PUBLISH_PR_COMMENT" = "true" ]; then
+            echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
+          fi
         fi
 
     - name: resolve-status-sha
@@ -737,7 +749,7 @@ runs:
     - name: show_build_size_diff
       shell: bash
       continue-on-error: true
-      if: always()
+      if: always() && inputs.publish_pr_comment
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
@@ -768,7 +780,7 @@ runs:
 
     - name: comment-if-cancel
       shell: bash
-      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && inputs.publish_pr_comment
       env:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}

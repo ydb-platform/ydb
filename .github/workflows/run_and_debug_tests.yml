@@ -289,11 +289,17 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Stage shard report
+        if: always()
+        run: |
+          mkdir -p shard_artifact
+          cp tmp/results/try_1/report.json shard_artifact/shard_${{ matrix.shard_id }}.json
       - name: Upload shard report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-shard-report-${{ matrix.shard_id }}-${{ github.run_id }}
-          path: tmp/results/try_1/report.json
+          path: shard_artifact/shard_${{ matrix.shard_id }}.json
           retention-days: 3
 
   shard_aggregate:
@@ -332,7 +338,7 @@ jobs:
         run: |
           set -eux
           mkdir -p merged
-          mapfile -t reports < <(find shard_reports -name report.json | sort)
+          mapfile -t reports < <(find shard_reports -name 'shard_*.json' | sort)
           if [ "${#reports[@]}" -eq 0 ]; then
             echo "No shard reports found"
             exit 1

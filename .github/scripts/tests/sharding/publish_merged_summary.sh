@@ -34,6 +34,11 @@ python3 .github/scripts/tests/generate-summary.py \
   --workflow_run_id "${GITHUB_RUN_ID:-}" \
   "Tests" "$PUBLIC_DIR/try_1/ya-test.html" "$PUBLIC_DIR/try_1/report.json"
 
+if [[ -n "${S3_BUCKET_PATH:-}" ]]; then
+  .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/" || true
+  s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+fi
+
 if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   cat "$PUBLIC_DIR/summary_text.txt" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color "$(cat "$PUBLIC_DIR/summary_color.txt")"
 fi

@@ -37,7 +37,7 @@ jobs:
         id: parse-checks-switch
         run: |
           if [ -n "${{ vars.CHECKS_SWITCH }}" ]; then
-            count=$(jq -r '.pr_check_shard_count // 0' <<< '${{ vars.CHECKS_SWITCH }}')
+            count=$(jq -r '(.pr_check_shard_count | tonumber?) // 0' <<< '${{ vars.CHECKS_SWITCH }}')
           else
             count=0
           fi
@@ -364,11 +364,17 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Stage shard report
+        if: always()
+        run: |
+          mkdir -p shard_artifact
+          cp tmp/results/try_1/report.json shard_artifact/shard_${{ matrix.shard_id }}.json
       - name: Upload shard report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pr-check-rwdi-shard-${{ matrix.shard_id }}-report
-          path: tmp/results/try_1/report.json
+          path: shard_artifact/shard_${{ matrix.shard_id }}.json
           retention-days: 3
 
   aggregate_rwdi:
@@ -407,7 +413,7 @@ jobs:
         run: |
           set -eux
           mkdir -p merged
-          mapfile -t reports < <(find shard_reports -name report.json | sort)
+          mapfile -t reports < <(find shard_reports -name 'shard_*.json' | sort)
           if [ "${#reports[@]}" -eq 0 ]; then
             echo "No shard reports found"
             exit 1
@@ -418,6 +424,16 @@ jobs:
           python3 .github/scripts/tests/fail-checker.py merged/try_1_report.json \
             --output_path merged/failed_count.txt || true
           echo "failed_count=$(cat merged/failed_count.txt)" >> "$GITHUB_OUTPUT"
+      - name: Prepare s3cmd
+        if: steps.merge.outputs.failed_count == '0' || fromJSON(steps.merge.outputs.failed_count) >= 500
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ya-aggregate-
+          build_preset: relwithdebinfo
       - name: Publish merged try1 result
         if: steps.merge.outputs.failed_count == '0' || fromJSON(steps.merge.outputs.failed_count) >= 500
         env:
@@ -426,9 +442,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PUBLIC_DIR: tmp/results
-          PUBLIC_DIR_URL: https://storage.example.invalid/pr-check-sharded
+          PUBLIC_DIR_URL: ${{ env.S3_URL_PREFIX }}
+          S3_BUCKET_PATH: ${{ env.S3_BUCKET_PATH }}
           PR_NUMBER: ${{ github.event.number }}
           STATUS_SHA: ${{ github.event.pull_request.head.sha }}
+          ORIGINAL_HEAD: ${{ needs.check-running-allowed.outputs.commit_sha }}
         run: |
           set -eux
           bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/try_1_report.json

@@ -16,6 +16,9 @@
 /.github/workflows/ydbdoc-*
 # Mute lists have no owner: no code owner review required
 /.github/config/muted_ya*
+# Ownership files have no owner: no code owner review required
+/.github/CODEOWNERS
+/.github/TESTOWNERS
 /.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/ci

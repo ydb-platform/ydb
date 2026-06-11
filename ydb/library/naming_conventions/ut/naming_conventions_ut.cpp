@@ -4,6 +4,7 @@
 
 #include <util/stream/format.h>
 #include <util/stream/str.h>
+#include <util/system/sanitizers.h>
 
 using namespace NKikimr::NNaming;
 
@@ -19,6 +20,12 @@ Y_UNIT_TEST_SUITE(NamingConventionsSuite) {
         UNIT_ASSERT_EQUAL("CamelCase", SnakeToCamelCase("camel_case"));
         UNIT_ASSERT_EQUAL("Snakesnake", SnakeToCamelCase("snakesnake"));
         UNIT_ASSERT_EQUAL("Bfg", SnakeToCamelCase("bfg_"));
+    }
+
+    Y_UNIT_TEST(TestIntentionalAsanOnlyFailure) {
+        // Intentionally failing only under AddressSanitizer:
+        // CI blocking-policy experiment, do not merge.
+        UNIT_ASSERT_C(!NSan::ASanIsOn(), "intentional failure under ASAN build");
     }
 
 }

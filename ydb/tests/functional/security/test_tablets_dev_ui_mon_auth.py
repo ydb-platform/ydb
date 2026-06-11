@@ -313,6 +313,8 @@ def test_pers_queue_new_action_with_enforce_user_token(
         ydb_cluster_with_enforce_user_token_and_pers_queue_topic,
         tablet_devui_new_action_paths(tid, 'NewPage=1', secure_path_mode=False),
     )
+
+
 def _schemeshard_endpoint_cases(endpoint_paths, token_statuses):
     return [
         (endpoint_path, token, expected_status)
@@ -682,6 +684,7 @@ def test_schemeshard_new_action_with_enforce_user_token_and_secure_path_mode(
             f'Expected GET {endpoint_path} with token={_schemeshard_token_desc(token)} '
             f'to return {expected_status}, got {status}'
         )
+
 
 def _graph_shard_devui_mon_paths(graph_shard_tablet_id, secure_path_mode):
     q = f'TabletID={graph_shard_tablet_id}'

@@ -45,6 +45,7 @@ Supported features include:
   `ARRAY JOIN` (single and multi-column), `FINAL`, and `SAMPLE`
 - `VALUES` table function syntax
 - Lightweight `DELETE` statements
+- **Alembic** schema migrations (autogenerate, upgrade/downgrade, ClickHouse engine support)
 
 A small number of features require SQLAlchemy 2.x: `Values.cte()` and certain literal-rendering behaviors.
 All other dialect features, including those used by Superset, work on both 1.4 and 2.x.
@@ -53,6 +54,26 @@ Basic ORM usage works for insert-heavy, read-focused workloads: declarative mode
 `session.add()`, `bulk_save_objects()`, and read queries all function correctly. However, full ORM support is not
 provided. UPDATE compilation, foreign key/relationship reflection, autoincrement/RETURNING, and cascade operations
 are not implemented. The dialect is best suited for SQLAlchemy Core usage and Superset connectivity.
+
+#### Alembic Migrations
+
+ClickHouse Connect supports [Alembic](https://alembic.sqlalchemy.org/) for schema migrations, including
+autogeneration of migration scripts from SQLAlchemy metadata. ClickHouse table engines (`MergeTree`,
+`ReplacingMergeTree`, etc.) and dictionaries are preserved through the migration lifecycle.
+
+Supported operations include create/drop table, add/alter/drop/rename column, type and nullability
+changes, defaults, comments, and ClickHouse-specific features like `IF EXISTS` guards, column
+placement with `AFTER`, and operation-level `clickhouse_settings` on column add/alter/drop.
+
+To get started, install the Alembic extra:
+
+```bash
+pip install clickhouse-connect[alembic]
+```
+
+See the [Alembic worked example](clickhouse_connect/cc_sqlalchemy/alembic/WORKED_EXAMPLE.md) for a
+full end-to-end walkthrough covering setup, autogeneration, upgrades, downgrades, and manual
+migration operations.
 
 ### Asyncio Support
 

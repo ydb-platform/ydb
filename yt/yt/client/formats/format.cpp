@@ -72,7 +72,7 @@ void Deserialize(TFormat& value, INodePtr node)
         THROW_ERROR_EXCEPTION("Format name must be a string");
     }
 
-    auto typeStr = node->GetValue<TString>();
+    auto typeStr = node->GetValue<std::string>();
     EFormatType type;
     try {
         type = ParseEnum<EFormatType>(typeStr);

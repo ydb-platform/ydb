@@ -24,17 +24,18 @@ class StreamingTestBase:
         os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
         os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "15"
         yield from super().setup_cluster(
-            extra_feature_flags={
-                "enable_external_data_sources": True,
-                "enable_streaming_queries": True
-            },
+            disabled_feature_flags=["enable_drain_on_shutdown"],
+            extra_feature_flags=[
+                "enable_external_data_sources",
+                "enable_streaming_queries"
+            ],
             additional_log_configs={
                 'KQP_COMPUTE': LogLevels.TRACE,
                 'STREAMS_CHECKPOINT_COORDINATOR': LogLevels.TRACE,
                 'STREAMS_STORAGE_SERVICE': LogLevels.TRACE,
                 'FQ_ROW_DISPATCHER': LogLevels.TRACE,
                 'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTOR': LogLevels.DEBUG},
+                'KQP_EXECUTER': LogLevels.DEBUG},
         )
 
     def create_topics(self):

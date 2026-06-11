@@ -118,11 +118,7 @@ TYqlRunTool::TYqlRunTool()
 }
 
 IYtGateway::TPtr TYqlRunTool::CreateYtGateway() {
-    THashMap<TString, TString> secureParams;
-    GetRunOptions().Credentials->ForEach([&](const TString& key, const TCredential& cred) {
-        secureParams["token:" + key] = cred.Content;
-    });
-    auto yqlNativeServices = NFile::TYtFileServices::Make(GetFuncRegistry().Get(), TablesMapping_, GetFileStorage(), TmpDir_, KeepTemp_, TablesDirMapping_, secureParams);
+    auto yqlNativeServices = NFile::TYtFileServices::Make(GetFuncRegistry().Get(), TablesMapping_, GetFileStorage(), TmpDir_, KeepTemp_, TablesDirMapping_);
     return CreateYtFileGateway(yqlNativeServices);
 }
 

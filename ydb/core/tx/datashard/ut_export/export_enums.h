@@ -3,7 +3,7 @@
 namespace NKikimr::NDataShard {
 
     enum class EDataFormat {
-        CSV,
+        YDB_DUMP,
         PARQUET,
     };
 

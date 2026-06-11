@@ -44,7 +44,7 @@ public:
         
         NExportScan::IBuffer* buffer = nullptr;
         switch (dataFormat) {
-        case EDataFormat::CSV:
+        case EDataFormat::YDB_DUMP:
             buffer = CreateS3ExportBuffer(std::move(settings));
             break;
         case EDataFormat::PARQUET:
@@ -60,7 +60,7 @@ public:
     NExportScan::IBuffer* Buffer(EDataFormat dataFormat) {
         THolder<NExportScan::IBuffer>* exportBuffer;
         switch (dataFormat) {
-            case EDataFormat::CSV:
+            case EDataFormat::YDB_DUMP:
                 exportBuffer = &S3ExportBuffer;
                 break;
             case EDataFormat::PARQUET:

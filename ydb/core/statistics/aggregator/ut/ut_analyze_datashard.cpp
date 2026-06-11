@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/statistics/events.h>
@@ -115,6 +116,47 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto pathId = ResolvePathId(runtime, R"(/Root/Database/test\Test`test)", nullptr, &saTabletId);
         // Check that ANALYZE is successful
         Analyze(runtime, saTabletId, {pathId}, "operationId");
+    }
+
+    Y_UNIT_TEST(AnalyzeRebootSa) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        PrepareTable(env, "Table");
+
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        auto sender = runtime.AllocateEdgeActor();
+        const TString operationId = "operationId";
+
+        // Block near end of analyze to ensure ForceTraversalOperationId is committed to DB.
+        TBlockEvents<TEvStatistics::TEvSaveStatisticsQueryResponse> block(runtime);
+
+        auto analyzeRequest = MakeAnalyzeRequest({pathId}, operationId);
+        runtime.SendToPipe(saTabletId, sender, analyzeRequest.release());
+
+        runtime.WaitFor("TEvSaveStatisticsQueryResponse", [&]{ return block.size() > 0; });
+
+        // Reboot the SA tablet while the analyze is in flight.
+        RebootTablet(runtime, saTabletId, sender);
+
+        // The blocked response now targets the old (dead) actor and will be dropped on unblock.
+        block.Unblock();
+        block.Stop();
+
+        // After restart, the operation must appear as IN_PROGRESS, not ENQUEUED.
+        // Without the fix ForceTraversalOperationId is empty after restart, so the check
+        // `ForceTraversalOperationId == operationId` fails and STATUS_ENQUEUED is returned.
+        AnalyzeStatus(runtime, sender, saTabletId, operationId,
+            NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
+
+        // Re-send the same request to trigger RequestingActorReattached recovery path.
+        auto analyzeRequest2 = MakeAnalyzeRequest({pathId}, operationId);
+        runtime.SendToPipe(saTabletId, sender, analyzeRequest2.release());
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+
+        ValidateCountMinSketch(runtime, pathId);
     }
 }
 

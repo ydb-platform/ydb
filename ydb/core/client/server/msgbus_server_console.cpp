@@ -78,7 +78,7 @@ public:
         // Don't print security token.
         Request.ClearSecurityToken();
         YDB_LOG_DEBUG_CTX(ctx, "Forwarding console request",
-            {"request", Request.ShortDebugString().data()});
+            {"request", Request});
 
         if (Request.HasCreateTenantRequest()) {
             auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();

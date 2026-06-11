@@ -11,12 +11,9 @@
 /.cursorindexingignore-personal @ydb-platform/ai-reviewers
 
 /.github/ @ydb-platform/ci
-# Docs-related workflows have no owner: no code owner review required
 /.github/workflows/docs_*
 /.github/workflows/ydbdoc-*
-# Mute lists have no owner: no code owner review required
 /.github/config/muted_ya*
-# Ownership files have no owner: no code owner review required
 /.github/CODEOWNERS
 /.github/TESTOWNERS
 /.github/docker @ydb-platform/appteam

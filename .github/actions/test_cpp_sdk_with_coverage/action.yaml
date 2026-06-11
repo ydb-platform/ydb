@@ -1,7 +1,5 @@
 name: Ya-Build-Test-Coverage
 inputs:
-  build_preset:
-    type: string
   secs:
     type: string
   vars:
@@ -29,7 +27,7 @@ runs:
         s3_key_id: ${{ fromJSON(inputs.secs).AWS_KEY_ID }}
         s3_key_secret: ${{ fromJSON(inputs.secs).AWS_KEY_VALUE }}
         folder_prefix: ya-
-        build_preset: ${{ inputs.build_preset }}
+        build_preset: profile
 
     - name: Coverage on main
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
@@ -55,7 +53,7 @@ runs:
       uses: ./.github/actions/test_ya
       with:
         build_target: ydb/public/sdk/cpp
-        build_preset: ${{ inputs.build_preset }}
+        build_preset: profile
         run_tests: true
         increment: false
         test_size: small,medium,large
@@ -64,7 +62,7 @@ runs:
         put_build_results_to_cache: false
         pull_number: ${{ inputs.pull_number }}
         additional_ya_make_args: >-
-          --build profile --clang-coverage --coverage-report
+          --clang-coverage --coverage-report
           -DCOVERAGE_TARGET_REGEXP=ydb/public/sdk/cpp
         bazel_remote_uri: ${{ fromJSON(inputs.vars).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ fromJSON(inputs.secs).REMOTE_CACHE_USERNAME || '' }}

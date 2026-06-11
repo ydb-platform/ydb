@@ -503,10 +503,22 @@ private:
         if (!entry) {
             return;
         }
-        // Guard against cross-type replies (e.g. from a reused cookie).
+        // Guard against cross-type replies. Should be unreachable with
+        // monotonic cookies; if it ever fires, erase the entry and release
+        // its inflight budget so the queue front can't be pinned forever.
         if (entry->IsRead) {
             LOG_E("HandleWriteResult cookie type mismatch Tag# " << Tag
                 << " Cookie# " << cookie << " expected write but IsRead=true");
+            Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleWriteResult");
+            const ui32 sizeBytes = entry->SizeBytes;
+            Inflight.Erase(cookie);
+            if (ReadInFlight > 0) {
+                --ReadInFlight;
+            }
+            if (Reads.BytesInFlight) {
+                *Reads.BytesInFlight -= sizeBytes;
+            }
+            CheckDrainComplete();
             return;
         }
         const TInflightEntry e = *entry;
@@ -580,10 +592,22 @@ private:
         if (!entry) {
             return;
         }
-        // Guard against cross-type replies (e.g. from a reused cookie).
+        // Guard against cross-type replies. Should be unreachable with
+        // monotonic cookies; if it ever fires, erase the entry and release
+        // its inflight budget so the queue front can't be pinned forever.
         if (!entry->IsRead) {
             LOG_E("HandleReadResult cookie type mismatch Tag# " << Tag
                 << " Cookie# " << cookie << " expected read but IsRead=false");
+            Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleReadResult");
+            const ui32 sizeBytes = entry->SizeBytes;
+            Inflight.Erase(cookie);
+            if (WriteInFlight > 0) {
+                --WriteInFlight;
+            }
+            if (Writes.BytesInFlight) {
+                *Writes.BytesInFlight -= sizeBytes;
+            }
+            CheckDrainComplete();
             return;
         }
         const TInflightEntry e = *entry;
@@ -978,6 +1002,15 @@ private:
                 << ") exceeds VChunkSizeBytes (" << vChunkSizeBytes << ")");
             return;
         }
+        // The tablet's ComputeRoutingParams marks IoValid=false unless
+        // IoSizeBytes evenly divides VChunkSizeBytes; fail fast here instead
+        // of letting every worker get NBSIO_NOT_CONFIGURED.
+        if (vChunkSizeBytes % ioBytes != 0) {
+            EmitError(TStringBuilder()
+                << "IoSizeBytes (" << ioBytes
+                << ") must evenly divide VChunkSizeBytes (" << vChunkSizeBytes << ")");
+            return;
+        }
         if (ioBytes > Max<ui32>()) {
             EmitError("ReadWriteSizeKiB * 1024 overflows ui32");
             return;
@@ -1007,6 +1040,13 @@ private:
         if (totalStopCount > 0) {
             numWorkers = Min(numWorkers, totalStopCount);
         }
+        // Each worker needs a non-empty slice of the flat io-unit space;
+        // otherwise it fails the run with "Degenerate address space slice".
+        // Cap by the total number of io-units (>= 1: all factors validated
+        // non-zero above, and ioBytes divides vChunkSizeBytes).
+        const ui64 addressSpaceIoUnits = static_cast<ui64>(effectiveDbgCount)
+            * static_cast<ui64>(targetNumVChunks) * (vChunkSizeBytes / ioBytes);
+        numWorkers = static_cast<ui32>(Min<ui64>(numWorkers, addressSpaceIoUnits));
 
         LOG_N("Proxy GetSummary OK Tag# " << Tag
             << " TotalDbgCount# " << totalDbgs
@@ -1132,6 +1172,15 @@ private:
         // No-op.
     }
 
+    void HandleWorkWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        // The init-timeout wakeup scheduled in Bootstrap() is not cancelled
+        // on the success path and fires here; ignore it.
+        if (ev->Get()->Tag != kWakeupInitTimeoutTag) {
+            LOG_D("Proxy unexpected wakeup Tag# " << Tag
+                << " WakeupTag# " << ev->Get()->Tag);
+        }
+    }
+
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
         LOG_I("Proxy poison Tag# " << Tag
             << " forwarding to " << Workers.size() << " worker(s)");
@@ -1211,6 +1260,7 @@ private:
         hFunc(TEvTabletPipe::TEvClientConnected, HandleWorkPipeConnected)
         hFunc(TEvTabletPipe::TEvClientDestroyed, HandleWorkPipeDestroyed)
         hFunc(TEvents::TEvPoisonPill, HandlePoison)
+        hFunc(TEvents::TEvWakeup, HandleWorkWakeup)
     )
 
 private:

@@ -234,12 +234,12 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::YQ_AUDIT_EVENT_SENDER_ACTOR; }
 
     void Bootstrap(const NActors::TActorContext&) {
-        YDB_LOG_TRACE("received",
-            {"EventId", *EventId},
-            {"EventType", EventType});
+        YDB_LOG_TRACE("Received",
+            {"eventId", *EventId},
+            {"eventType", EventType});
         if (!Session) {
-            YDB_LOG_TRACE("session is null. Skipping event...",
-                {"EventId", *EventId});
+            YDB_LOG_TRACE("Session is null. Skipping event...",
+                {"eventId", *EventId});
             AuditServiceSensors->ReportSkipped();
             Base::PassAway();
             return;
@@ -258,15 +258,15 @@ public:
         FillResponse(CloudEvent, Issues);
 
         if (ExtraInfo.CloudId) {
-            YDB_LOG_TRACE("cloudId is provided. Send now",
-                {"EventId", *EventId});
+            YDB_LOG_TRACE("CloudId is provided. Send now",
+                {"eventId", *EventId});
             CloudEvent.mutable_event_metadata()->set_cloud_id(ExtraInfo.CloudId);
             SendAndComplete();
             return;
         }
 
-        YDB_LOG_TRACE("resolving cloud id ...",
-            {"EventId", *EventId});
+        YDB_LOG_TRACE("Resolving cloud id",
+            {"eventId", *EventId});
         Base::Send(NKikimr::NFolderService::FolderServiceActorId(), CreateRequest().release(), 0, 0);
     }
 
@@ -290,26 +290,26 @@ private:
             if (delay) {
                 AuditServiceSensors->ReportCloudIdResolvedRetry();
                 YDB_LOG_ERROR("Folder resolve error. Retry with delay cloud id resolve error. Status",
-                    {"Delay", *delay},
-                    {"EventId", *EventId},
-                    {"GrpcStatusCode", status.GRpcStatusCode},
-                    {"StatusMessage", status.Msg},
-                    {"Details", status.Details});
+                    {"delay", *delay},
+                    {"eventId", *EventId},
+                    {"grpcStatusCode", status.GRpcStatusCode},
+                    {"statusMessage", status.Msg},
+                    {"details", status.Details});
                 NActors::TActivationContext::Schedule(*delay, new IEventHandle(NKikimr::NFolderService::FolderServiceActorId(), Base::SelfId(), CreateRequest().release()));
                 return;
             }
             AuditServiceSensors->ReportCloudIdResolvedError();
-            YDB_LOG_ERROR("cloud id resolve error. Status",
-                {"EventId", *EventId},
-                {"GrpcStatusCode", status.GRpcStatusCode},
-                {"StatusMessage", status.Msg},
-                {"Details", status.Details});
-            YDB_LOG_INFO("cloud id: [unknown], folder id: ], user: ], has issues ], details",
-                {"MessageName", MessageName},
-                {"FolderId", CloudEvent.event_metadata().folder_id()},
-                {"User", ExtraInfo.User},
-                {"HasIssues", static_cast<bool>(Issues)},
-                {"Details", CloudEvent.details().ShortDebugString()});
+            YDB_LOG_ERROR("Cloud id resolve error. Status",
+                {"eventId", *EventId},
+                {"grpcStatusCode", status.GRpcStatusCode},
+                {"statusMessage", status.Msg},
+                {"details", status.Details});
+            YDB_LOG_INFO("Cloud id: [unknown], folder id: user: has issues details",
+                {"messageName", MessageName},
+                {"folderId", CloudEvent.event_metadata().folder_id()},
+                {"user", ExtraInfo.User},
+                {"hasIssues", static_cast<bool>(Issues)},
+                {"details", CloudEvent.details()});
             AuditServiceSensors->ReportSkipped();
             Base::PassAway();
             return;
@@ -317,8 +317,8 @@ private:
 
         AuditServiceSensors->ReportCloudIdResolvedSuccess();
 
-        YDB_LOG_TRACE("cloud id resolved",
-            {"EventId", *EventId});
+        YDB_LOG_TRACE("Cloud id resolved",
+            {"eventId", *EventId});
         const auto cloudId = ev->Get()->CloudId;
         CloudEvent.mutable_event_metadata()->set_cloud_id(cloudId);
         SendAndComplete();
@@ -353,15 +353,15 @@ private:
         NUnifiedAgent::TClientMessage message;
         message.Payload = TStringBuilder() << output;
 
-        YDB_LOG_TRACE("sending",
-            {"EventId", *EventId});
-        YDB_LOG_INFO("cloud id: ], folder id: ], user: ], has issues ], details",
-            {"MessageName", MessageName},
-            {"CloudId", CloudEvent.event_metadata().cloud_id()},
-            {"FolderId", CloudEvent.event_metadata().folder_id()},
-            {"User", ExtraInfo.User},
-            {"HasIssues", static_cast<bool>(Issues)},
-            {"Details", CloudEvent.details().ShortDebugString()});
+        YDB_LOG_TRACE("Sending",
+            {"eventId", *EventId});
+        YDB_LOG_INFO("Cloud id: folder id: user: has issues details",
+            {"messageName", MessageName},
+            {"cloudId", CloudEvent.event_metadata().cloud_id()},
+            {"folderId", CloudEvent.event_metadata().folder_id()},
+            {"user", ExtraInfo.User},
+            {"hasIssues", static_cast<bool>(Issues)},
+            {"details", CloudEvent.details()});
         Session->Send(std::move(message));
 
         AuditServiceSensors->ReportSent();

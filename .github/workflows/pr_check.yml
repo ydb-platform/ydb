@@ -357,11 +357,23 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Resolve shard build targets
+        id: shard_targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t targets < <(jq -r --argjson id '${{ matrix.shard_id }}' '.shards[] | select(.id==$id) | .tests[]' shard_plan/shard_plan.json)
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No targets for shard ${{ matrix.shard_id }}"
+            exit 1
+          fi
+          echo "targets=${targets[*]}" >> "$GITHUB_OUTPUT"
+          echo "Shard ${{ matrix.shard_id }} targets (${#targets[@]}): ${targets[*]}"
       - name: Run shard tests (attempt 1)
         uses: ./.github/actions/build_and_test_ya
         with:
           build_preset: relwithdebinfo
-          build_target: "ydb/"
+          build_target: ${{ steps.shard_targets.outputs.targets }}
           increment: false
           run_tests: true
           test_size: small,medium
@@ -373,7 +385,7 @@ jobs:
           publish_github_status: false
           publish_pr_comment: false
           single_attempt: true
-          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY --test-blacklist-path shard_plan/shard_filters/shard_${{ matrix.shard_id }}.yaml
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',

@@ -101,6 +101,24 @@ class ShardingToolsTest(unittest.TestCase):
                 }
                 self.assertEqual(len(shard_ids), 1, f"suite {suite} split across shards")
 
+    def test_extract_drops_scope_root_when_nested_suites_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "tests.txt"
+            _run(
+                "extract_tests_from_graph.py",
+                str(FIXTURES / "graph_sample.json"),
+                "--target-prefix",
+                "ydb/tests/olap",
+                "-o",
+                str(out),
+            )
+            tests = out.read_text(encoding="utf-8").strip().splitlines()
+            self.assertNotIn("ydb/tests/olap", tests)
+            self.assertEqual(
+                tests,
+                ["ydb/tests/olap/load", "ydb/tests/olap/s3_import"],
+            )
+
     def test_build_shard_blacklist_complement(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"

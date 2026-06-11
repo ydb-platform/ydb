@@ -1,6 +1,10 @@
 {
   "graph": [
     {
+      "module_dir": "ydb/tests/olap",
+      "module_tag": "py3test_program"
+    },
+    {
       "module_dir": "ydb/tests/olap/s3_import",
       "module_tag": "py3test_program"
     },

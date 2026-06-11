@@ -74,6 +74,16 @@ def extract_suite_paths(graph: dict, target_prefix: str | None = None) -> list[s
     return sorted(suites)
 
 
+def drop_redundant_scope_roots(suites: list[str], target_prefix: str | None) -> list[str]:
+    """Drop scope root suite when nested suites exist (e.g. ydb/tests/olap + children)."""
+    prefix = normalize_target_prefix(target_prefix)
+    if not prefix or prefix not in suites:
+        return suites
+    if any(s.startswith(f"{prefix}/") for s in suites):
+        return sorted(s for s in suites if s != prefix)
+    return suites
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("graph", type=Path, help="graph.json from ya make --save-graph-to")
@@ -87,6 +97,7 @@ def main() -> int:
 
     graph = json.loads(args.graph.read_text(encoding="utf-8"))
     suites = extract_suite_paths(graph, args.target_prefix)
+    suites = drop_redundant_scope_roots(suites, args.target_prefix)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text("\n".join(suites) + ("\n" if suites else ""), encoding="utf-8")

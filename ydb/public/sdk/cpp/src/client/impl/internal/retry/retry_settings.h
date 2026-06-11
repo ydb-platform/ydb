@@ -31,7 +31,9 @@ inline TRetryOperationSettings ResolveRetrySettings(
         settings.MaxTimeout(operationClientTimeout);
     }
 
-    if (!explicitOverride && !operationOverride && idempotentDefault == ERetryIdempotentDefault::True) {
+    if (!explicitOverride && !operationOverride && idempotentDefault == ERetryIdempotentDefault::True
+        && !clientDefault.IdempotentWasSet_)
+    {
         settings.Idempotent(true);
     }
 

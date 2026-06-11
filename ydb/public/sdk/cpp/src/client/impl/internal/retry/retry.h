@@ -33,6 +33,25 @@ enum class NextStep {
     Finish,
 };
 
+inline bool ShouldRetryStatus(EStatus status, const TRetryOperationSettings& settings) {
+    switch (status) {
+        case EStatus::ABORTED:
+        case EStatus::OVERLOADED:
+        case EStatus::CLIENT_RESOURCE_EXHAUSTED:
+        case EStatus::UNAVAILABLE:
+        case EStatus::BAD_SESSION:
+        case EStatus::SESSION_BUSY:
+            return true;
+        case EStatus::NOT_FOUND:
+            return settings.RetryNotFound_;
+        case EStatus::UNDETERMINED:
+        case EStatus::TRANSPORT_UNAVAILABLE:
+            return settings.Idempotent_;
+        default:
+            return settings.RetryUndefined_;
+    }
+}
+
 class TRetryContextBase : TNonCopyable {
 protected:
     TRetryOperationSettings Settings_;

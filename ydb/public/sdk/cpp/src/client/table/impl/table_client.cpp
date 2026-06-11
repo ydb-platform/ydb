@@ -1,6 +1,7 @@
 #include "table_client.h"
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/bulk_upsert_retry_state.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 
 namespace NYdb::inline Dev {
 
@@ -1211,7 +1212,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     {
         Y_UNUSED(any);
         if (retryState && retryHolder && !retryState->HasBackup()
-            && !status.Ok() && NRetry::IsRetryableBulkUpsertFailure(status.Status, true))
+            && !status.Ok() && NRetry::ShouldRetryStatus(status.Status, retryState->Settings()))
         {
             retryState->CreateBackup(*retryHolder);
         }

@@ -134,6 +134,18 @@ Y_UNIT_TEST_SUITE(YdbUnaryRetrySettings) {
         UNIT_ASSERT(!resolved.Idempotent_);
     }
 
+    Y_UNIT_TEST(ResolveRetrySettingsRespectsClientIdempotentFalse) {
+        const auto clientDefault = TRetryOperationSettings().MaxRetries(5).Idempotent(false);
+        const auto resolved = ResolveRetrySettings(
+            clientDefault,
+            std::nullopt,
+            TDuration::Seconds(10),
+            ERetryIdempotentDefault::True);
+
+        UNIT_ASSERT_VALUES_EQUAL(resolved.MaxRetries_, 5u);
+        UNIT_ASSERT(!resolved.Idempotent_);
+    }
+
     Y_UNIT_TEST(RunUnaryWithRetrySkipsInnerRetryInRetryOperationContext) {
         TMockUnaryRetryClient client;
         client.SetInRetryOperationContext(true);

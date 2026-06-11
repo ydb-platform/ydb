@@ -1637,7 +1637,7 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
         return Impl_->BulkUpsert(table, std::move(rows), settings);
     }
 
-    auto state = std::make_shared<NRetry::TBulkUpsertRetryState>();
+    auto state = std::make_shared<NRetry::TBulkUpsertRetryState>(retrySettings);
     auto opSettings = settings;
     opSettings.RetryRowsState_ = state;
     const auto startedAt = TInstant::Now();
@@ -1646,7 +1646,7 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
         [this, table, settings, retrySettings, state, startedAt](const TAsyncBulkUpsertResult& f) {
             const auto result = f.GetValue();
             if (result.IsSuccess()
-                || !NRetry::IsRetryableBulkUpsertFailure(result.GetStatus(), retrySettings.Idempotent_)) {
+                || !NRetry::ShouldRetryStatus(result.GetStatus(), retrySettings)) {
                 return NThreading::MakeFuture(result);
             }
             Y_ABORT_UNLESS(state->HasBackup());
@@ -1707,7 +1707,7 @@ TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& r
     if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
         return Impl_->ReadRows(table, std::move(rows), columns, settings);
     }
-    const TValue keysCopy = rows;
+    const TValue keysCopy = std::move(rows);
 
     return NRetry::RunUnaryWithRetry(*this, retrySettings,
         [this, table, keysCopy, columns, settings](TDuration timeout) {

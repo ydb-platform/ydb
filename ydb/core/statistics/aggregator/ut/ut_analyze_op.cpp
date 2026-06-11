@@ -290,6 +290,125 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             "Cancel of DONE op should not change state");
     }
 
+    Y_UNIT_TEST(CancelAndForgetNonTerminal) {
+        //   * One active op (IN_PROGRESS) held mid-flight by blocking the SA-internal
+        //     per-table result.
+        //   * One queued op (ENQUEUED) that can't start while the active one runs.
+        //   Then:
+        //     1. Forget on the IN_PROGRESS op  -> PRECONDITION_FAILED.
+        //     2. Forget on the ENQUEUED op     -> PRECONDITION_FAILED.
+        //     3. Cancel the ENQUEUED op        -> SUCCESS, immediately STATE_CANCELLED
+        //        (TxAnalyzeOpCancel::Execute: not active -> marks finished inline).
+        //        The active op must remain IN_PROGRESS.
+        //     4. Cancel the IN_PROGRESS op     -> SUCCESS synchronously; the state
+        //        flip is deferred via DispatchFinishTraversalTx which marks the op
+        //        STATE_CANCELLED and poisons the SA-internal AnalyzeActor via
+        //        ResetTraversalState. Verified by polling Get until STATE_CANCELLED.
+        constexpr int kShardCount = 4;
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        auto tableInfo = PrepareColumnTable(env, "Database", "Table", kShardCount);
+
+        const ui64 saTabletId = tableInfo.SaTabletId;
+        const TPathId pathId = tableInfo.PathId;
+        const TString activeOpId = "opActive";
+        const TString queuedOpId = "opQueued";
+
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> blockResult(runtime);
+
+        TAnalyzedTable analyzedTable(pathId);
+
+        // Submit op1 and wait until it becomes the active force traversal.
+        {
+            auto req = MakeAnalyzeRequest({analyzedTable}, activeOpId, "/Root/Database");
+            req->Record.MutableTables(0)->SetPath(tableInfo.Path);
+            runtime.SendToPipe(saTabletId, runtime.AllocateEdgeActor(), req.release());
+        }
+        runtime.WaitFor("active AnalyzeActor running",
+            [&]{ return !blockResult.empty(); });
+
+        // Submit op2 — TxScheduleTraversal is a no-op because TraversalPathId is
+        // already set for op1, so op2 sits in ForceTraversals as STATE_ENQUEUED.
+        {
+            auto req = MakeAnalyzeRequest({analyzedTable}, queuedOpId, "/Root/Database");
+            req->Record.MutableTables(0)->SetPath(tableInfo.Path);
+            runtime.SendToPipe(saTabletId, runtime.AllocateEdgeActor(), req.release());
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        // Sanity: states match the configuration.
+        {
+            auto active = TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId);
+            UNIT_ASSERT_VALUES_EQUAL_C(active.GetAnalyzeOperation().GetState(),
+                Ydb::Table::AnalyzeState::STATE_IN_PROGRESS,
+                "active op should be IN_PROGRESS");
+            auto queued = TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", queuedOpId);
+            UNIT_ASSERT_VALUES_EQUAL_C(queued.GetAnalyzeOperation().GetState(),
+                Ydb::Table::AnalyzeState::STATE_ENQUEUED,
+                "queued op should be ENQUEUED before active finishes");
+        }
+
+        // (1) Forget on IN_PROGRESS -> PRECONDITION_FAILED, state unchanged.
+        TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId)
+                .GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_IN_PROGRESS,
+            "rejected Forget must not change IN_PROGRESS state");
+
+        // (2) Forget on ENQUEUED -> PRECONDITION_FAILED, state unchanged.
+        TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", queuedOpId,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", queuedOpId)
+                .GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_ENQUEUED,
+            "rejected Forget must not change ENQUEUED state");
+
+        // (3) Cancel queued op: synchronous transition to STATE_CANCELLED;
+        // active op untouched.
+        TestCancelAnalyzeOp(runtime, saTabletId, "/Root/Database", queuedOpId,
+            Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", queuedOpId)
+                .GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_CANCELLED,
+            "queued op should be CANCELLED right after cancel");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId)
+                .GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_IN_PROGRESS,
+            "active op must remain IN_PROGRESS after a queued sibling is cancelled");
+
+        // (4) Cancel active op: SUCCESS synchronously, but the state flip is
+        // deferred via DispatchFinishTraversalTx. Unblock the analyze result so
+        // the poisoned AnalyzeActor can finish tearing down, then poll until
+        // STATE_CANCELLED is observed. DONE must never be observed.
+        TestCancelAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId,
+            Ydb::StatusIds::SUCCESS);
+        blockResult.Unblock();
+        blockResult.Stop();
+
+        bool foundCancelled = false;
+        for (int i = 0; i < 60 && !foundCancelled; ++i) {
+            const auto state =
+                TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId)
+                    .GetAnalyzeOperation().GetState();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(
+                state, Ydb::Table::AnalyzeState::STATE_DONE,
+                "cancelled active op must not transition to DONE");
+            if (state == Ydb::Table::AnalyzeState::STATE_CANCELLED) {
+                foundCancelled = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(foundCancelled,
+            "cancelled active op did not transition to STATE_CANCELLED");
+    }
+
 } // Y_UNIT_TEST_SUITE(AnalyzeOpList)
 
 } // NStat

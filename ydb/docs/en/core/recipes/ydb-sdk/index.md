@@ -36,13 +36,8 @@ Contents:
 - [Troubleshooting](debug.md)
 
   - [Enable logging](debug-logs.md)
-<<<<<<< HEAD
-  - [Enable metrics in Prometheus](debug-prometheus.md)
-  - [Enable tracing in Jaeger](debug-jaeger.md)
-=======
   - [Connect metrics to Prometheus](debug-prometheus.md)
   - [Tracing with OpenTelemetry](debug-otel.md)
->>>>>>> 253c78f6185 (Translation of PR 39667 (#41026))
 
 See also:
 

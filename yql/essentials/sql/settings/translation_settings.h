@@ -144,6 +144,7 @@ struct TTranslationSettings {
     bool AllowTablesFunction = false;
 
     bool ValidateViewStatement = true;
+    bool MarkQueryTextAtomWithIgnoredContent = false;
 };
 
 struct TParsedSettings {

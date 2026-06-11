@@ -522,6 +522,11 @@ enum EPercentileCounters {
         Name: "NumShardsByTtlLag"
         Integral: true
         Ranges: { Value: 0        Name: "0"     }
+        Ranges: { Value: 30       Name: "30"    }
+        Ranges: { Value: 60       Name: "60"    }
+        Ranges: { Value: 120      Name: "120"   }
+        Ranges: { Value: 300      Name: "300"   }
+        Ranges: { Value: 600      Name: "600"   }
         Ranges: { Value: 900      Name: "900"   }
         Ranges: { Value: 1800     Name: "1800"  }
         Ranges: { Value: 3600     Name: "3600"  }
@@ -592,6 +597,15 @@ enum EPercentileCounters {
         Ranges: { Value: 200000      Name: "200 ms"       }
         Ranges: { Value: 500000      Name: "500 ms"       }
         Ranges: { Value: 1000000     Name: "1000 ms"      }
+        Ranges: { Value: 5000000     Name: "5000 ms"      }
+        Ranges: { Value: 10000000    Name: "10000 ms"     }
+        Ranges: { Value: 30000000    Name: "30000 ms"     }
+        Ranges: { Value: 50000000    Name: "50000 ms"     }
+        Ranges: { Value: 60000000    Name: "60000 ms"     }
+        Ranges: { Value: 70000000    Name: "70000 ms"     }
+        Ranges: { Value: 300000000   Name: "300000 ms"    }
+        Ranges: { Value: 600000000   Name: "600000 ms"    }
+        Ranges: { Value: 900000000   Name: "900000 ms"    }
     }];
 
     COUNTER_PQ_STATS_BATCH_LATENCY = 6 [(CounterOpts) = {

@@ -91,7 +91,7 @@ public:
     {
         YsonWriter_.OnKeyedItem(key);
         PathStack_.Pop();
-        PathStack_.Push(TString{key});
+        PathStack_.Push(std::string{key});
         auto path = PathStack_.GetPath();
         auto it = PathToIndex_.find(path);
         if (it != PathToIndex_.end()) {
@@ -174,6 +174,7 @@ TYsonString MergeYsonStrings(
         ForceYPath(rootNode, path);
         NYTree::SetNodeByYPath(rootNode, path, NYTree::GetEphemeralNodeFactory()->CreateMap());
     }
+    // TODO(babenko): migrate to std::string
     TString result;
     size_t sizeEstimate = std::accumulate(
         ysonStringBufs.begin(),

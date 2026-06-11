@@ -86,6 +86,9 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
 
         switch (indexDesc->Type) {
             case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::GlobalFulltextCompact:
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            case TIndexDescription::EType::GlobalJsonCompact:
                 AFL_ENSURE(false);
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {
@@ -177,6 +180,9 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalAsync:
             case TIndexDescription::EType::GlobalSyncUnique:
+            case TIndexDescription::EType::GlobalFulltextCompact:
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            case TIndexDescription::EType::GlobalJsonCompact:
                 return false;
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
             case TIndexDescription::EType::GlobalFulltextPlain:

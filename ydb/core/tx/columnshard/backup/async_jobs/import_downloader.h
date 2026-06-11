@@ -20,6 +20,6 @@ TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(con
 
 std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId,
     const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo,
-    const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema);
+    const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema);
 
 }   // namespace NKikimr::NColumnShard::NBackup

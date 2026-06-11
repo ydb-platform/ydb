@@ -59,15 +59,14 @@ size_t CalcMaxBlockLenForOutput(std::vector<TType*> wideComponents) {
     return CalcBlockLen(maxBlockItemSize);
 }
 
-using TEqualsPtr = bool(*)(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
-using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
-
-using TEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
-using THashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
-
 static ui64 GetInstanceSeed(void* self) {
-    // Used to return CityHash64(self) but looks like that's unnecessary: we put the seed through regular and then Fibonacci hashing anyway
-    return reinterpret_cast<ui64>(self);
+    char buf[sizeof(void*)];
+    WriteUnaligned<void*>(buf, self);
+    return CityHash64(buf, sizeof(buf));
+}
+
+static Y_FORCE_INLINE ui32 GlobalHashToRhItemHash(ui64 hash) {
+    return static_cast<ui32>(hash >> 32);
 }
 
 struct TSegmentedArena
@@ -577,10 +576,13 @@ struct TDqHashCombineTestParams
     TTestStateCallback StateCallback;
 };
 
+using TEqualsFunc = TWideUnboxedEqual;
+using THashFunc = TWideUnboxedHasherFib<true>;
+
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
 {
 protected:
-    using TMap = TDqRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TMap = TDqRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
 
     static size_t GetStaticMaxRowCount(size_t entryPayloadSizeBytes, size_t memoryLimit) {
         size_t memoryPerRow = entryPayloadSizeBytes + static_cast<size_t>(TMap::GetCellSize() * ExtraMapCapacity);
@@ -698,6 +700,7 @@ protected:
         const ui32 pageStride = Store->AllocSize;
 
         for (size_t i = 0; i < NumBuckets; ++i) {
+            size_t bucketEntries = 0;
             TWideUnboxedValuesSpillerAdapter& spiller = *currentSpilling.Spillage[i].SpilledState;
             TSegmentedArena::TPageEntry* page = Store->PagesByTag[i];
             while (page != nullptr) {
@@ -705,6 +708,7 @@ protected:
                 for (ui32 writtenFromPage = 0; writtenFromPage < page->Used; ++writtenFromPage, item += pageStride) {
                     TArrayRef<TUnboxedValuePod> pageItems(rehydrateIfNeeded(item));
                     ++totalWritten;
+                    ++bucketEntries;
                     auto pageFuture = spiller.WriteWideItem(pageItems);
                     for (auto& uv : pageItems) {
                         uv.UnRef();
@@ -729,6 +733,7 @@ protected:
                 }
                 spiller.AsyncWriteCompleted(finishFuture->ExtractValue());
             }
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "Spilled state bucket " << i << ": " << bucketEntries << " entries");
         }
 
         Map->Clear();
@@ -870,7 +875,7 @@ protected:
 
                 // TODO: Checkpoint: ensure RefCounts are valid
                 bool isNew = false;
-                Map->Insert(keyAndStateBuf, isNew);
+                Map->Insert(keyAndStateBuf, GlobalHashToRhItemHash(Hasher(keyAndStateBuf)), isNew);
 
                 MKQL_ENSURE(isNew, "Every key in the spilled state must be unique");
             }
@@ -913,7 +918,7 @@ protected:
                 // TODO: extract into a method (this is mostly a copy from ProcessFetchedRow)
                 TUnboxedValuePod* keyBuffer = nullptr;
                 bool isNew = false;
-                char* mapIt = Map->Insert(TempKeyBuffer.data(), isNew);
+                char* mapIt = Map->Insert(TempKeyBuffer.data(), GlobalHashToRhItemHash(Hasher(TempKeyBuffer.data())), isNew);
                 char* statePtr = nullptr;
 
                 if (isNew) {
@@ -1036,9 +1041,11 @@ protected:
         ui64 bucketId = 0;
         ui64 hash = Hasher(keyBuf.data());
         if (EnableSpilling) {
-            // Lower 16 bits are used by the hash shuffle connection to distribute keys among tasks, so we can't use these (even with the hash seed)
-            // Another solution would be to rehash using a different function but shifted bits are uniform enough
-            bucketId = ((hash * 11400714819323198485llu) >> 16) & ((1ull << BucketBits) - 1ull);
+            // Lower 16 bits of the same hash value are used by the hash shuffle connection to distribute keys among tasks,
+            // so we can't use these (even with the hash seed).
+            // Another solution would be to rehash using a different function but shifted bits are uniform enough.
+            // Actual hashmap items are using the upper 32 bits.
+            bucketId = (hash >> 16) & ((1ull << BucketBits) - 1ull);
         }
 
         if (!SpillingStack.empty()) {
@@ -1076,20 +1083,20 @@ protected:
             return EFillState::ContinueFilling;
         }
 
-        TUnboxedValuePod* keyBuffer = nullptr;
+        TUnboxedValuePod* persistentKeyBuffer = nullptr;
         bool isNew = false;
-        auto mapIt = Map->Insert(keyBuf.data(), hash, isNew);
+        auto mapIt = Map->Insert(keyBuf.data(), GlobalHashToRhItemHash(hash), isNew);
         char* statePtr = nullptr;
         if (isNew) {
             // Copy the value to the specified arena page
-            keyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
-            memcpy(keyBuffer, keyBuf.data(), keyBuf.size_bytes());
-            // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), keyBuffer);
-            *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = keyBuffer;
+            persistentKeyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
+            memcpy(persistentKeyBuffer, keyBuf.data(), keyBuf.size_bytes());
+            // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), persistentKeyBuffer);
+            *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = persistentKeyBuffer;
         } else {
-            keyBuffer = Map->GetKeyValue(mapIt);
+            persistentKeyBuffer = Map->GetKeyValue(mapIt);
         }
-        statePtr = reinterpret_cast<char *>(keyBuffer) + StatesOffset;
+        statePtr = reinterpret_cast<char *>(persistentKeyBuffer) + StatesOffset;
 
         // TODO: loop over Aggs, but for now we always have one and only GenericAggregation
         if (isNew) {
@@ -1159,7 +1166,8 @@ public:
     bool PassthroughKeys = false;
 
     TBaseAggregationState(
-        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputUnpackedWidth,
+        TMemoryUsageInfo* memInfo, TComputationContext& ctx, NYql::NUdf::TLoggerPtr logger, NYql::NUdf::TLogComponentId logComponent,
+        const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputUnpackedWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
@@ -1171,6 +1179,8 @@ public:
     )
         : TBase(memInfo)
         , Ctx(ctx)
+        , Logger(logger)
+        , LogComponent(logComponent)
         , MemoryHelper(memoryHelper)
         , MemoryLimit(memoryLimit)
         , ForLLVM(forLLVM)
@@ -1180,8 +1190,8 @@ public:
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
-        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes, GetInstanceSeed(this))))
-        , Equals(TWideUnboxedEqual(KeyTypes))
+        , Hasher(THashFunc(KeyTypes, GetInstanceSeed(this)))
+        , Equals(TEqualsFunc(KeyTypes))
         , Draining(false)
         , SourceEmpty(false)
         , CanBypass(!isAggregator && supportsBypass)
@@ -1303,7 +1313,7 @@ protected:
         auto tryAlloc = [this](size_t rows) -> bool {
             size_t newCapacity = GetMapCapacity(rows);
             try {
-                Map.Reset(new TMap(Hasher, Equals, newCapacity));
+                Map.Reset(new TMap(Equals, newCapacity));
                 if (!HasMemoryForProcessing()) {
                     Map.Reset(nullptr);
                     return false;
@@ -1324,7 +1334,7 @@ protected:
 
         // This can emit uncaught TMemoryLimitExceededException if we can't afford even a tiny map
         size_t smallCapacity = GetMapCapacity(LowerFixedRowCount);
-        Map.Reset(new TMap(Hasher, Equals, smallCapacity));
+        Map.Reset(new TMap(Equals, smallCapacity));
         return LowerFixedRowCount;
     }
 
@@ -1469,6 +1479,8 @@ protected:
     }
 
     TComputationContext& Ctx;
+    NYql::NUdf::TLoggerPtr Logger;
+    NYql::NUdf::TLogComponentId LogComponent;
 
     const TMemoryEstimationHelper& MemoryHelper;
 
@@ -1533,6 +1545,8 @@ public:
     TWideAggregationState(
         TMemoryUsageInfo* memInfo,
         TComputationContext& ctx,
+        NYql::NUdf::TLoggerPtr logger,
+        NYql::NUdf::TLogComponentId logComponent,
         const TMemoryEstimationHelper& memoryHelper,
         NYql::NUdf::TCounter& outputRowCounter,
         size_t memoryLimit,
@@ -1550,7 +1564,7 @@ public:
         const TDqHashCombineTestParams& testParams
     )
         : TBaseAggregationState(
-            memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
+            memInfo, ctx, logger, logComponent, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
             keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, true, testParams
         )
         , OutputRowCounter(outputRowCounter)
@@ -1707,6 +1721,8 @@ public:
     TBlockAggregationState(
         TMemoryUsageInfo* memInfo,
         TComputationContext& ctx,
+        NYql::NUdf::TLoggerPtr logger,
+        NYql::NUdf::TLogComponentId logComponent,
         const TMemoryEstimationHelper& memoryHelper,
         NYql::NUdf::TCounter& outputRowCounter,
         size_t memoryLimit,
@@ -1724,7 +1740,7 @@ public:
         const TDqHashCombineTestParams& testParams
     )
         : TBaseAggregationState(
-            memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
+            memInfo, ctx, logger, logComponent, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
             keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, true, testParams
         )
         , OutputRowCounter(outputRowCounter)
@@ -2524,11 +2540,11 @@ private:
 
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
+                ctx, logger, logComponent, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
                 KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, forLLVM, IsAggregator, EnableSpilling, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
+                ctx, logger, logComponent, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
                 KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, forLLVM, IsAggregator, EnableSpilling, TestParams);
         }
     }
@@ -2621,11 +2637,11 @@ private:
 
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
+                ctx, logger, logComponent, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
                 KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, false, IsAggregator, EnableSpilling, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
+                ctx, logger, logComponent, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
                 KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, false, IsAggregator, EnableSpilling, TestParams);
         }
     }

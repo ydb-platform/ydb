@@ -45,7 +45,8 @@ namespace NKikimr::NKll {
         }
 
         void Merge(const TDynamicKllSketch<T>& other) {
-            Sketch_.Merge(other.Sketch_);
+            const auto startLevel = AlignLevels(other.Sketch_);
+            Sketch_.Merge(other.Sketch_, startLevel);
         }
 
     private:
@@ -100,6 +101,31 @@ namespace NKikimr::NKll {
             while (Sketch_.Levels_.back().Weight < w) {
                 Sketch_.EnsureLevel(Sketch_.Levels_.size()); // add next level
             }
+        }
+
+        size_t AlignLevels(const TKllSketch<T>& other) {
+            if (other.Levels_.empty()) {
+                return 0;
+            }
+
+            auto otherBaseWeight = other.Levels_.front().Weight;
+            auto thisBaseWeight = Sketch_.Levels_.empty() ? Sketch_.CurrentWeight_ : Sketch_.Levels_.front().Weight;
+
+            while (thisBaseWeight < otherBaseWeight) {
+                if (!Sketch_.Levels_.empty()) {
+                    Sketch_.Levels_.pop_front();
+                }
+                thisBaseWeight <<= 1;
+                Sketch_.CurrentWeight_ <<= 1;
+            }
+
+            size_t startLevel = 0;
+            while (otherBaseWeight < thisBaseWeight) {
+                startLevel++;
+                otherBaseWeight <<= 1;
+            }
+
+            return startLevel;
         }
 
     private:

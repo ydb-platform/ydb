@@ -23,13 +23,13 @@ void TDynamicTableTransactionMixin::WriteRows(
     THROW_ERROR_EXCEPTION_UNLESS(IsWriteLock(lockType), "Inappropriate lock type %Qlv given for write modification",
         lockType);
 
-    std::vector<TRowModification> modifications;
+    std::vector<NFuture::TRowModification> modifications;
     modifications.reserve(rows.Size());
 
     switch (lockType) {
         case ELockType::Exclusive: {
             for (auto row : rows) {
-                modifications.push_back({ERowModificationType::Write, row.ToTypeErasedRow(), TLockMask()});
+                modifications.push_back(NFuture::NRowModifications::TWriteRow(row));
             }
 
             break;
@@ -57,7 +57,7 @@ void TDynamicTableTransactionMixin::WriteRows(
                     }
                 }
 
-                modifications.push_back({ERowModificationType::WriteAndLock, row.ToTypeErasedRow(), lockMask});
+                modifications.push_back(NFuture::NRowModifications::TWriteAndLockRow(row, lockMask));
             }
 
             break;
@@ -67,7 +67,7 @@ void TDynamicTableTransactionMixin::WriteRows(
             YT_ABORT();
     }
 
-    ModifyRows(
+    FutureModifyRows(
         path,
         std::move(nameTable),
         MakeSharedRange(std::move(modifications), std::move(rows.ReleaseHolder())),
@@ -80,14 +80,14 @@ void TDynamicTableTransactionMixin::WriteRows(
     TSharedRange<TVersionedRow> rows,
     const TModifyRowsOptions& options)
 {
-    std::vector<TRowModification> modifications;
+    std::vector<NFuture::TRowModification> modifications;
     modifications.reserve(rows.Size());
 
     for (auto row : rows) {
-        modifications.push_back({ERowModificationType::VersionedWrite, row.ToTypeErasedRow(), TLockMask()});
+        modifications.push_back(NFuture::NRowModifications::TVersionedWriteRow(row.ToTypeErasedRow()));
     }
 
-    ModifyRows(
+    FutureModifyRows(
         path,
         std::move(nameTable),
         MakeSharedRange(std::move(modifications), std::move(rows.ReleaseHolder())),
@@ -100,13 +100,13 @@ void TDynamicTableTransactionMixin::DeleteRows(
     TSharedRange<TLegacyKey> keys,
     const TModifyRowsOptions& options)
 {
-    std::vector<TRowModification> modifications;
+    std::vector<NFuture::TRowModification> modifications;
     modifications.reserve(keys.Size());
     for (auto key : keys) {
-        modifications.push_back({ERowModificationType::Delete, key.ToTypeErasedRow(), TLockMask()});
+        modifications.push_back(NFuture::NRowModifications::TDeleteRow(key));
     }
 
-    ModifyRows(
+    FutureModifyRows(
         path,
         std::move(nameTable),
         MakeSharedRange(std::move(modifications), std::move(keys.ReleaseHolder())),
@@ -119,18 +119,14 @@ void TDynamicTableTransactionMixin::LockRows(
     TSharedRange<TLegacyKey> keys,
     TLockMask lockMask)
 {
-    std::vector<TRowModification> modifications;
+    std::vector<NFuture::TRowModification> modifications;
     modifications.reserve(keys.Size());
 
     for (auto key : keys) {
-        TRowModification modification;
-        modification.Type = ERowModificationType::WriteAndLock;
-        modification.Row = key.ToTypeErasedRow();
-        modification.Locks = lockMask;
-        modifications.push_back(modification);
+        modifications.push_back(NFuture::NRowModifications::TWriteAndLockRow(key, lockMask));
     }
 
-    ModifyRows(
+    FutureModifyRows(
         path,
         std::move(nameTable),
         MakeSharedRange(std::move(modifications), std::move(keys)),
@@ -166,6 +162,49 @@ void TDynamicTableTransactionMixin::LockRows(
         lockType);
 
     LockRows(path, nameTable, keys, lockMask);
+}
+
+void TDynamicTableTransactionMixin::ModifyRows(
+    const NYPath::TYPath& path,
+    TNameTablePtr nameTable,
+    TSharedRange<TRowModification> modifications,
+    const TModifyRowsOptions& options)
+{
+    std::vector<NFuture::TRowModification> newModifications;
+    newModifications.reserve(modifications.Size());
+
+    for (const auto& modification : modifications) {
+        THROW_ERROR_EXCEPTION_IF(modification.Type != ERowModificationType::WriteAndLock && !modification.Locks.IsNone(),
+            "Cannot perform lock by %Qlv modification type, use %Qlv",
+            modification.Type,
+            ERowModificationType::WriteAndLock);
+
+        switch (modification.Type) {
+            case ERowModificationType::Write:
+                newModifications.push_back(NFuture::NRowModifications::TWriteRow(TUnversionedRow(modification.Row)));
+                break;
+
+            case ERowModificationType::Delete:
+                newModifications.push_back(NFuture::NRowModifications::TDeleteRow(TLegacyKey(modification.Row)));
+                break;
+
+            case ERowModificationType::VersionedWrite:
+                newModifications.push_back(NFuture::NRowModifications::TVersionedWriteRow(modification.Row));
+                break;
+
+            case ERowModificationType::WriteAndLock:
+                newModifications.push_back(NFuture::NRowModifications::TWriteAndLockRow(
+                    TUnversionedRow(modification.Row),
+                    modification.Locks));
+                break;
+        }
+    }
+
+    FutureModifyRows(
+        path,
+        std::move(nameTable),
+        MakeSharedRange(std::move(newModifications), std::move(modifications.ReleaseHolder())),
+        options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -147,6 +147,8 @@ public:
             bool hasSingleCompositeActionGroup = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>();
             ui64 createTime = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::CreateTime>();
             ui64 lastRefreshTime = maintenanceTasksRowset.GetValue<Schema::MaintenanceTasks::LastRefreshTime>();
+            ui32 maxInflightActions =
+                maintenanceTasksRowset.GetValueOrDefault<Schema::MaintenanceTasks::MaxInflightActions>(0);
 
             state->MaintenanceRequests.emplace(requestId, taskId);
             state->MaintenanceTasks.emplace(taskId, TTaskInfo{
@@ -155,7 +157,8 @@ public:
                 .Owner = owner,
                 .HasSingleCompositeActionGroup = hasSingleCompositeActionGroup,
                 .CreateTime = TInstant::MicroSeconds(createTime),
-                .LastRefreshTime = TInstant::MicroSeconds(lastRefreshTime)
+                .LastRefreshTime = TInstant::MicroSeconds(lastRefreshTime),
+                .MaxInflightActions = maxInflightActions
             });
 
             YDB_LOG_CTX_DEBUG(ctx, "Loaded maintenance task mapped to request",

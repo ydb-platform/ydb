@@ -2828,7 +2828,7 @@ value {
             result << hex[i];
             result << hex[i + 1];
         }
-        return std::move(result);
+        return result;
     }
 
     // Test that checks different combinations of:

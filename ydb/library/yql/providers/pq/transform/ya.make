@@ -5,7 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/pq/task_meta
+    ydb/library/yql/providers/pq/common
+    ydb/library/yql/providers/pq/proto
 
     yql/essentials/minikql
 )

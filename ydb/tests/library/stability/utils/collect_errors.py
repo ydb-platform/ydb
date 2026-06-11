@@ -546,11 +546,13 @@ class AgentErrorsCollector:
                 logging.error(f'Error while search coredumps on host {h}: {exec.stderr}')
         return core_hashes
 
-    def attach_nemesis_logs(self, start_time):
+    def attach_nemesis_logs(self, start_time, summary_dir: str | None = None):
         """Attach nemesis logs to Allure report.
 
         Args:
             start_time: Start time of nemesis service
+            summary_dir: Optional directory to additionally save logs into
+                (under ``<summary_dir>/nemesis_logs/<host>.log``).
         """
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
@@ -563,15 +565,36 @@ class AgentErrorsCollector:
             except BaseException as e:
                 logging.error(f'Failed to read nemesis logs: {e}')
 
+        summary_subdir = None
+        if summary_dir:
+            summary_subdir = os.path.join(summary_dir, 'nemesis_logs')
+            try:
+                os.makedirs(summary_subdir, exist_ok=True)
+            except OSError as e:
+                logging.warning(f'Failed to create {summary_subdir}: {e}')
+                summary_subdir = None
+
         for host, stdout in nemesis_logs.items():
             allure.attach(stdout, f'Nemesis_{host}_logs', allure.attachment_type.TEXT)
+            if summary_subdir is not None:
+                try:
+                    with open(os.path.join(summary_subdir, f'{host}.log'), 'w') as f:
+                        f.write(stdout or '')
+                except OSError as e:
+                    logging.warning(f'Failed to save nemesis log for {host}: {e}')
 
-    def attach_kikimr_logs(self, start_time, attach_name):
+    def attach_kikimr_logs(self, start_time, attach_name, summary_dir: str | None = None):
         """Attach kikimr logs to Allure report.
 
         Args:
             start_time: Start time for log collection
             attach_name: Name prefix for attachments
+            summary_dir: Optional directory to additionally save logs into.
+                Per-host log files go to ``<summary_dir>/<attach_name>_<container>_logs/<host>.log``
+                and the resulting archive is duplicated into
+                ``<summary_dir>/<attach_name>_<container>_logs.tar.gz``;
+                aggregated stderr is saved as
+                ``<summary_dir>/<attach_name>_<container>_stderr.log``.
         """
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
@@ -597,12 +620,25 @@ class AgentErrorsCollector:
                 except BaseException as e:
                     logging.error(e)
 
+        if summary_dir:
+            try:
+                os.makedirs(summary_dir, exist_ok=True)
+            except OSError as e:
+                logging.warning(f'Failed to create {summary_dir}: {e}')
+                summary_dir = None
+
         error_log = ''
         for c, execs in exec_start.items():
             for host, e in sorted(execs.items()):
                 e.wait(check_exit_code=False, timeout=_LOG_COLLECT_TIMEOUT)
                 error_log += f'{host}:\n{e.stdout if e.returncode == 0 else e.stderr}\n'
             allure.attach(error_log, f'{attach_name}_{c}_stderr', allure.attachment_type.TEXT)
+            if summary_dir:
+                try:
+                    with open(os.path.join(summary_dir, f'{attach_name}_{c}_stderr.log'), 'w') as f:
+                        f.write(error_log)
+                except OSError as ex:
+                    logging.warning(f'Failed to save kikimr stderr to summary: {ex}')
 
         for c, execs in exec_kikimr.items():
             dir = os.path.join(yatest.common.tempfile.gettempdir(), f'{attach_name}_{c}_logs')
@@ -614,6 +650,27 @@ class AgentErrorsCollector:
             archive = dir + '.tar.gz'
             yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'], timeout=_TAR_TIMEOUT)
             allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
+            if summary_dir:
+                try:
+                    # Save per-host log files and the archive itself into summary
+                    summary_subdir = os.path.join(summary_dir, f'{attach_name}_{c}_logs')
+                    os.makedirs(summary_subdir, exist_ok=True)
+                    for host_name in os.listdir(dir):
+                        src = os.path.join(dir, host_name)
+                        dst = os.path.join(summary_subdir, host_name)
+                        try:
+                            with open(src, 'r') as fr, open(dst, 'w') as fw:
+                                fw.write(fr.read())
+                        except OSError as ex:
+                            logging.warning(f'Failed to copy {src} → {dst}: {ex}')
+                    archive_dst = os.path.join(summary_dir, f'{attach_name}_{c}_logs.tar.gz')
+                    try:
+                        with open(archive, 'rb') as fr, open(archive_dst, 'wb') as fw:
+                            fw.write(fr.read())
+                    except OSError as ex:
+                        logging.warning(f'Failed to copy {archive} → {archive_dst}: {ex}')
+                except Exception as ex:
+                    logging.warning(f'Failed to save kikimr logs to summary: {ex}')
 
     def perform_verification_with_cluster_check(self, workload_names: list[str], nemesis_enabled: bool) -> None:
         """Perform pre-test cluster verification and record the results.

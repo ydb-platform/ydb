@@ -222,7 +222,14 @@ class ParallelWorkloadTestBase:
 
             # Final status processing (may throw exception, but results are already uploaded)
             # Use node_errors saved from diagnostics
-            self._handle_final_status(errors_collector, overall_result, preparation_result, node_errors, warden_results)
+            self._handle_final_status(
+                errors_collector,
+                overall_result,
+                preparation_result,
+                node_errors,
+                warden_results,
+                summary_writer=summary_writer,
+            )
 
             logging.info(
                 f"Final result: successful_runs={successful_runs} / {total_runs}"
@@ -308,6 +315,7 @@ class ParallelWorkloadTestBase:
         preparation_result: dict[str, StressUtilDeployResult],
         node_errors: list,
         warden_results: WardenResults = None,
+        summary_writer: SummaryWriter = None,
     ) -> None:
         """
         Handles final test status (fail, broken, etc.)
@@ -371,12 +379,21 @@ class ParallelWorkloadTestBase:
         cluster_log_mode = get_external_param('cluster_log', 'default')
         if (cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors
                 or warden_violations or warden_errors):
+            summary_dir_for_logs = (
+                summary_writer.test_dir
+                if summary_writer is not None and summary_writer.enabled
+                else None
+            )
             try:
-                errors_collector.attach_nemesis_logs(result.start_time)
+                errors_collector.attach_nemesis_logs(
+                    result.start_time, summary_dir=summary_dir_for_logs
+                )
             except Exception as e:
                 logging.warning(f"Failed to attach nemesis logs: {e}")
             try:
-                errors_collector.attach_kikimr_logs(result.start_time, "kikimr")
+                errors_collector.attach_kikimr_logs(
+                    result.start_time, "kikimr", summary_dir=summary_dir_for_logs
+                )
             except Exception as e:
                 logging.warning(f"Failed to attach kikimr logs: {e}")
 

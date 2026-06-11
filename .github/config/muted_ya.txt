@@ -19,6 +19,7 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle
 ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockThenUncommittedReadUpgradeRetryAndRestart
 ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockUncommittedConflictFailure
 ydb/core/tx/schemeshard/ut_restore TImportTests.ViewCreationRetry
@@ -134,6 +135,8 @@ ydb/tests/functional/secrets test_secrets.py.test_create_without_grants
 ydb/tests/functional/secrets test_secrets.py.test_drop_without_grants
 ydb/tests/functional/secrets test_secrets_usage.py.test_create_eds_with_single_secret_with_fail
 ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py] chunk
+ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite

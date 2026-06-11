@@ -259,20 +259,20 @@ public:
     }
 
     void RestartDisk(TTestActorSystem& runtime, TDiskRecord& disk) {
-        YDB_LOG_CTX_NOTICE(runtime, "Restarting",
+        YDB_LOG_NOTICE_CTX(runtime, "Restarting",
             {"VDiskId", disk.VDiskId},
-            {"OverNodeId", disk.NodeId},
+            {"overNodeId", disk.NodeId},
             {"PDiskId", disk.PDiskId});
         runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, disk.VDiskActorId, TActorId(), nullptr, 0), disk.NodeId);
         StartVDisk(runtime, disk);
     }
 
     void FormatDisk(TTestActorSystem& runtime, TDiskRecord& disk) {
-        YDB_LOG_CTX_NOTICE(runtime, "Formatting",
+        YDB_LOG_NOTICE_CTX(runtime, "Formatting",
             {"VDiskId", disk.VDiskId},
-            {"OverNodeId", disk.NodeId},
+            {"overNodeId", disk.NodeId},
             {"PDiskId", disk.PDiskId},
-            {"DiskStatus", GetDiskStatusMap()});
+            {"diskStatus", GetDiskStatusMap()});
         runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, disk.VDiskActorId, TActorId(), nullptr, 0), disk.NodeId);
         Slay(runtime, disk);
         StartVDisk(runtime, disk);
@@ -296,12 +296,12 @@ public:
         ui64 pdiskGuid;
         std::tie(nodeId, pdiskId, pdiskGuid) = it->second;
 
-        YDB_LOG_CTX_NOTICE(runtime, "Reassigning",
+        YDB_LOG_NOTICE_CTX(runtime, "Reassigning",
             {"VDiskId", disk.VDiskId},
-            {"FromNodeId", disk.NodeId},
+            {"fromNodeId", disk.NodeId},
             {"PDiskId", disk.PDiskId},
-            {"ToNodeId", nodeId},
-            {"NewPDiskId", pdiskId},
+            {"toNodeId", nodeId},
+            {"newPDiskId", pdiskId},
             {"PDiskGuid", pdiskGuid});
 
         // slay it over PDisk
@@ -346,7 +346,7 @@ public:
     }
 
     void Slay(TTestActorSystem& runtime, TDiskRecord& disk) {
-        YDB_LOG_CTX_INFO(runtime, "Slaying",
+        YDB_LOG_INFO_CTX(runtime, "Slaying",
             {"VDiskId", disk.VDiskId});
         const TActorId& edge = runtime.AllocateEdgeActor(disk.NodeId);
         auto slay = std::make_unique<NPDisk::TEvSlay>(disk.VDiskId, ++Round, disk.PDiskId, disk.VDiskSlotId);
@@ -354,7 +354,7 @@ public:
         auto res = runtime.WaitForEdgeActorEvent({edge});
         if (const auto *ev = res->CastAsLocal<NPDisk::TEvSlayResult>()) {
             Y_VERIFY_S(ev->Status == NKikimrProto::OK || ev->Status == NKikimrProto::ALREADY, "TEvSlayResult# " << ev->ToString());
-            YDB_LOG_CTX_INFO(runtime, "Slayed",
+            YDB_LOG_INFO_CTX(runtime, "Slayed",
                 {"VDiskId", disk.VDiskId});
         } else {
             Y_ABORT("unexpected event to edge actor");
@@ -472,13 +472,13 @@ public:
     void Run() override {
         for (ui32 generation = 1; generation <= MaxGen && generation; ++generation) {
             Prefix = TStringBuilder() << "[" << TabletId << ":" << generation << "@" << GroupId << "]";
-            YDB_LOG_CTX_INFO(GetActorContext(), "running",
-                {"Prefix", Prefix},
-                {"Generation", generation});
+            YDB_LOG_INFO_CTX(GetActorContext(), "Running",
+                {"prefix", Prefix},
+                {"generation", generation});
             RunCycle(generation);
         }
-        YDB_LOG_CTX_INFO(GetActorContext(), "done",
-            {"Prefix", Prefix});
+        YDB_LOG_INFO_CTX(GetActorContext(), "Done",
+            {"prefix", Prefix});
         ++*DoneCounter;
     }
 
@@ -489,18 +489,18 @@ public:
     template<typename TEvent, typename... TArgs>
     TAutoPtr<TEventHandle<TResultFor<TEvent>>> Query(TArgs&&... args) {
         auto q = std::make_unique<TEvent>(std::forward<TArgs>(args)...);
-        YDB_LOG_CTX_DEBUG(GetActorContext(), "sending",
-            {"Prefix", Prefix},
-            {"EventType", TypeName<TEvent>()},
-            {"Request", q->Print(false)});
+        YDB_LOG_DEBUG_CTX(GetActorContext(), "Sending",
+            {"prefix", Prefix},
+            {"eventType", TypeName<TEvent>()},
+            {"request", q->Print(false)});
         GetActorSystem()->Schedule(TDuration::MicroSeconds(TAppData::RandomProvider->Uniform(10, 100)),
             new IEventHandle(ProxyId, SelfActorId, q.release()));
         ++*Counter;
         auto ev = WaitForSpecificEvent<TResultFor<TEvent>>(&TActivityActorImpl::ProcessUnexpectedEvent);
-        YDB_LOG_CTX_DEBUG(GetActorContext(), "received",
-            {"Prefix", Prefix},
-            {"ResultType", TypeName<TResultFor<TEvent>>()},
-            {"Response", ev->Get()->Print(false)});
+        YDB_LOG_DEBUG_CTX(GetActorContext(), "Received",
+            {"prefix", Prefix},
+            {"resultType", TypeName<TResultFor<TEvent>>()},
+            {"response", ev->Get()->Print(false)});
         return ev;
     }
 
@@ -547,8 +547,8 @@ public:
             if (readQueue.size() && now >= nextSendTimestamp && readsInFlight < maxReadsInFlight) {
                 auto ev = std::make_unique<TEvBlobStorage::TEvGet>(readQueue.front(), 0, 0, TInstant::Max(),
                     NKikimrBlobStorage::EGetHandleClass::FastRead, true, false);
-                YDB_LOG_CTX_DEBUG(GetActorContext(), "sending",
-                    {"Prefix", Prefix},
+                YDB_LOG_DEBUG_CTX(GetActorContext(), "Sending",
+                    {"prefix", Prefix},
                     {"TEvGet", ev->Print(false)});
                 nextSendTimestamp = now + TDuration::MicroSeconds(TAppData::RandomProvider->Uniform(10, 100));
                 Send(ProxyId, ev.release());
@@ -557,8 +557,8 @@ public:
                 ++readsInFlight;
             } else if (auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvGetResult>(&TActivityActorImpl::ProcessUnexpectedEvent,
                     nextSendTimestamp)) {
-                YDB_LOG_CTX_DEBUG(GetActorContext(), "received",
-                    {"Prefix", Prefix},
+                YDB_LOG_DEBUG_CTX(GetActorContext(), "Received",
+                    {"prefix", Prefix},
                     {"TEvGetResult", ev->Get()->Print(false)});
                 Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK);
                 for (ui32 i = 0; i < ev->Get()->ResponseSz; ++i) {
@@ -594,8 +594,8 @@ public:
                 TString buffer = GenerateRandomBuffer(Cache);
                 const TLogoBlobID id(TabletId, generation, step++, 0, buffer.size(), 0);
                 auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max());
-                YDB_LOG_CTX_DEBUG(GetActorContext(), "sending",
-                    {"Prefix", Prefix},
+                YDB_LOG_DEBUG_CTX(GetActorContext(), "Sending",
+                    {"prefix", Prefix},
                     {"TEvPut", ev->Print(false)});
                 nextSendTimestamp = now + TDuration::MicroSeconds(TAppData::RandomProvider->Uniform(10, 100));
                 Send(ProxyId, ev.release());
@@ -604,8 +604,8 @@ public:
                 --numWritesRemain;
             } else if (auto ev = WaitForSpecificEvent<TEvBlobStorage::TEvPutResult>(&TActivityActorImpl::ProcessUnexpectedEvent,
                     nextSendTimestamp)) {
-                YDB_LOG_CTX_DEBUG(GetActorContext(), "received",
-                    {"Prefix", Prefix},
+                YDB_LOG_DEBUG_CTX(GetActorContext(), "Received",
+                    {"prefix", Prefix},
                     {"TEvPutResult", ev->Get()->Print(false)},
                     {"writesInFlight.size", writesInFlight.size()});
                 Y_VERIFY_S(ev->Get()->Status == NKikimrProto::OK, "TEvPutResult# " << ev->Get()->Print(false));

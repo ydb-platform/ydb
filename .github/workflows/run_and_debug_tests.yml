@@ -350,6 +350,8 @@ jobs:
             .github/scripts/tests/error_type_utils.py
             .github/scripts/tests/templates
             .github/scripts/analytics/testowners_utils.py
+            .github/scripts/analytics/ydb_wrapper.py
+            .github/TESTOWNERS
             .github/scripts/Indexer
       - name: Download shard reports
         uses: actions/download-artifact@v4

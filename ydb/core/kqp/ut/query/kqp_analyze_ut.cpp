@@ -1,11 +1,15 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
+#include <atomic>
 #include <thread>
 
 namespace NKikimr {
@@ -237,6 +241,106 @@ Y_UNIT_TEST(AnalyzeOperationsLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL_C(getAfterForget.Status().GetStatus(), NYdb::EStatus::NOT_FOUND,
             getAfterForget.Status().GetIssues().ToString());
     }
+
+    opDriver.Stop(true);
+}
+
+Y_UNIT_TEST(AnalyzeContinuesOnQueryAbort) {
+    TTestEnv env(1, 1);
+    auto& runtime = *env.GetServer().GetRuntime();
+    CreateDatabase(env, "Database");
+
+    NYdb::TDriver opDriver(NYdb::TDriverConfig()
+        .SetEndpoint(env.GetEndpoint())
+        .SetDatabase("/Root/Database")
+        .SetDiscoveryMode(NYdb::EDiscoveryMode::Off));
+    NYdb::NOperation::TOperationClient operationClient(opDriver);
+
+    TTableClient tableClient(opDriver);
+    auto session = env.RunInThreadPool([&]{
+        return tableClient.CreateSession().GetValueSync().GetSession();
+    });
+
+    {
+        auto result = env.RunInThreadPool([&]{
+            return session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `Root/Database/AnalyzeTest` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    {
+        auto result = env.RunInThreadPool([&]{
+            return session.ExecuteDataQuery(R"(
+                UPSERT INTO `Root/Database/AnalyzeTest` (Key, Value)
+                    VALUES (1, "a"), (2, "b"), (3, "c");
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    // No TEvAnalyzeCancel must reach the SA under the new policy.
+    std::atomic<int> cancelCount{0};
+    auto cancelObs = runtime.AddObserver<NStat::TEvStatistics::TEvAnalyzeCancel>(
+        [&](NStat::TEvStatistics::TEvAnalyzeCancel::TPtr&) {
+            cancelCount.fetch_add(1);
+        });
+
+    // The instant TAnalyzeActor's TEvAnalyze is observed on its way to the SA,
+    // inject TEvAbortExecution back to it (the sender) to simulate a session
+    // timeout. TEvAnalyze itself is not blocked; the SA still processes it and
+    // runs the traversal to completion in the background.
+    std::atomic<bool> aborted{false};
+    auto analyzeObs = runtime.AddObserver<NStat::TEvStatistics::TEvAnalyze>(
+        [&](NStat::TEvStatistics::TEvAnalyze::TPtr& ev) {
+            if (aborted.exchange(true)) {
+                return;
+            }
+            const TActorId target = ev->Sender;
+            auto* handle = new IEventHandle(
+                target, TActorId(),
+                new TEvKqp::TEvAbortExecution(
+                    NYql::NDqProto::StatusIds::TIMEOUT,
+                    "test injected query timeout", NYql::TIssues{}));
+            const ui32 nodeIdx = target.NodeId() - runtime.GetFirstNodeId();
+            runtime.Send(handle, nodeIdx, /*viaActorSystem=*/true);
+        });
+
+    auto analyzeResult = env.RunInThreadPool([&]{
+        return session.ExecuteSchemeQuery(
+            "ANALYZE `Root/Database/AnalyzeTest`").GetValueSync();
+    });
+    UNIT_ASSERT_C(!analyzeResult.IsSuccess(),
+        "expected ANALYZE to fail due to injected abort, got: "
+            << analyzeResult.GetIssues().ToString());
+
+    // Advance simulated time so the SA receives SchemeShard stats, schedules the
+    // traversal, and completes it. With our policy change, no TEvAnalyzeCancel was
+    // sent on abort, so the operation must reach STATE_DONE — not STATE_CANCELLED.
+    runtime.SimulateSleep(TDuration::Seconds(60));
+
+    auto listResult = env.RunInThreadPool([&]{
+        return operationClient.List<NYdb::NTable::TAnalyzeOperation>().GetValueSync();
+    });
+    UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS,
+        listResult.GetIssues().ToString());
+
+    bool foundDone = false;
+    for (const auto& op : listResult.GetList()) {
+        UNIT_ASSERT_VALUES_UNEQUAL_C(
+            op.Metadata().State, NYdb::NTable::EAnalyzeState::Cancelled,
+            "operation must not be cancelled by query abort");
+        if (op.Metadata().State == NYdb::NTable::EAnalyzeState::Done) {
+            foundDone = true;
+        }
+    }
+    UNIT_ASSERT_C(foundDone, "ANALYZE long-running op did not reach DONE after abort");
+    UNIT_ASSERT_VALUES_EQUAL_C(cancelCount.load(), 0,
+        "TEvAnalyzeCancel must not be sent on query abort");
 
     opDriver.Stop(true);
 }

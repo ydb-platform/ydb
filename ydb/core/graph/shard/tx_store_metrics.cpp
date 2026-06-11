@@ -20,13 +20,13 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxStoreMetrics::Execute",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         return Self->LocalBackend.StoreMetrics(txc, std::move(Data));
     }
 
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("TTxStoreMetrics::Complete",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
     }
 };
 

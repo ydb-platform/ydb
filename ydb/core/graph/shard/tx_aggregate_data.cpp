@@ -19,8 +19,8 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxAggregateData::Execute",
-            {"LogPrefix", GetLogPrefix()},
-            {"Settings", Settings.ToString()});
+            {"logPrefix", GetLogPrefix()},
+            {"settings", Settings});
         TInstant now = TActivationContext::Now();
         return Self->LocalBackend.AggregateData(txc, now, Settings);
         return true;
@@ -28,7 +28,7 @@ public:
 
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("TTxAggregateData::Complete",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
     }
 };
 

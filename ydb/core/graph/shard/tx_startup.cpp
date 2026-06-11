@@ -18,7 +18,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxStartup::Execute",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         {
             auto row = db.Table<Schema::State>().Key(TString("backend")).Select();
@@ -49,7 +49,7 @@ public:
 
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("TTxStartup::Complete",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         Self->OnReadyToWork();
     }
 };

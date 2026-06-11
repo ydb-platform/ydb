@@ -17,7 +17,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxInitScheme::Execute",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         db.Materialize<Schema>();
         db.Table<Schema::State>().Key(TString("version")).Update<Schema::State::ValueUI64>(1);
@@ -26,7 +26,7 @@ public:
 
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("TTxInitScheme::Complete",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         Self->ExecuteTxStartup();
     }
 };

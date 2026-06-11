@@ -48,7 +48,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxMonitoring::Execute",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         return true;
     }
 
@@ -72,7 +72,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TTxMonitoring::Complete",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         TStringBuilder html;
         html << "<html>";
         html << "<style>";
@@ -165,13 +165,13 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxMonitoringGetSettings::Execute",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TTxMonitoringGetSettings::Complete",
-            {"LogPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()});
         NJson::TJsonValue json;
         switch (Self->BackendType) {
             case EBackendType::Memory:

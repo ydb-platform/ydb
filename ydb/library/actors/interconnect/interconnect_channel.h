@@ -89,10 +89,10 @@ namespace NActors {
             TEventHolder& event = pool.Allocate(Queue);
             const ui32 bytes = event.Fill(ev, now) + sizeof(TEventDescr2);
             OutputQueueSize += bytes;
-            if (event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue")) {
-                event.Span
-                    .Attribute("OutputQueueItems", static_cast<i64>(Queue.size()))
-                    .Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));
+            event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue");
+            if (NWilson::TSpan* wilsonSpan = event.Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("OutputQueueItems", static_cast<i64>(Queue.size()));
+                wilsonSpan->Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));
             }
             return std::make_pair(bytes, &event);
         }

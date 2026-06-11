@@ -30,6 +30,7 @@ void TSummarySnapshot<T>::Record(T value)
         Min_ = ::Min(Min_, value);
         Max_ = ::Max(Max_, value);
     }
+    Last_ = value;
     Count_++;
 }
 
@@ -47,6 +48,7 @@ void TSummarySnapshot<T>::Add(const TSummarySnapshot& other)
         Min_ = ::Min(Min_, other.Min_);
         Max_ = ::Max(Max_, other.Max_);
         Count_ += other.Count_;
+        Last_ = other.Last_;
     }
 }
 

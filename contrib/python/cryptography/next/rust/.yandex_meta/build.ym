@@ -12,6 +12,7 @@ devtools/yamaker/libym2/scripts/python3
 {% block platforms %}
 x86_64-unknown-linux-gnu
 x86_64-unknown-linux-musl
+x86_64-apple-darwin
 {% endblock %}
 
 {% block msan_platforms %}
@@ -36,6 +37,7 @@ sed -e 's|cdylib|staticlib|' -i Cargo.toml
 export CC_{{p.replace('-', '_')}}=target-cc
 {% endfor %}
 export CC_x86_64_unknown_linux_musl=musl-gcc
+export CC_x86_64_apple_darwin=mac-target-cc
 export DEP_OPENSSL_INCLUDE={{arcadia_root}}/contrib/libs/openssl/include
 export PYO3_CROSS_PYTHON_VERSION=3.12
 
@@ -98,6 +100,7 @@ cp ${SRC}/autogen_cffi/_openssl.c ${OUTPUT}/
 cp ${OUTPUT}/patches/msan.cpp ${OUTPUT}/
 
 cat {{arcadia_root}}/contrib/libs/openssl/redef.h | awk '/#define/{print $2" "$3}' > ${OUTPUT}/openssl_redefines.txt
+cat {{arcadia_root}}/contrib/libs/openssl/redef.h | awk '/#define/{print "_"$2" _"$3}' >> ${OUTPUT}/openssl_redefines.txt
 
 find ${OUTPUT} -name '*.a' | xargs -L1 llvm-objcopy --redefine-syms=${OUTPUT}/openssl_redefines.txt
 rm ${OUTPUT}/openssl_redefines.txt
@@ -141,6 +144,11 @@ rm -rf ${OUTPUT}/a/{{p}}-msan/release/build
 {{super()}}
 export CLANG=$(ya tool c++ --print-path)
 
+MACOS_SDK="${TMPDIR}/macos_sdk"
+ya download --untar sbr:8156037824 "${MACOS_SDK}"
+
+# linux
+
 cat << EOF > ${BIN}/musl-gcc
 #!/usr/bin/env sh
 exec ${CLANG} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${@}"
@@ -157,4 +165,31 @@ exec ${CLANG} -DUSE_PYTHON3 -fsanitize=memory -I{{arcadia_root}} -I{{arcadia_roo
 EOF
 
 chmod +x ${BIN}/musl-gcc ${BIN}/target-cc ${BIN}/target-cc-msan
+
+# macOS
+
+cat << EOF > ${BIN}/mac-target-cc
+#!/bin/bash
+FILTERED_ARGS=()
+SKIP_NEXT=0
+for arg in "\$@"; do
+  if [ \$SKIP_NEXT -eq 1 ]; then
+    SKIP_NEXT=0
+    continue
+  fi
+  case "\$arg" in
+    -arch)
+      SKIP_NEXT=1
+      ;;
+    -m64|-m32)
+      ;;
+    *)
+      FILTERED_ARGS+=("\$arg")
+      ;;
+  esac
+done
+exec ${CLANG} -target x86_64-apple-darwin -isysroot ${MACOS_SDK} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${FILTERED_ARGS[@]}"
+EOF
+chmod +x ${BIN}/mac-target-cc
+
 {% endblock %}

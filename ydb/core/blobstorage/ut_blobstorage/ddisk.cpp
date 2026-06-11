@@ -282,7 +282,53 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
             UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        }
 
+        // Reconnect a tablet with a new (higher) generation.
+        // After this call PBCreds[tabletIdx].Generation == newGeneration.
+        void BumpGeneration(ui32 tabletIdx, ui32 newGeneration) {
+            PBCreds[tabletIdx].Generation = newGeneration;
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds[tabletIdx])), Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
+            UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+            PBCreds[tabletIdx].DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+        }
+
+        // Write a persistent buffer record with an explicit generation (does NOT update PersistentBuffers map).
+        // Returns the lsn used.
+        ui64 WritePBWithGeneration(ui32 tabletIdx, ui32 generation, ui32 offset = 0, ui32 numBlocks = 4) {
+            const ui32 size = numBlocks * BlockSize;
+            UNIT_ASSERT(offset + size <= Surface.size());
+
+            const ui64 lsn = NextLsn++;
+            TString update = TString::Uninitialized(size);
+            char letter = Letters[LetterIndex++ % Letters.size()];
+            memset(update.Detach(), letter, update.size());
+
+            NDDisk::TQueryCredentials creds = PBCreds[tabletIdx];
+            creds.Generation = generation;
+
+            Cerr << "write PB gen# " << generation << " offset# " << offset << " size# " << size
+                << " lsn# " << lsn << " letter# " << letter << "\n";
+
+            std::unique_ptr<NDDisk::TEvWritePersistentBuffer> ev(new NDDisk::TEvWritePersistentBuffer(
+                creds, {VChunkIndex, offset, size}, lsn, {0}));
+            ev->AddPayload(TRope(std::move(update)));
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(Edge, false);
+            UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+            return lsn;
+        }
+
+        // Batch-erase records from multiple generations in a single call.
+        // erases is a list of (lsn, generation) pairs.
+        double BatchEraseMultiGen(ui32 tabletIdx, const std::vector<std::tuple<ui64, ui32>>& erases) {
+            Cerr << "batch erase multi-gen count# " << erases.size() << Endl;
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvBatchErasePersistentBuffer(
+                PBCreds[tabletIdx], erases)), Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(Edge, false);
+            UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+            return res->Get()->Record.GetFreeSpace();
         }
 
         double ErasePB(ui64 lsn = 0, ui32 tabletIdx = 0) {
@@ -491,6 +537,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto& item = group[0];
         for (auto& node : item.GetNodes()) {
             f.ChangeTestingNode(node);
+            f.MoveBarrier(0, 0);
+
             Cerr << "next iteration\n";
 
             for (ui32 iter = 0; iter < 1000; ++iter) {
@@ -535,6 +583,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto& item = group[0];
         for (auto& node : item.GetNodes()) {
             f.ChangeTestingNode(node);
+            f.MoveBarrier(0, 0);
+
             Cerr << "next iteration\n";
             for (ui32 iter = 0; iter < 1000; ++iter) {
                 if (iter % 400 == 399) {
@@ -579,6 +629,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto fs = f.BatchErasePB();
             UNIT_ASSERT(fs == 1);
         }
+        f.MoveBarrier(0, 0);
 
         double occupiedSpace = 0;
 
@@ -612,10 +663,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
+        f.MoveBarrier(0, 0);
 
         auto info = f.GetPBInfo(false, true);
         auto freeSectors = info->Get()->FreeSectors;
-        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        UNIT_ASSERT_EQUAL(freeSectors, 131072 - 1);
         for (ui32 i = 1; i < 1001; ++i) {
             if (i % 200 == 99) {
                 f.RestartNode();
@@ -648,7 +700,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
         info = f.GetPBInfo(false, true);
         newFreeSectors = info->Get()->FreeSectors;
-        UNIT_ASSERT_EQUAL(newFreeSectors, 131072 - 1);
+        UNIT_ASSERT_EQUAL(newFreeSectors, 131072 - 2);
     }
 
     Y_UNIT_TEST(PersistentBufferFastEraseFallback) {
@@ -656,10 +708,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
+        f.MoveBarrier(0, 0);
 
         auto info = f.GetPBInfo(false, true);
         auto freeSectors = info->Get()->FreeSectors;
-        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        UNIT_ASSERT_EQUAL(freeSectors, 131072 - 1);
         for (ui32 i = 1; i < 5001; ++i) {
             ui32 sectorsCnt = 4;
             f.WritePB(0, sectorsCnt);
@@ -683,10 +736,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
+        f.MoveBarrier(0, 0);
 
         auto info = f.GetPBInfo(false, true);
         auto freeSectors = info->Get()->FreeSectors;
-        UNIT_ASSERT_EQUAL(freeSectors, 131072);
+        UNIT_ASSERT_EQUAL(freeSectors, 131072 - 1);
         for (ui32 i = 1; i < 5001; ++i) {
             ui32 sectorsCnt = 4;
             f.WritePB(0, sectorsCnt);
@@ -940,5 +994,246 @@ Y_UNIT_TEST_SUITE(DDisk) {
             UNIT_ASSERT(b[f.PBCreds[8].TabletId] == 3500);
             UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
         }
+    }
+
+    // Test that moving the barrier with a new (higher) generation removes all
+    // records that belong to older generations, even if their LSNs are above
+    // the new barrier LSN.
+    //
+    // Scenario:
+    //   1. Tablet writes several records with generation 1.
+    //   2. Tablet bumps to generation 2 and writes a few more records.
+    //   3. Tablet calls TEvErasePersistentBuffer with generation 2 and lsn=0
+    //      (barrier at the very beginning of gen-2).
+    //   4. All gen-1 records must be gone; gen-2 records must survive.
+    //   5. Verify via ListPB and GetPBInfo.
+    Y_UNIT_TEST(PersistentBufferGenerationChangeBarrier) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+
+        // Write 5 records with generation 1 (tabletIdx=0, default gen=1).
+        const ui32 tabletIdx = 0;
+        std::vector<ui64> gen1Lsns;
+        for (ui32 i = 0; i < 5; ++i) {
+            gen1Lsns.push_back(f.WritePBWithGeneration(tabletIdx, /*generation=*/1, /*offset=*/0, /*numBlocks=*/4));
+        }
+
+        // Verify all 5 gen-1 records are present.
+        {
+            auto info = f.GetPBInfo(false, true);
+            bool found = false;
+            for (auto& ti : info->Get()->TabletInfos) {
+                if (ti.TabletId == f.PBCreds[tabletIdx].TabletId && ti.Generation == 1) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(ti.LsnsCount, 5u,
+                        "Expected 5 gen-1 records before generation bump");
+                    found = true;
+                }
+            }
+            UNIT_ASSERT_C(found, "Gen-1 tablet info not found before generation bump");
+        }
+
+        // Bump to generation 2 and write 3 more records.
+        f.BumpGeneration(tabletIdx, /*newGeneration=*/2);
+        std::vector<ui64> gen2Lsns;
+        for (ui32 i = 0; i < 3; ++i) {
+            gen2Lsns.push_back(f.WritePBWithGeneration(tabletIdx, /*generation=*/2, /*offset=*/0, /*numBlocks=*/4));
+        }
+
+        // Verify both generations are present.
+        {
+            auto info = f.GetPBInfo(false, true);
+            ui32 gen1Count = 0, gen2Count = 0;
+            for (auto& ti : info->Get()->TabletInfos) {
+                if (ti.TabletId == f.PBCreds[tabletIdx].TabletId) {
+                    if (ti.Generation == 1) gen1Count = ti.LsnsCount;
+                    if (ti.Generation == 2) gen2Count = ti.LsnsCount;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(gen1Count, 5u, "Expected 5 gen-1 records before barrier move");
+            UNIT_ASSERT_VALUES_EQUAL_C(gen2Count, 3u, "Expected 3 gen-2 records before barrier move");
+        }
+
+        // Move barrier with generation 2, lsn=0.
+        // This must delete ALL gen-1 records (older generation) and keep gen-2 records.
+        f.MoveBarrier(/*lsn=*/0, tabletIdx);
+
+        // Verify: gen-1 records are gone, gen-2 records survive.
+        {
+            auto info = f.GetPBInfo(false, true);
+            ui32 gen1Count = 0, gen2Count = 0;
+            for (auto& ti : info->Get()->TabletInfos) {
+                if (ti.TabletId == f.PBCreds[tabletIdx].TabletId) {
+                    if (ti.Generation == 1) gen1Count = ti.LsnsCount;
+                    if (ti.Generation == 2) gen2Count = ti.LsnsCount;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(gen1Count, 0u,
+                "All gen-1 records must be deleted after barrier move with gen-2");
+            UNIT_ASSERT_VALUES_EQUAL_C(gen2Count, 3u,
+                "Gen-2 records must survive barrier move with lsn=0");
+        }
+
+        // Verify via ListPB: only gen-2 LSNs should be listed.
+        {
+            f.Env.Runtime->Send(new IEventHandle(f.PBServiceId, f.Edge,
+                new NDDisk::TEvListPersistentBuffer(f.PBCreds[tabletIdx])), f.Edge.NodeId());
+            auto res = f.Env.WaitForEdgeActorEvent<NDDisk::TEvListPersistentBufferResult>(f.Edge, false);
+            const auto& rr = res->Get()->Record;
+            UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
+            THashSet<ui64> listedLsns;
+            for (const auto& item : rr.GetRecords()) {
+                listedLsns.insert(item.GetLsn());
+            }
+            // None of the gen-1 LSNs should appear.
+            for (ui64 lsn : gen1Lsns) {
+                UNIT_ASSERT_C(!listedLsns.contains(lsn),
+                    TStringBuilder() << "Gen-1 lsn# " << lsn << " must not appear after barrier move");
+            }
+            // All gen-2 LSNs must appear.
+            for (ui64 lsn : gen2Lsns) {
+                UNIT_ASSERT_C(listedLsns.contains(lsn),
+                    TStringBuilder() << "Gen-2 lsn# " << lsn << " must appear after barrier move");
+            }
+        }
+
+        // Restart and verify the same invariant holds after recovery.
+        f.RestartNode();
+
+        {
+            auto info = f.GetPBInfo(false, true);
+            ui32 gen1Count = 0, gen2Count = 0;
+            for (auto& ti : info->Get()->TabletInfos) {
+                if (ti.TabletId == f.PBCreds[tabletIdx].TabletId) {
+                    if (ti.Generation == 1) gen1Count = ti.LsnsCount;
+                    if (ti.Generation == 2) gen2Count = ti.LsnsCount;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(gen1Count, 0u,
+                "Gen-1 records must still be absent after restart");
+            UNIT_ASSERT_VALUES_EQUAL_C(gen2Count, 3u,
+                "Gen-2 records must survive restart");
+        }
+    }
+
+    // Test that a BatchErase request containing records from multiple generations
+    // does NOT use the fast-erase path.
+    //
+    // Fast erase writes a single sector that lists all erased LSNs.  Regular
+    // erase zeroes the header sector of every erased record individually.
+    // Therefore:
+    //   - Fast erase of N records: frees N*recordSectors - 1 sector
+    //     (new fast-erase sector costs 1, records freed = N*recordSectors).
+    //   - Regular erase of N records: frees exactly N*recordSectors sectors
+    //     (no extra sector allocated or freed).
+    //
+    // We verify the sector accounting to distinguish the two paths.
+    //
+    // Setup:
+    //   1. Barrier at gen-1 (initial MoveBarrier).
+    //   2. Write 2 records with gen-1.
+    //   3. Bump to gen-2, write 2 more records with gen-2.
+    //   4. Batch-erase all 4 records in one call (creds gen-2, erases mix gen-1
+    //      and gen-2).  Because some erases have generation != creds.Generation,
+    //      canFastErase is forced to false → regular erase path.
+    //   5. Verify freed sectors == 4 * sectorsCntPerRecord (no fast-erase overhead).
+    //
+    //   Then move barrier to gen-2 and verify that a same-generation batch erase
+    //   DOES use fast erase (freed == 2*sectorsCntPerRecord - 1).
+    Y_UNIT_TEST(PersistentBufferBatchEraseMultiGenerationNoFastErase) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+
+        // Establish barrier at gen-1 lsn=0.
+        f.MoveBarrier(/*lsn=*/0, /*tabletIdx=*/0);
+
+        const ui32 tabletIdx = 0;
+        // Each record: 4 data blocks (4096 B each) + 1 header sector = 5 sectors.
+        const ui32 sectorsCntPerRecord = 5;
+
+        // Write 2 records with generation 1.
+        ui64 lsn1 = f.WritePBWithGeneration(tabletIdx, /*generation=*/1, /*offset=*/0, /*numBlocks=*/4);
+        ui64 lsn2 = f.WritePBWithGeneration(tabletIdx, /*generation=*/1, /*offset=*/0, /*numBlocks=*/4);
+
+        // Bump to generation 2 and write 2 more records.
+        // NOTE: we do NOT call MoveBarrier here – the barrier stays at gen-1.
+        // This keeps the gen-1 records alive so we can include them in the
+        // mixed-generation batch erase below.
+        f.BumpGeneration(tabletIdx, /*newGeneration=*/2);
+        ui64 lsn3 = f.WritePBWithGeneration(tabletIdx, /*generation=*/2, /*offset=*/0, /*numBlocks=*/4);
+        ui64 lsn4 = f.WritePBWithGeneration(tabletIdx, /*generation=*/2, /*offset=*/0, /*numBlocks=*/4);
+
+        // Snapshot free sectors before the mixed-generation batch erase.
+        auto infoBeforeErase = f.GetPBInfo(false, true);
+        ui64 freeSectorsBefore = infoBeforeErase->Get()->FreeSectors;
+
+        // Batch-erase records from BOTH generations in a single call.
+        // creds.Generation == 2, but erases include gen-1 entries.
+        // The handler sets canFastErase = false when any erase.generation !=
+        // creds.Generation, so the regular (slow) erase path is taken.
+        std::vector<std::tuple<ui64, ui32>> erases = {
+            {lsn1, 1u},
+            {lsn2, 1u},
+            {lsn3, 2u},
+            {lsn4, 2u},
+        };
+        f.BatchEraseMultiGen(tabletIdx, erases);
+
+        auto infoAfterErase = f.GetPBInfo(false, true);
+        ui64 freeSectorsAfter = infoAfterErase->Get()->FreeSectors;
+
+        // Regular erase: each record's header sector is zeroed and all of the
+        // record's sectors are freed.  No extra "fast-erase" sector is allocated.
+        // Expected freed = 4 records * 5 sectors/record = 20 sectors.
+        ui64 expectedFreed = 4 * sectorsCntPerRecord;
+        UNIT_ASSERT_VALUES_EQUAL_C(freeSectorsAfter - freeSectorsBefore, expectedFreed,
+            TStringBuilder() << "Regular erase must free exactly " << expectedFreed
+                << " sectors; freeBefore=" << freeSectorsBefore
+                << " freeAfter=" << freeSectorsAfter);
+
+        // Fast-erase count must be 0 for this tablet (no fast erases happened).
+        for (auto& ti : infoAfterErase->Get()->TabletInfos) {
+            if (ti.TabletId == f.PBCreds[tabletIdx].TabletId) {
+                UNIT_ASSERT_VALUES_EQUAL_C(ti.FastErasesCount, 0u,
+                    "No fast erases must have occurred for a mixed-generation batch erase");
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Contrast: same-generation batch erase DOES use fast erase.
+        // Move barrier to gen-2 (no gen-1 records remain, so nothing is
+        // deleted by the barrier move itself).
+        f.MoveBarrier(/*lsn=*/0, tabletIdx);
+
+        // Write 2 new gen-2 records.
+        ui64 lsn5 = f.WritePBWithGeneration(tabletIdx, /*generation=*/2, /*offset=*/0, /*numBlocks=*/4);
+        ui64 lsn6 = f.WritePBWithGeneration(tabletIdx, /*generation=*/2, /*offset=*/0, /*numBlocks=*/4);
+
+        auto infoBeforeFastErase = f.GetPBInfo(false, true);
+        ui64 freeSectorsBeforeFastErase = infoBeforeFastErase->Get()->FreeSectors;
+
+        // Erase both gen-2 records in one call – all erases have the same
+        // generation as creds, so fast erase is used.
+        std::vector<std::tuple<ui64, ui32>> sameGenErases = {
+            {lsn5, 2u},
+            {lsn6, 2u},
+        };
+        f.BatchEraseMultiGen(tabletIdx, sameGenErases);
+
+        auto infoAfterFastErase = f.GetPBInfo(false, true);
+        ui64 freeSectorsAfterFastErase = infoAfterFastErase->Get()->FreeSectors;
+
+        // Fast erase: 2 records freed (2 * 5 = 10 sectors) minus 1 sector
+        // consumed by the new fast-erase sector (no old fast-erase sector to
+        // reclaim on the first fast erase).  Net freed = 10 - 1 = 9.
+        ui64 expectedFastFreed = 2 * sectorsCntPerRecord - 1;
+        UNIT_ASSERT_VALUES_EQUAL_C(freeSectorsAfterFastErase - freeSectorsBeforeFastErase, expectedFastFreed,
+            TStringBuilder() << "Fast erase must free exactly " << expectedFastFreed
+                << " sectors; freeBefore=" << freeSectorsBeforeFastErase
+                << " freeAfter=" << freeSectorsAfterFastErase);
     }
 }

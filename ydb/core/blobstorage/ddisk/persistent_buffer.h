@@ -11,6 +11,13 @@ namespace NKikimr::NDDisk {
         ui64 Checksum : 64;
     };
 
+    struct TPersistentBufferId {
+        ui64 TabletId;
+        ui32 Generation;
+
+        friend constexpr std::strong_ordering operator <=>(const TPersistentBufferId& x, const TPersistentBufferId& y) = default;
+    };
+
     struct TPersistentBufferRecordId {
         ui64 TabletId;
         ui32 Generation;

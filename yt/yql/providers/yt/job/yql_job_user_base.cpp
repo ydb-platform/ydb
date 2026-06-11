@@ -176,6 +176,7 @@ void TYqlUserJobBase::DoImpl() {
     if (UseBlockInput) {
         MkqlIOSpecs->SetUseBlockInput();
         MkqlIOSpecs->SetInputBlockRepresentation(TMkqlIOSpecs::EBlockRepresentation::WideBlock);
+        MkqlIOSpecs->SetDatumValidationMode(RuntimeSettings->DatumValidation.Get());
     }
     if (UseBlockOutput) {
         MkqlIOSpecs->SetUseBlockOutput();

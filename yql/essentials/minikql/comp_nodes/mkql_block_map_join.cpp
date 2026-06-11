@@ -130,13 +130,13 @@ public:
         OutputRows_++;
     }
 
-    void MakeBlocks(const THolderFactory& holderFactory) {
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)));
+    void MakeBlocks(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)), validationMode);
         OutputRows_ = 0;
         BuilderAllocatedSize_ = 0;
 
         for (size_t i = 0; i < Builders_.size(); i++) {
-            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_), validationMode);
         }
         FillArrays();
     }
@@ -993,7 +993,8 @@ public:
                                                       LeftKeyColumns_,
                                                       RightIOMap_,
                                                       std::move(LeftStream_->GetValue(ctx)),
-                                                      std::move(RightBlockIndex_->GetValue(ctx)));
+                                                      std::move(RightBlockIndex_->GetValue(ctx)),
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -1008,7 +1009,8 @@ private:
             const TVector<ui32>& leftKeyColumns,
             const TVector<ui32>& rightIOMap,
             NUdf::TUnboxedValue&& leftStream,
-            NUdf::TUnboxedValue&& rightBlockIndex)
+            NUdf::TUnboxedValue&& rightBlockIndex,
+            NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , JoinState_(joinState)
             , LeftKeyColumns_(leftKeyColumns)
@@ -1016,6 +1018,7 @@ private:
             , LeftStream_(leftStream)
             , RightBlockIndex_(rightBlockIndex)
             , HolderFactory_(holderFactory)
+            , ValidationMode_(validationMode)
         {
         }
 
@@ -1106,7 +1109,7 @@ private:
                 if (joinState.IsEmpty()) {
                     return NUdf::EFetchStatus::Finish;
                 }
-                joinState.MakeBlocks(HolderFactory_);
+                joinState.MakeBlocks(HolderFactory_, ValidationMode_);
             }
 
             const auto sliceSize = joinState.Slice();
@@ -1143,6 +1146,7 @@ private:
         NUdf::TUnboxedValue RightBlockIndex_;
 
         const THolderFactory& HolderFactory_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {
@@ -1201,7 +1205,8 @@ public:
                                                       std::move(joinState),
                                                       RightIOMap_,
                                                       std::move(LeftStream_->GetValue(ctx)),
-                                                      std::move(RightBlockStorage_->GetValue(ctx)));
+                                                      std::move(RightBlockStorage_->GetValue(ctx)),
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -1215,13 +1220,15 @@ private:
             NUdf::TUnboxedValue&& joinState,
             const TVector<ui32>& rightIOMap,
             NUdf::TUnboxedValue&& leftStream,
-            NUdf::TUnboxedValue&& rightBlockStorage)
+            NUdf::TUnboxedValue&& rightBlockStorage,
+            NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , JoinState_(joinState)
             , RightIOMap_(rightIOMap)
             , LeftStream_(leftStream)
             , RightBlockStorage_(rightBlockStorage)
             , HolderFactory_(holderFactory)
+            , ValidationMode_(validationMode)
         {
         }
 
@@ -1277,7 +1284,7 @@ private:
                 if (joinState.IsEmpty()) {
                     return NUdf::EFetchStatus::Finish;
                 }
-                joinState.MakeBlocks(HolderFactory_);
+                joinState.MakeBlocks(HolderFactory_, ValidationMode_);
             }
 
             const auto sliceSize = joinState.Slice();
@@ -1300,6 +1307,7 @@ private:
         NUdf::TUnboxedValue RightBlockStorage_;
 
         const THolderFactory& HolderFactory_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {

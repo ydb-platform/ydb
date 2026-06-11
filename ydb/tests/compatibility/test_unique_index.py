@@ -11,9 +11,9 @@ class TestUniqueIndex(RollingUpgradeAndDowngradeFixture):
     def setup(self):
         if min(self.versions) < (25, 4):
             pytest.skip("Only available since 25-4")
-        flags = {"enable_add_unique_index": True}
+        flags = ["enable_add_unique_index"]
         if min(self.versions) >= (26, 2):
-            flags["enable_online_add_unique_index"] = True
+            flags.append("enable_online_add_unique_index")
         self.row_count = 50
         self.append_row_count = 5
         yield from self.setup_cluster(extra_feature_flags=flags)

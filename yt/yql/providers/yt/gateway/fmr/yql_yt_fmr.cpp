@@ -274,14 +274,32 @@ public:
                         }
 
                         // Update progress counters for ops still running.
+                        // If GetOperation returns a terminal status, promote to finalized
+                        // immediately rather than waiting for the next WaitForOperations cycle.
                         for (const auto& op : operationsToCheck) {
                             if (finalizedIds.contains(op.OperationId)) {
                                 continue;
                             }
                             try {
                                 auto getOperationResult = Coordinator_->GetOperation({op.OperationId}).GetValueSync();
-                                with_lock(Mutex_) {
-                                    InProgressCounters_[op.OperationId] = getOperationResult.JobCounters;
+                                auto status = getOperationResult.Status;
+                                bool isTerminal = (status == EOperationStatus::Completed
+                                    || status == EOperationStatus::Failed
+                                    || status == EOperationStatus::Aborted
+                                    || status == EOperationStatus::NotFound);
+                                if (isTerminal) {
+                                    YQL_CLOG(TRACE, FastMapReduce) << "Operation " << op.OperationId
+                                        << " reached terminal status " << status << " during progress update; promoting to finalized";
+                                    finalizedIds.insert(op.OperationId);
+                                    finalizedOps.push_back(TFinalizedOp{
+                                        .OperationId = op.OperationId,
+                                        .SessionId = operationSessionIds[op.OperationId],
+                                        .GetOpResponse = std::move(getOperationResult),
+                                    });
+                                } else {
+                                    with_lock(Mutex_) {
+                                        InProgressCounters_[op.OperationId] = getOperationResult.JobCounters;
+                                    }
                                 }
                             } catch (...) {
                                 YQL_CLOG(ERROR, FastMapReduce) << "Failed to get progress for operation " << op.OperationId << ": " << CurrentExceptionMessage();
@@ -541,7 +559,9 @@ public:
                 } catch (...) {
                     YQL_CLOG(ERROR, FastMapReduce) << "Unexpected exception in ping thread: " << CurrentExceptionMessage();
                 }
-                Sleep(CoordinatorPingInterval_);
+                with_lock(PingMutex_) {
+                    PingCondVar_.WaitD(PingMutex_, TInstant::Now() + CoordinatorPingInterval_);
+                }
             }
         };
         PingSessionThread_ = std::thread(pingGatewaySessionFunc);
@@ -550,6 +570,7 @@ public:
     ~TFmrYtGateway() {
         StopFmrGateway_ = true;
         TrackingCondVar_.BroadCast();
+        PingCondVar_.BroadCast();
         GetOperationStatusesThread_.join();
         PingSessionThread_.join();
     }
@@ -3438,6 +3459,8 @@ private:
     THashMap<TString, TFuture<void>> InFlightFileUploads_;
     TMutex Mutex_;
     TCondVar TrackingCondVar_;
+    TMutex PingMutex_;
+    TCondVar PingCondVar_;
     bool WaitFutureReady_ = false;  // set under Mutex_ by subscribe callback, read in WaitI predicate
     std::unordered_map<TString, TFmrSession::TPtr> Sessions_;
     std::unordered_map<TString, TJobCounters> InProgressCounters_; // operationId -> latest job counters

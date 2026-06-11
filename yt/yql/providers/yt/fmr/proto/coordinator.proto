@@ -133,3 +133,12 @@ message TWaitForOperationsRequest {
 message TWaitForOperationsResponse {
     repeated TOperationIdWithStatus FinalizedOperations = 1;
 }
+
+message TWaitForTasksRequest {
+    uint64 AvailableSlots = 1;
+    uint64 TimeoutMs = 2;
+}
+
+message TWaitForTasksResponse {
+    uint64 AvailableTasksCount = 1;
+}

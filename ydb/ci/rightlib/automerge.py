@@ -11,6 +11,7 @@ from github.PullRequest import PullRequest
 
 automerge_pr_label = "automerge"
 pr_label_fail = "automerge-blocked"
+pr_label_error = "automerge-error"
 check_name = "checks_integrated"
 failed_comment_mark = "<!--SyncFailed-->"
 
@@ -108,13 +109,23 @@ class PrAutomerger:
                 self.git_run("push")
                 return True
             except subprocess.CalledProcessError:
-                # Most likely a race: someone pushed to the base branch between
-                # our clone and push. Not a PR problem, retry on next iteration.
-                self.logger.warning("push to %s rejected, will retry on next iteration", pr.base.ref)
-                text = f"Unable to push merged revision to `{pr.base.ref}` (probably a race with another push), will retry automatically."
-                if self.workflow_url:
-                    text += f" Sync workflow logs can be found [here]({self.workflow_url})."
-                pr.create_issue_comment(text)
+                pr_labels = [l.name for l in pr.labels]
+                if pr_label_error in pr_labels:
+                    # Second failure in a row: this is not a transient race
+                    # (token/permissions/branch protection?), needs a human.
+                    self.logger.warning("push to %s rejected again, blocking automerge", pr.base.ref)
+                    self.add_failed_comment(pr, "Unable to push merged revision (failed twice in a row).")
+                    self.add_pr_failed_label(pr)
+                    pr.remove_from_labels(pr_label_error)
+                else:
+                    # Most likely a race: someone pushed to the base branch between
+                    # our clone and push. Not a PR problem, retry on next iteration.
+                    self.logger.warning("push to %s rejected, will retry on next iteration", pr.base.ref)
+                    pr.add_to_labels(pr_label_error)
+                    text = f"Unable to push merged revision to `{pr.base.ref}` (probably a race with another push), will retry automatically."
+                    if self.workflow_url:
+                        text += f" Sync workflow logs can be found [here]({self.workflow_url})."
+                    pr.create_issue_comment(text)
                 return False
         finally:
             os.chdir(original_dir)

@@ -56,7 +56,12 @@ public:
         // Don't capture pingableTx by reference: an in-flight ping may outlive it and race with its destruction
         auto pingRoutine = BIND([this, rawClient = RawClient_, transactionId = pingableTx.GetId(), periodic = std::weak_ptr{periodic}] {
             auto strong_ptr = periodic.lock();
-            YT_VERIFY(strong_ptr);
+            // NB: RemoveTransaction calls (*periodic)->Stop() fire-and-forget and then drops the last shared_ptr,
+            //     so if this callback was queued but hadn't started yet, lock() returns null.
+            if (!strong_ptr) {
+                // The executor is being torn down — nothing to ping.
+                return;
+            }
             DoPingTransaction(rawClient, transactionId, *strong_ptr);
         });
         *periodic = New<NConcurrency::TPeriodicExecutor>(ThreadPool_->GetInvoker(), pingRoutine, opts);

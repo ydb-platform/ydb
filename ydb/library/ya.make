@@ -20,6 +20,7 @@ RECURSE(
     http_proxy
     intersection_tree
     json_index
+    kafka
     keys
     kll_median
     lockfree_bucket

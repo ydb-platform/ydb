@@ -11,6 +11,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write 
 
 jobs:
   ydbdoc-review:
@@ -46,14 +47,13 @@ jobs:
           YDBDOC_MODEL_CHECK: ${{ vars.YDBDOC_MODEL_CHECK }}
           YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_PUSH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}  # секрет YDBDOC_PUSH_PAT → env для приложения
           YDBDOC_REPO_PATH: ${{ github.workspace }}
 
       - name: Trigger docs rebuild for translation PR
         if: ${{ !cancelled() }}
         uses: actions/github-script@v8
         with:
-          github-token: ${{ secrets.YDBDOC_PUSH_PAT }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;

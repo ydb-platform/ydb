@@ -9,7 +9,7 @@ namespace {
 
 TEST(TSimpleLruCacheTest, Common)
 {
-    TSimpleLruCache<TString, int> cache(2);
+    TSimpleLruCache<std::string, int> cache(2);
     cache.Insert("a", 1);
     cache.Insert("b", 2);
 
@@ -46,7 +46,7 @@ TEST(TSimpleLruCacheTest, Common)
 
 TEST(TSimpleLruCacheTest, Clear)
 {
-    TSimpleLruCache<TString, int> cache(2);
+    TSimpleLruCache<std::string, int> cache(2);
     cache.Insert("a", 1);
     cache.Insert("b", 2);
 
@@ -67,7 +67,7 @@ TEST(TSimpleLruCacheTest, Clear)
 
 TEST(TMultiLruCacheTest, InsertAndFind)
 {
-    TMultiLruCache<TString, int> cache(3);
+    TMultiLruCache<std::string, int> cache(3);
 
     EXPECT_EQ(cache.GetSize(), 0);
 
@@ -113,7 +113,7 @@ TEST(TMultiLruCacheTest, InsertAndFind)
 
 TEST(TMultiLruCacheTest, Extract)
 {
-    TMultiLruCache<TString, int> cache(3);
+    TMultiLruCache<std::string, int> cache(3);
 
     cache.Insert("a", 1);
     cache.Insert("b", 2);

@@ -2,6 +2,48 @@
 import requests
 
 
+def tablet_devui_sid_matrix():
+    all_forbidden = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 403,
+    }
+    monitoring_allowed_sids_ok = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    }
+    admin_allowed_sids_ok = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 200,
+    }
+    return all_forbidden, monitoring_allowed_sids_ok, admin_allowed_sids_ok
+
+
+def tablet_devui_expected_on_app(secure_path_mode, monitoring_ok, all_forbidden):
+    return all_forbidden if secure_path_mode else monitoring_ok
+
+
+def tablet_devui_new_action_paths(tablet_id, query_suffix, secure_path_mode):
+    all_forbidden, monitoring_ok, admin_ok = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_ok, all_forbidden)
+    q = f'TabletID={tablet_id}'
+    return {
+        f'/tablets/app?{q}&{query_suffix}': expected_on_app,
+        f'/tablets/app/secure?{q}&{query_suffix}': admin_ok,
+    }
+
+
 def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     headers = {}
     if token is not None:

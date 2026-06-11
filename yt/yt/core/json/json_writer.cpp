@@ -170,9 +170,8 @@ static void CheckYajlCode(int yajlCode)
         return;
     }
 
-    TString errorMessage;
-    switch (yajlCode)
-    {
+    std::string errorMessage;
+    switch (yajlCode) {
         case yajl_gen_keys_must_be_strings:
             errorMessage = "JSON key must be a string";
             break;
@@ -572,7 +571,7 @@ void TJsonConsumer::OnKeyedItem(TStringBuf name)
 {
     if (IsWriteAllowed()) {
         if (IsSpecialJsonKey(name)) {
-            JsonWriter_->OnKeyedItem(Utf8Transcoder_.Encode(TString("$") + name));
+            JsonWriter_->OnKeyedItem(Utf8Transcoder_.Encode(std::string("$") + std::string(name)));
         } else {
             JsonWriter_->OnKeyedItem(Utf8Transcoder_.Encode(name));
         }

@@ -125,6 +125,20 @@
             "uri": "https://{canondata_backend}/1689644/ef0bb26f0f3a11d845794943f10edcaab8ec7681/resource.tar.gz#test.test_agg_phases-percentile_struct_opt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-random_value_null-default.txt-Debug]": [
+        {
+            "checksum": "a07caf2f17eb12130c8ee755e049a671",
+            "size": 1911,
+            "uri": "https://{canondata_backend}/1817427/3ea1dd0bfd0352a6c624c7a6b190b4e66bb1e2fc/resource.tar.gz#test.test_agg_phases-random_value_null-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-random_value_null-default.txt-Results]": [
+        {
+            "checksum": "200ff2930124c82a55e22120feee5388",
+            "size": 5576,
+            "uri": "https://{canondata_backend}/1817427/3ea1dd0bfd0352a6c624c7a6b190b4e66bb1e2fc/resource.tar.gz#test.test_agg_phases-random_value_null-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-top_by-default.txt-Debug]": [
         {
             "checksum": "3993977a15513ab484bf26ac7364a6df",
@@ -725,6 +739,20 @@
             "checksum": "96cd9057bb44119e4c3ca0678cbccbe1",
             "size": 1169,
             "uri": "https://{canondata_backend}/1917492/53531106e44e755ea77008ec27c01bc41d81b31c/resource.tar.gz#test.test_expr-udaf_with_list_zip-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[expr-yql-21292-default.txt-Debug]": [
+        {
+            "checksum": "dbf3bcad3bdfe3a4635d48e95ed47ce0",
+            "size": 418,
+            "uri": "https://{canondata_backend}/1936997/cb8c5304c4d1ea79cf47e311032c94d9f1edc3f3/resource.tar.gz#test.test_expr-yql-21292-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-yql-21292-default.txt-Results]": [
+        {
+            "checksum": "90ac13c9b50161eec91546d157814cd8",
+            "size": 713,
+            "uri": "https://{canondata_backend}/1936997/cb8c5304c4d1ea79cf47e311032c94d9f1edc3f3/resource.tar.gz#test.test_expr-yql-21292-default.txt-Results_/results.txt"
         }
     ],
     "test.test[flatten_by-flatten_columns_with_opt_struct-default.txt-Debug]": [

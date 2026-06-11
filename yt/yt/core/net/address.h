@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/dns/public.h>
 
@@ -85,8 +86,8 @@ private:
 
     static socklen_t GetGenericLength(const sockaddr& sockAddr);
 
-    friend void ToProto(TString* protoAddress, const TNetworkAddress& address);
-    friend void FromProto(TNetworkAddress* address, const TString& protoAddress);
+    friend void ToProto(TProtobufString* protoAddress, const TNetworkAddress& address);
+    friend void FromProto(TNetworkAddress* address, const TProtobufString& protoAddress);
 };
 
 extern const TNetworkAddress NullNetworkAddress;

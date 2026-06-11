@@ -98,6 +98,53 @@ class BytesSource:
         """No-op close method for compatibility."""
 
 
+class _SessionLease:
+    """An aiohttp.ClientSession with an in-flight request count, so close()
+    can wait for outstanding requests to drain before tearing down the session."""
+
+    __slots__ = ("session", "_inflight", "_drained")
+
+    def __init__(self, session: aiohttp.ClientSession):
+        self.session = session
+        self._inflight = 0
+        self._drained = asyncio.Event()
+        self._drained.set()
+
+    def acquire(self) -> None:
+        self._inflight += 1
+        if self._inflight == 1:
+            self._drained.clear()
+
+    def release(self) -> None:
+        self._inflight -= 1
+        if self._inflight == 0:
+            self._drained.set()
+
+    async def wait_drained(self) -> None:
+        await self._drained.wait()
+
+
+def _one_shot(fn: Callable[[], None]) -> Callable[[], None]:
+    """Returns a wrapper that invokes fn at most once."""
+    fired = False
+
+    def call():
+        nonlocal fired
+        if not fired:
+            fired = True
+            fn()
+
+    return call
+
+
+def _release_lease(response: aiohttp.ClientResponse | None) -> None:
+    if response is None:
+        return
+    release = getattr(response, "_lease_release", None)
+    if release is not None:
+        release()
+
+
 class AsyncClient(Client):
     valid_transport_settings = {
         "database",
@@ -231,7 +278,7 @@ class AsyncClient(Client):
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
             elif ca_cert:
-                ssl_context.load_verify_locations(ca_cert)
+                ssl_context.load_verify_locations(httputil.resolve_ca_cert(ca_cert))
             if client_cert:
                 ssl_context.load_cert_chain(client_cert, client_cert_key)
 
@@ -250,7 +297,8 @@ class AsyncClient(Client):
         if sys.version_info < (3, 12, 7) or sys.version_info[:3] == (3, 13, 0):
             self._connector_kwargs["enable_cleanup_closed"] = True
 
-        self._session = None
+        self._session_lease: _SessionLease | None = None
+        self._session_lock = asyncio.Lock()
         self._read_format = "Native"
         self._write_format = "Native"
         self._transform = NativeTransform()
@@ -284,6 +332,15 @@ class AsyncClient(Client):
             autoconnect=False,
         )
 
+    @property
+    def _session(self) -> aiohttp.ClientSession | None:
+        lease = self._session_lease
+        return lease.session if lease is not None else None
+
+    @_session.setter
+    def _session(self, value: aiohttp.ClientSession | None) -> None:
+        self._session_lease = _SessionLease(value) if value is not None else None
+
     async def _initialize(self):
         """
         Async equivalent of Client._init_common_settings.
@@ -311,7 +368,7 @@ class AsyncClient(Client):
             self.server_version, server_tz_str = tuple(row)
             try:
                 server_tz = tzutil.resolve_zone(server_tz_str)
-                server_tz, self._dst_safe = tzutil.normalize_timezone(server_tz)
+                server_tz, self._dst_safe = tzutil.normalize_timezone(server_tz, trust_fixed_offset=True)
                 self.server_tz = server_tz
             except zoneinfo.ZoneInfoNotFoundError:
                 logger.warning(
@@ -420,22 +477,31 @@ class AsyncClient(Client):
         return False
 
     async def close(self):  # type: ignore[override]
-        if self._session:
-            await self._session.close()
+        async with self._session_lock:
+            old_lease = self._session_lease
+            self._session_lease = None
+        if old_lease is not None:
+            await old_lease.wait_drained()
+            await old_lease.session.close()
 
     async def close_connections(self):  # type: ignore[override]
-        """Close all pooled connections and recreate session"""
-        if self._session:
-            await self._session.close()
-        connector = aiohttp.TCPConnector(**self._connector_kwargs)
-        self._session = aiohttp.ClientSession(
-            connector=connector,
-            timeout=self._timeout,
-            headers=self.headers,
-            trust_env=False,
-            auto_decompress=False,
-            skip_auto_headers={"Accept-Encoding"},
-        )
+        """Rotate the connection pool: new requests use a fresh session; in-flight
+        requests keep using the old session until they complete, then it's closed."""
+        async with self._session_lock:
+            old_lease = self._session_lease
+            connector = aiohttp.TCPConnector(**self._connector_kwargs)
+            new_session = aiohttp.ClientSession(
+                connector=connector,
+                timeout=self._timeout,
+                headers=self.headers,
+                trust_env=False,
+                auto_decompress=False,
+                skip_auto_headers={"Accept-Encoding"},
+            )
+            self._session_lease = _SessionLease(new_session)
+        if old_lease is not None:
+            await old_lease.wait_drained()
+            await old_lease.session.close()
 
     def set_client_setting(self, key, value):
         str_value = self._validate_setting(key, value, common.get_setting("invalid_setting_action"))
@@ -496,8 +562,11 @@ class AsyncClient(Client):
                 params.update(context.bind_params)
                 response = await self._raw_request(fmt_json_query, params, headers, retries=self.query_retries)
 
-            body = await response.read()
-            encoding = response.headers.get("Content-Encoding")
+            try:
+                body = await response.read()
+                encoding = response.headers.get("Content-Encoding")
+            finally:
+                _release_lease(response)
             loop = asyncio.get_running_loop()
 
             def decompress_and_parse_json():
@@ -874,9 +943,12 @@ class AsyncClient(Client):
         headers = dict_copy(headers, transport_settings)
         method = "POST" if payload or files else "GET"
         response = await self._raw_request(payload, params, headers, files=files, method=method, server_wait=False)
-        body = await response.read()
-        encoding = response.headers.get("Content-Encoding")
-        summary = self._summary(response)
+        try:
+            body = await response.read()
+            encoding = response.headers.get("Content-Encoding")
+            summary = self._summary(response)
+        finally:
+            _release_lease(response)
 
         if not body:
             return QuerySummary(summary)
@@ -902,14 +974,22 @@ class AsyncClient(Client):
         return await loop.run_in_executor(None, decompress_and_decode)
 
     async def ping(self) -> bool:  # type: ignore[override]
+        async with self._session_lock:
+            lease = self._session_lease
+            if lease is None or lease.session.closed:
+                return False
+            session = lease.session
+            lease.acquire()
         try:
             url = f"{self.url}/ping"
             timeout = aiohttp.ClientTimeout(total=3.0)
-            async with self._session.get(url, timeout=timeout) as response:
+            async with session.get(url, timeout=timeout) as response:
                 return 200 <= response.status < 300
         except (aiohttp.ClientError, asyncio.TimeoutError):
             logger.debug("ping failed", exc_info=True)
             return False
+        finally:
+            lease.release()
 
     async def raw_query(  # type: ignore[override]
         self,
@@ -929,8 +1009,11 @@ class AsyncClient(Client):
             headers = dict_copy(headers, transport_settings)
 
         response = await self._raw_request(body, params, headers=headers, files=files, retries=self.query_retries)
-        response_data = await response.read()
-        encoding = response.headers.get("Content-Encoding")
+        try:
+            response_data = await response.read()
+            encoding = response.headers.get("Content-Encoding")
+        finally:
+            _release_lease(response)
 
         if encoding:
             loop = asyncio.get_running_loop()
@@ -961,7 +1044,14 @@ class AsyncClient(Client):
             async for chunk in response.content.iter_any():
                 yield chunk
 
-        return StreamContext(response, byte_iterator())
+        class _RawStreamSource:
+            def close(self):
+                try:
+                    response.close()
+                finally:
+                    _release_lease(response)
+
+        return StreamContext(_RawStreamSource(), byte_iterator())
 
     def _prep_raw_query(self, query, parameters, settings, fmt, use_database, external_data):
         """
@@ -1578,6 +1668,7 @@ class AsyncClient(Client):
         params.update(self._validate_settings(context.settings))
         headers = dict_copy(headers, context.transport_settings)
 
+        response = None
         try:
             response = await self._raw_request(
                 active_source.async_generator(),
@@ -1587,6 +1678,7 @@ class AsyncClient(Client):
                 retry_body=rebuild_body,
             )
             logger.debug("Context insert response code: %d", response.status)
+            summary = self._summary(response)
         except Exception:
             await active_source.close()
 
@@ -1598,8 +1690,11 @@ class AsyncClient(Client):
         finally:
             await active_source.close()
             context.data = None
+            if response is not None:
+                response.close()
+                _release_lease(response)
 
-        return QuerySummary(self._summary(response))
+        return QuerySummary(summary)
 
     async def insert_df(  # type: ignore[override]
         self,
@@ -1684,8 +1779,12 @@ class AsyncClient(Client):
         headers = dict_copy(headers, transport_settings)
 
         response = await self._raw_request(insert_block, params, headers, server_wait=False)
-        logger.debug("Raw insert response code: %d", response.status)
-        return QuerySummary(self._summary(response))
+        try:
+            logger.debug("Raw insert response code: %d", response.status)
+            return QuerySummary(self._summary(response))
+        finally:
+            response.close()
+            _release_lease(response)
 
     def _add_integration_tag(self, name: str):
         """
@@ -1799,9 +1898,10 @@ class AsyncClient(Client):
             if self._last_pool_reset is None:
                 self._last_pool_reset = now
             elif self._last_pool_reset < now - reset_seconds:
+                # Stamp before await so concurrent callers don't all queue redundant resets.
+                self._last_pool_reset = now
                 logger.debug("connection expiration - resetting connection pool")
                 await self.close_connections()
-                self._last_pool_reset = now
 
         final_params = dict_copy(self._client_settings, params)
         if server_wait:
@@ -1830,6 +1930,17 @@ class AsyncClient(Client):
                     )
                 self._active_session = query_session
 
+            # Snapshot+acquire under lock so close_connections() can't pass the
+            # drain check between our session read and our refcount increment.
+            async with self._session_lock:
+                lease = self._session_lease
+                if lease is None or lease.session.closed:
+                    if query_session:
+                        self._active_session = None
+                    raise ProgrammingError("Client session is unavailable; the client may have been closed.")
+                session = lease.session
+                lease.acquire()
+            lease_released = False
             try:
                 # Construct full URL (aiohttp doesn't have base_url)
                 url = f"{self.url}/"
@@ -1857,8 +1968,11 @@ class AsyncClient(Client):
                 else:
                     request_kwargs["data"] = data
 
-                response = await self._session.request(**request_kwargs)
+                response = await session.request(**request_kwargs)
                 if 200 <= response.status < 300 and not response.headers.get(ex_header):
+                    # Caller releases lease after consuming the body.
+                    response._lease_release = _one_shot(lease.release)
+                    lease_released = True
                     return response
 
                 if response.status in (429, 503, 504):
@@ -1888,6 +2002,8 @@ class AsyncClient(Client):
                 raise OperationalError(f"Network Error: {str(e)}") from e
 
             finally:
+                if not lease_released:
+                    lease.release()
                 if query_session:
                     self._active_session = None
 

@@ -82,4 +82,12 @@ NProto::TPrepareOperationResponse PrepareOperationResponseToProto(const TPrepare
 
 TPrepareOperationResponse PrepareOperationResponseFromProto(const NProto::TPrepareOperationResponse& protoResponse);
 
+NProto::TWaitForOperationsRequest WaitForOperationsRequestToProto(const TWaitForOperationsRequest& request);
+
+TWaitForOperationsRequest WaitForOperationsRequestFromProto(const NProto::TWaitForOperationsRequest& protoRequest);
+
+NProto::TWaitForOperationsResponse WaitForOperationsResponseToProto(const TWaitForOperationsResponse& response);
+
+TWaitForOperationsResponse WaitForOperationsResponseFromProto(const NProto::TWaitForOperationsResponse& protoResponse);
+
 } // namespace NYql::NFmr

@@ -460,8 +460,7 @@ private:
         NHPTimer::GetTime(&sentAt);
         Inflight[cookie] = TInflightEntry{addr, size, sentAt, /*IsRead=*/false};
         auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(addr, size);
-        const ui32 payloadId = ev->AddPayload(TRope(WritePayload));
-        ev->Record.SetPayloadId(payloadId);
+        ev->Payload = TRope(WritePayload);
         NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
         ++WriteInFlight;
         LOG_T("IssueWrite Cookie# " << cookie << " Addr# " << addr << " Size# " << size << " WriteInFlight# " << WriteInFlight);

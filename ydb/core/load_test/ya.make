@@ -38,6 +38,7 @@ SRCS(
     archive.cpp
     config_examples.cpp
     ddisk_load.cpp
+    events.cpp
     interconnect_load.cpp
     keyvalue_write.cpp
     kqp.cpp

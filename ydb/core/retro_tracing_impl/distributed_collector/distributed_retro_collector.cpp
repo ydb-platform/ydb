@@ -1,8 +1,9 @@
 #include "distributed_retro_collector.h"
 
-#include <ydb/library/actors/retro_tracing/events.h>
-#include <ydb/library/actors/retro_tracing/retro_collector.h>
-#include <ydb/library/actors/retro_tracing/span_buffer.h>
+#include <ydb/library/actors/retro_tracing/collector/events.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
+#include <ydb/library/actors/retro_tracing/span/span_buffer.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>

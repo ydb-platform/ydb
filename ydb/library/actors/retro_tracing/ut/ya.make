@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/actors/interconnect/retro_tracing
     ydb/library/actors/retro_tracing
     ydb/library/actors/testlib
 )

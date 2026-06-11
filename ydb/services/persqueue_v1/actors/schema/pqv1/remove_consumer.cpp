@@ -20,10 +20,8 @@ public:
     void DoAction() {
         Become(&TRemoveConsumerActor::StateWork);
 
-        auto database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
-
         Register(NPQ::NSchema::CreateRemoveConsumerActor(SelfId(), {
-            .Database = database,
+            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
             .PeerName = Request_->GetPeerName(),
             .Path = GetProtoRequest()->path(),
             .ConsumerName = GetProtoRequest()->consumer_name(),
@@ -32,7 +30,7 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         auto status = ev->Get()->Status;
         if (status == Ydb::StatusIds::SUCCESS) {
             ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::PersQueue::V1::RemoveReadRuleResponse());
@@ -43,7 +41,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

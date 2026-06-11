@@ -851,7 +851,8 @@ void UnversionedValueToProtobufImpl(
     TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     TProtobufWriterOptions options;
-    options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Keep);
+    options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+        EUnknownYsonFieldsMode::Keep);
     auto protobufWriter = CreateProtobufWriter(&outputStream, type, options);
     ParseYsonStringBuffer(
         unversionedValue.AsStringBuf(),
@@ -1028,7 +1029,12 @@ void UnversionedValueToListImpl(
         {
             FlushElement();
             WireBytes_.clear();
-            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_);
+
+            TProtobufWriterOptions options;
+            options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+                EUnknownYsonFieldsMode::Keep);
+
+            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_, options);
         }
 
         void FlushElement()
@@ -1338,7 +1344,12 @@ void UnversionedValueToMapImpl(
             FlushElement();
             WireBytes_.clear();
             Key_ = std::string(key);
-            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_);
+
+            TProtobufWriterOptions options;
+            options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+                EUnknownYsonFieldsMode::Keep);
+
+            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_, options);
         }
 
         void FlushElement()

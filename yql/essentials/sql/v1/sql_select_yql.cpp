@@ -764,7 +764,7 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_named_single_source& rule) {
-        TSQLResult<TYqlSource> source = Build(rule.GetRule_single_source1());
+        TSQLResult<TYqlSource> source = Build(rule.GetRule_hinted_single_source1());
         if (!source) {
             return std::unexpected(source.error());
         }
@@ -796,6 +796,16 @@ private:
         return source;
     }
 
+    TSQLResult<TYqlSource> Build(const TRule_hinted_single_source& rule) {
+        const auto result = Build(rule.GetRule_single_source1());
+
+        if (rule.HasBlock2()) {
+            return Unsupported("table_hints");
+        }
+
+        return result;
+    }
+
     TSQLResult<TYqlSource> Build(const TRule_single_source& rule) {
         switch (rule.GetAltCase()) {
             case NSQLv1Generated::TRule_single_source::kAltSingleSource1:
@@ -825,10 +835,6 @@ private:
         }
 
         const bool isAnonymous = rule.HasBlock2();
-
-        if (rule.HasBlock4()) {
-            return Unsupported("table_hints");
-        }
 
         return Build(
             rule.GetBlock3(),

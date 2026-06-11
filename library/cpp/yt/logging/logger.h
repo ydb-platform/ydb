@@ -12,7 +12,7 @@
 
 #include <library/cpp/yt/misc/guid.h>
 
-#include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/system/thread_name.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 

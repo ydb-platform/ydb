@@ -208,7 +208,7 @@ struct IQueryTrackerClient
 
     virtual TFuture<NQueryTrackerClient::TQueryId> StartQuery(
         NQueryTrackerClient::EQueryEngine engine,
-        const TString& query,
+        const std::string& query,
         const TStartQueryOptions& options = {}) = 0;
 
     virtual TFuture<void> AbortQuery(

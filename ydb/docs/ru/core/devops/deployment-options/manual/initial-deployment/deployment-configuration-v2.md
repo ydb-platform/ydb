@@ -144,16 +144,23 @@ config:
 
 Подробности подготовки — в разделе [{#T}](deployment-preparation.md#tls-certificates). Если сертификаты сгенерированы скриптом `tls_cert_gen`, возьмите `ca.crt` из каталога `CA/certs/YYYY-MM-DD_hh-mi-ss` (подставьте метку времени из вывода скрипта или выберите нужный каталог в `CA/certs/`), а `node.crt`, `node.key` и `web.pem` — из подкаталога с именем FQDN этого сервера в `ydb-ca-nodes.txt`. Перенесите эти четыре файла на соответствующий сервер кластера (например, через `scp`) в один локальный каталог.
 
-На каждом сервере, в каталоге, где уже лежат `ca.crt`, `node.crt`, `node.key` и `web.pem` этого узла, выполните команды ниже.
+Для административных команд в разделах [Инициализируйте кластер](#initialize-cluster), [Создайте базу данных](#create-db), [Настройка учётных записей](#security-setup) и [Протестируйте работу с созданной базой](#try-first-db) в примерах используется путь `~/CA/certs/`. Чтобы не менять пути в командах, на каждом сервере создайте каталог `~/CA/certs/` в домашнем каталоге того пользователя, от имени которого вы выполняете эти команды, и поместите в него четыре файла: `ca.crt`, `node.crt`, `node.key` и `web.pem`.
 
-Ниже приведён пример создания защищённого каталога и копирования:
+Каталог `/opt/ydb/certs/` (см. ниже) нужен для запуска `ydbd` от пользователя `ydb`; `~/CA/certs/` — для административных команд из последующих разделов.
+
+На каждом сервере выполните команды ниже: сначала разместите файлы в `~/CA/certs/`, затем скопируйте их в `/opt/ydb/certs/`.
 
 ```bash
+mkdir -p ~/CA/certs
+cp -v ca.crt ~/CA/certs/
+cp -v node.crt ~/CA/certs/
+cp -v node.key ~/CA/certs/
+cp -v web.pem ~/CA/certs/
 sudo mkdir -p /opt/ydb/certs
-sudo cp -v ca.crt /opt/ydb/certs/
-sudo cp -v node.crt /opt/ydb/certs/
-sudo cp -v node.key /opt/ydb/certs/
-sudo cp -v web.pem /opt/ydb/certs/
+sudo cp -v ~/CA/certs/ca.crt /opt/ydb/certs/
+sudo cp -v ~/CA/certs/node.crt /opt/ydb/certs/
+sudo cp -v ~/CA/certs/node.key /opt/ydb/certs/
+sudo cp -v ~/CA/certs/web.pem /opt/ydb/certs/
 sudo chown -R ydb:ydb /opt/ydb/certs
 sudo chmod 700 /opt/ydb/certs
 ```
@@ -264,20 +271,13 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir /opt/ydb/cfg --from-co
 
 {% endlist %}
 
-После запуска статических узлов проверьте их работоспособность через встроенный веб-интерфейс {{ ydb-short-name }} (Embedded UI):
-
-1. Откройте в браузере адрес `https://<static-node.ydb.tech>:8765`, где `<static-node.ydb.tech>` - FQDN сервера, на котором запущен любой статический узел;
-2. Если браузер запросит логин и пароль, войдите под учётной записью `root` с пустым паролем — на этом этапе развёртывания пароль для `root` ещё не задан;
-3. Перейдите на вкладку **Nodes**;
-4. Убедитесь, что в списке отображаются все 3 статических узла.
-
-![Ручная установка, запущенные статические узлы](../../_assets/manual_installation_1.png)
+В конфигурации V2 встроенный web-интерфейс (Embedded UI) доступен для входа только **после** инициализации кластера. Сразу после запуска статических узлов попытка входа на экране логина завершится ошибкой — это нормально. Проверку UI выполните после раздела [Инициализируйте кластер](#initialize-cluster).
 
 ## Инициализируйте кластер {#initialize-cluster}
 
 Операция инициализации кластера осуществляет настройку набора статических узлов, перечисленных в конфигурационном файле кластера, для хранения данных {{ ydb-short-name }}.
 
-Для инициализации кластера потребуются файлы `ca.crt`, `node.crt` и `node.key`. Пути к ним указываются в командах ниже (для bootstrap — все три, для получения токена — `ca.crt`). Перед выполнением убедитесь, что эти файлы есть на сервере, где запускаете команды (см. [копирование TLS](#tls-copy-cert)).
+Для инициализации кластера потребуются файлы `ca.crt`, `node.crt` и `node.key` из каталога `~/CA/certs/` (см. раздел [{#T}](#tls-copy-cert)). Пути к ним указываются в командах ниже (для bootstrap — все три, для получения токена — `ca.crt`).
 
 На одном из серверов хранения в составе кластера выполните команды:
 
@@ -285,9 +285,9 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir /opt/ydb/cfg --from-co
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydb --ca-file /opt/ydb/certs/ca.crt \
-    --client-cert-file /opt/ydb/certs/node.crt \
-    --client-cert-key-file /opt/ydb/certs/node.key \
+/opt/ydb/bin/ydb --ca-file ~/CA/certs/ca.crt \
+    --client-cert-file ~/CA/certs/node.crt \
+    --client-cert-key-file ~/CA/certs/node.key \
     -e grpcs://`hostname -f`:2135 \
     admin cluster bootstrap --uuid <строка>
 echo $?
@@ -296,17 +296,26 @@ echo $?
 После инициализации кластера для выполнения дальнейших административных команд необходимо предварительно получить аутентификационный токен.
 
 ```bash
-/opt/ydb/bin/ydb -e grpcs://`hostname -f`:2135 -d /Root --ca-file /opt/ydb/certs/ca.crt \
+/opt/ydb/bin/ydb -e grpcs://`hostname -f`:2135 -d /Root --ca-file ~/CA/certs/ca.crt \
 --user root --no-password auth get-token --force > auth_token
 ```
 
 При успешном выполнении инициализации кластера выведенный на экран код завершения команды инициализации кластера должен быть нулевым.
 
+После успешной инициализации кластера проверьте работоспособность статических узлов через встроенный web-интерфейс {{ ydb-short-name }} (Embedded UI):
+
+1. Откройте в браузере адрес `https://<static-node.ydb.tech>:8765`, где `<static-node.ydb.tech>` — FQDN сервера с запущенным статическим узлом;
+2. Войдите под учётной записью `root` с пустым паролем (пароль задаётся позже, в разделе [Настройка учётных записей](#security-setup));
+3. Перейдите на вкладку **Nodes**;
+4. Убедитесь, что в списке отображаются все статические узлы кластера.
+
+![Ручная установка, запущенные статические узлы](../../_assets/manual_installation_1.png)
+
 ## Создайте базу данных {#create-db}
 
 Для работы со строковыми или колоночными таблицами необходимо создать как минимум одну базу данных и запустить процесс или процессы, обслуживающие эту базу данных (динамические узлы).
 
-Для выполнения административной команды создания базы данных потребуется файл сертификата центра регистрации `ca.crt`, аналогично описанному выше порядку выполнения действий по инициализации кластера.
+Для выполнения административной команды создания базы данных потребуется файл `ca.crt` из каталога `~/CA/certs/` (см. раздел [{#T}](#tls-copy-cert)).
 
 При создании базы данных устанавливается первоначальное количество используемых групп хранения, определяющее доступную пропускную способность ввода-вывода и максимальную емкость хранения. Количество групп хранения может быть при необходимости увеличено после создания базы данных.
 
@@ -314,7 +323,7 @@ echo $?
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file /opt/ydb/certs/ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
+/opt/ydb/bin/ydbd --ca-file ~/CA/certs/ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
     admin database /Root/testdb create ssd:8
 echo $?
 ```
@@ -429,7 +438,7 @@ echo $?
 1. Установите пароль для учетной записи `root`, используя полученный ранее токен:
 
     ```bash
-    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file auth_token \
+    ydb --ca-file ~/CA/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file auth_token \
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 
@@ -438,14 +447,14 @@ echo $?
 1. Создайте дополнительные учетные записи:
 
     ```bash
-    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
+    ydb --ca-file ~/CA/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
         yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
     ```
 
 1. Установите права учетных записей, включив их во встроенные группы:
 
     ```bash
-    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
+    ydb --ca-file ~/CA/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
         yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
     ```
 
@@ -464,14 +473,14 @@ echo $?
 * Создание строковой таблицы
 
     ```bash
-    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file ~/CA/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
     ```
 
 * Создание колоночной таблицы
 
     ```bash
-    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file ~/CA/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64 NOT NULL, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
     ```
 

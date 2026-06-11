@@ -1383,7 +1383,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             // Sometimes stats arrive too quickly?
             WaitForStats(runtime, 1);
         }
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"30", 1}, {"900", 0}, {"1800", 0}, {"inf", 0}});
 
         Cerr << "TEST 3" << Endl;
 
@@ -1410,7 +1410,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
         WaitForCondErase(runtime);
         WaitForStats(runtime, 2);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"30", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}});
 
         Cerr << "TEST 7" << Endl;
 
@@ -1426,7 +1426,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // just after alter
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"30", 1}, {"900", 0}, {"1800", 0}, {"inf", 0}});
 
         Cerr << "TEST 8" << Endl;
 
@@ -1453,7 +1453,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // just after alter
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"30", 1}, {"900", 0}, {"1800", 0}, {"inf", 0}});
 
         Cerr << "TEST 10" << Endl;
 
@@ -1479,7 +1479,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
         WaitForCondErase(runtime, TEvCondEraseResp::ProtoRecordType::OK, 2);
         WaitForStats(runtime, 2);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"30", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}});
 
         Cerr << "TEST 12" << Endl;
 
@@ -1489,7 +1489,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // just after move
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"30", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}});
 
         // after a while
         runtime.AdvanceCurrentTime(TDuration::Minutes(20));
@@ -1512,7 +1512,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         // after a while
         runtime.AdvanceCurrentTime(TDuration::Minutes(10));
         WaitForStats(runtime, 2);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"600", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}});
 
         Cerr << "TEST 15" << Endl;
 

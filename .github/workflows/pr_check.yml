@@ -287,6 +287,7 @@ jobs:
           set -eux
           python3 -m pip install pyyaml --quiet
           python3 .github/scripts/tests/sharding/extract_tests_from_graph.py graph/graph.json \
+            --target-prefix ydb/ \
             -o /tmp/tests.txt
           test_count=$(wc -l < /tmp/tests.txt)
           echo "Extracted $test_count tests"

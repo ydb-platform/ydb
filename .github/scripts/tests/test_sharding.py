@@ -23,6 +23,27 @@ def _run(script: str, *args: str) -> subprocess.CompletedProcess:
 
 
 class ShardingToolsTest(unittest.TestCase):
+    def test_extract_tests_filters_by_target_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "tests.txt"
+            _run(
+                "extract_tests_from_graph.py",
+                str(FIXTURES / "graph_sample.json"),
+                "--target-prefix",
+                "ydb/tests/olap",
+                "-o",
+                str(out),
+            )
+            tests = out.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(
+                tests,
+                [
+                    "ydb/tests/olap/other/PyTest.chunk_1",
+                    "ydb/tests/olap/suite/OlapTest.case_a",
+                    "ydb/tests/olap/suite/OlapTest.case_b",
+                ],
+            )
+
     def test_merge_build_reports(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "merged.json"

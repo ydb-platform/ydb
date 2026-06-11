@@ -1,0 +1,22 @@
+{
+  "nodes": [
+    {
+      "path": "ydb/tests/olap/suite",
+      "subtest_name": "OlapTest.case_a"
+    },
+    {
+      "path": "ydb/tests/olap/suite",
+      "test_filter": "OlapTest.case_b"
+    },
+    {
+      "path": "ydb/apps/ydb",
+      "subtest_name": "AppTest.smoke"
+    },
+    {
+      "path": "ydb/apps/ydb"
+    },
+    {
+      "full_name": "ydb/tests/olap/other/PyTest.chunk_1"
+    }
+  ]
+}

@@ -343,7 +343,15 @@ runs:
         if [ "${{ inputs.skip_graph_compare }}" = "true" ]; then
           GRAPH_PATH=$(realpath "${{ inputs.prebuilt_graph_path }}")
           CONTEXT_PATH=$(realpath "${{ inputs.prebuilt_context_path }}")
-          YA_MAKE_TARGET="ydb"
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+            if [ -e "$TARGET" ]; then
+              YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+            fi
+          done
+          if [ -z "$YA_MAKE_TARGET" ]; then
+            YA_MAKE_TARGET="ydb"
+          fi
         elif [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"

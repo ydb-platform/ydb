@@ -209,6 +209,7 @@ jobs:
           set -eux
           python3 -m pip install pyyaml --quiet
           python3 .github/scripts/tests/sharding/extract_tests_from_graph.py graph/graph.json \
+            --target-prefix "${{ inputs.test_targets }}" \
             -o /tmp/tests.txt
           echo "Extracted $(wc -l < /tmp/tests.txt) tests"
           python3 .github/scripts/tests/sharding/split_test_shards.py \

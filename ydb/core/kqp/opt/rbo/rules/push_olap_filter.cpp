@@ -208,16 +208,12 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
         MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(), read->Limit,
                                read->GetRanges(), originalPredicate, read->SortDir, read->Props, read->Pos);
     if (IsValidPredicateToKeep(remainingFilter)) {
-        // Part of the predicate could not be pushed down. The remaining TOpFilter survives and its selectivity computed later.
+        // Part of the predicate could not be pushed down and the remaining TOpFilter survives.
         return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(remainingFilter.Cast().Ptr(), &ctx.ExprCtx, &props));
     }
 
-    // Compute the predicate selectivity now, while the filter lambda is still live and type-annotated
-    auto readStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(read->Props, true));
-    const double pushedDownFilterSelectivity = TPredicateSelectivityComputer(readStats).Compute(lambda.Body());
 
-    // The whole predicate was pushed in: no TOpFilter remains, so carry its selectivity on the read.
-    newRead->Props.PushedDownFilterSelectivity = pushedDownFilterSelectivity;
+    // The whole predicate was pushed in and no TOpFilter remains.
     return newRead;
 }
 

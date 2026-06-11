@@ -69,11 +69,11 @@ public:
 
     void Start() {
         YDB_LOG_INFO("[ydb] [Finalizer] Start finalizer actor. Compute",
-            {"CloudId", Params.CloudId},
-            {"Scope", Params.Scope.ToString()},
-            {"QueryId", Params.QueryId},
-            {"JobId", Params.JobId},
-            {"Status", FederatedQuery::QueryMeta::ComputeStatus_Name(Status)});
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(Status)});
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         Become(&TFinalizerActor::StateFunc);
@@ -169,19 +169,19 @@ public:
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
             YDB_LOG_INFO("[ydb] [Finalizer] Query moved to terminal state",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvFinalizerResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             YDB_LOG_ERROR("[ydb] [Finalizer] Error moving the query to the terminal state",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvFinalizerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }

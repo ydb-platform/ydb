@@ -61,7 +61,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_INFO("[ydb] [SynchronizationService]: Start synchronization for the scope",
-            {"Scope", Scope});
+            {"scope", Scope});
         Client = CreateNewTableClient(ConnectionConfig,
                                       YqSharedResources,
                                       CredentialsProviderFactory);
@@ -72,7 +72,7 @@ public:
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle:
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start fetch connections stage for the scope (single)",
-                {"Scope", Scope});
+                {"scope", Scope});
             SendListConnections();
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
@@ -92,15 +92,15 @@ public:
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: DescribeDatabaseResponse, scope",
-                    {"Scope", Scope},
-                    {"(failed)", issues.ToOneLineString()});
+                    {"scope", Scope},
+                    {"issues", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error describe a database at the synchronization stage");
             return;
         }
         ComputeDatabase = ev.Get()->Get()->Record;
         if (!ComputeDatabase.synchronized()) {
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start fetch connections stage for the scope (cms or ydbcp)",
-                {"Scope", Scope});
+                {"scope", Scope});
             SendListConnections();
             return;
         }
@@ -108,13 +108,13 @@ public:
         if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
             Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start creating resource pools for the scope (cms or ydbcp)",
-                {"Scope", Scope});
+                {"scope", Scope});
             CreateResourcePools();
             return;
         }
 
         YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed for the scope",
-            {"Scope", Scope});
+            {"scope", Scope});
         ReplyAndPassAway();
     }
 
@@ -122,9 +122,9 @@ public:
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: ListConnectionsResponse, scope page token",
-                    {"Scope", Scope},
-                    {"PageToken", PageToken},
-                    {"(failed)", issues.ToOneLineString()});
+                    {"scope", Scope},
+                    {"pageToken", PageToken},
+                    {"issues", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error getting a list of connections at the synchronization stage");
             return;
         }
@@ -133,9 +133,9 @@ public:
         for (const auto& connection: result.connection()) {
             const auto& id = connection.meta().id();
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Received connection: scope, id, type",
-                {"Scope", Scope},
-                {"Id", id},
-                {"ConnectionType", static_cast<int>(connection.content().setting().connection_case())});
+                {"scope", Scope},
+                {"id", id},
+                {"connectionType", static_cast<int>(connection.content().setting().connection_case())});
             Connections[id] = connection;
         }
 
@@ -145,7 +145,7 @@ public:
             SendListConnections();
         } else {
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start fetch bindings stage for the scope",
-                {"Scope", Scope});
+                {"scope", Scope});
             Become(&TSynchronizeScopeActor::StateFetchBindingsFunc);
             PageToken = {};
             SendListBindings();
@@ -162,9 +162,9 @@ public:
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: ListBindingsResponse, scope page token",
-                    {"Scope", Scope},
-                    {"PageToken", PageToken},
-                    {"(failed)", issues.ToOneLineString()});
+                    {"scope", Scope},
+                    {"pageToken", PageToken},
+                    {"issues", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error getting a list of bindings at the synchronization stage");
             return;
         }
@@ -173,9 +173,9 @@ public:
         for (const auto& binding: result.binding()) {
             const auto& id = binding.meta().id();
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Received binding id: scope, id, type",
-                {"Scope", Scope},
-                {"Id", id},
-                {"BindingType", FederatedQuery::BindingSetting::BindingType_Name(binding.type())});
+                {"scope", Scope},
+                {"id", id},
+                {"bindingType", FederatedQuery::BindingSetting::BindingType_Name(binding.type())});
 
             BindingIds.insert(binding.meta().id());
         }
@@ -186,7 +186,7 @@ public:
             SendListBindings();
         } else {
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start describe bindings stage for the scope",
-                {"Scope", Scope});
+                {"scope", Scope});
             PageToken = {};
             SendDescribeBindings();
         }
@@ -198,20 +198,20 @@ public:
         const auto& id = result.binding().meta().id();
         if (issues) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: DescribeBindingResponse, scope",
-                    {"Scope", Scope},
-                    {"(failed)", issues.ToOneLineString()});
+                    {"scope", Scope},
+                    {"issues", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, TStringBuilder {} << "Error getting a description of a binding with id '" << id << "' at the synchronization stage");
             return;
         }
         YDB_LOG_INFO("[ydb] [SynchronizationService]: Received binding: scope, id, type",
-            {"Scope", Scope},
-            {"Id", id},
-            {"BindingType", static_cast<int>(result.binding().content().setting().binding_case())});
+            {"scope", Scope},
+            {"id", id},
+            {"bindingType", static_cast<int>(result.binding().content().setting().binding_case())});
         Bindings[result.binding().meta().id()] = result.binding();
 
         if (BindingIds.size() == Bindings.size()) {
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start create external data sources stage for the scope",
-                {"Scope", Scope});
+                {"scope", Scope});
             Become(&TSynchronizeScopeActor::StateCreateExternalDataSourcesFunc);
             CreateExternalDataSources();
         }
@@ -227,7 +227,7 @@ public:
         ProcessedConnections++;
         if (ProcessedConnections == Connections.size()) {
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start create external tables stage for the scope",
-                {"Scope", Scope});
+                {"scope", Scope});
             Become(&TSynchronizeScopeActor::StateCreateExternalTablesFunc);
             CreateExternalTables();
         }
@@ -240,9 +240,9 @@ public:
 
     void Handle(const TEvControlPlaneProxy::TEvCreateConnectionResponse::TPtr& ev) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: Create external data source response of, issues",
-                    {"(error)", ProcessedConnections},
-                    {"ConnectionsCount", Connections.size()},
-                    {"Issues", ev.Get()->Get()->Issues.ToOneLineString()});
+                    {"processedConnections", ProcessedConnections},
+                    {"connectionsCount", Connections.size()},
+                    {"issues", ev.Get()->Get()->Issues.ToOneLineString()});
         ProcessCreateConnection();
         Issues.AddIssues(ev.Get()->Get()->Issues);
     }
@@ -267,9 +267,9 @@ public:
 
     void Handle(const TEvControlPlaneProxy::TEvCreateBindingResponse::TPtr& ev) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: Create external table response of, issues",
-                    {"(error)", ProcessedBindings},
-                    {"BindingsCount", Bindings.size()},
-                    {"Issues", ev.Get()->Get()->Issues.ToOneLineString()});
+                    {"processedBindings", ProcessedBindings},
+                    {"bindingsCount", Bindings.size()},
+                    {"issues", ev.Get()->Get()->Issues.ToOneLineString()});
 
         ProcessCreateBinding();
 
@@ -280,14 +280,14 @@ public:
         const auto& issues = ev->Get()->Issues;
         if (ev->Get()->Issues) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: ModifyDatabaseResponse, scope",
-                    {"Scope", Scope},
-                    {"(failed)", issues.ToOneLineString()});
+                    {"scope", Scope},
+                    {"issues", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error modify a database at the synchronization stage");
             return;
         }
 
         YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed for the scope (cms or ydbcp)",
-            {"Scope", Scope});
+            {"scope", Scope});
         ReplyAndPassAway();
     }
 
@@ -312,9 +312,9 @@ public:
         }
         if (!status.IsSuccess()) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: Create resource pool response of, issues",
-                    {"(error)", ProcessedResourcePools},
-                    {"ResourcePoolSize", WorkloadManagerConfig.ResourcePoolSize()},
-                    {"Issues", status.GetIssues().ToOneLineString()});
+                    {"processedResourcePools", ProcessedResourcePools},
+                    {"resourcePoolSize", WorkloadManagerConfig.ResourcePoolSize()},
+                    {"issues", status.GetIssues().ToOneLineString()});
             Issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             ProcessCreateResourcePool();
             return;
@@ -387,9 +387,9 @@ private:
             const auto& setting = content.setting();
             if (!ComputeConfig.IsConnectionCaseEnabled(setting.connection_case())) {
                 YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude connection by type: scope, id, type",
-                    {"Scope", Scope},
-                    {"Id", meta.id()},
-                    {"ConnectionType", static_cast<int>(setting.connection_case())});
+                    {"scope", Scope},
+                    {"id", meta.id()},
+                    {"connectionType", static_cast<int>(setting.connection_case())});
                 excludeIds.push_back(meta.id());
                 continue;
             }
@@ -402,9 +402,9 @@ private:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MAX_SENTINEL_DO_NOT_USE_:
                 YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude connection by visibility: scope, id, visibility",
-                    {"Scope", Scope},
-                    {"Id", meta.id()},
-                    {"Visibility", FederatedQuery::Acl::Visibility_Name(content.acl().visibility())});
+                    {"scope", Scope},
+                    {"id", meta.id()},
+                    {"visibility", FederatedQuery::Acl::Visibility_Name(content.acl().visibility())});
                 excludeIds.push_back(meta.id());
                 continue;
             }
@@ -418,9 +418,9 @@ private:
                 case FederatedQuery::IamAuth::kToken:
                 case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
                 YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude connection by auth: scope, id, auth",
-                    {"Scope", Scope},
-                    {"Id", meta.id()},
-                    {"AuthType", static_cast<int>(authCase)});
+                    {"scope", Scope},
+                    {"id", meta.id()},
+                    {"authType", static_cast<int>(authCase)});
                 excludeIds.push_back(meta.id());
             }
         }
@@ -438,18 +438,18 @@ private:
             const auto& connectionId = content.connection_id();
             if (!Connections.contains(connectionId)) {
                 YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude binding because connection is filtered out: scope, id, connection id",
-                    {"Scope", Scope},
-                    {"Id", meta.id()},
-                    {"ConnectionId", connectionId});
+                    {"scope", Scope},
+                    {"id", meta.id()},
+                    {"connectionId", connectionId});
                 excludeIds.push_back(meta.id());
                 continue;
             }
 
             if (!ComputeConfig.IsBindingCaseEnabled(setting.binding_case())) {
                 YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude binding by type: scope, id, type",
-                    {"Scope", Scope},
-                    {"Id", meta.id()},
-                    {"BindingType", static_cast<int>(setting.binding_case())});
+                    {"scope", Scope},
+                    {"id", meta.id()},
+                    {"bindingType", static_cast<int>(setting.binding_case())});
                 excludeIds.push_back(meta.id());
                 continue;
             }
@@ -462,9 +462,9 @@ private:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MAX_SENTINEL_DO_NOT_USE_:
                 YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude binding by visibility: scope, id, visibility",
-                    {"Scope", Scope},
-                    {"Id", meta.id()},
-                    {"Visibility", FederatedQuery::Acl::Visibility_Name(content.acl().visibility())});
+                    {"scope", Scope},
+                    {"id", meta.id()},
+                    {"visibility", FederatedQuery::Acl::Visibility_Name(content.acl().visibility())});
                 excludeIds.push_back(meta.id());
             }
         }
@@ -480,8 +480,8 @@ private:
         auto issues = ValidateSources();
         if (issues) {
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Validate sources (error): scope",
-                {"Scope", Scope},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues);
             return;
         }
@@ -570,8 +570,8 @@ private:
 
     void SendListConnections() const {
         YDB_LOG_TRACE("[ydb] [SynchronizationService]: Send list connections: scope, page token",
-            {"Scope", Scope},
-            {"PageToken", PageToken});
+            {"scope", Scope},
+            {"pageToken", PageToken});
         auto request = CreateListRequest<FederatedQuery::ListConnectionsRequest>(PageToken);
         TPermissions permissions = CreateSuperUserPermissions();
         std::unique_ptr<TEvControlPlaneStorage::TEvListConnectionsRequest> event{new TEvControlPlaneStorage::TEvListConnectionsRequest{
@@ -584,8 +584,8 @@ private:
 
     void SendListBindings() const {
         YDB_LOG_TRACE("[ydb] [SynchronizationService]: Send list bindings: scope, page token",
-            {"Scope", Scope},
-            {"PageToken", PageToken});
+            {"scope", Scope},
+            {"pageToken", PageToken});
         auto request = CreateListRequest<FederatedQuery::ListBindingsRequest>(PageToken);
         TPermissions permissions = CreateSuperUserPermissions();
         std::unique_ptr<TEvControlPlaneStorage::TEvListBindingsRequest> event{new TEvControlPlaneStorage::TEvListBindingsRequest{
@@ -603,7 +603,7 @@ private:
 
         if (BindingIds.empty()) {
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start create external data sources stage for the scope (bindigns list is empty)",
-                {"Scope", Scope});
+                {"scope", Scope});
             Become(&TSynchronizeScopeActor::StateCreateExternalDataSourcesFunc);
             CreateExternalDataSources();
         }
@@ -611,8 +611,8 @@ private:
 
     void SendDescribeBinding(const TString& bindingId) const {
         YDB_LOG_TRACE("[ydb] [SynchronizationService]: Send describe binding: scope, binding id",
-            {"Scope", Scope},
-            {"BindingId", bindingId});
+            {"scope", Scope},
+            {"bindingId", bindingId});
         FederatedQuery::DescribeBindingRequest request;
         request.set_binding_id(bindingId);
         TPermissions permissions = CreateSuperUserPermissions();
@@ -628,7 +628,7 @@ private:
         if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
             Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Start creating resource pools for the scope (cms or ydbcp) after external sources synchronization",
-                {"Scope", Scope});
+                {"scope", Scope});
             CreateResourcePools();
             return;
         }
@@ -637,8 +637,8 @@ private:
 
     void SendFinalModifyDatabase() {
         if (Issues) {
-            YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed with errors for",
-                {"Scope", Scope});
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed with errors",
+                {"scope", Scope});
             Issues.AddIssue(TStringBuilder{} << "Connections created " << SuccessfullyCreatedConnections << " of " << ProcessedConnections);
             Issues.AddIssue(TStringBuilder{} << "Bindings created " << SuccessfullyCreatedBindings << " of " << ProcessedBindings);
             if (WorkloadManagerConfig.GetEnable()) {
@@ -657,7 +657,7 @@ private:
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle:
             YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed for the scope (single)",
-                {"Scope", Scope});
+                {"scope", Scope});
             ReplyAndPassAway();
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
@@ -724,8 +724,8 @@ private:
         using namespace fmt::literals;
         if (index >= WorkloadManagerConfig.ResourcePoolSize()) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: Alter resource pool has been failed. Invalid of",
-                    {"Index", index},
-                    {"ResourcePoolSize", WorkloadManagerConfig.ResourcePoolSize()});
+                    {"index", index},
+                    {"resourcePoolSize", WorkloadManagerConfig.ResourcePoolSize()});
             Issues.AddIssue(TStringBuilder{} << "Alter resource pool has been failed. Invalid index: " << index << " of " << WorkloadManagerConfig.ResourcePoolSize());
             return false;
         }
@@ -907,7 +907,7 @@ public:
         auto it = Cache.find(ev->Get()->Scope);
         if (it == Cache.end()) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: Response: not found for scope",
-                    {"Scope", ev->Get()->Scope});
+                    {"scope", ev->Get()->Scope});
             return;
         }
 
@@ -919,8 +919,8 @@ public:
 
         if (ev->Get()->Status == NYdb::EStatus::SUCCESS && ev->Get()->Issues) {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: Synchronization failed (skipped some bindings and connections) for with issues",
-                    {"Scope", ev->Get()->Scope},
-                    {"Issues", ev->Get()->Issues.ToOneLineString()});
+                    {"scope", ev->Get()->Scope},
+                    {"issues", ev->Get()->Issues.ToOneLineString()});
             Counters.IncFailed(ev->Get()->Scope);
             it->second.Status = EScopeStatus::SYNCHRONIZED;
         } else if (ev->Get()->Status == NYdb::EStatus::SUCCESS) {
@@ -928,8 +928,8 @@ public:
             it->second.Status = EScopeStatus::SYNCHRONIZED;
         } else {
                 YDB_LOG_ERROR("[ydb] [SynchronizationService]: Synchronization failed for with issues",
-                    {"Scope", ev->Get()->Scope},
-                    {"Issues", ev->Get()->Issues.ToOneLineString()});
+                    {"scope", ev->Get()->Scope},
+                    {"issues", ev->Get()->Issues.ToOneLineString()});
             Counters.IncFailed(ev->Get()->Scope);
             Cache.erase(it);
         }

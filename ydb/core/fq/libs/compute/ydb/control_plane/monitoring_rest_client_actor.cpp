@@ -53,8 +53,8 @@ public:
         );
         auto ticket = CredentialsProvider->GetAuthInfo();
         YDB_LOG_DEBUG("[ydb] using ticket",
-            {"[MonitoringRestClient]", httpRequest->GetObfuscatedData()},
-            {"Token", NKikimr::MaskTicket(ticket)});
+            {"httpRequest", httpRequest->GetObfuscatedData()},
+            {"token", NKikimr::MaskTicket(ticket)});
         httpRequest->Set("Authorization", ticket);
 
         auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy()));
@@ -132,7 +132,7 @@ public:
 
         if (forwardResponse->Issues) {
             YDB_LOG_ERROR("[ydb]",
-                {"[MonitoringRestClient]", response.Response->Body});
+                {"response", response.Response->Body});
         }
         Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
     }

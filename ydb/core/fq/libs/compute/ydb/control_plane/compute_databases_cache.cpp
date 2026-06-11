@@ -73,7 +73,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_ERROR("[ydb] [ComputeDatabaseCache]: Cache Bootstrap, client",
-            {"DatabaseClientActorId", DatabaseClientActorId.ToString()});
+            {"databaseClientActorId", DatabaseClientActorId});
         InFlight = true;
         Counters.CacheReload.InFly->Inc();
         Send(DatabaseClientActorId, new TEvYdbCompute::TEvListDatabasesRequest());
@@ -92,8 +92,8 @@ public:
         Counters.CheckDatabaseRequest.InFly->Inc();
         const auto& path = ev->Get()->Path;
         YDB_LOG_DEBUG("[ydb] [ComputeDatabaseCache]: CheckDatabaseRequest,",
-            {"Path", path},
-            {"Ready", Ready});
+            {"path", path},
+            {"ready", Ready});
         if (!Ready) {
             PendingRequests.push_back({startTime, ev});
             return;
@@ -113,7 +113,7 @@ public:
         if (issues) {
             NotifyPendingRequests(issues);
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseCache]: ListDatabasesResponse was failed with",
-                {"Issues", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
             Counters.CacheReload.Error->Inc();
             Counters.CacheReload.InFly->Dec();
             Counters.CacheReload.LatencyMs->Collect(DeltaMs(StartCacheReload));
@@ -124,7 +124,7 @@ public:
         Ready = true;
         NotifyPendingRequests();
         YDB_LOG_DEBUG("[ydb] [ComputeDatabaseCache]: Updated list of databases, count",
-            {"DatabasesCount", Databases.size()});
+            {"databasesCount", Databases.size()});
         Counters.CacheReload.Ok->Inc();
         Counters.CacheReload.InFly->Dec();
         Counters.CacheReload.LatencyMs->Collect(DeltaMs(StartCacheReload));
@@ -135,8 +135,8 @@ public:
         Counters.AddDatabaseRequest.InFly->Inc();
         const auto& path = ev->Get()->Path;
         YDB_LOG_DEBUG("[ydb] [ComputeDatabaseCache]: AddDatabaseRequest,",
-            {"Path", path},
-            {"Ready", Ready});
+            {"path", path},
+            {"ready", Ready});
         Databases.insert(path);
         Send(ev->Sender, new TEvYdbCompute::TEvAddDatabaseResponse{}, 0, ev->Cookie);
         Counters.AddDatabaseRequest.InFly->Dec();

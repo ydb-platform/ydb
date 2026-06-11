@@ -67,10 +67,10 @@ public:
 
     void Start() {
         YDB_LOG_INFO("[ydb] [ExecuterActor] Bootstrap",
-            {"CloudId", Params.CloudId},
-            {"Scope", Params.Scope.ToString()},
-            {"QueryId", Params.QueryId},
-            {"JobId", Params.JobId});
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId});
         Become(&TExecuterActor::StateFunc);
         SendExecuteScript();
     }
@@ -87,24 +87,24 @@ public:
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
             YDB_LOG_INFO("[ydb] [ExecuterActor] Information about the operation id and execution id is stored",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId},
-                {"ExecutionId", ExecutionId},
-                {"OperationId", OperationId.ToString()});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"executionId", ExecutionId},
+                {"operationId", OperationId});
             Send(Parent, new TEvYdbCompute::TEvExecuterResponse(OperationId, ExecutionId, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             // Without the idempotency key, we lose the running operation here
             YDB_LOG_ERROR("[ydb] [ExecuterActor] Error saving information about the operation id and execution id",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId},
-                {"ExecutionId", ExecutionId},
-                {"OperationId", OperationId.ToString()});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"executionId", ExecutionId},
+                {"operationId", OperationId});
             Send(Parent, new TEvYdbCompute::TEvExecuterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString()}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
@@ -114,11 +114,11 @@ public:
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             YDB_LOG_ERROR("[ydb] [ExecuterActor] Can't execute",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId},
-                {"Script", ev->Get()->Issues.ToOneLineString()});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"script", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvExecuterResponse(ev->Get()->Issues, response.Status));
             FailedAndPassAway();
             return;
@@ -126,12 +126,12 @@ public:
         ExecutionId = response.ExecutionId;
         OperationId = response.OperationId;
         YDB_LOG_INFO("[ydb] [ExecuterActor] Execution has been created",
-            {"CloudId", Params.CloudId},
-            {"Scope", Params.Scope.ToString()},
-            {"QueryId", Params.QueryId},
-            {"JobId", Params.JobId},
-            {"ExecutionId", ExecutionId},
-            {"OperationId", OperationId.ToString()});
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"executionId", ExecutionId},
+            {"operationId", OperationId});
         SendPingTask();
     }
 

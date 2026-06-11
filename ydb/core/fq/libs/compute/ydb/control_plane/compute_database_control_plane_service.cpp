@@ -82,7 +82,7 @@ public:
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle: {
                 YDB_LOG_TRACE("[ydb] [ComputeDatabaseControlPlane]: Single control plane mode has been chosen",
-                    {"Scope", Scope});
+                    {"scope", Scope});
                 const auto& singleConfig = Config.GetYdb().GetControlPlane().GetSingle();
                 *Result.mutable_connection() = singleConfig.GetConnection();
                 Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, singleConfig.GetConnection(), GetWorkloadManagerConfig(singleConfig)});
@@ -91,7 +91,7 @@ public:
             case NConfig::TYdbComputeControlPlane::kCms:
             case NConfig::TYdbComputeControlPlane::kYdbcp:
             YDB_LOG_TRACE("[ydb] [ComputeDatabaseControlPlane]: CMS or YDBCP mode has been chosen",
-                {"Scope", Scope});
+                {"scope", Scope});
             Send(NFq::ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvDescribeDatabaseRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope});
             break;
         }
@@ -116,15 +116,15 @@ public:
 
         if (issues && issues.back().IssueCode == TIssuesIds::ACCESS_DENIED) {
             YDB_LOG_TRACE("[ydb] [ComputeDatabaseControlPlane]: Couldn't find the information about database in control plane storage for this scope",
-                {"Scope", Scope});
+                {"scope", Scope});
             Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvInvalidateSynchronizationRequest(Scope));
             return;
         }
 
         if (issues) {
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: Describe database (control plane storage) has been failed",
-                {"Scope", Scope},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -137,9 +137,9 @@ public:
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after DescribeDatabaseRequest. Please contact internal support"}};
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
-                {"Scope", Scope},
-                {"Connection", Result.ShortDebugString()},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -150,8 +150,8 @@ public:
         const auto& response = *ev.Get()->Get();
         if (response.Issues) {
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: The database existence check has been failed",
-                {"Scope", Scope},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"scope", Scope},
+                {"issues", response.Issues.ToOneLineString()});
             FailedAndPassAway(response.Issues);
             return;
         }
@@ -163,9 +163,9 @@ public:
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
-                {"Scope", Scope},
-                {"Connection", Result.ShortDebugString()},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -187,9 +187,9 @@ public:
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
-                {"Scope", Scope},
-                {"Connection", Result.ShortDebugString()},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -205,9 +205,9 @@ public:
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
-                {"Scope", Scope},
-                {"Connection", Result.ShortDebugString()},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -223,8 +223,8 @@ public:
         const auto issues = ev->Get()->Issues;
         if (issues) {
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: The modification of the information about database has been failed",
-                {"Scope", Scope},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -248,8 +248,8 @@ public:
         const auto issues = ev->Get()->Issues;
         if (issues) {
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: CreateDatabaseRequest (compute) has been failed",
-                {"Scope", Scope},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -259,9 +259,9 @@ public:
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after CreateDatabaseRequest. Please contact internal support"}};
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
-                {"Scope", Scope},
-                {"Connection", Result.ShortDebugString()},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -272,8 +272,8 @@ public:
         const auto issues = ev->Get()->Issues;
         if (issues) {
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: CreateDatabaseRequest (control plane storage) has been failed",
-                {"Scope", Scope},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -285,9 +285,9 @@ public:
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after CreateDatabaseRequest. Please contact internal support"}};
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]",
-                {"Scope", Scope},
-                {"Connection", Result.ShortDebugString()},
-                {"Issues", issues.ToOneLineString()});
+                {"scope", Scope},
+                {"connection", Result},
+                {"issues", issues.ToOneLineString()});
             FailedAndPassAway(issues);
             return;
         }
@@ -299,8 +299,8 @@ public:
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseControlPlane]: SynchronizeRequest has been failed",
-                {"Scope", Scope},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"scope", Scope},
+                {"issues", response.Issues.ToOneLineString()});
             FailedAndPassAway(response.Issues);
             return;
         }

@@ -68,20 +68,20 @@ public:
 
     void Start() {
         YDB_LOG_INFO("[ydb] [Initializer] Start initializer actor. Compute",
-            {"CloudId", Params.CloudId},
-            {"Scope", Params.Scope.ToString()},
-            {"QueryId", Params.QueryId},
-            {"JobId", Params.JobId},
-            {"State", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
         if (!Params.RequestStartedAt) {
             Become(&TInitializerActor::StateFunc);
             Send(NFq::ComputeDatabaseControlPlaneServiceActorId(), new TEvYdbCompute::TEvCpuQuotaRequest(Params.Scope.ToString(), Params.Deadline));
         } else {
             YDB_LOG_INFO("[ydb] [Initializer] Query has been initialized (did nothing)",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvInitializerResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         }
@@ -114,19 +114,19 @@ public:
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
             YDB_LOG_INFO("[ydb] [Initializer] Query has been initialized",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvInitializerResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             YDB_LOG_ERROR("[ydb] [Initializer] Error initialization query",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvInitializerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }

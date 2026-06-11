@@ -75,7 +75,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_ERROR("[ydb] [ComputeDatabaseMonitoring]: Monitoring Bootstrap, client",
-            {"MonitoringClientActorId", MonitoringClientActorId.ToString()});
+            {"monitoringClientActorId", MonitoringClientActorId});
         Become(&TComputeDatabaseMonitoringActor::StateFunc);
         SendCpuLoadRequest();
     }

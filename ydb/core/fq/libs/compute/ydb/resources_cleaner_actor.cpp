@@ -71,12 +71,12 @@ public:
 
     void Start() {
         YDB_LOG_INFO("[ydb] [ResourcesCleaner] Start resources cleaner actor. Compute",
-            {"CloudId", Params.CloudId},
-            {"Scope", Params.Scope.ToString()},
-            {"QueryId", Params.QueryId},
-            {"JobId", Params.JobId},
-            {"OperationId", OperationId.ToString()},
-            {"State", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"operationId", OperationId},
+            {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
         Become(&TResourcesCleanerActor::StateFunc);
         SendForgetOperation();
     }
@@ -89,34 +89,34 @@ public:
         const auto& response = *ev.Get()->Get();
         if (response.Status == NYdb::EStatus::TIMEOUT || response.Status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
             YDB_LOG_INFO("[ydb] [ResourcesCleaner] Operation partly forgotten, will be",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId},
-                {"OperationId", OperationId.ToString()},
-                {"Retried", response.Status});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId},
+                {"retried", response.Status});
             SendForgetOperation(BackoffTimer.Next());
             return;
         }
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND) {
             YDB_LOG_ERROR("[ydb] [ResourcesCleaner] Can't forget",
-                {"CloudId", Params.CloudId},
-                {"Scope", Params.Scope.ToString()},
-                {"QueryId", Params.QueryId},
-                {"JobId", Params.JobId},
-                {"OperationId", OperationId.ToString()},
-                {"Operation", ev->Get()->Issues.ToOneLineString()});
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId},
+                {"operation", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;
         }
         YDB_LOG_INFO("[ydb] [ResourcesCleaner] Operation successfully forgotten",
-            {"CloudId", Params.CloudId},
-            {"Scope", Params.Scope.ToString()},
-            {"QueryId", Params.QueryId},
-            {"JobId", Params.JobId},
-            {"OperationId", OperationId.ToString()},
-            {"Status", response.Status});
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"operationId", OperationId},
+            {"status", response.Status});
         Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse({}, NYdb::EStatus::SUCCESS));
         CompleteAndPassAway();
     }

@@ -51,8 +51,8 @@ public:
 
     void Bootstrap() {
         YDB_LOG_INFO("[ydb] Boostrap",
-            {"QueryId", Params.QueryId},
-            {"Params", Params});
+            {"queryId", Params.QueryId},
+            {"params", Params});
         Pinger = Register(ActorFactory->CreatePinger(SelfId()).release());
         Connector = Register(ActorFactory->CreateConnector().release());
         Become(&TYdbRunActor::StateFunc);
@@ -74,14 +74,14 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             YDB_LOG_INFO("[ydb] InitializerResponse (failed)",
-                {"QueryId", Params.QueryId},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"queryId", Params.QueryId},
+                {"issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
 
         YDB_LOG_INFO("[ydb] InitializerResponse (success)",
-            {"QueryId", Params.QueryId});
+            {"queryId", Params.QueryId});
         Register(ActorFactory->CreateExecuter(SelfId(), Connector, Pinger).release());
     }
 
@@ -89,17 +89,17 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             YDB_LOG_INFO("[ydb] ExecuterResponse (failed)",
-                {"QueryId", Params.QueryId},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"queryId", Params.QueryId},
+                {"issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
         Params.ExecutionId = response.ExecutionId;
         Params.OperationId = response.OperationId;
         YDB_LOG_INFO("[ydb] ExecuterResponse (success)",
-            {"QueryId", Params.QueryId},
-            {"ExecutionId", Params.ExecutionId},
-            {"OperationId", Params.OperationId.ToString()});
+            {"queryId", Params.QueryId},
+            {"executionId", Params.ExecutionId},
+            {"operationId", Params.OperationId});
         Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
     }
 
@@ -111,18 +111,18 @@ public:
         auto& response = *ev->Get();
         if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
             YDB_LOG_INFO("[ydb] StatusTrackerResponse (not found)",
-                {"QueryId", Params.QueryId},
-                {"Status", response.Status},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"queryId", Params.QueryId},
+                {"status", response.Status},
+                {"issues", response.Issues.ToOneLineString()});
             CreateFinalizer(Params.Status);
             return;
         }
 
         if (response.Status != NYdb::EStatus::SUCCESS) {
             YDB_LOG_INFO("[ydb] StatusTrackerResponse (failed)",
-                {"QueryId", Params.QueryId},
-                {"Status", response.Status},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"queryId", Params.QueryId},
+                {"status", response.Status},
+                {"issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
@@ -133,10 +133,10 @@ public:
         }
 
         YDB_LOG_INFO("[ydb] StatusTrackerResponse (success)",
-            {"QueryId", Params.QueryId},
-            {"Status", response.Status},
-            {"ExecStatus", static_cast<int>(response.ExecStatus)},
-            {"Issues", response.Issues.ToOneLineString()});
+            {"queryId", Params.QueryId},
+            {"status", response.Status},
+            {"execStatus", static_cast<int>(response.ExecStatus)},
+            {"issues", response.Issues.ToOneLineString()});
         if (ExecStatus == NYdb::NQuery::EExecStatus::Completed) {
             Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId, true).release());
         } else {
@@ -152,16 +152,16 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             YDB_LOG_INFO("[ydb] ResultWriterResponse (failed)",
-                {"QueryId", Params.QueryId},
-                {"Status", response.Status},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"queryId", Params.QueryId},
+                {"status", response.Status},
+                {"issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
         YDB_LOG_INFO("[ydb] ResultWriterResponse (success)",
-            {"QueryId", Params.QueryId},
-            {"Status", response.Status},
-            {"Issues", response.Issues.ToOneLineString()});
+            {"queryId", Params.QueryId},
+            {"status", response.Status},
+            {"issues", response.Issues.ToOneLineString()});
         CreateResourcesCleaner();
     }
 
@@ -169,16 +169,16 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::UNSUPPORTED) {
             YDB_LOG_INFO("[ydb] ResourcesCleanerResponse (failed)",
-                {"QueryId", Params.QueryId},
-                {"Status", response.Status},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"queryId", Params.QueryId},
+                {"status", response.Status},
+                {"issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
         YDB_LOG_INFO("[ydb] ResourcesCleanerResponse (success)",
-            {"QueryId", Params.QueryId},
-            {"Status", response.Status},
-            {"Issues", response.Issues.ToOneLineString()});
+            {"queryId", Params.QueryId},
+            {"status", response.Status},
+            {"issues", response.Issues.ToOneLineString()});
         CreateFinalizer(IsAborted ? FederatedQuery::QueryMeta::ABORTING_BY_USER : Params.Status);
     }
 
@@ -187,17 +187,17 @@ public:
         // The query can be restarted only after the expiration of lease in case of error
         auto& response = *ev->Get();
         YDB_LOG_INFO("[ydb] FinalizerResponse",
-            {"QueryId", Params.QueryId},
-            {"Result", (response.Status == NYdb::EStatus::SUCCESS ? "success" : "failed")},
-            {"Status", response.Status},
-            {"Issues", response.Issues.ToOneLineString()});
+            {"queryId", Params.QueryId},
+            {"result", (response.Status == NYdb::EStatus::SUCCESS ? "success" : "failed")},
+            {"status", response.Status},
+            {"issues", response.Issues.ToOneLineString()});
         FinishAndPassAway();
     }
 
     void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
         YDB_LOG_INFO("[ydb]",
-            {"QueryId", Params.QueryId},
-            {"QueryActionResult", FederatedQuery::QueryAction_Name(ev->Get()->Action)});
+            {"queryId", Params.QueryId},
+            {"queryActionResult", FederatedQuery::QueryAction_Name(ev->Get()->Action)});
         // Start cancel operation only when StatusTracker or ResultWriter is running
         if (Params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED && !IsAborted && !FinalizationStarted) {
             IsAborted = true;
@@ -209,16 +209,16 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             YDB_LOG_INFO("[ydb] StopperResponse (failed)",
-                {"QueryId", Params.QueryId},
-                {"Status", response.Status},
-                {"Issues", response.Issues.ToOneLineString()});
+                {"queryId", Params.QueryId},
+                {"status", response.Status},
+                {"issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
         YDB_LOG_INFO("[ydb] StopperResponse (success)",
-            {"QueryId", Params.QueryId},
-            {"Status", response.Status},
-            {"Issues", response.Issues.ToOneLineString()});
+            {"queryId", Params.QueryId},
+            {"status", response.Status},
+            {"issues", response.Issues.ToOneLineString()});
         CreateResourcesCleaner();
     }
 
@@ -289,8 +289,8 @@ public:
         }
 
         YDB_LOG_INFO("[ydb] Stop task execution, cancel operation now is running",
-            {"QueryId", Params.QueryId},
-            {"Stage", stage});
+            {"queryId", Params.QueryId},
+            {"stage", stage});
         return true;
     }
 

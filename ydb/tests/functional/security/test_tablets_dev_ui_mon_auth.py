@@ -237,6 +237,7 @@ def _pers_queue_endpoint_cases(endpoint_paths, token_statuses):
 
 def _pers_queue_monitoring_page_access_cases(
     tablet_id,
+    secure_path_mode=False,
     pages=(
         ('Main', ''),
         ('KV', 'kv=1'),
@@ -244,11 +245,12 @@ def _pers_queue_monitoring_page_access_cases(
     ),
 ):
     q_base = f'TabletID={tablet_id}'
-    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
     cases = []
     for _, query_suffix in pages:
         q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
-        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app?{q}'], monitoring_allowed))
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app?{q}'], expected_on_app))
     return cases
 
 
@@ -269,10 +271,14 @@ def _pers_queue_admin_page_access_cases(
     return cases
 
 
-def _pers_queue_monitoring_devui_cases(tablet_id):
+def _pers_queue_monitoring_devui_cases(tablet_id, secure_path_mode=False):
     q = f'TabletID={tablet_id}'
-    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
-    return _pers_queue_endpoint_cases([f'/tablets/app?{q}', f'/tablets?{q}'], monitoring_allowed)
+    all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    return (
+        _pers_queue_endpoint_cases([f'/tablets/app?{q}'], expected_on_app)
+        + _pers_queue_endpoint_cases([f'/tablets?{q}'], monitoring_allowed)
+    )
 
 
 def _pers_queue_admin_devui_cases(tablet_id, secure_path_mode):
@@ -341,7 +347,7 @@ def test_pers_queue_devui_mon_paths_with_enforce_user_token_and_secure_path_mode
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic
     tid = cluster.pers_queue_tablet_id
     cases = (
-        _pers_queue_monitoring_devui_cases(tid)
+        _pers_queue_monitoring_devui_cases(tid, secure_path_mode=True)
         + _pers_queue_admin_devui_cases(tid, secure_path_mode=True)
     )
 
@@ -359,7 +365,7 @@ def test_pers_queue_page_access_matrix_with_secure_path_mode(
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic
     tid = cluster.pers_queue_tablet_id
     cases = (
-        _pers_queue_monitoring_page_access_cases(tid)
+        _pers_queue_monitoring_page_access_cases(tid, secure_path_mode=True)
         + _pers_queue_admin_page_access_cases(tid)
     )
 

@@ -247,10 +247,10 @@ private:
         {
             Self.Cleanup();
             YDB_LOG_INFO("",
-                {"RequestStr", RequestStr});
-            YDB_LOG_TRACE("",
-                {"RequestStr", RequestStr},
-                {"LogPrefix", LogPrefix});
+                {"requestStr", RequestStr});
+            YDB_LOG_TRACE("Dump requestStr, logPrefix",
+                {"requestStr", RequestStr},
+                {"logPrefix", LogPrefix});
 
             RequestCounters.IncInFly();
             RequestCounters.Common->RequestBytes->Add(Event.GetByteSize());
@@ -279,9 +279,9 @@ private:
             Failed = true;
 
             YDB_LOG_WARN("",
-                {"RequestStr", RequestStr},
-                {"LogPrefix", LogPrefix},
-                {"LogInfo", logInfo},
+                {"requestStr", RequestStr},
+                {"logPrefix", LogPrefix},
+                {"logInfo", logInfo},
                 {"FAILED", issues.ToOneLineString()});
             Self.SendResponseIssues<TEvResponse>(EventPtr->Sender, issues, EventPtr->Cookie, TInstant::Now() - StartTime, RequestCounters);
         }
@@ -960,7 +960,7 @@ private:
     void SendEmptyResponse(TRequest& ev, std::string logText) {
         YDB_LOG_CRIT("SendEmptyResponse");
         YDB_LOG_INFO("",
-            {"LogText", logText});
+            {"logText", logText});
 
         TResult result = {};
         auto event = std::make_unique<TEvResult>(result);
@@ -971,7 +971,7 @@ private:
     void SendEmptyAuditResponse(TRequest& ev, std::string logText) {
         YDB_LOG_CRIT("SendEmptyAuditResponse");
         YDB_LOG_INFO("",
-            {"LogText", logText});
+            {"logText", logText});
 
         TResult result = {};
         TAuditDetails auditDetails = {};
@@ -1120,19 +1120,19 @@ private:
 
             if (query.Owner) {
                 YDB_LOG_TRACE("Task Lease TIMEOUT, RetryCounterUpdatedAt",
-                    {"(Query)", task.QueryId},
-                    {"RetryCounterUpdatedAt", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
-                    {"LastSeenAt", query.LastSeenAt});
+                    {"queryId", task.QueryId},
+                    {"retryCounterUpdatedAt", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
+                    {"lastSeenAt", query.LastSeenAt});
                 taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(query.LastSeenAt, Config->TaskLeaseRetryPolicy, ctx.StartTime);
             }
             task.RetryCount = taskInternal.RetryLimiter.RetryCount;
 
             YDB_LOG_TRACE("Task",
-                {"(Query)", task.QueryId},
-                {"RetryRate", taskInternal.RetryLimiter.RetryRate},
-                {"RetryCounter", taskInternal.RetryLimiter.RetryCount},
-                {"At", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
-                {"AbortStatus", (taskInternal.ShouldAbortTask ? " ABORTED" : "")});
+                {"queryId", task.QueryId},
+                {"retryRate", taskInternal.RetryLimiter.RetryRate},
+                {"retryCounter", taskInternal.RetryLimiter.RetryCount},
+                {"at", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
+                {"abortStatus", (taskInternal.ShouldAbortTask ? " ABORTED" : "")});
 
             if (tasks.size() >= tasksBatchSize) {
                 break;

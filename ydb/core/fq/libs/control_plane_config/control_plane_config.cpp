@@ -57,7 +57,7 @@ public:
     static constexpr char ActorName[] = "FQ_CONTROL_PLANE_CONFIG";
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("",
+        YDB_LOG_DEBUG("Dump STARTING",
             {"STARTING", SelfId()});
         Become(&TControlPlaneConfigActor::StateFunc);
         if (Config.GetUseDbMapping()) {
@@ -72,7 +72,7 @@ public:
                 auto [_, isInserted] = TenantInfo->SubjectMapping[SUBJECT_TYPE_SCOPE].emplace(scopeToTenant.GetKey(), scopeToTenant.GetValue());
                 if (!isInserted) {
                     YDB_LOG_ERROR("Invalid configuation, the scope with the name already exists",
-                        {"Scope", scopeToTenant.GetKey()});
+                        {"scope", scopeToTenant.GetKey()});
                 }
                 TenantInfo->TenantMapping.emplace(scopeToTenant.GetValue(), scopeToTenant.GetValue());
             }
@@ -80,7 +80,7 @@ public:
                 auto [_, isInserted] = TenantInfo->SubjectMapping[SUBJECT_TYPE_CLOUD].emplace(cloudToTenant.GetKey(), cloudToTenant.GetValue());
                 if (!isInserted) {
                     YDB_LOG_ERROR("Invalid configuation, the cloud with the name already exists",
-                        {"CloudId", cloudToTenant.GetKey()});
+                        {"cloudId", cloudToTenant.GetKey()});
                 }
                 TenantInfo->TenantMapping.emplace(cloudToTenant.GetValue(), cloudToTenant.GetValue());
             }
@@ -109,11 +109,11 @@ private:
 
     void Handle(TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) {
         if (ev->Get()->Issues) {
-            YDB_LOG_ERROR("TEvGetTaskResponse (Self",
-                {"Ping)", ev->Get()->Issues.ToOneLineString()});
+            YDB_LOG_ERROR("TEvGetTaskResponse",
+                {"issues", ev->Get()->Issues.ToOneLineString()});
         } else if (ev->Get()->Record.tasks().size()) {
             YDB_LOG_ERROR("TEvGetTaskResponse (Self Ping) returned tasks, empty list expected",
-                {"TasksCount", ev->Get()->Record.tasks().size()});
+                {"tasksCount", ev->Get()->Record.tasks().size()});
         }
     }
 
@@ -194,8 +194,8 @@ private:
                 this->TenantInfo = executer.State;
 
                 if (refreshed) {
-                    YDB_LOG_DEBUG("LOADED TenantInfo: State CHANGED at",
-                        {"StateTime", this->TenantInfo->StateTime});
+                    YDB_LOG_DEBUG("LOADED TenantInfo: State CHANGED",
+                        {"stateTime", this->TenantInfo->StateTime});
                 } else {
                     YDB_LOG_TRACE("LOADED TenantInfo: State NOT changed");
                 }
@@ -231,7 +231,7 @@ private:
                             auto issues = GetIssuesFromYdbStatus(executable, future);
                             if (issues) {
                                 YDB_LOG_ERROR("UpdateState in case of LoadTenantsAndMapping finished with",
-                                    {"Error", issues->ToOneLineString()});
+                                    {"error", issues->ToOneLineString()});
                                 // Nothing to do. We will retry it in the next Wakeup
                             }
                         }));
@@ -247,7 +247,7 @@ private:
                 auto issues = GetIssuesFromYdbStatus(executable, future);
                 if (issues) {
                     YDB_LOG_ERROR("LoadTenantsAndMapping finished with",
-                        {"Error", issues->ToOneLineString()});
+                        {"error", issues->ToOneLineString()});
                     LoadInProgress = false;
                 }
             }));
@@ -259,9 +259,9 @@ private:
             auto& tenant = p.first;
             auto state = p.second;
             if (oldInfo->TenantState.Value(tenant, state) != state) {
-                YDB_LOG_DEBUG("Tenant state CHANGED to",
-                    {"Tenant", tenant},
-                    {"State", state});
+                YDB_LOG_DEBUG("Tenant state CHANGED",
+                    {"tenant", tenant},
+                    {"state", state});
                 switch (state) {
                 case TenantState::Idle:
                     ReassignPending(tenant);

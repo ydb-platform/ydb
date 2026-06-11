@@ -40,8 +40,8 @@ public:
 
         if (NYql::TIssues issues = ValidateCreateOrDeleteRateLimiterResource(QueryId, scope, tenant, OwnerId)) {
             YDB_LOG_WARN("Request: validation",
-                {"RequestType", TDerived::RequestTypeName},
-                {"Request", request.DebugString()},
+                {"requestType", TDerived::RequestTypeName},
+                {"request", request.DebugString()},
                 {"FAILED", issues.ToOneLineString()});
             ReplyWithError(issues);
             return;
@@ -77,8 +77,8 @@ public:
     void Handle(TEvControlPlaneStorageInternal::TEvDbRequestResult::TPtr& ev) {
         const auto& status = ev->Get()->Status.GetValueSync();
         YDB_LOG_DEBUG("Request. Got response",
-            {"RequestType", TDerived::RequestTypeName},
-            {"FromDatabase", status.GetStatus()});
+            {"requestType", TDerived::RequestTypeName},
+            {"fromDatabase", status.GetStatus()});
         if (!status.IsSuccess()) {
             ReplyWithError(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             return;
@@ -117,7 +117,7 @@ public:
                 this->RequestCounters.Common->ParseProtobufError->Inc();
                 const TString error{"Error parsing proto message for query internal. Please contact internal support"};
                 YDB_LOG_ERROR("",
-                    {"Error", error});
+                    {"error", error});
                 ReplyWithError(error);
                 return;
             }
@@ -129,7 +129,7 @@ public:
                     this->RequestCounters.Common->ParseProtobufError->Inc();
                     const TString error{"Error parsing proto message for query. Please contact internal support"};
                     YDB_LOG_ERROR("",
-                        {"Error", error});
+                        {"error", error});
                     ReplyWithError(error);
                     return;
                 }

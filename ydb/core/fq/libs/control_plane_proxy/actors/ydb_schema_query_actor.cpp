@@ -140,7 +140,7 @@ public:
 
     void BootstrapImpl() override {
         YDB_LOG_INFO("TSchemaQueryYDBActor BootstrapImpl. Actor",
-            {"Id", TBase::SelfId()});
+            {"id", TBase::SelfId()});
         ScheduleNextTask();
     }
 
@@ -282,7 +282,7 @@ public:
 
     void TransitionToRollbackState() {
         YDB_LOG_INFO("TSchemaQueryYDBActor TransitionToRollbackState. Actor",
-            {"Id", TBase::SelfId()});
+            {"id", TBase::SelfId()});
         CompletionStatuses[CurrentTaskIndex] = ETaskCompletionStatus::ERROR;
         CurrentTaskIndex--;
         Become(&TSchemaQueryYDBActor::RollbackStateFunc);
@@ -291,14 +291,14 @@ public:
 
     void TransitionToNormalState() {
         YDB_LOG_INFO("TSchemaQueryYDBActor TransitionToNormalState. Actor",
-            {"Id", TBase::SelfId()});
+            {"id", TBase::SelfId()});
         Become(&TSchemaQueryYDBActor::StateFunc);
         ScheduleNextTask();
     }
 
     void TransitionToRecoveryState() {
         YDB_LOG_INFO("TSchemaQueryYDBActor TransitionToRecoveryState. Actor",
-            {"Id", TBase::SelfId()});
+            {"id", TBase::SelfId()});
         Become(&TSchemaQueryYDBActor::RecoveryStateFunc);
     }
 
@@ -342,8 +342,8 @@ public:
 
     void InitiateSchemaQueryExecution(const TString& schemeQuery) {
         YDB_LOG_INFO("TSchemaQueryYDBActor Executing schema query. Actor",
-            {"Id", TBase::SelfId()},
-            {"SchemeQuery", HideSecrets(schemeQuery)});
+            {"id", TBase::SelfId()},
+            {"schemeQuery", HideSecrets(schemeQuery)});
         Request->Get()
             ->YDBClient
             ->RetryOperation([query = schemeQuery](TSession session) {
@@ -360,11 +360,11 @@ public:
 
     void LogCurrentState(const TString& message) {
         using TEnumToString = TString(const ETaskCompletionStatus&);
-        YDB_LOG_INFO("TSchemaQueryYDBActor Logging current state. Message: ', Actor. CompletionStatuses: ],",
-            {"Message", message},
-            {"Id", TBase::SelfId()},
-            {"CompletionStatuses", JoinMapRange(", ",                                   CompletionStatuses.cbegin(),                                   CompletionStatuses.cend(),                                   (TEnumToString*)ToString<ETaskCompletionStatus>)},
-            {"CurrentTaskIndex", CurrentTaskIndex});
+        YDB_LOG_INFO("TSchemaQueryYDBActor Logging current state. Message: Actor. CompletionStatuses:",
+            {"message", message},
+            {"id", TBase::SelfId()},
+            {"completionStatuses", JoinMapRange(", ",                                   CompletionStatuses.cbegin(),                                   CompletionStatuses.cend(),                                   (TEnumToString*)ToString<ETaskCompletionStatus>)},
+            {"currentTaskIndex", CurrentTaskIndex});
     }
 
 private:

@@ -24,9 +24,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
     const FederatedQuery::Internal::ComputeDatabaseInternal& request = event.Request;
     const int byteSize = request.ByteSize();
 
-    YDB_LOG_TRACE("",
-        {"LogPrefix", MakeLogPrefix(scope, "internal", request.id())},
-        {"CreateDatabaseRequest", request.DebugString()});
+    YDB_LOG_TRACE("Dump logPrefix, createDatabaseRequest",
+        {"logPrefix", MakeLogPrefix(scope, "internal", request.id())},
+        {"createDatabaseRequest", request.DebugString()});
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase");
     queryBuilder.AddString("scope", scope);
@@ -89,7 +89,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeDat
     const auto byteSize = event.GetByteSize();
 
     YDB_LOG_TRACE("DescribeDatabaseRequest",
-        {"LogPrefix", MakeLogPrefix(scope, "internal", scope)});
+        {"logPrefix", MakeLogPrefix(scope, "internal", scope)});
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeDatabase");
     queryBuilder.AddString("scope", scope);
@@ -149,7 +149,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
     const auto byteSize = event.GetByteSize();
 
     YDB_LOG_TRACE("ModifyDatabaseRequest",
-        {"LogPrefix", MakeLogPrefix(scope, "internal", scope)});
+        {"logPrefix", MakeLogPrefix(scope, "internal", scope)});
     
     // only write part
     if (event.LastAccessAt) {

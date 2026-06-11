@@ -83,7 +83,7 @@ public:
 
     void SendCPSRequest() {
         YDB_LOG_INFO("TControlPlaneStorageRequesterActor Sending CPS request. Actor",
-            {"Id", TBase::SelfId()});
+            {"id", TBase::SelfId()});
         const auto& request = Request;
         auto event = new TCPSEventRequest(request->Get()->Scope,
                                           CPSProtoRequestFactory(request),
@@ -105,18 +105,18 @@ public:
 
     void Handle(typename TCPSEventResponse::TPtr& event) {
         YDB_LOG_INFO("TControlPlaneStorageRequesterActor Handling CPS response. Actor",
-            {"Id", TBase::SelfId()});
+            {"id", TBase::SelfId()});
         auto issues = event->Get()->Issues;
         if (!issues.Empty()) {
             YDB_LOG_INFO("TControlPlaneStorageRequesterActor Handling CPS response. Request finished with issues. Actor",
-                {"Id", TBase::SelfId()});
+                {"id", TBase::SelfId()});
             TString errorMessage = ErrorMessageFactory(issues);
             TBase::HandleError(errorMessage, issues);
             return;
         }
 
         YDB_LOG_INFO("TControlPlaneStorageRequesterActor Handling CPS response. Request finished successfully. Actor",
-            {"Id", TBase::SelfId()});
+            {"id", TBase::SelfId()});
         ResultHandler(Request, event->Get()->Result);
         TBase::SendRequestToSender();
     }

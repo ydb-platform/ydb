@@ -50,7 +50,7 @@ TControlPlaneStorageBase::TControlPlaneStorageBase(
 
 void TYdbControlPlaneStorageActor::Bootstrap() {
     YDB_LOG_INFO("Starting ydb control plane storage service. Actor",
-        {"Id", SelfId()});
+        {"id", SelfId()});
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
 
     YdbConnection = NewYdbConnection(Config->Proto.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
@@ -405,10 +405,10 @@ std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> TDbReque
                 return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
             }
             if (!status.IsSuccess()) {
-                YDB_LOG_CTX_WARN(*actorSystem, "DB Error,",
-                    {"Status", status.GetStatus()},
-                    {"Issues", status.GetIssues().ToOneLineString()},
-                    {"Query", query});
+                YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+                    {"status", status.GetStatus()},
+                    {"issues", status.GetIssues().ToOneLineString()},
+                    {"query", query});
             }
             if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                 return TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{status.GetIssues()}};
@@ -445,10 +445,10 @@ TAsyncStatus TDbRequester::Validate(
             return MakeFuture(TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}});
         }
         if (!status.IsSuccess()) {
-            YDB_LOG_CTX_WARN(*actorSystem, "DB Error,",
-                {"Status", status.GetStatus()},
-                {"Issues", status.GetIssues().ToOneLineString()},
-                {"Query", query});
+            YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+                {"status", status.GetStatus()},
+                {"issues", status.GetIssues().ToOneLineString()},
+                {"query", query});
             return MakeFuture(status);
         }
         *successFinish = validator(result);
@@ -481,10 +481,10 @@ TAsyncStatus TDbRequester::Write(
                 return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
             }
             if (!status.IsSuccess()) {
-                YDB_LOG_CTX_WARN(*actorSystem, "DB Error,",
-                    {"Status", status.GetStatus()},
-                    {"Issues", status.GetIssues().ToOneLineString()},
-                    {"Query", query});
+                YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+                    {"status", status.GetStatus()},
+                    {"issues", status.GetIssues().ToOneLineString()},
+                    {"query", query});
             }
             if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                 return TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{status.GetIssues()}};
@@ -511,20 +511,20 @@ TAsyncStatus TDbRequester::Write(
                 return writeHandler(session);
             } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
-                    YDB_LOG_CTX_ERROR(*actorSystem, "",
-                        {"Validation", CurrentExceptionMessage()});
+                    YDB_LOG_ERROR_CTX(*actorSystem, "",
+                        {"validation", CurrentExceptionMessage()});
                 } else {
-                    YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                        {"Validation", CurrentExceptionMessage()});
+                    YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                        {"validation", CurrentExceptionMessage()});
                 }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(MakeErrorIssue(exception.Code, exception.GetRawMessage()))}});
             } catch (const std::exception& exception) {
-                YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                    {"Validation", CurrentExceptionMessage()});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{exception.what()}}});
             } catch (...) {
-                YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                    {"Validation", CurrentExceptionMessage()});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}});
             }
         });
@@ -579,10 +579,10 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                 return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
             }
             if (!status.IsSuccess()) {
-                YDB_LOG_CTX_WARN(*actorSystem, "DB Error,",
-                    {"Status", status.GetStatus()},
-                    {"Issues", status.GetIssues().ToOneLineString()},
-                    {"Query", readQuery});
+                YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+                    {"status", status.GetStatus()},
+                    {"issues", status.GetIssues().ToOneLineString()},
+                    {"query", readQuery});
             }
             return status;
         });
@@ -606,9 +606,9 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                             return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
                         }
                         if (!status.IsSuccess()) {
-                            YDB_LOG_CTX_WARN(*actorSystem, "DB Error,, COMMIT",
-                                {"Status", status.GetStatus()},
-                                {"Issues", status.GetIssues().ToOneLineString()});
+                            YDB_LOG_WARN_CTX(*actorSystem, "DB Error,, COMMIT",
+                                {"status", status.GetStatus()},
+                                {"issues", status.GetIssues().ToOneLineString()});
                         }
                         return status;
                     });
@@ -622,10 +622,10 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                         return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
                     }
                     if (!status.IsSuccess()) {
-                        YDB_LOG_CTX_WARN(*actorSystem, "DB Error,",
-                            {"Status", status.GetStatus()},
-                            {"Issues", status.GetIssues().ToOneLineString()},
-                            {"Query", writeQuery});
+                        YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+                            {"status", status.GetStatus()},
+                            {"issues", status.GetIssues().ToOneLineString()},
+                            {"query", writeQuery});
                     }
                     if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                         return TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{status.GetIssues()}};
@@ -634,20 +634,20 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                 });
             } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
-                    YDB_LOG_CTX_ERROR(*actorSystem, "",
-                        {"Validation", CurrentExceptionMessage()});
+                    YDB_LOG_ERROR_CTX(*actorSystem, "",
+                        {"validation", CurrentExceptionMessage()});
                 } else {
-                    YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                        {"Validation", CurrentExceptionMessage()});
+                    YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                        {"validation", CurrentExceptionMessage()});
                 }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(MakeErrorIssue(exception.Code, exception.GetRawMessage()))}});
             } catch (const std::exception& exception) {
-                YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                    {"Validation", CurrentExceptionMessage()});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{exception.what()}}});
             } catch (...) {
-                YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                    {"Validation", CurrentExceptionMessage()});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}});
             }
         });
@@ -672,20 +672,20 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                 return readModifyWriteHandler(session);
             } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
-                    YDB_LOG_CTX_ERROR(*actorSystem, "",
-                        {"Validation", CurrentExceptionMessage()});
+                    YDB_LOG_ERROR_CTX(*actorSystem, "",
+                        {"validation", CurrentExceptionMessage()});
                 } else {
-                    YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                        {"Validation", CurrentExceptionMessage()});
+                    YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                        {"validation", CurrentExceptionMessage()});
                 }
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NAdapters::ToSdkIssue(MakeErrorIssue(exception.Code, exception.GetRawMessage()))}});
             } catch (const std::exception& exception) {
-                YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                    {"Validation", CurrentExceptionMessage()});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{exception.what()}}});
             } catch (...) {
-                YDB_LOG_CTX_DEBUG(*actorSystem, "",
-                    {"Validation", CurrentExceptionMessage()});
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Dump validation",
+                    {"validation", CurrentExceptionMessage()});
                 return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{CurrentExceptionMessage()}}});
             }
         });

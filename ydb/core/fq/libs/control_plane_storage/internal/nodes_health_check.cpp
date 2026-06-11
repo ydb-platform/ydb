@@ -38,11 +38,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     const auto deadline = startTime + ttl * 3;
 
     YDB_LOG_TRACE("NodesHealthCheckRequest",
-        {"Request", request.DebugString()});
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
         YDB_LOG_WARN("NodesHealthCheckRequest: validation",
-            {"Request", request.DebugString()},
+            {"request", request.DebugString()},
             {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);

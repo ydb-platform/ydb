@@ -112,9 +112,9 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
                     });
                 }
             } else {
-                YDB_LOG_CTX_TRACE(*NActors::TActivationContext::ActorSystem(), "SUCCESS",
-                    {"Name", name},
-                    {"Result", TrimForLogs(SecureDebugString(result))});
+                YDB_LOG_TRACE_CTX(*NActors::TActivationContext::ActorSystem(), "SUCCESS",
+                    {"name", name},
+                    {"result", TrimForLogs(SecureDebugString(result))});
                 std::unique_ptr<TEvControlPlaneStorage::TEvDeleteFolderResourcesResponse> event;
                 event = std::make_unique<TEvControlPlaneStorage::TEvDeleteFolderResourcesResponse>(result);
                 event->DebugInfo = debugInfo;

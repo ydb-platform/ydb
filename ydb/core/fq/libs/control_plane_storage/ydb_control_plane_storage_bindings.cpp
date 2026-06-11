@@ -70,17 +70,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
     const auto& content = binding.content();
     const TString& bindingId = binding.meta().id();
 
-    YDB_LOG_TRACE("",
-        {"LogPrefix", MakeLogPrefix(scope, user, bindingId)},
-        {"CreateBindingRequest", NKikimr::MaskTicket(token)},
-        {"Request", request.DebugString()});
+    YDB_LOG_TRACE("Dump logPrefix, createBindingRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
+        {"createBindingRequest", NKikimr::MaskTicket(token)},
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
         YDB_LOG_DEBUG("CreateBindingRequest, validation",
-            {"LogPrefix", MakeLogPrefix(scope, user, bindingId)},
-            {"Failed", NKikimr::MaskTicket(token)},
-            {"Request", request.DebugString()},
-            {"Error", issues.ToString()});
+            {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvCreateBindingResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(CreateBindingRequest, scope, user, delta, byteSize, false);
@@ -207,17 +207,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
         permissions.SetAll();
     }
 
-    YDB_LOG_TRACE("",
-        {"LogPrefix", MakeLogPrefix(scope, user)},
-        {"ListBindingsRequest", NKikimr::MaskTicket(token)},
-        {"Request", request.DebugString()});
+    YDB_LOG_TRACE("Dump logPrefix, listBindingsRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user)},
+        {"listBindingsRequest", NKikimr::MaskTicket(token)},
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
         YDB_LOG_DEBUG("ListBindingsRequest, validation",
-            {"LogPrefix", MakeLogPrefix(scope, user)},
-            {"Failed", NKikimr::MaskTicket(token)},
-            {"Request", request.DebugString()},
-            {"Error", issues.ToString()});
+            {"logPrefix", MakeLogPrefix(scope, user)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListBindingsResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ListBindingsRequest, scope, user, delta, byteSize, false);
@@ -355,17 +355,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
         permissions.SetAll();
     }
     const int byteSize = request.ByteSize();
-    YDB_LOG_TRACE("",
-        {"LogPrefix", MakeLogPrefix(scope, user, bindingId)},
-        {"DescribeBindingRequest", NKikimr::MaskTicket(token)},
-        {"Request", request.DebugString()});
+    YDB_LOG_TRACE("Dump logPrefix, describeBindingRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
+        {"describeBindingRequest", NKikimr::MaskTicket(token)},
+        {"request", request.DebugString()});
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         YDB_LOG_DEBUG("DescribeBindingRequest, validation",
-            {"LogPrefix", MakeLogPrefix(scope, user, bindingId)},
-            {"Failed", NKikimr::MaskTicket(token)},
-            {"Request", request.DebugString()},
-            {"Error", issues.ToString()});
+            {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeBindingResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DescribeBindingRequest, scope, bindingId, user, delta, byteSize, false);
@@ -445,18 +445,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     const int64_t previousRevision = request.previous_revision();
     const TString idempotencyKey = request.idempotency_key();
     const int byteSize = request.ByteSize();
-    YDB_LOG_TRACE("",
-        {"LogPrefix", MakeLogPrefix(scope, user, bindingId)},
-        {"ModifyBindingRequest", NKikimr::MaskTicket(token)},
-        {"Request", request.DebugString()});
+    YDB_LOG_TRACE("Dump logPrefix, modifyBindingRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
+        {"modifyBindingRequest", NKikimr::MaskTicket(token)},
+        {"request", request.DebugString()});
 
     NYql::TIssues issues = ValidateBinding(ev);
     if (issues) {
         YDB_LOG_DEBUG("ModifyBindingRequest, validation",
-            {"LogPrefix", MakeLogPrefix(scope, user, bindingId)},
-            {"Failed", NKikimr::MaskTicket(token)},
-            {"Request", request.DebugString()},
-            {"Error", issues.ToString()});
+            {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyBindingResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ModifyBindingRequest, scope, bindingId, user, delta, byteSize, false);
@@ -655,18 +655,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
     }
     const int previousRevision = request.previous_revision();
 
-    YDB_LOG_TRACE("",
-        {"LogPrefix", MakeLogPrefix(scope, user, bindingId)},
-        {"DeleteBindingRequest", NKikimr::MaskTicket(token)},
-        {"Request", request.DebugString()});
+    YDB_LOG_TRACE("Dump logPrefix, deleteBindingRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
+        {"deleteBindingRequest", NKikimr::MaskTicket(token)},
+        {"request", request.DebugString()});
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         YDB_LOG_DEBUG("DeleteBindingRequest, validation",
-            {"LogPrefix", MakeLogPrefix(scope, user, bindingId)},
-            {"Failed", NKikimr::MaskTicket(token)},
-            {"Request", request.DebugString()},
-            {"Error", issues.ToString()});
+            {"logPrefix", MakeLogPrefix(scope, user, bindingId)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDeleteBindingResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DeleteBindingRequest, scope, bindingId, user, delta, byteSize, false);

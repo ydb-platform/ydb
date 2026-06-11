@@ -788,9 +788,9 @@ protected:
             const auto& request = ev->Get()->Request;
             size_t responseByteSize = 0;
             if (issues) {
-                YDB_LOG_CTX_COMP_WARN(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
-                    {"Name", name},
-                    {"Request", TrimForLogs(SecureDebugString(request))},
+                YDB_LOG_WARN_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
+                    {"name", name},
+                    {"request", TrimForLogs(SecureDebugString(request))},
                     {"ERROR", internalIssues.ToOneLineString()});
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
@@ -804,9 +804,9 @@ protected:
                     });
                 }
             } else {
-                YDB_LOG_CTX_COMP_TRACE(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
-                    {"Name", name},
-                    {"Result", TrimForLogs(SecureDebugString(result))});
+                YDB_LOG_TRACE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
+                    {"name", name},
+                    {"result", TrimForLogs(SecureDebugString(result))});
                 std::unique_ptr<ResponseEvent> event;
                 if constexpr (ResponseEvent::Auditable) {
                     event = std::make_unique<ResponseEvent>(result, auditDetails);
@@ -1031,8 +1031,8 @@ private:
 
             size_t responseByteSize = 0;
             if (issues) {
-                YDB_LOG_CTX_COMP_WARN(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
-                    {"Name", name},
+                YDB_LOG_WARN_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
+                    {"name", name},
                     {"ERROR", internalIssues.ToOneLineString()});
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(issues));
                 event->DebugInfo = debugInfo;
@@ -1046,8 +1046,8 @@ private:
                     });
                 }
             } else {
-                YDB_LOG_CTX_COMP_TRACE(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
-                    {"Name", name});
+                YDB_LOG_TRACE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
+                    {"name", name});
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(std::make_from_tuple<ResponseEvent>(result)));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();

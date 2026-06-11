@@ -38,8 +38,8 @@ public:
         , RequestTimeout(std::move(requestTimeout)) { }
 
     void Bootstrap() {
-        YDB_LOG_COMP_TRACE(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "TBaseActor Bootstrap started. Actor",
-            {"Id", SelfId()});
+        YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "TBaseActor Bootstrap started. Actor",
+            {"id", SelfId()});
         Become(&TDerived::StateFunc, RequestTimeout, new NActors::TEvents::TEvWakeup());
         Counters->InFly->Inc();
         BootstrapImpl();
@@ -67,8 +67,8 @@ public:
     }
 
     void HandleTimeout() {
-        YDB_LOG_COMP_WARN(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "TBaseActor Timeout occurred. Actor",
-            {"Id", SelfId()});
+        YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "TBaseActor Timeout occurred. Actor",
+            {"id", SelfId()});
         Counters->Timeout->Inc();
         SendErrorMessageToSender(MakeTimeoutEventImpl(
             MakeErrorIssue(TIssuesIds::TIMEOUT,
@@ -132,8 +132,8 @@ public:
     }
 
     void HandleError(const TString& message, const NYql::TIssues& issues) {
-        YDB_LOG_COMP_ERROR(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
-            {"Message", message});
+        YDB_LOG_ERROR_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "",
+            {"message", message});
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, message);
         for (auto& subIssue : issues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));

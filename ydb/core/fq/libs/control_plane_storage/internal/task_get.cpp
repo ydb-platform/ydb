@@ -355,8 +355,8 @@ static TSet<ui64> ParseNodeIds(NActors::TActorSystem* actorSystem, const TString
                 auto beginStr = StripString(item.substr(0, it - item.begin()));
                 auto endStr = StripString(item.substr(it - item.begin() + 1));
                 if (beginStr.empty() || endStr.empty()) {
-                    YDB_LOG_CTX_ERROR(*actorSystem, "Failed to parse mapping nodes: db value, empty token",
-                        {"Nodes", nodes});
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Failed to parse mapping nodes: db value, empty token",
+                        {"nodes", nodes});
                     break;
                 }
                 ui64 begin = FromString(beginStr);
@@ -369,9 +369,9 @@ static TSet<ui64> ParseNodeIds(NActors::TActorSystem* actorSystem, const TString
             result.insert(FromString<ui64>(StripString(item)));
         }
     } catch (...) {
-        YDB_LOG_CTX_ERROR(*actorSystem, "Failed to parse mapping nodes (db value",
-            {"Nodes", nodes},
-            {")", CurrentExceptionMessage()});
+        YDB_LOG_ERROR_CTX(*actorSystem, "Failed to parse mapping nodes (db value",
+            {"nodes", nodes},
+            {"ex", CurrentExceptionMessage()});
     }
     return result;
 }
@@ -391,11 +391,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     const ui64 numTasksProportion = Config->Proto.GetNumTasksProportion();
 
     YDB_LOG_TRACE("GetTaskRequest",
-        {"Request", request.DebugString()});
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
         YDB_LOG_WARN("GetTaskRequest",
-            {"Request", request.DebugString()},
+            {"request", request.DebugString()},
             {"FAILED", issues.ToOneLineString()});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetTaskResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -463,20 +463,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                 task.NodeIds = *node;
             }
             if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time
-                YDB_LOG_CTX_TRACE(*actorSystem, "Task Lease TIMEOUT, RetryCounterUpdatedAt",
-                    {"(Query)", task.QueryId},
-                    {"RetryCounterUpdatedAt", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
-                    {"LastSeenAt", lastSeenAt});
+                YDB_LOG_TRACE_CTX(*actorSystem, "Task Lease TIMEOUT, RetryCounterUpdatedAt",
+                    {"queryId", task.QueryId},
+                    {"retryCounterUpdatedAt", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
+                    {"lastSeenAt", lastSeenAt});
                 taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, config->TaskLeaseRetryPolicy, now);
             }
             task.RetryCount = taskInternal.RetryLimiter.RetryCount;
 
-            YDB_LOG_CTX_TRACE(*actorSystem, "Task",
-                {"(Query)", task.QueryId},
-                {"RetryRate", taskInternal.RetryLimiter.RetryRate},
-                {"RetryCounter", taskInternal.RetryLimiter.RetryCount},
-                {"At", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
-                {"AbortStatus", (taskInternal.ShouldAbortTask ? " ABORTED" : "")});
+            YDB_LOG_TRACE_CTX(*actorSystem, "Task",
+                {"queryId", task.QueryId},
+                {"retryRate", taskInternal.RetryLimiter.RetryRate},
+                {"retryCounter", taskInternal.RetryLimiter.RetryCount},
+                {"at", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
+                {"abortStatus", (taskInternal.ShouldAbortTask ? " ABORTED" : "")});
         }
 
         std::shuffle(tasks.begin(), tasks.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));

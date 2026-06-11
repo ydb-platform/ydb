@@ -20,9 +20,7 @@ constexpr size_t ISSUES_TEXT_LIMIT = 1_KB;
 #define _KQP_REQ_LOG_AT(prio, stream) \
     LOG_LOG_S(*TlsActivationContext, (prio), NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << stream)
 
-// Metadata-service housekeeping (system views, secrets, resource pools)
-// runs under BUILTIN_ACL_METADATA and dominates KQP_REQUEST volume on a
-// healthy cluster — drop success-path logs, keep failures.
+// BUILTIN_ACL_METADATA traffic dominates KQP_REQUEST volume — silence SUCCESS, keep failures.
 bool IsMetadataServiceQuery(const TKqpQueryState& state) {
     return state.UserToken && state.UserToken->GetUserSID() == BUILTIN_ACL_METADATA;
 }
@@ -126,6 +124,16 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
     const size_t total = loggingRequestText.empty() ? 1 :
         (loggingRequestText.size() + chunkSize - 1) / chunkSize;
 
+    TString issuesStr;
+    bool issuesTruncated = false;
+    if (!issues.Empty()) {
+        issuesStr = issues.ToOneLineString();
+        if (issuesStr.size() > ISSUES_TEXT_LIMIT) {
+            issuesStr.resize(ISSUES_TEXT_LIMIT);
+            issuesTruncated = true;
+        }
+    }
+
     for (size_t i = 0; i < total; ++i) {
         TStringStream ss;
         NJsonWriter::TBuf json(NJsonWriter::HEM_RELAXED, &ss);
@@ -139,23 +147,16 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.WriteKey("total").WriteInt(total);
 
         json.WriteKey("request").BeginObject();
-        json.WriteKey("event").WriteString("completed");
 
         if (!loggingRequestText.empty()) {
             json.WriteKey("data").WriteString(loggingRequestText.SubStr(i * chunkSize, chunkSize));
         }
 
-        bool issuesTruncated = false;
-        if (!issues.Empty()) {
-            TString issuesStr = issues.ToOneLineString();
-            if (issuesStr.size() > ISSUES_TEXT_LIMIT) {
-                issuesStr.resize(ISSUES_TEXT_LIMIT);
-                issuesTruncated = true;
-            }
-            json.WriteKey("issues").WriteString(issuesStr);
-        }
-
         if (i == 0) {
+            json.WriteKey("event").WriteString("completed");
+            if (!issuesStr.empty()) {
+                json.WriteKey("issues").WriteString(issuesStr);
+            }
             WriteCompletedFields(json, fields);
             if (wasTruncated) {
                 json.WriteKey("data_truncated").WriteBool(true);

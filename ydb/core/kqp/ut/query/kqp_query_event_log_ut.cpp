@@ -260,8 +260,6 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
 
         auto db = kikimr.GetQueryClient();
 
-        // SQL longer than SQL_TEXT_MAX_SIZE (10240), padded inside a comment,
-        // so the TRACE path produces at least two chunks.
         TStringBuilder sb;
         sb << "/*";
         for (size_t i = 0; i < 15000; ++i) {
@@ -278,31 +276,113 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
     const auto entries = CollectReqJson(LogSince(logStream, logStart));
     DumpEntries("ExtraFieldsOnlyInFirstPart", entries, fullLog);
 
-    bool sawMulti = false;
+    bool sawPart1OfMulti = false;
+    bool sawNonFirst = false;
     for (const auto& e : entries) {
-        if (e.Event != "completed") {
+        if (e.Total <= 1) {
             continue;
         }
-        if (e.Total > 1) {
-            sawMulti = true;
-            UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "TRACE",
-                TStringBuilder() << "multi-part SUCCESS envelopes must be emitted at TRACE: " << e.RawLine);
-            const auto& req = e.Json["request"];
-            if (e.Part == 1) {
-                UNIT_ASSERT_C(req.Has("status"), "part=1 must have extra fields");
-                UNIT_ASSERT_C(!req.Has("data_truncated"),
-                    TStringBuilder() << "TRACE must NOT truncate SQL: " << e.RawLine);
-            } else {
-                UNIT_ASSERT_C(!req.Has("status"),
-                    TStringBuilder() << "non-first part must not have extra fields: " << e.RawLine);
-                UNIT_ASSERT_C(!req.Has("duration_us"),
-                    TStringBuilder() << "non-first part must not have duration_us: " << e.RawLine);
-                UNIT_ASSERT_C(!req.Has("data_truncated"),
-                    TStringBuilder() << "non-first part must not carry data_truncated: " << e.RawLine);
-            }
+        UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "TRACE",
+            TStringBuilder() << "multi-part envelopes must be emitted at TRACE: " << e.RawLine);
+        const auto& req = e.Json["request"];
+        if (e.Part == 1) {
+            sawPart1OfMulti = true;
+            UNIT_ASSERT_VALUES_EQUAL_C(req["event"].GetStringSafe(""), "completed",
+                TStringBuilder() << "part=1 must mark itself as completed envelope: " << e.RawLine);
+            UNIT_ASSERT_C(req.Has("status"),
+                TStringBuilder() << "part=1 must carry completed metadata: " << e.RawLine);
+            UNIT_ASSERT_C(req.Has("data"),
+                TStringBuilder() << "part=1 must carry first data chunk: " << e.RawLine);
+            UNIT_ASSERT_C(!req.Has("data_truncated"),
+                TStringBuilder() << "TRACE must NOT truncate SQL: " << e.RawLine);
+        } else {
+            sawNonFirst = true;
+            UNIT_ASSERT_C(!req.Has("event"),
+                TStringBuilder() << "non-first part must not duplicate event: " << e.RawLine);
+            UNIT_ASSERT_C(!req.Has("status"),
+                TStringBuilder() << "non-first part must not duplicate completed fields: " << e.RawLine);
+            UNIT_ASSERT_C(!req.Has("duration_us"),
+                TStringBuilder() << "non-first part must not duplicate duration_us: " << e.RawLine);
+            UNIT_ASSERT_C(!req.Has("issues"),
+                TStringBuilder() << "non-first part must not duplicate issues: " << e.RawLine);
+            UNIT_ASSERT_C(!req.Has("data_truncated"),
+                TStringBuilder() << "non-first part must not carry data_truncated: " << e.RawLine);
+            UNIT_ASSERT_C(req.Has("data"),
+                TStringBuilder() << "non-first part must carry data continuation: " << e.RawLine);
         }
     }
-    UNIT_ASSERT_C(sawMulti, "long SQL must produce a multi-part envelope");
+    UNIT_ASSERT_C(sawPart1OfMulti, "long SQL must produce a multi-part envelope (part=1)");
+    UNIT_ASSERT_C(sawNonFirst, "long SQL must produce continuation chunks (part>1)");
+}
+
+// Multi-part FAILURE keeps issues in part==1 only — no per-chunk duplication.
+Y_UNIT_TEST(IssuesOnlyInFirstPartOnFailure) {
+    TStringStream logStream;
+    size_t logStart = 0;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_TRACE);
+        logStart = logStream.Size();
+
+        auto db = kikimr.GetQueryClient();
+
+        TStringBuilder sb;
+        sb << "/*";
+        for (size_t i = 0; i < 15000; ++i) {
+            sb << 'x';
+        }
+        sb << "*/ SELECT FROM broken_chunk_marker_xyz";
+
+        auto bad = db.ExecuteQuery(
+            sb,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!bad.IsSuccess(), "syntax-broken query must fail");
+    }
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    DumpEntries("IssuesOnlyInFirstPartOnFailure", entries, fullLog);
+
+    TString targetReqId;
+    for (const auto& e : entries) {
+        if (e.Total <= 1 || e.Part != 1) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        const auto status = req["status"].GetStringSafe("");
+        if (status.empty() || status == "SUCCESS") {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "WARN",
+            TStringBuilder() << "failing envelope must log at WARN: " << e.RawLine);
+        UNIT_ASSERT_C(req.Has("issues"),
+            TStringBuilder() << "multi-part FAILURE part==1 must carry issues: " << e.RawLine);
+        const auto issuesStr = req["issues"].GetStringSafe("");
+        UNIT_ASSERT_C(!issuesStr.empty(),
+            TStringBuilder() << "issues string must not be empty for parse error: " << e.RawLine);
+        targetReqId = e.Json["req_id"].GetStringSafe("");
+        break;
+    }
+    UNIT_ASSERT_C(!targetReqId.empty(),
+        "expected a multi-part FAILURE envelope at TRACE for long broken SQL");
+
+    bool sawNonFirst = false;
+    for (const auto& e : entries) {
+        if (e.Json["req_id"].GetStringSafe("") != targetReqId || e.Part == 1) {
+            continue;
+        }
+        sawNonFirst = true;
+        const auto& req = e.Json["request"];
+        UNIT_ASSERT_C(!req.Has("issues"),
+            TStringBuilder() << "non-first part of FAILURE must NOT duplicate issues: " << e.RawLine);
+        UNIT_ASSERT_C(!req.Has("event"),
+            TStringBuilder() << "non-first part of FAILURE must NOT duplicate event: " << e.RawLine);
+        UNIT_ASSERT_C(!req.Has("status"),
+            TStringBuilder() << "non-first part of FAILURE must NOT duplicate status: " << e.RawLine);
+        UNIT_ASSERT_C(req.Has("data"),
+            TStringBuilder() << "non-first part of FAILURE must carry data: " << e.RawLine);
+    }
+    UNIT_ASSERT_C(sawNonFirst,
+        "long broken SQL must produce continuation chunks (part>1)");
 }
 
 // At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (10240) bytes and

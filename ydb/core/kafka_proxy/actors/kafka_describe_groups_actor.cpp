@@ -17,6 +17,8 @@
 #include "kafka_describe_groups_actor.h"
 #include "kafka_state_name_to_int.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 namespace NKafka {
 
@@ -40,7 +42,8 @@ void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
             new IEventHandle(SelfId(), SelfId(), wakeup.release())
         );
     } else {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "No EnableKafkaNativeBalancing FeatureFlag set.");
+        YDB_LOG_ERROR("No EnableKafkaNativeBalancing FeatureFlag set",
+            {"logPrefix", LogPrefix()});
         TDescribeGroupsResponseData groupsDescriptionResponseWithError;
         Send(Context->ConnectionId,
             new TEvKafka::TEvResponse(CorrelationId,
@@ -50,7 +53,8 @@ void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaDescribeGroupsActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received TEvManagerPrepared. Sending create session request to KQP.");
+    YDB_LOG_DEBUG("Received TEvManagerPrepared. Sending create session request to KQP",
+        {"logPrefix", LogPrefix()});
     InitedTablesCount++;
     if (InitedTablesCount == TABLES_TO_INIT_COUNT) {
         StartKqpSession(ctx);
@@ -59,7 +63,8 @@ void TKafkaDescribeGroupsActor::Handle(NMetadata::NProvider::TEvManagerPrepared:
 
 
 void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "KQP session created");
+    YDB_LOG_DEBUG("KQP session created",
+        {"logPrefix", LogPrefix()});
     if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
         Die(ctx);
@@ -69,9 +74,12 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::T
 }
 
 void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received query response from KQP DescribeGroups request");
+    YDB_LOG_DEBUG("Received query response from KQP DescribeGroups request",
+        {"logPrefix", LogPrefix()});
     if (auto error = GetErrorFromYdbResponse(ev)) {
-        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << error);
+        YDB_LOG_WARN("",
+            {"logPrefix", LogPrefix()},
+            {"error", error});
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, *error);
         Die(ctx);
         return;
@@ -80,14 +88,17 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
 }
 
 void TKafkaDescribeGroupsActor::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending fail response because of request timeout " << WAIT_REQUESTS_SECONDS << " sec");
+    YDB_LOG_WARN("Sending fail response because of request timeout sec",
+        {"logPrefix", LogPrefix()},
+        {"timeout", WAIT_REQUESTS_SECONDS});
     Send(Context->ConnectionId,
         new TEvKafka::TEvResponse(CorrelationId, BuildResponse(), EKafkaErrors::REQUEST_TIMED_OUT));
     Die(ctx);
 }
 
 void TKafkaDescribeGroupsActor::Die(const TActorContext &ctx) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Dying.");
+    YDB_LOG_DEBUG("Dying",
+        {"logPrefix", LogPrefix()});
     if (Kqp) {
         Kqp->CloseKqpSession(ctx);
     }
@@ -95,15 +106,21 @@ void TKafkaDescribeGroupsActor::Die(const TActorContext &ctx) {
 }
 
 void TKafkaDescribeGroupsActor::StartKqpSession(const TActorContext& ctx) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending create session request to KQP for database " << DatabasePath);
+    YDB_LOG_DEBUG("Sending create session request to KQP for database",
+        {"logPrefix", LogPrefix()},
+        {"databasePath", DatabasePath});
     Kqp->SendCreateSessionRequest(ctx);
 }
 
 void TKafkaDescribeGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Handling Select Response for DescribeGroups. SELECT result size: " << response.Record.GetResponse().GetYdbResults().size());
+    YDB_LOG_DEBUG("Handling Select Response for DescribeGroups. SELECT result",
+        {"logPrefix", LogPrefix()},
+        {"size", response.Record.GetResponse().GetYdbResults().size()});
     if (response.Record.GetResponse().GetYdbResults().size() != 2) {
         TString errorMessage = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.Record.GetResponse().GetYdbResults().size() << ".";
-        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << errorMessage);
+        YDB_LOG_WARN("",
+            {"logPrefix", LogPrefix()},
+            {"errorMessage", errorMessage});
         return;
     }
     ParseGroupDescriptionMetadata(response);
@@ -115,9 +132,11 @@ void TKafkaDescribeGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQuer
 }
 
 void TKafkaDescribeGroupsActor::ParseGroupDescriptionMetadata(const NKqp::TEvKqp::TEvQueryResponse& response) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Parsing Groups metadata");
+    YDB_LOG_DEBUG("Parsing Groups metadata",
+        {"logPrefix", LogPrefix()});
     ParseGroupMetadata(response);
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Parsing Members metadata");
+    YDB_LOG_DEBUG("Parsing Members metadata",
+        {"logPrefix", LogPrefix()});
     ParseMembersMetadata(response);
 }
 
@@ -181,7 +200,9 @@ NYdb::TParams TKafkaDescribeGroupsActor::BuildSelectParams() {
     params.AddParam("$Database").Utf8(DatabasePath).Build();
     auto& groupIds = params.AddParam("$GroupIds").BeginList();
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Groups count: " << DescribeGroupsRequestData->Groups.size());
+    YDB_LOG_DEBUG("Groups",
+        {"logPrefix", LogPrefix()},
+        {"count", DescribeGroupsRequestData->Groups.size()});
 
     for (auto& groupId: DescribeGroupsRequestData->Groups) {
         groupIds.AddListItem().Utf8(*groupId);
@@ -245,9 +266,14 @@ void TKafkaDescribeGroupsActor::SendFailResponse(EKafkaErrors errorCode, const s
         GroupIdToDescription[*groupId].ErrorCode = errorCode;
     }
     if (errorMessage.has_value()) {
-        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
+        YDB_LOG_WARN("Sending fail response with error",
+            {"logPrefix", LogPrefix()},
+            {"code", errorCode},
+            {"reason", errorMessage});
     } else {
-        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending fail response with error code: " << errorCode);
+        YDB_LOG_WARN("Sending fail response with error",
+            {"logPrefix", LogPrefix()},
+            {"code", errorCode});
     }
 
     Send(Context->ConnectionId,

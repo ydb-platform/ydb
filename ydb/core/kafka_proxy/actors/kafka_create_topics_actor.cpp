@@ -8,6 +8,8 @@
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 namespace NKafka {
 
@@ -58,7 +60,9 @@ NActors::IActor* CreateKafkaCreateTopicsActor(
 }
 
 void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << InputLogMessage());
+    YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
+        {"logPrefix", LogPrefix()},
+        {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);
@@ -168,7 +172,10 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status));
+    YDB_LOG_DEBUG("Create topics actor. Topic's response received",
+        {"logPrefix", LogPrefix()},
+        {"path", eventPtr->Path},
+        {"status", std::to_string(eventPtr->Status)});
 
     EKafkaErrors status;
     switch(eventPtr->Status) {

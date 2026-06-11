@@ -34,7 +34,9 @@ public:
 
 private:
     STATEFN(StateWork) {
-        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received event: " << (*ev.Get()).GetTypeName());
+        YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
+            {"logPrefix", LogPrefix()},
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvAuthRequest, HandleAuthRequest);
             HFunc(TEvKafka::TEvMtlsAuthRequest, HandleMtlsAuthRequest);
@@ -43,7 +45,9 @@ private:
     }
 
     STATEFN(StateResolveDatabase) {
-        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received event: " << (*ev.Get()).GetTypeName());
+        YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
+            {"logPrefix", LogPrefix()},
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
             CFunc(TEvents::TEvPoison::EventType, Die);
@@ -51,7 +55,9 @@ private:
     }
 
     STATEFN(StateResolveSharedDatabase) {
-        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received event: " << (*ev.Get()).GetTypeName());
+        YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
+            {"logPrefix", LogPrefix()},
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
             CFunc(TEvents::TEvPoison::EventType, Die);
@@ -59,7 +65,9 @@ private:
     }
 
     STATEFN(StateSaslPlainLogin) {
-        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received event: " << (*ev.Get()).GetTypeName());
+        YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
+            {"logPrefix", LogPrefix()},
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(NSasl::TEvSasl::TEvSaslPlainLoginResponse, HandleLoginResult);
             HFunc(NSasl::TEvSasl::TEvSaslPlainLdapLoginResponse, HandleLoginResult);
@@ -69,7 +77,9 @@ private:
     }
 
     STATEFN(StateSaslScramLogin) {
-        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received event: " << (*ev.Get()).GetTypeName());
+        YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
+            {"logPrefix", LogPrefix()},
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             hFunc(NSasl::TEvSasl::TEvSaslScramFirstServerResponse, HandleFirstLoginResponse);
             HFunc(TEvKafka::TEvAuthRequest, HandleAuthRequest);
@@ -80,7 +90,9 @@ private:
     }
 
     STATEFN(StateTicketResolve) {
-        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received event: " << (*ev.Get()).GetTypeName());
+        YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
+            {"logPrefix", LogPrefix()},
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             CFunc(TEvents::TEvPoison::EventType, Die);

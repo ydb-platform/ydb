@@ -8,6 +8,8 @@
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/core/persqueue/public/schema/common.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 
 namespace NKafka {
@@ -53,7 +55,10 @@ public:
         , CleanupPolicy(cleanupPolicy)
         , TimestampType(timestampType)
     {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Alter configs actor. DatabaseName: " << databaseName << ". TopicPath: " << TopicPath);
+        YDB_LOG_DEBUG("Alter configs actor",
+            {"logPrefix", LogPrefix()},
+            {"databaseName", databaseName},
+            {"topicPath", TopicPath});
     };
 
     ~TAlterConfigsActor() = default;
@@ -117,7 +122,9 @@ NActors::IActor* CreateKafkaAlterConfigsActor(
 
 void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << InputLogMessage());
+    YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
+        {"logPrefix", LogPrefix()},
+        {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);
@@ -267,7 +274,9 @@ void TKafkaAlterConfigsActor::ProcessValidateOnly(const NActors::TActorContext& 
         response->Responses.push_back(responseResource);
     }
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId == " << CorrelationId);
+    YDB_LOG_DEBUG("KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId",
+        {"logPrefix", LogPrefix()},
+        {"correlationId", CorrelationId});
     Send(Context->ConnectionId,
         new TEvKafka::TEvResponse(CorrelationId, response, NONE_ERROR));
     Die(ctx);

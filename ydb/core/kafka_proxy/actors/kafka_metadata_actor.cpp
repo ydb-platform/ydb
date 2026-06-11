@@ -8,6 +8,8 @@
 #include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 namespace NKafka {
 using namespace NKikimr;
 using namespace NKikimr::NGRpcProxy::V1;
@@ -61,8 +63,11 @@ void TKafkaMetadataActor::SendDiscoveryRequest() {
 void TKafkaMetadataActor::HandleDiscoveryError(TEvDiscovery::TEvError::TPtr& ev) {
     PendingResponses--;
     HaveError = true;
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Port discovery failed for database '" << Context->DatabasePath << "' with error '" << ev->Get()->Error
-                    << ", request " << CorrelationId);
+    YDB_LOG_ERROR("Port discovery failed for database with error request",
+        {"logPrefix", LogPrefix()},
+        {"databasePath", Context->DatabasePath},
+        {"error", ev->Get()->Error},
+        {"correlationId", CorrelationId});
 
     RespondIfRequired(ActorContext());
 }
@@ -90,7 +95,9 @@ void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
         ok = leResponse.operation().result().UnpackTo(&leResult);
     }
     if (!ok) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Port discovery failed, unable to parse discovery response for request " << CorrelationId);
+        YDB_LOG_ERROR("Port discovery failed, unable to parse discovery response for request",
+            {"logPrefix", LogPrefix()},
+            {"correlationId", CorrelationId});
         HaveError = true;
         return;
     }
@@ -145,7 +152,10 @@ void TKafkaMetadataActor::AddTopic(const TString& topic, ui64 index) {
 }
 
 TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Describe partitions locations for topic '" << topic << "' for user '" << GetUsernameOrAnonymous(Context) << "'");
+    YDB_LOG_DEBUG("Describe partitions locations for topic for user",
+        {"logPrefix", LogPrefix()},
+        {"topic", topic},
+        {"userName", GetUsernameOrAnonymous(Context)});
 
     TGetPartitionsLocationRequest locationRequest{};
     locationRequest.Topic = NormalizePath(Context->DatabasePath, topic);
@@ -237,12 +247,14 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
     Y_DEBUG_ABORT_UNLESS(!actorIter->second.empty());
 
     if (actorIter.IsEnd()) {
-        LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Got unexpected location response, ignoring. Expect malformed/incompled reply");
+        YDB_LOG_CRIT("Got unexpected location response, ignoring. Expect malformed/incompled reply",
+            {"logPrefix", LogPrefix()});
         return RespondIfRequired(ctx);
     }
 
     if (actorIter->second.empty()) {
-        LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Corrupted state (empty actorId in mapping). Ignored location response, expect incomplete reply");
+        YDB_LOG_CRIT("Corrupted state (empty actorId in mapping). Ignored location response, expect incomplete reply",
+            {"logPrefix", LogPrefix()});
         return RespondIfRequired(ctx);
     }
 
@@ -250,20 +262,27 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
         auto& topic = Response->Topics[index];
         Ydb::StatusIds::StatusCode status = locationResponse->Status;
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Describe topic '" << topic.Name << "' location finishied successful");
+            YDB_LOG_DEBUG("Describe topic location finishied successful",
+                {"logPrefix", LogPrefix()},
+                {"topicName", topic.Name});
             PendingTopicResponses.emplace(index, locationResponse);
         } else if (status == Ydb::StatusIds::SCHEME_ERROR
                 && Message->AllowAutoTopicCreation
                 && Context->Config.GetAutoCreateTopicsEnable()
                 && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()
             ) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sending create topic'" << topic.Name << "' request");
+            YDB_LOG_DEBUG("Sending create topic' request",
+                {"logPrefix", LogPrefix()},
+                {"topicName", topic.Name});
             TopicСreationAttempts.insert(*topic.Name);
             PendingResponses++;
             SendCreateTopicsRequest(*topic.Name, index, ctx);
         } else {
-            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Describe topic '" << topic.Name << "' location finishied with error: Code="
-                << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+            YDB_LOG_ERROR("Describe topic location finishied with error",
+                {"logPrefix", LogPrefix()},
+                {"topicName", topic.Name},
+                {"code", locationResponse->Status},
+                {"issues", locationResponse->Issues.ToOneLineString()});
             AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
         }
     }
@@ -352,7 +371,9 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
             auto topicNodes = CheckTopicNodes(ev.Get());
             if (topicNodes.empty()) {
                     // Already tried YDB discovery. Throw error
-                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Could not discovery kafka port for topic '" << topic.Name);
+                    YDB_LOG_ERROR("Could not discovery kafka port for topic",
+                        {"logPrefix", LogPrefix()},
+                        {"topicName", topic.Name});
                     AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
             } else {
                 AddTopicResponse(topic, ev.Get(), topicNodes);

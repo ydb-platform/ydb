@@ -64,7 +64,9 @@ namespace NKafka {
                         HFunc(TEvents::TEvPoison, Handle);
                     }
                 } catch (const yexception& y) {
-                    LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Critical error happened. Reason: " << y.what());
+                    YDB_LOG_CRIT_COMP(NKikimrServices::KAFKA_PROXY, "Critical error happened",
+                        {"logPrefix", LogPrefix()},
+                        {"reason", y.what()});
                     if (EndTxnRequestPtr) {
                         SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
                     }

@@ -5,6 +5,8 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 namespace NKafka {
 
@@ -105,7 +107,9 @@ void TKafkaDescribeTopicActor::HandleCacheNavigateResponse(NKikimr::TEvTxProxySc
 
 void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << InputLogMessage());
+    YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
+        {"logPrefix", LogPrefix()},
+        {"inputLogMessage", InputLogMessage()});
 
 
     THashSet<TString> requestedTopics{};

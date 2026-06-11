@@ -1,5 +1,7 @@
 #include "kafka_balancer_actor.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 namespace NKafka {
 
 using namespace NKikimr;
@@ -38,7 +40,8 @@ void TKafkaBalancerActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&
 }
 
 void TKafkaBalancerActor::Die(const TActorContext& ctx) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Pass away.");
+    YDB_LOG_DEBUG("Pass away",
+        {"logPrefix", LogPrefix()});
     if (Kqp) {
         Kqp->CloseKqpSession(ctx);
     }
@@ -96,7 +99,8 @@ void TKafkaBalancerActor::RequestFullRetry() {
 
 void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     if (ev->Cookie != KqpReqCookie) {
-        LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Unexpected cookie in TEvQueryResponse.");
+        YDB_LOG_CRIT("Unexpected cookie in TEvQueryResponse",
+            {"logPrefix", LogPrefix()});
         return;
     }
 
@@ -111,7 +115,9 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
         }
 
         if (CurrentTxAbortRetryNumber < TX_ABORT_RETRY_MAX_COUNT) {
-            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Retry after tx aborted. CurrentTxAbortRetryNumber# " << static_cast<int>(CurrentTxAbortRetryNumber));
+            YDB_LOG_ERROR("Retry after tx aborted",
+                {"logPrefix", LogPrefix()},
+                {"currentTxAbortRetryNumber", static_cast<int>(CurrentTxAbortRetryNumber)});
             RequestFullRetry();
             Die(ctx);
             return;
@@ -135,7 +141,8 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
 }
 
 void TKafkaBalancerActor::HandleResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Handle kqp response");
+    YDB_LOG_INFO("Handle kqp response",
+        {"logPrefix", LogPrefix()});
 
     switch (RequestType) {
         case JOIN_GROUP:
@@ -151,7 +158,8 @@ void TKafkaBalancerActor::HandleResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr ev
             HeartbeatNextStep(ev, ctx);
             break;
         default:
-            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Unknown RequestType in TEvCreateSessionResponse");
+            YDB_LOG_ERROR("Unknown RequestType in TEvCreateSessionResponse",
+                {"logPrefix", LogPrefix()});
             Die(ctx);
             break;
     }
@@ -221,7 +229,8 @@ void TKafkaBalancerActor::JoinGroupNextStep(
             break;
         }
         default:
-            LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "JOIN_GROUP: Unexpected step" );
+            YDB_LOG_CRIT("JOIN_GROUP: Unexpected step",
+                {"logPrefix", LogPrefix()});
             SendJoinGroupResponseFail(ctx, CorrelationId, EKafkaErrors::UNKNOWN_SERVER_ERROR, "Unexpected step");
             break;
     }
@@ -269,7 +278,8 @@ void TKafkaBalancerActor::SyncGroupNextStep(
         }
 
         default: {
-            LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "SYNC_GROUP: Unexpected step");
+            YDB_LOG_CRIT("SYNC_GROUP: Unexpected step",
+                {"logPrefix", LogPrefix()});
             SendSyncGroupResponseFail(ctx, CorrelationId, EKafkaErrors::UNKNOWN_SERVER_ERROR, "Failed to get assignments from master");
             break;
         }
@@ -312,7 +322,8 @@ void TKafkaBalancerActor::HeartbeatNextStep(
         }
 
         default: {
-            LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "HEARTBEAT: Unexpected step");
+            YDB_LOG_CRIT("HEARTBEAT: Unexpected step",
+                {"logPrefix", LogPrefix()});
             SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::UNKNOWN_SERVER_ERROR, "Unexpected step");
             break;
         }
@@ -340,7 +351,8 @@ void TKafkaBalancerActor::LeaveGroupStep(
         }
 
         default: {
-            LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "LEAVE_GROUP: Unexpected step");
+            YDB_LOG_CRIT("LEAVE_GROUP: Unexpected step",
+                {"logPrefix", LogPrefix()});
             SendLeaveGroupResponseFail(ctx, CorrelationId, EKafkaErrors::UNKNOWN_SERVER_ERROR, "Unexpected step");
             break;
         }
@@ -382,17 +394,18 @@ void TKafkaBalancerActor::JoinStepCreateNewOrJoinGroup(NKqp::TEvKqp::TEvQueryRes
     }
 
     if (groupStatus->Exists) {
-        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Check group before join status."
-            "\n memberId: " << MemberId <<
-            "\n instanceId: " << InstanceId <<
-            "\n group: " << GroupId <<
-            "\n exists: " << groupStatus->Exists <<
-            "\n protocolType: " << groupStatus->ProtocolType <<
-            "\n protocolName: " << groupStatus->ProtocolName <<
-            "\n master: " << groupStatus->MasterId <<
-            "\n generation: " << groupStatus->Generation <<
-            "\n lastSuccessGeneration: " << groupStatus->LastSuccessGeneration <<
-            "\n state: " << groupStatus->State);
+        YDB_LOG_INFO("\n \n \n \n \n \n \n \n \n",
+            {"logPrefix", LogPrefix()},
+            {"memberId", MemberId},
+            {"instanceId", InstanceId},
+            {"group", GroupId},
+            {"exists", groupStatus->Exists},
+            {"protocolType", groupStatus->ProtocolType},
+            {"protocolName", groupStatus->ProtocolName},
+            {"master", groupStatus->MasterId},
+            {"generation", groupStatus->Generation},
+            {"lastSuccessGeneration", groupStatus->LastSuccessGeneration},
+            {"state", groupStatus->State});
     }
 
     if (!groupStatus->Exists) {
@@ -631,13 +644,19 @@ void TKafkaBalancerActor::JoinStepWaitMembersAndChooseProtocol(NKqp::TEvKqp::TEv
             ui32 memberRebalanceTimeoutMs = prevGenerationMembersAndTimeoutsIt->second.RebalanceTimeoutMs;
             const TInstant& memberHeartbeatDeadline = prevGenerationMembersAndTimeoutsIt->second.HeartbeatDeadline;
             if (AllWorkerStates.count(prevGenerationMembersAndTimeoutsIt->first) == 1) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Waited member connected: " << prevGenerationMembersAndTimeoutsIt->first);
+                YDB_LOG_DEBUG("Waited member",
+                    {"logPrefix", LogPrefix()},
+                    {"connected", prevGenerationMembersAndTimeoutsIt->first});
                 prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.erase(prevGenerationMembersAndTimeoutsIt);
             } else if ((RebalanceStartTime + TDuration::MilliSeconds(memberRebalanceTimeoutMs)) < now) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Rebalance deadline: " << prevGenerationMembersAndTimeoutsIt->first);
+                YDB_LOG_DEBUG("Rebalance",
+                    {"logPrefix", LogPrefix()},
+                    {"deadline", prevGenerationMembersAndTimeoutsIt->first});
                 prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.erase(prevGenerationMembersAndTimeoutsIt);
             } else if (memberHeartbeatDeadline < now) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Waited member connect session deadline: " << prevGenerationMembersAndTimeoutsIt->first);
+                YDB_LOG_DEBUG("Waited member connect session",
+                    {"logPrefix", LogPrefix()},
+                    {"deadline", prevGenerationMembersAndTimeoutsIt->first});
                 prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.erase(prevGenerationMembersAndTimeoutsIt);
             } else {
                 ++prevGenerationMembersAndTimeoutsIt;
@@ -645,7 +664,9 @@ void TKafkaBalancerActor::JoinStepWaitMembersAndChooseProtocol(NKqp::TEvKqp::TEv
         }
 
         if (WaitedMemberIdsAndTimeouts.size() != 0) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Members waited count# : " << WaitedMemberIdsAndTimeouts.size());
+            YDB_LOG_DEBUG("Members waited",
+                {"logPrefix", LogPrefix()},
+                {"waitedMemberIdsAndTimeouts", WaitedMemberIdsAndTimeouts.size()});
             WaitedMemberIdsAndTimeouts.clear();
             AllWorkerStates.clear();
             WorkerStatesPaginationMemberId = "";
@@ -1321,7 +1342,9 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildAssignmentsParams() {
 
     auto& assignmentList = params.AddParam("$Assignments").BeginList();
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "Assignments count: " << SyncGroupRequestData->Assignments.size());
+    YDB_LOG_DEBUG("Assignments",
+        {"logPrefix", LogPrefix()},
+        {"count", SyncGroupRequestData->Assignments.size()});
 
     for (auto& assignment: SyncGroupRequestData->Assignments) {
         assignmentList.AddListItem()
@@ -1446,7 +1469,8 @@ void TKafkaBalancerActor::SendResponseFail(const TActorContext& ctx, EKafkaError
 }
 
 void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64 correlationId) {
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "JOIN_GROUP success.");
+    YDB_LOG_INFO("JOIN_GROUP success",
+        {"logPrefix", LogPrefix()});
     auto response = std::make_shared<TJoinGroupResponseData>();
 
     response->ProtocolType = ProtocolType;
@@ -1474,7 +1498,8 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
 }
 
 void TKafkaBalancerActor::SendSyncGroupResponseOk(const TActorContext& ctx, ui64 correlationId) {
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "SYNC_GROUP success.");
+    YDB_LOG_INFO("SYNC_GROUP success",
+        {"logPrefix", LogPrefix()});
     auto response = std::make_shared<TSyncGroupResponseData>();
     response->ProtocolType = ProtocolType;
     response->ProtocolName = Protocol;
@@ -1486,7 +1511,8 @@ void TKafkaBalancerActor::SendSyncGroupResponseOk(const TActorContext& ctx, ui64
 }
 
 void TKafkaBalancerActor::SendLeaveGroupResponseOk(const TActorContext& ctx, ui64 corellationId) {
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "LEAVE_GROUP success.");
+    YDB_LOG_INFO("LEAVE_GROUP success",
+        {"logPrefix", LogPrefix()});
     auto response = std::make_shared<TLeaveGroupResponseData>();
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
@@ -1496,7 +1522,8 @@ void TKafkaBalancerActor::SendLeaveGroupResponseOk(const TActorContext& ctx, ui6
 void TKafkaBalancerActor::SendHeartbeatResponseOk(const TActorContext& ctx,
                                                   ui64 corellationId,
                                                   EKafkaErrors error) {
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "HEARTBEAT success.");
+    YDB_LOG_INFO("HEARTBEAT success",
+        {"logPrefix", LogPrefix()});
     auto response = std::make_shared<THeartbeatResponseData>();
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));
@@ -1508,7 +1535,9 @@ void TKafkaBalancerActor::SendJoinGroupResponseFail(const TActorContext& ctx,
                                                     ui64 corellationId,
                                                     EKafkaErrors error,
                                                     TString message) {
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "JOIN_GROUP failed. reason# " << message);
+    YDB_LOG_ERROR("JOIN_GROUP failed",
+        {"logPrefix", LogPrefix()},
+        {"reason", message});
     auto response = std::make_shared<TJoinGroupResponseData>();
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));
@@ -1519,7 +1548,9 @@ void TKafkaBalancerActor::SendSyncGroupResponseFail(const TActorContext& ctx,
                                                     ui64 corellationId,
                                                     EKafkaErrors error,
                                                     TString message) {
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "SYNC_GROUP failed. reason# " << message);
+    YDB_LOG_ERROR("SYNC_GROUP failed",
+        {"logPrefix", LogPrefix()},
+        {"reason", message});
     auto response = std::make_shared<TSyncGroupResponseData>();
     response->ErrorCode = error;
 
@@ -1534,7 +1565,9 @@ void TKafkaBalancerActor::SendLeaveGroupResponseFail(const TActorContext& ctx,
                                                      ui64 corellationId,
                                                      EKafkaErrors error,
                                                      TString message) {
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "LEAVE_GROUP failed. reason# " << message);
+    YDB_LOG_ERROR("LEAVE_GROUP failed",
+        {"logPrefix", LogPrefix()},
+        {"reason", message});
     auto response = std::make_shared<TLeaveGroupResponseData>();
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));
@@ -1545,7 +1578,9 @@ void TKafkaBalancerActor::SendHeartbeatResponseFail(const TActorContext& ctx,
                                                     ui64 corellationId,
                                                     EKafkaErrors error,
                                                     TString message) {
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << TStringBuilder() << "HEARTBEAT failed. reason# " << message);
+    YDB_LOG_ERROR("HEARTBEAT failed",
+        {"logPrefix", LogPrefix()},
+        {"reason", message});
     auto response = std::make_shared<THeartbeatResponseData>();
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));

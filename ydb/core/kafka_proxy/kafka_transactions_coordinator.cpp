@@ -3,6 +3,8 @@
 #include "actors/txn_actor_response_builder.h"
 #include <ydb/core/kqp/common/simple/services.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 namespace NKafka {
     // Handles new transactional_id+producer_id+producer_epoch:
     // 1. validates that producer is not a zombie (in case of parallel init_producer_requests)
@@ -49,7 +51,8 @@ namespace NKafka {
     void TTransactionsCoordinator::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext&) {
         TablesInited++;
         if (TablesInited == TABLES_COUNT) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "All tables are prepared");
+            YDB_LOG_DEBUG("All tables are prepared",
+                {"logPrefix", LogPrefix()});
         }
     };
 
@@ -59,28 +62,35 @@ namespace NKafka {
 
         if (it == ProducersByTransactionalId.end() || it->second.Id != deadActorProducerState) {
             // new actor was already registered, we can just ignore this event
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId << " but producer has already been reinitialized with new epoch or deleted. Ignoring this event");
+            YDB_LOG_DEBUG("Received TEvTransactionActorDied for transactionalId but producer has already been reinitialized with new epoch or deleted. Ignoring this event",
+                {"logPrefix", LogPrefix()},
+                {"transactionalId", ev->Get()->TransactionalId});
         } else {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId
-                << " and producerId " << ev->Get()->ProducerState.Id
-                << " and producerEpoch " << ev->Get()->ProducerState.Epoch
-                << ". Erasing info about this actor.");
+            YDB_LOG_DEBUG("Received TEvTransactionActorDied for transactionalId and producerId and producerEpoch Erasing info about this actor",
+                {"logPrefix", LogPrefix()},
+                {"transactionalId", ev->Get()->TransactionalId},
+                {"producerStateId", ev->Get()->ProducerState.Id},
+                {"producerStateEpoch", ev->Get()->ProducerState.Epoch});
             // erase info about actor to prevent future zombie requests from this producer
             TxnActorByTransactionalId.erase(ev->Get()->TransactionalId);
         }
     };
 
     void TTransactionsCoordinator::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Got poison pill, killing all transaction actors");
+        YDB_LOG_DEBUG("Got poison pill, killing all transaction actors",
+            {"logPrefix", LogPrefix()});
         for (auto& [transactionalId, txnActorId]: TxnActorByTransactionalId) {
             ctx.Send(txnActorId, new TEvents::TEvPoison());
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Sent poison pill to transaction actor for transactionalId " << transactionalId);
+            YDB_LOG_DEBUG("Sent poison pill to transaction actor for transactionalId",
+                {"logPrefix", LogPrefix()},
+                {"transactionalId", transactionalId});
         }
         PassAway();
     };
 
     void TTransactionsCoordinator::PassAway() {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Killing myself");
+        YDB_LOG_DEBUG("Killing myself",
+            {"logPrefix", LogPrefix()});
         TBase::PassAway();
     };
 
@@ -90,7 +100,10 @@ namespace NKafka {
     template<class ErrorResponseType, class EventType>
     void TTransactionsCoordinator::HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
         EventType* ev = evHandle->Get();
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Received message for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
+        YDB_LOG_DEBUG("Received message for transactionalId and ApiKey",
+            {"logPrefix", LogPrefix()},
+            {"transactionalId", *ev->Request->TransactionalId},
+            {"apiKey", ev->Request->ApiKey()});
 
         // create helper struct to simplify methods interaction
         auto txnRequest = TTransactionalRequest(
@@ -108,7 +121,9 @@ namespace NKafka {
 
     template<class ErrorResponseType, class RequestType>
     void TTransactionsCoordinator::SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& txnRequestDetails) {
-        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << error);
+        YDB_LOG_WARN("",
+            {"logPrefix", LogPrefix()},
+            {"error", error});
         std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::PRODUCER_FENCED);
         Send(txnRequestDetails.ConnectionId, new TEvKafka::TEvResponse(txnRequestDetails.CorrelationId, response, EKafkaErrors::PRODUCER_FENCED));
     };
@@ -125,9 +140,17 @@ namespace NKafka {
             txnActorId = ctx.Register(new TTransactionActor(*ev->Request->TransactionalId, {ev->Request->ProducerId, ev->Request->ProducerEpoch}, ev->DatabasePath,
                                       producerInstance.TxnTimeoutMs, ev->ResourceDatabasePath ? ev->ResourceDatabasePath : ev->DatabasePath));
             TxnActorByTransactionalId[*ev->Request->TransactionalId] = txnActorId;
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Registered TTransactionActor with id " << txnActorId << " for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
+            YDB_LOG_DEBUG("Registered TTransactionActor with id for transactionalId and ApiKey",
+                {"logPrefix", LogPrefix()},
+                {"txnActorId", txnActorId},
+                {"transactionalId", *ev->Request->TransactionalId},
+                {"apiKey", ev->Request->ApiKey()});
         }
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << "Forwarded message to TTransactionActor with id " << txnActorId << " for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
+        YDB_LOG_DEBUG("Forwarded message to TTransactionActor with id for transactionalId and ApiKey",
+            {"logPrefix", LogPrefix()},
+            {"txnActorId", txnActorId},
+            {"transactionalId", *ev->Request->TransactionalId},
+            {"apiKey", ev->Request->ApiKey()});
         TAutoPtr<IEventHandle> tmpPtr = evHandle.Release();
         ctx.Forward(tmpPtr, txnActorId);
     };

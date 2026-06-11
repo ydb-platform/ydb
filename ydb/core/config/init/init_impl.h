@@ -1372,7 +1372,7 @@ public:
             AddLabelToAppConfig(it->first, it->second);
         }
 
-        Logger.Out() << "configured" << Endl;
+        Logger.Out() << "Configured YDB server" << Endl;
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {

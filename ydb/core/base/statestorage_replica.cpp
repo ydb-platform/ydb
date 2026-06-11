@@ -226,7 +226,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaLookup::TPtr &ev) {
         TEvStateStorage::TEvReplicaLookup *msg = ev->Get();
         YDB_LOG_DEBUG("Replica::Handle",
-            {"Ev", msg->ToString()});
+            {"ev", msg->ToString()});
 
         CheckConfigVersion(ev->Sender, msg);
 
@@ -257,7 +257,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaUpdate::TPtr &ev) {
         TEvStateStorage::TEvReplicaUpdate *msg = ev->Get();
         YDB_LOG_DEBUG("Replica::Handle",
-            {"Ev", msg->ToString()});
+            {"ev", msg->ToString()});
 
         CheckConfigVersion(ev->Sender, msg);
 
@@ -305,7 +305,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaCleanup::TPtr &ev) {
         const auto &record = ev->Get()->Record;
         YDB_LOG_DEBUG("Replica::Handle",
-            {"Ev", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         const ui64 tabletId = record.GetTabletID();
         const TActorId proposedLeader = ActorIdFromProto(record.GetProposedLeader());
 
@@ -316,8 +316,8 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
             return;
 
         if (tabletIt->second.Followers) {
-            YDB_LOG_ERROR("trying to cleanup entry with attached followers. Suspicious!",
-                {"TabletId", tabletId});
+            YDB_LOG_ERROR("Trying to cleanup entry with attached followers. Suspicious!",
+                {"tabletId", tabletId});
             return;
         }
 
@@ -328,7 +328,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaDelete::TPtr &ev) {
         TEvStateStorage::TEvReplicaDelete *msg = ev->Get();
         YDB_LOG_DEBUG("Replica::Handle",
-            {"Ev", msg->ToString()});
+            {"ev", msg->ToString()});
         const ui64 tabletId = msg->Record.GetTabletID();
 
         CheckConfigVersion(ev->Sender, msg);
@@ -356,9 +356,9 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         if (Info->ClusterStateGeneration < msgGeneration || (Info->ClusterStateGeneration == msgGeneration && Info->ClusterStateGuid != msgGuid)) {
             YDB_LOG_DEBUG("Replica TEvNodeWardenNotifyConfigMismatch",
                 {"Info->ClusterStateGeneration", Info->ClusterStateGeneration},
-                {"MsgGeneration", msgGeneration},
+                {"msgGeneration", msgGeneration},
                 {"Info->ClusterStateGuid", Info->ClusterStateGuid},
-                {"MsgGuid", msgGuid});
+                {"msgGuid", msgGuid});
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }
@@ -367,7 +367,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaLock::TPtr &ev) {
         TEvStateStorage::TEvReplicaLock *msg = ev->Get();
         YDB_LOG_DEBUG("Replica::Handle",
-            {"Ev", msg->ToString()});
+            {"ev", msg->ToString()});
         const ui64 tabletId = msg->Record.GetTabletID();
         const TActorId &sender = ev->Sender;
 
@@ -405,10 +405,10 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         const NKikimrStateStorage::TEvRegisterFollower &record = ev->Get()->Record;
 
         YDB_LOG_DEBUG("Replica::Handle received TEvReplicaRegFollower for tabletId, followerId, followerActorId, followerTabletActorId",
-            {"TabletId", record.GetTabletID()},
-            {"FollowerId", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
-            {"FollowerActorId", record.GetFollower()},
-            {"FollowerTabletActorId", record.GetFollowerTablet()});
+            {"tabletId", record.GetTabletID()},
+            {"followerId", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
+            {"followerActorId", record.GetFollower()},
+            {"followerTabletActorId", record.GetFollowerTablet()});
 
         CheckConfigVersion(ev->Sender, ev->Get());
         const ui64 tabletId = record.GetTabletID();
@@ -460,9 +460,9 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         const NKikimrStateStorage::TEvUnregisterFollower &record = ev->Get()->Record;
 
         YDB_LOG_DEBUG("Replica::Handle received TEvReplicaUnregFollower for tabletId, followerId, followerActorId",
-            {"TabletId", record.GetTabletID()},
-            {"FollowerId", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
-            {"FollowerActorId", record.GetFollower()});
+            {"tabletId", record.GetTabletID()},
+            {"followerId", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
+            {"followerActorId", record.GetFollower()});
 
         const ui64 tabletId = record.GetTabletID();
         CheckConfigVersion(ev->Sender, ev->Get());
@@ -552,8 +552,8 @@ public:
 
             default:
                 YDB_LOG_WARN("Replica::StateInit unexpected event",
-                    {"Type", ev->GetTypeRewrite()},
-                    {"Event", ev->ToString()});
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
                 break;
         }
     }

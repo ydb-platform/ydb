@@ -175,10 +175,10 @@ protected:
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
             YDB_LOG_DEBUG("Guardian TEvNodeWardenNotifyConfigMismatch",
-                {"ClusterStateGeneration", ClusterStateGeneration},
-                {"MsgGeneration", msgGeneration},
-                {"ClusterStateGuid", ClusterStateGuid},
-                {"MsgGuid", msgGuid});
+                {"clusterStateGeneration", ClusterStateGeneration},
+                {"msgGeneration", msgGeneration},
+                {"clusterStateGuid", ClusterStateGuid},
+                {"msgGuid", msgGuid});
             this->Send(MakeBlobStorageNodeWardenID(selfId.NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }

@@ -79,7 +79,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
         CheckConfigVersion(owner, ev->Get());
 
         if (!record.GetRegister()) {
-            YDB_LOG_ERROR("free floating entries not implemented yet");
+            YDB_LOG_ERROR("Free floating entries not implemented yet");
             return;
         }
 
@@ -90,7 +90,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
             const ui32 entryIndex = ownerIt->second;
             TEntry &entry = Entries[entryIndex];
             if (entry.PathIt->first != path) {
-                YDB_LOG_ERROR("inconsistent path for same owner");
+                YDB_LOG_ERROR("Inconsistent path for same owner");
                 // reply nothing, request suspicious
                 return;
             }
@@ -241,9 +241,9 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
         if (Info->ClusterStateGeneration < msgGeneration || (Info->ClusterStateGeneration == msgGeneration && Info->ClusterStateGuid != msgGuid)) {
             YDB_LOG_DEBUG("BoardReplica TEvNodeWardenNotifyConfigMismatch",
                 {"Info->ClusterStateGeneration", Info->ClusterStateGeneration},
-                {"MsgGeneration", msgGeneration},
+                {"msgGeneration", msgGeneration},
                 {"Info->ClusterStateGuid", Info->ClusterStateGuid},
-                {"MsgGuid", msgGuid});
+                {"msgGuid", msgGuid});
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }

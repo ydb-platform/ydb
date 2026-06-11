@@ -114,10 +114,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
             YDB_LOG_DEBUG("LookupReplica TEvNodeWardenNotifyConfigMismatch",
-                {"ClusterStateGeneration", ClusterStateGeneration},
-                {"MsgGeneration", msgGeneration},
-                {"ClusterStateGuid", ClusterStateGuid},
-                {"MsgGuid", msgGuid});
+                {"clusterStateGeneration", ClusterStateGeneration},
+                {"msgGeneration", msgGeneration},
+                {"clusterStateGuid", ClusterStateGuid},
+                {"msgGuid", msgGuid});
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
             NotAvailable();
@@ -225,7 +225,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         auto *msg = ev->Get();
 
         if (msg->ReplicaGroups.empty()) {
-            YDB_LOG_ERROR("lookup on unconfigured statestorage board service");
+            YDB_LOG_ERROR("Lookup on unconfigured statestorage board service");
             return NotAvailable();
         }
         ClusterStateGeneration = msg->ClusterStateGeneration;
@@ -267,10 +267,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                 Y_ABORT("unsupported mode");
             }
             YDB_LOG_DEBUG("Handle TEvResolveReplicasList",
-                {"Mode", (ui32)Mode},
-                {"GroupIdx", replicaGroupIdx},
-                {"Group", replicaGroups.ToString()},
-                {"Path", Path});
+                {"mode", (ui32)Mode},
+                {"groupIdx", replicaGroupIdx},
+                {"group", replicaGroups},
+                {"path", Path});
         }
         Become(&TThis::StateLookup);
     }
@@ -346,9 +346,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
         YDB_LOG_DEBUG("Handle TEvReplicaBoardInfo",
-            {"GroupIdx", groupIdx},
-            {"Idx", idx},
-            {"ReconnectNumber", reconnectNumber},
+            {"groupIdx", groupIdx},
+            {"idx", idx},
+            {"reconnectNumber", reconnectNumber},
             {"replica.ReconnectNumber", replica.ReconnectNumber});
         if (reconnectNumber != replica.ReconnectNumber) {
             return;

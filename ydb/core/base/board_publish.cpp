@@ -145,7 +145,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     }
 
     void HandleUndelivered() {
-        YDB_LOG_ERROR("publish on unavailable statestorage board service");
+        YDB_LOG_ERROR("Publish on unavailable statestorage board service");
         Become(&TThis::StateCalm);
     }
 
@@ -154,7 +154,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
 
         if (msg->ReplicaGroups.empty() || msg->ReplicaGroups[0].Replicas.empty()) {
             Y_ABORT_UNLESS(ReplicaPublishActors.empty());
-            YDB_LOG_ERROR("publish on unconfigured statestorage board service");
+            YDB_LOG_ERROR("Publish on unconfigured statestorage board service");
         } else {
             ClusterStateGeneration = msg->ClusterStateGeneration;
             ClusterStateGuid = msg->ClusterStateGuid;

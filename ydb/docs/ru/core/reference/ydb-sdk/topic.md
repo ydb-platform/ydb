@@ -1322,7 +1322,7 @@
 
     ```cpp
     auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path("my-topic")
+        // other settings are set here
         .Codec(ECodec::RAW);
 
     auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
@@ -1334,9 +1334,8 @@
 
     ```cpp
     auto producerSettings = NYdb::NTopic::TProducerSettings()
-        .Path("my-topic")
-        .ProducerIdPrefix("my-producer")
-        .Codec(NYdb::NTopic::ECodec::ZSTD);
+        // other settings are set here
+        .Codec(NYdb::NTopic::ECodec::RAW);
 
     auto producer = topicClient.CreateProducer(producerSettings);
     ```
@@ -1516,6 +1515,20 @@
     }
     ```
 
+  - ISimpleBlockingWriteSession (низкоуровневое API)
+
+    Метаданные задаются в `TWriteMessage` через `MessageMeta()` и передаются в `Write()`:
+
+    ```cpp
+    auto messageData = std::string("message-data");
+    NYdb::NTopic::TWriteMessage writeMessage(messageData);
+    writeMessage.MessageMeta({
+        {"meta-key", "meta-value"},
+        {"another-key", "value"},
+    });
+    session->Write(std::move(writeMessage));
+    ```
+
   - IProducer (высокоуровневое API)
 
     Метаданные задаются в `TWriteMessage` через `MessageMeta()`:
@@ -1679,6 +1692,29 @@
         NYdb::NTopic::TWriteMessage writeMessage("message");
 
         topicSession->Write(std::move(writeMessage), tx);
+        return tx.Commit().GetValueSync();
+    }));
+    ```
+
+  - ISimpleBlockingWriteSession (низкоуровневое API)
+
+    Для записи в топик в транзакции передайте объект транзакции вторым аргументом в `Write()`.
+
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
+
+    ```c++
+    NYdb::NQuery::TQueryClient queryClient(driver);
+
+    NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+        auto beginTxResult = session.BeginTransaction().GetValueSync();
+        if (!beginTxResult.IsSuccess()) {
+            return beginTxResult;
+        }
+        auto tx = beginTxResult.GetTransaction();
+
+        NYdb::NTopic::TWriteMessage writeMessage("message");
+
+        topicSession->Write(std::move(writeMessage), &tx);
         return tx.Commit().GetValueSync();
     }));
     ```

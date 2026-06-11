@@ -2701,10 +2701,10 @@ public:
                         }
 
                         if (indexIter->Type != NYql::TIndexDescription::EType::LocalBloomFilter && indexIter->Type != NYql::TIndexDescription::EType::LocalBloomNgramFilter ) {
-                            TString indexTypeName = indexIter->Type == NYql::TIndexDescription::EType::LocalBloomFilter ? "BLOOM_FILTER" : "BLOOM_NGRAMM_FILTER";
+                            YQL_ENSURE(indexIter->Type ==  NYql::TIndexDescription::EType::LocalMinMax);
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                TStringBuilder() << "Index " << alterIndexName << " is " << indexTypeName << " index. "
-                                 << "Only BLOOM_FILTER and BLOOM_NGRAMM_FILTER indexes can be used in ALTER INDEX statement in Column Shards"));
+                                TStringBuilder() << "Index " << alterIndexName << " is MIN_MAX index. "
+                                "Only BLOOM_FILTER and BLOOM_NGRAMM_FILTER indexes can be used in ALTER INDEX statement in Column Shards"));
                             return SyncError();
                         }
                         if (tableSettingsCount > 0) {

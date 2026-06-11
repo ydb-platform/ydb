@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         }
     };
 
-    struct TTestTypeToBoth {
+    struct TTestTypeToStringToStructuredMessage {
         TString ToString() const {
             return "some value";
         }
@@ -261,17 +261,39 @@ Y_UNIT_TEST_SUITE(StructLog) {
         }
     };
 
-    struct TTestTypeGetDebugShortString {
-        TString GetDebugShortString() const {
+    struct TTestTypeShortDebugString {
+        TString ShortDebugString() const {
             return "short_debug_string";
+        }
+    };
+
+    struct TTestTypeShortDebugStringToString {
+        TString ShortDebugString() const {
+            return "short_debug_string";
+        }
+
+        TString ToString() const {
+            return "some value";
+        }
+    };
+
+    struct TTestTypeShortDebugStringToStructuredMessage {
+        TString ShortDebugString() const {
+            return "short_debug_string";
+        }
+
+        TStructuredMessage ToStructuredMessage() const {
+            return YDB_LOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2});
         }
     };
 
     Y_UNIT_TEST(CreateMessageToMethods) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToString{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStructuredMessage{}}), "value.value1=1, value.value2=2");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToBoth{}}), "value.value1=1, value.value2=2");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeGetDebugShortString{}}), "value=short_debug_string");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStringToStructuredMessage{}}), "value.value1=1, value.value2=2");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeShortDebugString{}}), "value=short_debug_string");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeShortDebugStringToString{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeShortDebugStringToStructuredMessage{}}), "value.value1=1, value.value2=2");
     }
 
     Y_UNIT_TEST(CreateMessageIterable) {

@@ -64,8 +64,8 @@ class TGopherMother : public TActorBootstrapped<TGopherMother> {
     void Response(const TActorContext &ctx) {
         if (--WaitFor == 0) {
             const TDuration roundTime = ctx.Now() - RoundStart;
-            YDB_LOG_CTX_INFO(ctx, "Gopher Mother round time",
-                {"RoundTime", roundTime.ToString()});
+            YDB_LOG_INFO_CTX(ctx, "Gopher Mother round time",
+                {"roundTime", roundTime});
             Round(ctx);
         }
     }

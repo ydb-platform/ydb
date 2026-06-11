@@ -39,7 +39,7 @@ struct THedgingClientOptions
     TDuration RequestDurationHistogramMin;
     TDuration RequestDurationHistogramMax;
     std::optional<TDuration> RequestDurationHistogramGranularity;
-    THashMap<TString, TString> Tags;
+    THashMap<std::string, std::string> Tags;
     size_t RatioCounterBucketCount = 0;
     TDuration RatioCounterShiftPeriod = TDuration::Zero();
     double HedgingRatioLimit = 1.0;

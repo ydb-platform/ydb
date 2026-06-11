@@ -1411,7 +1411,6 @@ message TEvControllerNodeReport {
 
 message TEvControllerGroupDecommittedNotify {
     optional uint32 GroupId = 1;
-    optional bool Force = 2;
 }
 
 message TEvControllerGroupDecommittedResponse {

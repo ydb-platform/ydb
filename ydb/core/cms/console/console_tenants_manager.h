@@ -313,7 +313,7 @@ public:
 
         void ChangeRequiredGroups(i64 count)
         {
-            Y_DEBUG_ABORT_UNLESS(Config.GetNumGroups() + count > 0);
+            Y_ABORT_UNLESS(static_cast<i64>(Config.GetNumGroups()) + count > 0);
             Config.SetNumGroups(Config.GetNumGroups() + count);
         }
 
@@ -354,6 +354,7 @@ public:
         TString Issue;
         TActorId Worker;
         size_t GroupFitErrors = 0;
+        TVector<ui32> GroupsToDecommit;
     };
 
     struct TTenantSlotKind {
@@ -782,7 +783,7 @@ public:
                                           TStoragePool::TPtr pool,
                                           TActorId worker);
     ITransaction *CreateTxUpdateTenantPoolConfig(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev);
-    ITransaction *CreateTxDecommitGroups(TTenant::TPtr tenant, TStoragePool::TPtr pool, TVector<ui32> groups);
+    ITransaction *CreateTxDecommitGroups(TTenant::TPtr tenant, TStoragePool::TPtr pool, TActorId worker, TVector<ui32> groups);
 
     void ClearState();
     void SetConfig(const NKikimrConsole::TTenantsConfig &config);
@@ -1093,6 +1094,8 @@ inline void Out<NKikimr::NConsole::TTenantsManager::TTenant::EState>(IOutputStre
         o << "REMOVING_POOLS";
     else if (x == NKikimr::NConsole::TTenantsManager::TTenant::CONFIGURING_SUBDOMAIN)
         o << "CONFIGURING_SUBDOMAIN";
+    else if (x == NKikimr::NConsole::TTenantsManager::TTenant::REMOVING_GROUPS)
+        o << "REMOVING_GROUPS";
     else
         o << "<UNKNOWN>";
     return;
@@ -1108,6 +1111,8 @@ inline void Out<NKikimr::NConsole::TTenantsManager::TStoragePool::EState>(IOutpu
         o << "ALLOCATED";
     else if (x == NKikimr::NConsole::TTenantsManager::TStoragePool::DELETED)
         o << "DELETED";
+    else if (x == NKikimr::NConsole::TTenantsManager::TStoragePool::SHRINKING)
+        o << "SHRINKING";
     else
         o << "<UNKNOWN>";
     return;

@@ -1054,7 +1054,7 @@ namespace NKikimr::NBsController {
                     std::tie(Status, ErrorReason) = std::make_tuple(NKikimrProto::ERROR, "group not found");
                 } else if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
                     Status = NKikimrProto::ALREADY;
-                } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS && !Ev->Get()->Record.GetForce()) {
+                } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS) {
                     std::tie(Status, ErrorReason) = std::make_tuple(NKikimrProto::ERROR, "group is not being decommitted");
                 } else {
                     for (const TVSlotInfo *vslot : group->VDisksInGroup) {
@@ -1064,7 +1064,6 @@ namespace NKikimr::NBsController {
                     group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::DONE;
                     group->Topology = std::make_shared<TBlobStorageGroupInfo::TTopology>(group->Topology->GType, 0, 0, 0);
                     state.GroupContentChanged.insert(TGroupId::FromValue(groupId));
-                    state.GroupFailureModelChanged.insert(TGroupId::FromValue(groupId));
                 }
 
                 STLOG(PRI_INFO, BS_CONTROLLER, BSCVG10, "decommission update processed", (Status, Status),

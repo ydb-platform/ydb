@@ -85,9 +85,13 @@ public:
                 Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::CREATING_SUBDOMAIN), ctx);
             else if (Tenant->State == TTenant::REMOVING_POOLS && !Tenant->HasPoolsToDelete())
                 Self->TxProcessor->ProcessTx(Self->CreateTxRemoveTenantDone(Tenant), ctx);
-            else if (Tenant->State == TTenant::REMOVING_GROUPS && !Tenant->HasPoolsToCreate())
-                Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::RUNNING), ctx);
-            else if (Tenant->State == TTenant::RUNNING)
+            else if (Tenant->State == TTenant::REMOVING_GROUPS) {
+                if (!Pool->GroupsToDecommit.empty()) {
+                    Self->ProcessTenantActions(Tenant, ctx);
+                } else if (!Tenant->HasPoolsToCreate()) {
+                    Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::RUNNING), ctx);
+                }
+            } else if (Tenant->State == TTenant::RUNNING)
                 Self->ProcessTenantActions(Tenant, ctx);
         }
 

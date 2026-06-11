@@ -1014,6 +1014,29 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           Ydb::Cms::GetDatabaseStatusResult::REMOVING_STORAGE_UNITS,
                           {{"hdd", 3, 3}, {"hdd-1", 5, 6}, {"hdd-2", 2, 2}}, {});
 
+
+        auto observer2 = runtime.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](auto&& ev) {
+            if (ev->Get()->Record.GetRequest().GetCommand(0).HasDeleteSpecificGroups()) {
+                auto response = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
+                auto* proto = response->Record.MutableResponse();
+                proto->SetSuccess(true);
+                proto->AddStatus()->SetSuccess(true);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie), 0);
+                ev.Reset();
+            }
+        });
+
+        {
+            auto ev = std::make_unique<TEvHive::TEvShrinkStoragePoolDone>();
+            ev->Record.SetStoragePool(TENANT1_1_NAME + ":hdd-1");
+            ev->Record.AddGroupsToRemove(0x30000); // mock id
+            runtime.SendToConsole(ev.release());
+        }
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::REMOVING_STORAGE_UNITS,
+                          {{"hdd", 3, 3}, {"hdd-1", 5, 5}, {"hdd-2", 2, 2}}, {});
+
         CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{"hdd-1", 7, 5}});
 

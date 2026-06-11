@@ -13,8 +13,6 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
-#include <util/string/vector.h>
-
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_NOTICE
 #error log macro definition clash
 #endif
@@ -1221,7 +1219,8 @@ public:
         record.MutableSubDomain()->SetSchemeShard(Tenant->DomainId.OwnerId);
         record.MutableSubDomain()->SetPathId(Tenant->DomainId.LocalPathId);
         record.SetStoragePool(Pool->Config.GetName());
-        record.SetNewSize(Pool->Config.GetNumGroups());
+        // If allocated < needed, it means we are cancelling the shrinking
+        record.SetNewSize(std::min<ui64>(Pool->Config.GetNumGroups(), Pool->AllocatedNumGroups));
         record.SetVersion(Tenant->Generation);
 
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
@@ -1282,12 +1281,16 @@ public:
         HivePipe = ctx.Register(pipe);
     }
 
-    void ReplyAndDie(IEventBase *resp,
-                     const TActorContext &ctx)
-    {
+    void Die(const TActorContext &ctx) override {
         if (HivePipe) {
             NTabletPipe::CloseAndForgetClient(TActorIdentity(ctx.SelfID), HivePipe);
         }
+        TBase::Die(ctx);
+    }
+
+    void ReplyAndDie(IEventBase *resp,
+                     const TActorContext &ctx)
+    {
         ctx.Send(OwnerId, resp);
         Die(ctx);
     }
@@ -1321,8 +1324,13 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
+        BLOG_TRACE("TDecommitGroups Bootstrap");
         Become(&TThis::StateWork);
-        SendRequest(ctx);
+        if (Groups.empty()) {
+            ReplyAndDie(ctx);
+        } else {
+            SendRequest(ctx);
+        }
     }
 
     void SendRequest(const TActorContext &ctx) {
@@ -1354,7 +1362,7 @@ public:
 
         BLOG_D("TDecommitGroups got config response: " << rec.ShortDebugString());
 
-        if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
+        if (!rec.GetSuccess() || rec.StatusSize() == 0 || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
             if (rec.StatusSize() && rec.GetStatus(0).GetErrorDescription())
                 error = rec.GetStatus(0).GetErrorDescription();
@@ -1362,7 +1370,6 @@ public:
             BLOG_ERROR("TDecommitGroups cannot decommit groups '"
                         << Pool->Config.GetName() << "' ("
                         << Pool->Config.GetStoragePoolId() << "): " << error);
-            Pool->Issue = error;
             ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, error));
             Die(ctx);
             return;
@@ -1402,7 +1409,7 @@ public:
         Die(ctx);
     }
 
-    void Die(const TActorContext& ctx) {
+    void Die(const TActorContext& ctx) override {
         if (BSControllerPipe) {
             NTabletPipe::CloseAndForgetClient(TActorIdentity(ctx.SelfID), BSControllerPipe);
         }
@@ -1843,6 +1850,7 @@ void TTenantsManager::ClearState()
     TenantIdToName.clear();
     RemovedTenants.clear();
     SlotStats.Clear();
+    DecommittedGroups.clear();
 }
 
 void TTenantsManager::Bootstrap(const TActorContext &ctx)
@@ -2282,7 +2290,12 @@ void TTenantsManager::AllocateTenantPools(TTenant::TPtr tenant, const TActorCont
     for (auto &pr : tenant->StoragePools) {
         if (pr.second->State != TStoragePool::ALLOCATED && !pr.second->Worker) {
             if (pr.second->AllocatedNumGroups > pr.second->GetGroups() || pr.second->State == TStoragePool::SHRINKING) {
-                pr.second->Worker = ctx.RegisterWithSameMailbox(new TInitiateShrinkPool(SelfId(), tenant, pr.second));
+                if (pr.second->GroupsToDecommit.empty()) {
+                    pr.second->Worker = ctx.RegisterWithSameMailbox(new TInitiateShrinkPool(SelfId(), tenant, pr.second));
+                } else {
+                    pr.second->Worker = ctx.RegisterWithSameMailbox(new TDecommitGroups(SelfId(), tenant, pr.second, std::move(pr.second->GroupsToDecommit)));
+                    pr.second->GroupsToDecommit.clear();
+                }
             } else {
                 pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::ALLOCATE));
             }
@@ -3729,6 +3742,13 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolShrinking::TPtr &ev, const TActo
     auto tenant = ev->Get()->Tenant;
     auto pool = ev->Get()->Pool;
 
+    if (tenant != GetTenant(tenant->Path) || tenant->IsRemoving()) {
+        return;
+    }
+    if (pool->Worker != ev->Sender) {
+        return;
+    }
+
     TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::REMOVING_GROUPS), ctx);
     TxProcessor->ProcessTx(CreateTxUpdatePoolState(tenant, pool, ev->Sender,
                                                    TStoragePool::SHRINKING),
@@ -3843,7 +3863,8 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainFailed::TPtr &ev, const TAc
     Y_ABORT_UNLESS(tenant == GetTenant(tenant->Path));
     Y_ABORT_UNLESS(tenant->State == TTenant::CREATING_SUBDOMAIN
              || tenant->State == TTenant::CONFIGURING_SUBDOMAIN
-             || tenant->State == TTenant::RUNNING);
+             || tenant->State == TTenant::RUNNING
+             || tenant->State == TTenant::REMOVING_GROUPS);
 
     Counters.Inc(COUNTER_CONFIGURE_SUBDOMAIN_FAILED);
 
@@ -3928,7 +3949,8 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainReady::TPtr &ev, const TAct
 
     Y_ABORT_UNLESS(tenant == GetTenant(tenant->Path));
     Y_ABORT_UNLESS(tenant->State == TTenant::CONFIGURING_SUBDOMAIN
-             || tenant->State == TTenant::RUNNING);
+             || tenant->State == TTenant::RUNNING
+             || tenant->State == TTenant::REMOVING_GROUPS);
 
     TxProcessor->ProcessTx(CreateTxUpdateConfirmedSubdomain(tenant->Path,
                                                             ev->Get()->Version,
@@ -3952,7 +3974,11 @@ void TTenantsManager::Handle(TEvPrivate::TEvGroupsDecommitted::TPtr &ev, const T
     auto pool = ev->Get()->Pool;
     auto groups = std::move(ev->Get()->Groups);
 
-    TxProcessor->ProcessTx(CreateTxDecommitGroups(tenant, pool, groups), ctx);
+    if (tenant != GetTenant(tenant->Path) || tenant->IsRemoving()) {
+        return;
+    }
+
+    TxProcessor->ProcessTx(CreateTxDecommitGroups(tenant, pool, ev->Sender, groups), ctx);
 }
 
 void TTenantsManager::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
@@ -4030,13 +4056,13 @@ void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const 
 {
     BLOG_TRACE("Handle TEvShrinkStoragePoolDone " << ev->Get()->Record.ShortDebugString());
     const auto &poolName = ev->Get()->Record.GetStoragePool();
-    const auto split = SplitString(poolName, ":");
-    if (split.size() != 2) {
+    const auto splitIdx = poolName.find(':');
+    if (splitIdx == std::string::npos || splitIdx + 1 == poolName.size()) {
         BLOG_ERROR("Invalid pool name format: " << poolName);
         return;
     }
-    const auto &tenantName = split[0];
-    const auto &poolKind = split[1];
+    const auto tenantName = poolName.substr(0, splitIdx);
+    const auto poolKind = poolName.substr(splitIdx + 1);
     auto tenant = GetTenant(tenantName);
     if (!tenant) {
         return;
@@ -4046,11 +4072,14 @@ void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const 
         return;
     }
     auto pool = poolIt->second;
+    if (pool->State != TStoragePool::EState::SHRINKING) {
+        return;
+    }
 
-    auto newGroups = ev->Get()->Record.GetGroupsToRemove() | std::views::filter([&](ui32 group) { return !DecommittedGroups.contains(group); });
-    TVector<ui32> groups(newGroups.begin(), newGroups.end());
+    auto groups = ev->Get()->Record.GetGroupsToRemove() | std::views::filter([&](ui32 group) { return !DecommittedGroups.contains(group); });
+    pool->GroupsToDecommit.assign(groups.begin(), groups.end());
 
-    ctx.RegisterWithSameMailbox(new TDecommitGroups(SelfId(), tenant, pool, std::move(groups)));
+    AllocateTenantPools(tenant, ctx);
 }
 
 TString MakeStoragePoolName(const TString &tenantName, const TString &poolTypeName)

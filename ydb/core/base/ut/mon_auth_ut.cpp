@@ -49,6 +49,7 @@ Y_UNIT_TEST_SUITE(TabletDevUiMonAccess) {
             TTabletTypes::DataShard,
             TTabletTypes::Hive,
             TTabletTypes::GraphShard,
+            TTabletTypes::SchemeShard,
         }) {
             fixture.SetEnableTabletDevUiSecurePath(false);
             UNIT_ASSERT(!UsesTabletDevUiSecurePath(fixture.GetAppData(), type));

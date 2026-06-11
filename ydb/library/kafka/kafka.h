@@ -4,14 +4,27 @@
 #include <optional>
 #include <ostream>
 
-#include <ydb/core/raw_socket/sock_impl.h>
 #include <yql/essentials/public/decimal/yql_wide_int.h>
 
+#include "kafka_write_buffer.h"
+
+#include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
+#include <util/generic/string.h>
+#include <util/generic/yexception.h>
+#include <util/generic/deque.h>
 #include <util/generic/strbuf.h>
 #include <util/system/types.h>
 
 namespace NKafka {
+
+enum ECompressionType : ui8 {
+    NONE = 0,
+    GZIP = 1,
+    SNAPPY = 2,
+    LZ4 = 3,
+    ZSTD = 4
+};
 
 /*
  * There are four versions of each field:
@@ -51,6 +64,10 @@ using TKafkaFloat64 = double;
 using TKafkaRawString = TString;
 using TKafkaString = std::optional<TKafkaRawString>;
 using TKafkaRawBytes = TArrayRef<const char>;
+
+inline TKafkaRawBytes ToRawBytes(const TString& str) {
+    return TKafkaRawBytes(str.data(), str.size());
+}
 using TKafkaBytes = std::optional<TKafkaRawBytes>;
 using TKafkaRecords = std::optional<TKafkaRecordBatch>;
 
@@ -69,8 +86,6 @@ public:
 
 static constexpr TKafkaVersions VersionsNever(0, -1);
 static constexpr TKafkaVersions VersionsAlways(0, Max<TKafkaVersion>());
-
-using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter<>;
 
 namespace NPrivate {
 
@@ -314,14 +329,9 @@ U AsUnsigned(S value) {
     return (value << 1) ^ (value >> Shift);
 }
 
-inline TKafkaRawBytes ToRawBytes(const TString& str) {
-    return TKafkaRawBytes(str.data(), str.size());
-}
-
-
 class TKafkaWritable {
 public:
-    TKafkaWritable(TWritableBuf& buffer)
+    TKafkaWritable(TKafkaWriteBuffer& buffer)
         : Buffer(buffer){};
 
     template <typename T>
@@ -357,7 +367,7 @@ public:
     void write(const char* val, size_t length);
 
 private:
-    TWritableBuf& Buffer;
+    TKafkaWriteBuffer& Buffer;
 };
 
 class TKafkaReadable {
@@ -416,11 +426,21 @@ public:
 
     size_t position() const;
 
+    void SetAllowCompressed(bool allowCompressed) {
+        AllowCompressed_ = allowCompressed;
+    }
+
+    bool GetAllowCompressed() const {
+        return AllowCompressed_;
+    }
+
 private:
     void checkEof(size_t length);
 
     const TBuffer& Is;
     size_t Position;
+    // Temporary switch until server-side Kafka record batch support is implemented.
+    bool AllowCompressed_ = false;
 };
 
 struct TReadDemand {

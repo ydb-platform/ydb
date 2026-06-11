@@ -1,0 +1,54 @@
+Skip filesystem syscalls in inspect for binary-bundled modules.
+
+Modules bundled into an Arcadia binary (loaded via the ResourceImporter
+in library/python/runtime_py3/__res.py) expose a relative __file__ such
+as 'contrib/tools/python3/Lib/inspect.py'. There is no real file behind
+that path, but inspect.getmodule() and inspect.getsourcefile() probe
+the filesystem for it anyway:
+
+  * getmodule() walks sys.modules and calls os.path.realpath() on each
+    module's path. realpath() in turn calls os.lstat() for every path
+    component (see posixpath.realpath), producing dozens to hundreds of
+    syscalls per invocation. For a relative path getabsfile() first
+    joins it with the current working directory, so the resolved path
+    depends on where the binary was launched from -- often pointing at
+    an unrelated file on disk.
+
+  * getsourcefile() calls os.path.exists() on the same relative path,
+    which is again resolved against CWD and triggers an os.stat().
+
+Both probes are useless for bundled modules: their source is served by
+the PEP 302 loader, not the filesystem. We restrict the realpath() and
+exists() calls to genuinely absolute paths, which is the case for
+modules loaded from disk via Y_PYTHON_SOURCE_ROOT (see __res.py: those
+are passed to compile() with an absolute filename, while bundled
+modules keep the Arcadia-relative path baked in at compile time).
+
+linecache is already handled by fix-traceback.patch.
+
+--- a/Lib/inspect.py	(index)
++++ b/Lib/inspect.py	(working tree)
+@@ -980,7 +980,7 @@ def getsourcefile(object):
+     # return a filename found in the linecache even if it doesn't exist on disk
+     if filename in linecache.cache:
+         return filename
+-    if os.path.exists(filename):
++    if os.path.isabs(filename) and os.path.exists(filename):
+         return filename
+     # only return a non-existent filename if the module has a PEP 302 loader
+     module = getmodule(object, filename)
+@@ -1028,9 +1028,10 @@ def getmodule(object, _filename=None):
+                 # Have already mapped this module, so skip it
+                 continue
+             _filesbymodname[modname] = f
+-            f = getabsfile(module)
+-            # Always map to the name the module knows itself by
+-            modulesbyfile[f] = modulesbyfile[
+-                os.path.realpath(f)] = module.__name__
++            absfile = getabsfile(module)
++            modulesbyfile[absfile] = module.__name__
++            if os.path.isabs(f):
++                modulesbyfile[os.path.realpath(absfile)] = module.__name__
+     if file in modulesbyfile:
+         return sys.modules.get(modulesbyfile[file])
+     # Check the main module

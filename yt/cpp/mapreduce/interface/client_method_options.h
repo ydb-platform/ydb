@@ -67,10 +67,62 @@ struct TSuppressableAccessTrackingOptions
 };
 
 ///
+/// @brief Expected revision of a Cypress node, used as a precondition.
+///
+/// The command fails if the node at @ref Path has a revision different from @ref Revision.
+struct TPrerequisiteRevision
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TPrerequisiteRevision;
+    /// @endcond
+
+    /// @brief Cypress node's path.
+    FLUENT_FIELD_OPTION(TYPath, Path);
+
+    /// @brief Expected revision.
+    FLUENT_FIELD_OPTION(ui64, Revision);
+};
+
+/// Base class for options dealing with prerequisite transactions.
+template <typename TDerived>
+struct TPrerequisiteTransactionsOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Transactions that must be alive.
+    FLUENT_VECTOR_FIELD(TTransactionId, PrerequisiteTransactionId);
+};
+
+/// Base class for options dealing with prerequisite revisions.
+template <typename TDerived>
+struct TPrerequisiteRevisionsOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDerived;
+    /// @endcond
+
+    /// @brief Cypress nodes whose current revisions must match the expected ones.
+    FLUENT_VECTOR_FIELD(TPrerequisiteRevision, PrerequisiteRevision);
+};
+
+///
+/// @brief Server-side preconditions checked before the request is processed.
+///
+/// If any of the listed prerequisites is not satisfied, the command fails.
+template <typename TDerived>
+struct TPrerequisiteOptions
+    : public TPrerequisiteRevisionsOptions<TDerived>
+    , public TPrerequisiteTransactionsOptions<TDerived>
+{ };
+
+///
 /// @brief Options for @ref NYT::ICypressClient::Create
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#create
 struct TCreateOptions
+    : public TPrerequisiteOptions<TCreateOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TCreateOptions;
@@ -107,6 +159,7 @@ struct TCreateOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#remove
 struct TRemoveOptions
+    : public TPrerequisiteOptions<TRemoveOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TRemoveOptions;
@@ -135,49 +188,14 @@ struct TMasterReadOptions
 };
 
 ///
-/// @brief Expected revision of a Cypress node, used as a precondition.
-///
-/// The command fails if the node at @ref Path has a revision different from @ref Revision.
-struct TPrerequisiteRevisionOptions
-{
-    /// @cond Doxygen_Suppress
-    using TSelf = TPrerequisiteRevisionOptions;
-    /// @endcond
-
-    /// @brief Cypress node's path.
-    FLUENT_FIELD_OPTION(TYPath, Path);
-
-    /// @brief Expected revision.
-    FLUENT_FIELD_OPTION(ui64, Revision);
-};
-
-///
-/// @brief Server-side preconditions checked before the request is processed.
-///
-/// If any of the listed prerequisites is not satisfied, the command fails.
-template <typename TDerived>
-struct TPrerequisiteOptions
-{
-    /// @cond Doxygen_Suppress
-    using TSelf = TDerived;
-    /// @endcond
-
-    /// @brief Transactions that must be alive.
-    FLUENT_VECTOR_FIELD(TTransactionId, PrerequisiteTransactionId);
-
-    /// @brief Cypress nodes whose current revisions must match the expected ones.
-    FLUENT_VECTOR_FIELD(TPrerequisiteRevisionOptions, PrerequisiteRevision);
-};
-
-///
 /// @brief Options for @ref NYT::ICypressClient::Exists
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#exists
 struct TExistsOptions
     : public TMasterReadOptions<TExistsOptions>
     , public TSuppressableAccessTrackingOptions<TExistsOptions>
-{
-};
+    , public TPrerequisiteOptions<TExistsOptions>
+{ };
 
 ///
 /// @brief Options for @ref NYT::ICypressClient::Get
@@ -201,6 +219,7 @@ struct TGetOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#set
 struct TSetOptions
     : public TSuppressableAccessTrackingOptions<TSetOptions>
+    , public TPrerequisiteOptions<TSetOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TSetOptions;
@@ -219,6 +238,7 @@ struct TSetOptions
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#multiset_attributes
 struct TMultisetAttributesOptions
     : public TSuppressableAccessTrackingOptions<TMultisetAttributesOptions>
+    , public TPrerequisiteOptions<TMultisetAttributesOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TMultisetAttributesOptions;
@@ -234,6 +254,7 @@ struct TMultisetAttributesOptions
 struct TListOptions
     : public TMasterReadOptions<TListOptions>
     , public TSuppressableAccessTrackingOptions<TListOptions>
+    , public TPrerequisiteOptions<TListOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TListOptions;
@@ -251,6 +272,7 @@ struct TListOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#copy
 struct TCopyOptions
+    : public TPrerequisiteOptions<TCopyOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TCopyOptions;
@@ -274,6 +296,7 @@ struct TCopyOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#move
 struct TMoveOptions
+    : public TPrerequisiteOptions<TMoveOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TMoveOptions;
@@ -297,6 +320,7 @@ struct TMoveOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#link
 struct TLinkOptions
+    : public TPrerequisiteOptions<TLinkOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TLinkOptions;
@@ -847,6 +871,7 @@ struct TTableFragmentWriterOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#start_tx
 struct TStartTransactionOptions
+    : public TPrerequisiteTransactionsOptions<TStartTransactionOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TStartTransactionOptions;
@@ -938,6 +963,7 @@ enum ELockMode : int
 /// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locks
 /// @see NYT::ITransaction::Lock
 struct TLockOptions
+    : public TPrerequisiteOptions<TLockOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TLockOptions;
@@ -976,9 +1002,22 @@ struct TLockOptions
 ///
 /// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locks_compatibility
 struct TUnlockOptions
+    : public TPrerequisiteOptions<TUnlockOptions>
 {
     /// @cond Doxygen_Suppress
     using TSelf = TUnlockOptions;
+    /// @endcond
+};
+
+///
+/// @brief Options for @ref NYT::ITransaction::Commit
+///
+/// @see https://ytsaurus.tech/docs/api/commands#commit_tx
+struct TCommitTransactionOptions
+    : public TPrerequisiteOptions<TCommitTransactionOptions>
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TCommitTransactionOptions;
     /// @endcond
 };
 

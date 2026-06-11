@@ -37,6 +37,8 @@ meta:
       - source: grafana/dashboard
         title: Database Overview
         url: /d/ydb_database/overview
+      - source: grafana/logging
+        title: Database Logs
       - source: grafana/dashboard/search
         tag:
           - ui-database

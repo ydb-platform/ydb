@@ -979,6 +979,13 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_agg_phases-median_/sql.yql"
         }
     ],
+    "test_sql2yql.test[agg_phases-median_interval64]": [
+        {
+            "checksum": "110d0a4907c97aa8953d36726030e65f",
+            "size": 13673,
+            "uri": "https://{canondata_backend}/1942415/e36b702921b20a39423d30afd0852fe3861f1fea/resource.tar.gz#test_sql2yql.test_agg_phases-median_interval64_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[agg_phases-median_null]": [
         {
             "checksum": "e3e6f7bc1342cbdbac17f1af4ccc27ec",
@@ -1658,6 +1665,13 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_aggregate-parsetype_constness_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-percentile_interval64]": [
+        {
+            "checksum": "0f3387bda1623ba5426e3c53860c4e58",
+            "size": 1783,
+            "uri": "https://{canondata_backend}/1937492/f1d5e0e87bad2f010ee5b41d802d13571ccf3e18/resource.tar.gz#test_sql2yql.test_aggregate-percentile_interval64_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-random_sample]": [
         {
             "checksum": "10955c7af3e2dc246dbe67ecbd7f58a1",
@@ -1677,6 +1691,13 @@
             "checksum": "8d7921e9389458950f7ebf9d47c651ce",
             "size": 1319,
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_aggregate-random_value_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[aggregate-sum_interval64]": [
+        {
+            "checksum": "3da8281e5a3825d7d4ee711f1cb216d4",
+            "size": 1764,
+            "uri": "https://{canondata_backend}/1937492/f1d5e0e87bad2f010ee5b41d802d13571ccf3e18/resource.tar.gz#test_sql2yql.test_aggregate-sum_interval64_/sql.yql"
         }
     ],
     "test_sql2yql.test[aggregate-yql-18511]": [
@@ -11003,6 +11024,13 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_weak_field-weak_member_string_copy_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-avg_interval64]": [
+        {
+            "checksum": "57ba76835ee7b26f2d9d883b7bafd84e",
+            "size": 1797,
+            "uri": "https://{canondata_backend}/1937492/f1d5e0e87bad2f010ee5b41d802d13571ccf3e18/resource.tar.gz#test_sql2yql.test_window-avg_interval64_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[window-fuse_filter_basic]": [
         {
             "checksum": "6eccfc5312a87c09bb69f589a5680c6b",
@@ -11071,6 +11099,13 @@
             "checksum": "e1ea14ebf16ad22d262fb37141f82707",
             "size": 7121,
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_window-null_type_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-percentile_interval64]": [
+        {
+            "checksum": "07879dee1cbe7bc93621aa210a6379e2",
+            "size": 1816,
+            "uri": "https://{canondata_backend}/1937492/f1d5e0e87bad2f010ee5b41d802d13571ccf3e18/resource.tar.gz#test_sql2yql.test_window-percentile_interval64_/sql.yql"
         }
     ],
     "test_sql2yql.test[window-presort_window_partition_by_mem]": [
@@ -11533,6 +11568,13 @@
             "checksum": "7ca27958f789ffb421ce6956f282b7f8",
             "size": 2051,
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_window-rank_nulls_legacy_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-sum_interval64]": [
+        {
+            "checksum": "1c1febf4779250dd0d2f2c2dc1a7e5fc",
+            "size": 1812,
+            "uri": "https://{canondata_backend}/1937492/f1d5e0e87bad2f010ee5b41d802d13571ccf3e18/resource.tar.gz#test_sql2yql.test_window-sum_interval64_/sql.yql"
         }
     ],
     "test_sql2yql.test[window-udaf_no_merge]": [
@@ -12844,6 +12886,11 @@
             "uri": "file://test_sql_format.test_agg_phases-median_/formatted.sql"
         }
     ],
+    "test_sql_format.test[agg_phases-median_interval64]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-median_interval64_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[agg_phases-median_null]": [
         {
             "uri": "file://test_sql_format.test_agg_phases-median_null_/formatted.sql"
@@ -13329,6 +13376,11 @@
             "uri": "file://test_sql_format.test_aggregate-parsetype_constness_/formatted.sql"
         }
     ],
+    "test_sql_format.test[aggregate-percentile_interval64]": [
+        {
+            "uri": "file://test_sql_format.test_aggregate-percentile_interval64_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[aggregate-random_sample]": [
         {
             "uri": "file://test_sql_format.test_aggregate-random_sample_/formatted.sql"
@@ -13342,6 +13394,11 @@
     "test_sql_format.test[aggregate-random_value]": [
         {
             "uri": "file://test_sql_format.test_aggregate-random_value_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-sum_interval64]": [
+        {
+            "uri": "file://test_sql_format.test_aggregate-sum_interval64_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-yql-18511]": [
@@ -18489,6 +18546,11 @@
             "uri": "file://test_sql_format.test_weak_field-weak_member_string_copy_/formatted.sql"
         }
     ],
+    "test_sql_format.test[window-avg_interval64]": [
+        {
+            "uri": "file://test_sql_format.test_window-avg_interval64_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[window-fuse_filter_basic]": [
         {
             "uri": "file://test_sql_format.test_window-fuse_filter_basic_/formatted.sql"
@@ -18537,6 +18599,11 @@
     "test_sql_format.test[window-null_type]": [
         {
             "uri": "file://test_sql_format.test_window-null_type_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-percentile_interval64]": [
+        {
+            "uri": "file://test_sql_format.test_window-percentile_interval64_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-presort_window_partition_by_mem]": [
@@ -18867,6 +18934,11 @@
     "test_sql_format.test[window-rank/nulls_legacy]": [
         {
             "uri": "file://test_sql_format.test_window-rank_nulls_legacy_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-sum_interval64]": [
+        {
+            "uri": "file://test_sql_format.test_window-sum_interval64_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-udaf_no_merge]": [

@@ -586,7 +586,6 @@ public:
         const TGUCSettings::TPtr& gUCSettingsPtr,
         TIntrusivePtr<TKqpCounters>& counters,
         const TActorId& sender,
-        TKqpTransactionContext* txCtx = nullptr,
         EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
     // build the compilation request.

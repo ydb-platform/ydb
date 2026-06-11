@@ -200,7 +200,6 @@ bool TKqpQueryState::TryGetFromCache(
     const TGUCSettings::TPtr& gUCSettingsPtr,
     TIntrusivePtr<TKqpCounters>& counters,
     const TActorId& sender,
-    TKqpTransactionContext* txCtx,
     EWarmupAttributionMode warmupAttribution)
 {
     if (QueryPhysicalGraph) {

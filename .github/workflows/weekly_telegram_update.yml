@@ -45,7 +45,7 @@ jobs:
           
       - name: Send trend updates to Telegram
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.YDBOT_TELEGRAM_BOT_TOKEN }}
           TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
         run: |
           # Use input period if provided, otherwise default to 'week'

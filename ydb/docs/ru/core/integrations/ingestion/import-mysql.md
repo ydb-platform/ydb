@@ -23,7 +23,6 @@
 
 | Тип MySQL | Тип в {{ ydb-short-name }} |
 |---|---|
-| **Имена таблиц и колонок** | Как в MySQL (`users`, `orders`, …) |
 | `INT`, `MEDIUMINT`, `SMALLINT`, `TINYINT` | `Int32` |
 | `BIGINT` | `Int64` |
 | `INT UNSIGNED`, `MEDIUMINT UNSIGNED`, `SMALLINT UNSIGNED`, `TINYINT UNSIGNED` | `Uint32` |
@@ -31,19 +30,29 @@
 | `TINYINT(1)` | `Bool` |
 | `FLOAT` | `Float` |
 | `DOUBLE`, `REAL` | `Double` |
-| `BIT` | `Uint64` |
+| `BIT` | `Uint64` (в том числе `BIT(1)` — оборачивается в `Uint64`, не в `Bool`) |
 | `CHAR`, `VARCHAR`, `TEXT`, `MEDIUMTEXT`, `LONGTEXT` | `Text` |
 | `ENUM`, `SET`, `JSON` | `Text` |
-| `BINARY`, `VARBINARY`, `BLOB`, `MEDIUMBLOB`, `LONGBLOB` | `String` (байты в той же колонке) |
-| `AUTO_INCREMENT` | `BigSerial` + `ALTER SEQUENCE … START WITH` из `TABLES.AUTO_INCREMENT` |
-| Вторичные `KEY` / `UNIQUE KEY` | `INDEX … GLOBAL ASYNC` / `GLOBAL UNIQUE SYNC` в `CREATE TABLE` |
-| Таблица **без первичного ключа** | **Не поддерживается** при автоматическом создании схемы — `CREATE TABLE` завершается ошибкой |
+| `BINARY`, `VARBINARY`, `BLOB`, `MEDIUMBLOB`, `LONGBLOB` | `String` (байты inline в той же колонке) |
 | `DATE` | `Date` |
-| `DATETIME`, `TIMESTAMP` | `Timestamp` |
-| `DECIMAL`, `NUMERIC` | `Decimal(22, 9)` |
+| `DATETIME`, `TIMESTAMP` | `Timestamp` — значение сохраняется как UTC. У `DATETIME` (тип без часового пояса) трактовка зависит от `time_zone` MySQL во время чтения; учитывайте это при миграции исторических данных. |
+| `DECIMAL(p, s)`, `NUMERIC(p, s)` | `Decimal(22, 9)` для всех — исходные `p`/`s` не сохраняются; значения, не помещающиеся в 22 цифры, будут потеряны |
 | `YEAR` | `Uint16` |
 | Прочие типы | `Text` (запасной вариант) |
+
+### Структурные решения {#schema-structure}
+
+| Элемент схемы MySQL | Решение mysql2ydb |
+|---|---|
+| Имена таблиц и колонок | Как в MySQL (`users`, `orders`, …); должны быть допустимыми идентификаторами {{ ydb-short-name }} |
+| `AUTO_INCREMENT` | `BigSerial` + `ALTER SEQUENCE … START WITH` из `TABLES.AUTO_INCREMENT` |
+| Вторичные `KEY` / `UNIQUE KEY` | `INDEX … GLOBAL ASYNC` / `GLOBAL UNIQUE SYNC` в `CREATE TABLE` |
+| Таблица без `PRIMARY KEY` | Не поддерживается при автоматическом создании схемы — см. [Таблицы без первичного ключа](#tables-without-pk) |
 | Партиционирование | Только `AUTO_PARTITIONING_BY_LOAD` |
+
+### Вторичные индексы {#secondary-indexes}
+
+Неуникальные ключи MySQL становятся `INDEX … GLOBAL ASYNC`, уникальные (кроме первичного) — `INDEX … GLOBAL UNIQUE SYNC`. Таблицы с синхронными уникальными индексами при загрузке данных автоматически переключаются на транзакционный `UPSERT`, поскольку `BulkUpsert` поддерживает только асинхронные индексы.
 
 ### Примеры {#schema-examples}
 
@@ -72,26 +81,9 @@ ALTER TABLE my_table ADD COLUMN id BIGINT AUTO_INCREMENT PRIMARY KEY FIRST;
 
 или назначить `PRIMARY KEY` на существующую колонку (или набор колонок), если он действительно уникален.
 
-Найти таблицы без первичного ключа:
-
-```sql
-SELECT t.TABLE_NAME
-FROM information_schema.TABLES t
-WHERE t.TABLE_SCHEMA = DATABASE()
-  AND t.TABLE_TYPE = 'BASE TABLE'
-  AND NOT EXISTS (
-    SELECT 1 FROM information_schema.STATISTICS s
-    WHERE s.TABLE_SCHEMA = t.TABLE_SCHEMA
-      AND s.TABLE_NAME = t.TABLE_NAME
-      AND s.INDEX_NAME = 'PRIMARY'
-  );
-```
-
-Если добавить `PRIMARY KEY` в MySQL нельзя, но схему в {{ ydb-short-name }} можно подготовить вручную, создайте таблицу с нужным ключом сами и запустите утилиту с флагом `-data-only`. Чтение из MySQL при отсутствии `PRIMARY KEY` в метаданных пойдёт через `LIMIT/OFFSET` — это медленнее постраничного чтения по ключу. Ключевые колонки в {{ ydb-short-name }} должны присутствовать среди колонок MySQL.
+Если добавить `PRIMARY KEY` в MySQL нельзя, но схему в {{ ydb-short-name }} можно подготовить вручную, создайте таблицу с нужным ключом сами и запустите утилиту с флагом `-data-only`. Чтение из MySQL при отсутствии `PRIMARY KEY` в метаданных пойдёт через `LIMIT/OFFSET`: на каждой странице MySQL заново сканирует все предыдущие строки, поэтому время миграции растёт квадратично от размера таблицы — для больших таблиц лучше предварительно добавить ключ в MySQL. Ключевые колонки в {{ ydb-short-name }} должны присутствовать среди колонок MySQL.
 
 Если нужен автоматический импорт без ключа в MySQL, рассмотрите [YDB Importer](#ydb-importer-comparison) — он добавляет синтетическую колонку `ydb_synth_key` (SHA-256 по строке). mysql2ydb синтетические ключи не создаёт.
-
-**Вторичные индексы** — неуникальные ключи становятся `GLOBAL ASYNC`, уникальные (кроме PK) — `GLOBAL UNIQUE SYNC`. Таблицы с синхронными уникальными индексами при загрузке данных автоматически переключаются на транзакционный `UPSERT`, поскольку `BulkUpsert` поддерживает только асинхронные индексы.
 
 ## Эффективный доступ к MySQL {#efficient-access}
 
@@ -162,7 +154,7 @@ ssl-mode = REQUIRED
 ssl-verify = 0
 ```
 
-(или `ssl=1` и `ssl-verify=0`).
+Альтернативный вариант — `ssl=1` и `ssl-verify=0`.
 
 Минимальный запуск при наличии `~/.my.cnf` (обязателен только `-ydb`):
 
@@ -173,7 +165,7 @@ ssl-verify = 0
 С явным DSN MySQL (игнорирует `~/.my.cnf`):
 
 ```bash
-./mysql2ydb -mysql "user:password@tcp(localhost:3306)/mydb" -ydb "grpc://localhost:2136" -batch-size 10000
+./mysql2ydb -mysql "user:$MYSQL_PASSWORD@tcp(localhost:3306)/mydb" -ydb "grpc://localhost:2136" -batch-size 10000
 ```
 
 ### Флаги командной строки {#flags}
@@ -221,7 +213,7 @@ ssl-verify = 0
 
 По умолчанию данные записываются через `BulkUpsert`. Для таблиц с синхронными уникальными индексами утилита автоматически переключается на транзакционный `UPSERT`, поскольку `BulkUpsert` поддерживает только асинхронные индексы.
 
-Вызовы YDB SDK помечаются опцией **`WithIdempotent()`** — при сетевом сбое операцию можно безопасно повторить. Отсутствие дубликатов при перезапуске миграции обеспечивается перезаписью строк по ключу и сохранением прогресса в служебной таблице (см. [Возобновление](#features)).
+Запросы к {{ ydb-short-name }} помечены как идемпотентные, поэтому SDK автоматически повторяет их при сетевых сбоях. Отсутствие дубликатов при перезапуске миграции обеспечивается перезаписью строк по ключу и сохранением прогресса в служебной таблице (см. раздел [Возможности](#features), пункт «Возобновление»).
 
 ## Сравнение с YDB Importer {#ydb-importer-comparison}
 
@@ -229,7 +221,7 @@ ssl-verify = 0
 
 **mysql2ydb** решает более узкую задачу — перенос базы MySQL «один к одному» одним бинарным файлом, без JVM. Для миграции только из MySQL с большими таблицами достаточно `~/.my.cnf` и флага `-ydb`; прогресс сохраняется в служебной таблице {{ ydb-short-name }}.
 
-| | [ydb-importer](import-jdbc.md) | **mysql2ydb** |
+| | [YDB Importer](import-jdbc.md) | **mysql2ydb** |
 |---|---|---|
 | Среда выполнения | Java + JDBC-драйверы + XML-конфигурация | Один бинарный файл на Go, нативный протокол MySQL |
 | Область применения | Множество JDBC-источников | Только MySQL |

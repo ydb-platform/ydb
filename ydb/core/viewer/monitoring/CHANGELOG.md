@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ## [15.6.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v15.5.1...v15.6.0) (2026-05-12)
 
 
@@ -11,10 +12,14 @@
 * **Header:** redesign database links ([#3863](https://github.com/ydb-platform/ydb-embedded-ui/issues/3863)) ([a438815](https://github.com/ydb-platform/ydb-embedded-ui/commit/a4388150bd4a3a5bf03ae53ccf37ec3772068678))
 * redesign disk popup actions ([#3873](https://github.com/ydb-platform/ydb-embedded-ui/issues/3873)) ([a8ef081](https://github.com/ydb-platform/ydb-embedded-ui/commit/a8ef081763f97dc1f47a0eac3be6ceb2c22f22eb))
 * support custom actions for Node tooltip ([#3882](https://github.com/ydb-platform/ydb-embedded-ui/issues/3882)) ([649cb9a](https://github.com/ydb-platform/ydb-embedded-ui/commit/649cb9ad31866d0ccb34cf26b3d63b85b8ecf179))
+=======
+## [14.5.0-hotfix.3](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.5.0...v14.5.0-hotfix.3) (2026-06-11)
+>>>>>>> 7416ae3222d (build: refresh Embedded UI v14.5.0-hotfix.3)
 
 
 ### Bug Fixes
 
+<<<<<<< HEAD
 * diagnostics timeout ([#3862](https://github.com/ydb-platform/ydb-embedded-ui/issues/3862)) ([7dcb392](https://github.com/ydb-platform/ydb-embedded-ui/commit/7dcb392855b25466312faa02b00b87681f978f8e))
 * **Healthcheck:** use SuccessOperation illustration for no-issues ([#3870](https://github.com/ydb-platform/ydb-embedded-ui/issues/3870)) ([f7c34ac](https://github.com/ydb-platform/ydb-embedded-ui/commit/f7c34acdcdada98bfec347ce469c860a2bc89b18))
 
@@ -318,6 +323,10 @@
 * **Storage:** do not add history entry on type param ([#3418](https://github.com/ydb-platform/ydb-embedded-ui/issues/3418)) ([b1714c7](https://github.com/ydb-platform/ydb-embedded-ui/commit/b1714c7779cbb741a9c7347087090868b85eeed6))
 * **VDisk:** display donor and vdisk popups separately ([#3444](https://github.com/ydb-platform/ydb-embedded-ui/issues/3444)) ([41d6c0a](https://github.com/ydb-platform/ydb-embedded-ui/commit/41d6c0a11ca260e8ffbcbb78f85c1546fdf24e48))
 * **VDiskPopup:** prevent NaN replication progress ([#3443](https://github.com/ydb-platform/ydb-embedded-ui/issues/3443)) ([f5c70c9](https://github.com/ydb-platform/ydb-embedded-ui/commit/f5c70c9d337fd522a0f3b142b23c054829c0f013))
+=======
+* **PDisk, VDisk, Group:** do not use colorized progress for size ([#3953](https://github.com/ydb-platform/ydb-embedded-ui/issues/3953)) ([33ae59a](https://github.com/ydb-platform/ydb-embedded-ui/commit/33ae59a44f3e8e5005f541b163bce9bb4027ac94))
+* **PDiskSpaceDistribution:** slot height calculation ([#3897](https://github.com/ydb-platform/ydb-embedded-ui/issues/3897)) ([829f171](https://github.com/ydb-platform/ydb-embedded-ui/commit/829f1710b15ad571f999f817b953643edd28536f))
+>>>>>>> 7416ae3222d (build: refresh Embedded UI v14.5.0-hotfix.3)
 
 ## [14.5.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.4.4...v14.5.0) (2026-02-02)
 

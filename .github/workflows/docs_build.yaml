@@ -12,6 +12,38 @@ on:
         type: string
 
 jobs:
+  # Privileged job: needs a write token, so it must never check out or run PR code.
+  add-label:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Add documentation label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map((label) => label.name);
+            if (labels.includes('documentation')) {
+              core.info('Label "documentation" is already present, skipping');
+              return;
+            }
+
+            try {
+              await github.rest.issues.addLabels({
+                issue_number: context.payload.pull_request.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['documentation']
+              });
+            } catch (error) {
+              // Labeling is best-effort (fallback for the doc-review queue);
+              // it must not turn the docs workflow red.
+              core.warning(`Failed to add "documentation" label: ${error.message}`);
+            }
+
+  # Unprivileged job: builds untrusted PR code, so it must run with a read-only token.
   build-docs:
     if: |
       github.event_name == 'workflow_dispatch' || 
@@ -23,31 +55,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
     steps:
-      - name: Add documentation label
-        if: github.event_name == 'pull_request_target'
-        continue-on-error: true
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const labels = context.payload.pull_request.labels.map((label) => label.name);
-            if (labels.includes('documentation')) {
-              core.info('Label "documentation" is already present, skipping');
-              return;
-            }
-
-            await github.rest.issues.addLabels({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['documentation']
-            });
-
       - name: Checkout
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
+          persist-credentials: false
           
       - name: Get commit SHA
         id: sha

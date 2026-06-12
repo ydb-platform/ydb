@@ -218,6 +218,41 @@ class ShardingToolsTest(unittest.TestCase):
             )
             self.assertEqual(data["total_suites"], 0)
 
+    def test_extract_treats_missing_size_as_small(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            list_log = Path(tmp) / "list.log"
+            list_log.write_text(
+                "\n".join(
+                    [
+                        "ydb/core/log_backend/ut <unittest> for default-linux-x86_64-debug",
+                        "  foo.cpp:Bar::Baz",
+                        "  foo.cpp:Bar::Qux",
+                        "",
+                        "Total 1 suites",
+                        "Total 2 tests",
+                        "Ok",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            summary_path = Path(tmp) / "summary.json"
+            _run(
+                "extract_suites_from_ya_test_list.py",
+                str(list_log),
+                "--target-prefix",
+                "ydb/core",
+                "--summary-json",
+                str(summary_path),
+            )
+            data = json.loads(summary_path.read_text(encoding="utf-8"))
+            suite = data["suites"][0]
+            self.assertEqual(suite["path"], "ydb/core/log_backend/ut")
+            self.assertEqual(suite["sizes"], ["small"])
+            self.assertEqual(suite["small_test_count"], 2)
+            self.assertEqual(suite["medium_test_count"], 0)
+            self.assertEqual(suite["weight"], 120)
+
     def test_filter_keeps_intersecting_suites(self):
         with tempfile.TemporaryDirectory() as tmp:
             summary = {

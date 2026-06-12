@@ -74,10 +74,11 @@ class SuiteInfo:
 
 
 def _increment_test_count(suite: SuiteInfo, active_sizes: set[str]) -> None:
-    if active_sizes == {"small"}:
-        suite.small_test_count += 1
-    else:
+    if "medium" in active_sizes:
         suite.medium_test_count += 1
+    else:
+        # No [size:*] tag defaults to small (same as ya SIZE(SMALL) semantics).
+        suite.small_test_count += 1
 
 
 def parse_ya_test_list(
@@ -193,7 +194,7 @@ def build_summary(
             {
                 "path": suite.path,
                 "test_type": suite.test_type,
-                "sizes": sorted(suite.sizes),
+                "sizes": sorted(suite.sizes) if suite.sizes else ["small"],
                 "small_test_count": suite.small_test_count,
                 "medium_test_count": suite.medium_test_count,
                 "test_count": suite.test_count,

@@ -137,7 +137,7 @@ const TLogicalTypePtr& TDictLogicalType::GetValue() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTaggedLogicalType::GetTag() const
+const std::string& TTaggedLogicalType::GetTag() const
 {
     return Tag_;
 }

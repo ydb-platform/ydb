@@ -1,9 +1,11 @@
 import os
 
 from _common import sort_by_keywords
+from ymake import macro, Unit
 
 
-def oncopy(unit, *args):
+@macro
+def COPY(unit: Unit, *args: tuple[str, ...]):
     keywords = {
         'RESULT': 1,
         'KEEP_DIR_STRUCT': 0,

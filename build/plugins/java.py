@@ -38,7 +38,8 @@ def extract_macro_calls2(unit, macro_value_name):
     return calls
 
 
-def onjava_module(unit, *args):
+@ymake.macro
+def JAVA_MODULE(unit: ymake.Unit, *args: tuple[str, ...]):
     args_delim = unit.get('ARGS_DELIM')
 
     if unit.get('YA_IDE_IDEA') != 'yes':
@@ -141,12 +142,14 @@ def onjava_module(unit, *args):
     unit.set_property(['JAVA_DART_DATA', dart])
 
 
-def on_add_java_style_checks(unit, *args):
+@ymake.macro
+def _ADD_JAVA_STYLE_CHECKS(unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get('LINT_LEVEL_VALUE') != "none" and common.get_no_lint_value(unit) != 'none':
         unit.onadd_check(['JAVA_STYLE', unit.get('LINT_LEVEL_VALUE')] + list(args))
 
 
-def on_add_kotlin_style_checks(unit, *args):
+@ymake.macro
+def _ADD_KOTLIN_STYLE_CHECKS(unit: ymake.Unit, *args: tuple[str, ...]):
     """
     ktlint can be disabled using NO_LINT() and NO_LINT(ktlint)
     """
@@ -155,7 +158,8 @@ def on_add_kotlin_style_checks(unit, *args):
             unit.onadd_check(['ktlint'] + list(args))
 
 
-def on_add_classpath_clash_check(unit, *args):
+@ymake.macro
+def _ADD_CLASSPATH_CLASH_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
     jdeps_val = (unit.get('CHECK_JAVA_DEPS_VALUE') or '').lower()
     if jdeps_val and jdeps_val not in ('yes', 'no', 'strict'):
         ymake.report_configure_error('CHECK_JAVA_DEPS: "yes", "no" or "strict" required')
@@ -163,7 +167,8 @@ def on_add_classpath_clash_check(unit, *args):
         unit.onjava_test_deps(jdeps_val)
 
 
-def on_add_detekt_report_check(unit, *args):
+@ymake.macro
+def _ADD_DETEKT_REPORT_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get('WITH_KOTLIN_VALUE') == 'yes' and unit.get('WITH_KOTLINC_PLUGIN_DETEKT') == 'yes':
         unit.onadd_check(['detekt.report'] + list(args))
 
@@ -171,7 +176,8 @@ def on_add_detekt_report_check(unit, *args):
 # Ymake java modules related macros
 
 
-def on_check_java_srcdir(unit, *args):
+@ymake.macro
+def _CHECK_JAVA_SRCDIR(unit: ymake.Unit, *args: tuple[str, ...]):
     args = list(args)
     if 'SKIP_CHECK_SRCDIR' in args:
         return
@@ -189,7 +195,8 @@ def on_check_java_srcdir(unit, *args):
                 unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', srcdir[3:]))
 
 
-def on_fill_jar_copy_resources_cmd(unit, *args):
+@ymake.macro
+def _FILL_JAR_COPY_RESOURCES_CMD(unit: ymake.Unit, *args: tuple[str, ...]):
     if len(args) == 4:
         varname, srcdir, base_classes_dir, reslist = tuple(args)
         package = ''
@@ -203,7 +210,8 @@ def on_fill_jar_copy_resources_cmd(unit, *args):
     unit.set([varname, var])
 
 
-def on_fill_jar_gen_srcs(unit, *args):
+@ymake.macro
+def _FILL_JAR_GEN_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
     varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, res_list = tuple(args[0:7])
     resolved_srcdir = unit.resolve_arc_path(srcdir)
     if not resolved_srcdir.startswith('$') or resolved_srcdir.startswith('$S'):
@@ -226,7 +234,8 @@ def on_fill_jar_gen_srcs(unit, *args):
     unit.set([varname, var])
 
 
-def on_check_run_java_prog_classpath(unit, *args):
+@ymake.macro
+def _CHECK_RUN_JAVA_PROG_CLASSPATH(unit: ymake.Unit, *args: tuple[str, ...]):
     if len(args) != 1:
         ymake.report_configure_error(
             'multiple CLASSPATH elements in RUN_JAVA_PROGRAM invocation no more supported. Use JAVA_RUNTIME_PEERDIR on the JAVA_PROGRAM module instead'
@@ -285,12 +294,14 @@ def parse_words(words):
         yield o, templates[min(i, len(templates) - 1)], props
 
 
-def ongenerate_script(unit, *args):
+@ymake.macro
+def GENERATE_SCRIPT(unit: ymake.Unit, *args: tuple[str, ...]):
     for out, tmpl, props in parse_words(list(args)):
         unit.on_add_gen_java_script([out, tmpl] + list(props))
 
 
-def on_jdk_version_macro_check(unit, *args):
+@ymake.macro
+def _JDK_VERSION_MACRO_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
     if len(args) != 1:
         unit.message(["error", "Invalid syntax. Single argument required."])
     jdk_version = args[0]
@@ -355,7 +366,8 @@ def _maven_coords_for_project(unit, project_dir):
     return '{}:{}:{}:{}'.format(g, a, v, c)
 
 
-def on_setup_maven_export_coords_if_need(unit, *args):
+@ymake.macro
+def _SETUP_MAVEN_EXPORT_COORDS_IF_NEED(unit: ymake.Unit, *args: tuple[str, ...]):
     if not unit.enabled('MAVEN_EXPORT'):
         return
 
@@ -369,7 +381,8 @@ def _get_classpath(unit, dir):
         return 'project(\\":{}\\")'.format(dir.replace('/', ':'))
 
 
-def on_setup_project_coords_if_needed(unit, *args):
+@ymake.macro
+def _SETUP_PROJECT_COORDS_IF_NEEDED(unit: ymake.Unit, *args: tuple[str, ...]):
     if not unit.enabled('EXPORT_GRADLE'):
         return
 
@@ -377,7 +390,8 @@ def on_setup_project_coords_if_needed(unit, *args):
     unit.set(['EXPORT_GRADLE_CLASSPATH', _get_classpath(unit, project_dir)])
 
 
-def on_java_resource_tar_validate_extract_root(unit, extract_root):
+@ymake.macro
+def _JAVA_RESOURCE_TAR_VALIDATE_EXTRACT_ROOT(unit: ymake.Unit, extract_root: str):
     if extract_root == '<required>':
         ymake.report_configure_error(
             'Macro JAVA_RESOURCE_TAR requires to set EXTRACT_ROOT. '
@@ -385,7 +399,8 @@ def on_java_resource_tar_validate_extract_root(unit, extract_root):
         )
 
 
-def onjavac_flags(unit, *args):
+@ymake.macro
+def JAVAC_FLAGS(unit: ymake.Unit, *args: tuple[str, ...]):
     if '-proc:full' in args or '-proc:only' in args:
         ymake.report_configure_error(
             'Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses'

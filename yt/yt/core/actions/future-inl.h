@@ -2536,6 +2536,7 @@ private:
     TResultHolder ResultHolder_;
 
     std::atomic<int> ResponseCount_ = 0;
+    std::atomic<int> FillCount_ = 0;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ErrorsLock_);
     std::vector<TError> Errors_;
@@ -2569,13 +2570,16 @@ private:
             return;
         }
 
-        if (responseIndex == N_ - 1) {
+        // responseIndex reflects reservation order, not fill order, so the N_-th reserver
+        // may run before a lower-indexed slot is written. Trigger on the count of filled
+        // slots instead, so all writes are complete and visible.
+        if (++FillCount_ == N_) {
             if (ResultHolder_.TrySetPromise(Promise_)) {
                 this->OnCombinerFinished();
             }
 
             if (Options_.CancelInputOnShortcut &&
-                responseIndex < std::ssize(this->Futures_) - 1 &&
+                N_ < std::ssize(this->Futures_) &&
                 this->TryAcquireFuturesCancelLatch())
             {
                 this->CancelFutures(TError(

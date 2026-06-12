@@ -73,11 +73,15 @@ private:
                     }
                 }
                 if (groupsToDelete.empty()) {
-                    Sleep(TimeToSleepBetweenGroupDeletionRequests_);
+                    with_lock(Mutex_) {
+                        CondVar_.WaitD(Mutex_, TInstant::Now() + TimeToSleepBetweenGroupDeletionRequests_);
+                    }
                     continue;
                 }
                 TableDataService_->RegisterDeletion(groupsToDelete).GetValueSync();
-                Sleep(TimeToSleepBetweenGroupDeletionRequests_);
+                with_lock(Mutex_) {
+                    CondVar_.WaitD(Mutex_, TInstant::Now() + TimeToSleepBetweenGroupDeletionRequests_);
+                }
             }
         };
         ThreadPool_->SafeAddFunc(runExistingGroupDeleteRequestsFunc);

@@ -67,6 +67,7 @@ ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine2
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine3
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine4
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine5
+ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine6
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine7
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStream
@@ -517,6 +518,7 @@ ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/sys_view/ut ShowCreateSystemView.TableColumnAlterColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
+ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_ColumnTable
@@ -800,6 +802,7 @@ ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write

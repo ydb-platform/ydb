@@ -5,10 +5,14 @@ set -euo pipefail
 TARGET="${1:?usage: list_tests_for_shard_plan.sh TARGET OUTPUT_LOG}"
 OUTPUT="${2:?usage: list_tests_for_shard_plan.sh TARGET OUTPUT_LOG}"
 BUILD_PRESET="${BUILD_PRESET:-relwithdebinfo}"
+TEST_THREADS="${TEST_THREADS:-52}"
+LINK_THREADS="${LINK_THREADS:-12}"
 
 YA_OPTS=(
   --test-size small
   --test-size medium
+  --test-threads "$TEST_THREADS"
+  --link-threads "$LINK_THREADS"
   -DDEBUGINFO_LINES_ONLY
   --cache-tests
 )
@@ -47,7 +51,7 @@ if [ -n "${REMOTE_CACHE_URL:-}" ] && [ -n "${BAZEL_REMOTE_PASSWORD_FILE:-}" ] &&
   )
 fi
 
-echo "Listing tests for shard plan: target=$TARGET preset=$BUILD_PRESET" >&2
+echo "Listing tests for shard plan: target=$TARGET preset=$BUILD_PRESET threads=$TEST_THREADS link=$LINK_THREADS" >&2
 set +e
 ./ya test -L "${YA_OPTS[@]}" "$TARGET" 2>&1 | tee "$OUTPUT"
 rc=${PIPESTATUS[0]}

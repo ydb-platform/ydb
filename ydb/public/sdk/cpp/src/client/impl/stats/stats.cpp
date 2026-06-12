@@ -5,39 +5,37 @@
 namespace NYdb::inline Dev {
 namespace NSdkStats {
 
-using std::string;
-
 const NMonitoring::TLabel SESSIONS_ON_KQP_HOST_LABEL = NMonitoring::TLabel {"sensor", "SessionsByYdbHost"};
 const NMonitoring::TLabel TRANSPORT_ERRORS_BY_HOST_LABEL = NMonitoring::TLabel {"sensor", "TransportErrorsByYdbHost"};
 const NMonitoring::TLabel GRPC_INFLIGHT_BY_HOST_LABEL = NMonitoring::TLabel {"sensor", "Grpc/InFlightByYdbHost"};
 
-void TStatCollector::IncSessionsOnHost(const string& host) {
+void TStatCollector::IncSessionsOnHost(std::string_view host) {
     if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
-        ptr->IntGauge({ DatabaseLabel_, SESSIONS_ON_KQP_HOST_LABEL, {"YdbHost", host} })->Inc();
+        ptr->IntGauge({ DatabaseLabel_, SESSIONS_ON_KQP_HOST_LABEL, {"YdbHost", std::string(host)} })->Inc();
     }
 }
 
-void TStatCollector::DecSessionsOnHost(const string& host) {
+void TStatCollector::DecSessionsOnHost(std::string_view host) {
     if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
-        ptr->IntGauge({ DatabaseLabel_, SESSIONS_ON_KQP_HOST_LABEL, {"YdbHost", host} })->Dec();
+        ptr->IntGauge({ DatabaseLabel_, SESSIONS_ON_KQP_HOST_LABEL, {"YdbHost", std::string(host)} })->Dec();
     }
 }
 
-void TStatCollector::IncTransportErrorsByHost(const string& host) {
+void TStatCollector::IncTransportErrorsByHost(std::string_view host) {
     if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
-        ptr->Rate({ DatabaseLabel_, TRANSPORT_ERRORS_BY_HOST_LABEL, {"YdbHost", host} })->Inc();
+        ptr->Rate({ DatabaseLabel_, TRANSPORT_ERRORS_BY_HOST_LABEL, {"YdbHost", std::string(host)} })->Inc();
     }
 }
 
-void TStatCollector::IncGRpcInFlightByHost(const string& host) {
+void TStatCollector::IncGRpcInFlightByHost(std::string_view host) {
     if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
-        ptr->IntGauge({ DatabaseLabel_, GRPC_INFLIGHT_BY_HOST_LABEL, {"YdbHost", host} })->Inc();
+        ptr->IntGauge({ DatabaseLabel_, GRPC_INFLIGHT_BY_HOST_LABEL, {"YdbHost", std::string(host)} })->Inc();
     }
 }
 
-void TStatCollector::DecGRpcInFlightByHost(const string& host) {
+void TStatCollector::DecGRpcInFlightByHost(std::string_view host) {
     if (TMetricRegistry* ptr = MetricRegistryPtr_.Get()) {
-        ptr->IntGauge({ DatabaseLabel_, GRPC_INFLIGHT_BY_HOST_LABEL, {"YdbHost", host} })->Dec();
+        ptr->IntGauge({ DatabaseLabel_, GRPC_INFLIGHT_BY_HOST_LABEL, {"YdbHost", std::string(host)} })->Dec();
     }
 }
 

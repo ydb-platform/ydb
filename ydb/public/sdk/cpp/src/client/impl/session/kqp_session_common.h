@@ -8,11 +8,12 @@
 #include <util/system/spinlock.h>
 
 #include <functional>
+#include <string_view>
 
 namespace NYdb::inline Dev {
 
 ////////////////////////////////////////////////////////////////////////////////
-std::uint64_t GetNodeIdFromSession(const std::string& sessionId);
+std::uint64_t GetNodeIdFromSession(std::string_view sessionId);
 
 class TKqpSessionCommon;
 

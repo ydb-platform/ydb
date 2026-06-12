@@ -5,19 +5,20 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace NYdb::inline Dev::NObservability {
 
 class TRequestObservation {
 public:
-    TRequestObservation(const std::string& ydbClientType
+    TRequestObservation(std::string_view ydbClientType
         , NSdkStats::TStatCollector::TClientOperationStatCollector* operationCollector
         , std::shared_ptr<NTrace::ITracer> tracer
-        , const std::string& operationName
+        , std::string_view operationName
         , const std::shared_ptr<TDbDriverState>& dbDriverState
     );
 
-    void End(EStatus status, const std::string& endpoint = "") noexcept;
+    void End(EStatus status, std::string_view endpoint = {}) noexcept;
     void EndWithClientInternalError() noexcept;
 
 private:

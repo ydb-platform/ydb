@@ -49,10 +49,10 @@ TRunArgs MakeRunArgs() {
     return {std::move(driver), registry, std::move(database), endpoint, std::move(host), port};
 }
 
-NMetrics::TLabels FailedLabels(const std::string& dbNamespace
-    , const std::string& operation
+NMetrics::TLabels FailedLabels(std::string_view dbNamespace
+    , std::string_view operation
     , EStatus status
-    , const std::string& serverAddress
+    , std::string_view serverAddress
     , std::uint16_t serverPort
 ) {
     NMetrics::TLabels labels = {
@@ -70,9 +70,9 @@ NMetrics::TLabels FailedLabels(const std::string& dbNamespace
     return labels;
 }
 
-NMetrics::TLabels DurationLabels(const std::string& dbNamespace
-    , const std::string& operation
-    , const std::string& serverAddress
+NMetrics::TLabels DurationLabels(std::string_view dbNamespace
+    , std::string_view operation
+    , std::string_view serverAddress
     , std::uint16_t serverPort
 ) {
     NMetrics::TLabels labels = {
@@ -90,8 +90,8 @@ NMetrics::TLabels DurationLabels(const std::string& dbNamespace
 }
 
 NMetrics::TLabels QueryPoolLabels(
-    const std::string& database
-    , const std::string& endpoint
+    std::string_view database
+    , std::string_view endpoint
 ) {
     return {
         {"ydb.query.session.pool.name", database + "@" + endpoint},
@@ -99,9 +99,9 @@ NMetrics::TLabels QueryPoolLabels(
 }
 
 NMetrics::TLabels QueryCountLabels(
-    const std::string& database
-    , const std::string& endpoint
-    , const std::string& state
+    std::string_view database
+    , std::string_view endpoint
+    , std::string_view state
 ) {
     auto labels = QueryPoolLabels(database, endpoint);
     labels["ydb.query.session.state"] = state;

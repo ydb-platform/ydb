@@ -12,6 +12,6 @@ struct TConnectionInfo {
     bool EnableSsl = false;
 };
 
-TConnectionInfo ParseConnectionString(const std::string& connectionString);
+TConnectionInfo ParseConnectionString(std::string_view connectionString);
 
 } // namespace NYdb

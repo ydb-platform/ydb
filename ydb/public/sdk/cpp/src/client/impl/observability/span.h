@@ -22,24 +22,24 @@ namespace NYdb::inline Dev::NObservability {
 class TRequestSpan {
 public:
     static std::shared_ptr<TRequestSpan> Create(
-        const std::string& ydbClientType
+        std::string_view ydbClientType
         , std::shared_ptr<NTrace::ITracer> tracer
-        , const std::string& requestName
-        , const std::string& discoveryEndpoint
-        , const std::string& database
+        , std::string_view requestName
+        , std::string_view discoveryEndpoint
+        , std::string_view database
         , const TLog& log
         , NTrace::ESpanKind kind = NTrace::ESpanKind::CLIENT
         , const std::shared_ptr<TRequestSpan>& parent = nullptr
     );
 
     static std::shared_ptr<TRequestSpan> CreateForClientRetry(
-        const std::string& ydbClientType
+        std::string_view ydbClientType
         , std::shared_ptr<NTrace::ITracer> tracer
         , const std::shared_ptr<TDbDriverState>& dbDriverState
     );
 
     static std::shared_ptr<TRequestSpan> CreateForRetryAttempt(
-        const std::string& ydbClientType
+        std::string_view ydbClientType
         , std::shared_ptr<NTrace::ITracer> tracer
         , const std::shared_ptr<TDbDriverState>& dbDriverState
         , std::uint32_t attempt
@@ -52,22 +52,22 @@ public:
     TRequestSpan(const TRequestSpan&) = delete;
     TRequestSpan& operator=(const TRequestSpan&) = delete;
 
-    void SetPeerEndpoint(const std::string& endpoint) noexcept;
-    void SetPeerEndpoint(const std::string& endpoint, std::uint64_t nodeId, const std::string& location) noexcept;
+    void SetPeerEndpoint(std::string_view endpoint) noexcept;
+    void SetPeerEndpoint(std::string_view endpoint, std::uint64_t nodeId, std::string_view location) noexcept;
     void AddEvent(std::string_view name, NTrace::TAttributes attributes = {}) noexcept;
     std::unique_ptr<NTrace::IScope> Activate() noexcept;
     void SetRetryCount(std::uint32_t count) noexcept;
     void SetRetryAttributes(std::uint32_t attempt, std::int64_t backoffMs) noexcept;
 
     void End(EStatus status) noexcept;
-    void EndWithException(const std::string& exceptionType, const std::string& message) noexcept;
+    void EndWithException(std::string_view exceptionType, std::string_view message) noexcept;
 
 private:
-    TRequestSpan(const std::string& ydbClientType
+    TRequestSpan(std::string_view ydbClientType
         , std::shared_ptr<NTrace::ITracer> tracer
-        , const std::string& requestName
-        , const std::string& discoveryEndpoint
-        , const std::string& database
+        , std::string_view requestName
+        , std::string_view discoveryEndpoint
+        , std::string_view database
         , const TLog& log
         , NTrace::ESpanKind kind
         , NTrace::ISpan* parent

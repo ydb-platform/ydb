@@ -686,10 +686,10 @@ public:
         }
     }
 
-    std::shared_ptr<ICounter> Counter(const std::string& name,
+    std::shared_ptr<ICounter> Counter(std::string_view name,
                                        const TLabels& labels,
-                                       const std::string& description,
-                                       const std::string& unit) override {
+                                       std::string_view description,
+                                       std::string_view unit) override {
         const auto key = MakeKey(name, labels);
         std::lock_guard<std::mutex> lock(WrappersLock_);
         auto& slot = CounterWrappers_[key];
@@ -701,10 +701,10 @@ public:
         return slot;
     }
 
-    std::shared_ptr<IGauge> Gauge(const std::string& name,
+    std::shared_ptr<IGauge> Gauge(std::string_view name,
                                    const TLabels& labels,
-                                   const std::string& description,
-                                   const std::string& unit) override {
+                                   std::string_view description,
+                                   std::string_view unit) override {
         const auto key = MakeKey(name, labels);
         std::lock_guard<std::mutex> lock(WrappersLock_);
         auto& slot = GaugeWrappers_[key];
@@ -715,11 +715,11 @@ public:
         return slot;
     }
 
-    std::shared_ptr<IHistogram> Histogram(const std::string& name,
+    std::shared_ptr<IHistogram> Histogram(std::string_view name,
                                            const std::vector<double>& buckets,
                                            const TLabels& labels,
-                                           const std::string& description,
-                                           const std::string& unit) override {
+                                           std::string_view description,
+                                           std::string_view unit) override {
         const auto key = MakeKey(name, labels);
         std::lock_guard<std::mutex> lock(WrappersLock_);
         auto& slot = HistogramWrappers_[key];
@@ -733,7 +733,7 @@ public:
     }
 
 private:
-    static std::string MakeKey(const std::string& name, const TLabels& labels) {
+    static std::string MakeKey(std::string_view name, const TLabels& labels) {
         std::string key;
         key.reserve(name.size() + labels.size() * 24);
         key.append(name);

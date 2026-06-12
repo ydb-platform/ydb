@@ -7,6 +7,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace NYdb::NTests {
@@ -83,26 +84,26 @@ public:
         return StatusDescription_;
     }
 
-    std::string GetStringAttribute(const std::string& key) const {
+    std::string GetStringAttribute(std::string_view key) const {
         std::lock_guard lock(Mutex_);
-        auto it = StringAttributes_.find(key);
+        auto it = StringAttributes_.find(std::string(key));
         return it != StringAttributes_.end() ? it->second : "";
     }
 
-    bool HasStringAttribute(const std::string& key) const {
+    bool HasStringAttribute(std::string_view key) const {
         std::lock_guard lock(Mutex_);
-        return StringAttributes_.contains(key);
+        return StringAttributes_.contains(std::string(key));
     }
 
-    int64_t GetIntAttribute(const std::string& key) const {
+    int64_t GetIntAttribute(std::string_view key) const {
         std::lock_guard lock(Mutex_);
-        auto it = IntAttributes_.find(key);
+        auto it = IntAttributes_.find(std::string(key));
         return it != IntAttributes_.end() ? it->second : 0;
     }
 
-    bool HasIntAttribute(const std::string& key) const {
+    bool HasIntAttribute(std::string_view key) const {
         std::lock_guard lock(Mutex_);
-        return IntAttributes_.contains(key);
+        return IntAttributes_.contains(std::string(key));
     }
 
     std::vector<TFakeEvent> GetEvents() const {
@@ -125,20 +126,20 @@ private:
 class TFakeTracer : public NTrace::ITracer {
 public:
     std::shared_ptr<NTrace::ISpan> StartSpan(
-        const std::string& name,
+        std::string_view name,
         NTrace::ESpanKind kind
     ) override {
         return StartSpan(name, kind, /*parent=*/ nullptr);
     }
 
     std::shared_ptr<NTrace::ISpan> StartSpan(
-        const std::string& name,
+        std::string_view name,
         NTrace::ESpanKind kind,
         NTrace::ISpan* parent
     ) override {
         auto span = std::make_shared<TFakeSpan>();
         std::lock_guard lock(Mutex_);
-        Spans_.push_back({name, kind, span, parent});
+        Spans_.push_back({std::string(name), kind, span, parent});
         return span;
     }
 
@@ -181,20 +182,21 @@ private:
 
 class TFakeTraceProvider : public NTrace::ITraceProvider {
 public:
-    std::shared_ptr<NTrace::ITracer> GetTracer(const std::string& name) override {
+    std::shared_ptr<NTrace::ITracer> GetTracer(std::string_view name) override {
         std::lock_guard lock(Mutex_);
-        auto it = Tracers_.find(name);
+        const std::string tracerName(name);
+        auto it = Tracers_.find(tracerName);
         if (it != Tracers_.end()) {
             return it->second;
         }
         auto tracer = std::make_shared<TFakeTracer>();
-        Tracers_[name] = tracer;
+        Tracers_[tracerName] = tracer;
         return tracer;
     }
 
-    std::shared_ptr<TFakeTracer> GetFakeTracer(const std::string& name) const {
+    std::shared_ptr<TFakeTracer> GetFakeTracer(std::string_view name) const {
         std::lock_guard lock(Mutex_);
-        auto it = Tracers_.find(name);
+        auto it = Tracers_.find(std::string(name));
         return it != Tracers_.end() ? it->second : nullptr;
     }
 

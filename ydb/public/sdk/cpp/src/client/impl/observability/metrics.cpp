@@ -29,7 +29,7 @@ void SafeLogRequestMetricsError(TLog& log, const char* message, std::exception_p
 } // namespace
 
 TRequestMetrics::TRequestMetrics(NSdkStats::TStatCollector::TClientOperationStatCollector* operationCollector
-    , const std::string& requestName
+    , std::string_view requestName
     , const TLog& log
 ) : Collector_(operationCollector)
     , RequestName_(requestName)

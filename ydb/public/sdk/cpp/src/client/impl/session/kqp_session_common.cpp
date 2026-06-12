@@ -6,13 +6,14 @@
 
 namespace NYdb::inline Dev {
 
-std::uint64_t GetNodeIdFromSession(const std::string& sessionId) {
+std::uint64_t GetNodeIdFromSession(std::string_view sessionId) {
     if (sessionId.empty()) {
         return 0;
     }
 
     try {
-        NKikimr::NOperationId::TOperationId opId(sessionId);
+        const std::string sessionIdStr(sessionId);
+        NKikimr::NOperationId::TOperationId opId(sessionIdStr);
         const auto& nodeIds = opId.GetValue("node_id");
         if (nodeIds.size() != 1) {
             return 0;

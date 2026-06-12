@@ -28,8 +28,8 @@ constexpr TDuration ENDPOINT_UPDATE_PERIOD = TDuration::Minutes(1); // period to
 constexpr TDeadline::Duration DISCOVERY_RECHECK_PERIOD = 5s; // period to run periodic discovery task
 
 TDbDriverState::TDbDriverState(
-    const std::string& database,
-    const std::string& discoveryEndpoint,
+    std::string_view database,
+    std::string_view discoveryEndpoint,
     EDiscoveryMode discoveryMode,
     const TSslCredentials& sslCredentials,
     IInternalClient* client

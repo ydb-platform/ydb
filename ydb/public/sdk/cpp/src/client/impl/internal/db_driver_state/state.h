@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
 #include <mutex>
+#include <string_view>
 
 namespace NYdb::inline Dev {
 
@@ -30,8 +31,8 @@ public:
     using TPtr = std::shared_ptr<TDbDriverState>;
 
     TDbDriverState(
-        const std::string& database,
-        const std::string& discoveryEndpoint,
+        std::string_view database,
+        std::string_view discoveryEndpoint,
         EDiscoveryMode discoveryMode,
         const TSslCredentials& sslCredentials,
         IInternalClient* client

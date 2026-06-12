@@ -3,7 +3,7 @@
 
 namespace NYdb::inline Dev::NTable {
 
-TTransaction::TImpl::TImpl(const TSession& session, const std::string& txId)
+TTransaction::TImpl::TImpl(const TSession& session, std::string_view txId)
     : Session_(session)
     , TxId_(txId)
 {

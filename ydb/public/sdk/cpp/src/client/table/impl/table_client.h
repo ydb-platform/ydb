@@ -68,19 +68,19 @@ public:
     TFuture<TStatus> AlterTable(Ydb::Table::AlterTableRequest&& request, const TRpcRequestSettings& rpcSettings);
     TAsyncOperation AlterTableLong(Ydb::Table::AlterTableRequest&& request, const TRpcRequestSettings& rpcSettings);
 
-    TFuture<TStatus> CopyTable(const TSession& session, const std::string& src, const std::string& dst, const TCopyTableSettings& settings);
+    TFuture<TStatus> CopyTable(const TSession& session, std::string_view src, std::string_view dst, const TCopyTableSettings& settings);
     TFuture<TStatus> CopyTables(const TSession& session, const std::vector<TCopyItem>& copyItems, const TCopyTablesSettings& settings);
     TFuture<TStatus> RenameTables(const TSession& session, const std::vector<TRenameItem>& renameItems, const TRenameTablesSettings& settings);
-    TFuture<TStatus> DropTable(const TSession& session, const std::string& path, const TDropTableSettings& settings);
-    TAsyncDescribeTableResult DescribeTable(const TSession& session, const std::string& path, const TDescribeTableSettings& settings);
-    TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const TSession& session, const std::string& path, const TDescribeExternalDataSourceSettings& settings);
-    TAsyncDescribeExternalTableResult DescribeExternalTable(const TSession& session, const std::string& path, const TDescribeExternalTableSettings& settings);
-    TAsyncDescribeSystemViewResult DescribeSystemView(const TSession& session, const std::string& path, const TDescribeSystemViewSettings& settings);
+    TFuture<TStatus> DropTable(const TSession& session, std::string_view path, const TDropTableSettings& settings);
+    TAsyncDescribeTableResult DescribeTable(const TSession& session, std::string_view path, const TDescribeTableSettings& settings);
+    TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const TSession& session, std::string_view path, const TDescribeExternalDataSourceSettings& settings);
+    TAsyncDescribeExternalTableResult DescribeExternalTable(const TSession& session, std::string_view path, const TDescribeExternalTableSettings& settings);
+    TAsyncDescribeSystemViewResult DescribeSystemView(const TSession& session, std::string_view path, const TDescribeSystemViewSettings& settings);
 
     template<typename TParamsType>
-    TAsyncDataQueryResult ExecuteDataQuery(TSession& session, const std::string& query, const TTxControl& txControl,
+    TAsyncDataQueryResult ExecuteDataQuery(TSession& session, std::string_view query, const TTxControl& txControl,
         TParamsType params, const TExecDataQuerySettings& settings) {
-        auto maybeQuery = session.SessionImpl_->GetQueryFromCache(query, Settings_.AllowRequestMigration_);
+        auto maybeQuery = session.SessionImpl_->GetQueryFromCache(std::string(query), Settings_.AllowRequestMigration_);
         if (maybeQuery) {
             TDataQuery dataQuery(session, query, maybeQuery->QueryId, maybeQuery->ParameterTypes);
             return ExecuteDataQuery(session, dataQuery, txControl, params, settings, true);
@@ -112,28 +112,28 @@ public:
             cb);
     }
 
-    TAsyncPrepareQueryResult PrepareDataQuery(const TSession& session, const std::string& query,
+    TAsyncPrepareQueryResult PrepareDataQuery(const TSession& session, std::string_view query,
         const TPrepareDataQuerySettings& settings);
-    TAsyncStatus ExecuteSchemeQuery(const TSession& session, const std::string& query,
+    TAsyncStatus ExecuteSchemeQuery(const TSession& session, std::string_view query,
         const TExecSchemeQuerySettings& settings);
 
     TAsyncBeginTransactionResult BeginTransaction(const TSession& session, const TTxSettings& txSettings,
         const TBeginTxSettings& settings);
-    TAsyncCommitTransactionResult CommitTransaction(const TSession& session, const std::string& txId,
+    TAsyncCommitTransactionResult CommitTransaction(const TSession& session, std::string_view txId,
         const TCommitTxSettings& settings);
-    TAsyncStatus RollbackTransaction(const TSession& session, const std::string& txId,
+    TAsyncStatus RollbackTransaction(const TSession& session, std::string_view txId,
         const TRollbackTxSettings& settings);
 
-    TAsyncExplainDataQueryResult ExplainDataQuery(const TSession& session, const std::string& query,
+    TAsyncExplainDataQueryResult ExplainDataQuery(const TSession& session, std::string_view query,
         const TExplainDataQuerySettings& settings);
 
     static void SetTypedValue(Ydb::TypedValue* protoValue, const TValue& value);
 
     NThreading::TFuture<std::pair<TPlainStatus, TReadTableStreamProcessorPtr>> ReadTable(
         const TSession& session,
-        const std::string& path,
+        std::string_view path,
         const TReadTableSettings& settings);
-    TAsyncReadRowsResult ReadRows(const std::string& path, TValue&& keys, const std::vector<std::string>& columns, const TReadRowsSettings& settings);
+    TAsyncReadRowsResult ReadRows(std::string_view path, TValue&& keys, const std::vector<std::string>& columns, const TReadRowsSettings& settings);
 
     TAsyncStatus Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings);
     TAsyncStatus CloseInternal(const TKqpSessionCommon* sessionImpl);
@@ -144,14 +144,14 @@ public:
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 
-    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
-    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, EDataFormat format,
-        const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);
+    TAsyncBulkUpsertResult BulkUpsert(std::string_view table, TValue&& rows, const TBulkUpsertSettings& settings);
+    TAsyncBulkUpsertResult BulkUpsert(std::string_view table, EDataFormat format,
+        std::string_view data, std::string_view schema, const TBulkUpsertSettings& settings);
 
-    TFuture<std::pair<TPlainStatus, TScanQueryProcessorPtr>> StreamExecuteScanQueryInternal(const std::string& query,
+    TFuture<std::pair<TPlainStatus, TScanQueryProcessorPtr>> StreamExecuteScanQueryInternal(std::string_view query,
         const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
         const TStreamExecScanQuerySettings& settings);
-    TAsyncScanQueryPartIterator StreamExecuteScanQuery(const std::string& query,
+    TAsyncScanQueryPartIterator StreamExecuteScanQuery(std::string_view query,
         const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
         const TStreamExecScanQuerySettings& settings);
     void CollectRetryStatAsync(EStatus status);
@@ -183,7 +183,7 @@ private:
         const ::google::protobuf::Map<TStringType, Ydb::TypedValue>& params,
         NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> histgoram);
 
-    static void CollectQuerySize(const std::string& query, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>& querySizeHistogram);
+    static void CollectQuerySize(std::string_view query, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>& querySizeHistogram);
 
     static void CollectQuerySize(const TDataQuery&, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>&);
 
@@ -318,17 +318,17 @@ private:
 
     static void SetTxSettings(const TTxSettings& txSettings, Ydb::Table::TransactionSettings* proto);
 
-    static void SetQuery(const std::string& queryText, Ydb::Table::Query* query);
+    static void SetQuery(std::string_view queryText, Ydb::Table::Query* query);
 
     static void SetQuery(const TDataQuery& queryData, Ydb::Table::Query* query);
 
-    static void SetQueryCachePolicy(const std::string&, const TExecDataQuerySettings& settings,
+    static void SetQueryCachePolicy(std::string_view, const TExecDataQuerySettings& settings,
         Ydb::Table::QueryCachePolicy* queryCachePolicy);
 
     static void SetQueryCachePolicy(const TDataQuery&, const TExecDataQuerySettings& settings,
         Ydb::Table::QueryCachePolicy* queryCachePolicy);
 
-    static std::optional<std::string> GetQueryText(const std::string& queryText);
+    static std::optional<std::string> GetQueryText(std::string_view queryText);
 
     static std::optional<std::string> GetQueryText(const TDataQuery& queryData);
 
@@ -346,7 +346,7 @@ private:
     TRequestMigrator RequestMigrator_;
     static const TKeepAliveSettings KeepAliveSettings;
 
-    std::shared_ptr<NObservability::TRequestObservation> MakeObservation(const std::string& operationName) {
+    std::shared_ptr<NObservability::TRequestObservation> MakeObservation(std::string_view operationName) {
         return std::make_shared<NObservability::TRequestObservation>(
             "Table",
             &OperationStatCollector_,

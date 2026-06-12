@@ -121,10 +121,23 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
 
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;
-    for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-        to->GetIndexInfo()
-            .AppendIndex(entityChunksNew, i.first, storages, source.PortionInfo.GetPortionInfo().GetRecordsCount(), targetTier, secondaryData)
-            .Validate();
+    const bool sameSchema = from->GetVersion() == to->GetVersion();
+    const auto& fromIndexInfo = from->GetIndexInfo();
+    const ui32 recordsCount = source.PortionInfo.GetPortionInfo().GetRecordsCount();
+    for (auto&& [indexId, toIndex] : to->GetIndexInfo().GetIndexes()) {
+        if (sameSchema && fromIndexInfo.HasIndexId(indexId)) {
+            const auto fromIndex = fromIndexInfo.GetIndexVerified(indexId);
+            if (fromIndex->CheckModificationCompatibility(toIndex.GetObjectPtr()).Ok()) {
+                auto existingChunks = source.GetEntityChunks(indexId);
+                if (!existingChunks.empty()) {
+                    to->GetIndexInfo()
+                        .ReuseIndexChunks(std::move(existingChunks), indexId, storages, recordsCount, targetTier, secondaryData)
+                        .Validate();
+                    continue;
+                }
+            }
+        }
+        to->GetIndexInfo().AppendIndex(entityChunksNew, indexId, storages, recordsCount, targetTier, secondaryData).Validate();
     }
 
     const NSplitter::TEntityGroups groups =

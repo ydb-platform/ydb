@@ -371,7 +371,7 @@ public:
         }
 
         auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
-    
+
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
             AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr,
@@ -1200,7 +1200,7 @@ private:
                         AllocatedHolder->CheckForNotConsumedLinear();
                     }
                     if (dataConsumed) {
-                        AllocatedHolder->Output->Flush();
+                        // AllocatedHolder->Output->Flush();
                     }
                     return status;
                 }
@@ -1208,7 +1208,7 @@ private:
         }
 
         if (dataConsumed) {
-            AllocatedHolder->Output->Flush();
+            // AllocatedHolder->Output->Flush();
         }
         return ERunStatus::PendingOutput;
     }

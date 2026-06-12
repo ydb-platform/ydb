@@ -12,24 +12,6 @@ on:
         type: string
 
 jobs:
-  add-label:
-    if: github.event_name == 'pull_request_target'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Add documentation label
-        uses: actions/github-script@v8
-        with:
-          script: |
-            github.rest.issues.addLabels({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['documentation']
-            })
-            
   build-docs:
     if: |
       github.event_name == 'workflow_dispatch' || 
@@ -39,6 +21,10 @@ jobs:
       group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -78,3 +64,22 @@ jobs:
           name: inputs
           path: ./inputs/
           overwrite: true
+
+      - name: Add documentation label
+        if: github.event_name == 'pull_request_target'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map((label) => label.name);
+            if (labels.includes('documentation')) {
+              core.info('Label "documentation" is already present, skipping');
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['documentation']
+            });

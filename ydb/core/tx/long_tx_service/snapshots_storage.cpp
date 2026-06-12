@@ -140,6 +140,14 @@ TRowVersion TRemoteSnapshotsStorage::GetBorder() const {
     return SnapshotBorder;
 }
 
+TInstant TRemoteSnapshotsStorage::GetOldestCollectionTime() const {
+    TInstant oldest = AppData()->TimeProvider->Now();
+    for (const auto& [nodeId, state] : NodeIdToState) {
+        oldest = std::min(oldest, state.CollectionTime);
+    }
+    return oldest;
+}
+
 bool TRemoteSnapshotsStorage::IsReady() const {
     return Ready;
 }

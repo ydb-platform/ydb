@@ -131,6 +131,10 @@ public:
     TView View() const;
     TRowVersion GetBorder() const;
 
+    // Oldest collection time across all contributing nodes, including the local node (counted
+    // as now since its snapshots are collected right now). With no remote nodes this is now.
+    TInstant GetOldestCollectionTime() const;
+
     bool IsReady() const;
 
 private:

@@ -1775,6 +1775,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
 
     auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
     registryBuilder->SetSnapshotBorder(RemoteSnapshotsStorage->GetBorder());
+    registryBuilder->SetOldestCollectionTime(RemoteSnapshotsStorage->GetOldestCollectionTime());
 
     size_t localSnapshotsCount = 0;
     for (const auto& snapshotInfo : LocalSnapshotsStorage->View()) {

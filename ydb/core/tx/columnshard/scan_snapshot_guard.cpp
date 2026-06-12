@@ -66,27 +66,22 @@ public:
 
 NOlap::TSnapshot BuildRegistryMinSnapshotForNewReads(const ui64 passedStep, const NOlap::TSnapshot& lastCleanupSnapshot,
     const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry>& registry, const NKikimrConfig::TLongTxServiceConfig& longTxConfig) {
-    // How long it may take for a snapshot from the most remote node to reach this columnshard
-    // in the worst case by default:
-    //   promotion delay (120s) + exchange period (10s) + registry rebuild period (30s) + network/propagation delta (10s) = 170s.
-    // 10 seconds delta is the agreed conservative estimate:
-    //   4 messages * log_10(100k nodes) * 0.5s (ping time between the nodes) = 10s.
-
-    // But, in fact, the registry is not ready right after the node start, it takes it a while to materialize.
-    // During this period of materialization the shard keeps all portions (do not delete anything), see `TRegistryNotReadySnapshotGuard`.
-    // A practical upper estimate of this additional startup "no-delete" window with default config:
-    // exchange period (10s) + registry rebuild period (30s) + network/propagation delta (10s) = 50s
-    // Therefore the total default conservative duration of keeping removed portions is roughly:
-    //   170s (steady-state delay window) + 50s (startup materialization period) = ~220 seconds.
-    // That is at most for how long we will keep removed portions by default.
-    const ui64 delaySeconds = longTxConfig.GetLocalSnapshotPromotionTimeSeconds() + longTxConfig.GetSnapshotsExchangeIntervalSeconds() +
-                              longTxConfig.GetSnapshotsRegistryUpdateIntervalSeconds() + 10;
-    const ui64 delayMillisec = TDuration::Seconds(delaySeconds).MilliSeconds();
-    const ui64 serviceMinReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
+    // OldestCollectionTime tells us how fresh the registry actually is (oldest collection time
+    // across all contributing nodes). Anchoring on it means the floor backs off on its own when
+    // the registry is stale (e.g. under CPU saturation), instead of trusting a fixed worst-case
+    // estimate. A read on a remote node may still be missing from the registry for up to:
+    //   - LocalSnapshotPromotionTimeSeconds: a snapshot isn't propagated until it is promoted;
+    //   - MaxClockSkewMs: that collection time was stamped against the remote node's wall clock.
+    // So we may only clean strictly below OldestCollectionTime minus that margin.
+    const ui64 marginMs =
+        TDuration::Seconds(longTxConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds() + longTxConfig.GetMaxClockSkewMs();
+    const ui64 oldestCollectionMs = registry->GetOldestCollectionTime().MilliSeconds();
+    ui64 serviceMinReadStep = (oldestCollectionMs > marginMs ? oldestCollectionMs - marginMs : 0);
+    // The freshness floor must never exceed the current step.
+    serviceMinReadStep = std::min(serviceMinReadStep, passedStep);
 
     NOlap::TSnapshot minSnapshot = std::max(NOlap::TSnapshot(serviceMinReadStep, 0), lastCleanupSnapshot);
-    // Registry border may be older than the calculated delay window.
-    // In that case we use the older border to preserve correctness.
+    // Registry border may be older than the computed floor; use the older to preserve correctness.
     const TRowVersion border = registry->GetBorder();
     return std::min(minSnapshot, NOlap::TSnapshot(border.Step, border.TxId));
 }

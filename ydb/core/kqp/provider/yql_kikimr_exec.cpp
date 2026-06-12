@@ -2085,7 +2085,7 @@ public:
                                 }
                             } else {
                                 auto families = columnItem.Cast<TCoAtomList>();
-                                if (table.Metadata->IsOlap()) {
+                                if (table.Metadata->IsOlap() && families.Size() > 0) {
                                     ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
                                         "Column FAMILY is not supported for column tables"));
                                     return SyncError();

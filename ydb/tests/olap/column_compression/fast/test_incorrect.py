@@ -181,4 +181,3 @@ class TestIncorrectCompression(object):
             )
 
         assert "Column Compression is not supported in row tables" in ex.value.message
-

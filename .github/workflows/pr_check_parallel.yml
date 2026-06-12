@@ -129,7 +129,7 @@ jobs:
           elif grep -qE "$heavy_re" "$files_json"; then
             mode=sharded
             echo "Heavy paths touched:"
-            grep -E "$heavy_re" "$files_json" | head -10
+            grep -m 10 -E "$heavy_re" "$files_json" || true
           else
             mode=single
           fi

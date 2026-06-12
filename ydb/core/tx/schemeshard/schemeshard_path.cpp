@@ -415,7 +415,7 @@ const TPath::TChecker& TPath::TChecker::NotReadOnlyColumnTable(EStatus status) c
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is a read-only copy column table; only Drop is allowed"
+    return Fail(status, TStringBuilder() << "path is a read-only copy column table; only Copy and Drop are allowed"
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 

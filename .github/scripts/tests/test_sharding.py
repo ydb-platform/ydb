@@ -146,6 +146,15 @@ class ShardingToolsTest(unittest.TestCase):
         )
         self.assertEqual(proc.stdout.strip().splitlines(), ["Suite::Slow"])
 
+    def test_extract_failed_suite_paths(self):
+        proc = subprocess.run(
+            [sys.executable, str(SHARDING_DIR / "extract_failed_suite_paths.py"), str(FIXTURES / "report_shard_0.json")],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.stdout.strip().splitlines(), ["ydb/core/foo/ut"])
+
     def test_build_shard_blacklist_complement(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"

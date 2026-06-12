@@ -498,6 +498,7 @@ runs:
           fi
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
+          RETRY_YA_MAKE_TARGET="$YA_MAKE_TARGET"
           RERUN_EXTRA_OPTS=()
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
@@ -506,6 +507,23 @@ runs:
             MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
             python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
             RERUN_EXTRA_OPTS+=(--build-only-test-deps)
+            if [ "$CROSS_JOB_RETRY" = "1" ] && [ "$RETRY" = "$START_RETRY" ]; then
+              # Build-only saved graph ignores --test-filter; run explicit suite targets instead.
+              GRAPH_PATH=""
+              CONTEXT_PATH=""
+              RETRY_YA_MAKE_TARGET=""
+              while IFS= read -r suite; do
+                if [ -n "$suite" ] && [ -e "$suite" ]; then
+                  RETRY_YA_MAKE_TARGET="$RETRY_YA_MAKE_TARGET $suite"
+                fi
+              done < <(python3 .github/scripts/tests/sharding/extract_failed_suite_paths.py "$PREV_REPORT")
+              if [ -z "$(echo "$RETRY_YA_MAKE_TARGET" | tr -d ' ')" ]; then
+                echo "Cross-job retry: no suite paths resolved, falling back to original build_target"
+                RETRY_YA_MAKE_TARGET="$YA_MAKE_TARGET"
+              else
+                echo "Cross-job retry: suite targets:$RETRY_YA_MAKE_TARGET"
+              fi
+            fi
             if [ -z "$GRAPH_PATH" ]; then
               RERUN_EXTRA_OPTS+=(--test-blacklist-path "$MUTED_YAML_PATH")
             fi
@@ -558,7 +576,7 @@ runs:
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
           YA_MAKE_CMD=(
-            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            ./ya make "${params[@]}" $RETRY_YA_MAKE_TARGET $GRAPH_OPTS
             "${RERUN_EXTRA_OPTS[@]}" --log-file "$PUBLIC_DIR/ya_log.txt"
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"

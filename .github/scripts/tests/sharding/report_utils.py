@@ -92,9 +92,7 @@ def test_name_to_ya_filter(test_name: str) -> str:
     return test_name
 
 
-def iter_failed_test_filters(report: dict[str, Any]) -> Iterator[str]:
-    """Yield ya ``--test-filter`` values for failed/errored tests in a report."""
-    seen: set[str] = set()
+def iter_failed_rows(report: dict[str, Any]) -> Iterator[dict[str, Any]]:
     for row in iter_test_rows(report):
         if row.get("status") not in {"FAILED", "ERROR"}:
             continue
@@ -103,6 +101,24 @@ def iter_failed_test_filters(report: dict[str, Any]) -> Iterator[str]:
         subtest_name = row.get("subtest_name") or ""
         if subtest_name and "chunk" in subtest_name:
             continue
+        yield row
+
+
+def iter_failed_suite_paths(report: dict[str, Any]) -> Iterator[str]:
+    """Yield unique ya.make suite directories for failed/errored tests."""
+    seen: set[str] = set()
+    for row in iter_failed_rows(report):
+        path_str = row.get("path") or ""
+        if not path_str or path_str in seen:
+            continue
+        seen.add(path_str)
+        yield path_str
+
+
+def iter_failed_test_filters(report: dict[str, Any]) -> Iterator[str]:
+    """Yield ya ``--test-filter`` values for failed/errored tests in a report."""
+    seen: set[str] = set()
+    for row in iter_failed_rows(report):
         entry = TestEntry.from_report_row(row)
         if entry is None or not entry.name:
             continue

@@ -260,3 +260,33 @@ Set diff: every row in monolith try_1 `report.json` absent from sharded merged t
 - [ ] Decide product policy: **style rows**, **peerdir outside `ydb/`**, **benchmark subtests** — required for PR-check parity or explicitly out of scope.
 - [ ] If real-test gap persists on same commit: try (a) replay cut graph on shards with shard-specific UID filter, or (b) expand plan with missing suite roots from diff, or (c) accept &lt;0.5% gap with documented allowlist.
 - [ ] Fix plan job UX: show both “planned logical tests (-L)” and “expected report rows (historical ratio)” so smoke runs do not look under-tested.
+
+## Stage 2: `pr_check_parallel.yml` (branch `pr-check-parallel`)
+
+Lessons from the pilot and the two-week load analysis (shared pool of 80
+machines for all presets, bimodal PR sizes, `ya test -L` ≈ 20 min on the
+critical path) are implemented as a reusable workflow
+`.github/workflows/pr_check_parallel.yml`:
+
+- **`pr_check.yml` is reverted to the `main` version** — production PR-check is
+  untouched until the parallel pipeline is validated.
+- **Change-volume classifier** (`params` job): for PRs, changed files are
+  fetched via the API; only PRs touching heavy paths (`ydb/core/`,
+  `ydb/library/`, `yql/`, `util/`, `contrib/`, `build/`, …) or with ≥500
+  changed files go to the sharded path. Everything else runs the classic
+  single job — identical to today's PR-check, so light PRs never pay the
+  sharding overhead.
+- **Adaptive shard count** (`choose_shard_count.py`): the plan job estimates
+  the single-job duration from history p50 suite weights
+  (`D = total_weight / 60 / threads`) and picks N: `<60 min → 1`,
+  `<120 → 4`, `<200 → 8`, else `12`. During shared-pool peak hours
+  (09–16 UTC) N is capped at 4 so parallel checks do not starve the
+  80-machine pool. `SHARD_COUNT=auto` in `plan_shard_tests.sh` enables this.
+- **`ya test -L` off the critical path**: the `list` job runs in parallel
+  with the no-tests build job (listing only evaluates the graph), removing
+  ~20 min of latency.
+- **Driver for real PRs**: `run_and_debug_tests.yml` accepts a PR number or
+  branch, checks out the PR merge commit (like PR-check), runs the pipeline
+  with `publish=false` (no statuses/comments on the real PR) and prints a
+  duration table next to the production PR-check run of the same PR for
+  direct comparison.

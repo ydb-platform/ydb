@@ -42,6 +42,18 @@ python3 "$SCRIPT_DIR/apply_history_suite_weights.py" \
 
 echo "Weighting: $(jq -c '.weighting' "$FILTERED_SUMMARY")"
 
+if [ "$SHARD_COUNT" = "auto" ]; then
+  CHOOSE_ARGS=(--threads "${TEST_THREADS:-52}")
+  if [ "${DISABLE_PEAK_CAP:-}" = "1" ]; then
+    CHOOSE_ARGS+=(--no-peak-cap)
+  fi
+  if [ -n "${MAX_SHARDS:-}" ]; then
+    CHOOSE_ARGS+=(--max-shards "$MAX_SHARDS")
+  fi
+  SHARD_COUNT=$(python3 "$SCRIPT_DIR/choose_shard_count.py" "$FILTERED_SUMMARY" "${CHOOSE_ARGS[@]}")
+  echo "Adaptive shard count: $SHARD_COUNT"
+fi
+
 if [ "$(jq '.total_suites' "$FILTERED_SUMMARY")" = "0" ]; then
   jq -n \
     --argjson shard_count "$SHARD_COUNT" \

@@ -13,6 +13,11 @@ from unittest.mock import patch
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sharding"
 SHARDING_DIR = Path(__file__).resolve().parent / "sharding"
 
+if str(SHARDING_DIR) not in sys.path:
+    sys.path.insert(0, str(SHARDING_DIR))
+
+from choose_shard_count import choose_shard_count  # noqa: E402
+
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -475,6 +480,50 @@ class ShardingToolsTest(unittest.TestCase):
             text = blacklist_path.read_text(encoding="utf-8")
             self.assertIn("path: ydb/tests/bar", text)
             self.assertNotIn("test_filter:", text)
+
+
+class ChooseShardCountTest(unittest.TestCase):
+    @staticmethod
+    def _choose(total_weight_min: float, **kwargs) -> int:
+        count, _ = choose_shard_count(total_weight_min * 60.0, threads=1, **kwargs)
+        return count
+
+    def test_light_run_stays_single(self):
+        self.assertEqual(self._choose(30), 1)
+        self.assertEqual(self._choose(59.9), 1)
+
+    def test_tiers_by_estimated_duration(self):
+        self.assertEqual(self._choose(90), 4)
+        self.assertEqual(self._choose(150), 8)
+        self.assertEqual(self._choose(250), 12)
+
+    def test_peak_cap_limits_heavy_runs(self):
+        self.assertEqual(self._choose(250, is_peak=True), 4)
+        self.assertEqual(self._choose(90, is_peak=True), 4)
+        self.assertEqual(self._choose(30, is_peak=True), 1)
+
+    def test_max_shards_bound(self):
+        self.assertEqual(self._choose(250, max_shards=6), 6)
+
+    def test_cli_reads_summary_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "list_summary.json"
+            # 150 estimated minutes on 52 threads -> 8 shards off-peak.
+            summary.write_text(json.dumps({"total_weight": 150 * 60 * 52}), encoding="utf-8")
+            result = _run(
+                "choose_shard_count.py",
+                str(summary),
+                "--now-utc-hour",
+                "3",
+            )
+            self.assertEqual(result.stdout.strip(), "8")
+            result_peak = _run(
+                "choose_shard_count.py",
+                str(summary),
+                "--now-utc-hour",
+                "12",
+            )
+            self.assertEqual(result_peak.stdout.strip(), "4")
 
 
 if __name__ == "__main__":

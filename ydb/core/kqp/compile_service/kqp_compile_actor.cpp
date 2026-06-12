@@ -27,7 +27,15 @@
 
 namespace NKikimr::NKqp {
 
-static const TString YqlName = "CompileActor";
+namespace {
+
+const TString YqlName = "CompileActor";
+
+inline TString GetQueryTextForLog(const TString& queryText) {
+    return EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText));
+}
+
+} // namespace
 
 using namespace NKikimrConfig;
 using namespace NThreading;
@@ -105,11 +113,10 @@ public:
         if (tableServiceConfig.GetSqlVersion() != 0) {
             EnforcedSqlVersion = false;
         } else if (EnforcedSqlVersion) {
-            const auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(QueryId.Text);
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
                 "Enforced SQL version 1, "
                 << "current sql version: " << tableServiceConfig.GetSqlVersion()
-                << " queryText: " << EscapeC(protectedQueryText)
+                << " queryText: " << GetQueryTextForLog(QueryId.Text)
             );
 
             config->SetSqlVersion(1);
@@ -282,12 +289,11 @@ private:
             << std::to_string(CompileActorSpan.GetTraceId().GetVerbosity()) << ", trace_id = "
             << std::to_string(CompileActorSpan.GetTraceId().GetTraceId()));
 
-        const auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(QueryId.Text);
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Start compilation"
             << ", self: " << ctx.SelfID
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(protectedQueryText) << "\""
+            << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\""
             << ", startTime: " << StartTime);
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
@@ -667,12 +673,11 @@ private:
     }
 
     void HandleTimeout() {
-        const auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(QueryId.Text);
         ALOG_NOTICE(NKikimrServices::KQP_COMPILE_ACTOR, "Compilation timeout"
             << ", self: " << SelfId()
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(protectedQueryText) << "\""
+            << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\""
             << ", startTime: " << StartTime);
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -695,11 +700,10 @@ private:
 
 private:
     void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
-        const auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(QueryId.Text);
         LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, logMessage
                 << ", self: " << ctx.SelfID
                 << ", database: " << QueryId.Database
-                << ", text: \"" << EscapeC(protectedQueryText) << "\"");
+                << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\"");
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.

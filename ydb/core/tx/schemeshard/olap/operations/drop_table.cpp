@@ -263,6 +263,52 @@ private:
                 << " operationId# " << OperationId;
     }
 
+    std::optional<TPathId> FindNewShardOwner(TOperationContext& context, const TTxState& txState) const {
+        const auto targetPathId = txState.TargetPathId;
+        for (const auto& shard : txState.Shards) {
+            const auto shardIdx = shard.Idx;
+            const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
+            if (shardInfo.PathId != targetPathId) {
+                continue;
+            }
+            auto sharedIt = context.SS->SharedShards.find(shardIdx);
+            if (sharedIt != context.SS->SharedShards.end() && !sharedIt->second.empty()) {
+                return sharedIt->second.begin()->first;
+            }
+        }
+        return std::nullopt;
+    }
+
+    void TransferShardOwnership(TOperationContext& context, NIceDb::TNiceDb& db,
+                                const TShardIdx& shardIdx, const TPathId& targetPathId,
+                                const TPathId& newOwner) {
+        auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
+        auto sharedIt = context.SS->SharedShards.find(shardIdx);
+        AFL_VERIFY(sharedIt != context.SS->SharedShards.end());
+        AFL_VERIFY(sharedIt->second.contains(newOwner));
+
+        shardInfo.PathId = newOwner;
+        context.SS->PersistShardPathId(db, shardIdx, newOwner);
+        context.SS->PathsById.at(newOwner)->IncShardsInside();
+        context.SS->PathsById.at(targetPathId)->DecShardsInside();
+        context.SS->IncrementPathDbRefCount(newOwner);
+        context.SS->DecrementPathDbRefCount(targetPathId);
+        RemoveSharedShard(context, shardIdx, newOwner);
+    }
+
+    void RemoveSharedShard(TOperationContext& context, const TShardIdx& shardIdx, const TPathId& pathId) {
+        auto& sharedShards = context.SS->SharedShards;
+        auto sharedPathsIt = sharedShards.find(shardIdx);
+        AFL_VERIFY(sharedPathsIt != sharedShards.end());
+        auto& sharedPaths = sharedPathsIt->second;
+        sharedPaths.erase(pathId);
+        if (sharedPaths.empty()) {
+            sharedShards.erase(shardIdx);
+        }
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistRemoveSharedShard(db, shardIdx, pathId);
+    }
+
     bool Finish(TOperationContext& context) {
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -286,48 +332,27 @@ private:
         context.SS->PersistColumnTableRemove(db, txState->TargetPathId, context.Ctx);
         const auto targetPathId = txState->TargetPathId;
         if (isStandalone) {
+            const auto newOwner = FindNewShardOwner(context, *txState);
             for (auto& shard : txState->Shards) {
-                auto& sharedShards = context.SS->SharedShards;
                 const auto shardIdx = shard.Idx;
-                auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
-                auto sharedIt = sharedShards.find(shardIdx);
+                const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
+                auto sharedIt = context.SS->SharedShards.find(shardIdx);
                 if (targetPathId != shardInfo.PathId) {
                     // Not the owner - remove from SharedShards
                     RemoveSharedShard(context, shardIdx, targetPathId);
-                } else if (sharedIt == sharedShards.end()) {
+                } else if (sharedIt == context.SS->SharedShards.end()) {
                     // Owner, no one is sharing - delete the shard
                     context.OnComplete.DeleteShard(shardIdx);
                 } else {
-                    // Owner, there are dependents - we transfer ownership
-                    // Ownership is transferred to the next PathId in the shared set
-                    AFL_VERIFY(!sharedIt->second.empty());
-                    const auto newOwner = sharedIt->second.begin()->first;
-                    shardInfo.PathId = newOwner;
-                    context.SS->PersistShardPathId(db, shardIdx, newOwner);
-                    context.SS->PathsById.at(newOwner)->IncShardsInside();
-                    context.SS->PathsById.at(targetPathId)->DecShardsInside();
-                    context.SS->IncrementPathDbRefCount(newOwner);
-                    context.SS->DecrementPathDbRefCount(targetPathId);
-                    RemoveSharedShard(context, shardIdx, newOwner);
+                    // Owner, there are dependents - transfer ownership
+                    AFL_VERIFY(newOwner.has_value());
+                    TransferShardOwnership(context, db, shardIdx, targetPathId, *newOwner);
                 }
             }
         }
 
         context.OnComplete.DoneOperation(OperationId);
         return true;
-    }
-
-    void RemoveSharedShard(TOperationContext& context, const TShardIdx& shardIdx, const TPathId& pathId) {
-        auto& sharedShards = context.SS->SharedShards;
-        auto sharedPathsIt = sharedShards.find(shardIdx);
-        AFL_VERIFY(sharedPathsIt != sharedShards.end());
-        auto& sharedPaths = sharedPathsIt->second;
-        sharedPaths.erase(pathId);
-        if (sharedPaths.empty()) {
-            sharedShards.erase(shardIdx);
-        }
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistRemoveSharedShard(db, shardIdx, pathId);
     }
 
 public:

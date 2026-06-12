@@ -568,15 +568,12 @@ public:
         const auto dstPathId = dstPath.Base()->PathId;
         for (const auto& id : srcTable->GetShardIdsSet()) {
             const auto shardIdx = context.SS->TabletIdToShardIdx.at(TTabletId(id));
-            context.MemChanges.GrabShard(context.SS, shardIdx);
+            context.MemChanges.GrabNewSharedShard(context.SS, shardIdx, dstPathId);
 
-            TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
             txState.Shards.emplace_back(shardIdx, tabletType, TTxState::ConfigureParts);
-            shardInfo.CurrentTxId = OperationId.GetTxId();
-            context.DbChanges.PersistShard(shardIdx);
 
-            context.SS->SharedShards[shardIdx][dstPathId] = InvalidTxId;
-            context.DbChanges.PersistSharedShard(shardIdx, dstPathId);
+            context.SS->SharedShards[shardIdx][dstPathId] = OperationId.GetTxId();
+            context.DbChanges.PersistSharedShard(shardIdx, dstPathId, OperationId.GetTxId());
         }
 
         srcPath->PathState = TPathElement::EPathState::EPathStateCopying;

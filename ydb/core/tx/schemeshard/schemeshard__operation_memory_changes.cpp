@@ -196,6 +196,22 @@ void TMemoryChanges::GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId)
     Grab<TStreamingQueryInfo>(pathId, ss->StreamingQueries, StreamingQueries);
 }
 
+void TMemoryChanges::GrabNewSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId) {
+    auto shardIt = ss->SharedShards.find(shardIdx);
+    if (shardIt != ss->SharedShards.end()) {
+        Y_ABORT_UNLESS(!shardIt->second.contains(pathId));
+    }
+    SharedShardEntries.emplace(shardIdx, pathId, std::nullopt);
+}
+
+void TMemoryChanges::GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId) {
+    auto shardIt = ss->SharedShards.find(shardIdx);
+    Y_ABORT_UNLESS(shardIt != ss->SharedShards.end());
+    auto pathIt = shardIt->second.find(pathId);
+    Y_ABORT_UNLESS(pathIt != shardIt->second.end());
+    SharedShardEntries.emplace(shardIdx, pathId, pathIt->second);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -435,6 +451,22 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->StreamingQueries.erase(id);
         }
         StreamingQueries.pop();
+    }
+
+    while (SharedShardEntries) {
+        const auto& [shardIdx, pathId, elem] = SharedShardEntries.top();
+        if (elem) {
+            ss->SharedShards[shardIdx][pathId] = *elem;
+        } else {
+            auto shardIt = ss->SharedShards.find(shardIdx);
+            if (shardIt != ss->SharedShards.end()) {
+                shardIt->second.erase(pathId);
+                if (shardIt->second.empty()) {
+                    ss->SharedShards.erase(shardIt);
+                }
+            }
+        }
+        SharedShardEntries.pop();
     }
 }
 

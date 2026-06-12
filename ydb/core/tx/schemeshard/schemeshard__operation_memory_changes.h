@@ -91,6 +91,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TStreamingQueryState = std::pair<TPathId, TStreamingQueryInfo::TPtr>;
     TStack<TStreamingQueryState> StreamingQueries;
 
+    using TSharedShardEntry = std::tuple<TShardIdx, TPathId, std::optional<TTxId>>;
+    TStack<TSharedShardEntry> SharedShardEntries;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -155,6 +158,9 @@ public:
 
     void GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
     void GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabNewSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
+    void GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

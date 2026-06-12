@@ -43,7 +43,7 @@ void TMemoryChanges::GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId)
 
 void TMemoryChanges::GrabColumnTable(TSchemeShard* ss, const TPathId& pathId) {
     Y_ABORT_UNLESS(ss->ColumnTables.contains(pathId));
-    ColumnTables.emplace(pathId, ss->ColumnTables.GetVerified(pathId).GetPtr());
+    ColumnTables.emplace(pathId, std::make_shared<TColumnTableInfo>(*ss->ColumnTables.GetVerified(pathId)));
 }
 
 void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {

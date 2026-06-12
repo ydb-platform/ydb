@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 AlterSchema {
                     AddColumns { Name: "add_2" Type: "Uint64" }
                 }
-            )", {{NKikimrScheme::StatusSchemeError, "path is a read-only copy column table; only Drop is allowed"}});
+            )", {{NKikimrScheme::StatusSchemeError, "path is a read-only copy column table; only Copy and Drop are allowed"}});
 
             {
                 TInactiveZone inactive(activeZone);

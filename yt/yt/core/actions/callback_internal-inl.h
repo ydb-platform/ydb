@@ -68,4 +68,4 @@ inline TCallbackBase::TCallbackBase(TIntrusivePtr<TBindStateBase>&& bindState) n
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}  // namespace NYT::NDetail
+} // namespace NYT::NDetail

@@ -60,4 +60,4 @@ inline void SwitchTo(IInvokerPtr invoker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

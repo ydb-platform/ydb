@@ -472,4 +472,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
         .Done();
 }
 
-}  // namespace NYql
+} // namespace NYql

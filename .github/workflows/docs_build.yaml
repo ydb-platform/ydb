@@ -43,7 +43,6 @@ jobs:
               core.warning(`Failed to add "documentation" label: ${error.message}`);
             }
 
-  # Unprivileged job: builds untrusted PR code, so it must run with a read-only token.
   build-docs:
     if: |
       github.event_name == 'workflow_dispatch' || 
@@ -53,14 +52,11 @@ jobs:
       group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
-          persist-credentials: false
           
       - name: Get commit SHA
         id: sha

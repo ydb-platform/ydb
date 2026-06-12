@@ -22,6 +22,27 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
+- Go
+
+  This functionality is not currently supported.
+
+- Java
+
+  This functionality is not currently supported.
+
+- Python
+
+  This functionality is not currently supported.
+
+- JavaScript
+
+  This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
+  ```
+
 {% endlist %}
 
 ## Call parameters {#call-parameters}
@@ -63,6 +84,22 @@ The complete list of extra parameters is presented below:
       FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
   };
   ```
+
+- Go
+
+  This functionality is not currently supported.
+
+- Java
+
+  This functionality is not currently supported.
+
+- Python
+
+  This functionality is not currently supported.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 

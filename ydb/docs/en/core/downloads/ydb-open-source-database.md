@@ -8,6 +8,11 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Download | Changelog ||
+|| **v25.3** | > | > | > ||
+|| v.25.3.1.25 | 03.04.26 | [Binary file](https://binaries.ydb.tech/release/25.3.1.25/ydbd-25.3.1.25-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-3-1) ||
+|| **v25.2** | > | > | > ||
+|| v.25.2.1.24 | 28.01.26 | [Binary file](https://binaries.ydb.tech/release/25.2.1.24/ydbd-25.2.1.24-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-2-1-24) ||
+|| v.25.2.1.10-rc | 21.09.25 | [Binary file](https://binaries.ydb.tech/release/25.2.1.10-rc/ydbd-25.2.1.10-rc-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-2-1-10-rc) ||
 || **v25.1** | > | > | > ||
 || v.25.1.4.7 | 15.09.25 | [Binary file](https://binaries.ydb.tech/release/25.1.4.7/ydbd-25.1.4.7-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-1-4-7) ||
 || v.25.1.2.7-rc | 14.07.25 | [Binary file](https://binaries.ydb.tech/release/25.1.2.7-rc/ydbd-25.1.2.7-rc-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-1-2-7-rc) ||

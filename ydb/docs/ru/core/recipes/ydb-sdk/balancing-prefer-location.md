@@ -40,12 +40,11 @@
 
 - Go (database/sql)
 
-  Клиентская балансировка в `database/sql` драйвере для {{ ydb-short-name }} осуществляется только в момент установления нового соединения (в терминах `database/sql`), которое представляет собой сессию {{ ydb-short-name }} на конкретной ноде. После того, как сессия создана, все запросы на этой сессии направляются на ту ноду, на которой была создана сессия. Балансировка запросов на одной и той же сессии {{ ydb-short-name }} между разными нодами {{ ydb-short-name }} не происходит.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Пример кода установки алгоритма балансировки "предпочитать зону доступности":
 
-  ```go
-  package main
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   import (
     "context"
@@ -84,5 +83,13 @@
     ...
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

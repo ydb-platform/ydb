@@ -32,7 +32,7 @@ The `vector_kmeans_tree` index implements hierarchical data clustering. The stru
     * `levels`: number of levels in the tree, defining search depth (recommended 1-3)
     * `clusters`: number of clusters in k-means, defining search width (recommended 64-512)
 
-Internally, a vector index consists of hidden index tables named `indexImpl*Table`. In [selection queries](#select) using the vector index, the index tables will appear in [query statistics](query-plans-optimization.md).
+Internally, a vector index consists of hidden index tables named `indexImpl*Table`. In [selection queries](#select) using the vector index, the index tables will appear in [query statistics](query-execution-optimization/query-plans-optimization.md).
 
 ## Types of Vector Indexes {#types}
 
@@ -128,9 +128,116 @@ For more details on executing `SELECT` queries using vector indexes, see the sec
 
 If the `VIEW` expression is not used, the query will perform a full table scan with pairwise comparison of vectors.
 
-It is recommended to check the optimality of the written query using [query statistics](query-plans-optimization.md). In particular, ensure there is no full scan of the main table.
+It is recommended to check the optimality of the written query using [query statistics](query-execution-optimization/query-plans-optimization.md). In particular, ensure there is no full scan of the main table.
 
 {% endnote %}
+
+## Distance Functions {#distance}
+
+The following [similarity or distance functions](../yql/reference/udf/list/knn.md#functions-distance) are supported:
+
+* `distance=cosine` or `similarity=cosine` — cosine distance, corresponds to `ORDER BY Knn::CosineDistance(...) ASC` or `ORDER BY Knn::CosineSimilarity(...) DESC`.
+* `distance=manhattan` — Manhattan distance (L1 metric), corresponds to `ORDER BY Knn::ManhattanDistance(...) ASC`.
+* `distance=euclidean` — Euclidean distance (L2 metric), corresponds to `ORDER BY Knn::EuclideanDistance(...) ASC`.
+* `similarity=inner_product` — inner product, corresponds to `ORDER BY Knn::InnerProductSimilarity(...) DESC`.
+
+## Full Vector Index Syntax {#syntax}
+
+Creating a vector index:
+
+* During table creation: [CREATE TABLE](../yql/reference/syntax/create_table/vector_index.md).
+* Adding to an existing table: [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md).
+
+Full syntax for queries using a vector index:
+
+* [VIEW VECTOR INDEX](../yql/reference/syntax/select/vector_index.md).
+
+## Search Algorithm
+
+The current implementation offers one type of index: `vector_kmeans_tree`.
+
+### Vector Index Type `vector_kmeans_tree` {#kmeans-tree-type}
+
+The `vector_kmeans_tree` index implements hierarchical data clustering. The structure of the index includes:
+
+1. Hierarchical clustering:
+
+    * the index builds multiple levels of k-means clusters;
+    * at each level, vectors are distributed across a predefined number of clusters raised to the power of the level;
+    * the first level clusters the entire dataset;
+    * subsequent levels recursively cluster the contents of each parent cluster.
+
+2. Search process:
+
+    * search proceeds recursively from the first level to the subsequent ones;
+    * during queries, the index analyzes only the most promising clusters;
+    * such search space pruning avoids complete enumeration of all vectors.
+
+3. Parameters:
+
+    * `levels`: number of levels in the tree, defining search depth (recommended 1-3);
+    * `clusters`: number of clusters in k-means, defining search width (recommended 64-512).
+    * `overlap_clusters`: number of leaf-level clusters each vector is added to (recommended 3).
+
+Internally, a vector index consists of index tables named `indexImpl*Table`. In selection queries using the vector index, these tables appear in [query statistics](query-execution-optimization/query-plans-optimization.md). For more on the structure of the vector index, see the dedicated article about the `vector_kmeans_tree` index type.
+
+### Overlapping Clusters {#overlap-clusters}
+
+A vector index in YDB can add each vector to multiple clusters to improve search recall and speed:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+```
+
+In this example, each vector will be added to 3 nearest clusters instead of 1.
+
+The `overlap_clusters` parameter is recommended for nearly all use cases, especially for vector indexes with `levels > 1`, as it significantly improves search recall even with small [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) values (for example, 3).
+
+This way, you can reduce the PRAGMA value and significantly speed up the search while maintaining the same recall.
+
+## Partitioning of Index Tables {#partitioning}
+
+The most heavily loaded table in a vector index is `indexImplLevelTable`, the cluster structure table. Every search query reads this table, so load on its partitions may limit query performance.
+
+To improve performance, you can enable auto-partitioning by load:
+
+```yql
+ALTER TABLE `my_table/my_index/indexImplLevelTable`
+SET AUTO_PARTITIONING_BY_LOAD ENABLED;
+```
+
+Or by size:
+
+```yql
+ALTER TABLE `my_table/my_index/indexImplLevelTable`
+SET AUTO_PARTITIONING_PARTITION_SIZE_MB 100;
+```
+
+The same settings can be applied to other index tables (`indexImplPostingTable` and `indexImplPrefixTable`), but the Level table is the most loaded while being small in size, so auto-partitioning settings are most relevant for it.
+
+## Using Index Table Replicas {#replicas}
+
+Another way to speed up search is to use table replicas. To do this:
+
+1. Create a [covering index](#covering) so that only index tables are involved in search queries.
+2. Enable replicas on all index tables:
+
+   ```yql
+   ALTER TABLE `my_table/my_index/indexImplLevelTable` SET READ_REPLICAS_SETTINGS 'PER_AZ:3';
+   ALTER TABLE `my_table/my_index/indexImplPostingTable` SET READ_REPLICAS_SETTINGS 'PER_AZ:3';
+   ```
+
+   And, for a filtered index, also:
+
+   ```yql
+   ALTER TABLE `my_table/my_index/indexImplPrefixTable` SET READ_REPLICAS_SETTINGS 'PER_AZ:3';
+   ```
+
+3. Use the [Stale Read-Only](../recipes/ydb-sdk/tx-control.md#stale-read-only) query mode.
 
 ## Updating Vector Indexes {#update}
 

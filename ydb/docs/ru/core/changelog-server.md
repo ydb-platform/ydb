@@ -1,5 +1,89 @@
 # Список изменений {{ ydb-short-name }} Server
 
+## Версия 25.3 {#25-3}
+
+### Версия 25.3.1.25 {#25-3-1-25}
+
+Дата выхода: 3 апреля 2026.
+
+#### Функциональность
+
+* Добавлена поддержка конфигурации 2 ДЦ с синхронной записью данных (режим [`Bridge`](./concepts/bridge.md)); доступно в {{ ydb-short-name }} Enterprise.
+* Улучшения топиков:
+  * в Kafka API теперь можно создавать [компактифицированные](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) топики; YDB автоматически создаёт и удаляет внутреннего служебного потребителя, используемого для компактификации топика;
+  * API топиков расширен: в выдачу `DescribeConsumer` добавлены [новые параметры](./reference/ydb-sdk/topic.md), а [попартиционные метрики топиков можно отгружать в пользовательские квоты](./reference/observability/metrics/index.md#topics).
+* Реализованы [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) конфигурации топика в S3 и из S3.
+* Реализован [экспорт представлений](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) в S3 и из S3.
+
+#### Исправления ошибок
+
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/20238) состояние гонки при обновлении soft-лимита CPU.
+* [Исправлено поведение](https://github.com/ydb-platform/ydb/pull/18121), при котором `ALTER TABLE` мог завершаться с ошибкой для таблиц с векторным индексом.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/18088) неконсистентные результаты в некоторых read-write транзакциях — конфликтующие записи больше не затирают незакоммиченные изменения.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/18234) нарушение сериализуемости в read-write транзакциях после рестартов шарда.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20560) ошибка управления памятью при коммите смещения в топиках со включённым автоматическим партиционированием.
+* [Добавлены](https://github.com/ydb-platform/ydb/pull/18698) проверки включённого шифрования в zero-copy передаче.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20519) ошибка, приводящая к зависанию VDisk в local recovery после ошибки `ChunkRead`.
+* [Исключено](https://github.com/ydb-platform/ydb/pull/18924) появление фантомных VDisk из-за гонок между операциями создания и удаления группы.
+* [Улучшено](https://github.com/ydb-platform/ydb/pull/17687) определение состояния PDisk — теперь используется фактическое состояние из BSC, что повышает точность healthcheck.
+* При завершении сессии через attach stream теперь [отправляется](https://github.com/ydb-platform/ydb/pull/22298) уведомление.
+* Сервис координации теперь корректно [возвращает](https://github.com/ydb-platform/ydb/pull/16901) код `SCHEME_ERROR` для несуществующих ресурсов вместо ошибочно использовавшегося кода `INTERNAL_ERROR`.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/20157) ошибки работы с памятью и нарушения внутренней согласованности данных в Workload Manager и связанном с планировщиком коде.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20432) проблема, из-за которой запросы информации о PDisk могли завершаться таймаутом, если целевой узел был отключён или недоступен.
+
+## Версия 25.2 {#25-2}
+
+### Версия 25.2.1.24 {#25-2-1-24}
+
+Дата выхода: 28 января 2026.
+
+#### Исправления ошибок
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/25112) [проблема](https://github.com/ydb-platform/ydb/issues/23858), из-за которой удаление [таблетки](./concepts/glossary.md#tablet) могло зависать
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/25145) [ошибка](https://github.com/ydb-platform/ydb/issues/20866) вызывающая ошибку, при изменении follower'a таблицы
+* Исправлен ряд ошибок, связанных с [changefeed](./concepts/glossary.md#changefeed):
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/25689) [ошибка](https://github.com/ydb-platform/ydb/issues/25524), из-за которой импорт таблицы с Utf8-ключом и включённым changefeed мог завершиться неудачно
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/25453) [ошибка](https://github.com/ydb-platform/ydb/issues/25454), когда импорт таблицы без потоков изменений мог завершаться сбоем из-за некорректного поиска файлов changefeed
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/26069) [ошибка](https://github.com/ydb-platform/ydb/issues/25869), которая могла приводить к сбоям при UPSERT-операциях в колоночных таблицах
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/26504) [ошибка](https://github.com/ydb-platform/ydb/issues/26225), вызывавшая сбой из-за обращения к уже освобождённой памяти
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/26657) [ошибка](https://github.com/ydb-platform/ydb/issues/23122) с дубликатами в уникальных вторичных индексах
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/26879) [ошибка](https://github.com/ydb-platform/ydb/issues/26565) неверного совпадения контрольных сумм при восстановлении сжатых бэкапов из S3
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/27528) [ошибка](https://github.com/ydb-platform/ydb/issues/27193), из-за которой некоторые запросы бенчмарка TPC-H 1000 могли завершаться с ошибкой
+* Исправлен ряд проблем, связанных с инициализацией кластера:
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/25678) [ошибка](https://github.com/ydb-platform/ydb/issues/25023), из-за которой инициализация кластера могла зависать при обязательной авторизации
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/28886) [проблема](https://github.com/ydb-platform/ydb/issues/27228) из-за которой создание новых баз данных сразу после развёртывания кластера было невозможно в течение нескольких минут
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/28655) [ошибка](https://github.com/ydb-platform/ydb/issues/28510), при которой мог возникать race condition и клиенты получали ошибку `Could not find correct token validator`, если использовались недавно выданные токены до обновления состояния `LoginProvider`
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/29940) [ошибка](https://github.com/ydb-platform/ydb/issues/29903), при которой именованное выражение, содержащее другое именованное выражение, приводило к некорректному бэкапу `VIEW`
+
+### Релиз кандидат 25.2.1.10 {#25-2-1-10-rc}
+
+Дата выхода: 21 сентября 2025.
+
+#### Функциональность
+
+* [Аналитические возможности](./concepts/analytics/index.md) доступны по умолчанию: [колоночные таблицы](./concepts/datamodel/table.md#column-oriented-tables) могут создаваться без включения специальных флагов, с использованием сжатия LZ4 и хеш-партиционирования. Поддерживаемые операции включают широкий набор DML (UPDATE, DELETE, UPSERT, INSERT INTO ... SELECT) и CREATE TABLE AS SELECT. Интеграция с dbt, Apache Airflow, Jupyter, Superset и федеративные запросы к S3 позволяют строить сквозные аналитические пайплайны в YDB.
+* [Стоимостной оптимизатор](./concepts/optimizer.md) работает по умолчанию для запросов, использующих хотя бы одну колоночную таблицу, но может быть включён принудительно и для остальных запросов. Стоимостной оптимизатор улучшает производительность выполнения запросов, вычисляя оптимальный порядок и тип соединений на основе статистики таблиц; поддерживаемые [hints](./dev/query-execution-optimization/query-hints.md) позволяют тонко настраивать планы выполнения для сложных аналитических запросов.
+* Реализован [трансфер данных](./concepts/transfer.md) – асинхронный механизм переноса данных из топика в таблицу. [Создание](./yql/reference/syntax/create-transfer.md) экземпляра трансфера, его [изменение](./yql/reference/syntax/alter-transfer.md) и [удаление](./yql/reference/syntax/drop-transfer.md) осуществляется с использованием YQL. Для быстрого старта воспользуйтесь [инструкцией с примером](./recipes/transfer/quickstart.md).
+* Добавлен [спиллинг](./concepts/spilling.md), механизм управления памятью, при котором промежуточные данные, возникающие в результате выполнения запросов и превышающие доступный объём оперативной памяти узла, временно выгружаются во внешнее хранилище. Спиллинг обеспечивает выполнение пользовательских запросов, которые требуют обработки больших объёмов данных, превышающих доступную память узла.
+* Увеличено [максимальное время на выполнение одного запроса](./concepts/limits-ydb) с 30 минут до 2 часов.
+* Добавлена поддержка Certificate Authority (CA) и [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) аутентификации в [асинхронной репликации](./yql/reference/syntax/create-async-replication.md).
+* Включены по умолчанию:
+
+  * [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска;
+  * поддержка в [YDB Topics Kafka API](./reference/kafka-api/index.md) [клиентской балансировки читателей](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [компактифицированных топиков](https://docs.confluent.io/kafka/design/log_compaction.html) и [транзакций](https://www.confluent.io/blog/transactions-apache-kafka);
+  * поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions) в CDC для строковых таблиц;
+  * поддержка автопартиционирования топиков для асинхронной репликации;
+  * поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric);
+  * поддержка [типа DateTime64](./yql/reference/types/primitive.md#datetime);
+  * автоудаление временных директорий и таблиц при экспорте в S3;
+  * поддержка [потока изменений](./concepts/cdc.md) в операциях резервного копирования и восстановления;
+  * возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md) для вторичного индекса;
+  * системные представления с [историей перегруженных партиций](./dev/system-views#top-overload-partitions).
+
+#### Исправления ошибок
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/24265) ошибка в [Workload Manager](./dev/resource-consumption-management.md), из-за которой потребление CPU колоночными таблицами могло превышать установленные пределы.
+
 ## Версия 25.1 {#25-1}
 
 ### Версия 25.1.4.7 {#25-1-4-7}

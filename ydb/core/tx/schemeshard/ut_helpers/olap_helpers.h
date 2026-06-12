@@ -7,11 +7,11 @@
 
 namespace NSchemeShardUT_Private {
 
-ui32 CountSharedShardsRows(TTestActorRuntime& runtime, ui64 localShardIdx = 0);
-ui64 GetShardOwnerLocalPathId(TTestActorRuntime& runtime, ui64 localShardIdx);
-TVector<ui64> GetColumnShardTabletIds(TTestActorRuntime& runtime, const TString& path);
-ui64 ResolveLocalShardIdxByTabletId(TTestActorRuntime& runtime, ui64 tabletId);
-ui32 CountShardsTableRows(TTestActorRuntime& runtime);
-ui64 GetLocalPathId(TTestActorRuntime& runtime, const TString& path);
+ui32 CountSharedShardsRows(NActors::TTestActorRuntime& runtime, ui64 localShardIdx = 0);
+ui64 GetShardOwnerLocalPathId(NActors::TTestActorRuntime& runtime, ui64 localShardIdx);
+TVector<ui64> GetColumnShardTabletIds(NActors::TTestActorRuntime& runtime, const TString& path);
+ui64 ResolveLocalShardIdxByTabletId(NActors::TTestActorRuntime& runtime, ui64 tabletId);
+ui32 CountShardsTableRows(NActors::TTestActorRuntime& runtime);
+ui64 GetLocalPathId(NActors::TTestActorRuntime& runtime, const TString& path);
 
 } // namespace NSchemeShardUT_Private

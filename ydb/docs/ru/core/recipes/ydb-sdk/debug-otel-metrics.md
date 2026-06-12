@@ -22,14 +22,21 @@
 | `ydb.query.session.min`              | Gauge       | `{session}` | Настроенный минимальный размер пула сессий.                           |
 | `ydb.query.session.max`              | Gauge       | `{session}` | Настроенный максимальный размер пула сессий.                          |
 
+### Метрики повторных попыток {#retry-metrics}
+
+| Имя                          | Тип       | Единица     | Описание                                                                                                                            |
+|------------------------------|-----------|-------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `ydb.client.retry.duration`  | Histogram | `s`         | Полная видимая клиенту длительность логической операции, выполненной через политику повторов, включая все попытки и задержки backoff. |
+| `ydb.client.retry.attempts`  | Histogram | `{attempt}` | Распределение числа попыток на одну логическую операцию. Значение `1` означает успех с первой попытки.                               |
+
 ### Дополнительные метрики (JavaScript) {#js-metrics}
 
-В [JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk) пакет `@ydbjs/telemetry` дополнительно публикует метрики повторных попыток:
+В [JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk) пакет `@ydbjs/telemetry` использует собственные имена и семантику для метрик повторных попыток — отличные от `ydb.client.retry.*` выше:
 
-| Имя                   | Тип       | Единица     | Описание                                                        |
-|-----------------------|-----------|-------------|-----------------------------------------------------------------|
-| `ydb.retry.attempts`  | Counter   | `{attempt}` | Количество попыток повторного выполнения операции с тегом исхода. |
-| `ydb.retry.duration`  | Histogram | `s`         | Суммарная длительность цикла повторных попыток, включая backoff.  |
+| Имя                   | Тип       | Единица     | Описание                                                                                                                                              |
+|-----------------------|-----------|-------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ydb.retry.attempts`  | Counter   | `{attempt}` | Монотонный счётчик попыток повторного выполнения с тегом исхода `ydb.retry.outcome`. В отличие от гистограммы `ydb.client.retry.attempts`, не показывает распределение числа попыток на один запрос. |
+| `ydb.retry.duration`  | Histogram | `s`         | Суммарная длительность цикла повторных попыток, включая backoff (аналог `ydb.client.retry.duration`).                                                  |
 
 ## Атрибуты {#attributes}
 
@@ -37,10 +44,11 @@
 |-------------------------------|----------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
 | `database`                    | `ydb.client.operation.duration`, `ydb.client.operation.failed` | Имя базы данных {{ ydb-short-name }}.                                                                           |
 | `endpoint`                    | `ydb.client.operation.duration`, `ydb.client.operation.failed` | Discovery-endpoint в формате `host:port`.                                                                       |
-| `operation.name`              | `ydb.client.operation.duration`, `ydb.client.operation.failed` | Имя клиентской операции: `ExecuteQuery`, `Commit`, `Rollback`, `CreateSession`.                                 |
+| `operation.name`              | `ydb.client.operation.duration`, `ydb.client.operation.failed`, `ydb.client.retry.duration`, `ydb.client.retry.attempts` | Имя клиентской операции: `ExecuteQuery`, `Commit`, `Rollback`, `CreateSession`.                                 |
 | `status_code`                 | `ydb.client.operation.failed`                                  | Код статуса {{ ydb-short-name }} (например, `BAD_REQUEST`, `SCHEME_ERROR`).                                     |
 | `ydb.query.session.pool.name` | Все метрики `ydb.query.session.*`                              | Имя пула сессий. По умолчанию формируется как `<endpoint>/<database>`; настраивается через API конкретного SDK. |
 | `ydb.query.session.state`     | `ydb.query.session.count`                                      | Состояние сессии: `idle` или `used`.                                                                            |
+| `ydb.retry.outcome`           | `ydb.retry.attempts` (JavaScript)                              | Исход попытки повторного выполнения: например, `success`, `retried`.                                            |
 
 ## Подключение к SDK {#integration}
 

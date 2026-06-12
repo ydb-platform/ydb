@@ -447,6 +447,14 @@ public:
 
     void AddFilter(const TColumnFilter& filter) {
         if (filter.IsTotalAllowFilter()) {
+            if (filter.IsEmpty()) {
+                return;
+            }
+            // Exclusive duplicate interval: allow-all over explicit row span. Keep metadata for fetch gates.
+            if (!UseFilter) {
+                *Filter = filter;
+                RecordsCountActual = filter.GetFilteredCount();
+            }
             return;
         }
         if (!UseFilter) {

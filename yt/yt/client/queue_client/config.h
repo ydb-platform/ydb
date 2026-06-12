@@ -76,7 +76,7 @@ struct TQueueStaticExportConfig
     //!  - with 7 fields, the last field is interpreted as YEARS
     //!
     //! \note See library/cpp/cron_expression/readme.md.
-    std::optional<TString> ExportCronSchedule;
+    std::optional<std::string> ExportCronSchedule;
 
     //! Path to directory that will contain resulting static tables with exported data.
     NYPath::TYPath ExportDirectory;
@@ -93,7 +93,7 @@ struct TQueueStaticExportConfig
     //! unix timestamps corresponding to the output tables are guaranteed to be unique by the export algorithm).
     //! An attempt to produce a table which already exists will lead to an error, in which case the data will be exported
     //! on the next iteration.
-    TString OutputTableNamePattern;
+    std::string OutputTableNamePattern;
     //! If true, the unix timestamp used in formatting the output table name will be the upper bound actually used in gathering chunks for this table.
     //! Otherwise, the unix timestamp used in the name formatting will be equal to the upper bound minus one export period.
     //! E.g. if hourly exports are set up, setting this value to true will mean that a table named 17:00 has data from 16:00 to 17:00,

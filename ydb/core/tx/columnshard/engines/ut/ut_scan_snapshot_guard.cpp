@@ -46,8 +46,9 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         csControllerGuard->SetOverrideMaxReadStaleness(TDuration::MilliSeconds(250));
 
         auto tracker = MakeTracker();
+        NOlap::NTest::TTestPathIdTranslator translator;
         const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
-        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker);
+        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker, translator);
 
         UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 750);
         UNIT_ASSERT(guard->MayStartScanAt(Step(1000), TSchemeShardLocalPathId::FromRawValue(1)));
@@ -124,8 +125,9 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         csControllerGuard->SetOverrideMaxReadStaleness(TDuration::MilliSeconds(250));
 
         auto tracker = MakeTracker();
+        NOlap::NTest::TTestPathIdTranslator translator;
         const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot(900, 0);
-        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker);
+        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker, translator);
 
         UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads(), lastCleanupSnapshot);
         UNIT_ASSERT(!guard->MayStartScanAt(Step(850), TSchemeShardLocalPathId::FromRawValue(1)));

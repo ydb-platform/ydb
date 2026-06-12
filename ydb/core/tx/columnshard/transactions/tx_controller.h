@@ -419,6 +419,10 @@ public:
         }
 
         virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+
+        virtual void OnPlanStep(TColumnShard& /*owner*/, const ui64 /*planStep*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+        }
+
         virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
 
         virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;

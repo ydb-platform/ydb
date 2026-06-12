@@ -839,8 +839,6 @@ namespace NKikimr {
 
                     const auto& bridgeGroupState = Info->Group->GetBridgeGroupState();
                     const ui32 myGeneration = bridgeGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration();
-
-<<<<<<< HEAD
                     Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "GroupId# " << GroupId
                         << " item.GroupId# " << item.GroupId
                         << " myGeneration# " << myGeneration
@@ -848,11 +846,6 @@ namespace NKikimr {
                         << " Info.Generation# " << request->Info->GroupGeneration
                         << " Type# " << TypeName<TEvent>()
                         << " RequestId# " << request->RequestId); // too often restarts do not make sense
-=======
-                    Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "myGeneration# " << myGeneration
-                        << " RacingGeneration# " << msg->RacingGeneration
-                        << " Info.Generation# " << request->Info->GroupGeneration); // too often restarts do not make sense
->>>>>>> 17c34433eb5 (Introduce interpile put traffic optimization (#36607))
 
                     if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));

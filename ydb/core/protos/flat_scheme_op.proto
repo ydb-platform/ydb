@@ -766,11 +766,9 @@ message TMetadataManagerConstructorContainer {
     }
 }
 
-message TInsertPromoteOptions {
-    optional bool Enabled = 1 [default = false];
-    optional uint64 MinBlobBytes = 2 [default = 0];
-    optional bool BuildIndexesEnabled = 3 [default = false];
-    optional uint32 CompactionTargetLevel = 4 [default = 0];
+message TInsertOptions {
+    optional bool BuildIndexesEnabled = 1 [default = false];
+    optional uint64 BuildIndexesMinBlobBytes = 2 [default = 0];
 }
 
 message TColumnTableSchemeOptions {
@@ -778,7 +776,7 @@ message TColumnTableSchemeOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
-    optional TInsertPromoteOptions InsertPromoteOptions = 6;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TColumnTableSchema {

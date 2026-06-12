@@ -32,6 +32,16 @@ fi
 
 echo "Planned scope: $(jq '.total_suites' "$FILTERED_SUMMARY") suites, $(jq '.total_tests' "$FILTERED_SUMMARY") tests, weight $(jq '.total_weight' "$FILTERED_SUMMARY")"
 
+python3 "$SCRIPT_DIR/apply_history_suite_weights.py" \
+  "$TEST_LIST_LOG" \
+  "$FILTERED_SUMMARY" \
+  --target-prefix "$TARGET_PREFIX" \
+  --build-type "${BUILD_PRESET:-relwithdebinfo}" \
+  --branch "${HISTORY_BRANCH:-main}" \
+  --days-back "${HISTORY_DAYS_BACK:-3}"
+
+echo "Weighting: $(jq -c '.weighting' "$FILTERED_SUMMARY")"
+
 if [ "$(jq '.total_suites' "$FILTERED_SUMMARY")" = "0" ]; then
   jq -n \
     --argjson shard_count "$SHARD_COUNT" \

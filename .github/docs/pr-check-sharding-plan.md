@@ -62,7 +62,8 @@ check-running-allowed
 - [ ] Confirm shard split + S3 isolation on green smoke (distinct test counts per shard, `shard_N/try_1/` paths)
 - [ ] Pilot on internal PR with `pr_check_shard_count: 2`
 - [ ] Compare wall-clock vs monolith (YDB `pr_check_job_runs_scatter`)
-- [ ] Tune shard count, optional durations CSV from analytics
+- [ ] **Coverage parity:** resolve 739-row gap vs monolith (see [Coverage gap vs monolith](#coverage-gap-vs-monolith--open-investigation)) — style / peerdir / 197 real subtests; re-diff on same commit
+- [ ] Tune shard count; durations now come from YDB p50 on plan (3d window) with size fallback
 - [ ] Optional: ASAN sharding, S3 index linking shard logs from merge summary
 
 ## Shard planning
@@ -70,7 +71,7 @@ check-running-allowed
 1. **Extract** — walk graph JSON, collect `module_dir` where `module_tag` is `*test_program` (py3test, gtest, …).
 2. **Scope** — filter by `--target-prefix` (e.g. `ydb/tests/olap/`).
 3. **Drop scope root** — remove prefix root (e.g. `ydb/tests/olap`) when nested suites exist; avoids RECURSE parent pulling entire tree.
-4. **Split** — bin-pack suite paths by estimated duration; each plan entry is one ya.make suite directory.
+4. **Split** — bin-pack suite paths by load: **p50 total suite duration** from YDB (SUM per job run, then p50); fallback to size weights (small=60, medium=600). One YDB query; `suite_folder IN (...)` only when <50 suites.
 
 ## Try 1 execution (per shard)
 
@@ -156,3 +157,106 @@ Inspect **Plan test shards** job summary and artifact `debug-shard-plan-<run_id>
 - `>500` failed after try 1 skips retry (same as monolith).
 - `test_size` default `small,medium` skips LARGE-only suites (e.g. `ydb/tests/olap/load`); same as PR-check, not a sharding bug.
 - `build_rwdi` still posts PR comments unless `publish_pr_comment: false` is added (optional cleanup).
+
+## Coverage gap vs monolith — open investigation
+
+Reference comparison (not apples-to-apples on commit, but same scope `ydb/`, `test_size=small,medium`):
+
+| Run | Workflow | Branch / commit | Report |
+|-----|----------|-----------------|--------|
+| [27382570708](https://github.com/ydb-platform/ydb/actions/runs/27382570708) | Run-tests (monolith) | `main` @ `69e2f3b` | try_1 `report.json` |
+| [27425680676](https://github.com/ydb-platform/ydb/actions/runs/27425680676) | Run and debug tests (8 shards) | `pr-check-sharding-pilot` @ `9b85086` | merged try_1 `report.json` |
+
+### Metrics — do not compare plan table to monolith TESTS
+
+Three different numbers; confusing them looks like “sharding skipped half the tests”:
+
+| Metric | Sharded run | Meaning |
+|--------|------------:|---------|
+| Plan `total_tests` | **37 662** | Logical tests from `ya test -L` after small+medium filter (`extract_suites_from_ya_test_list.py`); chunks listed as `… chunk]` are **not** counted |
+| Plan `reported_tests` | **39 432** | Raw `Total N tests` footer from `ya test -L` before size filter (1 770 LARGE-only dropped → 37 662) |
+| Merged `report.json` rows | **57 264** | Full build-results-report: every gtest subtest, py3test parametrization, peerdir pull-in, style nodes |
+| Merged `type=test` rows | **51 936** | Runnable tests only (exclude `type=style`) |
+
+Monolith try_1: **58 003** total rows (**52 133** `type=test`). Sharded merged is **−739 (−1.3%)** total, **−197 (−0.4%)** on real tests.
+
+**Action:** in plan job summary / docs, label plan count as “logical tests (-L)” and link merged report TESTS as “executed rows”; never imply they must match.
+
+### What was missing vs monolith (739 rows) — breakdown
+
+Set diff: every row in monolith try_1 `report.json` absent from sharded merged try_1. Sharded is a **subset** (0 rows only-in-sharded).
+
+#### 1. Style / lint nodes — 542 rows (`type=style`)
+
+**What:** not runnable tests; build-graph nodes for `clang_format`, `flake8`, `clang_tidy`-style checks, template copies (`svn_interface.c`), etc.
+
+**Why skipped:**
+
+- Monolith runs **one** `./ya make -A ydb/` over the full dependency graph → all style nodes under `ydb/` and peerdirs land in `report.json`.
+- Shards run `./ya make -A` on **explicit suite paths** from plan (779 dirs from `ya test -L`). Style nodes attached to modules **outside** those suite targets, or only reachable via full-tree `-A ydb/`, are not invoked the same way.
+- Plan pipeline (`ya test -L` + `extract_suites_from_ya_test_list.py`) lists only `_RUNNABLE_TYPES` (gtest, unittest, py3test, …); style suites never enter `shard_plan.json`.
+
+**Where (top areas among 542 missing style rows):**
+
+| Area | Missing style rows |
+|------|-------------------:|
+| under `ydb/` | 408 |
+| under `yql/` (peerdir) | 113 |
+| under `yt/` (peerdir) | 21 |
+
+**Open question:** are style rows required for PR-check parity, or acceptable to drop (they are not functional tests)? If required → need explicit style targets or full-graph replay per shard (likely undesirable).
+
+#### 2. Peerdir paths outside `ydb/` — 134 rows (subset of §1, mostly style)
+
+**What:** nodes with `path` prefix `yql/essentials/…`, `yt/python/…` pulled by monolith via `--add-peerdirs-tests all` on `-A ydb/`.
+
+**Why skipped:**
+
+- Plan scope is `target_prefix=ydb/`. `ya test -L ydb/` lists suites under `ydb/`; peerdir suites living under `yql/`, `yt/` are **not** in `shard_plan.json`.
+- Shards still pass `--add-peerdirs-tests all`, but only when running their **listed** suite targets — peerdir tests that monolith gets “for free” from full `ydb/` root are not scheduled unless a planned suite triggers them.
+
+**Examples from diff:** `yql/essentials/core/cbo/simple` (cbo_simple.cpp), `yql/essentials/udfs/common/…`, `yt/python/yt/yson/…`.
+
+**Open question:** should plan add peerdir suite roots that monolith always runs, or is `-A ydb/` peerdir pull acceptable to omit for PR-check?
+
+#### 3. Real tests (`type=test`) — 197 rows
+
+**What:** actual test executions with `subtest_name` set — gtest cases (`BM_*` benchmarks), py3test chunks (`run[…]`, `sole chunk`), parametrized subtests.
+
+**Why skipped (likely combined causes):**
+
+| Cause | Explanation |
+|-------|-------------|
+| **Different commits** | Monolith `main@69e2f3b` vs pilot `9b85086` — tree differs; not a controlled A/B. Some of the 197 may be add/remove on branch, not sharding logic. |
+| **Suite-target vs full-graph execution** | Monolith uses `--build-custom-json=graph.json` + `-A ydb/` (entire cut graph). Shards use space-separated suite paths **without** graph replay. Some subtests/chunks reachable only through full-graph scheduling may not run when only the parent suite dir is passed. |
+| **Plan list vs report expansion** | `extract_suites_from_ya_test_list.py` skips lines containing ` chunk]` when counting plan tests; `ya make -A` on the suite still **expands** chunks in the report. Gap here is the opposite (report > plan), but monolith full graph may still pick up **extra** chunk/subtest rows not tied to a planned suite root. |
+| **Benchmark / manual edge cases** | Missing examples include `ydb/library/actors/async/benchmark` (`BM_ManualPingActor/process_time`, …), `ydb/library/benchmarks/runner`, `ydb/library/yql/dq/comp_nodes/…/exec` py3 chunks. Worth checking SIZE(medium)/manual tags vs what `-L` lists. |
+
+**Top suite areas among 197 missing `type=test` rows:**
+
+| Suite area (path prefix) | Count |
+|--------------------------|------:|
+| `ydb/library/benchmarks/runner` | 10 |
+| `ydb/core/blobstorage/vdisk` | 10 |
+| `ydb/core/tx/schemeshard` | 10 |
+| `ydb/core/kqp/ut` | 8 |
+| `ydb/library/actors/async` | 7 |
+| `ydb/library/yql/dq` | 4 |
+| `ydb/tests/compatibility/*`, `ydb/tests/stress/*`, … | 2–4 each |
+
+**Open question:** export the 197-row diff as a maintained artifact (`missing_vs_monolith.json`) and re-run diff on **same commit** after pilot merge to isolate sharding-caused gap from branch drift.
+
+### What is NOT the cause
+
+- **LARGE tests:** both runs use `small,medium`; 1 770 tests dropped at plan stage match `-L` size filter — same as monolith.
+- **increment:** sharded smoke had `increment=false` (full suite list).
+- **Failed shard 5:** merge collected all 8 shard reports; gap is not from a missing shard artifact.
+- **Duplicate work on shards:** sum of per-shard reports (~95k rows) >> merged (57k) because `--add-peerdirs-tests all` duplicates peerdir rows across shards; merge deduplicates correctly.
+
+### Follow-up tasks
+
+- [ ] Re-run monolith vs sharded merge on **identical commit** (`main`, same `test_targets`, `test_size`, `increment`).
+- [ ] Automate diff: monolith try_1 vs merged try_1 → `missing_vs_monolith.json` + summary by `type`, top-level dir, suite prefix.
+- [ ] Decide product policy: **style rows**, **peerdir outside `ydb/`**, **benchmark subtests** — required for PR-check parity or explicitly out of scope.
+- [ ] If real-test gap persists on same commit: try (a) replay cut graph on shards with shard-specific UID filter, or (b) expand plan with missing suite roots from diff, or (c) accept &lt;0.5% gap with documented allowlist.
+- [ ] Fix plan job UX: show both “planned logical tests (-L)” and “expected report rows (historical ratio)” so smoke runs do not look under-tested.

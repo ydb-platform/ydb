@@ -292,19 +292,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          sparse-checkout: .github/scripts/tests/sharding
+          sparse-checkout: |
+            .github/actions/setup_ci_ydb_service_account_key_file_credentials
+            .github/scripts/analytics/ydb_wrapper.py
+            .github/scripts/tests/get_test_duration_estimates.py
+            .github/scripts/tests/sharding
       - name: Download increment build artifacts
         uses: actions/download-artifact@v4
         with:
           name: pr-check-rwdi-graph
           path: build
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Build shard plan
         id: plan
         env:
           SHARD_COUNT: ${{ needs.check-running-allowed.outputs.shard_count }}
+          BUILD_PRESET: relwithdebinfo
+          HISTORY_BRANCH: ${{ github.base_ref }}
+          HISTORY_DAYS_BACK: "3"
         run: |
           set -eux
-          python3 -m pip install pyyaml --quiet
+          python3 -m pip install pyyaml ydb --quiet
           chmod +x .github/scripts/tests/sharding/plan_shard_tests.sh
           .github/scripts/tests/sharding/plan_shard_tests.sh \
             build/test_list.log \
@@ -321,6 +333,10 @@ jobs:
             shard_plan_out/shard_plan.json \
             --title "$plan_title" \
             >> "$GITHUB_STEP_SUMMARY"
+          if [ -f shard_plan_out/list_summary.json ]; then
+            jq -r '.weighting | "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p50 (\(.branch // "main"), \(.days_back // 3)d)"' \
+              shard_plan_out/list_summary.json >> "$GITHUB_STEP_SUMMARY" || true
+          fi
           echo "shard_ids=$(jq -c '[.shards[].id]' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
           echo "active_shard_count=$(jq '.shard_count' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
       - name: Upload shard plan

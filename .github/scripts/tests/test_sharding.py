@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sharding"
 SHARDING_DIR = Path(__file__).resolve().parent / "sharding"
@@ -410,6 +411,44 @@ class ShardingToolsTest(unittest.TestCase):
             self.assertEqual(plan["total_weight"], 60600)
             loads = [shard["balance_weight"] for shard in plan["shards"]]
             self.assertEqual(loads, [60000, 600])
+
+    def test_apply_history_replaces_size_weight_with_duration(self):
+        if str(SHARDING_DIR) not in sys.path:
+            sys.path.insert(0, str(SHARDING_DIR))
+        if str(SHARDING_DIR.parent) not in sys.path:
+            sys.path.insert(0, str(SHARDING_DIR.parent))
+        import apply_history_suite_weights as ahsw  # noqa: E402
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary_path = Path(tmp) / "summary.json"
+            _run(
+                "extract_suites_from_ya_test_list.py",
+                str(FIXTURES / "ya_test_list_olap.log"),
+                "--target-prefix",
+                "ydb/tests/olap",
+                "--summary-json",
+                str(summary_path),
+            )
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+            def fake_p50(paths, _days, _build, _branch, **kwargs):
+                return {path: 100.0 for path in paths}
+
+            with patch.object(ahsw, "get_suite_duration_p50", side_effect=fake_p50):
+                updated = ahsw.apply_history_weights(
+                    summary,
+                    list_log=FIXTURES / "ya_test_list_olap.log",
+                    target_prefix="ydb/tests/olap",
+                    allowed_sizes={"small", "medium"},
+                    build_type="relwithdebinfo",
+                    branch="main",
+                    days_back=3,
+                )
+
+            self.assertEqual(updated["weighting"]["history_suite_count"], len(updated["suites"]))
+            self.assertEqual(updated["weighting"]["size_fallback_suite_count"], 0)
+            self.assertEqual(updated["total_weight"], float(len(updated["suites"])) * 100.0)
+            self.assertTrue(all(suite["weight_source"] == "history" for suite in updated["suites"]))
 
     def test_build_shard_blacklist_complement(self):
         with tempfile.TemporaryDirectory() as tmp:

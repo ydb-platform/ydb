@@ -64,6 +64,7 @@ class SuiteInfo:
     sizes: set[str] = field(default_factory=set)
     small_test_count: int = 0
     medium_test_count: int = 0
+    test_names: list[str] = field(default_factory=list)
 
     @property
     def test_count(self) -> int:
@@ -145,6 +146,7 @@ def parse_ya_test_list(
             continue
         if " chunk]" in test_name or test_name.endswith(" chunk"):
             continue
+        suites[current_path].test_names.append(test_name)
         _increment_test_count(suites[current_path], current_sizes)
 
     result = [suite for suite in suites.values() if suite.test_count > 0]

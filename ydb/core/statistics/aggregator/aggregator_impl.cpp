@@ -940,7 +940,7 @@ std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) 
 }
 
 void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db) {
-    db.Table<Schema::ForceTraversalOperations>().Key(ForceTraversalOperationId).Delete();
+    db.Table<Schema::ForceTraversalOperations>().Key(operationId).Delete();
 
     auto operation = ForceTraversalOperation(operationId);
     for(const TForceTraversalTable& table : operation->Tables) {

@@ -118,6 +118,46 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         Analyze(runtime, saTabletId, {pathId}, "operationId");
     }
 
+    Y_UNIT_TEST(DeleteForceTraversalUsesCorrectKey) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        PrepareTable(env, "Table1");
+        PrepareTable(env, "Table2");
+
+        ui64 saTabletId = 0;
+        auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId);
+        auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
+
+        auto sender1 = runtime.AllocateEdgeActor();
+        auto sender2 = runtime.AllocateEdgeActor();
+        auto sender3 = runtime.AllocateEdgeActor();
+
+        TBlockEvents<TEvStatistics::TEvSaveStatisticsQueryResponse> block(runtime);
+
+        auto req1 = MakeAnalyzeRequest({pathId1}, "op1");
+        runtime.SendToPipe(saTabletId, sender1, req1.release());
+        runtime.WaitFor("TEvSaveStatisticsQueryResponse", [&]{ return block.size() > 0; });
+
+        // Re-send from different sender triggers delete of the queued operation
+        auto req2 = MakeAnalyzeRequest({pathId2}, "op2");
+        runtime.SendToPipe(saTabletId, sender2, req2.release());
+        auto req3 = MakeAnalyzeRequest({pathId2}, "op2");
+        runtime.SendToPipe(saTabletId, sender3, req3.release());
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        RebootTablet(runtime, saTabletId, sender1);
+
+        block.Unblock();
+        block.Stop();
+
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender3);
+
+        // op1 must still be enqueued after reboot
+        AnalyzeStatus(runtime, sender1, saTabletId, "op1",
+            NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
+    }
+
     Y_UNIT_TEST(AnalyzeRebootSa) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

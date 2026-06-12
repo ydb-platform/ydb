@@ -7,7 +7,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 template <class T>
-TConclusionStatus ExtractInsertPromoteOption(
+TConclusionStatus ExtractInsertOption(
     NYql::TObjectSettingsImpl::TFeaturesExtractor& features, const TString& featureId, std::optional<T>& target) {
     if (auto rawValue = features.Extract(featureId)) {
         T parsed;
@@ -33,16 +33,11 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE', 'TRIVIAL']");
         }
     }
-    if (auto status = ExtractInsertPromoteOption(features, "INSERT_PROMOTE_OPTIONS.ENABLED", InsertPromoteOptionsEnabled); status.IsFail()) {
+    if (auto status = ExtractInsertOption(features, "INSERT_OPTIONS.BUILD_INDEXES_ENABLED", InsertOptionsBuildIndexesEnabled); status.IsFail()) {
         return status;
     }
-    if (auto status = ExtractInsertPromoteOption(features, "INSERT_PROMOTE_OPTIONS.MIN_BLOB_BYTES", InsertPromoteOptionsMinBlobBytes); status.IsFail()) {
-        return status;
-    }
-    if (auto status = ExtractInsertPromoteOption(features, "INSERT_PROMOTE_OPTIONS.BUILD_INDEXES_ENABLED", InsertPromoteOptionsBuildIndexesEnabled); status.IsFail()) {
-        return status;
-    }
-    if (auto status = ExtractInsertPromoteOption(features, "INSERT_PROMOTE_OPTIONS.COMPACTION_TARGET_LEVEL", InsertPromoteOptionsCompactionTargetLevel); status.IsFail()) {
+    if (auto status = ExtractInsertOption(features, "INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES", InsertOptionsBuildIndexesMinBlobBytes);
+        status.IsFail()) {
         return status;
     }
     if (const auto className = features.Extract<TString>("COMPACTION_PLANNER.CLASS_NAME")) {
@@ -95,20 +90,13 @@ void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTab
     if (MetadataManagerConstructor.HasObject()) {
         MetadataManagerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableMetadataManagerConstructor());
     }
-    if (InsertPromoteOptionsEnabled || InsertPromoteOptionsMinBlobBytes || InsertPromoteOptionsBuildIndexesEnabled ||
-        InsertPromoteOptionsCompactionTargetLevel) {
-        auto& options = *schemaData.MutableOptions()->MutableInsertPromoteOptions();
-        if (InsertPromoteOptionsEnabled) {
-            options.SetEnabled(*InsertPromoteOptionsEnabled);
+    if (InsertOptionsBuildIndexesEnabled || InsertOptionsBuildIndexesMinBlobBytes) {
+        auto& options = *schemaData.MutableOptions()->MutableInsertOptions();
+        if (InsertOptionsBuildIndexesEnabled) {
+            options.SetBuildIndexesEnabled(*InsertOptionsBuildIndexesEnabled);
         }
-        if (InsertPromoteOptionsMinBlobBytes) {
-            options.SetMinBlobBytes(*InsertPromoteOptionsMinBlobBytes);
-        }
-        if (InsertPromoteOptionsBuildIndexesEnabled) {
-            options.SetBuildIndexesEnabled(*InsertPromoteOptionsBuildIndexesEnabled);
-        }
-        if (InsertPromoteOptionsCompactionTargetLevel) {
-            options.SetCompactionTargetLevel(*InsertPromoteOptionsCompactionTargetLevel);
+        if (InsertOptionsBuildIndexesMinBlobBytes) {
+            options.SetBuildIndexesMinBlobBytes(*InsertOptionsBuildIndexesMinBlobBytes);
         }
     }
 }

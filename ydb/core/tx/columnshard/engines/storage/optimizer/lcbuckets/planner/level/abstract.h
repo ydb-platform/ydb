@@ -408,6 +408,10 @@ public:
         return false;
     }
 
+    virtual std::optional<ui64> GetSkipLevelMinBlobSize() const {
+        return std::nullopt;
+    }
+
     const TSimplePortionsGroupInfo& GetPortionsInfo() const {
         AFL_VERIFY(PortionsInfo);
         return *PortionsInfo;

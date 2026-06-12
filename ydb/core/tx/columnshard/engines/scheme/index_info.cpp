@@ -206,37 +206,19 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({ columnId });
 }
 
-bool TInsertPromoteOptionsPolicy::MeetsMinBlobBytes(const ui64 totalBlobBytes) const {
-    const ui64 minBlobBytes = MinBlobBytes.value_or(0);
+bool TInsertOptionsPolicy::MeetsMinBlobBytes(const ui64 totalBlobBytes) const {
+    const ui64 minBlobBytes = BuildIndexesMinBlobBytes.value_or(0);
     return minBlobBytes == 0 || totalBlobBytes >= minBlobBytes;
 }
 
-bool TInsertPromoteOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
-    if (!Enabled.value_or(false) || !BuildIndexesEnabled.value_or(false)) {
+bool TInsertOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
+    if (!BuildIndexesEnabled.value_or(false)) {
         return false;
     }
     if (mType != NEvWrite::EModificationType::Replace) {
         return false;
     }
     return MeetsMinBlobBytes(totalBlobBytes);
-}
-
-bool TInsertPromoteOptionsPolicy::ShouldPromoteCompactionOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
-    if (!Enabled.value_or(false)) {
-        return false;
-    }
-    if (mType != NEvWrite::EModificationType::Replace) {
-        return false;
-    }
-    return MeetsMinBlobBytes(totalBlobBytes);
-}
-
-ui32 TInsertPromoteOptionsPolicy::ResolveFixedCompactionLevelOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
-    const ui32 compactionTargetLevel = CompactionTargetLevel.value_or(0);
-    if (!ShouldPromoteCompactionOnInsert(mType, totalBlobBytes) || !compactionTargetLevel) {
-        return 0;
-    }
-    return compactionTargetLevel;
 }
 
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
@@ -245,19 +227,13 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
     }
-    if (optionsProto.HasInsertPromoteOptions()) {
-        const auto& options = optionsProto.GetInsertPromoteOptions();
-        if (options.HasEnabled()) {
-            InsertPromoteOptions.Enabled = options.GetEnabled();
-        }
-        if (options.HasMinBlobBytes()) {
-            InsertPromoteOptions.MinBlobBytes = options.GetMinBlobBytes();
-        }
+    if (optionsProto.HasInsertOptions()) {
+        const auto& options = optionsProto.GetInsertOptions();
         if (options.HasBuildIndexesEnabled()) {
-            InsertPromoteOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
+            InsertOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
         }
-        if (options.HasCompactionTargetLevel()) {
-            InsertPromoteOptions.CompactionTargetLevel = options.GetCompactionTargetLevel();
+        if (options.HasBuildIndexesMinBlobBytes()) {
+            InsertOptions.BuildIndexesMinBlobBytes = options.GetBuildIndexesMinBlobBytes();
         }
     }
     if (optionsProto.HasCompactionPlannerConstructor()) {

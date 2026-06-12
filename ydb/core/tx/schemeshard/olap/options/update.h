@@ -13,10 +13,8 @@ class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
-    YDB_ACCESSOR_DEF(std::optional<bool>, InsertPromoteOptionsEnabled);
-    YDB_ACCESSOR_DEF(std::optional<ui64>, InsertPromoteOptionsMinBlobBytes);
-    YDB_ACCESSOR_DEF(std::optional<bool>, InsertPromoteOptionsBuildIndexesEnabled);
-    YDB_ACCESSOR_DEF(std::optional<ui32>, InsertPromoteOptionsCompactionTargetLevel);
+    YDB_ACCESSOR_DEF(std::optional<bool>, InsertOptionsBuildIndexesEnabled);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
@@ -41,19 +39,13 @@ public:
             }
             CompactionPlannerConstructor = container.DetachResult();
         }
-        if (alterRequest.GetOptions().HasInsertPromoteOptions()) {
-            const auto& optionsProto = alterRequest.GetOptions().GetInsertPromoteOptions();
-            if (optionsProto.HasEnabled()) {
-                InsertPromoteOptionsEnabled = optionsProto.GetEnabled();
-            }
-            if (optionsProto.HasMinBlobBytes()) {
-                InsertPromoteOptionsMinBlobBytes = optionsProto.GetMinBlobBytes();
-            }
+        if (alterRequest.GetOptions().HasInsertOptions()) {
+            const auto& optionsProto = alterRequest.GetOptions().GetInsertOptions();
             if (optionsProto.HasBuildIndexesEnabled()) {
-                InsertPromoteOptionsBuildIndexesEnabled = optionsProto.GetBuildIndexesEnabled();
+                InsertOptionsBuildIndexesEnabled = optionsProto.GetBuildIndexesEnabled();
             }
-            if (optionsProto.HasCompactionTargetLevel()) {
-                InsertPromoteOptionsCompactionTargetLevel = optionsProto.GetCompactionTargetLevel();
+            if (optionsProto.HasBuildIndexesMinBlobBytes()) {
+                InsertOptionsBuildIndexesMinBlobBytes = optionsProto.GetBuildIndexesMinBlobBytes();
             }
         }
         return true;
@@ -69,20 +61,13 @@ public:
         if (MetadataManagerConstructor.HasObject()) {
             MetadataManagerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableMetadataManagerConstructor());
         }
-        if (InsertPromoteOptionsEnabled || InsertPromoteOptionsMinBlobBytes || InsertPromoteOptionsBuildIndexesEnabled ||
-            InsertPromoteOptionsCompactionTargetLevel) {
-            auto& options = *alterRequest.MutableOptions()->MutableInsertPromoteOptions();
-            if (InsertPromoteOptionsEnabled) {
-                options.SetEnabled(*InsertPromoteOptionsEnabled);
+        if (InsertOptionsBuildIndexesEnabled || InsertOptionsBuildIndexesMinBlobBytes) {
+            auto& options = *alterRequest.MutableOptions()->MutableInsertOptions();
+            if (InsertOptionsBuildIndexesEnabled) {
+                options.SetBuildIndexesEnabled(*InsertOptionsBuildIndexesEnabled);
             }
-            if (InsertPromoteOptionsMinBlobBytes) {
-                options.SetMinBlobBytes(*InsertPromoteOptionsMinBlobBytes);
-            }
-            if (InsertPromoteOptionsBuildIndexesEnabled) {
-                options.SetBuildIndexesEnabled(*InsertPromoteOptionsBuildIndexesEnabled);
-            }
-            if (InsertPromoteOptionsCompactionTargetLevel) {
-                options.SetCompactionTargetLevel(*InsertPromoteOptionsCompactionTargetLevel);
+            if (InsertOptionsBuildIndexesMinBlobBytes) {
+                options.SetBuildIndexesMinBlobBytes(*InsertOptionsBuildIndexesMinBlobBytes);
             }
         }
     }

@@ -1938,34 +1938,20 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeValue(options.GetSchemeNeedActualization(), paramsStr);
         del = ", ";
     }
-    if (options.HasInsertPromoteOptions()) {
-        const auto& insertPromoteOptions = options.GetInsertPromoteOptions();
-        if (insertPromoteOptions.HasEnabled()) {
+    if (options.HasInsertOptions()) {
+        const auto& insertOptions = options.GetInsertOptions();
+        if (insertOptions.HasBuildIndexesEnabled()) {
             paramsStr << del;
-            EscapeName("INSERT_PROMOTE_OPTIONS.ENABLED", paramsStr);
+            EscapeName("INSERT_OPTIONS.BUILD_INDEXES_ENABLED", paramsStr);
             paramsStr << "=";
-            EscapeValue(insertPromoteOptions.GetEnabled(), paramsStr);
+            EscapeValue(insertOptions.GetBuildIndexesEnabled(), paramsStr);
             del = ", ";
         }
-        if (insertPromoteOptions.HasMinBlobBytes()) {
+        if (insertOptions.HasBuildIndexesMinBlobBytes()) {
             paramsStr << del;
-            EscapeName("INSERT_PROMOTE_OPTIONS.MIN_BLOB_BYTES", paramsStr);
+            EscapeName("INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES", paramsStr);
             paramsStr << "=";
-            EscapeValue(insertPromoteOptions.GetMinBlobBytes(), paramsStr);
-            del = ", ";
-        }
-        if (insertPromoteOptions.HasBuildIndexesEnabled()) {
-            paramsStr << del;
-            EscapeName("INSERT_PROMOTE_OPTIONS.BUILD_INDEXES_ENABLED", paramsStr);
-            paramsStr << "=";
-            EscapeValue(insertPromoteOptions.GetBuildIndexesEnabled(), paramsStr);
-            del = ", ";
-        }
-        if (insertPromoteOptions.HasCompactionTargetLevel()) {
-            paramsStr << del;
-            EscapeName("INSERT_PROMOTE_OPTIONS.COMPACTION_TARGET_LEVEL", paramsStr);
-            paramsStr << "=";
-            EscapeValue(insertPromoteOptions.GetCompactionTargetLevel(), paramsStr);
+            EscapeValue(insertOptions.GetBuildIndexesMinBlobBytes(), paramsStr);
             del = ", ";
         }
     }
@@ -2022,6 +2008,9 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
                                 }
                                 if (zeroLevel.HasCompactAtLevel()) {
                                     jsonLevel["compact_at_level"] = zeroLevel.GetCompactAtLevel();
+                                }
+                                if (zeroLevel.HasSkipLevelMinBlobSize()) {
+                                    jsonLevel["skip_level_min_blob_size"] = zeroLevel.GetSkipLevelMinBlobSize();
                                 }
                                 break;
                             }

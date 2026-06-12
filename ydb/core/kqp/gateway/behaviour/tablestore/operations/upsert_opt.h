@@ -14,10 +14,8 @@ private:
 private:
     bool SchemeNeedActualization = false;
     std::optional<TString> ScanReaderPolicyName;
-    std::optional<bool> InsertPromoteOptionsEnabled;
-    std::optional<ui64> InsertPromoteOptionsMinBlobBytes;
-    std::optional<bool> InsertPromoteOptionsBuildIndexesEnabled;
-    std::optional<ui32> InsertPromoteOptionsCompactionTargetLevel;
+    std::optional<bool> InsertOptionsBuildIndexesEnabled;
+    std::optional<ui64> InsertOptionsBuildIndexesMinBlobBytes;
     NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer CompactionPlannerConstructor;
     NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer MetadataManagerConstructor;
 public:

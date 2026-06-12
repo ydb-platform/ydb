@@ -13,17 +13,11 @@ bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate
     if (schemaUpdate.GetMetadataManagerConstructor().HasObject()) {
         MetadataManagerConstructor = schemaUpdate.GetMetadataManagerConstructor();
     }
-    if (schemaUpdate.GetInsertPromoteOptionsEnabled()) {
-        InsertPromoteOptions.Enabled = *schemaUpdate.GetInsertPromoteOptionsEnabled();
+    if (schemaUpdate.GetInsertOptionsBuildIndexesEnabled()) {
+        InsertOptions.BuildIndexesEnabled = *schemaUpdate.GetInsertOptionsBuildIndexesEnabled();
     }
-    if (schemaUpdate.GetInsertPromoteOptionsMinBlobBytes()) {
-        InsertPromoteOptions.MinBlobBytes = *schemaUpdate.GetInsertPromoteOptionsMinBlobBytes();
-    }
-    if (schemaUpdate.GetInsertPromoteOptionsBuildIndexesEnabled()) {
-        InsertPromoteOptions.BuildIndexesEnabled = *schemaUpdate.GetInsertPromoteOptionsBuildIndexesEnabled();
-    }
-    if (schemaUpdate.GetInsertPromoteOptionsCompactionTargetLevel()) {
-        InsertPromoteOptions.CompactionTargetLevel = *schemaUpdate.GetInsertPromoteOptionsCompactionTargetLevel();
+    if (schemaUpdate.GetInsertOptionsBuildIndexesMinBlobBytes()) {
+        InsertOptions.BuildIndexesMinBlobBytes = *schemaUpdate.GetInsertOptionsBuildIndexesMinBlobBytes();
     }
     return true;
 }
@@ -39,19 +33,13 @@ void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
     if (tableSchema.GetOptions().HasMetadataManagerConstructor()) {
         AFL_VERIFY(MetadataManagerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetMetadataManagerConstructor()));
     }
-    if (tableSchema.GetOptions().HasInsertPromoteOptions()) {
-        const auto& options = tableSchema.GetOptions().GetInsertPromoteOptions();
-        if (options.HasEnabled()) {
-            InsertPromoteOptions.Enabled = options.GetEnabled();
-        }
-        if (options.HasMinBlobBytes()) {
-            InsertPromoteOptions.MinBlobBytes = options.GetMinBlobBytes();
-        }
+    if (tableSchema.GetOptions().HasInsertOptions()) {
+        const auto& options = tableSchema.GetOptions().GetInsertOptions();
         if (options.HasBuildIndexesEnabled()) {
-            InsertPromoteOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
+            InsertOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
         }
-        if (options.HasCompactionTargetLevel()) {
-            InsertPromoteOptions.CompactionTargetLevel = options.GetCompactionTargetLevel();
+        if (options.HasBuildIndexesMinBlobBytes()) {
+            InsertOptions.BuildIndexesMinBlobBytes = options.GetBuildIndexesMinBlobBytes();
         }
     }
 }
@@ -67,19 +55,13 @@ void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     if (MetadataManagerConstructor.HasObject()) {
         MetadataManagerConstructor.SerializeToProto(*tableSchema.MutableOptions()->MutableMetadataManagerConstructor());
     }
-    if (InsertPromoteOptions.IsConfigured()) {
-        auto& options = *tableSchema.MutableOptions()->MutableInsertPromoteOptions();
-        if (InsertPromoteOptions.Enabled) {
-            options.SetEnabled(*InsertPromoteOptions.Enabled);
+    if (InsertOptions.IsConfigured()) {
+        auto& options = *tableSchema.MutableOptions()->MutableInsertOptions();
+        if (InsertOptions.BuildIndexesEnabled) {
+            options.SetBuildIndexesEnabled(*InsertOptions.BuildIndexesEnabled);
         }
-        if (InsertPromoteOptions.MinBlobBytes) {
-            options.SetMinBlobBytes(*InsertPromoteOptions.MinBlobBytes);
-        }
-        if (InsertPromoteOptions.BuildIndexesEnabled) {
-            options.SetBuildIndexesEnabled(*InsertPromoteOptions.BuildIndexesEnabled);
-        }
-        if (InsertPromoteOptions.CompactionTargetLevel) {
-            options.SetCompactionTargetLevel(*InsertPromoteOptions.CompactionTargetLevel);
+        if (InsertOptions.BuildIndexesMinBlobBytes) {
+            options.SetBuildIndexesMinBlobBytes(*InsertOptions.BuildIndexesMinBlobBytes);
         }
     }
 }

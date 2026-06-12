@@ -11,7 +11,7 @@ class TOlapOptionsDescription {
 private:
     YDB_READONLY(bool, SchemeNeedActualization, false);
     YDB_READONLY_DEF(std::optional<TString>, ScanReaderPolicyName);
-    YDB_READONLY_DEF(NOlap::TInsertPromoteOptionsPolicy, InsertPromoteOptions);
+    YDB_READONLY_DEF(NOlap::TInsertOptionsPolicy, InsertOptions);
     YDB_READONLY_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_READONLY_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:

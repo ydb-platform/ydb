@@ -372,7 +372,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     const ui64 totalBlobBytes = slice.GetPackedSize();
     THashMap<ui32, std::shared_ptr<IPortionDataChunk>> inplaceChunks;
     std::vector<TSplittedBlob> blobs;
-    if (GetIndexInfo().GetInsertPromoteOptions().ShouldBuildIndexesOnInsert(mType, totalBlobBytes) && GetIndexInfo().GetIndexes().size()) {
+    if (GetIndexInfo().GetInsertOptions().ShouldBuildIndexesOnInsert(mType, totalBlobBytes) && GetIndexInfo().GetIndexes().size()) {
         auto dataWithSecondaryConclusion = GetIndexInfo().AppendIndexes(
             slice.GetPortionChunksToHash(), storagesManager, slice.GetRecordsCount(), IStoragesManager::DefaultStorageId);
         if (dataWithSecondaryConclusion.IsFail()) {
@@ -393,8 +393,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     const ui32 deletionsCount = (mType == NEvWrite::EModificationType::Delete) ? incomingBatch->num_rows() : 0;
     constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(*this, deletionsCount, primaryKeys, std::nullopt);
     constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
-    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(
-        GetIndexInfo().GetInsertPromoteOptions().ResolveFixedCompactionLevelOnInsert(mType, totalBlobBytes));
+    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(0);
     return TWritePortionInfoWithBlobsResult(std::move(constructor));
 }
 

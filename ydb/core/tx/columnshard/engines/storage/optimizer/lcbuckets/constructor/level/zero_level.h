@@ -19,6 +19,7 @@ private:
     std::optional<ui64> CompactionTaskMemoryLimit;
     std::optional<ui64> CompactionTaskPortionsCountLimit;
     std::optional<bool> CompactAtLevel;
+    std::optional<ui64> SkipLevelMinBlobSize;
 
     virtual std::shared_ptr<IPortionsLevel> DoBuildLevel(const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel,
         const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo, const TLevelCounters& counters,

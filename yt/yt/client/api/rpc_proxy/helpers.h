@@ -21,7 +21,7 @@ void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceP
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[noreturn]] void ThrowUnimplemented(const TString& method);
+[[noreturn]] void ThrowUnimplemented(const std::string& method);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -265,10 +265,10 @@ void FromProto(
 
 void ToProto(
     NProto::TBackupManifest::TClusterManifest* protoEntry,
-    const std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>& entry);
+    const std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>& entry);
 
 void FromProto(
-    std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>* entry,
+    std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>* entry,
     const NProto::TBackupManifest::TClusterManifest& protoEntry);
 
 void ToProto(
@@ -539,7 +539,7 @@ TIntrusivePtr<NApi::IRowset<NTableClient::TTypeErasedRow>> DeserializeRowset(
 
 //! Invokes std::stable_sort reordering addresses by the index of the first regex they match;
 //! addresses not matching any regex are placed at the very end.
-void SortByRegexes(std::vector<TString>& values, const std::vector<NRe2::TRe2Ptr>& regexes);
+void SortByRegexes(std::vector<std::string>& values, const std::vector<NRe2::TRe2Ptr>& regexes);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -94,9 +94,7 @@ class TestInMemoryMixedCluster(MixedClusterFixture):
             pytest.skip("Only available since 25-3")
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_table_cache_modes": True,
-            },
+            extra_feature_flags=["enable_table_cache_modes"],
         )
 
     def test_in_memory_mixed_cluster(self):
@@ -115,9 +113,7 @@ class TestInMemoryRestartToAnotherVersion(RestartToAnotherVersionFixture):
             pytest.skip("Only available since 25-3")
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_table_cache_modes": True,
-            },
+            extra_feature_flags=["enable_table_cache_modes"],
         )
 
     def test_in_memory_restart_to_version(self):
@@ -141,9 +137,7 @@ class TestInMemoryRolling(RollingUpgradeAndDowngradeFixture):
             pytest.skip("Only available since 25-3")
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_table_cache_modes": True,
-            },
+            extra_feature_flags=["enable_table_cache_modes"],
         )
 
     def test_in_memory_rolling(self):

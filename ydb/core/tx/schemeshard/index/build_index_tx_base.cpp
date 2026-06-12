@@ -244,6 +244,9 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
 
     switch (indexInfo.State) {
     case TIndexBuildInfo::EState::AlterMainTable:
+    case TIndexBuildInfo::EState::CreateBuildSequence:
+    case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+    case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
     case TIndexBuildInfo::EState::Locking:
     case TIndexBuildInfo::EState::GatheringStatistics:
     case TIndexBuildInfo::EState::Initiating:
@@ -345,6 +348,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);
             columnProto->mutable_default_from_literal()->CopyFrom(column.DefaultFromLiteral);
+            if (column.IsFromSequence()) {
+                columnProto->set_default_from_sequence(column.DefaultFromSequence);
+                columnProto->set_bit_reverse_sequence_value(column.BitReverseSequenceValue);
+            }
         }
     }
 
@@ -405,6 +412,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo&
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.ApplyTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.UnlockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.AlterMainTableTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.CreateBuildSequenceTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.DropColumnsTxId);
 
     Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);

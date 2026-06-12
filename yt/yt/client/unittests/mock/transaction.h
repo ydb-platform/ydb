@@ -240,6 +240,12 @@ public:
         i64 newOffset,
         const TAdvanceQueueConsumerOptions& options), (override));
 
+    MOCK_METHOD(void, FutureModifyRows, (
+        const NYPath::TYPath& path,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NFuture::TRowModification> modifications,
+        const TModifyRowsOptions& options), (override));
+
     MOCK_METHOD(void, ModifyRows, (
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,

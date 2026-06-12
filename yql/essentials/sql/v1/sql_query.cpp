@@ -5004,6 +5004,10 @@ bool IsYqlSelectCompatiblePragma(TStringBuf prefix, TStringBuf pragma) {
         return true;
     }
 
+    if (pragma == "dqengine" || pragma == "blockengine") {
+        return true;
+    }
+
     auto descr = PragmaDescrs.FindPtr(pragma);
     if (!descr) {
         return false;

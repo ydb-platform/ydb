@@ -31,15 +31,14 @@ class SolomonExternalSourceWriteTestBase:
         cleanup_solomon(self.SOLOMON_PROJECT, self.SOLOMON_CLUSTER, self.SOLOMON_SERVICE)
 
         yield from super().setup_cluster(
-            extra_feature_flags={
-                "enable_external_data_sources": True,
-            },
+            disabled_feature_flags=["enable_drain_on_shutdown"],
+            extra_feature_flags=["enable_external_data_sources"],
             query_service_config={
                 "available_external_data_sources": ["Solomon"],
             },
             additional_log_configs={
                 'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTOR': LogLevels.DEBUG},
+                'KQP_EXECUTER': LogLevels.DEBUG},
         )
 
     def create_external_data_source(self):

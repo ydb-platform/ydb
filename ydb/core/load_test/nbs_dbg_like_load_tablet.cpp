@@ -2145,16 +2145,8 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         return;
     }
 
-    if (!msg.HasPayloadId()) {
-        ReplyWriteErr(origin, cookie, NBSIO_MISSING_PAYLOAD, "PayloadId field absent");
-        return;
-    }
-
-    const ui32 payloadId = msg.GetPayloadId();
-    if (payloadId >= ev->Get()->GetPayloadCount()) {
-        ReplyWriteErr(origin, cookie, NBSIO_MISSING_PAYLOAD,
-            TStringBuilder() << "PayloadId " << payloadId
-                << " >= PayloadCount " << ev->Get()->GetPayloadCount());
+    if (ev->Get()->Payload.IsEmpty()) {
+        ReplyWriteErr(origin, cookie, NBSIO_MISSING_PAYLOAD, "Payload absent");
         return;
     }
 
@@ -2180,12 +2172,10 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
             << " Cookie# " << cookie
             << " PBConnected# " << pbConnectedCount
             << " need# " << kPrimaryHostsPerDbg
-            << "; dropping silently");
-        // Mirror v1 worker StateConnect semantics: silently drop the request
-        // while the DBG's peers are still mid-handshake. The load actor's
-        // drain-timeout safety net reaps any never-replied cookies on Run
-        // shutdown; replying ERROR here would force the load actor into a
-        // tight retry loop that pins simulated time.
+            << "; replying TABLET_NOT_READY");
+        ReplyWriteErr(origin, cookie, NBSIO_TABLET_NOT_READY,
+            TStringBuilder() << "PB peers not ready: " << pbConnectedCount
+                << "/" << kPrimaryHostsPerDbg);
         return;
     }
 
@@ -2248,7 +2238,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         creds, selector, lsn, NDDisk::TWriteInstruction(0), pbIds,
         TabletConfig.GetPBufferReplyTimeoutMicroseconds());
 
-    wireEv->AddPayload(TRope(ev->Get()->GetPayload(payloadId)));
+    wireEv->AddPayload(std::move(ev->Get()->Payload));
 
     Send(dbg.PBActor[coord], wireEv.release(), 0, lsn);
 
@@ -2380,11 +2370,16 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     const ui32 vChunkIndex = decoded->VChunkIndex;
     const ui32 offset = decoded->OffsetInVChunk;
 
-    if (Dbg.DDConnected.count() < kPrimaryHostsPerDbg) {
-        // See HandleNbsWrite: drop silently while peers are still mid-handshake
-        // so the load actor doesn't tight-loop and pin simulated time.
+    const ui32 ddConnectedCount = static_cast<ui32>(Dbg.DDConnected.count());
+    if (ddConnectedCount < kPrimaryHostsPerDbg) {
         LOG_D("HandleNbsRead peers not ready DBG# " << dbgIndex
-            << " Cookie# " << cookie << "; dropping silently");
+            << " Cookie# " << cookie
+            << " DDConnected# " << ddConnectedCount
+            << " need# " << kPrimaryHostsPerDbg
+            << "; replying TABLET_NOT_READY");
+        ReplyReadErr(origin, cookie, NBSIO_TABLET_NOT_READY,
+            TStringBuilder() << "DDisk peers not ready: " << ddConnectedCount
+                << "/" << kPrimaryHostsPerDbg);
         return;
     }
 
@@ -3107,6 +3102,14 @@ void TNbsDbgLikeActor::BestEffortEraseAll(TPerDbgState& dbg) {
     std::array<std::vector<ui64>, kHostsPerDbgMax> pending;
     const ui32 hostsPerDbg = HostsPerDbg();
     for (auto& [lsn, info] : dbg.Lsns) {
+        // Never erase an LSN whose write reply has not been sent yet: erasing
+        // it here would drop it from dbg.Lsns, causing HandleWritePbsResult
+        // to find no LSN and silently skip the reply — permanently leaking the
+        // load actor's in-flight counter. Un-replied LSNs will reach
+        // quorum/failure via the normal path and be erased by DoErase.
+        if (!info.ReplySent) {
+            continue;
+        }
         if (!info.EraseTarget.any()) {
             info.EraseTarget |= info.WriteConfirmed;
         }

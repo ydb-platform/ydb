@@ -227,6 +227,18 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
             }
         }
     }
+
+    // Overwrite with selectivity for successfully pushed-down filters within the read operator.
+    if (OriginalPredicate.has_value()) {
+        auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(Props, true));
+        auto lambda = TCoLambda(OriginalPredicate->Node);
+        double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
+
+        double filterSelectivity = selectivity * Props.Statistics->Selectivity;
+        Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
+        Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
+        Props.Statistics->Selectivity = filterSelectivity;
+    }
 }
 
 /**
@@ -272,6 +284,7 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     double filterSelectivity = selectivity * Props.Statistics->Selectivity;
     Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
+    Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
     Props.Statistics->Selectivity = filterSelectivity;
 }
 

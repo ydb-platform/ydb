@@ -149,6 +149,18 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: 2
+      # The target ref may predate this pipeline: overlay CI tooling
+      # (.github actions/scripts) from the workflow branch.
+      - name: Checkout CI tooling
+        uses: actions/checkout@v5
+        with:
+          path: .ci_tooling
+          sparse-checkout: .github
+      - name: Overlay CI tooling
+        shell: bash
+        run: |
+          cp -a .ci_tooling/.github/. .github/
+          rm -rf .ci_tooling
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
@@ -187,6 +199,16 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: 2
+      - name: Checkout CI tooling
+        uses: actions/checkout@v5
+        with:
+          path: .ci_tooling
+          sparse-checkout: .github
+      - name: Overlay CI tooling
+        shell: bash
+        run: |
+          cp -a .ci_tooling/.github/. .github/
+          rm -rf .ci_tooling
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
@@ -236,6 +258,16 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: 2
+      - name: Checkout CI tooling
+        uses: actions/checkout@v5
+        with:
+          path: .ci_tooling
+          sparse-checkout: .github
+      - name: Overlay CI tooling
+        shell: bash
+        run: |
+          cp -a .ci_tooling/.github/. .github/
+          rm -rf .ci_tooling
       - name: List tests for shard plan
         env:
           BUILD_PRESET: ${{ inputs.build_preset }}
@@ -266,10 +298,10 @@ jobs:
       shard_ids: ${{ steps.plan.outputs.shard_ids }}
       active_shard_count: ${{ steps.plan.outputs.active_shard_count }}
     steps:
+      # Planning only needs CI scripts: checkout the workflow branch.
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.checkout_ref }}
           sparse-checkout: |
             .github/actions/setup_ci_ydb_service_account_key_file_credentials
             .github/scripts/analytics/ydb_wrapper.py
@@ -358,6 +390,16 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: 2
+      - name: Checkout CI tooling
+        uses: actions/checkout@v5
+        with:
+          path: .ci_tooling
+          sparse-checkout: .github
+      - name: Overlay CI tooling
+        shell: bash
+        run: |
+          cp -a .ci_tooling/.github/. .github/
+          rm -rf .ci_tooling
       - name: Download shard plan
         uses: actions/download-artifact@v4
         with:
@@ -428,10 +470,10 @@ jobs:
       failed_count: ${{ steps.merge.outputs.failed_count }}
       shard_count: ${{ steps.merge.outputs.shard_count }}
     steps:
+      # Merge/publish only needs CI scripts: checkout the workflow branch.
       - name: Checkout scripts
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.checkout_ref }}
           sparse-checkout: |
             .github/actions
             .github/config
@@ -572,6 +614,16 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: 2
+      - name: Checkout CI tooling
+        uses: actions/checkout@v5
+        with:
+          path: .ci_tooling
+          sparse-checkout: .github
+      - name: Overlay CI tooling
+        shell: bash
+        run: |
+          cp -a .ci_tooling/.github/. .github/
+          rm -rf .ci_tooling
       - name: Download build graph
         uses: actions/download-artifact@v4
         with:

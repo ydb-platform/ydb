@@ -542,6 +542,10 @@
       {
         "name": "Replicated",
         "type": "Bool?"
+      },
+      {
+        "name": "PhantomOnly",
+        "type": "Bool?"
       }
     ],
     "primary_key": [

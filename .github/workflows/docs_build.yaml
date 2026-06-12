@@ -23,6 +23,10 @@ jobs:
       - name: Add documentation label
         uses: actions/github-script@v8
         with:
+          # Retry transient API failures, including the 401 seen on #42934
+          # (401/403 are retry-exempt by default, hence the trimmed list).
+          retries: 3
+          retry-exempt-status-codes: 400,404,422
           script: |
             const labels = context.payload.pull_request.labels.map((label) => label.name);
             if (labels.includes('documentation')) {

@@ -1887,6 +1887,12 @@ private:
                     if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
                         return TStatus::Error;
                     }
+
+                    if (table->Metadata->IsOlap() && !columnMeta.Families.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                            "Column FAMILY is not supported for column tables"));
+                        return TStatus::Error;
+                    }
                 }
             } else if (name == "dropColumns") {
                 auto listNode = action.Value().Cast<TCoAtomList>();
@@ -1950,6 +1956,11 @@ private:
                             }
                         }
                     } else if (alterColumnAction == "setFamily") {
+                        if (table->Metadata->IsOlap()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                "Column FAMILY is not supported for column tables"));
+                            return TStatus::Error;
+                        }
                         auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                         if (families.Size() > 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
@@ -2158,9 +2169,13 @@ private:
                         return TStatus::Error;
                     }
                 }
-            } else if (name != "addColumnFamilies"
-                    && name != "alterColumnFamilies"
-                    && name != "setTableSettings"
+            } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
+                if (table->Metadata->IsOlap()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                        "Column FAMILY is not supported for column tables"));
+                    return TStatus::Error;
+                }
+            } else if (name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"

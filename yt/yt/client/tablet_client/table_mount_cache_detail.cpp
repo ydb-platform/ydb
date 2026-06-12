@@ -23,13 +23,14 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<TErrorCode> TableMountCacheRetryableCodes = {
+const THashSet<TErrorCode> TableMountCacheRetryableCodes = {
     NTabletClient::EErrorCode::NoSuchTablet,
     NTabletClient::EErrorCode::TabletNotMounted,
     NTabletClient::EErrorCode::InvalidMountRevision,
     NTabletClient::EErrorCode::TabletServantIsNotActive,
     NTabletClient::EErrorCode::TabletResharded,
     NTabletClient::EErrorCode::TestingFailureBeforeWrite,
+    NTabletClient::EErrorCode::ReadOnlySmoothMovementStage,
     NYTree::EErrorCode::ResolveError,
 };
 
@@ -567,9 +568,14 @@ auto TTableMountCacheBase::TryHandleTabletReshardedError(
     }};
 }
 
-auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetry)
+auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetry, TTabletId tabletIdHint)
     -> TInvalidationResult
 {
+    static const THashSet<TErrorCode> retryableCodesWithoutTabletId = {
+        NRpc::EErrorCode::NoSuchRealm,
+        NRpc::EErrorCode::NoSuchService,
+    };
+
     if (error.IsOK()) {
         return {};
     }
@@ -579,15 +585,19 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
     }
 
     auto errorFilter = [&] (const TError& error) {
-        auto it = std::find(TableMountCacheRetryableCodes.begin(), TableMountCacheRetryableCodes.end(), error.GetCode());
-        bool retryableCode = it != TableMountCacheRetryableCodes.end();
-        return retryableCode && !error.Attributes().Get<bool>("mount_cache_invalidation_exhausted", false);
+        bool isRetryableCode = TableMountCacheRetryableCodes.contains(error.GetCode()) ||
+            retryableCodesWithoutTabletId.contains(error.GetCode());
+        return isRetryableCode && !error.Attributes().Get<bool>("mount_cache_invalidation_exhausted", false);
     };
 
     if (auto retryableError = error.FindMatching(errorFilter)) {
         auto code = retryableError->GetCode();
 
         auto tabletId = retryableError->Attributes().Find<TTabletId>("tablet_id");
+        if (!tabletId && retryableCodesWithoutTabletId.contains(code)) {
+            tabletId = tabletIdHint;
+        }
+
         if (!tabletId) {
             return {};
         }

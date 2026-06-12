@@ -6,5 +6,6 @@
 
 * [{#T}](monitoring.md)
 * [{#T}](logging.md)
+* [{#T}](minidumps.md)
 * [{#T}](../../reference/observability/tracing/setup.md)
 * [{#T}](system-views.md)

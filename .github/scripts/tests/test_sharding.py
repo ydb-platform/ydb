@@ -155,6 +155,54 @@ class ShardingToolsTest(unittest.TestCase):
         )
         self.assertEqual(proc.stdout.strip().splitlines(), ["ydb/core/foo/ut"])
 
+    def test_extract_failed_suite_paths_includes_chunk_failures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "report.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "path": "ydb/core/kqp/ut/scheme",
+                                "name": "KqpConstraints",
+                                "subtest_name": "AlterTableSetDropDefaultAsyncIndexOnColumn",
+                                "status": "FAILED",
+                                "type": "test",
+                            },
+                            {
+                                "path": "ydb/core/tx/datashard/ut_read_iterator",
+                                "name": "ReadIteratorExternalBlobs",
+                                "subtest_name": "chunk 3",
+                                "status": "FAILED",
+                                "type": "test",
+                                "chunk": True,
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            suites = subprocess.run(
+                [sys.executable, str(SHARDING_DIR / "extract_failed_suite_paths.py"), str(report_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            filters = subprocess.run(
+                [sys.executable, str(SHARDING_DIR / "extract_failed_test_filters.py"), str(report_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(
+                suites.stdout.strip().splitlines(),
+                ["ydb/core/kqp/ut/scheme", "ydb/core/tx/datashard/ut_read_iterator"],
+            )
+            self.assertEqual(
+                filters.stdout.strip().splitlines(),
+                ["KqpConstraints::AlterTableSetDropDefaultAsyncIndexOnColumn"],
+            )
+
     def test_extract_suites_from_ya_test_list_olap(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "tests.txt"

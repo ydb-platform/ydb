@@ -36,8 +36,21 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         const TString operationId = Record().GetOperationId();
 
-        // check existing force traversal with the same OperationId
-        const auto existingOperation = Self->ForceTraversalOperation(operationId);
+        // Check existing force traversal with the same (OperationId, DatabaseName).
+        // A serverless shared SA can see the same opId from different tenants. Only
+        // treat the existing op as "the same one" when both opId and database match.
+        // If the opId matches but the database doesn't, drop the older entry — keeping
+        // two ops with the same opId in ForceTraversals would corrupt every internal
+        // opId-only lookup (Current*, MarkFinished, etc.).
+        auto* existingOperation = Self->ForceTraversalOperation(operationId);
+        if (existingOperation && existingOperation->DatabaseName != Record().GetDatabase()) {
+            SA_LOG_W("[" << Self->TabletID() << "] TTxAnalyze::Execute. Replacing "
+                "force traversal with same OperationId " << operationId.Quote() << " from "
+                "different database (was " << existingOperation->DatabaseName.Quote()
+                << ", now " << Record().GetDatabase().Quote() << ")");
+            Self->DeleteForceTraversalOperation(operationId, db);
+            existingOperation = nullptr;
+        }
 
         // update existing force traversal
         if (existingOperation) {

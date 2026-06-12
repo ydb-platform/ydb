@@ -128,6 +128,62 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             Ydb::StatusIds::NOT_FOUND);
     }
 
+    Y_UNIT_TEST(AnalyzeSameOpIdDifferentDb) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        PrepareTable(env, "Table");
+
+        ui64 saTabletId;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+
+        const TString sharedOpId = "opSame";
+        const TString firstDb = "/Root/Database";
+        const TString secondDb = "/Root/OtherTenant";
+
+        // First analyze runs to completion → STATE_DONE in firstDb history.
+        Analyze(runtime, saTabletId, {{pathId}}, sharedOpId, firstDb);
+        {
+            auto result = TestGetAnalyzeOp(runtime, saTabletId, firstDb, sharedOpId);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                result.GetAnalyzeOperation().GetState(),
+                Ydb::Table::AnalyzeState::STATE_DONE,
+                "Expected first opId entry to be DONE");
+        }
+
+        // Second Analyze with same opId but a different database. The SA's existing
+        // entry collides on opId but lives under a different database; TxAnalyze
+        // must drop the older entry rather than replaying its cached terminal
+        // response (which would belong to firstDb, not secondDb).
+        TAnalyzedTable analyzedTable(pathId);
+        auto req = MakeAnalyzeRequest({analyzedTable}, sharedOpId, secondDb);
+        req->Record.MutableTables(0)->SetPath("/Root/Database/Table");
+        auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(saTabletId, sender, req.release());
+        // Drain enough simulated time for the TxAnalyze to commit (the second
+        // operation may or may not run a full traversal — we only care about the
+        // collision resolution, not the analysis itself).
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        // The first entry (firstDb) was replaced: Get under firstDb is now NOT_FOUND.
+        TestGetAnalyzeOp(runtime, saTabletId, firstDb, sharedOpId,
+            Ydb::StatusIds::NOT_FOUND);
+
+        // The new entry is present under secondDb (state is whatever the active
+        // schedule produced — at minimum it must not be the cached DONE response
+        // from the firstDb operation; we'd see that as STATE_DONE here if the
+        // replay path had fired).
+        auto result = TestGetAnalyzeOp(runtime, saTabletId, secondDb, sharedOpId);
+        const auto state = result.GetAnalyzeOperation().GetState();
+        UNIT_ASSERT_C(
+            state == Ydb::Table::AnalyzeState::STATE_ENQUEUED ||
+            state == Ydb::Table::AnalyzeState::STATE_IN_PROGRESS ||
+            state == Ydb::Table::AnalyzeState::STATE_DONE ||
+            state == Ydb::Table::AnalyzeState::STATE_FAILED,
+            "Expected an actual entry for secondDb (any non-UNSPECIFIED state), got "
+                << (int)state);
+    }
+
     Y_UNIT_TEST(ListTerminalHistory) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

@@ -306,7 +306,11 @@ bool TSideEffects::CheckDecouplingProposes(const TSchemeShard* ss, TString& errE
             if (shardIdxIt != ss->TabletIdToShardIdx.end()
                 && ss->SharedShards.contains(shardIdxIt->second))
             {
-                continue;
+                const auto* txState1 = ss->TxInFlight.FindPtr(opId);
+                const auto* txState2 = ss->TxInFlight.FindPtr(position->second);
+                if (txState1 && txState2 && txState1->TargetPathId != txState2->TargetPathId) {
+                    continue;
+                }
             }
             errExpl = TStringBuilder()
                     << "can't propose more then one operation to the shard with the same txId"

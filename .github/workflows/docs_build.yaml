@@ -25,6 +25,25 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - name: Add documentation label
+        if: github.event_name == 'pull_request_target'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map((label) => label.name);
+            if (labels.includes('documentation')) {
+              core.info('Label "documentation" is already present, skipping');
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['documentation']
+            });
+
       - name: Checkout
         uses: actions/checkout@v5
         with:
@@ -63,22 +82,3 @@ jobs:
           name: inputs
           path: ./inputs/
           overwrite: true
-
-      - name: Add documentation label
-        if: github.event_name == 'pull_request_target'
-        continue-on-error: true
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const labels = context.payload.pull_request.labels.map((label) => label.name);
-            if (labels.includes('documentation')) {
-              core.info('Label "documentation" is already present, skipping');
-              return;
-            }
-
-            await github.rest.issues.addLabels({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['documentation']
-            });

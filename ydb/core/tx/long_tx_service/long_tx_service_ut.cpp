@@ -375,6 +375,15 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
 
+        // Once the registry is materialized, OldestCollectionTime must be a real, recent instant:
+        // the local node counts as now, remote nodes contribute their propagated collection times.
+        const auto assertFreshOldestCollectionTime = [&](const auto& registry) {
+            const TInstant oldest = registry->GetOldestCollectionTime();
+            UNIT_ASSERT(oldest > TInstant::Zero());
+            UNIT_ASSERT(oldest <= runtime.GetCurrentTime());
+            return oldest;
+        };
+
         // Sleep a little, so there's at least one plan step generated
         SimulateSleep(runtime, TDuration::Seconds(1));
 
@@ -424,9 +433,11 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         SimulateSleep(runtime, TDuration::Seconds(10));
 
         // snapshots have been promoted
+        TVector<TInstant> oldestAfterPromotion(nodesCount);
         for (size_t node = 0; node < nodesCount; ++node) {
             const auto& registry = runtime.GetAppData(node).SnapshotRegistryHolder->Get();
             UNIT_ASSERT(registry);
+            oldestAfterPromotion[node] = assertFreshOldestCollectionTime(registry);
             if (manySnapshots) {
                 const TRowVersion expectedBorder = *std::min_element(snapshots.begin(), snapshots.end());
                 UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), expectedBorder);
@@ -462,6 +473,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         for (size_t node = 0; node < nodesCount; ++node) {
             const auto& registry = runtime.GetAppData(node).SnapshotRegistryHolder->Get();
             UNIT_ASSERT(registry);
+            // Freshness keeps advancing as exchange rounds continue, even after snapshots are gone.
+            UNIT_ASSERT(assertFreshOldestCollectionTime(registry) > oldestAfterPromotion[node]);
             UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), TRowVersion::Max());
             UNIT_ASSERT(registry->GetActiveSnapshots(table).empty());
             UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSchema).empty());

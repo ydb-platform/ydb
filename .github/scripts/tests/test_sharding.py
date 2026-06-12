@@ -266,6 +266,36 @@ class ShardingToolsTest(unittest.TestCase):
             )
             self.assertEqual(data["total_suites"], 0)
 
+    def test_extract_accepts_target_prefix_with_trailing_slash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            list_log = Path(tmp) / "list.log"
+            list_log.write_text(
+                "\n".join(
+                    [
+                        "ydb/core/foo/ut <unittest> [size:small] for default-linux-x86_64-debug",
+                        "  Foo::Bar",
+                        "",
+                        "Total 1 suites",
+                        "Total 1 tests",
+                        "Ok",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            summary_path = Path(tmp) / "summary.json"
+            _run(
+                "extract_suites_from_ya_test_list.py",
+                str(list_log),
+                "--target-prefix",
+                "ydb/",
+                "--summary-json",
+                str(summary_path),
+            )
+            data = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["total_suites"], 1)
+            self.assertEqual(data["suites"][0]["path"], "ydb/core/foo/ut")
+
     def test_extract_treats_missing_size_as_small(self):
         with tempfile.TemporaryDirectory() as tmp:
             list_log = Path(tmp) / "list.log"

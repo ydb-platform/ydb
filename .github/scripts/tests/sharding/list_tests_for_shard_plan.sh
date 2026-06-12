@@ -7,12 +7,36 @@ OUTPUT="${2:?usage: list_tests_for_shard_plan.sh TARGET OUTPUT_LOG}"
 BUILD_PRESET="${BUILD_PRESET:-relwithdebinfo}"
 
 YA_OPTS=(
-  --build "$BUILD_PRESET"
   --test-size small
   --test-size medium
   -DDEBUGINFO_LINES_ONLY
   --cache-tests
 )
+
+case "$BUILD_PRESET" in
+  debug)
+    YA_OPTS+=(--build debug)
+    ;;
+  relwithdebinfo)
+    YA_OPTS+=(--build relwithdebinfo)
+    ;;
+  release)
+    YA_OPTS+=(--build release)
+    ;;
+  release-asan)
+    YA_OPTS+=(--build release --sanitize=address)
+    ;;
+  release-tsan)
+    YA_OPTS+=(--build release --sanitize=thread)
+    ;;
+  release-msan)
+    YA_OPTS+=(--build release --sanitize=memory)
+    ;;
+  *)
+    echo "Unsupported BUILD_PRESET for ya test -L: $BUILD_PRESET" >&2
+    exit 1
+    ;;
+esac
 
 if [ -n "${REMOTE_CACHE_URL:-}" ] && [ -n "${BAZEL_REMOTE_PASSWORD_FILE:-}" ] && [ -f "$BAZEL_REMOTE_PASSWORD_FILE" ]; then
   YA_OPTS+=(

@@ -34,9 +34,10 @@ def normalize_target_prefix(prefix: str | None) -> str | None:
 
 
 def in_target_scope(path: str, target_prefix: str | None) -> bool:
-    if target_prefix is None:
+    prefix = normalize_target_prefix(target_prefix)
+    if prefix is None:
         return True
-    return path == target_prefix or path.startswith(f"{target_prefix}/")
+    return path == prefix or path.startswith(f"{prefix}/")
 
 
 def drop_redundant_scope_roots(suites: list[str], target_prefix: str | None) -> list[str]:

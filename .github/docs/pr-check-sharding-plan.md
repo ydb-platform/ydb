@@ -282,9 +282,15 @@ critical path) are implemented as a reusable workflow
   `<120 → 4`, `<200 → 8`, else `12`. During shared-pool peak hours
   (09–16 UTC) N is capped at 4 so parallel checks do not starve the
   80-machine pool. `SHARD_COUNT=auto` in `plan_shard_tests.sh` enables this.
-- **`ya test -L` off the critical path**: the `list` job runs in parallel
-  with the no-tests build job (listing only evaluates the graph), removing
-  ~20 min of latency.
+- **One `prepare` job instead of build/list/plan**: `ya test -L` (~20 min)
+  runs in the background in a detached git worktree (so increment-mode
+  `graph_compare.py` checkouts in the main tree do not race with it) while
+  the cached no-tests build (~3 min) runs in the foreground; the shard plan
+  is then computed from local files. Listing stays off the critical path,
+  and merging the jobs saves a big-runner allocation (~6-8 runner-minutes
+  with provisioning) plus two artifact round-trips. The shared `~/.ya` cache
+  is cleaned once before the listing starts (`clean_ya_cache: false` on the
+  build action) since ya supports concurrent invocations via file locks.
 - **In-shard retries**: shards run attempts 2-3 themselves (binaries are
   already built and warm, a retry costs only the re-run time; `test_ya`
   stops retrying above 500 failures per shard). The separate cross-shard

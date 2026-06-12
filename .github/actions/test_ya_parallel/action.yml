@@ -117,6 +117,10 @@ inputs:
     type: boolean
     default: false
     description: "Build job saves graph for shard planning only; skip test loop (no -A on save)"
+  clean_ya_cache:
+    type: boolean
+    default: true
+    description: "rm -rf ~/.ya before the build. Disable when another ya process (e.g. background test listing) shares the cache in this job."
 
 outputs:
   success:
@@ -151,6 +155,7 @@ runs:
         fi
 
     - name: Clean ya cache
+      if: inputs.clean_ya_cache == 'true'
       shell: bash
       run: rm -rf ~/.ya
 

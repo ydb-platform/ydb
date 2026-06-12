@@ -102,6 +102,10 @@ inputs:
     type: string
     default: ""
     description: "Optional S3 subfolder under preset path (e.g. shard_0)"
+  clean_ya_cache:
+    type: boolean
+    default: true
+    description: "rm -rf ~/.ya before the build (disable when sharing the cache with a concurrent ya process)"
 defaults:
   run:
     shell: bash
@@ -177,3 +181,4 @@ runs:
         start_retry: ${{ inputs.start_retry }}
         previous_report_path: ${{ inputs.previous_report_path }}
         save_test_graph: ${{ inputs.save_test_graph }}
+        clean_ya_cache: ${{ inputs.clean_ya_cache }}

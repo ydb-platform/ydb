@@ -5,8 +5,11 @@ name: PR-check-parallel
 #   - change-volume classifier picks single vs sharded mode before any build;
 #   - shard count is adaptive: from estimated work (history p50 weights) with
 #     a cap during shared-pool peak hours (see choose_shard_count.py);
-#   - ya test -L runs in a separate job in parallel with the build, removing
-#     ~20 min of list time from the critical path;
+#   - build, ya test -L and shard planning share one job on one runner:
+#     listing runs in the background while the (cached, ~3 min) build runs in
+#     the foreground, then the plan is computed locally. This keeps list off
+#     the critical path and saves a big-runner allocation plus two
+#     artifact round-trips compared to separate build/list/plan jobs;
 #   - retries run in-shard (attempts 2-3 on the same warm machine) instead of
 #     a separate cross-shard retry job, saving its runner spin-up, checkout
 #     and relink (~15-35 min on the critical path of every yellow run).
@@ -72,7 +75,7 @@ on:
         value: ${{ jobs.params.outputs.mode }}
       shard_count:
         description: 'Actual shard count used (sharded mode)'
-        value: ${{ jobs.plan.outputs.active_shard_count }}
+        value: ${{ jobs.prepare.outputs.active_shard_count }}
 
 jobs:
   params:
@@ -190,12 +193,19 @@ jobs:
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
 
   # --------------------------------------------------------------- sharded --
-  build:
+  # One job replaces the former build/list/plan trio: ya test -L (the longest
+  # part, ~20 min) runs in the background while the cached no-tests build
+  # (~3 min) runs in the foreground, then the shard plan is computed from
+  # local files. Saves a big-runner allocation and two artifact round-trips.
+  prepare:
     needs: params
     if: needs.params.outputs.mode == 'sharded'
     runs-on: ${{ fromJSON(needs.params.outputs.runner) }}
-    name: Build ${{ inputs.build_preset }} (no tests)
+    name: Prepare ${{ inputs.build_preset }} (build, list, plan)
     timeout-minutes: 240
+    outputs:
+      shard_ids: ${{ steps.plan.outputs.shard_ids }}
+      active_shard_count: ${{ steps.plan.outputs.active_shard_count }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -217,6 +227,34 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      # The cache clean normally done by test_ya must happen before the
+      # background listing starts (clean_ya_cache: false below), otherwise
+      # the build action would wipe ~/.ya from under the running ya test -L.
+      - name: Clean ya cache
+        run: rm -rf ~/.ya
+      - name: Start test listing (background)
+        env:
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          TEST_THREADS: "52"
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/tests/sharding/list_tests_for_shard_plan.sh
+          # Listing runs in a detached git worktree: in increment mode
+          # graph_compare.py switches the main working tree between commits,
+          # which must not race with ya test -L reading the sources.
+          # ya itself supports concurrent invocations (~/.ya file locks).
+          git worktree add --detach .list_tree HEAD
+          # stdio is fully detached from the step so the runner does not wait
+          # on open pipes; the exit code lands in list_rc.txt.
+          (
+            set +e
+            cd .list_tree
+            "$GITHUB_WORKSPACE/.github/scripts/tests/sharding/list_tests_for_shard_plan.sh" \
+              "${{ inputs.test_targets }}" "$GITHUB_WORKSPACE/test_list.log"
+            echo $? > "$GITHUB_WORKSPACE/list_rc.txt"
+          ) > list_runner.log 2>&1 < /dev/null &
+          disown
+          echo "Test listing started in background"
       - name: Build (no tests)
         uses: ./.github/actions/build_and_test_ya_parallel
         with:
@@ -226,6 +264,7 @@ jobs:
           run_tests: false
           save_test_graph: true
           s3_subdir: build
+          clean_ya_cache: false
           test_size: small,medium
           test_threads: 52
           custom_branch_name: ${{ inputs.history_branch }}
@@ -246,39 +285,27 @@ jobs:
             graph.json
             context.json
           retention-days: 3
-
-  list:
-    # Runs in parallel with the build job: ya test -L only evaluates the
-    # build graph, it does not need build outputs.
-    needs: params
-    if: needs.params.outputs.mode == 'sharded'
-    runs-on: ${{ fromJSON(needs.params.outputs.runner) }}
-    name: List tests ${{ inputs.build_preset }}
-    timeout-minutes: 90
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.checkout_ref }}
-          fetch-depth: 2
-      - name: Checkout CI tooling
-        uses: actions/checkout@v5
-        with:
-          path: .ci_tooling
-          sparse-checkout: .github
-      - name: Overlay CI tooling
-        shell: bash
+      - name: Wait for test listing
         run: |
-          cp -a .ci_tooling/.github/. .github/
-          rm -rf .ci_tooling
-      - name: List tests for shard plan
-        env:
-          BUILD_PRESET: ${{ inputs.build_preset }}
-          TEST_THREADS: "52"
-        run: |
-          chmod +x .github/scripts/tests/sharding/list_tests_for_shard_plan.sh
-          .github/scripts/tests/sharding/list_tests_for_shard_plan.sh \
-            "${{ inputs.test_targets }}" test_list.log
+          set -euo pipefail
+          echo "Waiting for background ya test -L to finish..."
+          waited=0
+          while [ ! -f list_rc.txt ]; do
+            if [ "$waited" -ge 5400 ]; then
+              echo "Test listing did not finish within 90 min" >&2
+              tail -n 40 list_runner.log >&2 || true
+              exit 1
+            fi
+            sleep 10; waited=$((waited + 10))
+          done
+          rc=$(cat list_rc.txt)
+          echo "--- listing log (tail) ---"
+          tail -n 40 list_runner.log || true
+          if [ "$rc" -ne 0 ]; then
+            echo "Test listing failed with exit code $rc" >&2
+            exit "$rc"
+          fi
+          git worktree remove --force .list_tree || true
       - name: Upload test list
         if: always()
         uses: actions/upload-artifact@v4
@@ -287,44 +314,6 @@ jobs:
           path: test_list.log
           retention-days: 3
           if-no-files-found: ignore
-
-  plan:
-    needs:
-      - params
-      - build
-      - list
-    if: needs.params.outputs.mode == 'sharded'
-    runs-on: [self-hosted, tiny-worker]
-    name: Plan shards ${{ inputs.build_preset }}
-    timeout-minutes: 30
-    outputs:
-      shard_ids: ${{ steps.plan.outputs.shard_ids }}
-      active_shard_count: ${{ steps.plan.outputs.active_shard_count }}
-    steps:
-      # Planning only needs CI scripts: checkout the workflow branch.
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          sparse-checkout: |
-            .github/actions/setup_ci_ydb_service_account_key_file_credentials
-            .github/scripts/analytics/ydb_wrapper.py
-            .github/scripts/tests/get_test_duration_estimates.py
-            .github/scripts/tests/sharding
-      - name: Download build graph
-        uses: actions/download-artifact@v4
-        with:
-          name: parallel-${{ inputs.build_preset }}-graph-${{ github.run_id }}
-          path: build
-      - name: Download test list
-        uses: actions/download-artifact@v4
-        with:
-          name: parallel-${{ inputs.build_preset }}-test-list-${{ github.run_id }}
-          path: build
-      - name: Setup ydb access
-        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-        with:
-          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Build shard plan
         id: plan
         env:
@@ -339,11 +328,11 @@ jobs:
           python3 -m pip install pyyaml ydb --quiet
           INCREMENT_GRAPH=""
           if [ "${{ inputs.increment }}" = "true" ]; then
-            INCREMENT_GRAPH="build/graph.json"
+            INCREMENT_GRAPH="graph.json"
           fi
           chmod +x .github/scripts/tests/sharding/plan_shard_tests.sh
           .github/scripts/tests/sharding/plan_shard_tests.sh \
-            build/test_list.log \
+            test_list.log \
             "${{ inputs.test_targets }}" \
             "$SHARD_COUNT" \
             shard_plan_out \
@@ -377,13 +366,12 @@ jobs:
   test_shard:
     needs:
       - params
-      - build
-      - plan
-    if: needs.params.outputs.mode == 'sharded' && needs.plan.outputs.active_shard_count != '0'
+      - prepare
+    if: needs.params.outputs.mode == 'sharded' && needs.prepare.outputs.active_shard_count != '0'
     strategy:
       fail-fast: false
       matrix:
-        shard_id: ${{ fromJSON(needs.plan.outputs.shard_ids) }}
+        shard_id: ${{ fromJSON(needs.prepare.outputs.shard_ids) }}
     runs-on: ${{ fromJSON(needs.params.outputs.runner) }}
     name: Test ${{ inputs.build_preset }} shard ${{ matrix.shard_id }}
     timeout-minutes: 300
@@ -473,10 +461,9 @@ jobs:
   merge:
     needs:
       - params
-      - build
-      - plan
+      - prepare
       - test_shard
-    if: always() && needs.params.outputs.mode == 'sharded' && needs.build.result == 'success' && needs.plan.result == 'success'
+    if: always() && needs.params.outputs.mode == 'sharded' && needs.prepare.result == 'success'
     runs-on: [self-hosted, tiny-worker]
     name: Merge shards ${{ inputs.build_preset }}
     timeout-minutes: 60
@@ -511,7 +498,7 @@ jobs:
       - name: Merge shard reports
         id: merge
         env:
-          EXPECTED_SHARDS: ${{ needs.plan.outputs.active_shard_count }}
+          EXPECTED_SHARDS: ${{ needs.prepare.outputs.active_shard_count }}
         run: |
           set -eux
           mkdir -p merged

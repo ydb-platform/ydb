@@ -170,7 +170,7 @@ jobs:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Build and test
-        uses: ./.github/actions/build_and_test_ya
+        uses: ./.github/actions/build_and_test_ya_parallel
         with:
           build_preset: ${{ inputs.build_preset }}
           build_target: ${{ inputs.test_targets }}
@@ -218,7 +218,7 @@ jobs:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Build (no tests)
-        uses: ./.github/actions/build_and_test_ya
+        uses: ./.github/actions/build_and_test_ya_parallel
         with:
           build_preset: ${{ inputs.build_preset }}
           build_target: ${{ inputs.test_targets }}
@@ -429,7 +429,7 @@ jobs:
       # are built locally, so a retry costs only the re-run time). test_ya
       # stops retrying on >500 failures per shard.
       - name: Run shard tests (with in-shard retries)
-        uses: ./.github/actions/build_and_test_ya
+        uses: ./.github/actions/build_and_test_ya_parallel
         with:
           build_preset: ${{ inputs.build_preset }}
           build_target: ${{ steps.shard_targets.outputs.targets }}
@@ -575,7 +575,7 @@ jobs:
           echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
       - name: Prepare s3cmd
         if: steps.merge.outcome == 'success'
-        uses: ./.github/actions/s3cmd
+        uses: ./.github/actions/s3cmd_parallel
         with:
           s3_bucket: ${{ vars.AWS_BUCKET }}
           s3_endpoint: ${{ vars.AWS_ENDPOINT }}

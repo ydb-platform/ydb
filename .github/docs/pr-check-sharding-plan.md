@@ -298,3 +298,9 @@ critical path) are implemented as a reusable workflow
   with `publish=false` (no statuses/comments on the real PR) and prints a
   duration table next to the production PR-check run of the same PR for
   direct comparison.
+- **Zero diff in production actions**: the pilot changes to `test_ya`,
+  `build_and_test_ya` and `s3cmd` live in forked copies
+  (`test_ya_parallel`, `build_and_test_ya_parallel`, `s3cmd_parallel`) used
+  only by `pr_check_parallel.yml`. Production `pr_check.yml` and its actions
+  are byte-identical to `main`, so the pilot can be merged into CI without
+  touching the production path; fold the forks back after validation.

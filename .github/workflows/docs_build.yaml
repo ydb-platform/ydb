@@ -12,7 +12,6 @@ on:
         type: string
 
 jobs:
-  # Privileged job: needs a write token, so it must never check out or run PR code.
   add-label:
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
@@ -23,9 +22,8 @@ jobs:
       - name: Add documentation label
         uses: actions/github-script@v8
         with:
-          # Retry transient API failures, including the 401 seen on #42934
-          # (401/403 are retry-exempt by default, hence the trimmed list).
           retries: 3
+          # 401/403 are retry-exempt by default, but the original failure was a transient 401
           retry-exempt-status-codes: 400,404,422
           script: |
             const labels = context.payload.pull_request.labels.map((label) => label.name);
@@ -42,8 +40,6 @@ jobs:
                 labels: ['documentation']
               });
             } catch (error) {
-              // Labeling is best-effort (fallback for the doc-review queue);
-              // it must not turn the docs workflow red.
               core.warning(`Failed to add "documentation" label: ${error.message}`);
             }
 

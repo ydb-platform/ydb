@@ -105,10 +105,11 @@ public:
         if (tableServiceConfig.GetSqlVersion() != 0) {
             EnforcedSqlVersion = false;
         } else if (EnforcedSqlVersion) {
+            const auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(QueryId.Text);
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
                 "Enforced SQL version 1, "
                 << "current sql version: " << tableServiceConfig.GetSqlVersion()
-                << " queryText: " << EscapeC(QueryId.Text)
+                << " queryText: " << EscapeC(protectedQueryText)
             );
 
             config->SetSqlVersion(1);
@@ -281,11 +282,12 @@ private:
             << std::to_string(CompileActorSpan.GetTraceId().GetVerbosity()) << ", trace_id = "
             << std::to_string(CompileActorSpan.GetTraceId().GetTraceId()));
 
+        const auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(QueryId.Text);
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Start compilation"
             << ", self: " << ctx.SelfID
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(QueryId.Text) << "\""
+            << ", text: \"" << EscapeC(protectedQueryText) << "\""
             << ", startTime: " << StartTime);
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),

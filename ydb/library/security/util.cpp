@@ -98,6 +98,7 @@ bool ProtectQueryForLoggingIfSensitive(TStringBuf text, TString& protectedText) 
         protectedText = TStringBuilder() << "Query text is hidden due to a sensitive marker: " << *marker;
         return true;
     }
+    protectedText.clear();
     return false;
 }
 

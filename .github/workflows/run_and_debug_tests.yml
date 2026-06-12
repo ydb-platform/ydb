@@ -9,7 +9,7 @@ on:
         type: string
         default: 'ydb/tests/olap/'
       build_preset:
-        description: 'Build preset types (comma-separated). Sharding mode: relwithdebinfo only.'
+        description: 'Build preset types (comma-separated). Sharding mode: first preset only (relwithdebinfo or release-asan).'
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'
@@ -47,6 +47,8 @@ jobs:
       build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
       sharding_branch: ${{ steps.sharding-branch.outputs.branch }}
       history_branch: ${{ steps.sharding-branch.outputs.history_branch }}
+      sharding_preset: ${{ steps.sharding-preset.outputs.preset }}
+      sharding_runner: ${{ steps.sharding-preset.outputs.runner }}
       shard_ids: ${{ steps.shard-ids.outputs.shard_ids }}
     steps:
       - name: Format branches
@@ -103,6 +105,29 @@ jobs:
             echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
           fi
 
+      - name: Resolve sharding preset
+        id: sharding-preset
+        if: inputs.use_sharding
+        run: |
+          PRESETS='${{ steps.format-build-preset.outputs.build_preset_array }}'
+          preset=$(echo "$PRESETS" | jq -r '.[0]')
+          case "$preset" in
+            relwithdebinfo)
+              label=build-preset-relwithdebinfo
+              ;;
+            release-asan)
+              label=build-preset-release-asan
+              ;;
+            *)
+              echo "Unsupported sharding preset: $preset (use relwithdebinfo or release-asan)" >&2
+              exit 1
+              ;;
+          esac
+          runner=$(jq -nc --arg label "$label" '["self-hosted","auto-provisioned",$label]')
+          echo "preset=$preset" >> "$GITHUB_OUTPUT"
+          echo "runner=$runner" >> "$GITHUB_OUTPUT"
+          echo "Sharding preset: $preset (runner label: $label)"
+
       - name: Resolve sharding branch
         id: sharding-branch
         if: inputs.use_sharding
@@ -157,8 +182,8 @@ jobs:
   shard_build:
     needs: prepare
     if: inputs.use_sharding == true
-    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
-    name: Sharded build (relwithdebinfo)
+    runs-on: ${{ fromJSON(needs.prepare.outputs.sharding_runner) }}
+    name: Sharded build (${{ needs.prepare.outputs.sharding_preset }})
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -173,7 +198,7 @@ jobs:
       - name: Build (no tests)
         uses: ./.github/actions/build_and_test_ya
         with:
-          build_preset: relwithdebinfo
+          build_preset: ${{ needs.prepare.outputs.sharding_preset }}
           build_target: ${{ inputs.test_targets }}
           increment: ${{ inputs.increment }}
           run_tests: false
@@ -190,6 +215,7 @@ jobs:
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
       - name: List tests for shard plan
         env:
+          BUILD_PRESET: ${{ needs.prepare.outputs.sharding_preset }}
           REMOTE_CACHE_URL: ${{ vars.REMOTE_CACHE_URL_YA }}
           REMOTE_CACHE_USERNAME: ${{ secrets.REMOTE_CACHE_USERNAME }}
         run: |
@@ -284,8 +310,8 @@ jobs:
       fail-fast: false
       matrix:
         shard_id: ${{ fromJSON(needs.shard_plan.outputs.shard_ids) }}
-    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
-    name: Sharded test shard ${{ matrix.shard_id }}
+    runs-on: ${{ fromJSON(needs.prepare.outputs.sharding_runner) }}
+    name: Sharded test shard ${{ matrix.shard_id }} (${{ needs.prepare.outputs.sharding_preset }})
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -317,7 +343,7 @@ jobs:
       - name: Run shard tests (attempt 1)
         uses: ./.github/actions/build_and_test_ya
         with:
-          build_preset: relwithdebinfo
+          build_preset: ${{ needs.prepare.outputs.sharding_preset }}
           build_target: ${{ steps.shard_targets.outputs.targets }}
           increment: false
           run_tests: true
@@ -450,14 +476,14 @@ jobs:
           s3_key_id: ${{ secrets.AWS_KEY_ID }}
           s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
           folder_prefix: ${{ env.folder_prefix }}
-          build_preset: relwithdebinfo
+          build_preset: ${{ needs.prepare.outputs.sharding_preset }}
       - name: Install publish dependencies
         if: steps.merge.outcome == 'success'
         run: python3 -m pip install ydb ydb[yc] codeowners humanize plotly jinja2 pyyaml --quiet
       - name: Publish merged try1 report
         if: steps.merge.outcome == 'success'
         env:
-          BUILD_PRESET: relwithdebinfo
+          BUILD_PRESET: ${{ needs.prepare.outputs.sharding_preset }}
           BRANCH_NAME: ${{ needs.prepare.outputs.history_branch }}
           PUBLIC_DIR: tmp/results
           PUBLIC_DIR_URL: ${{ env.S3_URL_PREFIX }}
@@ -494,8 +520,8 @@ jobs:
       needs.shard_aggregate_merge.result == 'success' &&
       needs.shard_aggregate_merge.outputs.failed_count != '0' &&
       fromJSON(needs.shard_aggregate_merge.outputs.failed_count) < 500
-    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
-    name: Sharded retry
+    runs-on: ${{ fromJSON(needs.prepare.outputs.sharding_runner) }}
+    name: Sharded retry (${{ needs.prepare.outputs.sharding_preset }})
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -520,7 +546,7 @@ jobs:
       - name: Retry failed tests (attempts 2-3)
         uses: ./.github/actions/build_and_test_ya
         with:
-          build_preset: relwithdebinfo
+          build_preset: ${{ needs.prepare.outputs.sharding_preset }}
           build_target: ${{ inputs.test_targets }}
           increment: false
           run_tests: true

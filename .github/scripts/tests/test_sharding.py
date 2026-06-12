@@ -155,6 +155,149 @@ class ShardingToolsTest(unittest.TestCase):
         )
         self.assertEqual(proc.stdout.strip().splitlines(), ["ydb/core/foo/ut"])
 
+    def test_extract_suites_from_ya_test_list_olap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "tests.txt"
+            summary = Path(tmp) / "summary.json"
+            _run(
+                "extract_suites_from_ya_test_list.py",
+                str(FIXTURES / "ya_test_list_olap.log"),
+                "--target-prefix",
+                "ydb/tests/olap",
+                "-o",
+                str(out),
+                "--summary-json",
+                str(summary),
+            )
+            suites = out.read_text(encoding="utf-8").strip().splitlines()
+            summary_data = json.loads(summary.read_text(encoding="utf-8"))
+            self.assertNotIn("ydb/tests/olap", suites)
+            self.assertIn("ydb/tests/olap/ttl_tiering", suites)
+            self.assertEqual(summary_data["total_suites"], len(suites))
+            self.assertGreater(summary_data["total_tests"], 0)
+            self.assertEqual(
+                summary_data["total_tests"],
+                sum(item["test_count"] for item in summary_data["suites"]),
+            )
+            self.assertEqual(
+                summary_data["total_weight"],
+                sum(item["weight"] for item in summary_data["suites"]),
+            )
+            self.assertEqual(summary_data["size_weights"], {"small": 60, "medium": 600})
+
+    def test_filter_suites_by_increment_graph(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            full_summary = Path(tmp) / "full.json"
+            _run(
+                "extract_suites_from_ya_test_list.py",
+                str(FIXTURES / "ya_test_list_olap.log"),
+                "--target-prefix",
+                "ydb/tests/olap",
+                "--summary-json",
+                str(full_summary),
+            )
+            filtered_summary = Path(tmp) / "filtered.json"
+            filtered_tests = Path(tmp) / "filtered.txt"
+            _run(
+                "filter_suites_by_increment_graph.py",
+                str(full_summary),
+                str(FIXTURES / "graph_sample.json"),
+                "--target-prefix",
+                "ydb/tests/olap",
+                "-o",
+                str(filtered_tests),
+                "--summary-json",
+                str(filtered_summary),
+            )
+            data = json.loads(filtered_summary.read_text(encoding="utf-8"))
+            self.assertTrue(data["increment_filtered"])
+            self.assertEqual(data["increment_graph_suites"], 2)
+            self.assertEqual(
+                [suite["path"] for suite in data["suites"]],
+                [],
+            )
+            self.assertEqual(data["total_suites"], 0)
+
+    def test_filter_keeps_intersecting_suites(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = {
+                "size_weights": {"small": 60, "medium": 600},
+                "suites": [
+                    {
+                        "path": "ydb/tests/olap/load",
+                        "test_count": 5,
+                        "weight": 3000,
+                    },
+                    {
+                        "path": "ydb/tests/olap/scenario",
+                        "test_count": 10,
+                        "weight": 6000,
+                    },
+                ],
+            }
+            summary_path = Path(tmp) / "summary.json"
+            summary_path.write_text(json.dumps(summary), encoding="utf-8")
+            filtered_summary = Path(tmp) / "filtered.json"
+            _run(
+                "filter_suites_by_increment_graph.py",
+                str(summary_path),
+                str(FIXTURES / "graph_sample.json"),
+                "--target-prefix",
+                "ydb/tests/olap",
+                "--summary-json",
+                str(filtered_summary),
+            )
+            data = json.loads(filtered_summary.read_text(encoding="utf-8"))
+            self.assertEqual(
+                [suite["path"] for suite in data["suites"]],
+                ["ydb/tests/olap/load"],
+            )
+            self.assertEqual(data["total_tests"], 5)
+            self.assertEqual(data["total_weight"], 3000)
+
+    def test_split_uses_suite_weights_for_balancing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = {
+                "size_weights": {"small": 60, "medium": 600},
+                "suites": [
+                    {
+                        "path": "ydb/tests/foo",
+                        "small_test_count": 0,
+                        "medium_test_count": 100,
+                        "test_count": 100,
+                        "weight": 60000,
+                    },
+                    {
+                        "path": "ydb/tests/bar",
+                        "small_test_count": 10,
+                        "medium_test_count": 0,
+                        "test_count": 10,
+                        "weight": 600,
+                    },
+                ],
+            }
+            tests_path = Path(tmp) / "tests.txt"
+            summary_path = Path(tmp) / "summary.json"
+            tests_path.write_text("ydb/tests/foo\nydb/tests/bar\n", encoding="utf-8")
+            summary_path.write_text(json.dumps(summary), encoding="utf-8")
+            plan_path = Path(tmp) / "plan.json"
+            _run(
+                "split_test_shards.py",
+                "--tests-file",
+                str(tests_path),
+                "--suite-weights-file",
+                str(summary_path),
+                "--shard-count",
+                "2",
+                "-o",
+                str(plan_path),
+            )
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["total_tests"], 110)
+            self.assertEqual(plan["total_weight"], 60600)
+            loads = [shard["balance_weight"] for shard in plan["shards"]]
+            self.assertEqual(loads, [60000, 600])
+
     def test_build_shard_blacklist_complement(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"

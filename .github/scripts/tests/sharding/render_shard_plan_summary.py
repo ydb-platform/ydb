@@ -16,19 +16,32 @@ def render(plan: dict, title: str = "Shard plan") -> str:
         lines.append(f"**Shard count:** {shard_count} (requested {requested}, capped to suite count)")
     else:
         lines.append(f"**Shard count:** {shard_count}")
+    total_suites = plan.get("total_suites")
+    total_tests = plan.get("total_tests")
+    total_weight = plan.get("total_weight")
+    if total_suites is not None and total_tests is not None:
+        total_line = f"**Total:** {total_suites} suites, {total_tests} tests"
+        if total_weight is not None:
+            total_line += f", weight {total_weight}"
+        lines.append(total_line)
+    load_column = "Weight" if total_weight is not None else "Est. duration (sec)"
     lines.append("")
-    lines.append("| Shard | Suites | Tests | Est. duration (sec) | Sample suites |")
+    lines.append(f"| Shard | Suites | Tests | {load_column} | Sample suites |")
     lines.append("| ---: | ---: | ---: | ---: | --- |")
 
     for shard in plan.get("shards") or []:
         shard_id = shard.get("id", "?")
         tests = shard.get("tests") or []
         suites = shard.get("suites") or sorted({t.rsplit("/", 1)[0] if "/" in t else t for t in tests})
-        est = shard.get("estimated_duration_sec", "")
+        test_count = shard.get("test_count", len(tests))
+        if total_weight is not None:
+            load_value = shard.get("balance_weight", "")
+        else:
+            load_value = shard.get("estimated_duration_sec", "")
         sample = ", ".join(f"`{s}`" for s in suites[:3])
         if len(suites) > 3:
             sample += f", … (+{len(suites) - 3})"
-        lines.append(f"| {shard_id} | {len(suites)} | {len(tests)} | {est} | {sample} |")
+        lines.append(f"| {shard_id} | {len(suites)} | {test_count} | {load_value} | {sample} |")
 
     lines.append("")
     return "\n".join(lines)

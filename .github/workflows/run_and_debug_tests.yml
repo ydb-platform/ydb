@@ -188,13 +188,19 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
-      - name: Upload graph
+      - name: List tests for shard plan
+        run: |
+          chmod +x .github/scripts/tests/sharding/list_tests_for_shard_plan.sh
+          .github/scripts/tests/sharding/list_tests_for_shard_plan.sh \
+            "${{ inputs.test_targets }}" test_list.log
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: debug-shard-graph-${{ github.run_id }}
           path: |
             graph.json
             context.json
+            test_list.log
           retention-days: 3
 
   shard_plan:
@@ -212,11 +218,11 @@ jobs:
         uses: actions/checkout@v5
         with:
           sparse-checkout: .github/scripts/tests/sharding
-      - name: Download graph
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: debug-shard-graph-${{ github.run_id }}
-          path: graph
+          path: build
       - name: Build shard plan
         id: plan
         env:
@@ -224,34 +230,32 @@ jobs:
         run: |
           set -eux
           python3 -m pip install pyyaml --quiet
-          python3 .github/scripts/tests/sharding/extract_tests_from_graph.py graph/graph.json \
-            --target-prefix "${{ inputs.test_targets }}" \
-            -o /tmp/tests.txt
-          echo "Extracted $(wc -l < /tmp/tests.txt) tests"
-          python3 .github/scripts/tests/sharding/split_test_shards.py \
-            --tests-file /tmp/tests.txt \
-            --shard-count "$SHARD_COUNT" \
-            -o /tmp/shard_plan.json
-          mkdir -p shard_plan_out/shard_filters
-          cp /tmp/shard_plan.json shard_plan_out/
-          cp /tmp/tests.txt shard_plan_out/
-          for id in $(jq -r '.shards[].id' /tmp/shard_plan.json); do
-            python3 .github/scripts/tests/sharding/build_shard_blacklist.py \
-              --plan /tmp/shard_plan.json \
-              --shard-id "$id" \
-              -o "shard_plan_out/shard_filters/shard_${id}.yaml"
-          done
-          plan_title="Shard plan (${{ needs.prepare.outputs.sharding_branch }}, ${{ inputs.test_targets }})"
+          INCREMENT_GRAPH=""
+          if [ "${{ inputs.increment }}" = "true" ]; then
+            INCREMENT_GRAPH="build/graph.json"
+          fi
+          chmod +x .github/scripts/tests/sharding/plan_shard_tests.sh
+          .github/scripts/tests/sharding/plan_shard_tests.sh \
+            build/test_list.log \
+            "${{ inputs.test_targets }}" \
+            "$SHARD_COUNT" \
+            shard_plan_out \
+            "$INCREMENT_GRAPH"
+          plan_suffix="${{ inputs.test_targets }}"
+          if [ "${{ inputs.increment }}" = "true" ]; then
+            plan_suffix="$plan_suffix, increment"
+          fi
+          plan_title="Shard plan (${{ needs.prepare.outputs.sharding_branch }}, $plan_suffix)"
           python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
-            /tmp/shard_plan.json \
+            shard_plan_out/shard_plan.json \
             --title "$plan_title" \
             -o shard_plan_out/shard_plan_summary.md
           python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
-            /tmp/shard_plan.json \
+            shard_plan_out/shard_plan.json \
             --title "$plan_title" \
             >> "$GITHUB_STEP_SUMMARY"
-          echo "shard_ids=$(jq -c '[.shards[].id]' /tmp/shard_plan.json)" >> "$GITHUB_OUTPUT"
-          echo "active_shard_count=$(jq '.shard_count' /tmp/shard_plan.json)" >> "$GITHUB_OUTPUT"
+          echo "shard_ids=$(jq -c '[.shards[].id]' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
+          echo "active_shard_count=$(jq '.shard_count' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
       - name: Upload shard plan
         uses: actions/upload-artifact@v4
         with:
@@ -264,7 +268,7 @@ jobs:
       - prepare
       - shard_build
       - shard_plan
-    if: inputs.use_sharding == true
+    if: inputs.use_sharding == true && needs.shard_plan.outputs.active_shard_count != '0'
     strategy:
       fail-fast: false
       matrix:
@@ -377,6 +381,15 @@ jobs:
           set -eux
           mkdir -p merged
           mapfile -t reports < <(find shard_reports -name 'shard_*.json' | sort)
+          if [ "$EXPECTED_SHARDS" = "0" ]; then
+            echo '{"results":[]}' > merged/try_1_report.json
+            echo "failed_count=0" >> "$GITHUB_OUTPUT"
+            echo "shard_count=0" >> "$GITHUB_OUTPUT"
+            echo "## Merged try 1" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Shards: 0 (increment had no runnable suites in scope)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Failed tests: 0" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [ "${#reports[@]}" -eq 0 ]; then
             echo "No shard reports found"
             exit 1

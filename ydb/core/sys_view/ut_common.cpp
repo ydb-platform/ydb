@@ -145,6 +145,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
     featureFlags.SetEnableCsDictionaryEncoding(settings.EnableCsDictionaryEncoding);
+    featureFlags.SetEnableLocalBloomFilterIndex(settings.EnableLocalBloomFilterIndex);
+    featureFlags.SetEnableLocalBloomNgramFilterIndex(settings.EnableLocalBloomNgramFilterIndex);
+    featureFlags.SetEnableLocalIndexAsSchemeObject(settings.EnableLocalIndexAsSchemeObject);
     featureFlags.SetEnableLocalMinMaxIndex(settings.EnableLocalMinMaxIndex);
 
     Settings->SetFeatureFlags(featureFlags);

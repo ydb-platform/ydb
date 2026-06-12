@@ -743,7 +743,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     for (const auto& [tableNode, indexDesc] : indexes) {
         if (useStreamIndex
                 && (indexDesc->Type == TIndexDescription::EType::GlobalSync
-                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact)) {
             continue;
         }
         bool indexKeyColumnsUpdated = false;
@@ -1024,6 +1027,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    Y_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:
@@ -1100,6 +1107,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    Y_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:

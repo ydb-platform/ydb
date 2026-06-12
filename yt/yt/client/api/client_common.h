@@ -20,6 +20,12 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_ENUM(EClientPriority,
+    ((Local)            (0))
+    ((Remote)           (1))
+    ((Undefined)        (2))
+);
+
 struct TMutatingOptions
 {
     NRpc::TMutationId MutationId;

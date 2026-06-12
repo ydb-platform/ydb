@@ -3,6 +3,8 @@
 
 #include <yt/yt/core/misc/proc.h>
 
+#include <library/cpp/yt/system/process_id.h>
+
 namespace NYT {
 namespace {
 
@@ -10,7 +12,7 @@ namespace {
 
 TEST(TProcTest, TestParseMemoryMappings)
 {
-    const TString rawSMaps =
+    const std::string rawSMaps =
         "7fbb7b24d000-7fbb7b251000 rw-s 00000000 00:00 0 \n"
         "Size:                  1 kB\n"
         "KernelPageSize:        2 kB\n"
@@ -90,7 +92,7 @@ TEST(TProcTest, TestParseMemoryMappings)
 
 TEST(TProcTest, TestGetSelfMemoryMappings)
 {
-    auto pid = GetCurrentProcessId();
+    auto pid = GetProcessId();
     auto memoryMappings = GetProcessMemoryMappings(pid);
 
     TMemoryMappingStatistics statistics;

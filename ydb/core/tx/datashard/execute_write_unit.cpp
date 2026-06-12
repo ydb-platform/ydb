@@ -222,6 +222,8 @@ public:
 
                 if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT ||
                     userDb.NeedToReadBeforeWrite(fullTableId))
                 {
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
@@ -284,6 +286,7 @@ public:
 
         // Main update cycle
 
+        bool notReady = false;
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
             FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
@@ -305,7 +308,20 @@ public:
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.InsertRow(fullTableId, key, ops, userCtx);
+                    if (userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
+                        userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
+                        userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact) {
+                        try {
+                            userDb.InsertFulltext(fullTableId, key, ops, userCtx,
+                                userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+                        } catch (const TNotReadyTabletException&) {
+                            // Simple alternative to complex precharge process: continue processing
+                            // other rows to resolve more page faults in one pass
+                            notReady = true;
+                        }
+                    } else {
+                        userDb.InsertRow(fullTableId, key, ops, userCtx);
+                    }
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
@@ -327,6 +343,9 @@ public:
                     // Checked before in TWriteOperation
                     Y_ENSURE(false, operationType << " operation is not supported now");
             }
+        }
+        if (notReady) {
+            throw TNotReadyTabletException();
         }
 
         // Counters

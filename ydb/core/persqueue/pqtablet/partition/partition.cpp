@@ -2753,6 +2753,7 @@ void TPartition::RunPersist() {
             MsgsWrittenGrpc.Inc(writeInfo->MessagesWrittenTotal);
 
             WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
+            WriteNewMessagesFromSupportivePartitions += writeInfo->MessagesWrittenTotal;
 
             std::unordered_map<TString, std::pair<ui64, ui64>> perSourceMetrics;
             const auto& psm = writeInfo->WriteStats.PerSourceMetrics;

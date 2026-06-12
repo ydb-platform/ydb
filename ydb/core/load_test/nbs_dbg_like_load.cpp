@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/util/circular_sparse_queue.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -14,9 +15,12 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/utility.h>
 #include <util/system/hp_timer.h>
 #include <util/random/fast.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <util/string/printf.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsDbgLikeLoad] " << stream)
@@ -36,6 +40,7 @@ constexpr ui64 kWakeupErrorBackoffTag  = 3;
 constexpr TDuration kInitTimeout        = TDuration::Seconds(15);
 constexpr TDuration kErrorBackoffDuration = TDuration::MilliSeconds(10);
 constexpr ui32 kPipeRetryLimit = 3;
+constexpr ui32 kMaxInflightPerActor = 512;
 
 // Latency histogram bounds (spec §15.1). Up to ~134s, microsecond precision.
 constexpr i64 kLatencyHistMaxUs = 134'000'000;
@@ -63,6 +68,26 @@ TRope BuildWritePayload(ui32 size, TFastRng64& rng) {
     return TRope(std::move(data));
 }
 
+// Distributes `total` io-units across `count` workers as evenly as possible.
+// Workers with index < (total % count) get one extra unit, so shares sum to `total`.
+static ui64 SplitShare(ui64 total, ui32 count, ui32 index) {
+    if (count == 0) {
+        return total;
+    }
+    return total / count + (index < (total % count) ? 1 : 0);
+}
+
+// Returns the start offset for worker `index` — i.e. the sum of all shares
+// before it: index * (total/count) + min(index, total%count).
+static ui64 SplitStart(ui64 total, ui32 count, ui32 index) {
+    if (count == 0) {
+        return 0;
+    }
+    const ui64 base  = total / count;
+    const ui64 extra = total % count;
+    return base * index + Min<ui64>(index, extra);
+}
+
 struct TInflightEntry {
     ui64 Address = 0;
     ui32 SizeBytes = 0;
@@ -70,23 +95,138 @@ struct TInflightEntry {
     bool IsRead = false;
 };
 
+// Summary info resolved by the proxy (from GetSummary + validation).
+// Passed to each worker so they skip GetSummary and ConfigureTablet.
+struct TResolvedTabletInfo {
+    ui32 EffectiveDbgCount = 0;
+    ui64 VChunkSizeBytes = 0;
+    ui32 TargetNumVChunks = 0;
+    ui32 IoSizeBytes = 0;
+};
+
+// Builds the combined TEvLoadTestFinished from an already-aggregated
+// TNbsDbgLikeFinishStats. Used both by a single load worker and by the
+// proxy that merges several workers' stats. `stats` is consumed (its
+// histograms are moved into the event's WorkerStats).
+TEvLoad::TEvLoadTestFinished* BuildNbsDbgLikeFinishEvent(
+    ui64 tag,
+    ui64 tabletId,
+    const TString& errorReason,
+    TNbsDbgLikeFinishStats stats)
+{
+    const ui64 durationMs = stats.RunningMs;
+    const ui64 measuredMs = stats.MeasuredMs;
+    const double measuredSec = measuredMs > 0 ? measuredMs / 1000.0 : 1.0;
+
+    // Compute percentiles before moving histograms into WorkerStats.
+    const ui64 writeP50Us = stats.WriteE2eUs.GetValueAtPercentile(50.0);
+    const ui64 writeP95Us = stats.WriteE2eUs.GetValueAtPercentile(95.0);
+    const ui64 writeP99Us = stats.WriteE2eUs.GetValueAtPercentile(99.0);
+    const ui64 readP50Us  = stats.ReadPbUs.GetValueAtPercentile(50.0);
+    const ui64 readP95Us  = stats.ReadPbUs.GetValueAtPercentile(95.0);
+    const ui64 readP99Us  = stats.ReadPbUs.GetValueAtPercentile(99.0);
+
+    LOG_I("Run finished Tag# " << tag
+        << " Status# " << (errorReason.empty() ? "OK" : errorReason)
+        << " DurationMs# " << durationMs
+        << " MeasuredMs# " << measuredMs
+        << " WritesIssued# " << stats.WritesIssued
+        << " WritesOk# " << stats.WritesOkTotal
+        << " MeasuredWritesOk# " << stats.WritesOk
+        << " WriteBytes# " << stats.WriteBytesTotal
+        << " MeasuredWriteBytes# " << stats.WriteBytes
+        << " WriteLatencyP50Us# " << writeP50Us
+        << " WriteLatencyP99Us# " << writeP99Us
+        << " ReadsIssued# " << stats.ReadsIssuedTotal
+        << " ReadsOk# " << stats.ReadsOkTotal
+        << " MeasuredReadsOk# " << stats.ReadsPbOk
+        << " ReadBytes# " << stats.ReadBytesTotal
+        << " MeasuredReadBytes# " << stats.ReadsPbBytes
+        << " ReadLatencyP50Us# " << readP50Us
+        << " ReadLatencyP99Us# " << readP99Us);
+
+    auto report = MakeIntrusive<TEvLoad::TLoadReport>();
+    report->Duration = TDuration::MilliSeconds(durationMs);
+    report->Size = stats.WriteBytes + stats.ReadsPbBytes;
+    report->InFlight = stats.MaxInFlight;
+    report->LoadType = TEvLoad::TLoadReport::LOAD_WRITE;
+
+    auto* finishEv = new TEvLoad::TEvLoadTestFinished(
+        tag,
+        report,
+        errorReason.empty() ? TString{} : errorReason);
+
+    // Build a minimal JsonResult compatible with service_actor's aggregation.
+    // The service actor will further enrich this from WorkerStats below.
+    const ui64 measuredTxs = stats.WritesOk + stats.ReadsPbOk;
+    const ui64 measuredErrors = stats.WritesErr + stats.ReadsErr;
+    finishEv->JsonResult["txs"] = measuredTxs;
+    finishEv->JsonResult["rps"] = measuredTxs / measuredSec;
+    finishEv->JsonResult["errors"] = static_cast<double>(measuredErrors) / measuredSec;
+    finishEv->JsonResult["percentile"]["50"] = static_cast<double>(writeP50Us);
+    finishEv->JsonResult["percentile"]["95"] = static_cast<double>(writeP95Us);
+    finishEv->JsonResult["percentile"]["99"] = static_cast<double>(writeP99Us);
+
+    // Render a brief HTML summary as the "last page".
+    {
+        TStringStream html;
+        html << "<b>NbsDbgLike run summary</b><br/>"
+            << "Tag: " << tag << "<br/>"
+            << "TabletId: " << tabletId << "<br/>"
+            << "MaxInFlight: " << stats.MaxInFlight << "<br/>"
+            << "Duration: " << durationMs << " ms (measured: " << measuredMs << " ms)<br/>"
+            << "WritesIssued: " << stats.WritesIssued << " (total ok: " << stats.WritesOkTotal
+            << ") MeasuredWritesOk: " << stats.WritesOk
+            << " MeasuredWriteBytes: " << stats.WriteBytes << "<br/>"
+            << "WriteLatency p50=" << writeP50Us << "us p95=" << writeP95Us
+            << "us p99=" << writeP99Us << "us<br/>"
+            << "ReadsIssued: " << stats.ReadsIssuedTotal << " (total ok: " << stats.ReadsOkTotal
+            << ") MeasuredReadsOk: " << stats.ReadsPbOk
+            << " MeasuredReadBytes: " << stats.ReadsPbBytes << "<br/>"
+            << "ReadLatency p50=" << readP50Us << "us p95=" << readP95Us
+            << "us p99=" << readP99Us << "us<br/>";
+        if (!errorReason.empty()) {
+            html << "<b>Error:</b> " << errorReason << "<br/>";
+        }
+        finishEv->LastHtmlPage = html.Str();
+    }
+
+    // Move typed WorkerStats so the service actor can enrich JsonResult
+    // with split write/read keys consumed by the sweep table.
+    SetNbsDbgLikeFinishStats(*finishEv, std::move(stats));
+
+    return finishEv;
+}
+
 class TNbsDbgLikeLoadActor : public TActorBootstrapped<TNbsDbgLikeLoadActor> {
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_NBS_DBG_LIKE;
     }
 
+    // Workers are constructed by the proxy after it has resolved tablet info.
+    // All fields from TResolvedTabletInfo are already validated by the proxy.
     TNbsDbgLikeLoadActor(
         const TEvLoadTestRequest::TNbsDbgLikeLoad& cmd,
         const TActorId& parent,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-        ui64 tag)
+        ui64 tag,
+        ui32 workerIndex,
+        ui32 numWorkers,
+        TResolvedTabletInfo resolved)
         : Parent(parent)
         , Tag(tag)
         , TabletId(cmd.GetNbsDbgLikeTabletId())
         , Config(cmd.GetWorkloadConfig())
+        , WorkerIndex(workerIndex)
+        , NumWorkers(numWorkers)
+        , EffectiveDbgCount(resolved.EffectiveDbgCount)
+        , VChunkSizeBytes(resolved.VChunkSizeBytes)
+        , TargetNumVChunks(resolved.TargetNumVChunks)
+        , IoSizeBytes(resolved.IoSizeBytes)
         , Rng(TInstant::Now().GetValue() ^ tag)
         , Counters(std::move(counters))
+        , Inflight(Max<size_t>(1, Config.GetMaxInFlight()))
         , MeasuredWriteLatencyUs(kLatencyHistMaxUs, kLatencyHistPrecision)
         , MeasuredReadLatencyUs(kLatencyHistMaxUs, kLatencyHistPrecision)
     {
@@ -100,82 +240,53 @@ public:
             << " DurationSeconds# " << Config.GetDurationSeconds()
             << " MaxInFlight# " << Config.GetMaxInFlight()
             << " ReadRatio# " << Config.GetReadRatio()
-            << " Sequential# " << Config.GetSequential());
+            << " Sequential# " << Config.GetSequential()
+            << " Worker# " << WorkerIndex << "/" << NumWorkers);
 
-        if (TabletId == 0) {
-            ErrorReason = "NbsDbgLikeTabletId is not set";
+        // Compute this worker's slice of the flat io-unit address space.
+        // The summary fields (EffectiveDbgCount, VChunkSizeBytes, etc.) were
+        // already validated by the proxy.
+        ComputeWorkerSlice();
+        if (!ErrorReason.empty()) {
+            LOG_N("ComputeWorkerSlice error Tag# " << Tag << " " << ErrorReason);
             FinishRun();
             return;
         }
 
+        // Open a pipe for I/O only (no GetSummary, no ConfigureTablet — that
+        // was already done by the proxy before spawning us).
         NTabletPipe::TClientConfig pipeConfig{
             .RetryPolicy = {.RetryLimitCount = kPipeRetryLimit}
         };
         PipeClient = Register(NTabletPipe::CreateClient(SelfId(), TabletId, pipeConfig));
-
-        auto req = std::make_unique<TEvLoad::TEvNbsLoadTabletGetSummary>();
-        NTabletPipe::SendData(SelfId(), PipeClient, req.release());
 
         Schedule(kInitTimeout, new TEvents::TEvWakeup(kWakeupInitTimeoutTag));
         Become(&TNbsDbgLikeLoadActor::StateInit);
     }
 
 private:
-    // ---- StateInit: wait for GetSummary reply before starting the load ----
+    // ---- StateInit: wait for pipe connection ----
 
-    void HandleSummaryResult(TEvLoad::TEvNbsLoadTabletGetSummaryResult::TPtr& ev) {
-        const auto& rec = ev->Get()->Record;
-        if (rec.GetStatus() != NBSLT_OK) {
+    void HandlePipeConnectedInit(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->ClientId != PipeClient) {
+            return;
+        }
+        if (ev->Get()->Status != NKikimrProto::OK) {
             ErrorReason = TStringBuilder()
-                << "GetSummary failed: status=" << rec.GetStatus()
-                << " reason=" << rec.GetErrorReason();
-            LOG_N("GetSummary error Tag# " << Tag << " " << ErrorReason);
+                << "pipe connect failed: status=" << static_cast<int>(ev->Get()->Status);
+            LOG_N("Pipe connect error Tag# " << Tag << " " << ErrorReason);
             FinishRun();
             return;
         }
 
-        const ui32 totalDbgs = rec.GetNumDirectBlockGroups();
-        const ui32 readyDbgs = rec.GetNumReadyDirectBlockGroups();
-        VChunkSizeBytes = rec.GetVChunkSizeBytes();
-        TargetNumVChunks = rec.GetTargetNumVChunks();
-
-        // Use the ready count (longest contiguous prefix of DBGs with peers
-        // connected) as the base. Only target DBGs that can actually accept
-        // writes; targeting unconnected DBGs would silently drop writes and
-        // consume the entire inflight budget. Fall back to the total count for
-        // backward compatibility with tablets that don't set the field yet.
-        EffectiveDbgCount = (readyDbgs > 0) ? readyDbgs : totalDbgs;
-
-        // Apply NumDirectBlockGroupsToUse slice.
-        const ui32 mDbg = Config.GetNumDirectBlockGroupsToUse();
-        if (mDbg > 0 && mDbg < EffectiveDbgCount) {
-            EffectiveDbgCount = mDbg;
-        }
-
-        Validate();
-        if (!ErrorReason.empty()) {
-            LOG_N("Validate error Tag# " << Tag << " " << ErrorReason);
-            FinishRun();
-            return;
-        }
-
-        LOG_N("GetSummary OK Tag# " << Tag
-            << " TotalDbgCount# " << totalDbgs
-            << " ReadyDbgCount# " << readyDbgs
+        LOG_N("Worker ready Tag# " << Tag
             << " EffectiveDbgCount# " << EffectiveDbgCount
             << " VChunkSizeBytes# " << VChunkSizeBytes
             << " TargetNumVChunks# " << TargetNumVChunks
             << " IoSizeBytes# " << IoSizeBytes
+            << " Worker# " << WorkerIndex << "/" << NumWorkers
+            << " UnitRange# [" << UnitRangeStart << "," << UnitRangeStart + UnitRangeCount << ")"
             << " — starting load");
-
-        // Tell the tablet the per-run I/O size and DBG slice.
-        {
-            auto cfg = std::make_unique<TEvLoad::TEvConfigureTablet>();
-            cfg->Record = Config.GetTabletConfig();
-            cfg->Record.SetNumDirectBlockGroupsToUse(EffectiveDbgCount);
-            cfg->Record.SetIoSizeBytes(IoSizeBytes);
-            NTabletPipe::SendData(SelfId(), PipeClient, cfg.release());
-        }
 
         InitCounters();
         WritePayload = BuildWritePayload(IoSizeBytes, Rng);
@@ -197,7 +308,7 @@ private:
             return;
         }
         PipeClient = TActorId();
-        ErrorReason = "pipe lost before GetSummary reply";
+        ErrorReason = "pipe lost before connecting";
         FinishRun();
     }
 
@@ -208,11 +319,11 @@ private:
 
     void HandleInitWakeup(TEvents::TEvWakeup::TPtr& ev) {
         if (ev->Get()->Tag == kWakeupInitTimeoutTag) {
-            LOG_N("GetSummary timeout after " << kInitTimeout
+            LOG_N("Pipe connect timeout after " << kInitTimeout
                 << " Tag# " << Tag
                 << " TabletId# " << TabletId);
             ErrorReason = TStringBuilder()
-                << "GetSummary timed out after " << kInitTimeout
+                << "pipe connect timed out after " << kInitTimeout
                 << " (TabletId " << TabletId << ")";
             FinishRun();
         }
@@ -220,61 +331,31 @@ private:
 
     // ---- Helpers shared by both states ----
 
-    void Validate() {
-        if (EffectiveDbgCount == 0) {
-            ErrorReason = "EffectiveDbgCount=0 (NumDirectBlockGroups from tablet)";
-            return;
-        }
-        if (TargetNumVChunks == 0) {
-            ErrorReason = "TargetNumVChunks=0 (from tablet GetSummary)";
-            return;
-        }
-        if (VChunkSizeBytes == 0 || VChunkSizeBytes % kSectorSize != 0) {
-            ErrorReason = TStringBuilder()
-                << "VChunkSizeBytes (" << VChunkSizeBytes
-                << ") must be a positive multiple of " << kSectorSize;
-            return;
-        }
-        const ui32 kib = Config.GetReadWriteSizeKiB();
-        if (kib < 4 || (kib % 4) != 0) {
-            ErrorReason = TStringBuilder()
-                << "ReadWriteSizeKiB (" << kib << " KiB) must be >= 4 and a multiple of 4";
-            return;
-        }
-        const ui64 ioBytes = static_cast<ui64>(kib) * 1024;
-        if (ioBytes > VChunkSizeBytes) {
-            ErrorReason = TStringBuilder()
-                << "ReadWriteSizeKiB * 1024 (" << ioBytes
-                << ") exceeds VChunkSizeBytes (" << VChunkSizeBytes << ")";
-            return;
-        }
-        if (ioBytes > Max<ui32>()) {
-            ErrorReason = "ReadWriteSizeKiB * 1024 overflows ui32";
-            return;
-        }
-        if (Config.GetDurationSeconds() == 0 && Config.GetStopOnWritesDoneCount() == 0) {
-            ErrorReason = "at least one of DurationSeconds or StopOnWritesDoneCount must be non-zero";
-            return;
-        }
-        if (Config.GetDurationSeconds() > 0
-            && Config.GetDelayBeforeMeasurementsSeconds() >= Config.GetDurationSeconds())
-        {
-            ErrorReason = TStringBuilder()
-                << "DelayBeforeMeasurementsSeconds (" << Config.GetDelayBeforeMeasurementsSeconds()
-                << ") must be < DurationSeconds (" << Config.GetDurationSeconds() << ")";
-            return;
-        }
-        if (Config.GetTabletConfig().GetDisableReplication() && Config.GetReadRatio() > 0) {
-            ErrorReason = "DisableReplication is incompatible with ReadRatio > 0 (reads require flush)";
-            return;
-        }
-
-        IoSizeBytes = static_cast<ui32>(ioBytes);
+    // Compute the derived address-space fields and this worker's io-unit slice.
+    // Called during Bootstrap; all summary fields are already set from TResolvedTabletInfo.
+    void ComputeWorkerSlice() {
         BytesPerDbg = static_cast<ui64>(TargetNumVChunks) * VChunkSizeBytes;
         AddressSpaceBytes = static_cast<ui64>(EffectiveDbgCount) * BytesPerDbg;
         IoUnitsPerVChunk = VChunkSizeBytes / IoSizeBytes;
         AddressSpaceIoUnits = static_cast<ui64>(EffectiveDbgCount)
             * static_cast<ui64>(TargetNumVChunks) * IoUnitsPerVChunk;
+
+        const ui64 unitsPerDbg = static_cast<ui64>(TargetNumVChunks) * IoUnitsPerVChunk;
+        if (EffectiveDbgCount >= NumWorkers) {
+            // Preferred: align to whole DBG boundaries.
+            UnitRangeStart = SplitStart(EffectiveDbgCount, NumWorkers, WorkerIndex) * unitsPerDbg;
+            UnitRangeCount = SplitShare(EffectiveDbgCount, NumWorkers, WorkerIndex) * unitsPerDbg;
+        } else {
+            // Fewer DBGs than workers: fall back to io-unit granularity.
+            UnitRangeStart = SplitStart(AddressSpaceIoUnits, NumWorkers, WorkerIndex);
+            UnitRangeCount = SplitShare(AddressSpaceIoUnits, NumWorkers, WorkerIndex);
+        }
+        if (UnitRangeCount == 0) {
+            ErrorReason = TStringBuilder()
+                << "Degenerate address space slice for worker #" << WorkerIndex
+                << " (AddressSpaceIoUnits=" << AddressSpaceIoUnits
+                << " NumWorkers=" << NumWorkers << ")";
+        }
     }
 
     void InitCounters() {
@@ -305,15 +386,20 @@ private:
     }
 
     ui64 PickAddress(ui32 sizeBytes) {
-        Y_ABORT_UNLESS(AddressSpaceIoUnits != 0);
+        Y_ABORT_UNLESS(UnitRangeCount != 0);
         ui64 unit;
         if (Config.GetSequential()) {
+            if (NextSequentialIoUnit < UnitRangeStart ||
+                NextSequentialIoUnit >= UnitRangeStart + UnitRangeCount) {
+                // First call or out-of-range: start from the beginning of our slice.
+                NextSequentialIoUnit = UnitRangeStart;
+            }
             unit = NextSequentialIoUnit;
-            if (++NextSequentialIoUnit >= AddressSpaceIoUnits) {
-                NextSequentialIoUnit = 0;
+            if (++NextSequentialIoUnit >= UnitRangeStart + UnitRangeCount) {
+                NextSequentialIoUnit = UnitRangeStart;
             }
         } else {
-            unit = Rng.GenRand() % AddressSpaceIoUnits;
+            unit = UnitRangeStart + Rng.GenRand() % UnitRangeCount;
         }
         // Sampling in I/O units guarantees the resulting flat address is
         // aligned to sizeBytes and fits entirely inside its vChunk.
@@ -345,25 +431,33 @@ private:
                         / static_cast<double>(WritesIssued))
                     < static_cast<double>(readRatio) / 100.0;
             if (wantRead) {
-                IssueRead();
+                if (!IssueRead()) {
+                    break;
+                }
             } else if (stopCount == 0 || WritesIssued < stopCount) {
-                IssueWrite();
+                if (!IssueWrite()) {
+                    break;
+                }
             } else {
                 break; // write cap reached; no more ops to issue
             }
         }
     }
 
-    void IssueWrite() {
+    // Returns false if the inflight queue was full (slot occupied by stuck entry).
+    bool IssueWrite() {
         const ui32 size = IoSizeBytes;
         const ui64 addr = PickAddress(size);
-        const ui64 cookie = ++NextCookie;
         NHPTimer::STime sentAt = 0;
         NHPTimer::GetTime(&sentAt);
-        Inflight[cookie] = TInflightEntry{addr, size, sentAt, /*IsRead=*/false};
+        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/false);
+        if (!res) {
+            LOG_D("IssueWrite queue full Tag# " << Tag << " " << res.error());
+            return false;
+        }
+        const ui64 cookie = res.value();
         auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(addr, size);
-        const ui32 payloadId = ev->AddPayload(TRope(WritePayload));
-        ev->Record.SetPayloadId(payloadId);
+        ev->Payload = TRope(WritePayload);
         NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
         ++WriteInFlight;
         LOG_T("IssueWrite Cookie# " << cookie << " Addr# " << addr << " Size# " << size << " WriteInFlight# " << WriteInFlight);
@@ -374,15 +468,21 @@ private:
         if (Writes.BytesInFlight) {
             *Writes.BytesInFlight += size;
         }
+        return true;
     }
 
-    void IssueRead() {
+    // Returns false if the inflight queue was full (slot occupied by stuck entry).
+    bool IssueRead() {
         const ui32 size = IoSizeBytes;
         const ui64 addr = PickAddress(size);
-        const ui64 cookie = ++NextCookie;
         NHPTimer::STime sentAt = 0;
         NHPTimer::GetTime(&sentAt);
-        Inflight[cookie] = TInflightEntry{addr, size, sentAt, /*IsRead=*/true};
+        auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/true);
+        if (!res) {
+            LOG_D("IssueRead queue full Tag# " << Tag << " " << res.error());
+            return false;
+        }
+        const ui64 cookie = res.value();
         auto ev = std::make_unique<TEvLoad::TEvNbsRead>(addr, size);
         NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
         ++ReadInFlight;
@@ -394,23 +494,44 @@ private:
         if (Reads.BytesInFlight) {
             *Reads.BytesInFlight += size;
         }
+        return true;
     }
 
     void HandleWriteResult(TEvLoad::TEvNbsWriteResult::TPtr& ev) {
         const ui64 cookie = ev->Cookie;
-        auto it = Inflight.find(cookie);
-        if (it == Inflight.end()) {
+        auto* entry = Inflight.Find(cookie);
+        if (!entry) {
             return;
         }
-        const TInflightEntry e = it->second;
-        Inflight.erase(it);
+        // Guard against cross-type replies. Should be unreachable with
+        // monotonic cookies; if it ever fires, erase the entry and release
+        // its inflight budget so the queue front can't be pinned forever.
+        if (entry->IsRead) {
+            LOG_E("HandleWriteResult cookie type mismatch Tag# " << Tag
+                << " Cookie# " << cookie << " expected write but IsRead=true");
+            Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleWriteResult");
+            const ui32 sizeBytes = entry->SizeBytes;
+            Inflight.Erase(cookie);
+            if (ReadInFlight > 0) {
+                --ReadInFlight;
+            }
+            if (Reads.BytesInFlight) {
+                *Reads.BytesInFlight -= sizeBytes;
+            }
+            CheckDrainComplete();
+            return;
+        }
+        const TInflightEntry e = *entry;
+        Inflight.Erase(cookie);
 
         NHPTimer::STime now = 0;
         NHPTimer::GetTime(&now);
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
-        const bool ok = ev->Get()->Record.GetStatus() == 0;
+        const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
         const bool measure = InMeasurementWindow();
-        LOG_T("HandleWriteResult Cookie# " << cookie << " Status# " << ev->Get()->Record.GetStatus() << " LatencyUs# " << latencyUs << " WriteInFlight# " << WriteInFlight);
+        LOG_T("HandleWriteResult Cookie# " << cookie << " Status# "
+            << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# "
+            << latencyUs << " WriteInFlight# " << WriteInFlight);
 
         if (WriteInFlight > 0) {
             --WriteInFlight;
@@ -439,6 +560,12 @@ private:
                 Schedule(kDrainTimeout, new TEvents::TEvWakeup(kWakeupDrainTimeoutTag));
             }
         } else {
+            const auto& record = ev->Get()->Record;
+            LOG_D("HandleWriteResult error Tag# " << Tag
+                << " Cookie# " << cookie
+                << " LatencyUs# " << latencyUs
+                << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
+                << " Reason# " << record.GetReason());
             if (Writes.ReplyErr) {
                 Writes.ReplyErr->Inc();
             }
@@ -461,22 +588,39 @@ private:
 
     void HandleReadResult(TEvLoad::TEvNbsReadResult::TPtr& ev) {
         const ui64 cookie = ev->Cookie;
-        auto it = Inflight.find(cookie);
-        if (it == Inflight.end()) {
+        auto* entry = Inflight.Find(cookie);
+        if (!entry) {
             return;
         }
-        const TInflightEntry e = it->second;
-        Inflight.erase(it);
+        // Guard against cross-type replies. Should be unreachable with
+        // monotonic cookies; if it ever fires, erase the entry and release
+        // its inflight budget so the queue front can't be pinned forever.
+        if (!entry->IsRead) {
+            LOG_E("HandleReadResult cookie type mismatch Tag# " << Tag
+                << " Cookie# " << cookie << " expected read but IsRead=false");
+            Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleReadResult");
+            const ui32 sizeBytes = entry->SizeBytes;
+            Inflight.Erase(cookie);
+            if (WriteInFlight > 0) {
+                --WriteInFlight;
+            }
+            if (Writes.BytesInFlight) {
+                *Writes.BytesInFlight -= sizeBytes;
+            }
+            CheckDrainComplete();
+            return;
+        }
+        const TInflightEntry e = *entry;
+        Inflight.Erase(cookie);
 
         NHPTimer::STime now = 0;
         NHPTimer::GetTime(&now);
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
-        const bool ok = ev->Get()->Record.GetStatus() == 0;
+        const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
         const bool measure = InMeasurementWindow();
-        LOG_T("HandleReadResult Cookie# " << cookie << " Status# " << ev->Get()->Record.GetStatus() << " LatencyUs# " << latencyUs << " ReadInFlight# " << ReadInFlight);
-        // Payload is on the actor event as a TRope; we don't validate it
-        // beyond observing the status — the worker already checked sizes.
-        (void)ev->Get()->Record.HasPayloadId();
+        LOG_T("HandleReadResult Cookie# " << cookie << " Status# "
+            << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# " << latencyUs
+            << " ReadInFlight# " << ReadInFlight);
 
         if (ReadInFlight > 0) {
             --ReadInFlight;
@@ -499,6 +643,13 @@ private:
                 MeasuredReadLatencyUs.RecordValue(static_cast<i64>(latencyUs));
             }
         } else {
+            const auto& record = ev->Get()->Record;
+            LOG_D("HandleReadResult error Tag# " << Tag
+                << " Cookie# " << cookie
+                << " LatencyUs# " << latencyUs
+                << " PayloadCount# " << ev->Get()->GetPayloadCount()
+                << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
+                << " Reason# " << record.GetReason());
             if (Reads.ReplyErr) {
                 Reads.ReplyErr->Inc();
             }
@@ -592,98 +743,30 @@ private:
         const ui64 measuredMs = (MeasurementEndTime != NActors::TMonotonic::Zero()
                                   && MeasurementEndTime > MeasurementStartTime)
             ? (MeasurementEndTime - MeasurementStartTime).MilliSeconds() : 0;
-        const double measuredSec = measuredMs > 0 ? measuredMs / 1000.0 : 1.0;
 
-        // Compute percentiles before moving histograms into WorkerStats.
-        const ui64 writeP50Us = MeasuredWriteLatencyUs.GetValueAtPercentile(50.0);
-        const ui64 writeP95Us = MeasuredWriteLatencyUs.GetValueAtPercentile(95.0);
-        const ui64 writeP99Us = MeasuredWriteLatencyUs.GetValueAtPercentile(99.0);
-        const ui64 readP50Us  = MeasuredReadLatencyUs.GetValueAtPercentile(50.0);
-        const ui64 readP95Us  = MeasuredReadLatencyUs.GetValueAtPercentile(95.0);
-        const ui64 readP99Us  = MeasuredReadLatencyUs.GetValueAtPercentile(99.0);
+        // Populate typed WorkerStats: measured fields feed the service-actor
+        // aggregation, *Total fields feed the run summary.
+        TNbsDbgLikeFinishStats stats;
+        stats.WritesIssued     = WritesIssued;
+        stats.WritesOk         = MeasuredWritesOk;
+        stats.WritesErr        = MeasuredWriteErrors;
+        stats.WriteBytes       = MeasuredWriteBytes;
+        stats.ReadsPbOk        = MeasuredReadsOk;   // load actor measures all reads together
+        stats.ReadsPbBytes     = MeasuredReadBytes;
+        stats.ReadsErr         = MeasuredReadErrors;
+        stats.ReadsDDiskOk     = 0;
+        stats.WritesOkTotal    = WritesOk;
+        stats.WriteBytesTotal  = WriteBytes;
+        stats.ReadsIssuedTotal = ReadsIssued;
+        stats.ReadsOkTotal     = ReadsOk;
+        stats.ReadBytesTotal   = ReadBytes;
+        stats.RunningMs        = durationMs;
+        stats.MeasuredMs       = measuredMs;
+        stats.MaxInFlight      = Config.GetMaxInFlight();
+        stats.WriteE2eUs       = std::move(MeasuredWriteLatencyUs);
+        stats.ReadPbUs         = std::move(MeasuredReadLatencyUs);
 
-        LOG_I("Run finished Tag# " << Tag
-            << " Status# " << (ErrorReason.empty() ? "OK" : ErrorReason)
-            << " DurationMs# " << durationMs
-            << " MeasuredMs# " << measuredMs
-            << " WritesIssued# " << WritesIssued
-            << " WritesOk# " << WritesOk
-            << " MeasuredWritesOk# " << MeasuredWritesOk
-            << " WriteBytes# " << WriteBytes
-            << " MeasuredWriteBytes# " << MeasuredWriteBytes
-            << " WriteLatencyP50Us# " << writeP50Us
-            << " WriteLatencyP99Us# " << writeP99Us
-            << " ReadsIssued# " << ReadsIssued
-            << " ReadsOk# " << ReadsOk
-            << " MeasuredReadsOk# " << MeasuredReadsOk
-            << " ReadBytes# " << ReadBytes
-            << " MeasuredReadBytes# " << MeasuredReadBytes
-            << " ReadLatencyP50Us# " << readP50Us
-            << " ReadLatencyP99Us# " << readP99Us);
-
-        auto report = MakeIntrusive<TEvLoad::TLoadReport>();
-        report->Duration = TDuration::MilliSeconds(durationMs);
-        report->Size = MeasuredWriteBytes + MeasuredReadBytes;
-        report->InFlight = Config.GetMaxInFlight();
-        report->LoadType = TEvLoad::TLoadReport::LOAD_WRITE;
-
-        auto* finishEv = new TEvLoad::TEvLoadTestFinished(
-            Tag,
-            report,
-            ErrorReason.empty() ? TString{} : ErrorReason);
-
-        // Build a minimal JsonResult compatible with service_actor's aggregation.
-        // The service actor will further enrich this from WorkerStats below.
-        const ui64 measuredTxs = MeasuredWritesOk + MeasuredReadsOk;
-        const ui64 measuredErrors = MeasuredWriteErrors + MeasuredReadErrors;
-        finishEv->JsonResult["txs"] = measuredTxs;
-        finishEv->JsonResult["rps"] = measuredTxs / measuredSec;
-        finishEv->JsonResult["errors"] = static_cast<double>(measuredErrors) / measuredSec;
-        finishEv->JsonResult["percentile"]["50"] = static_cast<double>(writeP50Us);
-        finishEv->JsonResult["percentile"]["95"] = static_cast<double>(writeP95Us);
-        finishEv->JsonResult["percentile"]["99"] = static_cast<double>(writeP99Us);
-
-        // Populate typed WorkerStats so the service actor can enrich JsonResult
-        // with split write/read keys consumed by the sweep table.
-        {
-            TNbsDbgLikeFinishStats stats;
-            stats.WritesIssued  = WritesIssued;
-            stats.WritesOk      = MeasuredWritesOk;
-            stats.WritesErr     = MeasuredWriteErrors;
-            stats.WriteBytes    = MeasuredWriteBytes;
-            stats.ReadsPbOk     = MeasuredReadsOk;   // load actor measures all reads together
-            stats.ReadsDDiskOk  = 0;
-            stats.RunningMs     = durationMs;
-            stats.MeasuredMs    = measuredMs;
-            stats.MaxInFlight   = Config.GetMaxInFlight();
-            stats.WriteE2eUs    = std::move(MeasuredWriteLatencyUs);
-            stats.ReadPbUs      = std::move(MeasuredReadLatencyUs);
-            SetNbsDbgLikeFinishStats(*finishEv, std::move(stats));
-        }
-
-        // Render a brief HTML summary as the "last page".
-        {
-            TStringStream html;
-            html << "<b>NbsDbgLike run summary</b><br/>"
-                << "Tag: " << Tag << "<br/>"
-                << "TabletId: " << TabletId << "<br/>"
-                << "MaxInFlight: " << Config.GetMaxInFlight() << "<br/>"
-                << "Duration: " << durationMs << " ms (measured: " << measuredMs << " ms)<br/>"
-                << "WritesIssued: " << WritesIssued << " (total ok: " << WritesOk
-                << ") MeasuredWritesOk: " << MeasuredWritesOk
-                << " MeasuredWriteBytes: " << MeasuredWriteBytes << "<br/>"
-                << "WriteLatency p50=" << writeP50Us << "us p95=" << writeP95Us
-                << "us p99=" << writeP99Us << "us<br/>"
-                << "ReadsIssued: " << ReadsIssued << " (total ok: " << ReadsOk
-                << ") MeasuredReadsOk: " << MeasuredReadsOk
-                << " MeasuredReadBytes: " << MeasuredReadBytes << "<br/>"
-                << "ReadLatency p50=" << readP50Us << "us p95=" << readP95Us
-                << "us p99=" << readP99Us << "us<br/>";
-            if (!ErrorReason.empty()) {
-                html << "<b>Error:</b> " << ErrorReason << "<br/>";
-            }
-            finishEv->LastHtmlPage = html.Str();
-        }
+        auto* finishEv = BuildNbsDbgLikeFinishEvent(Tag, TabletId, ErrorReason, std::move(stats));
 
         Send(Parent, finishEv);
 
@@ -693,14 +776,13 @@ private:
         PassAway();
     }
 
-    void HandlePipeConnected(TEvTabletPipe::TEvClientConnected::TPtr&) {
-        // Nothing to do — we already sent GetSummary; wait for the reply.
+    void HandlePipeConnectedRunning(TEvTabletPipe::TEvClientConnected::TPtr&) {
+        // Reconnect during run — no action needed; the pipe client retried for us.
     }
 
     STRICT_STFUNC(StateInit,
-        hFunc(TEvLoad::TEvNbsLoadTabletGetSummaryResult, HandleSummaryResult)
+        hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnectedInit)
         hFunc(TEvTabletPipe::TEvClientDestroyed, HandleInitPipeDestroyed)
-        hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnected)
         hFunc(TEvents::TEvPoisonPill, HandleInitPoison)
         hFunc(TEvents::TEvWakeup, HandleInitWakeup)
     )
@@ -711,7 +793,7 @@ private:
         hFunc(TEvents::TEvPoisonPill, HandlePoison)
         hFunc(TEvents::TEvWakeup, HandleWakeup)
         hFunc(TEvTabletPipe::TEvClientDestroyed, HandleRunPipeDestroyed)
-        hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnected)
+        hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnectedRunning)
     )
 
 private:
@@ -740,12 +822,19 @@ private:
     const ui64 TabletId;
     TEvLoadTestRequest::TNbsDbgLikeLoad::TWorkloadConfig Config;
 
-    // Filled in from GetSummary reply.
+    const ui32 WorkerIndex;
+    const ui32 NumWorkers;
+
+    // Set from TResolvedTabletInfo; validated by the proxy before worker creation.
     ui32 EffectiveDbgCount = 0;
     ui64 VChunkSizeBytes = 0;
     ui32 TargetNumVChunks = 0;
-
     ui32 IoSizeBytes = 0;
+
+    // Assigned slice of the flat io-unit space; computed in ComputeWorkerSlice().
+    ui64 UnitRangeStart = 0;
+    ui64 UnitRangeCount = 0;
+
     ui64 BytesPerDbg = 0;
     ui64 AddressSpaceBytes = 0;
     ui64 IoUnitsPerVChunk = 0;
@@ -762,8 +851,7 @@ private:
 
     TActorId PipeClient;
 
-    THashMap<ui64, TInflightEntry> Inflight;
-    ui64 NextCookie = 0;
+    TCircularSparseQueue<TInflightEntry> Inflight;
 
     ui32 WriteInFlight = 0;
     ui32 ReadInFlight  = 0;
@@ -795,6 +883,402 @@ private:
     TString ErrorReason;
 };
 
+// TNbsDbgLikeLoadActorProxy fans a single NbsDbgLike run out to several
+// TNbsDbgLikeLoadActor workers (each with a share of the in-flight and
+// StopOnWritesDoneCount budget), then merges their per-worker results
+// into a single TEvLoadTestFinished — exactly the event the service actor
+// (which registers one actor per Tag) expects.
+//
+// The proxy is responsible for the init sequence:
+//   1. Open pipe → send GetSummary → validate → send single ConfigureTablet
+//   2. Spawn workers (passing resolved info); switch to StateWork
+//   3. Merge worker results; close pipe; emit combined TEvLoadTestFinished
+class TNbsDbgLikeLoadActorProxy : public TActorBootstrapped<TNbsDbgLikeLoadActorProxy> {
+public:
+    static constexpr auto ActorActivityType() {
+        return NKikimrServices::TActivity::BS_LOAD_NBS_DBG_LIKE;
+    }
+
+    TNbsDbgLikeLoadActorProxy(
+        const TEvLoadTestRequest::TNbsDbgLikeLoad& cmd,
+        const TActorId& parent,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+        ui64 tag)
+        : Cmd(cmd)
+        , Parent(parent)
+        , Tag(tag)
+        , TabletId(cmd.GetNbsDbgLikeTabletId())
+        , Counters(std::move(counters))
+    {}
+
+    void Bootstrap() {
+        if (TabletId == 0) {
+            EmitError("NbsDbgLikeTabletId is not set");
+            return;
+        }
+
+        const auto& config = Cmd.GetWorkloadConfig();
+        TotalMaxInFlight = config.GetMaxInFlight();
+
+        LOG_I("Proxy bootstrap Tag# " << Tag
+            << " TabletId# " << TabletId
+            << " TotalMaxInFlight# " << TotalMaxInFlight);
+
+        NTabletPipe::TClientConfig pipeConfig{
+            .RetryPolicy = {.RetryLimitCount = kPipeRetryLimit}
+        };
+        ProxyPipeClient = Register(NTabletPipe::CreateClient(SelfId(), TabletId, pipeConfig));
+
+        auto req = std::make_unique<TEvLoad::TEvNbsLoadTabletGetSummary>();
+        NTabletPipe::SendData(SelfId(), ProxyPipeClient, req.release());
+
+        Schedule(kInitTimeout, new TEvents::TEvWakeup(kWakeupInitTimeoutTag));
+        Become(&TNbsDbgLikeLoadActorProxy::StateInit);
+    }
+
+private:
+    static ui32 CalcNumWorkers(ui32 totalMaxInFlight, bool sequential) {
+        if (sequential) {
+            return 1;
+        }
+        // At least one worker even when MaxInFlight is 0.
+        return Max<ui32>(
+            1,
+            (totalMaxInFlight + kMaxInflightPerActor - 1) / kMaxInflightPerActor);
+    }
+
+    // ---- StateInit ----
+
+    void HandleProxySummaryResult(TEvLoad::TEvNbsLoadTabletGetSummaryResult::TPtr& ev) {
+        const auto& rec = ev->Get()->Record;
+        if (rec.GetStatus() != NBSLT_OK) {
+            EmitError(TStringBuilder()
+                << "GetSummary failed: status=" << rec.GetStatus()
+                << " reason=" << rec.GetErrorReason());
+            return;
+        }
+
+        const ui32 totalDbgs = rec.GetNumDirectBlockGroups();
+        const ui32 readyDbgs = rec.GetNumReadyDirectBlockGroups();
+        const ui64 vChunkSizeBytes = rec.GetVChunkSizeBytes();
+        const ui32 targetNumVChunks = rec.GetTargetNumVChunks();
+
+        // Use the ready count (longest contiguous prefix of DBGs with peers
+        // connected) as the base. Fall back to total count for backward
+        // compatibility with tablets that don't set the field yet.
+        ui32 effectiveDbgCount = (readyDbgs > 0) ? readyDbgs : totalDbgs;
+
+        const auto& config = Cmd.GetWorkloadConfig();
+        const ui32 mDbg = config.GetNumDirectBlockGroupsToUse();
+        if (mDbg > 0 && mDbg < effectiveDbgCount) {
+            effectiveDbgCount = mDbg;
+        }
+
+        // Validate everything the workers would have validated.
+        if (effectiveDbgCount == 0) {
+            EmitError("EffectiveDbgCount=0 (NumDirectBlockGroups from tablet)");
+            return;
+        }
+        if (targetNumVChunks == 0) {
+            EmitError("TargetNumVChunks=0 (from tablet GetSummary)");
+            return;
+        }
+        if (vChunkSizeBytes == 0 || vChunkSizeBytes % kSectorSize != 0) {
+            EmitError(TStringBuilder()
+                << "VChunkSizeBytes (" << vChunkSizeBytes
+                << ") must be a positive multiple of " << kSectorSize);
+            return;
+        }
+        const ui32 kib = config.GetReadWriteSizeKiB();
+        if (kib < 4 || (kib % 4) != 0) {
+            EmitError(TStringBuilder()
+                << "ReadWriteSizeKiB (" << kib << " KiB) must be >= 4 and a multiple of 4");
+            return;
+        }
+        const ui64 ioBytes = static_cast<ui64>(kib) * 1024;
+        if (ioBytes > vChunkSizeBytes) {
+            EmitError(TStringBuilder()
+                << "ReadWriteSizeKiB * 1024 (" << ioBytes
+                << ") exceeds VChunkSizeBytes (" << vChunkSizeBytes << ")");
+            return;
+        }
+        // The tablet's ComputeRoutingParams marks IoValid=false unless
+        // IoSizeBytes evenly divides VChunkSizeBytes; fail fast here instead
+        // of letting every worker get NBSIO_NOT_CONFIGURED.
+        if (vChunkSizeBytes % ioBytes != 0) {
+            EmitError(TStringBuilder()
+                << "IoSizeBytes (" << ioBytes
+                << ") must evenly divide VChunkSizeBytes (" << vChunkSizeBytes << ")");
+            return;
+        }
+        if (ioBytes > Max<ui32>()) {
+            EmitError("ReadWriteSizeKiB * 1024 overflows ui32");
+            return;
+        }
+        if (config.GetDurationSeconds() == 0 && config.GetStopOnWritesDoneCount() == 0) {
+            EmitError("at least one of DurationSeconds or StopOnWritesDoneCount must be non-zero");
+            return;
+        }
+        if (config.GetDurationSeconds() > 0
+            && config.GetDelayBeforeMeasurementsSeconds() >= config.GetDurationSeconds())
+        {
+            EmitError(TStringBuilder()
+                << "DelayBeforeMeasurementsSeconds (" << config.GetDelayBeforeMeasurementsSeconds()
+                << ") must be < DurationSeconds (" << config.GetDurationSeconds() << ")");
+            return;
+        }
+        if (config.GetTabletConfig().GetDisableReplication() && config.GetReadRatio() > 0) {
+            EmitError("DisableReplication is incompatible with ReadRatio > 0 (reads require flush)");
+            return;
+        }
+
+        const ui32 ioSizeBytes = static_cast<ui32>(ioBytes);
+        const ui32 totalStopCount = config.GetStopOnWritesDoneCount();
+
+        // Determine worker count.
+        ui32 numWorkers = CalcNumWorkers(TotalMaxInFlight, config.GetSequential());
+        if (totalStopCount > 0) {
+            numWorkers = Min(numWorkers, totalStopCount);
+        }
+        // Each worker needs a non-empty slice of the flat io-unit space;
+        // otherwise it fails the run with "Degenerate address space slice".
+        // Cap by the total number of io-units (>= 1: all factors validated
+        // non-zero above, and ioBytes divides vChunkSizeBytes).
+        const ui64 addressSpaceIoUnits = static_cast<ui64>(effectiveDbgCount)
+            * static_cast<ui64>(targetNumVChunks) * (vChunkSizeBytes / ioBytes);
+        numWorkers = static_cast<ui32>(Min<ui64>(numWorkers, addressSpaceIoUnits));
+
+        LOG_N("Proxy GetSummary OK Tag# " << Tag
+            << " TotalDbgCount# " << totalDbgs
+            << " ReadyDbgCount# " << readyDbgs
+            << " EffectiveDbgCount# " << effectiveDbgCount
+            << " VChunkSizeBytes# " << vChunkSizeBytes
+            << " TargetNumVChunks# " << targetNumVChunks
+            << " IoSizeBytes# " << ioSizeBytes
+            << " NumWorkers# " << numWorkers
+            << " TotalMaxInFlight# " << TotalMaxInFlight
+            << " TotalStopOnWritesDoneCount# " << totalStopCount);
+
+        // Send a single ConfigureTablet. The proxy's pipe stays open until
+        // PassAway() to ensure delivery.
+        {
+            auto cfg = std::make_unique<TEvLoad::TEvConfigureTablet>();
+            cfg->Record = config.GetTabletConfig();
+            cfg->Record.SetNumDirectBlockGroupsToUse(effectiveDbgCount);
+            cfg->Record.SetIoSizeBytes(ioSizeBytes);
+            NTabletPipe::SendData(SelfId(), ProxyPipeClient, cfg.release());
+        }
+
+        // Spawn workers and switch to StateWork.
+        const TResolvedTabletInfo resolved{effectiveDbgCount, vChunkSizeBytes,
+                                           targetNumVChunks, ioSizeBytes};
+        for (ui32 i = 0; i < numWorkers; ++i) {
+            auto workerCmd = Cmd;
+            auto& wc = *workerCmd.MutableWorkloadConfig();
+            wc.SetMaxInFlight(static_cast<ui32>(SplitShare(TotalMaxInFlight, numWorkers, i)));
+            if (totalStopCount > 0) {
+                wc.SetStopOnWritesDoneCount(
+                    static_cast<ui32>(SplitShare(totalStopCount, numWorkers, i)));
+            }
+
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> workerCounters = Counters
+                ? Counters->GetSubgroup("worker", ToString(i))
+                : nullptr;
+
+            // Give each worker a distinct tag so their RNG seeds diverge
+            // (the worker seeds with TInstant::Now() ^ tag, and a tight
+            // registration loop can observe the same Now()) and their log
+            // lines are distinguishable. The proxy tracks workers by actor
+            // id and rebuilds the finish event with the original Tag, so the
+            // service actor only ever sees the real tag.
+            const ui64 workerTag = Tag * 1000 + i;
+            const TActorId workerId = Register(
+                new TNbsDbgLikeLoadActor(
+                    workerCmd, SelfId(), workerCounters,
+                    workerTag, i, numWorkers, resolved));
+            Workers.insert(workerId);
+        }
+
+        Become(&TNbsDbgLikeLoadActorProxy::StateWork);
+    }
+
+    void HandleInitPipeConnected(TEvTabletPipe::TEvClientConnected::TPtr&) {
+        // No-op: we wait for the GetSummary reply, not for the connection event.
+    }
+
+    void HandleInitPipeDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        if (ev->Get()->ClientId != ProxyPipeClient) {
+            return;
+        }
+        ProxyPipeClient = TActorId();
+        EmitError("proxy pipe lost before GetSummary reply");
+    }
+
+    void HandleInitPoison(TEvents::TEvPoisonPill::TPtr&) {
+        EmitError("stopped before start");
+    }
+
+    void HandleInitWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == kWakeupInitTimeoutTag) {
+            LOG_N("Proxy GetSummary timeout after " << kInitTimeout
+                << " Tag# " << Tag
+                << " TabletId# " << TabletId);
+            EmitError(TStringBuilder()
+                << "GetSummary timed out after " << kInitTimeout
+                << " (TabletId " << TabletId << ")");
+        }
+    }
+
+    // ---- StateWork ----
+
+    void HandleWorkerFinished(TEvLoad::TEvLoadTestFinished::TPtr& ev) {
+        const TActorId worker = ev->Sender;
+        if (!Workers.erase(worker)) {
+            return;
+        }
+
+        if (!ev->Get()->ErrorReason.empty()) {
+            if (!CombinedError.empty()) {
+                CombinedError += "; ";
+            }
+            CombinedError += ev->Get()->ErrorReason;
+        }
+
+        if (auto& ws = ev->Get()->WorkerStats) {
+            if (auto* s = std::get_if<TNbsDbgLikeFinishStats>(&*ws)) {
+                MergeStats(*s);
+            }
+        }
+
+        LOG_I("Proxy worker finished Tag# " << Tag
+            << " RemainingWorkers# " << Workers.size());
+
+        if (Workers.empty()) {
+            EmitCombined();
+        }
+    }
+
+    void HandleWorkPipeDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        if (ev->Get()->ClientId != ProxyPipeClient) {
+            return;
+        }
+        ProxyPipeClient = TActorId();
+        // The proxy pipe dying during the run is benign: ConfigureTablet was
+        // already delivered. Workers have their own pipes and self-manage.
+        LOG_D("Proxy pipe to tablet " << TabletId << " destroyed during run Tag# " << Tag);
+    }
+
+    void HandleWorkPipeConnected(TEvTabletPipe::TEvClientConnected::TPtr&) {
+        // No-op.
+    }
+
+    void HandleWorkWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        // The init-timeout wakeup scheduled in Bootstrap() is not cancelled
+        // on the success path and fires here; ignore it.
+        if (ev->Get()->Tag != kWakeupInitTimeoutTag) {
+            LOG_D("Proxy unexpected wakeup Tag# " << Tag
+                << " WakeupTag# " << ev->Get()->Tag);
+        }
+    }
+
+    void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
+        LOG_I("Proxy poison Tag# " << Tag
+            << " forwarding to " << Workers.size() << " worker(s)");
+        for (const TActorId& worker : Workers) {
+            Send(worker, new TEvents::TEvPoisonPill);
+        }
+        // Keep the proxy alive; workers will send TEvLoadTestFinished back,
+        // and HandleWorkerFinished will call EmitCombined when all are done.
+    }
+
+    void MergeStats(TNbsDbgLikeFinishStats& s) {
+        if (!HasMerged) {
+            HasMerged = true;
+            Merged = std::move(s);
+            return;
+        }
+        // The fields summed below are the only ones the load actor populates.
+        // BytesAccounted, LsnsCompleted, LsnsFailed, ReadsPbIssued,
+        // ReadsDDiskIssued and ReadsDDiskBytes are set only by the tablet-side
+        // actor and are always 0 here, so they keep the first worker's value
+        // (0) rather than being summed. Add them here if a load worker ever
+        // starts producing them.
+        Merged.WritesIssued     += s.WritesIssued;
+        Merged.WritesOk         += s.WritesOk;
+        Merged.WritesErr        += s.WritesErr;
+        Merged.WriteBytes       += s.WriteBytes;
+        Merged.ReadsPbOk        += s.ReadsPbOk;
+        Merged.ReadsPbBytes     += s.ReadsPbBytes;
+        Merged.ReadsErr         += s.ReadsErr;
+        Merged.ReadsDDiskOk     += s.ReadsDDiskOk;
+        Merged.WritesOkTotal    += s.WritesOkTotal;
+        Merged.WriteBytesTotal  += s.WriteBytesTotal;
+        Merged.ReadsIssuedTotal += s.ReadsIssuedTotal;
+        Merged.ReadsOkTotal     += s.ReadsOkTotal;
+        Merged.ReadBytesTotal   += s.ReadBytesTotal;
+        Merged.RunningMs         = Max(Merged.RunningMs, s.RunningMs);
+        Merged.MeasuredMs        = Max(Merged.MeasuredMs, s.MeasuredMs);
+        Merged.WriteE2eUs.Add(s.WriteE2eUs);
+        Merged.ReadPbUs.Add(s.ReadPbUs);
+    }
+
+    void EmitCombined() {
+        if (ProxyPipeClient) {
+            NTabletPipe::CloseClient(SelfId(), ProxyPipeClient);
+            ProxyPipeClient = TActorId();
+        }
+        Merged.MaxInFlight = TotalMaxInFlight;
+        auto* finishEv = BuildNbsDbgLikeFinishEvent(
+            Tag, TabletId, CombinedError, std::move(Merged));
+        Send(Parent, finishEv);
+        PassAway();
+    }
+
+    void EmitError(TString reason) {
+        LOG_N("Proxy error Tag# " << Tag << " " << reason);
+        if (ProxyPipeClient) {
+            NTabletPipe::CloseClient(SelfId(), ProxyPipeClient);
+            ProxyPipeClient = TActorId();
+        }
+        TNbsDbgLikeFinishStats stats;
+        stats.MaxInFlight = TotalMaxInFlight;
+        auto* finishEv = BuildNbsDbgLikeFinishEvent(Tag, TabletId, reason, std::move(stats));
+        Send(Parent, finishEv);
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateInit,
+        hFunc(TEvLoad::TEvNbsLoadTabletGetSummaryResult, HandleProxySummaryResult)
+        hFunc(TEvTabletPipe::TEvClientConnected, HandleInitPipeConnected)
+        hFunc(TEvTabletPipe::TEvClientDestroyed, HandleInitPipeDestroyed)
+        hFunc(TEvents::TEvPoisonPill, HandleInitPoison)
+        hFunc(TEvents::TEvWakeup, HandleInitWakeup)
+    )
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvLoad::TEvLoadTestFinished, HandleWorkerFinished)
+        hFunc(TEvTabletPipe::TEvClientConnected, HandleWorkPipeConnected)
+        hFunc(TEvTabletPipe::TEvClientDestroyed, HandleWorkPipeDestroyed)
+        hFunc(TEvents::TEvPoisonPill, HandlePoison)
+        hFunc(TEvents::TEvWakeup, HandleWorkWakeup)
+    )
+
+private:
+    const TEvLoadTestRequest::TNbsDbgLikeLoad Cmd;
+    const TActorId Parent;
+    const ui64 Tag;
+    const ui64 TabletId;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+
+    TActorId ProxyPipeClient;
+    ui32 TotalMaxInFlight = 0;
+    THashSet<TActorId> Workers;
+
+    bool HasMerged = false;
+    TNbsDbgLikeFinishStats Merged;
+    TString CombinedError;
+};
+
 } // anonymous namespace
 
 NActors::IActor* CreateNbsDbgLikeLoadActor(
@@ -803,7 +1287,7 @@ NActors::IActor* CreateNbsDbgLikeLoadActor(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     ui64 tag)
 {
-    return new TNbsDbgLikeLoadActor(cmd, parent, std::move(counters), tag);
+    return new TNbsDbgLikeLoadActorProxy(cmd, parent, std::move(counters), tag);
 }
 
 } // namespace NKikimr::NNbsDbgLike

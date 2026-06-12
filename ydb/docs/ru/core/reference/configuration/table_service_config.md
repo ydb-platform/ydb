@@ -168,7 +168,7 @@ table_service_config:
 
 {% note info %}
 
-Для получения информации о настройке лимитов файловых дескрипторов при первоначальном развертывании см. раздел [Лимиты файловых дескрипторов](../../../devops/deployment-options/manual/initial-deployment.html#file-descriptors).
+Для получения информации о настройке лимитов файловых дескрипторов при первоначальном развертывании см. раздел [Лимиты файловых дескрипторов](../../devops/deployment-options/manual/initial-deployment/deployment-preparation.md#file-descriptors).
 
 {% endnote %}
 

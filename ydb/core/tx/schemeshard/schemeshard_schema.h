@@ -1471,6 +1471,20 @@ struct Schema : NIceDb::Schema {
         struct DropColumnsTxStatus : Column<47, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
         struct DropColumnsTxDone : Column<48, NScheme::NTypeIds::Bool> {};
 
+        struct CreateBuildSequenceTxId : Column<50, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct CreateBuildSequenceTxStatus : Column<51, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
+        struct CreateBuildSequenceTxDone : Column<52, NScheme::NTypeIds::Bool> {};
+
+        // Fulltext rowid auto-provisioning. Parent fulltext build: intent flags, the auto unique-index
+        // name, and the ids of the spawned child builds. Child build: link to the parent and the
+        // shared-lock marker.
+        struct FulltextNeedsRowIdColumn : Column<53, NScheme::NTypeIds::Bool> {};
+        struct FulltextNeedsUniqueIndex : Column<54, NScheme::NTypeIds::Bool> {};
+        struct AutoUniqueIndexName : Column<55, NScheme::NTypeIds::Utf8> {};
+        struct RowIdColumnBuildId : Column<56, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct RowIdUniqueBuildId : Column<57, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1521,7 +1535,16 @@ struct Schema : NIceDb::Schema {
             DropColumnsTxId,
             DropColumnsTxStatus,
             DropColumnsTxDone,
-            SubState
+            SubState,
+            CreateBuildSequenceTxId,
+            CreateBuildSequenceTxStatus,
+            CreateBuildSequenceTxDone,
+            FulltextNeedsRowIdColumn,
+            FulltextNeedsUniqueIndex,
+            AutoUniqueIndexName,
+            RowIdColumnBuildId,
+            RowIdUniqueBuildId,
+            ParentBuildId
         >;
     };
 
@@ -2019,6 +2042,8 @@ struct Schema : NIceDb::Schema {
         struct DefaultFromLiteral : Column<4, NScheme::NTypeIds::String> {};
         struct NotNull : Column<5, NScheme::NTypeIds::Bool> {};
         struct FamilyName : Column<6, NScheme::NTypeIds::String> {};
+        struct DefaultFromSequence : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct BitReverseSequenceValue : Column<8, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id, ColumnNo>;
         using TColumns = TableColumns<
@@ -2027,7 +2052,9 @@ struct Schema : NIceDb::Schema {
             ColumnName,
             DefaultFromLiteral,
             NotNull,
-            FamilyName
+            FamilyName,
+            DefaultFromSequence,
+            BitReverseSequenceValue
         >;
     };
 

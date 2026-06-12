@@ -6,8 +6,6 @@
 #include <ydb/library/actors/struct_log/native_types_support.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 
-#include <ydb/library/actors/struct_log/create_message_impl.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/overloaded.h>
@@ -263,10 +261,17 @@ Y_UNIT_TEST_SUITE(StructLog) {
         }
     };
 
+    struct TTestTypeGetDebugShortString {
+        TString GetDebugShortString() const {
+            return "short_debug_string";
+        }
+    };
+
     Y_UNIT_TEST(CreateMessageToMethods) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToString{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStructuredMessage{}}), "value.value1=1, value.value2=2");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToBoth{}}), "value.value1=1, value.value2=2");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeGetDebugShortString{}}), "value=short_debug_string");
     }
 
     Y_UNIT_TEST(CreateMessageIterable) {

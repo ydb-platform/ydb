@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/protos/index_builder.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -2035,6 +2035,30 @@ public:
                                     hasNotNull = true;
                                 }
                             }
+                        }
+
+                        // Auto-bind ALTER ADD COLUMN __ydb_row_id Uint64 NOT NULL to a server-side
+                        // sequence: __ydb_row_id is a reserved name for the fulltext UseRowIdAsDocId
+                        // opt-in (NFulltext::RowIdColumn). The schemeshard creates the sequence,
+                        // backfills existing rows via the column-build scan, and bit-reverses
+                        // each value to spread inserts across posting-table shards.
+                        if (hasNotNull && !hasDefaultValue
+                            && TString(columnName.Value()) == NKikimr::NTableIndex::NFulltext::RowIdColumn
+                            && actualType->GetKind() == ETypeAnnotationKind::Data
+                            && actualType->Cast<TDataExprType>()->GetName() == "Uint64")
+                        {
+                            if (columnBuild == nullptr) {
+                                columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                            }
+                            // The not_null branch above creates columnBuild without a name; set it
+                            // unconditionally here so the schemeshard build pipeline can identify the column.
+                            columnBuild->SetColumnName(TString(columnName));
+                            columnBuild->SetNotNull(true);
+                            columnBuild->set_default_from_sequence(
+                                NKikimr::NTableIndex::NFulltext::RowIdSequenceName);
+                            columnBuild->set_bit_reverse_sequence_value(true);
+                            columnBuild->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                            hasDefaultValue = true;
                         }
 
                         if (hasNotNull && !hasDefaultValue) {

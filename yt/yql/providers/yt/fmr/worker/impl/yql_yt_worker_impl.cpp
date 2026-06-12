@@ -364,7 +364,7 @@ public:
                 } catch (...) {
                     YQL_CLOG(ERROR, FastMapReduce) << "Error in task processing thread: " << CurrentExceptionMessage();
                 }
-                Sleep(TDuration::MilliSeconds(100));
+                Sleep(TimeToSleepBetweenRequests_);
             }
         };
 

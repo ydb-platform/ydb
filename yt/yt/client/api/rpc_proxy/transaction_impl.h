@@ -75,10 +75,10 @@ public:
     void SubscribeAborted(const TAbortedHandler& handler) override;
     void UnsubscribeAborted(const TAbortedHandler& handler) override;
 
-    void ModifyRows(
+    void FutureModifyRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NApi::TRowModification> modifications,
+        TSharedRange<NApi::NFuture::TRowModification> modifications,
         const NApi::TModifyRowsOptions& options) override;
 
     using TQueueTransactionMixin::AdvanceQueueConsumer;
@@ -339,8 +339,6 @@ private:
     NApi::TTransactionStartOptions PatchTransactionId(const NApi::TTransactionStartOptions& options);
     template <class T>
     T PatchTransactionTimestamp(const T& options);
-
-    void SetControlMultiplexingBandIfNeeded(NRpc::TClientRequest& req);
 };
 
 DEFINE_REFCOUNTED_TYPE(TTransaction)

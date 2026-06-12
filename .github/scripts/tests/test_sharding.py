@@ -482,6 +482,39 @@ class ShardingToolsTest(unittest.TestCase):
             self.assertNotIn("test_filter:", text)
 
 
+class MergeReportsLatestWinsTest(unittest.TestCase):
+    def test_later_attempt_overrides_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            try1 = Path(tmp) / "try_1.json"
+            try2 = Path(tmp) / "try_2.json"
+            try1.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {"path": "ydb/a", "name": "T", "subtest_name": "ok", "type": "test", "status": "OK"},
+                            {"path": "ydb/a", "name": "T", "subtest_name": "flaky", "type": "test", "status": "FAILED"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            try2.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {"path": "ydb/a", "name": "T", "subtest_name": "flaky", "type": "test", "status": "OK"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out = Path(tmp) / "final.json"
+            _run("merge_build_reports.py", "--latest-wins", "-o", str(out), str(try1), str(try2))
+            final = json.loads(out.read_text(encoding="utf-8"))
+            statuses = {r["subtest_name"]: r["status"] for r in final["results"]}
+            self.assertEqual(statuses, {"ok": "OK", "flaky": "OK"})
+
+
 class ChooseShardCountTest(unittest.TestCase):
     @staticmethod
     def _choose(total_weight_min: float, **kwargs) -> int:

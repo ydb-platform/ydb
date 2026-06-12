@@ -285,6 +285,14 @@ critical path) are implemented as a reusable workflow
 - **`ya test -L` off the critical path**: the `list` job runs in parallel
   with the no-tests build job (listing only evaluates the graph), removing
   ~20 min of latency.
+- **In-shard retries**: shards run attempts 2-3 themselves (binaries are
+  already built and warm, a retry costs only the re-run time; `test_ya`
+  stops retrying above 500 failures per shard). The separate cross-shard
+  retry job is removed — it added a fixed ~15-35 min (runner queue, checkout,
+  relink on a cold machine) to the critical path of every run with at least
+  one flaky failure. Each shard uploads a final-status report
+  (`merge_build_reports.py --latest-wins` over its `try_1..try_N`), and the
+  merge job publishes the merged final result directly.
 - **Driver for real PRs**: `run_and_debug_tests.yml` accepts a PR number or
   branch, checks out the PR merge commit (like PR-check), runs the pipeline
   with `publish=false` (no statuses/comments on the real PR) and prints a

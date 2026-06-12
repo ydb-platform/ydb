@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from report_utils import merge_reports, write_report, load_report
+from report_utils import merge_reports, merge_reports_latest_wins, write_report, load_report
 
 
 def main() -> int:
@@ -19,10 +19,15 @@ def main() -> int:
         help="Output merged report.json path",
     )
     parser.add_argument(
+        "--latest-wins",
+        action="store_true",
+        help="Later reports override earlier rows (merge try_1..try_N of one shard)",
+    )
+    parser.add_argument(
         "reports",
         nargs="+",
         type=Path,
-        help="Input report.json files (one per shard)",
+        help="Input report.json files (one per shard, or per attempt with --latest-wins)",
     )
     args = parser.parse_args()
 
@@ -33,7 +38,10 @@ def main() -> int:
             return 2
         reports.append(load_report(path))
 
-    merged = merge_reports(reports)
+    if args.latest_wins:
+        merged = merge_reports_latest_wins(reports)
+    else:
+        merged = merge_reports(reports)
     write_report(merged, args.output)
     print(f"Merged {len(args.reports)} reports, {len(merged.get('results', []))} rows -> {args.output}")
     return 0

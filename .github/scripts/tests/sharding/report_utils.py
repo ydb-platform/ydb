@@ -74,6 +74,25 @@ def merge_reports(reports: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return {"results": merged_results}
 
 
+def merge_reports_latest_wins(reports: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """Merge attempt reports of one shard: a later report overrides earlier rows.
+
+    Used for in-shard retries (try_1..try_N): a test re-run in a later attempt
+    replaces its earlier row, so the result carries final statuses.
+    """
+    merged: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for report in reports:
+        for row in iter_test_rows(report):
+            key = (
+                row.get("path") or "",
+                row.get("name") or "",
+                row.get("subtest_name") or "",
+                row.get("type") or "",
+            )
+            merged[key] = row
+    return {"results": list(merged.values())}
+
+
 def count_failures(report: dict[str, Any]) -> int:
     count = 0
     for row in iter_test_rows(report):

@@ -72,18 +72,12 @@ class TDescribeConsumerActor: public TGrpcProxyActor<TDescribeConsumerActor, NGR
     void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         const auto& consumerName = GetProtoRequest()->consumer();
         const auto& topicInfo = ev->Get()->Topics.begin()->second;
-        switch (topicInfo.Status) {
-            case NPQ::NDescriber::EStatus::SUCCESS: {
-                ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Topic::DescribeConsumerResponse());
-                break;
-            }
-            case NPQ::NDescriber::EStatus::NOT_FOUND: {
-                ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Consumer not found");
-                break;
-            }
-            default: {
 
-            }
+        if (topicInfo.Status != NPQ::NDescriber::EStatus::SUCCESS) {
+            return ReplyWithError(
+                NPQ::NDescriber::Convert(topicInfo.Status),
+                NPQ::NDescriber::Description(GetProtoRequest()->path(), topicInfo.Status)
+            );
         }
 
         ReadBalancerTabletId = topicInfo.Info->Description.GetBalancerTabletID();
@@ -210,7 +204,12 @@ class TDescribeConsumerActor: public TGrpcProxyActor<TDescribeConsumerActor, NGR
             SetProtoTime(consStats->mutable_max_write_time_lag(), lagInfo.GetWriteLagMs());
             SetProtoTime(consStats->mutable_max_committed_time_lag(), lagInfo.GetCommitedLagMs());
 
-            AddWindowsStat(consStats->mutable_bytes_read(), partResult.GetAvgReadSpeedPerMin(), partResult.GetAvgReadSpeedPerHour(), partResult.GetAvgReadSpeedPerDay());
+            AddWindowsStat(
+                consStats->mutable_bytes_read(),
+                partResult.GetAvgReadSpeedPerMin(),
+                partResult.GetAvgReadSpeedPerHour(),
+                partResult.GetAvgReadSpeedPerDay()
+            );
 
             if (!Result.consumer().has_consumer_stats()) {
                 auto* stats = Result.mutable_consumer()->mutable_consumer_stats();
@@ -304,6 +303,7 @@ class TDescribeConsumerActor: public TGrpcProxyActor<TDescribeConsumerActor, NGR
             ReplyWithResult(Ydb::StatusIds::SUCCESS, Result);
             return true;
         }
+
         return false;
     }
 

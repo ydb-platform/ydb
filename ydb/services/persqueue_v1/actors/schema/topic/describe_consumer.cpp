@@ -177,8 +177,8 @@ namespace {
 
             auto& record = ev->Get()->Record;
             for (const auto& partResult : record.GetPartResult()) {
-                Ydb::Topic::DescribeConsumerResult::PartitionInfo* partRes = &Partitions[partResult.GetPartition()].Stats;
-                Ydb::Topic::PartitionStats* partStats = partRes->mutable_partition_stats();
+                Ydb::Topic::DescribeConsumerResult::PartitionInfo& partRes = Partitions[partResult.GetPartition()].Stats;
+                Ydb::Topic::PartitionStats* partStats = partRes.mutable_partition_stats();
         
                 partStats->set_store_size_bytes(partResult.GetPartitionSize());
                 partStats->mutable_partition_offsets()->set_start(partResult.GetStartOffset());
@@ -196,7 +196,7 @@ namespace {
         
                 const auto& lagInfo = partResult.GetLagsInfo();
         
-                auto consStats = partRes->mutable_partition_consumer_stats();
+                auto consStats = partRes.mutable_partition_consumer_stats();
 
                 consStats->set_last_read_offset(lagInfo.GetReadPosition().GetOffset());
                 consStats->set_committed_offset(lagInfo.GetWritePosition().GetOffset());
@@ -322,8 +322,7 @@ namespace {
         }
 
         void RequestStats(ui64 tabletId) {
-            auto ev = std::make_unique<TEvPersQueue::TEvStatus>();
-            ev->Record.AddConsumers(ConsumerName);
+            auto ev = std::make_unique<TEvPersQueue::TEvStatus>(ConsumerName);
             SendToTablet(tabletId, ev.release(), tabletId);
             TabletsInflight.insert(tabletId);
         }
@@ -343,7 +342,6 @@ namespace {
                 Ydb::Topic::DescribeConsumerResult::PartitionInfo Stats;
                 NKikimrPQ::TReadSessionsInfoResponse::TPartitionInfo ReadSession;
             };
-
             absl::flat_hash_map<ui32, TPartitionInfo> Partitions;
     };
 

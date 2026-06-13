@@ -66,9 +66,14 @@ public:
             Y_ASSERT(PathToOriginalPath.contains(realPath));
             auto originalPath = PathToOriginalPath[realPath];
 
+            bool isCDCStream = false;
+            TString cdcStreamName;
+
             auto it = CDCPaths.find(realPath);
             if (it != CDCPaths.end()) {
-                originalPath = it->second;
+                originalPath = it->second.OriginalPath;
+                isCDCStream = true;
+                cdcStreamName = it->second.CdcStreamName;
             }
 
             switch (entry.Status) {
@@ -87,7 +92,11 @@ public:
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
                         LOG_D("Path '" << realPath << "' is a CDC");
-                        CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = originalPath;
+                        CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = {
+                            .OriginalPath = originalPath,
+                            .CdcStreamName = entry.Self->Info.GetName()
+                        };
+                        break;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
@@ -110,7 +119,8 @@ public:
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::SUCCESS,
                                     .RealPath = realPath,
-                                    .CdcStream = CDCPaths.contains(realPath),
+                                    .CdcStream = isCDCStream,
+                                    .CdcStreamName = cdcStreamName,
                                     .CreateStep = entry.CreateStep,
                                     .Info = entry.PQGroupInfo,
                                     .Self = entry.Self,
@@ -187,7 +197,11 @@ private:
     bool UsedSyncVersion = false;
     bool RetryWithCDC = false;
     // CDC topic path -> original topic path
-    std::unordered_map<TString, TString> CDCPaths;
+    struct TCDCTopicInfo {
+        TString OriginalPath;
+        TString CdcStreamName;
+    };
+    std::unordered_map<TString, TCDCTopicInfo> CDCPaths;
     std::unordered_map<TString, TTopicInfo> Result;
 };
 

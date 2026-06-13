@@ -111,6 +111,8 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto& topicInfo = topics["/Root/table1/feed"];
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/table1/feed/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
     }
 
     Y_UNIT_TEST(TopicWithoutDatabase) {

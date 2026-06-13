@@ -58,7 +58,7 @@ namespace {
             Become(&TDescribeConsumerActor::StateDescribe);
 
             ReadSessionsReceived = !GetProtoRequest()->include_stats();
-            LocationsReceived = !GetProtoRequest()->include_location() && ReadSessionsReceived;
+            LocationsReceived = !GetProtoRequest()->include_location() && !GetProtoRequest()->include_stats();
         }
 
         void PassAway() override {
@@ -103,12 +103,10 @@ namespace {
 
             Ydb::Scheme::Entry *selfEntry = Result.mutable_self();
             ConvertDirectoryEntry(topicInfo.Self->Info, selfEntry, true);
-            //TODO: change entry
-            //if (const auto& name = GetCdcStreamName()) {
-            //    selfEntry->set_name(*name);
-            //}
+            if (topicInfo.CdcStream) {
+                selfEntry->set_name(std::move(topicInfo.CdcStreamName));
+            }
             selfEntry->set_name(selfEntry->name() + "/" + consumerName);
-        
 
             for (const auto& partition : topicInfo.Info->Description.GetPartitions()) {
                 auto part = Result.add_partitions();

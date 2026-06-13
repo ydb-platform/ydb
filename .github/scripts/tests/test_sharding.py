@@ -639,6 +639,51 @@ class FilterGraphForShardTest(unittest.TestCase):
             self.assertEqual(plan["shard_count"], 2)
             self.assertEqual(len(plan["uid_assignments"]), plan["total_graph_nodes"])
 
+    def test_split_graph_result_balances_large_connected_component(self):
+        graph = {
+            "conf": {},
+            "inputs": {},
+            "result": [f"test-{idx}" for idx in range(80)] + ["build-a", "test-b1", "build-b"],
+            "graph": [
+                {
+                    "uid": f"test-{idx}",
+                    "node-type": "test",
+                    "target_properties": {"module_dir": f"ydb/tests/synthetic_balance/chunk{idx}"},
+                    "deps": ["build-a"],
+                }
+                for idx in range(80)
+            ]
+            + [
+                {"uid": "build-a", "target_properties": {"module_dir": "ydb/tests/foo/support"}, "deps": []},
+                {
+                    "uid": "test-b1",
+                    "node-type": "test",
+                    "target_properties": {"module_dir": "ydb/tests/bar"},
+                    "deps": ["build-b"],
+                },
+                {"uid": "build-b", "target_properties": {"module_dir": "ydb/tests/bar/deps"}, "deps": []},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            graph_path = Path(tmp) / "graph.json"
+            plan_path = Path(tmp) / "plan.json"
+            graph_path.write_text(json.dumps(graph), encoding="utf-8")
+            _run(
+                "split_graph_result.py",
+                str(graph_path),
+                "--shard-count",
+                "4",
+                "--default-weight-sec",
+                "10",
+                "-o",
+                str(plan_path),
+            )
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            loads = [shard["result_node_count"] for shard in plan["shards"]]
+            self.assertEqual(sum(loads), len(graph["result"]))
+            self.assertLess(max(loads), 60)
+            self.assertGreater(min(loads), 10)
+
     def test_cli_filters_graph_for_shard(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"

@@ -118,6 +118,53 @@ def longest_history_match(
     return default_weight, "fallback", None
 
 
+def uid_weight(
+    uid: str,
+    nodes_by_uid: dict[str, dict[str, Any]],
+    duration_p50: dict[str, float],
+    *,
+    path_counts: Counter[str] | None = None,
+    default_weight: float = 600.0,
+) -> float:
+    """Estimate one result node weight (history p50 split evenly within a path)."""
+    node = nodes_by_uid.get(uid)
+    if not node:
+        return default_weight
+    path = extract_node_path(node)
+    if not path:
+        return default_weight
+    weight, _, _ = longest_history_match(path, duration_p50, default_weight=default_weight)
+    if path_counts is not None:
+        count = path_counts.get(path, 1)
+        if count > 1:
+            return weight / count
+    return weight
+
+
+def uid_weights(
+    uids: list[str],
+    nodes_by_uid: dict[str, dict[str, Any]],
+    duration_p50: dict[str, float],
+    *,
+    default_weight: float = 600.0,
+) -> dict[str, float]:
+    path_counts: Counter[str] = Counter()
+    for uid in uids:
+        path = extract_node_path(nodes_by_uid.get(uid, {}))
+        if path:
+            path_counts[path] += 1
+    return {
+        uid: uid_weight(
+            uid,
+            nodes_by_uid,
+            duration_p50,
+            path_counts=path_counts,
+            default_weight=default_weight,
+        )
+        for uid in uids
+    }
+
+
 def component_weight(
     component: list[str],
     nodes_by_uid: dict[str, dict[str, Any]],

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Plan increment sharding by partitioning graph.result UIDs across runners.
 
-Uses connected components of the cut-graph and history p50 weights (longest
-prefix match on node paths) for bin-packing. Output is a shard_plan.json with
-uid_assignments for filter_graph_for_shard.py and graph replay on shards.
+Bin-packs individual result UIDs by history p50 weights (longest prefix match
+on node paths, split evenly when many nodes share a path). Each shard keeps the
+full cut-graph and runs a subset of ``graph.result`` via filter_graph_for_shard.
 """
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ from graph_plan_utils import (  # noqa: E402
     extract_node_path,
     graph_nodes_by_uid,
     result_uids,
+    uid_weights,
     validate_graph,
 )
 
@@ -45,24 +46,19 @@ def collect_unique_paths(graph: dict[str, Any]) -> list[str]:
     return sorted(paths)
 
 
-def bin_pack_components(
-    components: list[list[str]],
-    component_weights: list[float],
+def bin_pack_uids(
+    weights: dict[str, float],
     shard_count: int,
 ) -> tuple[list[list[str]], list[float]]:
     if shard_count < 1:
         raise ValueError("shard_count must be >= 1")
-    indexed = sorted(
-        enumerate(components),
-        key=lambda item: component_weights[item[0]],
-        reverse=True,
-    )
+    indexed = sorted(weights.items(), key=lambda item: item[1], reverse=True)
     buckets: list[list[str]] = [[] for _ in range(shard_count)]
     loads = [0.0] * shard_count
-    for idx, component in indexed:
+    for uid, weight in indexed:
         target = min(range(shard_count), key=lambda i: (loads[i], i))
-        buckets[target].extend(component)
-        loads[target] += component_weights[idx]
+        buckets[target].append(uid)
+        loads[target] += weight
     return buckets, loads
 
 
@@ -74,19 +70,16 @@ def build_plan(
     default_weight: float = 600.0,
 ) -> dict[str, Any]:
     nodes_by_uid = graph_nodes_by_uid(graph)
-    components = connected_components(result_uids(graph), nodes_by_uid)
-    comp_weights: list[float] = []
-    for component in components:
-        weight, _ = component_weight(
-            component,
-            nodes_by_uid,
-            duration_p50,
-            default_weight=default_weight,
-        )
-        comp_weights.append(weight)
-
-    total_weight = sum(comp_weights)
-    buckets, loads = bin_pack_components(components, comp_weights, shard_count)
+    uids = result_uids(graph)
+    per_uid = uid_weights(
+        uids,
+        nodes_by_uid,
+        duration_p50,
+        default_weight=default_weight,
+    )
+    total_weight = sum(per_uid.values())
+    buckets, loads = bin_pack_uids(per_uid, shard_count)
+    components = connected_components(uids, nodes_by_uid)
     assignments: dict[str, int] = {}
     shards: list[dict[str, Any]] = []
     for shard_id, uids in enumerate(buckets):
@@ -120,8 +113,9 @@ def build_plan(
         "total_components": len(components),
         "total_weight": round(total_weight, 1),
         "weighting": {
-            "mode": "graph_path_history_p50_longest_match",
+            "mode": "graph_uid_history_p50_lpt",
             "history_suite_count": len(duration_p50),
+            "max_shard_weight_ratio": round(max(loads) / total_weight, 3) if total_weight else 0.0,
         },
         "uid_assignments": assignments,
         "shards": shards,

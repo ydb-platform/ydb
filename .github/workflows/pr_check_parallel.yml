@@ -361,7 +361,7 @@ jobs:
             --title "$plan_title" \
             >> "$GITHUB_STEP_SUMMARY"
           if [ -f shard_plan_out/list_summary.json ]; then
-            jq -r '.weighting | if .mode == "graph_path_history_p50_longest_match" then "Graph history weights: \(.history_suite_count // 0) suites matched" else "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p50 (\(.branch // "main"), \(.days_back // 3)d)" end' \
+            jq -r '.weighting | if .mode == "graph_uid_history_p50_lpt" then "Graph UID weights: \(.history_suite_count // 0) suites matched, max shard share \(.max_shard_weight_ratio // 0)" elif .mode == "graph_path_history_p50_longest_match" then "Graph history weights: \(.history_suite_count // 0) suites matched" else "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p50 (\(.branch // "main"), \(.days_back // 3)d)" end' \
               shard_plan_out/list_summary.json >> "$GITHUB_STEP_SUMMARY" || true
           fi
           echo "shard_ids=$(jq -c '[.shards[].id]' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"

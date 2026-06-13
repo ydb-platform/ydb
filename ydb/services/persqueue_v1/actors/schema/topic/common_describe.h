@@ -39,9 +39,10 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         using TBase = TGrpcProxyActor<TDescribeBaseActor<TRequest>, TRequest>;
 
     public:
-        TDescribeBaseActor(NGRpcService::IRequestOpCtx* request)
+        TDescribeBaseActor(NGRpcService::IRequestOpCtx* request, std::vector<NACLib::EAccessRights>&& accessRights)
             : TBase(request)
             , NPQ::TPipeCacheClient(this)
+            , AccessRights(std::move(accessRights))
         {
         }
 
@@ -56,9 +57,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 this->SelfId(),
                 this->GetDatabase(),
                 { this->GetProtoRequest()->path() },
-                { // TODO check access rights
+                {
                     .UserToken = this->GetUserToken(),
-                    .AccessRights = NACLib::EAccessRights::DescribeSchema,
+                    .AccessRights = NPQ::NDescriber::TAccessRights(AccessRights),
                 }
             ));
             this->Become(&TDescribeBaseActor::StateDescribe);
@@ -218,7 +219,6 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             }
 
             ReadSessionsReceived = true;
-
             if (LocationsReceived && ReadSessionsReceived) {
                 TabletsInflight.erase(ReadBalancerTabletId);
                 ReplyIfPossible();
@@ -274,6 +274,8 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         protected:
+            const std::vector<NACLib::EAccessRights> AccessRights;
+        
             NPQ::NDescriber::TTopicInfo TopicInfo;
 
             ui64 ReadBalancerTabletId = 0;

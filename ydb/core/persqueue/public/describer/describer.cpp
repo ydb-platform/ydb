@@ -1,13 +1,28 @@
 #include "describer.h"
 
+#include <util/generic/algorithm.h>
+
 #define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
 #define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 #define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 #define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 
-
 namespace NKikimr::NPQ::NDescriber {
+
+namespace {
+    bool CheckAccess(TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TAccessRights& accessRights, const TIntrusivePtr<TSecurityObject>& securityObject) {
+        if (accessRights.Operand == EPermissionOperand::OR) {
+            return AnyOf(accessRights.AccessRights, [&](const auto& right) {
+                return securityObject->CheckAccess(right, *userToken);
+            });
+        } else {
+            return AllOf(accessRights.AccessRights, [&](const auto& right) {
+                return securityObject->CheckAccess(right, *userToken);
+            });
+        }
+    }
+}
 
 using namespace NSchemeCache;
 
@@ -108,7 +123,7 @@ public:
                                 unknownPaths.insert(realPath);
                             }
                         } else {
-                            if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
+                            if (Settings.UserToken && !CheckAccess(Settings.UserToken, Settings.AccessRights, entry.SecurityObject)) {
                                 LOG_D("Path '" << realPath << "' UNAUTHORIZED");
                                 Result[originalPath] = TTopicInfo{
                                     .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)

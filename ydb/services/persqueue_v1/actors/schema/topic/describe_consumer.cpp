@@ -9,7 +9,7 @@ namespace {
 
         public:
         TDescribeActor(NGRpcService::IRequestOpCtx* request)
-            : TBase(request)
+            : TBase(request, { NACLib::EAccessRights::DescribeSchema })
         {
         }
 
@@ -52,15 +52,16 @@ namespace {
             const auto includeStats = GetProtoRequest()->include_stats();
 
             Result.mutable_self()->CopyFrom(SelfEntry);
+            Result.mutable_self()->set_name(TStringBuilder() << Result.self().name() << "/" << ConsumerName);
             for (const auto& p : TopicInfo.Info->Description.GetPartitions()) {
+                auto& partition = *Result.add_partitions();
+                partition.set_partition_id(p.GetPartitionId());
+                partition.set_active(p.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
+
                 auto it = Partitions.find(p.GetPartitionId());
                 if (it == Partitions.end()) {
                     continue;
                 }
-
-                auto& partition = *Result.add_partitions();
-                partition.set_partition_id(p.GetPartitionId());
-                partition.set_active(p.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
 
                 auto& partitionInfo = it->second;
 

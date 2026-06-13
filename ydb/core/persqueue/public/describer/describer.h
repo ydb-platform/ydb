@@ -21,6 +21,39 @@ enum class EStatus {
     UNKNOWN_ERROR
 };
 
+enum class EPermissionOperand {
+    AND,
+    OR
+};
+
+struct TAccessRights {
+    TAccessRights()
+        : Operand(EPermissionOperand::OR)
+    {
+    }
+
+    TAccessRights(NACLib::EAccessRights right)
+        : Operand(EPermissionOperand::OR)
+        , AccessRights({right})
+    {
+    }
+
+    explicit TAccessRights(const std::vector<NACLib::EAccessRights>& accessRights)
+        : Operand(EPermissionOperand::OR)
+        , AccessRights(accessRights)
+    {
+    }
+
+    TAccessRights(EPermissionOperand operand, const std::vector<NACLib::EAccessRights>& accessRights)
+        : Operand(operand)
+        , AccessRights(accessRights)
+    {
+    }
+
+    EPermissionOperand Operand = EPermissionOperand::AND;
+    std::vector<NACLib::EAccessRights> AccessRights;
+};
+
 struct TTopicInfo {
     EStatus Status = EStatus::NOT_FOUND;
 
@@ -50,7 +83,7 @@ struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopics
 
 struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    NACLib::EAccessRights AccessRights;
+    TAccessRights AccessRights;
     bool ForceSyncVersion = false;
 };
 

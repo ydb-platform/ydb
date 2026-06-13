@@ -154,7 +154,7 @@ public:
             CreateStderrLogWriter(
                 std::make_unique<TPlainTextLogFormatter>(),
                 CreateDefaultSystemLogEventProvider(/*systemMessagesEnabled*/ true, /*systemMessageFamily*/ ELogFamily::PlainText),
-                TString(StderrSystemWriterName),
+                std::string(StderrSystemWriterName),
                 New<TStderrLogWriterConfig>())
         })
         , DiskProfilingExecutor_(New<TPeriodicExecutor>(
@@ -189,8 +189,8 @@ public:
             /*threadCount*/ 1,
             /*threadNamePrefix*/ "LogCompress"))
     {
-        RegisterWriterFactory(TString(TFileLogWriterConfig::WriterType), GetFileLogWriterFactory());
-        RegisterWriterFactory(TString(TStderrLogWriterConfig::WriterType), GetStderrLogWriterFactory());
+        RegisterWriterFactory(std::string(TFileLogWriterConfig::WriterType), GetFileLogWriterFactory());
+        RegisterWriterFactory(std::string(TStderrLogWriterConfig::WriterType), GetStderrLogWriterFactory());
     }
 
     bool IsInitialized() const
@@ -379,7 +379,7 @@ public:
         DoUpdateAnchor(config, anchor);
     }
 
-    TLoggingAnchor* RegisterDynamicAnchor(TString anchorMessage)
+    TLoggingAnchor* RegisterDynamicAnchor(std::string anchorMessage)
     {
         auto guard = Guard(SpinLock_);
         if (auto it = AnchorMap_.find(anchorMessage)) {
@@ -395,13 +395,13 @@ public:
         return rawAnchor;
     }
 
-    void RegisterWriterFactory(const TString& typeName, const ILogWriterFactoryPtr& factory)
+    void RegisterWriterFactory(const std::string& typeName, const ILogWriterFactoryPtr& factory)
     {
         auto guard = Guard(SpinLock_);
         EmplaceOrCrash(TypeNameToWriterFactory_, typeName, factory);
     }
 
-    void UnregisterWriterFactory(const TString& typeName)
+    void UnregisterWriterFactory(const std::string& typeName)
     {
         auto guard = Guard(SpinLock_);
         EraseOrCrash(TypeNameToWriterFactory_, typeName);
@@ -601,7 +601,7 @@ private:
             return it->second;
         }
 
-        THashSet<TString> writerNames;
+        THashSet<std::string> writerNames;
         for (const auto& rule : config->Rules) {
             if (rule->IsApplicable(event.Category->Name, event.Level, event.Family)) {
                 writerNames.insert(rule->Writers.begin(), rule->Writers.end());
@@ -727,7 +727,7 @@ private:
             return;
         }
 
-        THashMap<TString, ILogWriterFactoryPtr> typeNameToWriterFactory;
+        THashMap<std::string, ILogWriterFactoryPtr> typeNameToWriterFactory;
         {
             auto guard = Guard(SpinLock_);
             for (const auto& [name, writerConfig] : config->Writers) {
@@ -922,7 +922,7 @@ private:
             // TODO(prime@): optimize sensor count
             auto counter = Profiler
                 .WithSparse()
-                .WithTag("category", TString{event.Category->Name})
+                .WithTag("category", std::string{event.Category->Name})
                 .WithTag("level", FormatEnum(event.Level))
                 .Counter("/written_events");
 
@@ -1274,11 +1274,11 @@ private:
         anchor->CurrentVersion.store(GetVersion());
     }
 
-    static TString BuildAnchorMessage(::TSourceLocation sourceLocation, TStringBuf message)
+    static std::string BuildAnchorMessage(::TSourceLocation sourceLocation, TStringBuf message)
     {
         if (message) {
             auto index = message.find_first_of('(');
-            return Strip(TString(message.substr(0, index)));
+            return Strip(std::string(message.substr(0, index)));
         } else {
             return Format("%v:%v",
                 sourceLocation.File,
@@ -1301,8 +1301,8 @@ private:
 
     // Protects the section of members below.
     YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
-    THashMap<TString, std::unique_ptr<TLoggingCategory>> NameToCategory_;
-    THashMap<TString, ILogWriterFactoryPtr> TypeNameToWriterFactory_;
+    THashMap<std::string, std::unique_ptr<TLoggingCategory>> NameToCategory_;
+    THashMap<std::string, ILogWriterFactoryPtr> TypeNameToWriterFactory_;
 
     // Incrementing version forces loggers to update their own default configuration (default level etc.).
     std::atomic<int> Version_ = 0;
@@ -1334,7 +1334,7 @@ private:
     std::deque<TLoggerQueueItem> TimeOrderedBuffer_;
     TExpiringSet<TRequestId> SuppressedRequestIdSet_;
 
-    using TEventProfilingKey = std::pair<TString, ELogLevel>;
+    using TEventProfilingKey = std::pair<std::string, ELogLevel>;
     THashMap<TEventProfilingKey, TCounter> WrittenEventsCounters_;
 
     const TProfiler Profiler{"/logging"};
@@ -1350,7 +1350,7 @@ private:
     std::atomic<ui64> SuppressedEvents_ = 0;
     std::atomic<ui64> DroppedEvents_ = 0;
 
-    THashMap<TString, ILogWriterPtr> NameToWriter_;
+    THashMap<std::string, ILogWriterPtr> NameToWriter_;
     THashMap<TLogWriterCacheKey, std::vector<ILogWriterPtr>> KeyToCachedWriter_;
 
     const std::vector<ILogWriterPtr> SystemWriters_;
@@ -1377,7 +1377,7 @@ private:
     THashMap<int, IFileLogWriterPtr> NotificationWatchWDToWriter_;
     THashSet<IFileLogWriterPtr> WritersWithFailedNotificationWatches_;
 
-    THashMap<TString, TLoggingAnchor*> AnchorMap_;
+    THashMap<std::string, TLoggingAnchor*> AnchorMap_;
     std::atomic<TLoggingAnchor*> FirstAnchor_ = nullptr;
     std::vector<std::unique_ptr<TLoggingAnchor>> DynamicAnchors_;
 
@@ -1501,7 +1501,7 @@ void TLogManager::RegisterStaticAnchor(TLoggingAnchor* anchor, ::TSourceLocation
     Impl_->RegisterStaticAnchor(anchor, sourceLocation, anchorMessage);
 }
 
-TLoggingAnchor* TLogManager::RegisterDynamicAnchor(TString anchorMessage)
+TLoggingAnchor* TLogManager::RegisterDynamicAnchor(std::string anchorMessage)
 {
     if (!Impl_->IsInitialized()) [[unlikely]] {
         return nullptr;
@@ -1509,7 +1509,7 @@ TLoggingAnchor* TLogManager::RegisterDynamicAnchor(TString anchorMessage)
     return Impl_->RegisterDynamicAnchor(std::move(anchorMessage));
 }
 
-void TLogManager::RegisterWriterFactory(const TString& typeName, const ILogWriterFactoryPtr& factory)
+void TLogManager::RegisterWriterFactory(const std::string& typeName, const ILogWriterFactoryPtr& factory)
 {
     if (!Impl_->IsInitialized()) [[unlikely]] {
         return;
@@ -1517,7 +1517,7 @@ void TLogManager::RegisterWriterFactory(const TString& typeName, const ILogWrite
     Impl_->RegisterWriterFactory(typeName, factory);
 }
 
-void TLogManager::UnregisterWriterFactory(const TString& typeName)
+void TLogManager::UnregisterWriterFactory(const std::string& typeName)
 {
     if (!Impl_->IsInitialized()) [[unlikely]] {
         return;

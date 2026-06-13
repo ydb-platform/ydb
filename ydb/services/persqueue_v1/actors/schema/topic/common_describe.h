@@ -56,7 +56,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 this->SelfId(),
                 this->GetDatabase(),
                 { this->GetProtoRequest()->path() },
-                {
+                { // TODO check access rights
                     .UserToken = this->GetUserToken(),
                     .AccessRights = NACLib::EAccessRights::DescribeSchema,
                 }
@@ -91,8 +91,9 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
             ReadBalancerTabletId = TopicInfo.Info->Description.GetBalancerTabletID();
 
-            ValidateSchema();
-
+            if (!ValidateSchema()) {
+                return;
+            }
 
             ConvertDirectoryEntry(TopicInfo.Self->Info, &SelfEntry, true);
             if (TopicInfo.CdcStream) {

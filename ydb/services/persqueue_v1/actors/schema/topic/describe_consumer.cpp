@@ -4,11 +4,11 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
 
-    class TDescribeConsumerActor: public TDescribeBaseActor<NGRpcService::TEvDescribeConsumerRequest> {
+    class TDescribeActor: public TDescribeBaseActor<NGRpcService::TEvDescribeConsumerRequest> {
         using TBase = TDescribeBaseActor<NGRpcService::TEvDescribeConsumerRequest>;
 
         public:
-        TDescribeConsumerActor(NGRpcService::IRequestOpCtx* request)
+        TDescribeActor(NGRpcService::IRequestOpCtx* request)
             : TBase(request)
         {
         }
@@ -109,7 +109,7 @@ namespace {
 } // namespace
 
 NActors::IActor* CreateDescribeConsumerActor(NGRpcService::IRequestOpCtx* request) {
-    return new TDescribeConsumerActor(request);
+    return new TDescribeActor(request);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NTopic

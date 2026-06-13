@@ -10,6 +10,7 @@ SRCS(
     alter_topic.cpp
     create_topic.cpp
     describe_consumer.cpp
+    describe_partition.cpp
     drop_topic.cpp
 )
 

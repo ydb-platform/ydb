@@ -56,22 +56,43 @@ def load_reports(paths: Iterable[Path]) -> list[dict[str, Any]]:
     return [load_report(path) for path in paths]
 
 
+def _report_row_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        row.get("path") or "",
+        row.get("name") or "",
+        row.get("subtest_name") or "",
+        row.get("type") or "",
+    )
+
+
+def _status_severity(status: str | None) -> int:
+    """Higher = worse. Used when the same test appears in multiple shard reports."""
+    if not status:
+        return 0
+    value = status.upper()
+    if value in {"FAILED", "FAIL"}:
+        return 4
+    if value == "ERROR":
+        return 3
+    if value in {"SKIPPED", "SKIP", "MUTE"}:
+        return 2
+    return 1
+
+
 def merge_reports(reports: Iterable[dict[str, Any]]) -> dict[str, Any]:
-    merged_results: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, str, str]] = set()
+    """Merge disjoint shard reports, deduplicating overlapping runs of the same test.
+
+    When parent and child suite targets both ran the same test (same path/name/
+    subtest_name), keep the worst status so a failure on any shard is preserved.
+    """
+    merged: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     for report in reports:
         for row in iter_test_rows(report):
-            key = (
-                row.get("path") or "",
-                row.get("name") or "",
-                row.get("subtest_name") or "",
-                row.get("status") or "",
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            merged_results.append(row)
-    return {"results": merged_results}
+            key = _report_row_key(row)
+            prev = merged.get(key)
+            if prev is None or _status_severity(row.get("status")) > _status_severity(prev.get("status")):
+                merged[key] = row
+    return {"results": list(merged.values())}
 
 
 def merge_reports_latest_wins(reports: Iterable[dict[str, Any]]) -> dict[str, Any]:
@@ -83,13 +104,7 @@ def merge_reports_latest_wins(reports: Iterable[dict[str, Any]]) -> dict[str, An
     merged: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     for report in reports:
         for row in iter_test_rows(report):
-            key = (
-                row.get("path") or "",
-                row.get("name") or "",
-                row.get("subtest_name") or "",
-                row.get("type") or "",
-            )
-            merged[key] = row
+            merged[_report_row_key(row)] = row
     return {"results": list(merged.values())}
 
 

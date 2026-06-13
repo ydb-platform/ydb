@@ -64,6 +64,30 @@ class ShardingToolsTest(unittest.TestCase):
             merged = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(len(merged["results"]), 4)
 
+    def test_merge_deduplicates_overlapping_shard_runs_worst_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shard_a = Path(tmp) / "a.json"
+            shard_b = Path(tmp) / "b.json"
+            row = {
+                "path": "ydb/tests/olap/load",
+                "name": "Py",
+                "subtest_name": "case",
+                "type": "test",
+            }
+            shard_a.write_text(
+                json.dumps({"results": [{**row, "status": "OK"}]}),
+                encoding="utf-8",
+            )
+            shard_b.write_text(
+                json.dumps({"results": [{**row, "status": "FAILED"}]}),
+                encoding="utf-8",
+            )
+            out = Path(tmp) / "merged.json"
+            _run("merge_build_reports.py", "-o", str(out), str(shard_a), str(shard_b))
+            merged = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(len(merged["results"]), 1)
+            self.assertEqual(merged["results"][0]["status"], "FAILED")
+
     def test_split_test_shards_balances_by_duration(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"
@@ -227,7 +251,7 @@ class ShardingToolsTest(unittest.TestCase):
             )
             suites = out.read_text(encoding="utf-8").strip().splitlines()
             summary_data = json.loads(summary.read_text(encoding="utf-8"))
-            self.assertNotIn("ydb/tests/olap", suites)
+            self.assertIn("ydb/tests/olap", suites)
             self.assertIn("ydb/tests/olap/ttl_tiering", suites)
             self.assertEqual(summary_data["total_suites"], len(suites))
             self.assertGreater(summary_data["total_tests"], 0)

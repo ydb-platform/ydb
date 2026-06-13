@@ -40,13 +40,26 @@ def in_target_scope(path: str, target_prefix: str | None) -> bool:
     return path == prefix or path.startswith(f"{prefix}/")
 
 
-def drop_redundant_scope_roots(suites: list[str], target_prefix: str | None) -> list[str]:
+def drop_redundant_scope_roots(
+    suites: list[str],
+    target_prefix: str | None,
+    *,
+    suite_test_counts: dict[str, int] | None = None,
+) -> list[str]:
+    """Drop scope root when nested suites exist, unless the root has direct tests.
+
+    A scope root with its own runnable tests (e.g. ydb/tests/olap py3test files
+    in the root ya.make) must stay in the plan even when child suites exist;
+    otherwise those direct tests are never scheduled.
+    """
     prefix = normalize_target_prefix(target_prefix)
     if not prefix or prefix not in suites:
         return suites
-    if any(s.startswith(f"{prefix}/") for s in suites):
-        return sorted(s for s in suites if s != prefix)
-    return suites
+    if not any(s.startswith(f"{prefix}/") for s in suites):
+        return suites
+    if suite_test_counts and (suite_test_counts.get(prefix) or 0) > 0:
+        return sorted(suites)
+    return sorted(s for s in suites if s != prefix)
 
 
 def _parse_sizes(rest: str) -> set[str]:
@@ -152,8 +165,9 @@ def parse_ya_test_list(
     result = [suite for suite in suites.values() if suite.test_count > 0]
     result.sort(key=lambda item: item.path)
     paths = [suite.path for suite in result]
-    dropped_roots = _dropped_scope_roots(paths, target_prefix)
-    paths = drop_redundant_scope_roots(paths, target_prefix)
+    suite_test_counts = {suite.path: suite.test_count for suite in result}
+    dropped_roots = _dropped_scope_roots(paths, target_prefix, suite_test_counts=suite_test_counts)
+    paths = drop_redundant_scope_roots(paths, target_prefix, suite_test_counts=suite_test_counts)
     path_set = set(paths)
     result = [suite for suite in result if suite.path in path_set]
     for dropped_path in dropped_roots:
@@ -167,13 +181,20 @@ def parse_ya_test_list(
     return result, reported_suites, reported_tests
 
 
-def _dropped_scope_roots(paths: list[str], target_prefix: str | None) -> list[str]:
+def _dropped_scope_roots(
+    paths: list[str],
+    target_prefix: str | None,
+    *,
+    suite_test_counts: dict[str, int] | None = None,
+) -> list[str]:
     prefix = normalize_target_prefix(target_prefix)
     if not prefix or prefix not in paths:
         return []
-    if any(path.startswith(f"{prefix}/") for path in paths):
-        return [prefix]
-    return []
+    if not any(path.startswith(f"{prefix}/") for path in paths):
+        return []
+    if suite_test_counts and (suite_test_counts.get(prefix) or 0) > 0:
+        return []
+    return [prefix]
 
 
 def build_summary(

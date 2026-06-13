@@ -16,7 +16,7 @@
 | medium kafka_proxy (#43285) | increment | [27375619130](https://github.com/ydb-platform/ydb/actions/runs/27375619130) | [27450301922](https://github.com/ydb-platform/ydb/actions/runs/27450301922) | 43554 | 0 | 43554 | 0 | **FAIL** |
 | fat (#43284) | increment | [27398642720](https://github.com/ydb-platform/ydb/actions/runs/27398642720) | [27448783713](https://github.com/ydb-platform/ydb/actions/runs/27448783713) | 48487 | 9041 | 39454 | 8 | **FAIL** (V2 run = failure, покрытие частичное) |
 | main `ydb/` | full | [27382570708](https://github.com/ydb-platform/ydb/actions/runs/27382570708) | [27448789885](https://github.com/ydb-platform/ydb/actions/runs/27448789885) | 52133 | 51957 | 177 | 1 | **MINOR** |
-| `ydb/tests/olap/` | full | [27446799893](https://github.com/ydb-platform/ydb/actions/runs/27446799893) | [27448792212](https://github.com/ydb-platform/ydb/actions/runs/27448792212) | 524 | 233 | 291 | 0 | **FAIL** |
+| `ydb/tests/olap/` | full | [27446799893](https://github.com/ydb-platform/ydb/actions/runs/27446799893) | [27448792212](https://github.com/ydb-platform/ydb/actions/runs/27448792212) | **4333** (summary) | 233 | — | 0 | **FAIL** (524 в старом diff — subset `try_1`) |
 
 Итог: 2/6 строк совпадают полностью (zero, short). Остальные 4 имеют недобор;
 наиболее критичны medium и olap.
@@ -114,10 +114,9 @@
    - [x] Фикс применён в `list_tests_for_shard_plan.sh`.
    - [ ] Перепроверка v3: missing → ~0; хвост `chunk`/`import_test` — отдельно.
 5. **olap full (missing 291).**
-   - [x] Первопричина: `drop_redundant_scope_roots` дропает корневую py3test
-     сьюту `ydb/tests/olap` с прямыми тестами (баг #3).
-   - [ ] Фикс #3: выбрать вариант (а/б/в выше) и применить.
-   - [ ] Перепроверка v3: missing → ~0.
+   - [x] Первопричина: `drop_redundant_scope_roots` + dedup в merge.
+   - [x] Фикс #3 применён; worst-wins dedup в `merge_reports`.
+   - [ ] Перепроверка v4 olap: тестов ≈ 4333 vs монолит.
 
 ## Метод повторной сверки
 

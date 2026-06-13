@@ -274,7 +274,7 @@ class TestReadTableSuccessStories(AbstractReadTableTest):
 class TestReadTableTruncatedResults(AbstractReadTableTest):
     @pytest.mark.parametrize('method_kind', ['async_read_table', 'read_table'])
     def test_truncated_results(self, method_kind):
-        session, table_name, prepared_data, _ = self._prepare_test('test_truncated_results', partitions=32)
+        session, table_name, prepared_data, _ = self._prepare_test(f'test_truncated_results_{method_kind}', partitions=32)
 
         sall_it = self.driver.table_client.scan_query('select * from `%s` order by Key1' % table_name)
         prev_key = None

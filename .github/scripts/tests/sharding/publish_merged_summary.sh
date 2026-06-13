@@ -2,7 +2,8 @@
 # Publish PR-check summary and test_* status from an existing build-results-report.
 set -euo pipefail
 
-REPORT_PATH="${1:?report.json path required}"
+REPORT_PATH="${1:?report.json path required}"   # authoritative latest-wins report
+TRIES_DIR="${2:-}"                               # merged dir with try_*/report.json
 BUILD_PRESET="${BUILD_PRESET:?BUILD_PRESET is required}"
 BRANCH_NAME="${BRANCH_NAME:-main}"
 PUBLIC_DIR="${PUBLIC_DIR:-tmp/results}"
@@ -10,8 +11,22 @@ PUBLIC_DIR_URL="${PUBLIC_DIR_URL:-}"
 SUMMARY_LINKS="${SUMMARY_LINKS:-$PUBLIC_DIR/summary_links.txt}"
 STATUS_SHA="${STATUS_SHA:-${GITHUB_EVENT_PULL_REQUEST_HEAD_SHA:-}}"
 
-mkdir -p "$PUBLIC_DIR/try_1"
-cp "$REPORT_PATH" "$PUBLIC_DIR/try_1/report.json"
+# Preserve the per-attempt layout (try_1 = full run, try_2..N = reruns) stitched
+# across shards, so the published artifacts match the monolith's structure.
+if [[ -n "$TRIES_DIR" ]]; then
+  for td in "$TRIES_DIR"/try_*/; do
+    [ -f "$td/report.json" ] || continue
+    n=$(basename "$td")
+    mkdir -p "$PUBLIC_DIR/$n"
+    cp "$td/report.json" "$PUBLIC_DIR/$n/report.json"
+  done
+fi
+
+# The single "Tests" summary/status is driven by the aggregated latest-wins
+# report (every test's final status), rendered in its own dir to avoid
+# clobbering the per-attempt try_1 report above.
+mkdir -p "$PUBLIC_DIR/final"
+cp "$REPORT_PATH" "$PUBLIC_DIR/final/report.json"
 
 touch "$SUMMARY_LINKS"
 : > "$SUMMARY_LINKS"
@@ -35,7 +50,7 @@ python3 .github/scripts/tests/generate-summary.py \
   --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
   ${PR_NUMBER:+--pr_number "$PR_NUMBER"} \
   --workflow_run_id "${GITHUB_RUN_ID:-}" \
-  "Tests" "try_1/ya-test.html" "$PUBLIC_DIR/try_1/report.json"
+  "Tests" "final/ya-test.html" "$PUBLIC_DIR/final/report.json"
 
 if [[ -n "${S3_BUCKET_PATH:-}" ]]; then
   .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/" || true

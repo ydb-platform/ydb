@@ -366,6 +366,17 @@ runs:
         fi
 
         GRAPH_SAVE_PARAMS=("${params[@]}")
+        # The increment graph must contain *test_program nodes so the sharder
+        # can map the diff to test suites. In the sharded prepare job tests run
+        # in shards (run_tests=false), so -A is not in params yet; add it to the
+        # graph-only command. It stays out of YA_MAKE_COMMAND, so prepare still
+        # builds no tests.
+        if [ "$GRAPH_ONLY_MODE" = "true" ] && [ "${{ inputs.increment }}" = "true" ]; then
+          case " ${GRAPH_SAVE_PARAMS[*]} " in
+            *" -A "*) ;;
+            *) GRAPH_SAVE_PARAMS+=(-A) ;;
+          esac
+        fi
         GRAPH_YA_MAKE_COMMAND="./ya make ${GRAPH_SAVE_PARAMS[@]}"
 
         YA_MAKE_COMMAND="./ya make ${params[@]}"

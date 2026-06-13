@@ -438,26 +438,32 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
-      - name: Stage shard final report
+      # Keep per-attempt reports separate (try_1 = full run, try_2..N = failed
+      # reruns), so the merge job can stitch try_N across shards back into the
+      # monolith's try_1/try_2/try_3 layout instead of one flattened report.
+      - name: Stage shard attempt reports
         if: always()
         run: |
           set -euo pipefail
           mkdir -p shard_artifact
-          mapfile -t tries < <(ls tmp/results/try_*/report.json 2>/dev/null | sort -V)
-          if [ "${#tries[@]}" -eq 0 ]; then
+          found=0
+          for report in tmp/results/try_*/report.json; do
+            [ -f "$report" ] || continue
+            try_dir=$(basename "$(dirname "$report")")   # try_1, try_2, ...
+            mkdir -p "shard_artifact/$try_dir"
+            cp "$report" "shard_artifact/$try_dir/shard_${{ matrix.shard_id }}.json"
+            found=1
+          done
+          if [ "$found" -ne 1 ]; then
             echo "No attempt reports found in tmp/results" >&2
             exit 1
           fi
-          python3 .github/scripts/tests/sharding/merge_build_reports.py \
-            --latest-wins \
-            -o shard_artifact/shard_${{ matrix.shard_id }}.json \
-            "${tries[@]}"
       - name: Upload shard report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: parallel-${{ inputs.build_preset }}-shard-report-${{ matrix.shard_id }}-${{ github.run_id }}
-          path: shard_artifact/shard_${{ matrix.shard_id }}.json
+          path: shard_artifact/
           retention-days: 3
 
   merge:
@@ -504,7 +510,6 @@ jobs:
         run: |
           set -eux
           mkdir -p merged
-          mapfile -t reports < <(find shard_reports -name 'shard_*.json' | sort)
           if [ "$EXPECTED_SHARDS" = "0" ]; then
             echo '{"results":[]}' > merged/final_report.json
             echo "failed_count=0" >> "$GITHUB_OUTPUT"
@@ -514,33 +519,56 @@ jobs:
             echo "- Failed tests: 0" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          if [ "${#reports[@]}" -eq 0 ]; then
-            echo "No shard reports found"
+          # Each shard uploaded try_*/shard_<id>.json. Every shard has try_1, so
+          # the shard count is the number of try_1 files.
+          mapfile -t try_dirs < <(ls -d shard_reports/try_*/ 2>/dev/null | sort -V)
+          if [ "${#try_dirs[@]}" -eq 0 ]; then
+            echo "No shard attempt reports found"
             exit 1
           fi
-          if [ "${#reports[@]}" -ne "$EXPECTED_SHARDS" ]; then
-            echo "Expected $EXPECTED_SHARDS shard reports, got ${#reports[@]}"
+          shard_count=$(ls shard_reports/try_1/shard_*.json 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$shard_count" -ne "$EXPECTED_SHARDS" ]; then
+            echo "Expected $EXPECTED_SHARDS shards (try_1 reports), got $shard_count"
             exit 1
           fi
-          # Shard reports already carry final statuses (in-shard retries).
+          # Stitch try_N across shards into one try_N report (monolith layout:
+          # try_1 = full run, try_2/try_3 = failed-test reruns). Shards are
+          # disjoint so this is a plain union per attempt.
+          final_inputs=()
+          for td in "${try_dirs[@]}"; do
+            n=$(basename "$td")           # try_1, try_2, ...
+            mapfile -t shard_files < <(ls "$td"shard_*.json 2>/dev/null | sort)
+            [ "${#shard_files[@]}" -eq 0 ] && continue
+            python3 .github/scripts/tests/sharding/merge_build_reports.py \
+              -o "merged/$n/report.json" \
+              "${shard_files[@]}"
+            final_inputs+=("merged/$n/report.json")
+          done
+          # Authoritative status: later attempts override earlier ones, so a
+          # test that failed try_1 but passed on retry counts as passed. Shards
+          # have heterogeneous attempt counts, hence latest-wins across the
+          # stitched per-try reports (not just the last try).
           python3 .github/scripts/tests/sharding/merge_build_reports.py \
+            --latest-wins \
             -o merged/final_report.json \
-            "${reports[@]}"
+            "${final_inputs[@]}"
           python3 .github/scripts/tests/fail-checker.py merged/final_report.json \
             --output_path merged/failed_count.txt || true
           failed_count=$(cat merged/failed_count.txt)
           merged_test_count=$(jq '[.results[] | select(.type=="test")] | length' merged/final_report.json)
           echo "failed_count=$failed_count" >> "$GITHUB_OUTPUT"
-          echo "shard_count=${#reports[@]}" >> "$GITHUB_OUTPUT"
+          echo "shard_count=$shard_count" >> "$GITHUB_OUTPUT"
           {
             echo "ref=${{ inputs.checkout_ref }}"
             echo "test_targets=${{ inputs.test_targets }}"
-            echo "shard_reports=${#reports[@]}"
+            echo "shard_reports=$shard_count"
+            echo "attempts=${#try_dirs[@]}"
             echo "failed_tests_after_retries=$failed_count"
             echo "merged_test_rows=$merged_test_count"
           } > merged/meta.txt
           echo "## Merged final result" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Shards: ${#reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Shards: $shard_count" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Attempts merged: ${#try_dirs[@]} (try_1..${#try_dirs[@]})" >> "$GITHUB_STEP_SUMMARY"
           echo "- Failed tests (after in-shard retries): $failed_count" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload merged report
         if: always() && steps.merge.outcome == 'success'
@@ -591,4 +619,4 @@ jobs:
           SKIP_FAIL_CHECK: ${{ inputs.publish && '0' || '1' }}
         run: |
           set -eux
-          bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/final_report.json
+          bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/final_report.json merged

@@ -8,12 +8,18 @@ BUILD_PRESET="${BUILD_PRESET:-relwithdebinfo}"
 TEST_THREADS="${TEST_THREADS:-52}"
 LINK_THREADS="${LINK_THREADS:-12}"
 
+# Keep the suite universe identical to what the shard test jobs (and the
+# monolith PR-check) actually run: --add-peerdirs-tests all pulls in tests of
+# PEERDIR'd modules, otherwise the plan is built over a narrower set than the
+# shards execute and full runs undercount (see pr-check-parallel-parity.md).
 YA_OPTS=(
   --test-size small
   --test-size medium
   --test-threads "$TEST_THREADS"
   --link-threads "$LINK_THREADS"
   -DDEBUGINFO_LINES_ONLY
+  -DUSE_EAT_MY_DATA
+  --add-peerdirs-tests all
   --cache-tests
 )
 

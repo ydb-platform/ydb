@@ -6,6 +6,12 @@ SRCS(
     env_ut.cpp
 )
 
+IF (OS_LINUX)
+    SRCS(
+        cpu_id_ut.cpp
+    )
+ENDIF()
+
 PEERDIR(
     library/cpp/yt/misc
     library/cpp/yt/string

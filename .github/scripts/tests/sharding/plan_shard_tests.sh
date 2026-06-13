@@ -47,6 +47,20 @@ if [ "$SHARD_COUNT" = "auto" ]; then
   if [ "${DISABLE_PEAK_CAP:-}" = "1" ]; then
     CHOOSE_ARGS+=(--no-peak-cap)
   fi
+  # Real pool-capacity cap: count active jobs per runner label, convert to
+  # cloud-quota usage (runner_capacity.yml) and cap shards by what still
+  # fits. When available it supersedes the static peak-hour heuristic.
+  CAPACITY_CONFIG="${CAPACITY_CONFIG:-$SCRIPT_DIR/../../../config/runner_capacity.yml}"
+  if [ -z "${MAX_SHARDS:-}" ] && [ -f "$CAPACITY_CONFIG" ] && [ -n "${GITHUB_TOKEN:-}${GH_TOKEN:-}" ]; then
+    capacity_cap=$(python3 "$SCRIPT_DIR/estimate_runner_capacity.py" \
+      --config "$CAPACITY_CONFIG" \
+      --preset-label "build-preset-${BUILD_PRESET:-relwithdebinfo}" || true)
+    if [ -n "$capacity_cap" ]; then
+      MAX_SHARDS="$capacity_cap"
+      CHOOSE_ARGS+=(--no-peak-cap)
+      echo "Pool capacity cap: $MAX_SHARDS runners fit into the quota budget"
+    fi
+  fi
   if [ -n "${MAX_SHARDS:-}" ]; then
     CHOOSE_ARGS+=(--max-shards "$MAX_SHARDS")
   fi

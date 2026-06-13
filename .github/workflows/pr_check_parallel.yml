@@ -323,6 +323,8 @@ jobs:
           HISTORY_DAYS_BACK: "3"
           TEST_THREADS: "52"
           DISABLE_PEAK_CAP: ${{ inputs.disable_peak_cap && '1' || '' }}
+          # For the pool-capacity estimator (estimate_runner_capacity.py).
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -eux
           python3 -m pip install pyyaml ydb --quiet

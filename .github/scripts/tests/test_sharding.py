@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ if str(SHARDING_DIR) not in sys.path:
     sys.path.insert(0, str(SHARDING_DIR))
 
 from choose_shard_count import choose_shard_count  # noqa: E402
+from estimate_runner_capacity import compute_max_new_runners  # noqa: E402
 
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess:
@@ -557,6 +559,55 @@ class ChooseShardCountTest(unittest.TestCase):
                 "12",
             )
             self.assertEqual(result_peak.stdout.strip(), "4")
+
+
+class RunnerCapacityTest(unittest.TestCase):
+    CONFIG = {
+        "quotas": {"vcpu": 5400, "ram_gb": 23000, "instances": 110, "nrd_ssd_gb": 200000},
+        "reserved": {"vcpu": 200, "ram_gb": 600, "instances": 22, "nrd_ssd_gb": 16000},
+        "headroom_fraction": 1.0,
+        "footprints": {
+            "build-preset-relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
+            "build-preset-release-asan": {"vcpu": 96, "ram_gb": 288, "nrd_ssd_gb": 2417},
+        },
+        "default_footprint": {"vcpu": 96, "ram_gb": 320, "nrd_ssd_gb": 2417},
+        "saturated_min_shards": 2,
+    }
+
+    def test_empty_pool_is_limited_by_smallest_quota(self):
+        max_new, details = compute_max_new_runners(
+            Counter(), "build-preset-relwithdebinfo", self.CONFIG
+        )
+        # vcpu: 5200/64=81.25, ram: 22400/256=87.5, ssd: 184000/2417=76.1,
+        # instances: 88 -> ssd is the binding constraint.
+        self.assertEqual(max_new, 76)
+        self.assertEqual(details["used"]["instances"], 0)
+
+    def test_busy_pool_reduces_capacity(self):
+        demand = Counter(
+            {"build-preset-relwithdebinfo": 40, "build-preset-release-asan": 25}
+        )
+        max_new, details = compute_max_new_runners(
+            demand, "build-preset-relwithdebinfo", self.CONFIG
+        )
+        # vcpu used: 40*64 + 25*96 = 4960 -> free 240 -> 3 runners; this is
+        # now the binding constraint (ssd free 26935 -> 11, instances 23).
+        self.assertEqual(max_new, 3)
+        self.assertEqual(details["used"]["vcpu"], 4960)
+
+    def test_saturated_pool_returns_zero_before_floor(self):
+        demand = Counter({"build-preset-release-asan": 60})
+        max_new, _ = compute_max_new_runners(
+            demand, "build-preset-relwithdebinfo", self.CONFIG
+        )
+        self.assertEqual(max_new, 0)
+
+    def test_unknown_label_uses_default_footprint(self):
+        demand = Counter({"build-preset-release-msan": 10})
+        _, details = compute_max_new_runners(
+            demand, "build-preset-relwithdebinfo", self.CONFIG
+        )
+        self.assertEqual(details["used"]["vcpu"], 960)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,69 @@
+# Cloud quota budget and per-runner-class footprints for the adaptive
+# shard-count capacity calculator (estimate_runner_capacity.py).
+#
+# Numbers come from the Yandex Cloud folder quotas page and the observed
+# VM specs of auto-provisioned ghrun-* runners (snapshot 2026-06-13).
+# Update here when quotas or VM presets change - nothing is hardcoded
+# in the scripts.
+
+# Total folder quotas (Compute Cloud).
+quotas:
+  vcpu: 5400
+  ram_gb: 23000
+  instances: 110
+  nrd_ssd_gb: 200000
+
+# Static consumption outside auto-provisioned runners (cache servers,
+# tiny workers, long-lived infra). Derived as quota usage minus the sum
+# of ghrun-* footprints at snapshot time; round up generously.
+reserved:
+  vcpu: 200
+  ram_gb: 600
+  instances: 22
+  nrd_ssd_gb: 16000
+
+# Plan against this fraction of the remaining budget, so the calculator
+# never schedules the pool to 100% (provisioning races, drift in this
+# config vs reality).
+headroom_fraction: 0.9
+
+# Footprint of one runner VM per GitHub runner label.
+# Jobs whose labels match no entry here (ubuntu-latest, tiny-worker
+# helper jobs, ...) are ignored by the calculator.
+footprints:
+  build-preset-relwithdebinfo:
+    vcpu: 64
+    ram_gb: 256
+    nrd_ssd_gb: 2417
+  build-preset-release:
+    vcpu: 64
+    ram_gb: 256
+    nrd_ssd_gb: 2417
+  build-preset-release-asan:
+    vcpu: 96
+    ram_gb: 288
+    nrd_ssd_gb: 2417
+  build-preset-release-msan:
+    vcpu: 64
+    ram_gb: 320
+    nrd_ssd_gb: 2417
+  build-preset-release-tsan:
+    vcpu: 64
+    ram_gb: 320
+    nrd_ssd_gb: 2417
+  build-preset-analytic-node:
+    vcpu: 64
+    ram_gb: 320
+    nrd_ssd_gb: 2417
+
+# Footprint assumed for unknown build-preset-* labels (conservative:
+# the largest class).
+default_footprint:
+  vcpu: 96
+  ram_gb: 320
+  nrd_ssd_gb: 2417
+
+# Even when the pool looks saturated, ask for at least this many shards:
+# queued shards start as machines free up, and more shards still finish
+# the same work sooner than one giant shard would.
+saturated_min_shards: 2

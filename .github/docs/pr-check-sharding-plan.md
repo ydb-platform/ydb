@@ -282,6 +282,18 @@ critical path) are implemented as a reusable workflow
   `<120 → 4`, `<200 → 8`, else `12`. During shared-pool peak hours
   (09–16 UTC) N is capped at 4 so parallel checks do not starve the
   80-machine pool. `SHARD_COUNT=auto` in `plan_shard_tests.sh` enables this.
+- **Pool-capacity cap** (`estimate_runner_capacity.py` +
+  `.github/config/runner_capacity.yml`): before choosing N the plan step
+  counts queued/in-progress jobs per `build-preset-*` runner label across
+  the repo, converts them to cloud-quota demand using per-class VM
+  footprints (rwdi 64c/256G, asan 96c/288G, msan/tsan 64c/320G, all
+  ~2.4T NRD SSD) and subtracts demand + static reserve from the folder
+  quotas (5400 vCPU / 23000G RAM / 110 VMs / 200T SSD). N is capped by how
+  many more runners of the requested preset actually fit (with 10%
+  headroom, floor of 2 when saturated). Quotas and footprints live in the
+  config only — update there when the cloud quotas change. When the
+  estimate is available it replaces the static peak-hour cap; on API
+  errors the plan falls back to the peak-hour heuristic.
 - **One `prepare` job instead of build/list/plan**: `ya test -L` (~20 min)
   runs in the background in a detached git worktree (so increment-mode
   `graph_compare.py` checkouts in the main tree do not race with it) while

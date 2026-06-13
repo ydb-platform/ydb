@@ -332,7 +332,6 @@ ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YDB_PERF
-ydb/core/kqp/ut/rbo KqpRboYql.UnionAll
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
@@ -492,7 +491,6 @@ ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEn
 ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionNotExists_Test
 ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.DistributedTxCommit_ChildFirst
-ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.SkipMessagesWithObsoleteTimestamp
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.TestBasicRemote
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.ValidStartStream
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorerWithScaling.TestQuotaLimitedGrow
@@ -544,7 +542,6 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.NullEmbeddi
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPosting
-ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.RunScan
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
@@ -741,7 +738,6 @@ ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransf
 ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest.py.TestDigest.test_digest_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest_regression.py.TestDigest.test_digest_regression[mixed_prestable-26-3_and_stable-26-2-1]
-ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRollingUpgradeAndDowngrade.test_external_data_source[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityMixedCluster.test_external_data_source_secret_object_schema_compatibility[mixed_prestable-26-3]
 ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityMixedCluster.test_external_data_source_secret_object_schema_compatibility[mixed_prestable-26-3_and_stable-26-2-1]
@@ -833,11 +829,11 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[32]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[34]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[41]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[65]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[49]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[50]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[67]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[88]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[10]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[11]

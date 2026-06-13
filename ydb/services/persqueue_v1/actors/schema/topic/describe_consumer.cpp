@@ -119,7 +119,7 @@ class TDescribeConsumerActor: public TGrpcProxyActor<TDescribeConsumerActor, NGR
         }
 
         if (GetProtoRequest()->include_location() || GetProtoRequest()->include_stats()) {
-            RequestPartitionsLocation();
+            RequestReadBalancer();
         }
 
         if (GetProtoRequest()->include_stats()) {
@@ -143,6 +143,7 @@ class TDescribeConsumerActor: public TGrpcProxyActor<TDescribeConsumerActor, NGR
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvPersQueue::TEvGetPartitionsLocationResponse, Handle);
             hFunc(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
+            hFunc(NKikimr::TEvPersQueue::TEvStatusResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -154,7 +155,7 @@ class TDescribeConsumerActor: public TGrpcProxyActor<TDescribeConsumerActor, NGR
 
         const auto& record = ev->Get()->Record;
         if (!record.GetStatus()) {
-            RequestPartitionsLocation();
+            RequestReadBalancer();
             return;
         }
 
@@ -261,7 +262,7 @@ class TDescribeConsumerActor: public TGrpcProxyActor<TDescribeConsumerActor, NGR
         }
 
         if (ev->Get()->TabletId == ReadBalancerTabletId) {
-            RequestPartitionsLocation();
+            RequestReadBalancer();
         } else {
             RequestStats(ev->Get()->TabletId);
         }
@@ -306,7 +307,7 @@ class TDescribeConsumerActor: public TGrpcProxyActor<TDescribeConsumerActor, NGR
         return false;
     }
 
-    void RequestPartitionsLocation() {
+    void RequestReadBalancer() {
         if (!LocationsReceived) {
             SendToTablet(ReadBalancerTabletId, new TEvPersQueue::TEvGetPartitionsLocation());
         }

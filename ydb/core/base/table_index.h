@@ -8,6 +8,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
+#include <util/generic/bitops.h>
 #include <util/string/builder.h>
 
 #include <optional>
@@ -135,8 +136,38 @@ namespace NFulltext {
     inline constexpr const char* RowIdUniqueIndexName = "uniq__ydb_row_id";
     inline constexpr const char* RowIdSequenceName = "_seq___ydb_row_id";
 
+    // __ydb_row_id value layout (one scheme shared by compact and non-compact fulltext indexes).
+    // A single Uint64 carries two fields derived from the dense per-table document counter `seq`:
+    //   * the high RowIdSpreadBits bits hold a bit-reversed "spread bucket" of seq, so consecutive
+    //     seq values land in distant key ranges -> writes to the unique index / posting / docs
+    //     tables spread across shards instead of hot-spotting on a monotonic tail;
+    //   * the low (64 - RowIdSpreadBits) bits hold `seq` itself, kept dense so the compact index can
+    //     delta-encode it into __ydb_segment with small varints (bit-reversed ids would not compress).
+    // Non-compact indexes use the full __ydb_row_id as the doc id; the compact index encodes only the
+    // dense `seq` and reconstructs the full row_id (RowIdFromSeq) before resolving it to the PK via the
+    // unique index. Generation (backfill scan + online-insert sequencer) calls RowIdFromSeq; both must
+    // stay in lockstep so a backfilled and an online-inserted row share the same layout.
+    inline constexpr int  RowIdSpreadBits = 16;                                    // R: 2^16 buckets, 2^48 docs
+    inline constexpr ui64 RowIdSeqMask    = (ui64(1) << (64 - RowIdSpreadBits)) - 1;
+
+    // seq (in [0, 2^(64-R))) -> spread __ydb_row_id. Bijective; consecutive seq spread across buckets.
+    inline ui64 RowIdFromSeq(ui64 seq) {
+        ui64 bucket = ReverseBits(seq) >> (64 - RowIdSpreadBits); // low R bits of seq, reversed, into top R bits
+        return (bucket << (64 - RowIdSpreadBits)) | (seq & RowIdSeqMask);
+    }
+    // Recover the dense seq from a stored __ydb_row_id (cheap mask, no reverse).
+    inline ui64 SeqFromRowId(ui64 rowId) {
+        return rowId & RowIdSeqMask;
+    }
+
     inline constexpr const char* DocsTable = "indexImplDocsTable";
     inline constexpr const char* DocLengthColumn = "__ydb_length";
+
+    // Transient build table used only by the compact build in rowid mode: the main table re-keyed by
+    // the dense seq (SeqFromRowId(__ydb_row_id)) so the posting scan visits doc ids in ascending,
+    // densely-packed order. Holds (__ydb_seq, <text column>, <data columns>); dropped after the build.
+    inline constexpr const char* RowIdSrcBuildSuffix = "rowidsrc";
+    inline constexpr const char* SeqColumn = "__ydb_seq";
 
     inline constexpr const char* DictTable = "indexImplDictTable";
 

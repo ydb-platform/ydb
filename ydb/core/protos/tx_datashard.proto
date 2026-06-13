@@ -2019,6 +2019,12 @@ message TEvBuildFulltextIndexRequest {
     // When true, the scan uses the __ydb_row_id Uint64 column of the source table as the doc_id key
     // (and as the key of the posting/docs impl tables) instead of the source table PK columns.
     optional bool UseRowIdAsDocId = 16;
+
+    // Compact rowid-mode prepass. When set, the scan does NOT build postings: it reads the main table
+    // and copies each row (the indexed text + data columns) into this transient "row-id source" table,
+    // keyed by the dense seq = NFulltext::SeqFromRowId(__ydb_row_id). The compact posting scan then reads
+    // that table in seq order so doc ids are ascending and densely packed (see NFulltext::RowIdFromSeq).
+    optional string RowIdSourceTableName = 17;
 }
 
 message TEvBuildFulltextIndexResponse {

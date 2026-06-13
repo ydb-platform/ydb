@@ -429,9 +429,16 @@ auto CalcFulltextCompactImplTableDescImpl(
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType)
 {
+    // In rowid mode the doc id is the synthetic Uint64 __ydb_row_id (its dense low-bits seq), so the
+    // source table may have any (incl. composite, non-integer) primary key. Otherwise the legacy
+    // single-integer-PK doc id is used and __ydb_max_id inherits that PK's type.
+    const bool useRowId = indexDesc && indexDesc->GetUseRowIdAsDocId();
+
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns;
-    Y_ENSURE(tableColumns.Keys.size() == 1);
+    if (!useRowId) {
+        Y_ENSURE(tableColumns.Keys.size() == 1);
+    }
     for (const auto & keyColumn: tableColumns.Keys) {
         indexColumns.insert(keyColumn);
     }
@@ -448,7 +455,9 @@ auto CalcFulltextCompactImplTableDescImpl(
         tokenColumnType = textColumnInfo.GetTypeId();
     }
 
-    auto idType = baseColumnTypes.at(tableColumns.Keys.at(0)).GetTypeId();
+    NScheme::TTypeId idType = useRowId
+        ? NScheme::NTypeIds::Uint64
+        : baseColumnTypes.at(tableColumns.Keys.at(0)).GetTypeId();
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
@@ -498,6 +507,41 @@ auto CalcFulltextCompactImplTableDescImpl(
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
     implTableDesc.SetIndexImplType(indexType);
+
+    return implTableDesc;
+}
+
+// Transient "row-id source" table for the compact build in rowid mode: the main table re-keyed by the
+// dense seq = SeqFromRowId(__ydb_row_id). The posting scan reads this table in seq order (so doc ids
+// arrive ascending and densely packed), treating __ydb_seq as a plain single Uint64 PK. Holds the
+// indexed text column + data columns. Dropped once the build completes.
+auto CalcFulltextRowIdSrcImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    THashSet<TString> valueColumns = indexDataColumns;
+    Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
+    valueColumns.insert(indexDesc.GetSettings().columns().at(0).column());
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::ImplTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::SeqColumn);
+        col->SetType(NScheme::TypeName(NScheme::NTypeIds::Uint64));
+        col->SetTypeId(NScheme::NTypeIds::Uint64);
+        col->SetNotNull(true);
+    }
+    implTableDesc.AddKeyColumnNames(NFulltext::SeqColumn);
+
+    const TVector<TString> noKeys;
+    FillIndexImplTableColumns(GetColumns(baseTable), noKeys, valueColumns, implTableDesc);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
 
     return implTableDesc;
 }
@@ -842,6 +886,26 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);
 }
 
+NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextRowIdSrcImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextRowIdSrcImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
+}
+
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
@@ -972,10 +1036,17 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
     TFulltextRowIdClassification result;
 
     const auto indexType = GetIndexType(indexDesc);
-    if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain &&
-        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
-        result.Plan = EFulltextRowIdPlan::NotApplicable;
-        return result;
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            break;
+        default:
+            // Non-fulltext indexes have nothing to decide. JSON-compact also has no
+            // TFulltextIndexDescription to carry the flag - deferred to a follow-up PR.
+            result.Plan = EFulltextRowIdPlan::NotApplicable;
+            return result;
     }
 
     // Look for a live __ydb_row_id column on the main table.

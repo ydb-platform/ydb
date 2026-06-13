@@ -92,6 +92,13 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TBufferData* UploadBuf = nullptr;
     TBufferData* DocsBuf = nullptr;
 
+    // Compact rowid-mode prepass: when set, the scan copies the main table into the transient
+    // "row-id source" table keyed by the dense seq (SeqFromRowId(__ydb_row_id)) instead of building
+    // postings. RowIdSrcValueColumns lists the copied value columns in scan-row order ([text, data...]).
+    bool RowIdSrcMode = false;
+    TBufferData* RowIdSrcBuf = nullptr;
+    TVector<TString> RowIdSrcValueColumns;
+
     bool Compact = false;
     bool WithRelevance = false;
     THashMap<TString, TTokenState> TokenBuf;
@@ -146,6 +153,7 @@ public:
         TextColumn = Request.settings().columns().at(0).column();
         TextAnalyzers = Request.settings().columns().at(0).analyzers();
         UseRowIdAsDocId = Request.GetUseRowIdAsDocId();
+        RowIdSrcMode = !Request.GetRowIdSourceTableName().empty();
         Signed = (KeyTypeId == NScheme::NTypeIds::Int64 || KeyTypeId == NScheme::NTypeIds::Int32);
 
         auto tags = GetAllTags(table);
@@ -158,14 +166,16 @@ public:
 
         {
             ScanTags.push_back(tags.at(TextColumn));
+            RowIdSrcValueColumns.push_back(TextColumn);
 
             for (auto dataColumn : Request.GetDataColumns()) {
                 if (dataColumn != TextColumn) {
                     ScanTags.push_back(tags.at(dataColumn));
+                    RowIdSrcValueColumns.push_back(dataColumn);
                 }
             }
 
-            if (UseRowIdAsDocId) {
+            if (UseRowIdAsDocId || RowIdSrcMode) {
                 RowIdRowIndex = ScanTags.size();
                 ScanTags.push_back(tags.at(NKikimr::NTableIndex::NFulltext::RowIdColumn));
             }
@@ -179,6 +189,13 @@ public:
                 uploadTypes->emplace_back(it->first, type);
             }
         };
+
+        if (RowIdSrcMode) {
+            // Prepass: only the row-id source table is written; postings/docs are built later from it.
+            MakeRowIdSrcTypes(addType);
+            MaxSegmentDocuments = gFulltextMaxSegment;
+            return;
+        }
 
         MakeTokenTypes(table, types, addType);
 
@@ -288,6 +305,22 @@ public:
         DocsBuf = Uploader.AddDestination(Request.GetDocsTableName(), std::move(uploadTypes));
     }
 
+    // Destination for the rowid-mode prepass: the row-id source table keyed by __ydb_seq (Uint64),
+    // value columns = the indexed text column + data columns (RowIdSrcValueColumns, in scan-row order).
+    void MakeRowIdSrcTypes(std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TString& column)> addType)
+    {
+        auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+        {
+            Ydb::Type type;
+            type.set_type_id(Ydb::Type::UINT64);
+            uploadTypes->emplace_back(NTableIndex::NFulltext::SeqColumn, type);
+        }
+        for (const auto& column : RowIdSrcValueColumns) {
+            addType(uploadTypes, column);
+        }
+        RowIdSrcBuf = Uploader.AddDestination(Request.GetRowIdSourceTableName(), std::move(uploadTypes));
+    }
+
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -331,6 +364,11 @@ public:
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
+
+        if (RowIdSrcMode) {
+            UploadRowIdSrc(key, row);
+            return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+        }
 
         // Effective doc-id key cells: either the table PK or the single __ydb_row_id cell.
         TArrayRef<const TCell> docIdKey = key;
@@ -469,6 +507,26 @@ public:
 
         DocCount++;
         TotalDocLength += totalTokens;
+    }
+
+    // Prepass upload: copy one main-table row into the row-id source table, keyed by the dense
+    // seq = SeqFromRowId(__ydb_row_id). Value cells are the scan-row value columns (RowIdSrcValueColumns,
+    // i.e. row.Get(0 .. RowIdRowIndex-1) = [text, data...]).
+    void UploadRowIdSrc(TArrayRef<const TCell> key, const TRow& row)
+    {
+        LastProcessedKey = TSerializedCellVec(key);
+        Uploader.SetCurrentSourceKey(LastProcessedKey);
+
+        const ui64 rowId = row.Get(RowIdRowIndex).AsValue<ui64>();
+        const ui64 seq = NTableIndex::NFulltext::SeqFromRowId(rowId);
+
+        TVector<TCell> uploadKey = { TCell::Make(seq) };
+        TVector<TCell> uploadValue(::Reserve(RowIdRowIndex));
+        for (size_t i = 0; i < RowIdRowIndex; ++i) {
+            uploadValue.push_back(row.Get(i));
+        }
+        RowIdSrcBuf->AddRow(uploadKey, uploadValue);
+        ++PostingEntriesAdded;
     }
 
     void UploadFulltextPlain(TArrayRef<const TCell> key, const TRow& row, const TVector<TString>& tokens)
@@ -815,7 +873,15 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
                 << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' not found in table");
         }
 
-        if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
+        if (request.GetRowIdSourceTableName()) {
+            // Compact rowid-mode prepass: the scanned source is the (arbitrary-PK) main table and the
+            // doc id is taken from __ydb_row_id, so there is no single-integer-PK requirement - but that
+            // column must be present to compute the seq.
+            if (!tags.contains(NKikimr::NTableIndex::NFulltext::RowIdColumn)) {
+                badRequest(TStringBuilder() << "RowIdSourceTableName set but column '"
+                    << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' not found in table");
+            }
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
             if (userTable.KeyColumnTypes.size() != 1) {

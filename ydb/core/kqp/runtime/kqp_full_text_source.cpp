@@ -2469,6 +2469,11 @@ private:
     // primary key must be resolved through UniqueIndexReader before main-table reads.
     bool UseRowIdAsDocId = false;
 
+    // True for compact index formats. In rowid mode their segments encode the dense `seq`
+    // (the low bits of __ydb_row_id), so the full spread __ydb_row_id must be reconstructed
+    // (NFulltext::RowIdFromSeq) from the decoded doc id before the unique-index resolve.
+    bool CompactDocId = false;
+
     // For each in-flight unique-index resolve read, the docs being resolved.
     // Populated in EnqueueRowIdResolve, consumed in RowIdResolveResult.
     absl::flat_hash_map<ui64, std::vector<TDocInfoPtr>> RowIdResolveItems;
@@ -2842,6 +2847,9 @@ public:
         , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
+        , CompactDocId(Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact
+            || Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance
+            || Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact)
         , ReadsState(Counters, LogPrefix)
         , DocsReadingQueue(this->SelfId(), ReadsState)
         , L2ReadingQueue(this->SelfId(), ReadsState)
@@ -3223,7 +3231,12 @@ public:
         absl::flat_hash_map<ui64, std::pair<ui64, std::deque<TOwnedTableRange>>> byShard;
         absl::flat_hash_map<ui64, std::vector<TDocInfoPtr>> docsByReadId;
         for (auto& doc : docInfos) {
-            TVector<TCell> rowIdCells = {TCell::Make(doc->DocumentNumId)};
+            // Plain/relevance row-id indexes store the full __ydb_row_id as the doc id; compact
+            // formats store only the dense seq, so rebuild the spread __ydb_row_id before the lookup.
+            ui64 rowId = CompactDocId
+                ? NKikimr::NTableIndex::NFulltext::RowIdFromSeq(doc->DocumentNumId)
+                : doc->DocumentNumId;
+            TVector<TCell> rowIdCells = {TCell::Make(rowId)};
             TTableRange range(rowIdCells, true, rowIdCells, true, false /*not a point*/);
             auto partitions = UniqueIndexReader->GetRangePartitioning(range);
             YQL_ENSURE(partitions.size() == 1, "Expected single partition for __ydb_row_id resolve, got " << partitions.size());

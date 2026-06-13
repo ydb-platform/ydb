@@ -3005,6 +3005,18 @@ TKikimrRunner KikimrRowIdOptIn() {
     return TKikimrRunner(settings);
 }
 
+TKikimrRunner KikimrRowIdOptInCompact() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableUniqConstraint(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()
+        ->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    return TKikimrRunner(settings);
+}
+
 void CreateRowIdTable(NQuery::TQueryClient& db) {
     TString query = R"sql(
         CREATE TABLE `/Root/RowIdTexts` (
@@ -3097,6 +3109,56 @@ Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_Plain) {
     UNIT_ASSERT(seenPks.contains("pk-200"));
     UNIT_ASSERT(!seenPks.contains("pk-300"));
     UNIT_ASSERT(!seenPks.contains("pk-400"));
+}
+
+Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CompactAutoProvision) {
+    // Custom-PK table with NO pre-created __ydb_row_id infrastructure: building a compact fulltext
+    // index must auto-provision the __ydb_row_id column + unique index, then build + serve in rowid mode.
+    auto kikimr = KikimrRowIdOptInCompact();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/RowIdTexts` (
+                Pk Utf8 NOT NULL,
+                Text Utf8,
+                Data Utf8,
+                PRIMARY KEY (Pk)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/RowIdTexts` (Pk, Text, Data) VALUES
+                ("pk-100"u, "cats love cats"u,         "cats data"u),
+                ("pk-200"u, "dogs chase small cats"u,  "dogs data"u),
+                ("pk-300"u, "foxes love dogs"u,        "foxes data"u),
+                ("pk-400"u, "small birds"u,            "birds data"u);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    AddFulltextIndexPlain(db); // compact + auto-provisions __ydb_row_id and uniq__ydb_row_id
+
+    TString query = R"sql(
+        SELECT Pk FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(Text, "cats")
+        ORDER BY Pk;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+    NYdb::TResultSetParser parser(resultSet);
+    THashSet<TString> seenPks;
+    while (parser.TryNextRow()) {
+        seenPks.emplace(TString{parser.ColumnParser("Pk").GetUtf8()});
+    }
+    UNIT_ASSERT(seenPks.contains("pk-100"));
+    UNIT_ASSERT(seenPks.contains("pk-200"));
 }
 
 Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CoveredAvoidsResolve) {

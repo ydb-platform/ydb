@@ -230,6 +230,8 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
         const ui64 marginMs =
             TDuration::Seconds(longTxConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds() + longTxConfig.GetMaxClockSkewMs();
 
+        ConfigureRegistry(context);
+
         const ui64 write1Step = WriteValueOnShard(context, /*key*/ 1, /*message*/ 1);
         const NOlap::TSnapshot activeSnapshot(write1Step, 2000);
         AssertScanHasSingleMessageValue(context, activeSnapshot, "1");
@@ -238,7 +240,7 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
         context.Runtime.SimulateSleep(TDuration::Seconds(20));
         const ui64 passedStep = UpdateSnapshotOnShard(context);
 
-        // Freshly-updated registry: OldestCollectionTime = now, the old snapshot is still tracked as active.
+        // Publish the registry under test: OldestCollectionTime = now, old snapshot still tracked as active.
         const TInstant oldestCollectionTime = context.Runtime.GetCurrentTime();
         ConfigureRegistry(context, std::nullopt, { TRowVersion(activeSnapshot.GetPlanStep(), activeSnapshot.GetTxId()) }, oldestCollectionTime);
 

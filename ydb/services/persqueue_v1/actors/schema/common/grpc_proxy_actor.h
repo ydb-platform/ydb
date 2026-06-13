@@ -70,8 +70,7 @@ protected:
         IsDead = true;
     }
 
-    template<class TProtoResult>
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status, const TProtoResult& result) {
+    void ReplyWithResult(Ydb::StatusIds::StatusCode status, const google::protobuf::Message& result) {
         if (IsDead) {
             return;
         }

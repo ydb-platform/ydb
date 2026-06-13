@@ -43,9 +43,9 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         return config;
     }
 
-    // Freshness margin subtracted from OldestCollectionTime by the registry guard:
-    // LocalSnapshotPromotionTimeSeconds (120s) + MaxClockSkewMs (5000ms) = 125000ms.
-    static constexpr ui64 FreshnessMarginMs = 125000;
+    ui64 FreshnessMarginMs(const NKikimrConfig::TLongTxServiceConfig& config) {
+        return TDuration::Seconds(config.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds() + config.GetMaxClockSkewMs();
+    }
 
     Y_UNIT_TEST(LocalGuardSmoke) {
         auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -84,7 +84,8 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         translator.Add(internalPathId, { ssPathId });
 
         // Collection time well newer than the border, so the border caps the floor.
-        auto registry = CreateSnapshotRegistry(TRowVersion(900, 0), {}, TInstant::MilliSeconds(30000 + FreshnessMarginMs));
+        const ui64 marginMs = FreshnessMarginMs(longTxConfig);
+        auto registry = CreateSnapshotRegistry(TRowVersion(900, 0), {}, TInstant::MilliSeconds(30000 + marginMs));
 
         const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
         auto guard = CreateRegistryScanSnapshotGuard(
@@ -116,7 +117,8 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
             /*passedStep*/ 200000, schemeShardId, lastCleanupSnapshot, translator, registry, longTxConfig);
 
         // No border: floor = OldestCollectionTime(155000) - margin(125000) = 30000.
-        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 155000 - FreshnessMarginMs);
+        const ui64 marginMs = FreshnessMarginMs(longTxConfig);
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 155000 - marginMs);
         UNIT_ASSERT(guard->MayStartScanAt(Step(30000), ssPathId));
         UNIT_ASSERT(guard->MayStartScanAt(Step(10), ssPathId));
         UNIT_ASSERT(!guard->MayStartScanAt(Step(9), ssPathId));

@@ -36,8 +36,8 @@ namespace {
 // collapse the cleanup floor to 0 and nothing would ever be collected.
 class TLiveEmptySnapshotRegistry: public IImmutableSnapshotRegistry {
 public:
-    bool HasSnapshot(const NKikimr::TTableId&, const TRowVersion& version) const override {
-        return version >= TRowVersion::Max();
+    bool HasSnapshot(const NKikimr::TTableId&, const TRowVersion&) const override {
+        return false;
     }
 
     TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId&) const override {

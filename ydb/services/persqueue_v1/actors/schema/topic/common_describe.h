@@ -257,7 +257,12 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 SendToTablet(ReadBalancerTabletId, new TEvPersQueue::TEvGetPartitionsLocation());
             }
             if (!ReadSessionsReceived && this->GetProtoRequest()->include_stats()) {
-                SendToTablet(ReadBalancerTabletId, CreateReadSessionsInfoRequest().release());
+                auto ev = CreateReadSessionsInfoRequest();
+                if (ev) {
+                    SendToTablet(ReadBalancerTabletId, ev.release());
+                } else {
+                    ReadSessionsReceived = true;
+                }
             }
             TabletsInflight.insert(ReadBalancerTabletId);
         }

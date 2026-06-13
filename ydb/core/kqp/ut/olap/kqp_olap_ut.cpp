@@ -252,13 +252,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
             {
                 const auto result = client.ExecuteQuery(
-                    "ALTER TABLE `/Root/olapTable` ALTER FAMILY default SET compression 'LZ4';",
-                    NYdb::NQuery::TTxControl::NoTx()
-                ).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            }
-            {
-                const auto result = client.ExecuteQuery(
                     "ALTER TABLE `/Root/olapTable` set TTL Interval('P1D') on timestamp;",
                     NYdb::NQuery::TTxControl::NoTx()
                 ).ExtractValueSync();

@@ -2023,6 +2023,11 @@ public:
                                 }
                             } else {
                                 auto families = columnItem.Cast<TCoAtomList>();
+                                if (table.Metadata->IsOlap() && families.Size() > 0) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                        "Column FAMILY is not supported for column tables"));
+                                    return SyncError();
+                                }
                                 if (families.Size() > 1) {
                                     ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
                                         "Unsupported number of families"));
@@ -2080,6 +2085,11 @@ public:
                                 fromSequence->set_name(arg);
                             }
                         } else if (alterColumnAction == "setFamily") {
+                            if (table.Metadata->IsOlap()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    "Column FAMILY is not supported for column tables"));
+                                return SyncError();
+                            }
                             auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (families.Size() > 1) {
                                 ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
@@ -2175,6 +2185,11 @@ public:
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
+                    if (table.Metadata->IsOlap()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            "Column FAMILY is not supported for column tables"));
+                        return SyncError();
+                    }
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);

@@ -124,6 +124,30 @@ LIMIT 20;
 
 A `LIKE` / `ILIKE` query uses the same logic as `FulltextMatch(body, ..., "Wildcard" AS Mode)` and accesses the same n-gram index.
 
+## Primary key types {#primary-key}
+
+Inside the inverted index, every indexed document is identified by a numeric document id (`doc_id`). How {{ ydb-short-name }} derives the `doc_id` depends on the base table's [primary key](../concepts/glossary.md#primary-key):
+
+* **Single integer primary key** (`Uint64`, `Int64`, `Uint32`, or `Int32`) — the primary key value is used directly as the `doc_id`. This is the most compact form, and no additional structures are created.
+* **Any other primary key** (for example `Utf8` / `String`, a non-integer type, or a composite key of several columns) — {{ ydb-short-name }} maintains a system column `__ydb_row_id` of type `Uint64` and uses it as the `doc_id`.
+
+When you create a fulltext index on a table whose primary key is not a single integer column, {{ ydb-short-name }} automatically:
+
+* adds the `__ydb_row_id` column to the table — existing rows are backfilled while the index is being built;
+* generates `__ydb_row_id` values automatically as rows are inserted (you never set this column yourself);
+* creates a unique [secondary index](../concepts/glossary.md#secondary-index) named `uniq__ydb_row_id` over `__ydb_row_id`. At query time this index maps a matched `__ydb_row_id` back to the table's primary key before the row is read from the main table.
+
+If the table already has more than one fulltext index, they all **reuse** the same `__ydb_row_id` column and `uniq__ydb_row_id` index — these structures are created only once per table.
+
+{% note warning %}
+
+The `__ydb_row_id` column and the `uniq__ydb_row_id` index are managed by {{ ydb-short-name }}:
+
+* `__ydb_row_id` is generated server-side; do not write to it. It cannot be set explicitly, including via `BulkUpsert`.
+* The `uniq__ydb_row_id` index cannot be dropped while any fulltext index depends on it. Drop the dependent fulltext index(es) first.
+
+{% endnote %}
+
 ## Full syntax for fulltext indexes {#syntax}
 
 Creating a fulltext index:
@@ -168,7 +192,7 @@ ALTER TABLE articles DROP INDEX ft_index;
 
 ## Limitations {#limitations}
 
-* Tables with fulltext indexes only support a single primary key column of type `Uint64`.
+* Any primary key type is supported. Tables whose primary key is not a single integer column get an auto-managed `__ydb_row_id` system column and a `uniq__ydb_row_id` unique index (see [Primary key types](#primary-key)).
 * `BulkUpsert` isn't supported for tables with fulltext indexes.
 * Fulltext index access must be specified explicitly using `VIEW IndexName`.
 * Only one text column can be indexed (per fulltext index). Use `COVER` for additional columns.

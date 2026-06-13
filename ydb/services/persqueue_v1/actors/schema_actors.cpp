@@ -217,25 +217,6 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * 
 {
 }
 
-TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::TEvDescribeConsumerRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-    , TDescribeTopicActorImpl(TDescribeTopicActorSettings::DescribeConsumer(
-            request->GetProtoRequest()->consumer(),
-            request->GetProtoRequest()->include_stats(),
-            request->GetProtoRequest()->include_location()))
-{
-    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribeConsumerActor for request " << request->GetProtoRequest()->DebugString());
-}
-
-TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
-    : TBase(ctx, dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->path())
-    , TDescribeTopicActorImpl(TDescribeTopicActorSettings::DescribeConsumer(
-            dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->consumer(),
-            dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->include_stats(),
-            dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->include_location()))
-{
-}
-
 TDescribeTopicActorImpl::TDescribeTopicActorImpl(const TDescribeTopicActorSettings& settings)
     : Settings(settings)
 {
@@ -268,13 +249,6 @@ void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-void TDescribeConsumerActor::StateWork(TAutoPtr<IEventHandle>& ev) {
-    if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
-        TBase::StateWork(ev);
-    }
-}
-
-
 void TDescribeTopicActorImpl::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Status != NKikimrProto::OK) {
         RestartTablet(ev->Get()->TabletId, ctx, ev->Sender);
@@ -291,11 +265,6 @@ void TDescribeTopicActorImpl::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev
 }
 
 void TDescribeTopicActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-    this->Request_->RaiseIssue(FillIssue(error, errorCode));
-    TBase::Reply(status, ctx);
-}
-
-void TDescribeConsumerActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
     this->Request_->RaiseIssue(FillIssue(error, errorCode));
     TBase::Reply(status, ctx);
 }
@@ -683,116 +652,6 @@ void TDescribeTopicActor::Reply(const TActorContext& ctx) {
     return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ctx);
 }
 
-void TDescribeConsumerActor::Reply(const TActorContext& ctx) {
-    if (TBase::IsDead) {
-        return;
-    }
-    return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ctx);
-}
-
-
-void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(tabletInfo);
-
-    std::map<ui32, NKikimrPQ::TReadSessionsInfoResponse::TPartitionInfo> res;
-
-    for (const auto& partInfo : ev->Get()->Record.GetPartitionInfo()) {
-        res[partInfo.GetPartition()] = partInfo;
-    }
-    for (auto& partRes : *(Result.mutable_partitions())) {
-        auto it = res.find(partRes.partition_id());
-        if (it == res.end()) continue;
-        auto consRes = partRes.mutable_partition_consumer_stats();
-        consRes->set_read_session_id(it->second.GetSession());
-        SetProtoTime(consRes->mutable_partition_read_session_create_time(), it->second.GetTimestampMs());
-        consRes->set_connection_node_id(it->second.GetProxyNodeId());
-        consRes->set_reader_name(it->second.GetClientNode());
-    }
-}
-
-
-void TDescribeConsumerActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(tabletInfo);
-
-    auto& record = ev->Get()->Record;
-
-    std::map<ui32, NKikimrPQ::TStatusResponse::TPartResult> res;
-
-    for (auto& partResult : record.GetPartResult()) {
-        res[partResult.GetPartition()] = partResult;
-    }
-
-    for (auto& partRes : *(Result.mutable_partitions())) {
-        auto it = res.find(partRes.partition_id());
-        if (it == res.end()) continue;
-
-        const auto& partResult = it->second;
-        auto partStats = partRes.mutable_partition_stats();
-
-        partStats->set_store_size_bytes(partResult.GetPartitionSize());
-        partStats->mutable_partition_offsets()->set_start(partResult.GetStartOffset());
-        partStats->mutable_partition_offsets()->set_end(partResult.GetEndOffset());
-
-        SetProtoTime(partStats->mutable_last_write_time(), partResult.GetLastWriteTimestampMs());
-        SetProtoTime(partStats->mutable_max_write_time_lag(), partResult.GetWriteLagMs());
-
-
-        AddWindowsStat(partStats->mutable_bytes_written(), partResult.GetAvgWriteSpeedPerMin(), partResult.GetAvgWriteSpeedPerHour(), partResult.GetAvgWriteSpeedPerDay());
-
-        partStats->set_partition_node_id(tabletInfo.NodeId);
-
-        if (Settings.Consumer) {
-            auto consStats = partRes.mutable_partition_consumer_stats();
-
-            consStats->set_last_read_offset(partResult.GetLagsInfo().GetReadPosition().GetOffset());
-            consStats->set_committed_offset(partResult.GetLagsInfo().GetWritePosition().GetOffset());
-
-            SetProtoTime(consStats->mutable_last_read_time(), partResult.GetLagsInfo().GetLastReadTimestampMs());
-            SetProtoTime(consStats->mutable_max_read_time_lag(), partResult.GetLagsInfo().GetReadLagMs());
-            SetProtoTime(consStats->mutable_max_write_time_lag(), partResult.GetLagsInfo().GetWriteLagMs());
-            SetProtoTime(consStats->mutable_max_committed_time_lag(), partResult.GetLagsInfo().GetCommitedLagMs());
-
-            AddWindowsStat(consStats->mutable_bytes_read(), partResult.GetAvgReadSpeedPerMin(), partResult.GetAvgReadSpeedPerHour(), partResult.GetAvgReadSpeedPerDay());
-
-            if (!Result.consumer().has_consumer_stats()) {
-                auto* stats = Result.mutable_consumer()->mutable_consumer_stats();
-
-                SetProtoTime(stats->mutable_min_partitions_last_read_time(), partResult.GetLagsInfo().GetLastReadTimestampMs());
-                SetProtoTime(stats->mutable_max_read_time_lag(), partResult.GetLagsInfo().GetReadLagMs());
-                SetProtoTime(stats->mutable_max_write_time_lag(), partResult.GetLagsInfo().GetWriteLagMs());
-                SetProtoTime(stats->mutable_max_committed_time_lag(), partResult.GetLagsInfo().GetCommitedLagMs());
-            } else {
-                auto* stats = Result.mutable_consumer()->mutable_consumer_stats();
-
-                UpdateProtoTime(stats->mutable_min_partitions_last_read_time(), partResult.GetLagsInfo().GetLastReadTimestampMs(), true);
-                UpdateProtoTime(stats->mutable_max_read_time_lag(), partResult.GetLagsInfo().GetReadLagMs(), false);
-                UpdateProtoTime(stats->mutable_max_write_time_lag(), partResult.GetLagsInfo().GetWriteLagMs(), false);
-                UpdateProtoTime(stats->mutable_max_committed_time_lag(), partResult.GetLagsInfo().GetCommitedLagMs(), false);
-            }
-        }
-    }
-}
-
-bool TDescribeConsumerActor::ApplyResponse(
-        TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
-) {
-    const auto& record = ev->Get()->Record;
-    AFL_ENSURE(Settings.RequireLocation);
-    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
-        const auto& location = record.GetLocations(i);
-        auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
-        SetPartitionLocation(location, locationResult);
-    }
-    return true;
-}
-
-void TDescribeConsumerActor::PassAway() {
-    TDescribeTopicActorImpl::PassAway(ActorContext());
-    TBase::PassAway();
-}
-
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
@@ -843,68 +702,6 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
     return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ActorContext());
 }
 
-void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
-    if (ReplyIfNotTopic(ev)) {
-        return;
-    }
-    const auto& response = ev->Get()->Request.Get()->ResultSet.front();
-
-    const TString path = JoinSeq("/", response.Path);
-
-    Ydb::Scheme::Entry *selfEntry = Result.mutable_self();
-    ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
-    //TODO: change entry
-    if (const auto& name = GetCdcStreamName()) {
-        selfEntry->set_name(*name);
-    }
-    selfEntry->set_name(selfEntry->name() + "/" + Settings.Consumer);
-
-    if (response.PQGroupInfo) {
-        const auto& pqDescr = response.PQGroupInfo->Description;
-        const auto& config = pqDescr.GetPQTabletConfig();
-
-        for(ui32 i = 0; i < pqDescr.GetTotalGroupCount(); ++i) {
-            auto part = Result.add_partitions();
-            part->set_partition_id(i);
-            part->set_active(true);
-        }
-
-        auto consumerName = NPersQueue::ConvertNewConsumerName(Settings.Consumer, ActorContext());
-        bool found = false;
-        for (const auto& consumer : config.GetConsumers()) {
-            if (consumerName != consumer.GetName()) {
-                continue;
-            }
-            found = true;
-
-            auto rr = Result.mutable_consumer();
-            Ydb::StatusIds::StatusCode status;
-            TString error;
-            if (!FillConsumer(*rr, consumer, status, error)) {
-                return RaiseError(error, Ydb::PersQueue::ErrorCode::ERROR, status, ActorContext());
-            }
-            break;
-        }
-        if (!found) {
-            Request_->RaiseIssue(FillIssue(
-                    TStringBuilder() << "no consumer '" << Settings.Consumer << "' in topic",
-                    Ydb::PersQueue::ErrorCode::BAD_REQUEST
-            ));
-            return RespondWithCode(Ydb::StatusIds::SCHEME_ERROR);
-        }
-
-        if (GetProtoRequest()->include_stats() || GetProtoRequest()->include_location()) {
-            ProcessTablets(pqDescr, ActorContext());
-            return;
-        }
-    }
-
-    return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ActorContext());
-}
-
-
-
 bool TDescribeTopicActorImpl::ProcessTablets(
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, const TActorContext& ctx
 ) {
@@ -953,15 +750,6 @@ void TDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
     Become(&TDescribeTopicActor::StateWork);
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "Describe topic actor for path " << GetProtoRequest()->path());
 }
-
-void TDescribeConsumerActor::Bootstrap(const NActors::TActorContext& ctx)
-{
-    TBase::Bootstrap(ctx);
-
-    SendDescribeProposeRequest(ctx);
-    Become(&TDescribeConsumerActor::StateWork);
-}
-
 
 template<class TProtoType>
 TDescribeTopicActorSettings SettingsFromDescribePartRequest(TProtoType* request) {

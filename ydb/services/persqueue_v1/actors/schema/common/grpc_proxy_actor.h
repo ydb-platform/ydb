@@ -53,6 +53,10 @@ protected:
         return this->Request_->GetSerializedToken().empty() ? nullptr : new NACLib::TUserToken(this->Request_->GetSerializedToken());
     }
 
+    TString GetDatabase() const {
+        return CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
+    }
+
     void ReplyWithError(Ydb::StatusIds::StatusCode status, const TString& messageText) {
         if (IsDead) {
             return;

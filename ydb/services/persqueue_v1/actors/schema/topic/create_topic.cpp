@@ -21,7 +21,7 @@ public:
         Become(&TCreateTopicActor::StateWork);
 
         Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
-            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
+            .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .Request = *GetProtoRequest(),
             .UserToken = GetUserToken(),

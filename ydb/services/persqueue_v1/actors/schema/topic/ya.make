@@ -9,6 +9,7 @@ SRCS(
     actors.cpp
     alter_topic.cpp
     create_topic.cpp
+    describe_consumer.cpp
     drop_topic.cpp
 )
 

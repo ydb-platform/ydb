@@ -259,7 +259,7 @@ In the [JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk), the `@ydbjs
   ```
 
 
-  You can connect metrics and tracing together by registering both `TDriverConfig` and `MetricRegistry` in `TraceProvider` simultaneously.
+  You can connect metrics and tracing together by registering both `MetricRegistry` and `TraceProvider` in `TDriverConfig` simultaneously.
 
 - JavaScript
 

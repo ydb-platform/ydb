@@ -16,6 +16,7 @@ struct TReqJsonEntry {
     TString RawLine;
     NJson::TJsonValue Json;
     TString Event;
+    TString Kind;
     int Part = 0;
     int Total = 0;
     TString Priority;  // "DEBUG" | "WARN" | ...
@@ -99,6 +100,7 @@ TVector<TReqJsonEntry> CollectReqJson(TStringBuf blob) {
             entry.Priority = ExtractPriority(blob, markerPos);
             const auto& req = entry.Json["request"];
             entry.Event = req["event"].GetStringSafe("");
+            entry.Kind = entry.Json["kind"].GetStringSafe("");
             entry.Part = entry.Json["part"].GetIntegerSafe(0);
             entry.Total = entry.Json["total"].GetIntegerSafe(0);
             entries.push_back(std::move(entry));
@@ -122,6 +124,7 @@ void DumpEntries(const char* caseName, const TVector<TReqJsonEntry>& entries, co
     }
     for (size_t i = 0; i < entries.size(); ++i) {
         Cerr << "[" << i << "] prio=" << entries[i].Priority
+             << " kind=" << entries[i].Kind
              << " event=" << entries[i].Event
              << " part=" << entries[i].Part << "/" << entries[i].Total << Endl
              << "    " << entries[i].RawLine << Endl;
@@ -184,6 +187,8 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     UNIT_ASSERT_C(completed, "completed envelope (part=1) must be present");
     UNIT_ASSERT_VALUES_EQUAL_C(completed->Priority, "DEBUG",
         "successful completed must be emitted at DEBUG");
+    UNIT_ASSERT_VALUES_EQUAL_C(completed->Kind, "completed",
+        "single-envelope completed must carry kind=completed marker");
     UNIT_ASSERT_C(!completed->Json["req_id"].GetStringSafe("").empty(),
         "req_id must be ProxyRequestId (non-empty)");
 
@@ -278,6 +283,8 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
 
     bool sawPart1OfMulti = false;
     bool sawNonFirst = false;
+    TString multiReqId;
+    int multiTotal = 0;
     for (const auto& e : entries) {
         if (e.Total <= 1) {
             continue;
@@ -287,6 +294,10 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
         const auto& req = e.Json["request"];
         if (e.Part == 1) {
             sawPart1OfMulti = true;
+            multiReqId = e.Json["req_id"].GetStringSafe("");
+            multiTotal = e.Total;
+            UNIT_ASSERT_VALUES_EQUAL_C(e.Kind, "completed",
+                TStringBuilder() << "part=1 must carry kind=completed marker: " << e.RawLine);
             UNIT_ASSERT_VALUES_EQUAL_C(req["event"].GetStringSafe(""), "completed",
                 TStringBuilder() << "part=1 must mark itself as completed envelope: " << e.RawLine);
             UNIT_ASSERT_C(req.Has("status"),
@@ -297,6 +308,8 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
                 TStringBuilder() << "TRACE must NOT truncate SQL: " << e.RawLine);
         } else {
             sawNonFirst = true;
+            UNIT_ASSERT_VALUES_EQUAL_C(e.Kind, "continuation",
+                TStringBuilder() << "part>1 must carry kind=continuation marker: " << e.RawLine);
             UNIT_ASSERT_C(!req.Has("event"),
                 TStringBuilder() << "non-first part must not duplicate event: " << e.RawLine);
             UNIT_ASSERT_C(!req.Has("status"),
@@ -313,6 +326,16 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
     }
     UNIT_ASSERT_C(sawPart1OfMulti, "long SQL must produce a multi-part envelope (part=1)");
     UNIT_ASSERT_C(sawNonFirst, "long SQL must produce continuation chunks (part>1)");
+
+    int chunksSeen = 0;
+    for (const auto& e : entries) {
+        if (e.Json["req_id"].GetStringSafe("") == multiReqId) {
+            ++chunksSeen;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(chunksSeen, multiTotal,
+        TStringBuilder() << "must see exactly total=" << multiTotal
+                         << " chunks for the multi-part req, got " << chunksSeen);
 }
 
 // Multi-part FAILURE keeps issues in part==1 only — no per-chunk duplication.
@@ -385,12 +408,102 @@ Y_UNIT_TEST(IssuesOnlyInFirstPartOnFailure) {
         "long broken SQL must produce continuation chunks (part>1)");
 }
 
-// At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (10240) bytes and
+// Long issues span multiple chunks instead of being silently truncated to 1 KB.
+Y_UNIT_TEST(LongIssuesChunkedAcrossPartsOnFailure) {
+    TStringStream logStream;
+    size_t logStart = 0;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_TRACE);
+        logStart = logStream.Size();
+
+        TStringBuilder bad;
+        for (size_t i = 0; i < 10000; ++i) {
+            bad << 'z';
+        }
+        const TString sql = TStringBuilder() << "SELECT * FROM `" << bad << "` LIMIT 1;";
+        auto fail = kikimr.GetQueryClient().ExecuteQuery(
+            sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!fail.IsSuccess(), "missing-table query must fail");
+    }
+    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    DumpEntries("LongIssuesChunkedAcrossPartsOnFailure", entries, logStream.Str());
+
+    TString targetReqId;
+    for (const auto& e : entries) {
+        const auto status = e.Json["request"]["status"].GetStringSafe("");
+        if (e.Part == 1 && !status.empty() && status != "SUCCESS") {
+            targetReqId = e.Json["req_id"].GetStringSafe("");
+            break;
+        }
+    }
+    UNIT_ASSERT_C(!targetReqId.empty(), "expected a failing envelope with issues");
+
+    int partsWithIssues = 0;
+    size_t issuesBytesSeen = 0;
+    for (const auto& e : entries) {
+        if (e.Json["req_id"].GetStringSafe("") != targetReqId) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        if (req.Has("issues")) {
+            ++partsWithIssues;
+            issuesBytesSeen += req["issues"].GetStringSafe("").size();
+        }
+    }
+    UNIT_ASSERT_C(partsWithIssues > 1,
+        TStringBuilder() << "long issues must span multiple chunks, got " << partsWithIssues);
+    UNIT_ASSERT_C(issuesBytesSeen > 4096,
+        TStringBuilder() << "concatenated issues must exceed 4 KB, got " << issuesBytesSeen);
+}
+
+// At WARN long issues are truncated to 1 KB inside a single envelope — no multi-part.
+Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
+    TStringStream logStream;
+    size_t logStart = 0;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_WARN);
+        logStart = logStream.Size();
+
+        TStringBuilder bad;
+        for (size_t i = 0; i < 10000; ++i) {
+            bad << 'z';
+        }
+        const TString sql = TStringBuilder() << "SELECT * FROM `" << bad << "` LIMIT 1;";
+        auto fail = kikimr.GetQueryClient().ExecuteQuery(
+            sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!fail.IsSuccess(), "missing-table query must fail");
+    }
+    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    DumpEntries("LongIssuesTruncatedAtWarn", entries, logStream.Str());
+
+    bool found = false;
+    for (const auto& e : entries) {
+        if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        if (req["status"].GetStringSafe("") == "SUCCESS") {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(e.Total, 1, e.RawLine);
+        UNIT_ASSERT_C(req.Has("issues_truncated"), e.RawLine);
+        UNIT_ASSERT_VALUES_EQUAL_C(req["issues_truncated"].GetBooleanSafe(false), true, e.RawLine);
+        UNIT_ASSERT_C(req["issues"].GetStringSafe("").size() <= 1024,
+            TStringBuilder() << "WARN issues must be capped at 1 KB, got "
+                             << req["issues"].GetStringSafe("").size());
+        found = true;
+    }
+    UNIT_ASSERT_C(found, "expected a single-envelope failure with truncated issues at WARN");
+}
+
+// At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (6 KB) bytes and
 // emitted as a single envelope (`total=1`) — operators of the always-on
 // stream consume "one record per query". The original length is preserved
 // in `query_len` and the cut is flagged by `data_truncated: true`.
 Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
-    constexpr size_t QUERY_TEXT_LIMIT = 10240;
+    constexpr size_t QUERY_TEXT_LIMIT = 6 * 1024;
 
     TStringStream logStream;
     size_t logStart = 0;
@@ -401,7 +514,7 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
 
         auto db = kikimr.GetQueryClient();
 
-        // ~30 KB of SQL, well past the 10 KB cap.
+        // ~30 KB of SQL, well past the 6 KB cap.
         TStringBuilder sb;
         sb << "/*";
         for (size_t i = 0; i < 30000; ++i) {

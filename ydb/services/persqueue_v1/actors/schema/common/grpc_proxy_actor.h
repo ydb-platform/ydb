@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
 namespace NKikimr::NGRpcProxy::V1 {

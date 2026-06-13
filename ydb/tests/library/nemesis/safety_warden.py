@@ -410,7 +410,7 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
         start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
-        verify_pattern = 'VERIFY failed'
+        verify_pattern = 'VERIFY failed|unhandled exception'
         violations = []
 
         try:

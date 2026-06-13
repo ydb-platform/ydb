@@ -1,5 +1,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -9,7 +10,9 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_committer.h>
@@ -45,6 +48,10 @@ struct TRealPDiskTestConfig {
     ui32 MaxLogoBlobDataSize = 0;
     ui32 MinHugeBlobInBytes = 0;
     ui32 MilestoneHugeBlobInBytes = 0;
+    ui64 MaxCommonLogChunks = 0;
+    ui32 GroupId = 0;
+    bool EnableSmallDiskOptimization = true;
+    bool RunSyncer = false;
     TDuration AdvanceEntryPointTimeout = TDuration::Seconds(5);
     TDuration RecoveryLogCutterFirstDuration = TDuration::Seconds(3);
     TDuration RecoveryLogCutterRegularDuration = TDuration::Seconds(5);
@@ -102,6 +109,23 @@ TString MakeData(ui32 size) {
     return data;
 }
 
+TString MakeLocalSyncDataBlockPayload(ui32 minPayloadBytes) {
+    NSyncLog::TNaiveFragmentWriter writer;
+    ui64 lsn = 1;
+    while (writer.GetSize() < minPayloadBytes) {
+        char buf[NSyncLog::MaxRecFullSize];
+        const ui32 generation = 1 + static_cast<ui32>(lsn % 10'000);
+        const ui32 size = NSyncLog::TSerializeRoutines::SetBlock(buf, lsn,
+            1'000'000 + lsn, generation, 0);
+        writer.Push(reinterpret_cast<const NSyncLog::TRecordHdr*>(buf), size);
+        ++lsn;
+    }
+
+    TString result;
+    writer.Finish(&result);
+    return result;
+}
+
 TIntrusivePtr<TBlobStorageGroupInfo> MakeGroupInfo(ui32 nodeId, ui32 groupId, TBlobStorageGroupType::EErasureSpecies erasure) {
     const TBlobStorageGroupType groupType(erasure);
     const ui32 numVDisks = groupType.BlobSubgroupSize();
@@ -131,7 +155,7 @@ TIntrusivePtr<TVDiskConfig> MakeTestVDiskConfig(const TIntrusivePtr<TAllVDiskKin
     vdiskConfig->RecoveryLogCutterFirstDuration = testConfig.RecoveryLogCutterFirstDuration;
     vdiskConfig->RecoveryLogCutterRegularDuration = testConfig.RecoveryLogCutterRegularDuration;
     vdiskConfig->RunRepl = false;
-    vdiskConfig->RunSyncer = false;
+    vdiskConfig->RunSyncer = testConfig.RunSyncer;
     vdiskConfig->UseCostTracker = false;
     return vdiskConfig;
 }
@@ -150,10 +174,13 @@ class TTestRuntimeCallbackGuard {
 public:
     TTestRuntimeCallbackGuard(TTestActorRuntimeBase& runtime,
             TTestActorRuntimeBase::TEventObserver previousObserver,
-            TTestActorRuntimeBase::TEventFilter previousEventFilter)
+            TTestActorRuntimeBase::TEventFilter previousEventFilter,
+            TTestActorRuntimeBase::TRegistrationObserver previousRegistrationObserver =
+                &TTestActorRuntimeBase::DefaultRegistrationObserver)
         : Runtime(runtime)
         , PreviousObserver(std::move(previousObserver))
         , PreviousEventFilter(std::move(previousEventFilter))
+        , PreviousRegistrationObserver(std::move(previousRegistrationObserver))
     {}
 
     TTestRuntimeCallbackGuard(const TTestRuntimeCallbackGuard&) = delete;
@@ -162,12 +189,14 @@ public:
     ~TTestRuntimeCallbackGuard() {
         Runtime.SetEventFilter(std::move(PreviousEventFilter));
         Runtime.SetObserverFunc(std::move(PreviousObserver));
+        Runtime.SetRegistrationObserverFunc(std::move(PreviousRegistrationObserver));
     }
 
 private:
     TTestActorRuntimeBase& Runtime;
     TTestActorRuntimeBase::TEventObserver PreviousObserver;
     TTestActorRuntimeBase::TEventFilter PreviousEventFilter;
+    TTestActorRuntimeBase::TRegistrationObserver PreviousRegistrationObserver;
 };
 
 TRealStorage SetupRealPDiskAndRealVDisk(TTestActorRuntime& runtime,
@@ -176,7 +205,7 @@ TRealStorage SetupRealPDiskAndRealVDisk(TTestActorRuntime& runtime,
     runtime.Initialize(MakeRuntimeEgg());
 
     const ui32 nodeId = runtime.GetNodeId(NodeIndex);
-    const ui32 groupId = 0;
+    const ui32 groupId = testConfig.GroupId;
     const TBlobStorageGroupType groupType(erasure);
     const ui32 numVDisks = groupType.BlobSubgroupSize();
     const TString pdiskPath = TStringBuilder() << runtime.GetTempDir() << testConfig.PDiskPathSuffix;
@@ -186,7 +215,7 @@ TRealStorage SetupRealPDiskAndRealVDisk(TTestActorRuntime& runtime,
     const auto sectorMap = MakeIntrusive<NPDisk::TSectorMap>(testConfig.DiskSize);
     TFormatOptions formatOptions;
     formatOptions.SectorMap = sectorMap;
-    formatOptions.EnableSmallDiskOptimization = false;
+    formatOptions.EnableSmallDiskOptimization = testConfig.EnableSmallDiskOptimization;
     formatOptions.EnableSectorEncryption = false;
     FormatPDisk(pdiskPath, testConfig.DiskSize, testConfig.SectorSize, testConfig.ChunkSize, PDiskGuid, MainKeyValue, MainKeyValue, MainKeyValue,
         MainKeyValue,
@@ -197,8 +226,12 @@ TRealStorage SetupRealPDiskAndRealVDisk(TTestActorRuntime& runtime,
     pdiskConfig->SectorSize = testConfig.SectorSize;
     pdiskConfig->SectorMap = sectorMap;
     pdiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(false);
+    pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(testConfig.EnableSmallDiskOptimization);
     pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
     pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+    if (testConfig.MaxCommonLogChunks) {
+        pdiskConfig->MaxCommonLogChunks = testConfig.MaxCommonLogChunks;
+    }
 
     const NPDisk::TMainKey mainKey{ .Keys = { MainKeyValue }, .IsInitialized = true };
     const TActorId pdiskActorId = runtime.Register(CreatePDisk(pdiskConfig, mainKey, counters), NodeIndex, 0,
@@ -685,6 +718,290 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             << " deletes# " << FormatList(syncLogDeleteDetails)
             << " lastPDiskError# " << lastPDiskErrorReason);
 
+    }
+
+    Y_UNIT_TEST(LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks) {
+        /*
+         * Reproduces the VSyncFull retry window:
+         *
+         * 1. VDisk writes data received from full sync as SignatureLocalSyncData.
+         * 2. The node dies after PDisk has committed this record, but before VDisk observes the
+         *    log result and before the final SyncerState/cut becomes durable.
+         * 3. On restart the sync state is still old, but local recovery has already replayed the
+         *    durable local sync data; startup data sync must not start fetching more remote data
+         *    until recovery log cut durably passes the replayed record.
+         *
+         * The first TEvLocalSyncData is injected directly into Skeleton; this exercises the same
+         * recovery-log writer, PDisk common log, and local-recovery replay path without building
+         * a multi-vdisk sync topology. If the feature flag below is disabled by hand, the same
+         * loop keeps repeating this interrupted write and must fail on common-log OUT_OF_SPACE.
+         */
+        const ui32 targetPayloadBytes = 3_MB;
+        const TString localSyncData = MakeLocalSyncDataBlockPayload(targetPayloadBytes);
+        UNIT_ASSERT_C(localSyncData.size() >= targetPayloadBytes,
+            "LocalSyncData payload is too small; expected at least# " << targetPayloadBytes
+            << " actual# " << localSyncData.size());
+
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 64_KB;
+        testConfig.DiskSize = 128_MB;
+        testConfig.MaxCommonLogChunks = 5;
+        testConfig.EnableSmallDiskOptimization = false;
+        testConfig.RunSyncer = true;
+        testConfig.GroupId = TGroupID(EGroupConfigurationType::Dynamic, DomainId, 2).GetRaw();
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = "local_sync_data_cut_wait.dat";
+
+        TActorId currentVDiskFront;
+        TActorId skeletonId;
+        TVector<std::pair<TActorId, TActorId>> registrations;
+        auto previousRegistrationObserver = runtime.SetRegistrationObserverFunc(
+            [&](TTestActorRuntimeBase&, const TActorId& parentId, const TActorId& actorId) {
+                registrations.emplace_back(parentId, actorId);
+                if (parentId == currentVDiskFront && !skeletonId) {
+                    skeletonId = actorId;
+                }
+            });
+
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureNone, testConfig);
+        runtime.GetAppData(NodeIndex).FeatureFlags
+            .SetEnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay(true);
+        const TVDiskID vdiskId = storage.Info->GetVDiskId(0);
+        const TActorId vdiskActorId = storage.Info->GetActorId(0);
+        const TActorId edge = storage.Edge;
+        currentVDiskFront = storage.VDiskActors[0];
+        for (const auto& [parentId, actorId] : registrations) {
+            if (parentId == currentVDiskFront) {
+                skeletonId = actorId;
+                break;
+            }
+        }
+
+        bool restartRequested = false;
+        bool dropNextLocalSyncDataLogResult = false;
+        bool observeAfterRestart = false;
+        bool localSyncDataOutOfSpace = false;
+        bool otherOutOfSpace = false;
+        bool cutRequested = false;
+        bool cutReachedInterruptedLsn = false;
+        bool startupTokenBeforeCut = false;
+        ui32 interruptedWrites = 0;
+        ui32 restartNo = 0;
+        ui64 interruptedLsn = 0;
+        ui64 lastCutFirstLsnToKeep = 0;
+        i64 maxLogChunkCount = 0;
+        TString details;
+        auto observedOutOfSpace = [&] {
+            return localSyncDataOutOfSpace || otherOutOfSpace;
+        };
+
+        auto setDetails = [&](TString value) {
+            if (details.empty()) {
+                details = std::move(value);
+            }
+        };
+
+        auto previousEventFilter = runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return false;
+            }
+
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvAcquireVDiskOperationToken:
+                    if (observeAfterRestart && !cutReachedInterruptedLsn) {
+                        startupTokenBeforeCut = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvAskForCutLog:
+                    if (observeAfterRestart) {
+                        cutRequested = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvRecoveryLogCutDone: {
+                    if (observeAfterRestart) {
+                        const auto *msg = ev->Get<TEvRecoveryLogCutDone>();
+                        lastCutFirstLsnToKeep = msg->FirstLsnToKeep;
+                        if (interruptedLsn && msg->FirstLsnToKeep >= interruptedLsn + 1) {
+                            cutReachedInterruptedLsn = true;
+                        }
+                    }
+                    break;
+                }
+
+                case TEvBlobStorage::EvLogResult: {
+                    const auto *msg = ev->Get<NPDisk::TEvLogResult>();
+                    maxLogChunkCount = Max(maxLogChunkCount, msg->LogChunkCount);
+
+                    if (msg->Status == NKikimrProto::OUT_OF_SPACE) {
+                        TString outOfSpaceDetails = TStringBuilder()
+                            << "TEvLogResult recipient# " << ev->Recipient
+                            << " status# " << NKikimrProto::EReplyStatus_Name(msg->Status)
+                            << " error# " << msg->ErrorReason
+                            << " logChunkCount# " << msg->LogChunkCount
+                            << " interruptedWrites# " << interruptedWrites;
+                        if (dropNextLocalSyncDataLogResult) {
+                            localSyncDataOutOfSpace = true;
+                        } else {
+                            otherOutOfSpace = true;
+                        }
+                        setDetails(std::move(outOfSpaceDetails));
+                        return true;
+                    }
+
+                    if (dropNextLocalSyncDataLogResult && msg->Status == NKikimrProto::OK) {
+                        dropNextLocalSyncDataLogResult = false;
+                        restartRequested = true;
+                        ++interruptedWrites;
+                        Y_ABORT_UNLESS(!msg->Results.empty());
+                        interruptedLsn = msg->Results.front().Lsn;
+                        cutRequested = false;
+                        cutReachedInterruptedLsn = false;
+                        return true;
+                    }
+                    break;
+                }
+
+                case TEvBlobStorage::EvChunkReserveResult:
+                    if (ev->Get<NPDisk::TEvChunkReserveResult>()->Status == NKikimrProto::OUT_OF_SPACE) {
+                        otherOutOfSpace = true;
+                        setDetails("TEvChunkReserveResult OUT_OF_SPACE");
+                        return true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvChunkWriteResult:
+                    if (ev->Get<NPDisk::TEvChunkWriteResult>()->Status == NKikimrProto::OUT_OF_SPACE) {
+                        otherOutOfSpace = true;
+                        setDetails("TEvChunkWriteResult OUT_OF_SPACE");
+                        return true;
+                    }
+                    break;
+            }
+
+            return false;
+        });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            &TTestActorRuntimeBase::DefaultObserverFunc, std::move(previousEventFilter),
+            std::move(previousRegistrationObserver));
+
+        auto dispatchFor = [&](TDuration timeout) {
+            TDispatchOptions options;
+            const TDuration oldDispatchTimeout = runtime.SetDispatchTimeout(TDuration::MilliSeconds(10));
+            try {
+                runtime.DispatchEvents(options, timeout);
+            } catch (const TEmptyEventQueueException&) {
+            }
+            runtime.SetDispatchTimeout(oldDispatchTimeout);
+        };
+
+        auto pumpUntil = [&](auto predicate, ui32 iterations, TDuration step) {
+            for (ui32 i = 0; i < iterations && !predicate(); ++i) {
+                dispatchFor(step);
+            }
+            return predicate();
+        };
+
+        auto waitReady = [&] {
+            return pumpUntil([&] {
+                runtime.Send(new IEventHandle(vdiskActorId, edge,
+                    new TEvBlobStorage::TEvVStatus(vdiskId), IEventHandle::FlagTrackDelivery), NodeIndex);
+                auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVStatusResult>(edge, TDuration::Seconds(1));
+                return res && res->Get()->Record.GetStatus() == NKikimrProto::OK;
+            }, 60, TDuration::MilliSeconds(100));
+        };
+
+        auto restartVDisk = [&] {
+            runtime.Send(new IEventHandle(storage.VDiskActors[0], edge, new TEvents::TEvPoisonPill), NodeIndex);
+            dispatchFor(TDuration::MilliSeconds(100));
+
+            const NPDisk::TOwnerRound nextOwnerRound = 200 + restartNo++;
+            auto vdiskConfig = MakeTestVDiskConfig(storage.AllVDiskKinds, storage.Info, storage.PDiskServiceId,
+                0, nextOwnerRound, testConfig);
+            const TActorId vdiskActor = runtime.Register(CreateVDisk(vdiskConfig, storage.Info,
+                storage.Counters->GetSubgroup("subsystem", "vdisk")->GetSubgroup("slot", "0")),
+                NodeIndex, 0, TMailboxType::Revolving);
+            currentVDiskFront = vdiskActor;
+            skeletonId = {};
+            observeAfterRestart = true;
+            runtime.RegisterService(vdiskActorId, vdiskActor, NodeIndex);
+            storage.VDiskActors[0] = vdiskActor;
+            UNIT_ASSERT_C(pumpUntil([&] { return bool(skeletonId); }, 300, TDuration::MilliSeconds(10)),
+                "failed to discover Skeleton actor after restart"
+                << " interruptedWrites# " << interruptedWrites);
+        };
+
+        auto sendInterruptedLocalSyncData = [&] {
+            restartRequested = false;
+            dropNextLocalSyncDataLogResult = true;
+            runtime.Send(new IEventHandle(skeletonId, edge,
+                new TEvLocalSyncData(vdiskId, TSyncState(), localSyncData)), NodeIndex);
+
+            UNIT_ASSERT_C(pumpUntil([&] { return restartRequested || observedOutOfSpace(); },
+                    600, TDuration::MilliSeconds(10)),
+                "LocalSyncData write was not committed to PDisk"
+                << " interruptedWrites# " << interruptedWrites
+                << " payloadSize# " << localSyncData.size());
+            dropNextLocalSyncDataLogResult = false;
+        };
+
+        UNIT_ASSERT_C(skeletonId, "failed to discover initial Skeleton actor");
+        UNIT_ASSERT_C(waitReady(), "target VDisk did not become ready before LocalSyncData injection");
+        sendInterruptedLocalSyncData();
+        UNIT_ASSERT_C(!observedOutOfSpace(),
+            "initial LocalSyncData write exhausted space"
+            << " details# " << details);
+        UNIT_ASSERT_C(interruptedLsn,
+            "test did not capture interrupted LocalSyncData LSN");
+
+        restartVDisk();
+        UNIT_ASSERT_C(waitReady(),
+            "target VDisk did not become ready after interrupted LocalSyncData"
+            << " interruptedLsn# " << interruptedLsn);
+
+        auto waitForCut = [&] {
+            pumpUntil([&] { return cutRequested || observedOutOfSpace(); },
+                100, TDuration::MilliSeconds(10));
+            if (cutRequested) {
+                pumpUntil([&] { return cutReachedInterruptedLsn || observedOutOfSpace(); },
+                    600, TDuration::MilliSeconds(10));
+            }
+        };
+        waitForCut();
+
+        for (ui32 i = 0; i < 8 && !observedOutOfSpace(); ++i) {
+            sendInterruptedLocalSyncData();
+            if (!observedOutOfSpace()) {
+                restartVDisk();
+                UNIT_ASSERT_C(waitReady(),
+                    "target VDisk did not become ready after duplicate LocalSyncData"
+                    << " iteration# " << i
+                    << " interruptedWrites# " << interruptedWrites);
+                waitForCut();
+            }
+        }
+        UNIT_ASSERT_C(!localSyncDataOutOfSpace && !otherOutOfSpace,
+            "replayed LocalSyncData exhausted space"
+            << " localSyncDataOutOfSpace# " << localSyncDataOutOfSpace
+            << " otherOutOfSpace# " << otherOutOfSpace
+            << " interruptedWrites# " << interruptedWrites
+            << " maxLogChunkCount# " << maxLogChunkCount
+            << " details# " << details);
+        UNIT_ASSERT_C(cutRequested,
+            "startup data sync did not request recovery log cut"
+            << " interruptedLsn# " << interruptedLsn);
+        UNIT_ASSERT_C(cutReachedInterruptedLsn,
+            "recovery log cut did not pass replayed LocalSyncData"
+            << " interruptedLsn# " << interruptedLsn
+            << " lastCutFirstLsnToKeep# " << lastCutFirstLsnToKeep);
+        UNIT_ASSERT_C(!startupTokenBeforeCut,
+            "startup data sync token was requested before durable recovery log cut"
+            << " interruptedLsn# " << interruptedLsn
+            << " lastCutFirstLsnToKeep# " << lastCutFirstLsnToKeep);
     }
 
 } // Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk)

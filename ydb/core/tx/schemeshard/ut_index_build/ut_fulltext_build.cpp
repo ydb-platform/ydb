@@ -635,6 +635,64 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         });
     }
 
+    Y_UNIT_TEST(RejectDropRowIdUniqueIndexUsedByFulltext) {
+        // The auto-provisioned unique index over __ydb_row_id must not be droppable while a fulltext
+        // index resolves its documents through it - dropping it would orphan every posting entry. Once
+        // the dependent fulltext index is gone, the unique index can be dropped.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, buildIndexTx);
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        const TString uniqueIndexPath = TStringBuilder()
+            << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName;
+
+        // Dropping the unique index while the fulltext index depends on it is rejected.
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "texts"
+            IndexName: "%s"
+        )", NTableIndex::NFulltext::RowIdUniqueIndexName),
+            {NKikimrScheme::StatusPreconditionFailed});
+
+        // ... and the unique index is still present and Ready.
+        TestDescribeResult(DescribePrivatePath(runtime, uniqueIndexPath), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // Drop the dependent fulltext index first ...
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "texts"
+            IndexName: "fulltext_idx"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // ... now nothing depends on the unique index over __ydb_row_id, so it can be dropped.
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "texts"
+            IndexName: "%s"
+        )", NTableIndex::NFulltext::RowIdUniqueIndexName));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, uniqueIndexPath), {
+            NLs::PathNotExist,
+        });
+    }
+
     Y_UNIT_TEST(AutoProvision_SecondFulltextBuildReusesInfra) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

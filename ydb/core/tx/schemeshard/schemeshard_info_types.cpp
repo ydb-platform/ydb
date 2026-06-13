@@ -636,10 +636,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data());
                 return nullptr;
             }
-            if (colIt->second.DefaultKind == ETableColumnDefaultKind::FromSequence) {
-                errStr = Sprintf("Can't drop serial column: '%s'", colName.data());
-                return nullptr;
-            }
 
             alterData->Columns[colId] = colIt->second;
             alterData->Columns[colId].DeleteVersion = alterData->AlterVersion;

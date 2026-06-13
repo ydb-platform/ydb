@@ -45,16 +45,16 @@ if [ -n "${MAX_SHARDS:-}" ]; then
   fi
 fi
 
-jq -n \
-  --argjson plan "$(cat "$PLAN_FILE")" \
+# Read plan from file (--slurpfile) to avoid ARG_MAX when uid_assignments is large.
+jq -n --slurpfile plan "$PLAN_FILE" \
   '{
     total_suites: 0,
-    total_tests: ($plan.total_graph_nodes // 0),
-    total_weight: ($plan.total_weight // 0),
+    total_tests: ($plan[0].total_graph_nodes // 0),
+    total_weight: ($plan[0].total_weight // 0),
     increment_filtered: true,
-    increment_graph_suites: ($plan.total_graph_nodes // 0),
+    increment_graph_suites: ($plan[0].total_graph_nodes // 0),
     plan_mode: "increment_graph",
-    weighting: ($plan.weighting // {})
+    weighting: ($plan[0].weighting // {})
   }' >"$LIST_SUMMARY"
 
 echo "Increment graph plan: $(jq '.shard_count' "$PLAN_FILE") shards, $(jq '.total_graph_nodes' "$PLAN_FILE") graph nodes"

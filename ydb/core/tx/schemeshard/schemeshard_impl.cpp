@@ -290,9 +290,13 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                     continue;
                 }
                 auto indexIt = Indexes.find(childPathId);
-                if (indexIt != Indexes.end()
-                    && indexIt->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
-                    && indexIt->second->IndexKeys.size() == prefixLen) {
+                if (indexIt == Indexes.end()
+                    || indexIt->second->Type != NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                    continue;
+                }
+                const auto& indexKeys = indexIt->second->IndexKeys;
+                if (indexKeys.size() == prefixLen
+                    && std::equal(indexKeys.begin(), indexKeys.end(), pkColumns.begin())) {
                     alreadyExists = true;
                     break;
                 }

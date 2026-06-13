@@ -853,7 +853,11 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
 
     TVector<ISubOperation::TPtr> result;
     if (alter.HasPartitionConfig()) {
-        result.push_back(CreateAlterTable(NextPartId(id, result), tx));
+        // Forward a copy with the transient, decomposition-only field cleared so the base
+        // alter sub-op never observes AddLocalIndexes (it is handled here, not downstream).
+        TTxTransaction baseTx = tx;
+        baseTx.MutableAlterTable()->ClearAddLocalIndexes();
+        result.push_back(CreateAlterTable(NextPartId(id, result), baseTx));
     }
 
     for (const auto& indexConfig : alter.GetAddLocalIndexes()) {

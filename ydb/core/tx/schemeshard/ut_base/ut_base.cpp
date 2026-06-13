@@ -7190,6 +7190,63 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 0);
     }
 
+    Y_UNIT_TEST(RowTableLocalBloomIndexDropOneOfMany) {
+        // Dropping one bloom index must leave the other index and its ByKeyFilterPrefix intact.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        auto byKeyFilterPrefixesSize = [&](const TString& path) {
+            return DescribePath(runtime, path, true).GetPathDescription()
+                .GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize();
+        };
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "Key1" Type: "Uint64" }
+              Columns { Name: "Key2" Type: "Uint64" }
+              Columns { Name: "Value" Type: "Utf8" }
+              KeyColumnNames: ["Key1", "Key2"]
+              PartitionConfig {
+                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+                ByKeyFilterPrefixes { PrefixLength: 2 FalsePositiveProbability: 0.01 }
+              }
+            }
+            IndexDescription {
+              Name: "idx_bloom_1"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+            IndexDescription {
+              Name: "idx_bloom_2"
+              Type: EIndexTypeLocalBloomFilter
+              State: EIndexStateReady
+              KeyColumnNames: ["Key1", "Key2"]
+              BloomFilterDescription { FalsePositiveProbability: 0.01 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 2);
+
+        // Drop only idx_bloom_1 (prefix length 1).
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            IndexName: "idx_bloom_1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // idx_bloom_1 gone; idx_bloom_2 and its prefix survive.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_2",
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1", "Key2"});
+        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+    }
+
     Y_UNIT_TEST(RowTableLocalBloomIndexDisableFilter) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

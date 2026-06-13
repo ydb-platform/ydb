@@ -133,10 +133,17 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
+        const auto indexType = GetIndexType(indexDescription);
 
-        if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDescription))) {
-            // Local indexes have no impl table. Column validation is done in KQP;
-            // here we only enforce a valid, unique index name.
+        if (TTableIndexInfo::IsLocalIndex(indexType)) {
+            // Row-table local indexes (prefix bloom filters) have no impl table. Full column
+            // validation is done in KQP; here we enforce a valid, unique name and a non-empty
+            // primary-key prefix - drop logic later treats IndexKeys.size() as the prefix length.
+            if (indexType != NKikimrSchemeOp::EIndexTypeLocalBloomFilter || indexDescription.KeyColumnNamesSize() == 0) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                    TStringBuilder() << "Local index '" << indexName
+                        << "' must be a local bloom filter over a non-empty primary-key prefix")};
+            }
             TPath indexPath = baseTablePath.Child(indexName);
             TString msg = "invalid table index name: ";
             if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
@@ -149,7 +156,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             indexes.emplace(indexName, TTableColumns{});
             continue;
         }
-        const auto indexType = GetIndexType(indexDescription);
         switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:

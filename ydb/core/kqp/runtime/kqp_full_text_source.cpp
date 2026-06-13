@@ -3343,7 +3343,10 @@ public:
         absl::flat_hash_map<ui64, std::pair<ui64, std::deque<TOwnedTableRange>>> byShard;
         absl::flat_hash_map<ui64, std::vector<TDocInfoPtr>> docsByReadId;
         for (auto& doc : docInfos) {
-            TVector<TCell> rowIdCells = {TCell::Make(doc->DocumentNumId)};
+            // Row-id indexes (plain, relevance and compact alike) store the full __ydb_row_id as the
+            // doc id, so it is the unique-index lookup key directly.
+            ui64 rowId = doc->DocumentNumId;
+            TVector<TCell> rowIdCells = {TCell::Make(rowId)};
             TTableRange range(rowIdCells, true, rowIdCells, true, false /*not a point*/);
             auto partitions = UniqueIndexReader->GetRangePartitioning(range);
             YQL_ENSURE(partitions.size() == 1, "Expected single partition for __ydb_row_id resolve, got " << partitions.size());
@@ -3378,6 +3381,7 @@ public:
         absl::flat_hash_map<TDocId, TDocInfoPtr> docsByRowId;
         docsByRowId.reserve(docs.size());
         for (auto& doc : docs) {
+            // The doc id is the full __ydb_row_id, which is exactly the unique-index row's first key cell.
             docsByRowId.emplace(doc->DocumentNumId, doc);
         }
 

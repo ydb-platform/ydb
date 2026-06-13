@@ -197,13 +197,13 @@ namespace NKikimr {
             }, "Error: Unknown snapshot", true);
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.ClearSnapshotStep();
-            }, "{ <main>: Error: Missing snapshot }");
+            }, "Error: Unknown snapshot", true);
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.SetSnapshotTxId(request.GetSnapshotTxId() + 1);
             }, "Error: Unknown snapshot", true);
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.ClearSnapshotTxId();
-            }, "{ <main>: Error: Missing snapshot }");
+            }, "Error: Unknown snapshot", true);
 
             DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
                 request.clear_settings();

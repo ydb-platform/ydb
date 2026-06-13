@@ -233,6 +233,7 @@ jobs:
       - name: Clean ya cache
         run: rm -rf ~/.ya
       - name: Start test listing (background)
+        if: inputs.increment != true
         env:
           BUILD_PRESET: ${{ inputs.build_preset }}
           TEST_THREADS: "52"
@@ -286,6 +287,7 @@ jobs:
             context.json
           retention-days: 3
       - name: Wait for test listing
+        if: inputs.increment != true
         run: |
           set -euo pipefail
           echo "Waiting for background ya test -L to finish..."
@@ -307,7 +309,7 @@ jobs:
           fi
           git worktree remove --force .list_tree || true
       - name: Upload test list
-        if: always()
+        if: always() && inputs.increment != true
         uses: actions/upload-artifact@v4
         with:
           name: parallel-${{ inputs.build_preset }}-test-list-${{ github.run_id }}
@@ -328,17 +330,23 @@ jobs:
         run: |
           set -eux
           python3 -m pip install pyyaml ydb --quiet
-          INCREMENT_GRAPH=""
+          mkdir -p shard_plan_out
           if [ "${{ inputs.increment }}" = "true" ]; then
-            INCREMENT_GRAPH="graph.json"
+            chmod +x .github/scripts/tests/sharding/plan_increment_graph_shards.sh
+            .github/scripts/tests/sharding/plan_increment_graph_shards.sh \
+              graph.json \
+              "$SHARD_COUNT" \
+              shard_plan_out
+          else
+            INCREMENT_GRAPH=""
+            chmod +x .github/scripts/tests/sharding/plan_shard_tests.sh
+            .github/scripts/tests/sharding/plan_shard_tests.sh \
+              test_list.log \
+              "${{ inputs.test_targets }}" \
+              "$SHARD_COUNT" \
+              shard_plan_out \
+              "$INCREMENT_GRAPH"
           fi
-          chmod +x .github/scripts/tests/sharding/plan_shard_tests.sh
-          .github/scripts/tests/sharding/plan_shard_tests.sh \
-            test_list.log \
-            "${{ inputs.test_targets }}" \
-            "$SHARD_COUNT" \
-            shard_plan_out \
-            "$INCREMENT_GRAPH"
           plan_suffix="${{ inputs.test_targets }}"
           if [ "${{ inputs.increment }}" = "true" ]; then
             plan_suffix="$plan_suffix, increment"
@@ -353,7 +361,7 @@ jobs:
             --title "$plan_title" \
             >> "$GITHUB_STEP_SUMMARY"
           if [ -f shard_plan_out/list_summary.json ]; then
-            jq -r '.weighting | "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p50 (\(.branch // "main"), \(.days_back // 3)d)"' \
+            jq -r '.weighting | if .mode == "graph_path_history_p50_longest_match" then "Graph history weights: \(.history_suite_count // 0) suites matched" else "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p50 (\(.branch // "main"), \(.days_back // 3)d)" end' \
               shard_plan_out/list_summary.json >> "$GITHUB_STEP_SUMMARY" || true
           fi
           echo "shard_ids=$(jq -c '[.shards[].id]' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
@@ -398,6 +406,28 @@ jobs:
         with:
           name: parallel-${{ inputs.build_preset }}-shard-plan-${{ github.run_id }}
           path: shard_plan
+      - name: Download increment graph
+        if: inputs.increment == true
+        uses: actions/download-artifact@v4
+        with:
+          name: parallel-${{ inputs.build_preset }}-graph-${{ github.run_id }}
+          path: increment_graph
+      - name: Filter increment graph for shard
+        if: inputs.increment == true
+        id: graph_shard
+        run: |
+          set -euo pipefail
+          mkdir -p shard_graph_out
+          python3 .github/scripts/tests/sharding/filter_graph_for_shard.py \
+            --graph increment_graph/graph.json \
+            --context increment_graph/context.json \
+            --plan shard_plan/shard_plan.json \
+            --shard-id ${{ matrix.shard_id }} \
+            -o shard_graph_out/graph.json \
+            --context-output shard_graph_out/context.json
+          echo "graph_path=$PWD/shard_graph_out/graph.json" >> "$GITHUB_OUTPUT"
+          echo "context_path=$PWD/shard_graph_out/context.json" >> "$GITHUB_OUTPUT"
+          echo "Shard ${{ matrix.shard_id }} increment graph nodes: $(jq '.result | length' shard_graph_out/graph.json)"
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
@@ -405,6 +435,7 @@ jobs:
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
       - name: Resolve shard build targets
         id: shard_targets
+        if: inputs.increment != true
         shell: bash
         run: |
           set -euo pipefail
@@ -422,7 +453,7 @@ jobs:
         uses: ./.github/actions/build_and_test_ya_parallel
         with:
           build_preset: ${{ inputs.build_preset }}
-          build_target: ${{ steps.shard_targets.outputs.targets }}
+          build_target: ${{ inputs.increment == true && inputs.test_targets || steps.shard_targets.outputs.targets }}
           increment: false
           run_tests: true
           test_size: small,medium
@@ -430,6 +461,8 @@ jobs:
           custom_branch_name: ${{ inputs.history_branch }}
           put_build_results_to_cache: true
           skip_graph_compare: true
+          prebuilt_graph_path: ${{ inputs.increment == true && steps.graph_shard.outputs.graph_path || '' }}
+          prebuilt_context_path: ${{ inputs.increment == true && steps.graph_shard.outputs.context_path || '' }}
           publish_github_status: false
           publish_pr_comment: false
           s3_subdir: shard_${{ matrix.shard_id }}

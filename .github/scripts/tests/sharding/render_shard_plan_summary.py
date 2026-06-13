@@ -10,12 +10,36 @@ from pathlib import Path
 
 def render(plan: dict, title: str = "Shard plan") -> str:
     lines = [f"## {title}", ""]
+    plan_mode = plan.get("plan_mode")
     shard_count = plan.get("shard_count", len(plan.get("shards") or []))
     requested = plan.get("requested_shard_count")
     if requested is not None and requested != shard_count:
         lines.append(f"**Shard count:** {shard_count} (requested {requested}, capped to suite count)")
     else:
         lines.append(f"**Shard count:** {shard_count}")
+    if plan_mode == "increment_graph":
+        total_nodes = plan.get("total_graph_nodes")
+        total_weight = plan.get("total_weight")
+        total_line = f"**Increment graph:** {total_nodes or 0} result nodes"
+        if total_weight is not None:
+            total_line += f", weight {total_weight}"
+        lines.append(total_line)
+        load_column = "Weight"
+        lines.append("")
+        lines.append(f"| Shard | Graph nodes | {load_column} | Sample paths |")
+        lines.append("| ---: | ---: | ---: | --- |")
+        for shard in plan.get("shards") or []:
+            shard_id = shard.get("id", "?")
+            node_count = shard.get("result_node_count", len(shard.get("graph_uids") or []))
+            load_value = shard.get("balance_weight", "")
+            sample_paths = shard.get("sample_paths") or []
+            sample = ", ".join(f"`{s}`" for s in sample_paths[:3])
+            if len(sample_paths) > 3:
+                sample += f", … (+{len(sample_paths) - 3})"
+            lines.append(f"| {shard_id} | {node_count} | {load_value} | {sample} |")
+        lines.append("")
+        return "\n".join(lines)
+
     total_suites = plan.get("total_suites")
     total_tests = plan.get("total_tests")
     total_weight = plan.get("total_weight")

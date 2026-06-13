@@ -19,6 +19,8 @@ if str(SHARDING_DIR) not in sys.path:
 
 from choose_shard_count import choose_shard_count  # noqa: E402
 from estimate_runner_capacity import compute_max_new_runners  # noqa: E402
+from filter_graph_for_shard import filter_for_shard  # noqa: E402
+from graph_plan_utils import assign_result_uids_to_shards, load_graph  # noqa: E402
 
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess:
@@ -583,6 +585,79 @@ class ChooseShardCountTest(unittest.TestCase):
                 "12",
             )
             self.assertEqual(result_peak.stdout.strip(), "4")
+
+
+class FilterGraphForShardTest(unittest.TestCase):
+    @staticmethod
+    def _two_shard_plan() -> dict:
+        return {
+            "shard_count": 2,
+            "shards": [
+                {"id": 0, "tests": ["ydb/tests/foo"]},
+                {"id": 1, "tests": ["ydb/tests/bar"]},
+            ],
+        }
+
+    def test_assignments_partition_result_and_keep_components(self):
+        graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
+        assignments = assign_result_uids_to_shards(self._two_shard_plan(), graph)
+        self.assertEqual(len(assignments), len(graph["result"]))
+        self.assertEqual(set(assignments), set(graph["result"]))
+        # foo component (tests + build-a) stays on one shard.
+        foo_nodes = {"test-a1", "test-a2", "build-a"}
+        bar_nodes = {"test-b1", "build-b"}
+        self.assertEqual(len({assignments[uid] for uid in foo_nodes}), 1)
+        self.assertEqual(len({assignments[uid] for uid in bar_nodes}), 1)
+        self.assertNotEqual(assignments["test-a1"], assignments["test-b1"])
+
+    def test_filter_for_shard_writes_subset_result(self):
+        graph = load_graph(FIXTURES / "graph_for_shard_filter.json")
+        plan = self._two_shard_plan()
+        assignments = assign_result_uids_to_shards(plan, graph)
+        plan["uid_assignments"] = assignments
+        plan["plan_mode"] = "increment_graph"
+        shard_id = assignments["test-a1"]
+        filtered, _, _ = filter_for_shard(plan, graph, shard_id)
+        self.assertLess(len(filtered["result"]), len(graph["result"]))
+        self.assertEqual(len(filtered["graph"]), len(graph["graph"]))
+        for uid in filtered["result"]:
+            self.assertEqual(assignments[uid], shard_id)
+
+    def test_split_graph_result_fixture(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            _run(
+                "split_graph_result.py",
+                str(FIXTURES / "graph_for_shard_filter.json"),
+                "--shard-count",
+                "2",
+                "-o",
+                str(plan_path),
+            )
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["plan_mode"], "increment_graph")
+            self.assertEqual(plan["shard_count"], 2)
+            self.assertEqual(len(plan["uid_assignments"]), plan["total_graph_nodes"])
+
+    def test_cli_filters_graph_for_shard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(self._two_shard_plan()), encoding="utf-8")
+            out = Path(tmp) / "graph_shard_0.json"
+            _run(
+                "filter_graph_for_shard.py",
+                "--graph",
+                str(FIXTURES / "graph_for_shard_filter.json"),
+                "--plan",
+                str(plan_path),
+                "--shard-id",
+                "0",
+                "-o",
+                str(out),
+            )
+            filtered = json.loads(out.read_text(encoding="utf-8"))
+            self.assertTrue(filtered["result"])
+            self.assertLess(len(filtered["result"]), 5)
 
 
 class RunnerCapacityTest(unittest.TestCase):

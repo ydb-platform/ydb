@@ -22,6 +22,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/library/issue
     ydb/public/sdk/cpp/src/library/time
+    ydb/public/sdk/cpp/tests/common/iam_mocks
 )
 
 END()

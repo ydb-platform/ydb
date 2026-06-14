@@ -1,5 +1,5 @@
 name: Run and debug tests
-# Driver for the parallel PR-check pipeline (pr_check_parallel.yml).
+# Driver for the parallel PR-check pipeline (pr_check_parallel_core.yml).
 #
 # Runs the pipeline over a real PR (checkout of its merge commit, like
 # PR-check does) or over a branch, without publishing anything to the PR,
@@ -119,7 +119,7 @@ jobs:
   run_check:
     needs: resolve
     name: Parallel check
-    uses: ./.github/workflows/pr_check_parallel.yml
+    uses: ./.github/workflows/pr_check_parallel_core.yml
     secrets: inherit
     with:
       checkout_ref: ${{ needs.resolve.outputs.checkout_ref }}
@@ -213,9 +213,3 @@ jobs:
               echo "No PR-check run found for head $PR_HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
-
-  collect_combined_summary:
-    needs:
-      - run_check
-    if: always() && needs.run_check.result != 'skipped'
-    uses: ./.github/workflows/collect_combined_summary.yml

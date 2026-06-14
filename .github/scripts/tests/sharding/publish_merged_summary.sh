@@ -11,6 +11,13 @@ PUBLIC_DIR_URL="${PUBLIC_DIR_URL:-}"
 SUMMARY_LINKS="${SUMMARY_LINKS:-$PUBLIC_DIR/summary_links.txt}"
 STATUS_SHA="${STATUS_SHA:-${GITHUB_EVENT_PULL_REQUEST_HEAD_SHA:-}}"
 
+try_reports=()
+if [[ -n "$TRIES_DIR" ]]; then
+  while IFS= read -r report; do
+    try_reports+=("$report")
+  done < <(find "$TRIES_DIR" -mindepth 2 -maxdepth 2 -path '*/try_*/report.json' 2>/dev/null | sort -V)
+fi
+
 # Preserve the per-attempt layout (try_1 = full run, try_2..N = reruns) stitched
 # across shards, so the published artifacts match the monolith's structure.
 if [[ -n "$TRIES_DIR" ]]; then
@@ -22,35 +29,101 @@ if [[ -n "$TRIES_DIR" ]]; then
   done
 fi
 
-# The single "Tests" summary/status is driven by the aggregated latest-wins
-# report (every test's final status), rendered in its own dir to avoid
-# clobbering the per-attempt try_1 report above.
 mkdir -p "$PUBLIC_DIR/final"
 cp "$REPORT_PATH" "$PUBLIC_DIR/final/report.json"
 
 touch "$SUMMARY_LINKS"
 : > "$SUMMARY_LINKS"
 if [[ -n "$PUBLIC_DIR_URL" ]]; then
-  echo "00 [Merged test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
+  nav_args=(
+    --output "$PUBLIC_DIR/artifacts_nav.html"
+    --base-url "$PUBLIC_DIR_URL"
+  )
+  if [[ -n "$TRIES_DIR" && -d "$TRIES_DIR" ]]; then
+    nav_args+=(--tries-dir "$TRIES_DIR")
+  fi
+  if [[ "${INCLUDE_BUILD_ARTIFACTS:-}" == "1" ]]; then
+    nav_args+=(--include-build)
+  fi
+  if [[ "${INCLUDE_PLAN_ARTIFACTS:-}" == "1" ]]; then
+    nav_args+=(--include-plan)
+  fi
+  python3 .github/scripts/tests/sharding/render_artifacts_nav.py "${nav_args[@]}"
+  echo "00 [Artifact navigation](${PUBLIC_DIR_URL}/artifacts_nav.html)" >> "$SUMMARY_LINKS"
+  echo "01 [Merged test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
+  if [[ "${INCLUDE_PLAN_ARTIFACTS:-}" == "1" ]]; then
+    echo "02 [Plan (graph & sharding)](${PUBLIC_DIR_URL}/plan/index.html)" >> "$SUMMARY_LINKS"
+  fi
 fi
 
 export GITHUB_HEAD_SHA="${ORIGINAL_HEAD:-$STATUS_SHA}"
 
-python3 .github/scripts/tests/generate-summary.py \
-  --summary_links "$SUMMARY_LINKS" \
-  --public_dir "$PUBLIC_DIR" \
-  --public_dir_url "$PUBLIC_DIR_URL" \
-  --build_preset "$BUILD_PRESET" \
-  --branch "$BRANCH_NAME" \
-  --status_report_file "$PUBLIC_DIR/statusrep.txt" \
-  --is_retry 0 \
-  --is_last_retry 1 \
-  --is_test_result_ignored 0 \
-  --comment_color_file "$PUBLIC_DIR/summary_color.txt" \
-  --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
-  ${PR_NUMBER:+--pr_number "$PR_NUMBER"} \
-  --workflow_run_id "${GITHUB_RUN_ID:-}" \
-  "Tests" "final/ya-test.html" "$PUBLIC_DIR/final/report.json"
+IS_TEST_RESULT_IGNORED=0
+case "$BUILD_PRESET" in
+  release-asan|release-msan)
+    IS_TEST_RESULT_IGNORED=1
+    ;;
+esac
+
+gen_summary_common_args=(
+  --summary_links "$SUMMARY_LINKS"
+  --public_dir "$PUBLIC_DIR"
+  --public_dir_url "$PUBLIC_DIR_URL"
+  --build_preset "$BUILD_PRESET"
+  --branch "$BRANCH_NAME"
+  --is_test_result_ignored "$IS_TEST_RESULT_IGNORED"
+)
+if [[ -n "${PR_NUMBER:-}" ]]; then
+  gen_summary_common_args+=(--pr_number "$PR_NUMBER")
+fi
+if [[ -n "${GITHUB_RUN_ID:-}" ]]; then
+  gen_summary_common_args+=(--workflow_run_id "$GITHUB_RUN_ID")
+fi
+
+try_count=${#try_reports[@]}
+if [[ "$try_count" -gt 0 ]]; then
+  try_idx=0
+  for report in "${try_reports[@]}"; do
+    try_idx=$((try_idx + 1))
+    try_name=$(basename "$(dirname "$report")")
+    is_retry=0
+    if [[ "$try_idx" -gt 1 ]]; then
+      is_retry=1
+    fi
+    python3 .github/scripts/tests/generate-summary.py \
+      "${gen_summary_common_args[@]}" \
+      --status_report_file "$PUBLIC_DIR/.statusrep.try_${try_idx}.txt" \
+      --is_retry "$is_retry" \
+      --is_last_retry 0 \
+      --comment_color_file "$PUBLIC_DIR/.summary_color.try_${try_idx}.txt" \
+      --comment_text_file "$PUBLIC_DIR/.summary_text.try_${try_idx}.txt" \
+      "Tests" "${try_name}/ya-test.html" "$report"
+  done
+else
+  mkdir -p "$PUBLIC_DIR/try_1"
+  cp "$REPORT_PATH" "$PUBLIC_DIR/try_1/report.json"
+  python3 .github/scripts/tests/generate-summary.py \
+    "${gen_summary_common_args[@]}" \
+    --status_report_file "$PUBLIC_DIR/statusrep.txt" \
+    --is_retry 0 \
+    --is_last_retry 1 \
+    --comment_color_file "$PUBLIC_DIR/summary_color.txt" \
+    --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
+    "Tests" "try_1/ya-test.html" "$REPORT_PATH"
+fi
+
+# Authoritative GitHub status / PR comment from latest-wins final report only.
+if [[ "$try_count" -gt 0 ]]; then
+  python3 .github/scripts/tests/generate-summary.py \
+    "${gen_summary_common_args[@]}" \
+    --no_step_summary \
+    --status_report_file "$PUBLIC_DIR/statusrep.txt" \
+    --is_retry 0 \
+    --is_last_retry 1 \
+    --comment_color_file "$PUBLIC_DIR/summary_color.txt" \
+    --comment_text_file "$PUBLIC_DIR/summary_text.txt" \
+    "Tests" "final/ya-test.html" "$PUBLIC_DIR/final/report.json"
+fi
 
 if [[ -n "${S3_BUCKET_PATH:-}" ]]; then
   .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/" || true
@@ -81,6 +154,6 @@ if [[ "${SKIP_GITHUB_PUBLISH:-}" != "1" ]] && [[ -n "$STATUS_SHA" ]]; then
     -d "{\"state\":\"${teststatus}\",\"description\":\"${testmessage}\",\"context\":\"test_${BUILD_PRESET}\"}"
 fi
 
-if [[ "${SKIP_FAIL_CHECK:-}" != "1" ]]; then
+if [[ "${SKIP_FAIL_CHECK:-}" != "1" && "$IS_TEST_RESULT_IGNORED" -eq 0 ]]; then
   .github/scripts/tests/fail-checker.py "$REPORT_PATH"
 fi

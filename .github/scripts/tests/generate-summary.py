@@ -722,6 +722,11 @@ def main():
     parser.add_argument('--workflow_run_id', required=False, help="GitHub workflow run ID")
     parser.add_argument('--oom_dmesg_log', required=False, default=None,
                         help="Path to per-try dmesg OOM dump for OOM badge correlation.")
+    parser.add_argument(
+        '--no_step_summary',
+        action='store_true',
+        help="Skip appending the markdown table to GITHUB_STEP_SUMMARY (status/comment files still updated)",
+    )
     parser.add_argument("args", nargs="+", metavar="TITLE html_out build-results-report-path")
     args = parser.parse_args()
 
@@ -742,7 +747,8 @@ def main():
                           workflow_run_id=args.workflow_run_id,
                           oom_dmesg_log=args.oom_dmesg_log,
                           )
-    write_summary(summary)
+    if not args.no_step_summary:
+        write_summary(summary)
 
     if summary.is_failed and not args.is_test_result_ignored:
         overall_status = "failure"

@@ -21,6 +21,7 @@ from choose_shard_count import choose_shard_count  # noqa: E402
 from estimate_runner_capacity import compute_max_new_runners  # noqa: E402
 from filter_graph_for_shard import filter_for_shard  # noqa: E402
 from graph_plan_utils import assign_result_uids_to_shards, load_graph  # noqa: E402
+from render_artifacts_nav import render_nav_html  # noqa: E402
 
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess:
@@ -703,6 +704,39 @@ class FilterGraphForShardTest(unittest.TestCase):
             filtered = json.loads(out.read_text(encoding="utf-8"))
             self.assertTrue(filtered["result"])
             self.assertLess(len(filtered["result"]), 5)
+
+
+class RenderArtifactsNavTest(unittest.TestCase):
+    def test_render_nav_links_merged_build_and_shards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            merged = Path(tmp)
+            (merged / "try_1").mkdir()
+            (merged / "try_2").mkdir()
+            (merged / "try_1" / "shard_0.json").write_text("{}", encoding="utf-8")
+            (merged / "try_1" / "shard_1.json").write_text("{}", encoding="utf-8")
+            (merged / "try_2" / "shard_0.json").write_text("{}", encoding="utf-8")
+            (merged / "try_2" / "shard_1.json").write_text("{}", encoding="utf-8")
+            html = render_nav_html(
+                base_url="https://s3.example/run/x86-64",
+                tries_dir=merged,
+                include_build=True,
+            )
+            self.assertIn("https://s3.example/run/x86-64/index.html", html)
+            self.assertIn("https://s3.example/run/x86-64/build/index.html", html)
+            self.assertIn("https://s3.example/run/x86-64/shard_0/try_1/index.html", html)
+            self.assertIn("https://s3.example/run/x86-64/shard_1/try_2/index.html", html)
+            self.assertIn("https://s3.example/run/x86-64/final/index.html", html)
+
+    def test_render_nav_includes_plan_section(self):
+        html = render_nav_html(
+            base_url="https://s3.example/run/x86-64",
+            tries_dir=None,
+            include_build=False,
+            include_plan=True,
+        )
+        self.assertIn("https://s3.example/run/x86-64/plan/graph.json", html)
+        self.assertIn("https://s3.example/run/x86-64/plan/shard_plan.json", html)
+        self.assertIn("https://s3.example/run/x86-64/plan/index.html", html)
 
 
 class RunnerCapacityTest(unittest.TestCase):

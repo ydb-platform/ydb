@@ -81,6 +81,11 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  status_sha:
+    type: string
+    required: false
+    default: ""
+    description: "PR head SHA for GitHub commit statuses (workflow_dispatch / workflow_call)"
   skip_graph_compare:
     type: boolean
     default: false
@@ -131,27 +136,39 @@ runs:
   using: "composite"
   steps:
     - name: comment-build-start
-      if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && inputs.publish_pr_comment
+      if: (inputs.publish_pr_comment || inputs.publish_github_status) && ((github.event_name == 'pull_request' || github.event_name == 'pull_request_target') || inputs.pull_number != '')
       shell: bash
       env:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ inputs.pull_number }}
       run: |
         jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
         # tricky: we are searching job with name that contains build_preset
         check_url=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: Bearer ${{github.token}}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$jobs_url" | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
 
         platform_name="$(echo "$(uname -s)-$(uname -p)" | tr '[:upper:]' '[:lower:]')-$BUILD_PRESET"
-        echo "Pre-commit [check]($check_url) **$platform_name** for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
+        if [ "${{ inputs.publish_pr_comment }}" = "true" ]; then
+          echo "Pre-commit [check]($check_url) **$platform_name** for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
+        fi
 
-        curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
-          -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
+        status_sha=$(git rev-parse HEAD)
+        if [ -n "${{ inputs.status_sha }}" ]; then
+          status_sha="${{ inputs.status_sha }}"
+        elif [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+          status_sha="${{ github.event.pull_request.head.sha }}"
+        fi
 
-        if [[ "${{inputs.run_tests}}" == "true" && "${{ inputs.publish_github_status }}" == "true" ]]; then
+        if [ "${{ inputs.publish_github_status }}" = "true" ]; then
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
-            -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
+            https://api.github.com/repos/${{github.repository}}/statuses/${status_sha} \
+            -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
+
+          if [[ "${{inputs.run_tests}}" == "true" || "${{ inputs.save_test_graph }}" == "true" ]]; then
+            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{github.repository}}/statuses/${status_sha} \
+              -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
+          fi
         fi
 
     - name: Clean ya cache
@@ -788,13 +805,15 @@ runs:
       shell: bash
       run: |
         status_sha="$ORIGINAL_HEAD"
-        if [[ -n "${{ github.event.pull_request.head.sha }}" ]]; then
+        if [[ -n "${{ inputs.status_sha }}" ]]; then
+          status_sha="${{ inputs.status_sha }}"
+        elif [[ -n "${{ github.event.pull_request.head.sha }}" ]]; then
           status_sha="${{ github.event.pull_request.head.sha }}"
         fi
         echo "STATUS_SHA=$status_sha" >> $GITHUB_ENV
 
     - name: comment-build-status
-      if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && inputs.publish_github_status
+      if: inputs.publish_github_status && ((github.event_name == 'pull_request' || github.event_name == 'pull_request_target') || inputs.pull_number != '')
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -912,7 +931,7 @@ runs:
 
     - name: comment-if-cancel
       shell: bash
-      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && inputs.publish_pr_comment
+      if: cancelled() && inputs.publish_pr_comment && ((github.event_name == 'pull_request' || github.event_name == 'pull_request_target') || inputs.pull_number != '')
       env:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}

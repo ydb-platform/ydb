@@ -70,6 +70,11 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  status_sha:
+    type: string
+    required: false
+    default: ""
+    description: "PR head SHA for GitHub commit statuses (workflow_dispatch / workflow_call)"
   skip_graph_compare:
     type: boolean
     default: false
@@ -172,6 +177,7 @@ runs:
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps }}
         pull_number: ${{ inputs.pull_number }}
+        status_sha: ${{ inputs.status_sha }}
         skip_graph_compare: ${{ inputs.skip_graph_compare }}
         prebuilt_graph_path: ${{ inputs.prebuilt_graph_path }}
         prebuilt_context_path: ${{ inputs.prebuilt_context_path }}

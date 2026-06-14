@@ -57,6 +57,141 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            TString DescribeCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd) const {
+                if (cmd.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kQueryBaseConfig) {
+                    const auto& query = cmd.GetQueryBaseConfig();
+                    return TStringBuilder()
+                        << "QueryBaseConfig{"
+                        << "RetrieveDevices# " << query.GetRetrieveDevices()
+                        << " VirtualGroupsOnly# " << query.GetVirtualGroupsOnly()
+                        << '}';
+                }
+
+                const auto *descriptor = cmd.GetDescriptor();
+                const auto *oneof = descriptor->FindOneofByName("Command");
+                const auto *field = oneof ? cmd.GetReflection()->GetOneofFieldDescriptor(cmd, oneof) : nullptr;
+                return field ? TString(field->name()) : "COMMAND_NOT_SET";
+            }
+
+            TString DescribeRequest() const {
+                TStringBuilder builder;
+                builder << "Commands# " << Cmd.CommandSize()
+                    << " Rollback# " << Cmd.GetRollback()
+                    << " IgnoreGroupFailModelChecks# " << Cmd.GetIgnoreGroupFailModelChecks()
+                    << " IgnoreDegradedGroupsChecks# " << Cmd.GetIgnoreDegradedGroupsChecks()
+                    << " IgnoreDisintegratedGroupsChecks# " << Cmd.GetIgnoreDisintegratedGroupsChecks()
+                    << " Cito# " << Cmd.GetCito()
+                    << " Types# [";
+
+                bool first = true;
+                for (const auto& cmd : Cmd.GetCommand()) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        builder << ", ";
+                    }
+                    builder << DescribeCommand(cmd);
+                }
+                builder << ']';
+                return builder;
+            }
+
+            TString DescribeResponse() const {
+                ui64 errorStatuses = 0;
+                ui64 failParams = 0;
+                ui64 hostConfigs = 0;
+                ui64 boxes = 0;
+                ui64 driveStatuses = 0;
+                ui64 storagePools = 0;
+                ui64 baseConfigPDisks = 0;
+                ui64 baseConfigVSlots = 0;
+                ui64 baseConfigGroups = 0;
+                ui64 baseConfigNodes = 0;
+                ui64 baseConfigDevices = 0;
+                ui64 baseConfigSettings = 0;
+                ui64 groupIds = 0;
+                ui64 moveCommands = 0;
+                ui64 pdiskStats = 0;
+                ui64 reassignedItems = 0;
+                ui64 wipeVDisks = 0;
+                ui64 intents = 0;
+                ui64 statusSettings = 0;
+                ui64 assignedStoragePoolIds = 0;
+                ui64 interfaceVersions = 0;
+
+                for (const auto& status : Response->GetStatus()) {
+                    errorStatuses += !status.GetSuccess();
+                    failParams += status.FailParamSize();
+                    hostConfigs += status.HostConfigSize();
+                    boxes += status.BoxSize();
+                    driveStatuses += status.DriveStatusSize();
+                    storagePools += status.StoragePoolSize();
+                    groupIds += status.GroupIdSize();
+                    assignedStoragePoolIds += status.GetAssignedStoragePoolId() != 0;
+                    moveCommands += status.MoveCommandSize();
+                    pdiskStats += status.PDiskStatSize();
+                    reassignedItems += status.ReassignedItemSize();
+                    wipeVDisks += status.WipeVDiskSize();
+                    intents += status.HasIntent();
+                    statusSettings += status.HasSettings();
+                    interfaceVersions += status.GetInterfaceVersion() != 0;
+
+                    if (status.HasBaseConfig()) {
+                        const auto& baseConfig = status.GetBaseConfig();
+                        baseConfigPDisks += baseConfig.PDiskSize();
+                        baseConfigVSlots += baseConfig.VSlotSize();
+                        baseConfigGroups += baseConfig.GroupSize();
+                        baseConfigNodes += baseConfig.NodeSize();
+                        baseConfigDevices += baseConfig.DeviceSize();
+                        baseConfigSettings += baseConfig.HasSettings();
+                    }
+                }
+
+                return TStringBuilder()
+                    << "Success# " << Response->GetSuccess()
+                    << " Statuses# " << Response->StatusSize()
+                    << " ErrorStatuses# " << errorStatuses
+                    << " FailParams# " << failParams
+                    << " HostConfigs# " << hostConfigs
+                    << " Boxes# " << boxes
+                    << " DriveStatuses# " << driveStatuses
+                    << " StoragePools# " << storagePools
+                    << " BaseConfigPDisks# " << baseConfigPDisks
+                    << " BaseConfigVSlots# " << baseConfigVSlots
+                    << " BaseConfigGroups# " << baseConfigGroups
+                    << " BaseConfigNodes# " << baseConfigNodes
+                    << " BaseConfigDevices# " << baseConfigDevices
+                    << " BaseConfigSettings# " << baseConfigSettings
+                    << " GroupIds# " << groupIds
+                    << " AssignedStoragePoolIds# " << assignedStoragePoolIds
+                    << " MoveCommands# " << moveCommands
+                    << " PDiskStats# " << pdiskStats
+                    << " ReassignedItems# " << reassignedItems
+                    << " WipeVDisks# " << wipeVDisks
+                    << " Intents# " << intents
+                    << " StatusSettings# " << statusSettings
+                    << " InterfaceVersions# " << interfaceVersions
+                    << " GroupsGetDegraded# " << Response->GroupsGetDegradedSize()
+                    << " GroupsGetDisintegrated# " << Response->GroupsGetDisintegratedSize()
+                    << " GroupsGetDisintegratedByExpectedStatus# "
+                    << Response->GroupsGetDisintegratedByExpectedStatusSize();
+            }
+
+            void LogLargeResponse() const {
+                const ui64 serializedSize = Ev->Record.ByteSizeLong();
+                if (serializedSize > NActors::EventLargeByteSize) {
+                    STLOG(PRI_WARN, BS_CONTROLLER, BSCTXCC02, "Large TEvControllerConfigResponse",
+                        (SerializedSize, serializedSize),
+                        (LargeEventThreshold, NActors::EventLargeByteSize),
+                        (EventMaxByteSize, NActors::EventMaxByteSize),
+                        (Cookie, Cookie),
+                        (SelfHeal, SelfHeal),
+                        (GroupLayoutSanitizer, GroupLayoutSanitizer),
+                        (RequestSummary, DescribeRequest()),
+                        (ResponseSummary, DescribeResponse()));
+                }
+            }
+
             bool ExecuteSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd, TTransactionContext& txc) {
                 NIceDb::TNiceDb db(txc.DB);
                 switch (cmd.GetCommandCase()) {
@@ -386,6 +521,7 @@ namespace NKikimr::NBsController {
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
+                LogLargeResponse();
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();
             }

@@ -114,7 +114,9 @@ namespace NActors {
             if (!Metrics) {
                 Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common);
             }
-            const TString peerLabel = Common->Settings.MergePerHostCounters ? info.Host : name;
+            const TString peerLabel = Common->Settings.MergePerHostCounters ? info.Host
+                : Common->Settings.MergePerScopeClassCounters ? TString("unknown")
+                : name;
             Metrics->SetPeerInfo(name, info.Location.GetDataCenterId(), peerLabel);
 
             LOG_DEBUG_IC("ICP02", "configured for host %s", name.data());

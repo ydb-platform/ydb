@@ -20,10 +20,9 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    std::shared_ptr<TWriteRequestBundle> bundle,
-    EWriteMode writeMode)
+    std::shared_ptr<TWriteRequestBundle> bundle)
     : ActorSystem(actorSystem)
-    , WriteMode(writeMode)
+    , WriteMode(directBlockGroup->GetOracle()->GetWriteMode())
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},
@@ -129,7 +128,6 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
     THostMask completedWritesOfCurrentResponse;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
-        // AvailableHostsForDirectSending.Reset(host);
 
         if (!HasError(pbufferResponse.Error)) {
             LOG_DEBUG(
@@ -521,8 +519,7 @@ TWriteRequestExecutorPtr CreateWriteRequestExecutor(
         logTitle,
         vChunkConfig,
         std::move(directBlockGroup),
-        bundle,
-        directBlockGroup->GetOracle()->GetWriteMode());
+        bundle);
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -29,8 +29,7 @@ public:
         const TLogTitle& logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        std::shared_ptr<TWriteRequestBundle> bundle,
-        EWriteMode writeMode);
+        std::shared_ptr<TWriteRequestBundle> bundle);
 
     virtual ~TWriteRequestExecutor();
 

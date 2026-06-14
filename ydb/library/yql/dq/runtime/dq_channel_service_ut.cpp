@@ -21,11 +21,6 @@ using namespace NYql::NDq;
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-template<>
-void Out<NYql::NDq::EDqFillLevel>(IOutputStream& os, const NYql::NDq::EDqFillLevel l) {
-    os << static_cast<ui32>(l);
-}
-
 struct TEvTestPrivate {
     enum ERole {
         Producer,
@@ -84,12 +79,12 @@ public:
             switch (Role) {
                 case TEvTestPrivate::ERole::Producer: {
                     TChannelFullInfo info(ChannelId, SelfId(), PeerId, 0, 1, TCollectStatsLevel::None);
-                    Buffer = Service->GetOutputBuffer(info, nullptr, nullptr);
+                    Buffer = Service->GetOutputBuffer(info, nullptr);
                     break;
                 }
                 case TEvTestPrivate::ERole::Consumer: {
                     TChannelFullInfo info(ChannelId, PeerId, SelfId(), 0, 1, TCollectStatsLevel::None);
-                    Buffer = Service->GetInputBuffer(info, nullptr);
+                    Buffer = Service->GetInputBuffer(info);
                     break;
                 }
             }

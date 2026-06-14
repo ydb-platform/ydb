@@ -24,7 +24,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString SerializedNullRow;
+extern const std::string SerializedNullRow;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -513,8 +513,8 @@ const TLegacyOwningKey& ChooseMinKey(const TLegacyOwningKey& a, const TLegacyOwn
 //! Ties are broken in favour of the first argument.
 const TLegacyOwningKey& ChooseMaxKey(const TLegacyOwningKey& a, const TLegacyOwningKey& b);
 
-TString SerializeToString(TUnversionedRow row);
-TString SerializeToString(TUnversionedValueRange range);
+std::string SerializeToString(TUnversionedRow row);
+std::string SerializeToString(TUnversionedValueRange range);
 
 //! Returns an upper bound on the number of bytes |SerializeRowToBuffer| writes for |range|.
 size_t GetUnversionedRowByteSizeForWire(TUnversionedValueRange range);
@@ -815,7 +815,7 @@ public:
 
 private:
     friend TLegacyOwningKey GetKeySuccessorImpl(const TLegacyOwningKey& key, int prefixLength, EValueType sentinelType);
-    friend TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> nullPaddingWidth);
+    friend TUnversionedOwningRow DeserializeFromString(std::string&& data, std::optional<int> nullPaddingWidth);
 
     friend class TUnversionedOwningRowBuilder;
 

@@ -44,7 +44,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString SerializedNullRow;
+const std::string SerializedNullRow;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -858,16 +858,16 @@ void ValidateClientRow(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString SerializeToString(TUnversionedRow row)
+std::string SerializeToString(TUnversionedRow row)
 {
     return row
         ? SerializeToString(row.Elements())
         : SerializedNullRow;
 }
 
-TString SerializeToString(TUnversionedValueRange range)
+std::string SerializeToString(TUnversionedValueRange range)
 {
-    TString buffer;
+    std::string buffer;
     buffer.resize(GetUnversionedRowByteSizeForWire(range));
 
     char* begin = const_cast<char*>(buffer.data());
@@ -912,7 +912,7 @@ const char* ReadUnversionedValueFromBuffer(const char* input, TUnversionedValue*
     return input + ReadRowValue(input, value);
 }
 
-TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> nullPaddingWidth = std::nullopt)
+TUnversionedOwningRow DeserializeFromString(std::string&& data, std::optional<int> nullPaddingWidth = std::nullopt)
 {
     if (data == SerializedNullRow) {
         return TUnversionedOwningRow();
@@ -943,7 +943,7 @@ TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> n
     return TUnversionedOwningRow(std::move(rowData), std::move(dataRef));
 }
 
-TUnversionedRow DeserializeFromString(const TString& data, const TRowBufferPtr& rowBuffer)
+TUnversionedRow DeserializeFromString(const std::string& data, const TRowBufferPtr& rowBuffer)
 {
     if (data == SerializedNullRow) {
         return TUnversionedRow();
@@ -973,7 +973,7 @@ void TUnversionedRow::Save(TSaveContext& context) const
 
 void TUnversionedRow::Load(TLoadContext& context)
 {
-    *this = DeserializeFromString(NYT::Load<TString>(context), context.GetRowBuffer());
+    *this = DeserializeFromString(NYT::Load<std::string>(context), context.GetRowBuffer());
 }
 
 void ValidateValueType(
@@ -1560,7 +1560,7 @@ void ToProto(TProtobufString* protoRow, const TRange<TUnversionedOwningValue>& v
 
 void FromProto(TUnversionedOwningRow* row, const TProtobufString& protoRow, std::optional<int> nullPaddingWidth)
 {
-    *row = DeserializeFromString(TString{protoRow}, nullPaddingWidth);
+    *row = DeserializeFromString(std::string{protoRow}, nullPaddingWidth);
 }
 
 void FromProto(TUnversionedRow* row, const TProtobufString& protoRow, const TRowBufferPtr& rowBuffer)
@@ -1604,7 +1604,7 @@ void ToBytes(TString* bytes, const TUnversionedOwningRow& row)
 
 void FromBytes(TUnversionedOwningRow* row, TStringBuf bytes)
 {
-    *row = DeserializeFromString(TString(bytes));
+    *row = DeserializeFromString(std::string(bytes));
 }
 
 void PrintTo(const TUnversionedOwningRow& key, ::std::ostream* os)
@@ -1872,7 +1872,7 @@ void TUnversionedOwningRow::Save(TStreamSaveContext& context) const
 
 void TUnversionedOwningRow::Load(TStreamLoadContext& context)
 {
-    *this = DeserializeFromString(NYT::Load<TString>(context));
+    *this = DeserializeFromString(NYT::Load<std::string>(context));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -772,7 +772,7 @@ TListOperationsResult TRpcRawClient::ListOperations(const TListOperationsOptions
         result.Operations.push_back(ParseOperationAttributes(operation));
     }
     if (listOperationsResult.PoolCounts) {
-        result.PoolCounts = std::move(*listOperationsResult.PoolCounts);
+        result.PoolCounts = THashMap<TString, i64>(listOperationsResult.PoolCounts->begin(), listOperationsResult.PoolCounts->end());
     }
     if (listOperationsResult.UserCounts) {
         // TODO(babenko): migrate to std::string

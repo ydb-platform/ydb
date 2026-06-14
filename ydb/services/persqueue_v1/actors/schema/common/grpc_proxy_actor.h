@@ -59,11 +59,15 @@ protected:
     }
 
     void ReplyWithError(Ydb::StatusIds::StatusCode status, const TString& messageText) {
+        ReplyWithError(status, messageText, AsIssueCode(status));
+    }
+
+    void ReplyWithError(Ydb::StatusIds::StatusCode status, const TString& messageText, Ydb::PersQueue::ErrorCode::ErrorCode issueCode) {
         if (IsDead) {
             return;
         }
 
-        this->Request_->RaiseIssue(FillIssue(messageText, AsIssueCode(status)));
+        this->Request_->RaiseIssue(FillIssue(messageText, issueCode));
         this->Request_->ReplyWithYdbStatus(status);
         this->Die(this->ActorContext());
 

@@ -86,7 +86,8 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             if (TopicInfo.Status != NPQ::NDescriber::EStatus::SUCCESS) {
                 return this->ReplyWithError(
                     Ydb::StatusIds::SCHEME_ERROR,
-                    NPQ::NDescriber::Description(this->GetProtoRequest()->path(), TopicInfo.Status)
+                    NPQ::NDescriber::Description(this->GetProtoRequest()->path(), TopicInfo.Status),
+                    AsIssueCode(NPQ::NDescriber::Convert(TopicInfo.Status))
                 );
             }
 

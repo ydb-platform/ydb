@@ -190,7 +190,6 @@ END DO
 ### `json_each_row` {#json_each_row}
 
 Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a single JSON **object**. Common for systems like Apache Kafka or [{{ ydb-full-name }} topics](../../concepts/datamodel/topic.md).
-
 Multiple separate JSON objects in one message are not supported; a JSON array is also not supported.
 
 Valid example (one message):
@@ -199,7 +198,7 @@ Valid example (one message):
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 ```
 
-Invalid example (two objects in one message):
+Invalid example:
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
@@ -324,7 +323,9 @@ DO BEGIN
 END DO
 ```
 
-### Supported schema types {#schema}
+### Supported data types {#schema}
+
+Table of all supported types in the query schema:
 
 | Type | csv_with_names | tsv_with_names | json_list | json_each_row | json_as_string | parquet | raw |
 |------|------------------|----------------|-----------|---------------|----------------|---------|-----|

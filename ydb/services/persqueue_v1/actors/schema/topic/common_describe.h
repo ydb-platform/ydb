@@ -52,7 +52,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         virtual std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() = 0;
         virtual std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() = 0;
 
-        void Bootstrap() {
+        void DoAction() {
             this->RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
                 this->SelfId(),
                 this->GetDatabase(),

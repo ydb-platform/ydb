@@ -226,7 +226,6 @@ namespace {
             }
 
             entry.Self.Drop();
-            entry.SecurityObject.Drop();
             entry.DomainInfo.Drop();
             entry.Kind = TNavigate::KindUnknown;
             entry.Attributes.clear();

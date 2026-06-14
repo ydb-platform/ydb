@@ -77,6 +77,8 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
                 sFunc(TEvents::TEvPoison, PassAway);
+            default:
+                this->StateFuncBase(ev);
             }
         }
 
@@ -143,7 +145,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 hFunc(NKikimr::TEvPersQueue::TEvStatusResponse, Handle);
                 sFunc(TEvents::TEvPoison, PassAway);
             default:
-                Y_VERIFY_DEBUG_S(false, (TStringBuilder() << "Unexpected event " << ev->GetTypeName()).c_str());
+                this->StateFuncBase(ev);
             }
         }
 

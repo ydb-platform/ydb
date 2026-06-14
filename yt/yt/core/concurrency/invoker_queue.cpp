@@ -4,7 +4,7 @@
 #include <yt/yt/core/actions/invoker_detail.h>
 #include <yt/yt/core/actions/current_invoker.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/misc/tls.h>
 

@@ -12,6 +12,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/yt/cpu_clock
     library/cpp/yt/exception
     library/cpp/yt/misc
     library/cpp/yt/rseq

@@ -32,7 +32,7 @@ ORDER BY HybridRank(
 LIMIT 10;
 ```
 
-{{ ydb-short-name }} runs each branch against its own index, retrieves a pool of candidates from each, and fuses their rankings. Two fusion methods are available:
+Each branch runs against its own index and returns its own list of best-matching documents. {{ ydb-short-name }} then merges these lists into a single ranking — in one of two ways:
 
 * **Reciprocal Rank Fusion (RRF)** — the default. Each branch contributes a term based on a document's *rank* within that branch, so the absolute magnitudes of the scores (which are not comparable across branches) do not matter.
 * **Linear** — a weighted sum of the (optionally min-max normalized) per-branch scores.
@@ -41,7 +41,7 @@ Per-branch weights, the RRF constant, and the candidate-pool sizes are all confi
 
 Learn more:
 
-* [Hybrid search](../../dev/hybrid-search.md)
+* [Using hybrid search](../../dev/hybrid-search.md)
 * [Hybrid search query syntax (HybridRank)](../../yql/reference/syntax/select/hybrid_search.md)
 * [Fulltext search](fulltext_search.md)
 * [Vector search](vector_search.md)

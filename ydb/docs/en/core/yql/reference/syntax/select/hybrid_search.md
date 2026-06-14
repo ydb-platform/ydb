@@ -26,6 +26,20 @@ The query requires both a [fulltext_relevance](../../../../dev/fulltext-indexes.
 
 ## HybridRank {#hybrid-rank}
 
+The general form of the function:
+
+```yql
+HybridRank(
+    score1, score2 [, ... scoreN]        -- 2+ scoring expressions: FullTextScore(...) or Knn::<Distance|Similarity>(...)
+    [, "rrf" | "linear"  AS Mode]        -- fusion method (default "rrf")
+    [, (w1, w2, ...)     AS Weights]     -- per-branch weights (default 1.0 each)
+    [, k                 AS K]           -- RRF constant (default 60.0)
+    [, true | false      AS Normalize]   -- "linear" mode only: min-max normalize (default true)
+    [, (idx1, idx2, ...) AS Indexes]     -- per-branch index names (default: auto-detect)
+    [, (lim1, lim2, ...) AS Limits]      -- per-branch candidate-pool sizes (default: LIMIT * 10)
+)
+```
+
 `HybridRank` may only appear as the entire sort key of an `ORDER BY` clause. It takes **two or more scoring expressions** (positional), followed by optional **named arguments**.
 
 Each scoring expression is one *branch* of the fusion, classified by its form:

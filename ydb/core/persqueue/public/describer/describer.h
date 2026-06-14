@@ -21,37 +21,23 @@ enum class EStatus {
     UNKNOWN_ERROR
 };
 
-enum class EPermissionOperand {
-    AND,
-    OR
-};
 
 struct TAccessRights {
-    TAccessRights()
-        : Operand(EPermissionOperand::OR)
+    TAccessRights() = default;
+
+    TAccessRights(ui32 access)
+        : Access(access)
     {
     }
 
-    TAccessRights(NACLib::EAccessRights right)
-        : Operand(EPermissionOperand::OR)
-        , AccessRights({right})
+    TAccessRights(ui32 access, ui32 accessOr)
+        : Access(access)
+        , AccessOr(accessOr)
     {
     }
 
-    explicit TAccessRights(const std::vector<NACLib::EAccessRights>& accessRights)
-        : Operand(EPermissionOperand::OR)
-        , AccessRights(accessRights)
-    {
-    }
-
-    TAccessRights(EPermissionOperand operand, const std::vector<NACLib::EAccessRights>& accessRights)
-        : Operand(operand)
-        , AccessRights(accessRights)
-    {
-    }
-
-    EPermissionOperand Operand = EPermissionOperand::AND;
-    std::vector<NACLib::EAccessRights> AccessRights;
+   ui32 Access = NACLib::DescribeSchema;
+   TMaybe<ui32> AccessOr;
 };
 
 struct TTopicInfo {

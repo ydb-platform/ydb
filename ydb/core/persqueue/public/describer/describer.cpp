@@ -11,18 +11,6 @@
 namespace NKikimr::NPQ::NDescriber {
 
 namespace {
-    bool CheckAccess(TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TAccessRights& accessRights, const TIntrusivePtr<TSecurityObject>& securityObject) {
-        if (accessRights.Operand == EPermissionOperand::OR) {
-            return AnyOf(accessRights.AccessRights, [&](const auto& right) {
-                return securityObject->CheckAccess(right, *userToken);
-            });
-        } else {
-            return AllOf(accessRights.AccessRights, [&](const auto& right) {
-                return securityObject->CheckAccess(right, *userToken);
-            });
-        }
-    }
-}
 
 using namespace NSchemeCache;
 
@@ -59,6 +47,8 @@ public:
             entry.Operation = TSchemeCacheNavigate::OpList;
             entry.SyncVersion = RetryWithSyncVersion;
             entry.ShowPrivatePath = true;
+            entry.Access = Settings.AccessRights.Access;
+            entry.AccessOr = Settings.AccessRights.AccessOr;
         };
 
         for (const auto& topic : topicPath) {
@@ -105,6 +95,13 @@ public:
                     }
                     break;
                 }
+                case TSchemeCacheNavigate::EStatus::AccessDenied: {
+                    LOG_D("Path '" << realPath << "' ACCESS DENIED");
+                    Result[originalPath] = TTopicInfo{
+                        .Status = EStatus::UNAUTHORIZED
+                    };
+                    break;
+                }
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
                         LOG_D("Path '" << realPath << "' is a CDC");
@@ -124,39 +121,23 @@ public:
                                 unknownPaths.insert(realPath);
                             }
                         } else {
-                            if (Settings.UserToken && !CheckAccess(Settings.UserToken, Settings.AccessRights, entry.SecurityObject)) {
-                                LOG_D("Path '" << realPath << "' UNAUTHORIZED");
-                                Result[originalPath] = TTopicInfo{
-                                    .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
-                                            ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
-                                };
-                            } else {
-                                LOG_D("Path '" << realPath << "' SUCCESS");
-                                Result[originalPath] = TTopicInfo{
-                                    .Status = EStatus::SUCCESS,
-                                    .RealPath = realPath,
-                                    .CdcStream = isCDCStream,
-                                    .CdcStreamName = cdcStreamName,
-                                    .CreateStep = entry.CreateStep,
-                                    .Info = entry.PQGroupInfo,
-                                    .Self = entry.Self,
-                                    .SecurityObject = entry.SecurityObject
-                                };
-                            }
+                            LOG_D("Path '" << realPath << "' SUCCESS");
+                            Result[originalPath] = TTopicInfo{
+                                .Status = EStatus::SUCCESS,
+                                .RealPath = realPath,
+                                .CdcStream = isCDCStream,
+                                .CdcStreamName = cdcStreamName,
+                                .CreateStep = entry.CreateStep,
+                                .Info = entry.PQGroupInfo,
+                                .Self = entry.Self,
+                                .SecurityObject = entry.SecurityObject
+                            };
                         }
                     } else {
-                        LOG_D("Path '" << realPath << "' is not a topic: " << entry.Kind);
-                        if (Settings.UserToken && !entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)) {
-                            LOG_D("Path '" << realPath << "' UNAUTHORIZED");
-                            Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED
-                            };
-                        } else {
-                            Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::NOT_TOPIC,
-                                .RealPath = realPath
-                            };
-                        }
+                        Result[originalPath] = TTopicInfo{
+                            .Status = EStatus::NOT_TOPIC,
+                            .RealPath = realPath
+                        };
                     }
                     break;
                 }
@@ -221,6 +202,7 @@ private:
     std::unordered_map<TString, TTopicInfo> Result;
 };
 
+} // namespace
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings) {
     return new TDescribeActor(parent, databasePath, std::move(topicPaths), settings);

@@ -9,7 +9,7 @@ namespace {
 
         public:
         TDescribeActor(NGRpcService::IRequestOpCtx* request)
-            : TBase(request, { NACLib::EAccessRights::DescribeSchema })
+            : TBase(request, NACLib::EAccessRights::DescribeSchema)
         {
         }
 

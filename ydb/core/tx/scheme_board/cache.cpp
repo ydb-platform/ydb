@@ -327,8 +327,7 @@ namespace {
                     const ui32 access = GetAccess(entry);
                     auto checkAccessResult = securityObject->CheckAccess(access, *token);
                     if (!checkAccessResult) {
-                        const auto accessOr = GetAccessOr(entry);
-                        if (accessOr) {
+                        if (const auto accessOr = GetAccessOr(entry); accessOr) {
                             checkAccessResult = securityObject->CheckAccess(*accessOr, *token);
                         }
                     }

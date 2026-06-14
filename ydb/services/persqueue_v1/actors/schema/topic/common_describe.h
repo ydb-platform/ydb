@@ -39,7 +39,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         using TBase = TGrpcProxyActor<TDescribeBaseActor<TRequest>, TRequest>;
 
     public:
-        TDescribeBaseActor(NGRpcService::IRequestOpCtx* request, std::vector<NACLib::EAccessRights>&& accessRights)
+        TDescribeBaseActor(NGRpcService::IRequestOpCtx* request, NPQ::NDescriber::TAccessRights accessRights)
             : TBase(request)
             , NPQ::TPipeCacheClient(this)
             , AccessRights(std::move(accessRights))
@@ -59,7 +59,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 { this->GetProtoRequest()->path() },
                 {
                     .UserToken = this->GetUserToken(),
-                    .AccessRights = NPQ::NDescriber::TAccessRights(AccessRights),
+                    .AccessRights = AccessRights,
                 }
             ));
             this->Become(&TDescribeBaseActor::StateDescribe);
@@ -84,10 +84,22 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             TopicInfo = std::move(ev->Get()->Topics.begin()->second);
 
             if (TopicInfo.Status != NPQ::NDescriber::EStatus::SUCCESS) {
+                auto asIssueCode = [](Ydb::StatusIds::StatusCode status) {
+                    switch (status) {
+                        case Ydb::StatusIds::SUCCESS:
+                            return Ydb::PersQueue::ErrorCode::OK;
+                        case Ydb::StatusIds::NOT_FOUND:
+                        case Ydb::StatusIds::UNAUTHORIZED:
+                            return Ydb::PersQueue::ErrorCode::ACCESS_DENIED;
+                        default:
+                            return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
+                    }
+                };
+
                 return this->ReplyWithError(
                     Ydb::StatusIds::SCHEME_ERROR,
                     NPQ::NDescriber::Description(this->GetProtoRequest()->path(), TopicInfo.Status),
-                    AsIssueCode(NPQ::NDescriber::Convert(TopicInfo.Status))
+                    asIssueCode(NPQ::NDescriber::Convert(TopicInfo.Status))
                 );
             }
 
@@ -275,7 +287,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         protected:
-            const std::vector<NACLib::EAccessRights> AccessRights;
+            const NPQ::NDescriber::TAccessRights AccessRights;
         
             NPQ::NDescriber::TTopicInfo TopicInfo;
 

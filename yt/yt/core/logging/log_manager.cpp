@@ -511,6 +511,7 @@ public:
 
     void Synchronize(TInstant deadline = TInstant::Max())
     {
+        DequeueExecutor_->ScheduleOutOfBand();
         auto enqueuedEvents = EnqueuedEvents_.load();
         while (enqueuedEvents > FlushedEvents_.load() && TInstant::Now() < deadline) {
             SchedYield();

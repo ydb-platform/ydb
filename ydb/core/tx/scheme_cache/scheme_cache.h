@@ -352,6 +352,7 @@ struct TSchemeCacheNavigate {
         // in
         TVector<TString> Path;
         ui32 Access = NACLib::DescribeSchema;
+        TMaybe<ui32> AccessOr;
         TTableId TableId;
         ERequestType RequestType = ERequestType::ByPath;
         EOp Operation = OpUnknown;
@@ -452,6 +453,7 @@ struct TSchemeCacheRequest {
         // in
         THolder<TKeyDesc> KeyDescription;
         ui32 Access = 0;
+        TMaybe<ui32> AccessOr;
         uintptr_t UserData = 0;
         bool SyncVersion = false;
 

@@ -15,7 +15,7 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-struct TVChunkConfig;
+class TVChunkConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -126,13 +126,21 @@ class TDDiskState
 public:
     enum class EState
     {
-        Operational,   // The ddisk is fully functional and can be read from
+        Disabled,   // There are no DDisks with data on the host and DDisk
+                    // cannot be used.
+
+        Operational,   // The DDisk is fully functional and can be read from
                        // anywhere.
         Fresh,   // The ddisk is only partially filled, and you can only read
                  // from the blocks below the OperationalBlockCount.
     };
 
+    // Enables the use of DDisk. If the operational blocks count less then total
+    // block count, then the DDisk is only partially filled (fresh).
     void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
+
+    // Completely disables DDisk usage.
+    void SwitchOffline();
 
     [[nodiscard]] EState GetState() const;
     [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
@@ -147,7 +155,7 @@ public:
 private:
     void UpdateState();
 
-    EState State = EState::Operational;
+    EState State = EState::Disabled;
 
     ui64 TotalBlockCount = 0;
 
@@ -190,16 +198,19 @@ class TBlocksDirtyMap
     , public TDisableCopyMove
 {
 public:
+    enum class EEraseType
+    {
+        Standard,
+        Belated
+    };
     TBlocksDirtyMap(
         const TVChunkConfig& vChunkConfig,
         ui32 blockSize,
         ui64 blockCount);
     ~TBlocksDirtyMap() override;
 
-    void UpdateConfig(
-        THostMask desiredPBuffers,
-        THostMask desiredDDisks,
-        THostMask disabled);
+    // Note. Fresh watermarks are not applying for exists DDisks.
+    void UpdateConfig(const TVChunkConfig& vChunkConfig);
 
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
 
@@ -208,6 +219,11 @@ public:
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
+    [[nodiscard]] TEraseHints MakeEraseBelatedHint();
+
+    // Registers a write as pending (lsn generated, data not in any PBuffer
+    // yet) so that the cleanup bound covers it from the moment of generation.
+    void RegisterInflightWrite(ui64 lsn, TBlockRange64 range);
 
     void WriteFinished(
         ui64 lsn,
@@ -222,6 +238,11 @@ public:
         THostIndex host,
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
+
+    void UpdateBelatedEraseQueue(
+        THostMask completedWrites,
+        ui64 lsn,
+        TBlockRange64 range);
 
     // Sets a mark on the ddisk to which offset it contains data and can be read
     // from it.
@@ -238,8 +259,10 @@ public:
     [[nodiscard]] size_t GetInflightCount() const;
     [[nodiscard]] size_t GetFlushPendingCount() const;
     [[nodiscard]] size_t GetErasePendingCount() const;
+    [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
+    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
 
@@ -312,6 +335,17 @@ private:
     // Ranges that are fully transferred to DDisk and can be erased.
     // Using TSet for O(1) min LSN access.
     TSet<ui64> ReadyToErase;
+
+    struct TInfoEraseBelated
+    {
+        ui64 Lsn{};
+        THostMask Hosts;
+        TBlockRange64 Range;
+
+        bool operator<(const TInfoEraseBelated& other) const;
+    };
+
+    TSet<TInfoEraseBelated> ReadyToEraseBelated;
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

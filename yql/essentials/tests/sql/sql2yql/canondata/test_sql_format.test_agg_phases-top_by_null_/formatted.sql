@@ -1,7 +1,5 @@
 /* syntax version 1 */
 /* postgres can not */
-/* custom error: Mismatch type argument #2, type diff: Optional<Void!=Unit> */
-/* FIXME(YQL-20234): support Null type */
 $t = (
     SELECT
         *

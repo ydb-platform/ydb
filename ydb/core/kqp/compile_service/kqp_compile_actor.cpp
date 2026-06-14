@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
+#include <ydb/library/security/util.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -125,6 +126,10 @@ public:
             } else {
                 config->_ResultRowsLimit.Clear();
             }
+        }
+
+        if (IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, QueryId.Settings.QueryType)) {
+            config->_KqpYqlConstraintsTransformerEnabled = AppData()->FeatureFlags.GetEnableKqpConstraintsTransformer();
         }
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
@@ -402,6 +407,11 @@ private:
     }
 
     void AddMessageToReplayLog(const TString& queryPlan) {
+        if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text)) {
+            // Skip both replay log and QueryDiagnostics replay message for sensitive queries.
+            return;
+        }
+
         NJson::TJsonValue replayMessage(NJson::JSON_MAP);
 
         NJson::TJsonValue tablesMeta(NJson::JSON_ARRAY);
@@ -560,6 +570,7 @@ private:
             bool allowCache, bool success) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
             preparingQuery.release(), AppData()->FunctionRegistry, !success);
+        preparedQueryHolder->SetUseKqpTasksGraphV2(Config->GetUseKqpTasksGraphV2());
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;

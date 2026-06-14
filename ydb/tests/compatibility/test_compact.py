@@ -137,9 +137,7 @@ class CompactWorkload:
 
 def _compact_setup_cluster(fixture):
     return fixture.setup_cluster(
-        extra_feature_flags={
-            "enable_forced_compactions": True,
-        },
+        extra_feature_flags=["enable_forced_compactions"],
     )
 
 

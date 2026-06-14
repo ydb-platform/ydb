@@ -221,6 +221,7 @@ public:
     bool External = false;
     TStringBuilder _Builder;
     TConnection* IngressConnection = nullptr;
+    std::vector<std::pair<ui64, ui64>> HotRegions;
 };
 
 class TClusterNode {
@@ -373,6 +374,7 @@ public:
     void PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
     void PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
+    void CalcHotPath();
     const ui32 GroupId;
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;

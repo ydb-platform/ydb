@@ -21,6 +21,7 @@ namespace NKikimr::NKqp {
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 
 static std::atomic<ui64> MaxTaskSize = 48_MB;
 
@@ -282,7 +283,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetPoolId(UserRequestContext->PoolId);
 
     if (UserRequestContext->PoolConfig.has_value()) {
-        request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+        request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode);
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
@@ -498,7 +499,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     if (!TxInfo) {
         double memoryPoolPercent = 100;
         if (UserRequestContext->PoolConfig.has_value()) {
-            memoryPoolPercent = UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode;
+            memoryPoolPercent = UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode;
         }
 
         TxInfo = MakeIntrusive<NRm::TTxState>(
@@ -544,7 +545,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
         .WithProgressStats = WithProgressStats,
-        .Deadline = Deadline,
+        // Compute actor should not arm a timeout timer: in case of timeout it will receive
+        // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
+        // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.
+        .Deadline = TInstant(),
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
@@ -918,6 +922,11 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
 
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
+        if (!dqTask.ComputeActorId) {
+            LOG_W("Skip sending TEvReadyState to checkpoint coordinator"
+                << ": task " << dqTask.Id << " has no ComputeActorId (node disconnected / task not started)");
+            return;
+        }
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
         bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;

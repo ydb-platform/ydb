@@ -9,6 +9,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
@@ -537,7 +538,24 @@ private:
         }
 
         for (const auto& index : entry.Indexes) {
-            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
+            const auto indexType = index.GetType();
+            if ((indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance)
+                && index.GetFulltextIndexDescription().GetUseRowIdAsDocId())
+            {
+                for (const auto& reqCol : *reqColumns) {
+                    if (reqCol.first == NTableIndex::NFulltext::RowIdColumn) {
+                        return TConclusionStatus::Fail(TStringBuilder()
+                            << "Column " << NTableIndex::NFulltext::RowIdColumn
+                            << " is generated server-side for tables with fulltext indexes"
+                            << " and cannot be set explicitly via BulkUpsert");
+                    }
+                }
+            }
+
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
                 AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
                 continue;
             }

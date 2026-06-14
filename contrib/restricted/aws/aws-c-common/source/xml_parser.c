@@ -419,3 +419,128 @@ int s_node_next_sibling(struct aws_xml_parser *parser) {
 
     return parser->error;
 }
+
+/*
+ * Takes xml encoded string and pushes unescaped string to the out buffer.
+ * Note: xml allows escaping chars as follows:
+ * - &name; with 5 possible values corresponding to <, >, &, " and '
+ * - &#n; where n is a codepoint representing anyunicode character. (codepoint can start with x to indicate its a hex
+ * codepoint) Unescaped result will always be either the same length (nothing to unescape) or shorter.
+ */
+static int s_build_unescaped_buffer(struct aws_byte_cursor data, struct aws_byte_buf *out) {
+    bool first_split = true;
+
+    struct aws_byte_cursor substr = {0};
+    while (aws_byte_cursor_next_split(&data, '&', &substr)) {
+        if (first_split) {
+            AWS_RETURN_ERROR_IF(aws_byte_buf_append(out, &substr) == AWS_OP_SUCCESS, AWS_ERROR_INVALID_STATE);
+            first_split = false;
+            continue;
+        }
+
+        struct aws_byte_cursor escaped = {0};
+        AWS_RETURN_ERROR_IF(aws_byte_cursor_next_split(&substr, ';', &escaped), AWS_ERROR_INVALID_STATE);
+        aws_byte_cursor_advance(&substr, escaped.len + 1);
+
+        if (escaped.len == 2 && aws_byte_cursor_eq_c_str(&escaped, "lt")) {
+            AWS_RETURN_ERROR_IF(aws_byte_buf_write_u8(out, '<'), AWS_ERROR_INVALID_STATE);
+        } else if (escaped.len == 2 && aws_byte_cursor_eq_c_str(&escaped, "gt")) {
+            AWS_RETURN_ERROR_IF(aws_byte_buf_write_u8(out, '>'), AWS_ERROR_INVALID_STATE);
+        } else if (escaped.len == 3 && aws_byte_cursor_eq_c_str(&escaped, "amp")) {
+            AWS_RETURN_ERROR_IF(aws_byte_buf_write_u8(out, '&'), AWS_ERROR_INVALID_STATE);
+        } else if (escaped.len == 4 && aws_byte_cursor_eq_c_str(&escaped, "quot")) {
+            AWS_RETURN_ERROR_IF(aws_byte_buf_write_u8(out, '"'), AWS_ERROR_INVALID_STATE);
+        } else if (escaped.len == 4 && aws_byte_cursor_eq_c_str(&escaped, "apos")) {
+            AWS_RETURN_ERROR_IF(aws_byte_buf_write_u8(out, '\''), AWS_ERROR_INVALID_STATE);
+        } else if (escaped.len >= 2 && escaped.ptr[0] == '#') {
+            uint64_t codepoint = 0;
+            struct aws_byte_cursor codepoint_cur = escaped;
+            if (escaped.ptr[1] == 'x' || escaped.ptr[1] == 'X') {
+                aws_byte_cursor_advance(&codepoint_cur, 2);
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_cursor_utf8_parse_u64_hex(codepoint_cur, &codepoint) == AWS_OP_SUCCESS,
+                    AWS_ERROR_INVALID_XML);
+            } else {
+                aws_byte_cursor_advance(&codepoint_cur, 1);
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_cursor_utf8_parse_u64(codepoint_cur, &codepoint) == AWS_OP_SUCCESS, AWS_ERROR_INVALID_XML);
+            }
+
+            if (codepoint <= 0x7F) {
+                AWS_RETURN_ERROR_IF(aws_byte_buf_write_u8(out, (uint8_t)codepoint), AWS_ERROR_INVALID_STATE);
+            } else if (codepoint <= 0x7FF) {
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0xC0 | (codepoint >> 6))), AWS_ERROR_INVALID_STATE);
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0x80 | (codepoint & 0x3F))), AWS_ERROR_INVALID_STATE);
+            } else if (codepoint <= 0xFFFF) {
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0xE0 | (codepoint >> 12))), AWS_ERROR_INVALID_STATE);
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0x80 | ((codepoint >> 6) & 0x3F))), AWS_ERROR_INVALID_STATE);
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0x80 | (codepoint & 0x3F))), AWS_ERROR_INVALID_STATE);
+            } else if (codepoint <= 0x10FFFF) {
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0xF0 | (codepoint >> 18))), AWS_ERROR_INVALID_STATE);
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0x80 | ((codepoint >> 12) & 0x3F))), AWS_ERROR_INVALID_STATE);
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0x80 | ((codepoint >> 6) & 0x3F))), AWS_ERROR_INVALID_STATE);
+                AWS_RETURN_ERROR_IF(
+                    aws_byte_buf_write_u8(out, (uint8_t)(0x80 | (codepoint & 0x3F))), AWS_ERROR_INVALID_STATE);
+            } else {
+                return aws_raise_error(AWS_ERROR_INVALID_XML);
+            }
+        } else {
+            return aws_raise_error(AWS_ERROR_INVALID_XML);
+        }
+
+        AWS_RETURN_ERROR_IF(aws_byte_buf_write_from_whole_cursor(out, substr), AWS_ERROR_INVALID_STATE);
+    }
+
+    return AWS_OP_SUCCESS;
+}
+
+int aws_byte_buf_append_unescaped_xml(
+    struct aws_allocator *allocator,
+    struct aws_byte_cursor data,
+    struct aws_byte_buf *out) {
+
+    struct aws_byte_buf temp;
+    aws_byte_buf_init(&temp, allocator, data.len);
+
+    if (s_build_unescaped_buffer(data, &temp)) {
+        aws_byte_buf_clean_up(&temp);
+        return AWS_OP_ERR;
+    }
+
+    /*
+     * reserve room up front for the worst possible case: nothing unescaped
+     */
+    if (aws_byte_buf_reserve_relative(out, temp.len)) {
+        aws_byte_buf_clean_up(&temp);
+        return AWS_OP_ERR;
+    }
+
+    struct aws_byte_cursor temp_cur = aws_byte_cursor_from_buf(&temp);
+    if (aws_byte_buf_append(out, &temp_cur)) {
+        aws_byte_buf_clean_up(&temp);
+        return AWS_OP_ERR;
+    }
+
+    aws_byte_buf_clean_up(&temp);
+    return AWS_OP_SUCCESS;
+}
+
+int aws_xml_node_as_body_unescaped(
+    struct aws_allocator *allocator,
+    struct aws_xml_node *node,
+    struct aws_byte_buf *out_body) {
+    struct aws_byte_cursor body = {0};
+    if (aws_xml_node_as_body(node, &body)) {
+        return AWS_OP_ERR;
+    }
+
+    return aws_byte_buf_append_unescaped_xml(allocator, body, out_body);
+}

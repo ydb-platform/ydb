@@ -1,4 +1,5 @@
 #include "partition_util.h"
+#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 #include "partition_compactification.h"
 #include "partition_common.h"
 
@@ -338,7 +339,6 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
 
     ProcessTxsAndUserActs(ctx);
 }
-
 template <typename T> // TCmdReadResult
 static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
     auto cc = read->AddResult();
@@ -358,6 +358,9 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
         if (blob.PartData->PartNo == 0)
             cc->SetTotalSize(blob.PartData->TotalSize);
     }
+
+    cc->SetMessageCount(blob.MessageCount);
+    cc->SetMessageFormat(ToProtoMessageFormat(blob.MessageFormat));
 }
 
 template <typename T>
@@ -406,11 +409,11 @@ bool TReadInfo::UpdateUsage(const TClientBlob& blob,
         }
         lastBlobSize = 0;
 
-        return cnt >= Count;
+        return cnt >= Count || (size >= Size && !ReadToBlobEnd);
     }
 
     // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
-    return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count);
+    return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count || (size >= Size && !ReadToBlobEnd));
 }
 
 TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlob>& blobs,
@@ -486,7 +489,12 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 batchStartIdx = 0;
             } else {
                 const ui64 trueSearchOffset = Offset - blobs[blobIdx].Key.GetOffset() + firstHeaderOffset;
-                batchStartIdx = batch.FindPos(trueSearchOffset, PartNo);
+                const auto& position = batch.FindPos(trueSearchOffset, PartNo);
+                batchStartIdx = position.BlobIdx;
+                if (batchStartIdx != Max<ui32>()) {
+                    Offset = position.Offset;
+                    PartNo = position.PartNo;
+                }
             }
             offset += header.GetCount();
 
@@ -514,7 +522,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
 
                 if (res.IsLastPart()) {
                     PartNo = 0;
-                    ++Offset;
+                    Offset += res.MessageCount;
                     if (ReachedLastOffset()) {
                         needStop = true;
                         break;
@@ -602,10 +610,10 @@ TReadAnswer TReadInfo::FormAnswer(
                 size -= lastBlobSize;
             }
             lastBlobSize = 0;
-            return cnt >= Count;
+            return cnt >= Count || (size >= Size && !ReadToBlobEnd);
         }
         // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
-        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && cnt >= Count;
+        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count || (size >= Size && !ReadToBlobEnd));
     };
 
     AFL_ENSURE(blobs.size() == Blobs.size());
@@ -650,7 +658,7 @@ TReadAnswer TReadInfo::FormAnswer(
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
                 PartNo = 0;
-                ++Offset;
+                Offset += writeBlob.MessageCount;
             } else {
                 ++PartNo;
             }
@@ -877,7 +885,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     }
 
     TReadInfo info(
-            user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->Cookie, read->ReadTimestampMs,
+            user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->ReadToBlobEnd, read->Cookie, read->ReadTimestampMs,
             waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal(), read->ReplyTo
     );
 
@@ -976,7 +984,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     );
 
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 0, 1, "",
-                                                               user, 0, MAX_BLOB_PART_SIZE * 2, 0, 0, "",
+                                                               user, 0, MAX_BLOB_PART_SIZE * 2, false, 0, 0, "",
                                                                false, TActorId{});
 
     ctx.Send(ctx.SelfID, event.Release());

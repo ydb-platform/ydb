@@ -8,6 +8,31 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TOracleMock::OnRequestStarted(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    Y_UNUSED(hostIndex, operation, now);
+}
+
+void TOracleMock::OnRequestSucceeded(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now,
+    TDuration executionTime)
+{
+    Y_UNUSED(hostIndex, operation, now, executionTime);
+}
+
+void TOracleMock::OnRequestFailed(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    Y_UNUSED(hostIndex, operation, now);
+}
+
 THostIndex TOracleMock::SelectBestPBufferHost(
     std::span<const THostIndex> hostIndexes,
     EOperation operation) const
@@ -34,6 +59,11 @@ TDuration TOracleMock::GetPBufferReplyTimeout() const
 EWriteMode TOracleMock::GetWriteMode() const
 {
     return WriteMode;
+}
+
+TString TOracleMock::Dump() const
+{
+    return {};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,9 +107,9 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set SyncWithPBufferHandler");
         return NThreading::TFuture<TDBGFlushResponse>();
     };
-    EraseFromPBufferHandler = [](const auto&...)
+    BatchEraseFromPBufferHandler = [](const auto&...)
     {
-        Y_ABORT_UNLESS(false, "Should set EraseFromPBufferHandler");
+        Y_ABORT_UNLESS(false, "Should set BatchEraseFromPBufferHandler");
         return NThreading::TFuture<TDBGEraseResponse>();
     };
     RestoreDBGPBuffersHandler = [](const auto&...)
@@ -201,8 +231,7 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
         traceId);
 }
 
-NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
+void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     THostIndex coordinatorHostIndex,
     TVector<THostIndex> hostIndexes,
@@ -210,9 +239,10 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     TBlockRange64 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
-    const NWilson::TTraceId& traceId)
+    const NWilson::TTraceId& traceId,
+    TWriteBlocksToManyPBuffersCallback callback)
 {
-    return WriteBlocksToManyPBuffersHandler(
+    WriteBlocksToManyPBuffersHandler(
         vChunkIndex,
         coordinatorHostIndex,
         std::move(hostIndexes),
@@ -220,7 +250,8 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
         range,
         replyTimeout,
         guardedSglist,
-        traceId);
+        traceId,
+        std::move(callback));
 }
 
 NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
@@ -238,13 +269,29 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
         traceId);
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroupMock::EraseFromPBuffer(
+NThreading::TFuture<TDBGEraseResponse>
+TDirectBlockGroupMock::BatchEraseFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     const TVector<TPBufferSegment>& segments,
     const NWilson::TTraceId& traceId)
 {
-    return EraseFromPBufferHandler(vChunkIndex, hostIndex, segments, traceId);
+    return BatchEraseFromPBufferHandler(
+        vChunkIndex,
+        hostIndex,
+        segments,
+        traceId);
+}
+
+void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
+{
+    Y_UNUSED(lsn);
+}
+
+NThreading::TFuture<std::optional<ui64>>
+TDirectBlockGroupMock::GatherSafeBarrierForErase()
+{
+    return NThreading::MakeFuture<std::optional<ui64>>(std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>

@@ -1261,6 +1261,44 @@ Y_UNIT_TEST(TableHints) {
          "SELECT\n\t*\nFROM\n\tplato.T WITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t)\n;\n"},
         {"select * from plato.T with schema struct<\nfoo:int32,\nbar:double\n> as a",
          "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<\n\t\tfoo: int32,\n\t\tbar: double\n\t> AS a\n;\n"},
+        {R"sql($input=select * from plato.T; select * from $input with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            $input = (
+                SELECT
+                    *
+                FROM
+                    plato.T
+            );
+
+            SELECT
+                *
+            FROM
+                $input WITH WATERMARK = ts - Interval('PT1S')
+            ;
+
+        )sql")},
+        {R"sql(select * from (select * from plato.T) with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            SELECT
+                *
+            FROM (
+                SELECT
+                    *
+                FROM
+                    plato.T
+            ) WITH WATERMARK = ts - Interval('PT1S');
+
+        )sql")},
+        {R"sql(select * from (values(1)) with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            SELECT
+                *
+            FROM (
+                VALUES
+                    (1)
+            ) WITH WATERMARK = ts - Interval('PT1S');
+
+        )sql")},
     };
 
     TSetup setup;

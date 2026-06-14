@@ -257,13 +257,19 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
 
             const auto now = context.Ctx.Now();
-            for (const auto& [_, shard] : table->GetPartitionStore()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
                 lag = now - shard.LastCondErase;
                 context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
             }
+        }
+
+        if (table->PartitionsInShardIdxFormat) {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+        } else {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
         }
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -276,8 +282,10 @@ public:
         if (srcPathId != InvalidPathId && context.SS->PathsById.contains(srcPathId)) {
             auto srcPath = context.SS->PathsById.at(srcPathId);
 
-            srcPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
-            srcPath->LastTxId = InvalidTxId;
+            Y_VERIFY_S(!srcPath->Dropped(),
+                "TCopyTable TPropose::HandleReply: source path is dropped at plan step"
+                << ", srcPathId: " << srcPathId
+                << ", StepDropped: " << srcPath->StepDropped);
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
 
@@ -625,7 +633,6 @@ public:
                 checks
                     .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
-                    .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);
             }
 
@@ -633,7 +640,9 @@ public:
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(maxShardsToCreate);
+                    .PathShardsLimit(maxShardsToCreate)
+                    .ShardsLimit(maxShardsToCreate)
+                ;
             }
 
             if (!checks) {
@@ -748,6 +757,7 @@ public:
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
+            .EnableDetailedMetrics = true,
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
@@ -758,6 +768,9 @@ public:
 
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
+
+        // Preserve table partitions storage format from source table.
+        tableInfo->PartitionsInShardIdxFormat = srcTableInfo->PartitionsInShardIdxFormat;
 
         TChannelsBindings channelsBinding;
         bool storePerShardConfig = false;
@@ -848,7 +861,7 @@ public:
         if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }
-        for (const auto& [shardIdx, shard] : tableInfo->GetPartitionStore()) {
+        for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx), "shard info is set before");
             if (storePerShardConfig) {
                 tableInfo->PerShardPartitionConfig[shardIdx].CopyFrom(perShardConfig);
@@ -1054,6 +1067,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                     // no specialized index description
                     Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
                     break;
@@ -1063,14 +1078,29 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                     *operation->MutableFulltextIndexDescription() =
                         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    *operation->MutableBloomFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    *operation->MutableBloomNGrammFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
                     break;
                 default:
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }
 
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
+                result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), schema));
+                continue; // local indexes have no impl tables
+            } else {
+                result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            }
         }
 
         // Skip impl table copies if OmitIndexes is set (handled by CreateConsistentCopyTables for incremental backups)

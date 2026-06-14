@@ -67,6 +67,12 @@ namespace {
         , SegmentManager(DDiskInstanceGuid)
         , PersistentBufferFormat(std::move(pbFormat))
     {
+        if (IsPersistentBufferActor) {
+            SetActivityType(NKikimrServices::TActivity::BS_PERSISTENT_BUFFER);
+        } else {
+            SetActivityType(NKikimrServices::TActivity::BS_DDISK);
+        }
+
         StartedAt = TInstant::Now();
         TVector<double> latencyHistBounds;
         if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME || BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_SSD) {
@@ -194,7 +200,7 @@ namespace {
         if (IsPersistentBufferActor) {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
-            WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+            WritePersistentBuffersActor = Register(new TWritePersistentBuffersRequestActor(SelfId()));
             CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {

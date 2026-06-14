@@ -161,7 +161,7 @@ public:
         // need to initialize expr before checking whether it is a column
         auto clone = expr->Clone();
         if (!clone->Init(ctx, &src)) {
-            return !ctx.StrictWarningAsError;
+            return false;
         }
 
         const auto column = clone->GetColumnName();
@@ -4247,6 +4247,11 @@ TNodeResult BuildBuiltinFunc(
             }
             auto fulltextBuiltinName = normalizedName == "fulltextmatch" ? "FulltextMatch" : "FulltextScore";
             return TNonNull(TNodePtr(new TCallNodeImpl(pos, fulltextBuiltinName, args)));
+        } else if (normalizedName == "hybridrank") {
+            if (mustUseNamed && *mustUseNamed) {
+                *mustUseNamed = false;
+            }
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "HybridRank", args)));
         } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
             if (args.empty()) {
                 return TNonNull(TNodePtr(new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args)));

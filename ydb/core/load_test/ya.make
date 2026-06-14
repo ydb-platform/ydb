@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/containers/absl_flat_hash
     library/cpp/histogram/hdr
     library/cpp/monlib/dynamic_counters/percentile
     library/cpp/monlib/service/pages
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/columnshard
     ydb/core/tx/datashard
+    ydb/core/util
     ydb/library/workload/abstract
     ydb/library/workload/kv
     ydb/library/workload/stock
@@ -37,6 +39,7 @@ SRCS(
     archive.cpp
     config_examples.cpp
     ddisk_load.cpp
+    events.cpp
     interconnect_load.cpp
     keyvalue_write.cpp
     kqp.cpp

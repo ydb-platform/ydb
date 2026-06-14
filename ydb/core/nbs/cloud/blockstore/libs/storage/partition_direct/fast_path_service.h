@@ -30,7 +30,7 @@ private:
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
-    const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
+    const TVector<TRegionPtr> Regions;   // 4 GiB each
 
     std::atomic<ui64> SequenceGenerator;
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
@@ -43,6 +43,15 @@ private:
     TAdaptiveLock DumpLock;
     size_t DumpCount = 0;
     TMap<size_t, TDBGDumpResponse> DebugDumps;
+
+    struct TPBufferCleanupGather
+    {
+        std::atomic<bool> Active{false};
+        TVector<std::optional<ui64>> SafeBarriers;
+        std::atomic<size_t> PendingResponses{0};
+    };
+
+    TPBufferCleanupGather CleanupGather;
 
 public:
     TFastPathService(
@@ -89,11 +98,19 @@ public:
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
+    ui64 GenerateLsn() override;
+
 private:
-    ui64 GenerateSequenceNumber();
     void ScheduleDirtyMapDebugPrint();
     void QueryDirtyMapDebugDump();
     void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
+
+    void MaybeTriggerPBufferCleanup(ui64 lsn);
+    void PBufferCleanup();
+    void OnGatherSafeBarrierForErase(
+        size_t dbgIndex,
+        std::optional<ui64> safeBarrier);
+    void FinishPBufferCleanup();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

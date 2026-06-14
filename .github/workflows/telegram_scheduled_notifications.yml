@@ -37,10 +37,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -51,7 +51,7 @@ jobs:
 
       - name: Run queued jobs checker and send to Telegram
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.YDBOT_TELEGRAM_BOT_TOKEN }}
           GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
         run: |
           python .github/scripts/telegram/alert_queued_jobs.py \
@@ -66,7 +66,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup YDB access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -79,7 +79,7 @@ jobs:
 
       - name: Send digest
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.YDBOT_TELEGRAM_BOT_TOKEN }}
           TG_TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
         run: |
           ARGS=""

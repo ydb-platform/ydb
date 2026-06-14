@@ -17,7 +17,7 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
         self.query_count = 5
         self.limit = 5
         self.good_queries = {}
-        yield from self.setup_cluster(extra_feature_flags={"enable_fulltext_index": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_fulltext_index"])
 
     def create_table(self, table_name):
         query = f"""

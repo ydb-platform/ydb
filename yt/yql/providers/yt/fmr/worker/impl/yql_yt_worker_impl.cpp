@@ -190,7 +190,7 @@ public:
                         availableSlots
                     );
 
-                    YQL_CLOG(TRACE, FastMapReduce) << "Sending heartbeat request to coordinator";
+                    YQL_CLOG(TRACE, FastMapReduce) << "Worker " << WorkerId_ << " sending heartbeat request to coordinator";
                     HeartbeatInFlight_->store(true);
                     Coordinator_->SendHeartbeatResponse(heartbeatRequest).Subscribe(
                         [this, weakState = std::weak_ptr(WorkerState_), heartbeatInFlight = HeartbeatInFlight_](const auto& f) {
@@ -364,7 +364,7 @@ public:
                 } catch (...) {
                     YQL_CLOG(ERROR, FastMapReduce) << "Error in task processing thread: " << CurrentExceptionMessage();
                 }
-                Sleep(TDuration::MilliSeconds(100));
+                Sleep(TimeToSleepBetweenRequests_);
             }
         };
 

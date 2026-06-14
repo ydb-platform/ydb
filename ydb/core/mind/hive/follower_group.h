@@ -40,15 +40,7 @@ struct TFollowerGroup {
             const auto& allowedNodes(followerGroup.GetAllowedNodeIDs());
             std::copy(allowedNodes.begin(), allowedNodes.end(), std::back_inserter(NodeFilter.AllowedNodes));
         }
-        {
-            if (const auto& x = followerGroup.GetAllowedDataCenters(); !x.empty()) {
-                NodeFilter.AllowedDataCenters.insert(NodeFilter.AllowedDataCenters.end(), x.begin(), x.end());
-            } else {
-                for (const auto& dataCenterId : followerGroup.GetAllowedDataCenterNumIDs()) {
-                    NodeFilter.AllowedDataCenters.push_back(DataCenterToString(dataCenterId));
-                }
-            }
-        }
+        NodeFilter.AllowedDataCenters.MutableDataCenter()->CopyFrom(followerGroup.GetAllowedDataCenters());
         if (RequireAllDataCenters) {
             NodeFilter.MustBePrimaryPile = false;
         }

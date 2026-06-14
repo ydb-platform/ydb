@@ -32,6 +32,24 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistBuildIndexState(db, buildInfo);
     }
+
+    for (auto& rec: SetColumnConstraintStateChanges) {
+        TIndexBuildId operationId;
+        TSetColumnConstraintOperationInfo::EOperationState state;
+        std::tie(operationId, state) = rec;
+
+        const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(operationId);
+        Y_VERIFY_S(operationInfoPtr, "SetColumnConstraintOperations has no " << operationId);
+        auto& operationInfo = *operationInfoPtr->get();
+        LOG_I("Change SetColumnConstraint state from " << ToString(operationInfo.OperationState) << " to " << ToString(state));
+        if (state == TSetColumnConstraintOperationInfo::EOperationState::Done) {
+            operationInfo.EndTime = TAppData::TimeProvider->Now();
+        }
+        operationInfo.OperationState = state;
+
+        NIceDb::TNiceDb db(txc.DB);
+        Self->PersistSetColumnConstraintState(db, operationInfo);
+    }
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
@@ -188,6 +206,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TIndexB
     StateChanges.push_back(TChangeStateRec(id, state));
 }
 
+void TSchemeShard::TIndexBuilder::TTxBase::ChangeState(TIndexBuildId id, TSetColumnConstraintOperationInfo::EOperationState state) {
+    SetColumnConstraintStateChanges.push_back(TChangeSetColumnConstraintStateRec(id, state));
+}
+
 void TSchemeShard::TIndexBuilder::TTxBase::Progress(TIndexBuildId id) {
     SideEffects.ToProgress(id);
 }
@@ -222,6 +244,9 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
 
     switch (indexInfo.State) {
     case TIndexBuildInfo::EState::AlterMainTable:
+    case TIndexBuildInfo::EState::CreateBuildSequence:
+    case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+    case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
     case TIndexBuildInfo::EState::Locking:
     case TIndexBuildInfo::EState::GatheringStatistics:
     case TIndexBuildInfo::EState::Initiating:
@@ -304,12 +329,15 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:
             *index.mutable_global_fulltext_plain_index() = Ydb::Table::GlobalFulltextPlainIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance:
             *index.mutable_global_fulltext_relevance_index() = Ydb::Table::GlobalFulltextRelevanceIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
             *index.mutable_global_json_index() = Ydb::Table::GlobalJsonIndex();
             break;
         default:
@@ -320,6 +348,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);
             columnProto->mutable_default_from_literal()->CopyFrom(column.DefaultFromLiteral);
+            if (column.IsFromSequence()) {
+                columnProto->set_default_from_sequence(column.DefaultFromSequence);
+                columnProto->set_bit_reverse_sequence_value(column.BitReverseSequenceValue);
+            }
         }
     }
 
@@ -363,12 +395,24 @@ void TSchemeShard::AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& buildIn
     }
 }
 
+void TSchemeShard::AddSetColumnConstraintOperation(const std::shared_ptr<TSetColumnConstraintOperationInfo>& operationInfo) {
+    Y_ASSERT(!SetColumnConstraintOperations.contains(operationInfo->Id));
+    SetColumnConstraintOperations[operationInfo->Id] = operationInfo;
+    SetColumnConstraintOperationsByTime.emplace(operationInfo->StartTime, operationInfo->Id);
+
+    if (operationInfo->Uid) {
+        Y_ASSERT(!SetColumnConstraintOperationsByUid.contains(operationInfo->Uid));
+        SetColumnConstraintOperationsByUid[operationInfo->Uid] = operationInfo;
+    }
+}
+
 void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo) {
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.LockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.InitiateTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.ApplyTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.UnlockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.AlterMainTableTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo.CreateBuildSequenceTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.DropColumnsTxId);
 
     Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);

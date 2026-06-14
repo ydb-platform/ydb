@@ -2,6 +2,7 @@
 
 #include <yt/cpp/mapreduce/interface/fwd.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/discovery/interface/yql_yt_service_discovery.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/interface/yql_yt_table_data_service.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/job/interface/yql_yt_job.h>
@@ -59,6 +60,23 @@ TJobResult RunJob(
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task);
 
+// Fully intraprocess variant: bypasses HTTP, no discovery file or server needed.
+IFmrJob::TPtr MakeFmrJob(
+    ITableDataService::TPtr tableDataService,
+    IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
+    const TFmrJobSettings& settings = {}
+);
+
+// Fully intraprocess variant: bypasses HTTP, no discovery file or server needed.
+TJobResult RunJob(
+    TTask::TPtr task,
+    ITableDataService::TPtr tableDataService,
+    IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
+    std::shared_ptr<std::atomic<bool>> cancelFlag
+);
+
 void FillMapFmrJob(
     TFmrUserJob& mapJob,
     const TMapTaskParams& mapTaskParams,
@@ -73,6 +91,15 @@ void FillReduceFmrJob(
     TFmrUserJob& reduceJob,
     const TReduceTaskParams& reduceTaskParams,
     const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
+    IYtJobService::TPtr jobService
+);
+
+void FillFillFmrJob(
+    TFmrUserJob& fillJob,
+    const TFillTaskParams& fillTaskParams,
     ITableDataServiceDiscovery::TPtr discovery,
     TMaybe<TVanillaInfo> vanillaInfo,
     const TFmrUserJobSettings& userJobSettings,

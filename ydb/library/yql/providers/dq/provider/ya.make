@@ -27,31 +27,17 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/threading/task_scheduler
     library/cpp/threading/future
     library/cpp/svnversion
     library/cpp/yson/node
     library/cpp/yson
-    ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/src/client/driver
-    yql/essentials/ast
-    yql/essentials/core
-    yql/essentials/core/issue
-    yql/essentials/utils/backtrace
-    yql/essentials/utils/failure_injector
-    yql/essentials/core/dq_integration
-    yql/essentials/core/dq_integration/transform
-    ydb/library/yql/dq/transform
+    ydb/library/yql/dq/constraints
+    ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/tasks
+    ydb/library/yql/dq/transform
     ydb/library/yql/dq/type_ann
-    yql/essentials/providers/common/gateway
-    yql/essentials/providers/common/metrics
-    yql/essentials/providers/common/schema/expr
-    yql/essentials/providers/common/transform
-    yql/essentials/providers/common/activation
-    yql/essentials/providers/common/config/transformer
-    yql/essentials/providers/common/proto
+    ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
@@ -59,10 +45,26 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/dq/opt
     ydb/library/yql/providers/dq/planner
-    ydb/library/yql/providers/dq/actors
+    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/library/grpc/client
     yql/essentials/providers/result/expr_nodes
+    yql/essentials/ast
+    yql/essentials/core
+    yql/essentials/core/dq_integration
+    yql/essentials/core/dq_integration/transform
+    yql/essentials/core/issue
+    yql/essentials/providers/common/activation
+    yql/essentials/providers/common/config/transformer
+    yql/essentials/providers/common/gateway
+    yql/essentials/providers/common/metrics
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/transform
     yql/essentials/minikql
     yql/essentials/public/issue
+    yql/essentials/utils/backtrace
+    yql/essentials/utils/failure_injector
 )
 
 YQL_LAST_ABI_VERSION()

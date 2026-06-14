@@ -1,4 +1,5 @@
 #include "partition.h"
+#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include "partition_util.h"
@@ -9,18 +10,19 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, ui64 nextRequ
         nextRequestCookie,
         startOffset,
         lastOffset,
-        nextPartNo.GetOrElse(0),
-        std::numeric_limits<ui32>::max(),
-        TString{},
-        CLIENTID_COMPACTION_CONSUMER,
-        3000,
-        std::numeric_limits<ui32>::max(),
-        0,
-        0,
-        "unknown",
-        false,
-        TActorId{},
-        selfId
+        nextPartNo.GetOrElse(0), // partNo
+        std::numeric_limits<ui32>::max(), // count
+        TString{}, // sessionId
+        CLIENTID_COMPACTION_CONSUMER, // clientId
+        3000, // timeout
+        std::numeric_limits<ui32>::max(), // size
+        false, // readToBlobEnd
+        0, // maxTimeLagMs
+        0, // readTimestampMs
+        "unknown", // clientDC
+        false, // externalOperation
+        TActorId{}, // pipeClient
+        selfId // replyTo
     );
     return evRead;
 }
@@ -453,7 +455,9 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         TClientBlob blob(std::move(*res.MutableSourceId()), res.GetSeqNo(), std::move(tmpData),
                          Nothing(),
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
-                         res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()));
+                         res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()),
+                         res.GetMessageCount(),
+                         FromProtoMessageFormat(res.GetMessageFormat()));
 
         if (res.HasTotalParts()) {
             blob.PartData = TPartData{static_cast<ui16>(res.GetPartNo()), static_cast<ui16>(res.GetTotalParts()), res.GetTotalSize()};

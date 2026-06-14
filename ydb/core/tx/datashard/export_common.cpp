@@ -94,7 +94,6 @@ static TMaybe<Ydb::Table::CreateTableRequest> GenColumnTableScheme(
     FillColumnFamilies(scheme, tableDesc);
     FillAttributes(scheme, pathDesc);
     FillPartitioningSettings(scheme, tableDesc);
-    FillColumnTableIndexDescription(scheme, tableDesc);
 
     return scheme;
 }

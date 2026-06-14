@@ -277,6 +277,7 @@ struct TEvPQ {
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
+            std::optional<ui64> MaxSeqNo; // for batch msgs
             ui16 PartNo;
             ui16 TotalParts;
             ui32 TotalSize;
@@ -300,6 +301,9 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
+            ui32 MessageCount = 1;
+            NPQ::EMessageFormat MessageFormat = NPQ::EMessageFormat::STANDARD;
+            std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)
@@ -334,7 +338,7 @@ struct TEvPQ {
 
     struct TEvRead : public TEventLocal<TEvRead, EvRead> {
         TEvRead(const ui64 cookie, const ui64 offset, ui64 lastOffset, const ui16 partNo, const ui32 count,
-                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size,
+                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size, const bool readToBlobEnd,
                 const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC,
                 bool externalOperation, const TActorId& pipeClient, const TActorId& replyTo = {})
             : Cookie(cookie)
@@ -345,6 +349,7 @@ struct TEvPQ {
             , ClientId(clientId)
             , Timeout(timeout)
             , Size(size)
+            , ReadToBlobEnd(readToBlobEnd)
             , MaxTimeLagMs(maxTimeLagMs)
             , ReadTimestampMs(readTimestampMs)
             , ClientDC(clientDC)
@@ -362,6 +367,7 @@ struct TEvPQ {
         TString ClientId;
         ui32 Timeout;
         ui32 Size;
+        bool ReadToBlobEnd;
         ui32 MaxTimeLagMs;
         ui64 ReadTimestampMs;
         TString ClientDC;

@@ -4,39 +4,77 @@ on:
   pull_request_target:
     paths: 
     - 'ydb/docs/**'
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: 'Pull Request number to build documentation'
+        required: true
+        type: string
 
 jobs:
   add-label:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
     steps:
       - name: Add documentation label
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             github.rest.issues.addLabels({
-              issue_number: context.issue.number,
+              issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: ['documentation']
             })
             
   build-docs:
-    needs: add-label
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      (github.event_name == 'pull_request_target' && 
+       github.event.pull_request.state == 'open')
     concurrency:
-      group: docs-build-${{ github.event.pull_request.number }}
+      group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
+          
+      - name: Get commit SHA
+        id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
-          revision: "pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
+          revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
           cli-version: stable
+
+      # docs-build-action writes github.event.number to inputs/pr-number.
+      # For workflow_dispatch this field is empty, so patch the artifact.
+      - name: Download inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs
+
+      - name: Save PR number to inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PULL_NUMBER: ${{ inputs.pull_number }}
+        run: printf '%s' "$PULL_NUMBER" > ./inputs/pr-number
+
+      - name: Upload inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs/
+          overwrite: true

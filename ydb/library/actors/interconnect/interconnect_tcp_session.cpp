@@ -52,6 +52,7 @@ namespace NActors {
         , OutputCounter(0ULL)
         , ZcProcessor(proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY)
     {
+        Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
         PartUpdateTimestamp = GetCycleCountFast();
         ReceiveContext.Reset(new TReceiveContext);
@@ -145,7 +146,11 @@ namespace NActors {
         Subscribers.clear();
 
         for (auto& d : DelayedEvents) {
-            d.Span.EndError("nondelivery");
+            if (NWilson::TSpan* wilsonSpan = d.Span.GetWilsonSpanPtr()) {
+                wilsonSpan->EndError("nondelivery");
+            } else if (NActors::TDelayedEventSpan* retroSpan = d.Span.GetRetroSpanPtr()) {
+                retroSpan->EndError();
+            }
             TActivationContext::Send(IEventHandle::ForwardOnNondelivery(d.Event, TEvents::TEvUndelivered::Disconnected));
         }
         DelayedEvents.clear();
@@ -202,6 +207,7 @@ namespace NActors {
         }
 
         SetOutputStuckFlag(true);
+        Proxy->Metrics->UpdateNumEventsInQueueHistogram(NumEventsInQueue);
         ++NumEventsInQueue;
         if (State == EState::Idle) {
             UpdateState(EState::Utilized);
@@ -274,7 +280,7 @@ namespace NActors {
         Y_ABORT_UNLESS(!DelayedEvents.empty());
         auto d = std::move(DelayedEvents.front());
         DelayedEvents.pop_front();
-        d.Span.End();
+        d.Span.EndOk();
         Enqueue(d.Event);
     }
 
@@ -406,6 +412,7 @@ namespace NActors {
         }
 
         LostConnectionWatchdog.Disarm();
+        Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(1);
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] connected", Proxy->PeerNodeId);
         if (Proxy->Common->Settings.MergePerHostCounters) {

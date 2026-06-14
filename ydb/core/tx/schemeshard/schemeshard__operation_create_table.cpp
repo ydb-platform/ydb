@@ -324,7 +324,7 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
 
             const auto now = context.Ctx.Now();
-            for (const auto& [_, shard] : table->GetPartitionStore()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
@@ -333,6 +333,12 @@ public:
             }
         }
         context.SS->PersistTableCreated(db, pathId);
+
+        if (table->PartitionsInShardIdxFormat) {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+        } else {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
+        }
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         if (parentDir->IsDirectory() || parentDir->IsDomainRoot()) {
@@ -547,6 +553,18 @@ public:
         }
 
         if (schema.HasDetailedMetricsSettings()) {
+            // Do not allow changing detailed metrics settings without the feature flag
+            if (!AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "The detailed metrics settings are specified in the request, "
+                    "but the detailed metrics feature is disabled by the corresponding "
+                    "feature flag (EnableDataShardDetailedMetrics)"
+                );
+
+                return result;
+            }
+
             TString errorString;
 
             // Make sure the detailed metrics settings are valid (correct metrics level etc)
@@ -617,6 +635,7 @@ public:
             .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
+            .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,
@@ -635,6 +654,10 @@ public:
 
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
+
+        if (AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx() && AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdxByDefault()) {
+            tableInfo->PartitionsInShardIdxFormat = true;
+        }
 
         TVector<TTableShardInfo> partitions;
 
@@ -740,7 +763,7 @@ public:
         context.SS->PersistUpdateNextPathId(db);
         context.SS->PersistUpdateNextShardIdx(db);
         // Persist new shards info
-        for (const auto& [shardIdx, shard] : tableInfo->GetPartitionStore()) {
+        for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx), "shard info is set before");
             auto tabletType = context.SS->ShardInfos[shardIdx].TabletType;
             const auto& bindedChannels = context.SS->ShardInfos[shardIdx].BindedChannels;

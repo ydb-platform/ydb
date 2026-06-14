@@ -300,17 +300,17 @@ private:
             return result;
         }
 
-        bool CheckShardRetriesExeeded(TReadState& failedRead) {
-            return CheckShardRetriesExeededImpl(failedRead.ShardId);
+        bool CheckShardRetriesExceeded(TReadState& failedRead) {
+            return CheckShardRetriesExceededImpl(failedRead.ShardId);
         }
 
-        bool CheckShardRetriesExeededImpl(ui64 shardId) {
+        bool CheckShardRetriesExceededImpl(ui64 shardId) {
             const auto& shardState = ShardsState[shardId];
             return shardState.RetryAttempts + 1 > MaxShardRetries();
         }
 
-        bool CheckShardRetriesExeededLock(const TLockState& failedLock) {
-            return CheckShardRetriesExeededImpl(failedLock.ShardId);
+        bool CheckShardRetriesExceededLock(const TLockState& failedLock) {
+            return CheckShardRetriesExceededImpl(failedLock.ShardId);
         }
 
         TDuration CalcDelayForShardImpl(ui64 shardId, bool allowInstantRetry) {
@@ -696,7 +696,7 @@ private:
                 const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
                     ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
                     : std::nullopt;
-                if (!throttleDelay && (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read))) {
+                if (!throttleDelay && (CheckTotalRetriesExceeded() || Reads.CheckShardRetriesExceeded(read))) {
                     return replyError(
                         TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
@@ -707,7 +707,7 @@ private:
                 return RetryTableRead(read, /*allowInstantRetry = */false, throttleDelay);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                if (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read)) {
+                if (CheckTotalRetriesExceeded() || Reads.CheckShardRetriesExceeded(read)) {
                     return replyError(
                         TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -1157,7 +1157,7 @@ private:
         }
     }
 
-    bool CheckTotalRetriesExeeded() {
+    bool CheckTotalRetriesExceeded() {
         const auto limit = MaxTotalRetries();
         return limit && TotalRetryAttempts + 1 > *limit;
     }
@@ -1168,13 +1168,13 @@ private:
 
         TDuration delay;
         if (!throttleDelay) {
-            if (CheckTotalRetriesExeeded()) {
+            if (CheckTotalRetriesExceeded()) {
                 return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded",
                     NYql::NDqProto::StatusIds::UNAVAILABLE);
             }
             ++TotalRetryAttempts;
 
-            if (Reads.CheckShardRetriesExeeded(failedRead)) {
+            if (Reads.CheckShardRetriesExceeded(failedRead)) {
                 StreamLookupWorker->ResetRowsProcessing(failedRead.Id);
                 Reads.eraseRead(failedRead);
                 return ResolveTableShards();
@@ -1202,13 +1202,13 @@ private:
     void RetryLock(TLockState& failedLock, bool allowInstantRetry = true) {
         CA_LOG_D("Retry locking for shard: " << failedLock.ShardId << ", lockId: " << failedLock.Id);
 
-        if (CheckTotalRetriesExeeded()) {
+        if (CheckTotalRetriesExceeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' lock retry limit exceeded",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
         ++TotalRetryAttempts;
 
-        if (Reads.CheckShardRetriesExeededLock(failedLock)) {
+        if (Reads.CheckShardRetriesExceededLock(failedLock)) {
             Reads.eraseLock(failedLock);
             return ResolveTableShards();
         }

@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
@@ -17,6 +18,8 @@
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
+
+#include <functional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -92,12 +95,6 @@ struct TAggregatedListPBufferResponse
     TMap<THostIndex, TListPBufferMetaVector> Meta;
 };
 
-struct TDDiskIdLess
-{
-    using TDDiskId = NKikimrBlobStorage::NDDisk::TDDiskId;
-    bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
-};
-
 struct TDBGDumpResponse
 {
     size_t DirectBlockGroupIndex = 0;
@@ -164,8 +161,10 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
-    virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToManyPBuffers(
+    using TWriteBlocksToManyPBuffersCallback =
+        std::function<void(TDBGWriteBlocksToManyPBuffersResponse)>;
+
+    virtual void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
@@ -173,7 +172,8 @@ public:
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        const NWilson::TTraceId& traceId) = 0;
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) = 0;
 
     // Batch operation to flush a list of PBuffer entries. It can be executed in
     // two modes - when the source and destination are the same host, and when
@@ -188,11 +188,20 @@ public:
         const NWilson::TTraceId& traceId) = 0;
 
     // Batch operation to erase a list of PBuffer entries.
-    virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+    virtual NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) = 0;
+
+    virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;
+
+    // The lowest lsn that must be preserved across all vchunks of this
+    // DirectBlockGroup (records below it are safe to erase). Used to compute
+    // the tablet-wide cleanup watermark. Resolves on the executor thread.
+    // nullopt means nothing is inflight here.
+    virtual NThreading::TFuture<std::optional<ui64>>
+    GatherSafeBarrierForErase() = 0;
 
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(

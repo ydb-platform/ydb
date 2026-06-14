@@ -317,6 +317,17 @@ void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopic
     topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
 }
 
+// TODO(flown4qqqq):: rework this into a fast way.
+ui32 TTableInfo::GetColumnIdByNameSlow(const TString& columnName) const {
+    for (const auto& [id, col] : Columns) {
+        if (!col.IsDropped() && col.Name == columnName) {
+            return id;
+        }
+    }
+
+    return InvalidColumnId;
+}
+
 TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     TPtr source,
     NKikimrSchemeOp::TTableDescription& op,
@@ -488,20 +499,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             if (isChangeNotNullConstraint) {
                 if (col.GetNotNull()) { // SET NOT NULL
-                    if (!featureFlags.EnableSetColumnConstraint) {
-                        errStr = Sprintf("Type '%s' specified for column '%s', but support for SET NOT NULL is disabled (EnableSetColumnConstraint feature flag is off)", col.GetType().data(), colName.data());
-                        return nullptr;
-                    }
-
-                    /*
-                        Note that here we are setting the NotNull value to true, although we can't just leave it that way,
-                        because first we need to check the column for null values.
-
-                        Thus, after that, such a check will be started. Based on the results of this check, one of two decisions will be made:
-                        1. Leave the NotNull value as true if the column did not contain Nulls.
-                        2. Set NotNull back to false if there is at least one Null in the column.
-                    */
-
                     column.NotNull = true;
                 } else { // DROP NOT NULL
                     column.NotNull = false;
@@ -676,7 +673,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
     }
 
-    if (op.HasDetailedMetricsSettings()) {
+    if (featureFlags.EnableDetailedMetrics && op.HasDetailedMetricsSettings()) {
         switch (op.GetDetailedMetricsSettings().GetStatusCase()) {
         case NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured:
             if (op.GetDetailedMetricsSettings().HasConfigured()) {
@@ -817,6 +814,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             return nullptr;
         }
         alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
+    }
+
+    if (op.HasIndexImplType()) {
+        alterData->TableDescriptionFull->SetIndexImplType(op.GetIndexImplType());
     }
 
     if (source) {
@@ -2047,6 +2048,14 @@ void TTableInfo::ApplySplitMerge(
 }
 
 void TTableInfo::VerifyConsistency() const {
+    // AppData is absent in lowlevel unit tests
+    if (HasAppData() && !AppData()->FeatureFlags.GetEnableTablePartitionsConsistencyCheck()) {
+        LastVerifyConsistencyTime = 0;
+        return;
+    }
+
+    THPTimer cpuTimer;
+
     Y_ABORT_UNLESS(PartitionStore.size() == Partitions.size());
     Y_ABORT_UNLESS(Stats.PartitionStats.size() == Partitions.size());
     Y_ABORT_UNLESS(Stats.Aggregated.PartCount == Partitions.size());
@@ -2077,6 +2086,8 @@ void TTableInfo::VerifyConsistency() const {
         Y_ABORT_UNLESS(CondEraseSchedule.Empty());
         Y_ABORT_UNLESS(InFlightCondErase.empty());
     }
+
+    LastVerifyConsistencyTime = ui64(1e9 * cpuTimer.PassedReset());
 }
 
 void TTableAggregatedStats::RemoveShardStats(const TVector<TShardIdx>& keys, TInstant now) {
@@ -3071,7 +3082,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         if (TString objectPath = CanonizePath(path)) {
             result << objectPath;
         }
-        return std::move(result);
+        return result;
     };
 
     auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {

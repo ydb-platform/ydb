@@ -45,6 +45,10 @@ ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
 ui32 gDbStatsHistogramBucketsCount = 10;
 
+ui32 gFulltextMaxDelta = 10000;
+ui32 gFulltextMaxSegment = 10000;
+ui32 gFulltextSegmentPenalty = 4;
+
 // Avoid caching too many txIds when operations are cancelled en-masse
 size_t MaxCachedGlobalTxIds = 16;
 
@@ -3451,7 +3455,9 @@ void TDataShard::ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, c
         UpdateProposeQueueSize();
     } else {
         // Prepare planned transactions as soon as possible
-        NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan datashardTransactionSpan(
+            TWilsonTablet::TabletTopLevel, NWilson::TTraceId(ev->TraceId),
+            "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
         if (datashardTransactionSpan) {
             datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
         }

@@ -414,6 +414,7 @@ public:
                 hFunc(TEvRetryShard, HandleRetry);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
+                cFunc(TEvents::TEvPoison::EventType, PassAway);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -738,12 +739,12 @@ public:
         }
     }
 
-    bool CheckTotalRetriesExeeded() {
+    bool CheckTotalRetriesExceeded() {
         const auto limit = MaxTotalRetries();
         return limit && TotalRetries + 1 > *limit;
     }
 
-    bool CheckShardRetriesExeeded(ui64 id) {
+    bool CheckShardRetriesExceeded(ui64 id) {
         if (!Reads[id] || Reads[id].Finished) {
             return false;
         }
@@ -761,13 +762,13 @@ public:
 
         TDuration delay;
         if (!throttleDelay) {
-            if (CheckTotalRetriesExeeded()) {
+            if (CheckTotalRetriesExceeded()) {
                 return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
                     NDqProto::StatusIds::UNAVAILABLE);
             }
             ++TotalRetries;
 
-            if (CheckShardRetriesExeeded(id)) {
+            if (CheckShardRetriesExceeded(id)) {
                 ResetRead(id);
                 return ResolveShard(state);
             }
@@ -935,7 +936,7 @@ public:
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    TString DebugPrintContionuationToken(TString s) {
+    TString DebugPrintContinuationToken(TString s) {
         NKikimrTxDataShard::TReadContinuationToken token;
         Y_ABORT_UNLESS(token.ParseFromString(s));
         TString lastKey = "(empty)";
@@ -1037,7 +1038,7 @@ public:
                 const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
                     ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
                     : std::nullopt;
-                if (!throttleDelay && (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id))) {
+                if (!throttleDelay && (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id))) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
@@ -1045,7 +1046,7 @@ public:
                 return RetryRead(id, false, throttleDelay);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                if (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id)) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -1053,7 +1054,7 @@ public:
                 return RetryRead(id);
             }
             case Ydb::StatusIds::NOT_FOUND: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                if (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id)) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::UNAVAILABLE);
@@ -1112,7 +1113,7 @@ public:
         CA_LOG_D(TStringBuilder() << "new data for read #" << id
             << " seqno = " << seqNo
             << " finished = " << record.GetFinished());
-        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(&msg) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
+        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(&msg) << " continuation token " << DebugPrintContinuationToken(record.GetContinuationToken()));
 
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();

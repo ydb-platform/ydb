@@ -4,6 +4,7 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -43,10 +44,13 @@ TRegion::TRegion(
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
-        const auto vChunkConfig =
-            persisted ? *persisted : TVChunkConfig::Make(vChunkIndex);
+        const auto vChunkConfig = persisted ? *persisted
+                                            : TVChunkConfig::MakeDefault(
+                                                  vChunkIndex,
+                                                  DirectBlockGroupHostCount,
+                                                  DefaultPrimaryCount);
         Y_ABORT_UNLESS(vChunkConfig.IsValid());
-        Y_ABORT_UNLESS(vChunkConfig.VChunkIndex == vChunkIndex);
+        Y_ABORT_UNLESS(vChunkConfig.GetVChunkIndex() == vChunkIndex);
 
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
@@ -67,6 +71,14 @@ void TRegion::Run()
     }
 }
 
+void TRegion::Stop()
+{
+    for (const auto& vChunk: VChunks) {
+        vChunk->Stop();
+    }
+    VChunks.clear();
+}
+
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
@@ -83,7 +95,6 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
 NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
     const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
@@ -91,7 +102,6 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        lsn,
         traceId);
 }
 

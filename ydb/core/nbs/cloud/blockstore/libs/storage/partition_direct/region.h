@@ -30,6 +30,7 @@ public:
         NMonitoring::TDynamicCounterPtr counters);
 
     void Run();
+    void Stop();
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -39,12 +40,11 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
         const NWilson::TTraceId& traceId);
 
 private:
     NActors::TActorSystem* const ActorSystem;
-    TVector<std::shared_ptr<TVChunk>> VChunks;
+    TVector<TVChunkPtr> VChunks;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

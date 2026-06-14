@@ -42,30 +42,29 @@ namespace {
             const auto includeLocation = GetProtoRequest()->include_location();
             const auto includeStats = GetProtoRequest()->include_stats();
 
-            for (const auto& p : TopicInfo.Info->Description.GetPartitions()) {
-                if (!NeedProcessPartition(p)) {
-                    continue;
-                }
+            const auto partitionId = GetProtoRequest()->partition_id();
+            auto* p = FindIfPtr(TopicInfo.Info->Description.GetPartitions(), [&](const auto& p) {
+                return p.GetPartitionId() == partitionId;
+            });
 
-                auto it = Partitions.find(p.GetPartitionId());
-                if (it == Partitions.end()) {
-                    continue;
-                }
-
+            if (p) {
                 auto& partition = *Result.mutable_partition();
-                partition.set_partition_id(p.GetPartitionId());
-                partition.set_active(p.GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
+                partition.set_partition_id(p->GetPartitionId());
+                partition.set_active(p->GetStatus() == ::NKikimrPQ::ETopicPartitionStatus::Active);
 
-                auto& partitionInfo = it->second;
+                auto it = Partitions.find(p->GetPartitionId());
+                if (it != Partitions.end()) {
+                    auto& partitionInfo = it->second;
 
-                if (includeLocation) {
-                    *partition.mutable_partition_location() = partitionInfo.Location;
-                }
-
-                if (includeStats) {
-                    auto* partitionStats = partition.mutable_partition_stats();
-                    *partitionStats = partitionInfo.Stats.partition_stats();
-                    partitionStats->set_partition_node_id(partitionInfo.Location.node_id());
+                    if (includeLocation) {
+                        *partition.mutable_partition_location() = partitionInfo.Location;
+                    }
+    
+                    if (includeStats) {
+                        auto* partitionStats = partition.mutable_partition_stats();
+                        *partitionStats = partitionInfo.Stats.partition_stats();
+                        partitionStats->set_partition_node_id(partitionInfo.Location.node_id());
+                    }
                 }
             }
 

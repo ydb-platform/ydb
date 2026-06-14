@@ -193,15 +193,14 @@ jobs:
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
 
   # --------------------------------------------------------------- sharded --
-  # One job replaces the former build/list/plan trio: ya test -L (the longest
-  # part, ~20 min) runs in the background while the cached no-tests build
-  # (~3 min) runs in the foreground, then the shard plan is computed from
-  # local files. Saves a big-runner allocation and two artifact round-trips.
+  # Prepare: build full/increment graph (-A, no tests), plan UID shards,
+  # then each test_shard replays its graph slice (same execution model as
+  # monolith -A, unlike the old suite-list -A suite1 suite2… path).
   prepare:
     needs: params
     if: needs.params.outputs.mode == 'sharded'
     runs-on: ${{ fromJSON(needs.params.outputs.runner) }}
-    name: Prepare ${{ inputs.build_preset }} (build, list, plan)
+    name: Prepare ${{ inputs.build_preset }} (build, plan)
     timeout-minutes: 240
     outputs:
       shard_ids: ${{ steps.plan.outputs.shard_ids }}
@@ -232,30 +231,6 @@ jobs:
       # the build action would wipe ~/.ya from under the running ya test -L.
       - name: Clean ya cache
         run: rm -rf ~/.ya
-      - name: Start test listing (background)
-        if: inputs.increment != true
-        env:
-          BUILD_PRESET: ${{ inputs.build_preset }}
-          TEST_THREADS: "52"
-        run: |
-          set -euo pipefail
-          chmod +x .github/scripts/tests/sharding/list_tests_for_shard_plan.sh
-          # Listing runs in a detached git worktree: in increment mode
-          # graph_compare.py switches the main working tree between commits,
-          # which must not race with ya test -L reading the sources.
-          # ya itself supports concurrent invocations (~/.ya file locks).
-          git worktree add --detach .list_tree HEAD
-          # stdio is fully detached from the step so the runner does not wait
-          # on open pipes; the exit code lands in list_rc.txt.
-          (
-            set +e
-            cd .list_tree
-            "$GITHUB_WORKSPACE/.github/scripts/tests/sharding/list_tests_for_shard_plan.sh" \
-              "${{ inputs.test_targets }}" "$GITHUB_WORKSPACE/test_list.log"
-            echo $? > "$GITHUB_WORKSPACE/list_rc.txt"
-          ) > list_runner.log 2>&1 < /dev/null &
-          disown
-          echo "Test listing started in background"
       - name: Build (no tests)
         uses: ./.github/actions/build_and_test_ya_parallel
         with:
@@ -286,36 +261,6 @@ jobs:
             graph.json
             context.json
           retention-days: 3
-      - name: Wait for test listing
-        if: inputs.increment != true
-        run: |
-          set -euo pipefail
-          echo "Waiting for background ya test -L to finish..."
-          waited=0
-          while [ ! -f list_rc.txt ]; do
-            if [ "$waited" -ge 5400 ]; then
-              echo "Test listing did not finish within 90 min" >&2
-              tail -n 40 list_runner.log >&2 || true
-              exit 1
-            fi
-            sleep 10; waited=$((waited + 10))
-          done
-          rc=$(cat list_rc.txt)
-          echo "--- listing log (tail) ---"
-          tail -n 40 list_runner.log || true
-          if [ "$rc" -ne 0 ]; then
-            echo "Test listing failed with exit code $rc" >&2
-            exit "$rc"
-          fi
-          git worktree remove --force .list_tree || true
-      - name: Upload test list
-        if: always() && inputs.increment != true
-        uses: actions/upload-artifact@v4
-        with:
-          name: parallel-${{ inputs.build_preset }}-test-list-${{ github.run_id }}
-          path: test_list.log
-          retention-days: 3
-          if-no-files-found: ignore
       - name: Build shard plan
         id: plan
         env:
@@ -331,22 +276,16 @@ jobs:
           set -eux
           python3 -m pip install pyyaml ydb --quiet
           mkdir -p shard_plan_out
+          chmod +x .github/scripts/tests/sharding/plan_graph_shards.sh
           if [ "${{ inputs.increment }}" = "true" ]; then
-            chmod +x .github/scripts/tests/sharding/plan_increment_graph_shards.sh
-            .github/scripts/tests/sharding/plan_increment_graph_shards.sh \
-              graph.json \
-              "$SHARD_COUNT" \
-              shard_plan_out
+            export PLAN_MODE=increment_graph
           else
-            INCREMENT_GRAPH=""
-            chmod +x .github/scripts/tests/sharding/plan_shard_tests.sh
-            .github/scripts/tests/sharding/plan_shard_tests.sh \
-              test_list.log \
-              "${{ inputs.test_targets }}" \
-              "$SHARD_COUNT" \
-              shard_plan_out \
-              "$INCREMENT_GRAPH"
+            export PLAN_MODE=full_graph
           fi
+          .github/scripts/tests/sharding/plan_graph_shards.sh \
+            graph.json \
+            "$SHARD_COUNT" \
+            shard_plan_out
           plan_suffix="${{ inputs.test_targets }}"
           if [ "${{ inputs.increment }}" = "true" ]; then
             plan_suffix="$plan_suffix, increment"
@@ -406,54 +345,36 @@ jobs:
         with:
           name: parallel-${{ inputs.build_preset }}-shard-plan-${{ github.run_id }}
           path: shard_plan
-      - name: Download increment graph
-        if: inputs.increment == true
+      - name: Download build graph
         uses: actions/download-artifact@v4
         with:
           name: parallel-${{ inputs.build_preset }}-graph-${{ github.run_id }}
-          path: increment_graph
-      - name: Filter increment graph for shard
-        if: inputs.increment == true
+          path: build_graph
+      - name: Filter graph for shard
         id: graph_shard
         run: |
           set -euo pipefail
           mkdir -p shard_graph_out
           python3 .github/scripts/tests/sharding/filter_graph_for_shard.py \
-            --graph increment_graph/graph.json \
-            --context increment_graph/context.json \
+            --graph build_graph/graph.json \
+            --context build_graph/context.json \
             --plan shard_plan/shard_plan.json \
             --shard-id ${{ matrix.shard_id }} \
             -o shard_graph_out/graph.json \
             --context-output shard_graph_out/context.json
           echo "graph_path=$PWD/shard_graph_out/graph.json" >> "$GITHUB_OUTPUT"
           echo "context_path=$PWD/shard_graph_out/context.json" >> "$GITHUB_OUTPUT"
-          echo "Shard ${{ matrix.shard_id }} increment graph nodes: $(jq '.result | length' shard_graph_out/graph.json)"
+          echo "Shard ${{ matrix.shard_id }} graph nodes: $(jq '.result | length' shard_graph_out/graph.json)"
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
-      - name: Resolve shard build targets
-        id: shard_targets
-        if: inputs.increment != true
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t targets < <(jq -r --argjson id '${{ matrix.shard_id }}' '.shards[] | select(.id==$id) | .tests[]' shard_plan/shard_plan.json)
-          if [ "${#targets[@]}" -eq 0 ]; then
-            echo "No targets for shard ${{ matrix.shard_id }}"
-            exit 1
-          fi
-          echo "targets=${targets[*]}" >> "$GITHUB_OUTPUT"
-          echo "Shard ${{ matrix.shard_id }} targets (${#targets[@]}): ${targets[*]}"
-      # Retries run in-shard (attempts 2-3 on the same warm machine: binaries
-      # are built locally, so a retry costs only the re-run time). test_ya
-      # stops retrying on >500 failures per shard.
       - name: Run shard tests (with in-shard retries)
         uses: ./.github/actions/build_and_test_ya_parallel
         with:
           build_preset: ${{ inputs.build_preset }}
-          build_target: ${{ inputs.increment == true && inputs.test_targets || steps.shard_targets.outputs.targets }}
+          build_target: ${{ inputs.test_targets }}
           increment: false
           run_tests: true
           test_size: small,medium
@@ -461,8 +382,8 @@ jobs:
           custom_branch_name: ${{ inputs.history_branch }}
           put_build_results_to_cache: true
           skip_graph_compare: true
-          prebuilt_graph_path: ${{ inputs.increment == true && steps.graph_shard.outputs.graph_path || '' }}
-          prebuilt_context_path: ${{ inputs.increment == true && steps.graph_shard.outputs.context_path || '' }}
+          prebuilt_graph_path: ${{ steps.graph_shard.outputs.graph_path }}
+          prebuilt_context_path: ${{ steps.graph_shard.outputs.context_path }}
           publish_github_status: false
           publish_pr_comment: false
           s3_subdir: shard_${{ matrix.shard_id }}

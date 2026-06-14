@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Plan increment sharding by partitioning graph.result UIDs across runners.
+"""Plan graph-replay sharding by partitioning graph.result UIDs across runners.
 
 Bin-packs individual result UIDs by history p50 weights (longest prefix match
 on node paths, split evenly when many nodes share a path). Each shard keeps the
-full cut-graph and runs a subset of ``graph.result`` via filter_graph_for_shard.
+full graph and runs a subset of ``graph.result`` via filter_graph_for_shard.
+
+Used for increment cuts (``increment_graph``) and full PR-check scope
+(``full_graph``).
 """
 from __future__ import annotations
 
@@ -68,6 +71,7 @@ def build_plan(
     *,
     duration_p50: dict[str, float],
     default_weight: float = 600.0,
+    plan_mode: str = "increment_graph",
 ) -> dict[str, Any]:
     nodes_by_uid = graph_nodes_by_uid(graph)
     uids = result_uids(graph)
@@ -106,7 +110,7 @@ def build_plan(
         )
 
     return {
-        "plan_mode": "increment_graph",
+        "plan_mode": plan_mode,
         "requested_shard_count": shard_count,
         "shard_count": len(shards),
         "total_graph_nodes": len(result_uids(graph)),
@@ -141,13 +145,19 @@ def main() -> int:
         default=600.0,
         help="Fallback weight when no history prefix matches",
     )
+    parser.add_argument(
+        "--plan-mode",
+        default="increment_graph",
+        choices=("increment_graph", "full_graph"),
+        help="Plan mode stored in shard_plan.json (default: increment_graph)",
+    )
     args = parser.parse_args()
 
     graph = json.loads(args.graph.read_text(encoding="utf-8"))
     validate_graph(graph)
     if not result_uids(graph):
         plan = {
-            "plan_mode": "increment_graph",
+            "plan_mode": args.plan_mode,
             "requested_shard_count": 0,
             "shard_count": 0,
             "total_graph_nodes": 0,
@@ -199,13 +209,14 @@ def main() -> int:
         shard_count,
         duration_p50=duration_p50,
         default_weight=args.default_weight_sec,
+        plan_mode=args.plan_mode,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     loads = Counter(plan["uid_assignments"].values())
     print(
-        f"Increment graph plan: {plan['shard_count']} shards, "
+        f"Graph replay plan ({args.plan_mode}): {plan['shard_count']} shards, "
         f"{plan['total_graph_nodes']} nodes, {plan['total_components']} components, "
         f"weight={plan['total_weight']} -> {args.output}",
         file=sys.stderr,

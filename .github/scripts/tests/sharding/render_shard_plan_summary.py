@@ -17,10 +17,11 @@ def render(plan: dict, title: str = "Shard plan") -> str:
         lines.append(f"**Shard count:** {shard_count} (requested {requested}, capped to suite count)")
     else:
         lines.append(f"**Shard count:** {shard_count}")
-    if plan_mode == "increment_graph":
+    if plan_mode in ("increment_graph", "full_graph"):
+        graph_label = "Full graph" if plan_mode == "full_graph" else "Increment graph"
         total_nodes = plan.get("total_graph_nodes")
         total_weight = plan.get("total_weight")
-        total_line = f"**Increment graph:** {total_nodes or 0} result nodes"
+        total_line = f"**{graph_label}:** {total_nodes or 0} result nodes"
         if total_weight is not None:
             total_line += f", weight {total_weight}"
         lines.append(total_line)

@@ -123,10 +123,6 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
        ...
    }
 
-    ````
-
-  {% endlist %}
-
 - Python
 
   This functionality is not currently supported.

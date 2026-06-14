@@ -7,13 +7,6 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-class TEvGetObjectRequest: public TGenericRequest<TEvGetObjectRequest, EvGetObjectRequest, Aws::S3::Model::GetObjectRequest> {
-private:
-    using TBase = TGenericRequest<TEvGetObjectRequest, EvGetObjectRequest, Aws::S3::Model::GetObjectRequest>;
-public:
-    using TBase::TBase;
-};
-
 class TEvGetObjectResponse: public TResponseWithBody<TEvGetObjectResponse, EvGetObjectResponse, Aws::S3::Model::GetObjectResult, Aws::String> {
 private:
     using TBase = TResponseWithBody<TEvGetObjectResponse, EvGetObjectResponse, Aws::S3::Model::GetObjectResult, Aws::String>;

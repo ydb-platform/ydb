@@ -301,7 +301,7 @@ END DO
 
 ### `raw` {#raw}
 
-Reads message payloads as raw bytes. Default schema: `SCHEMA(Data String)`.
+Reads message payloads as raw bytes. Data read this way can be processed with [YQL](../../yql/reference/udf/list/string) string functions. Default schema: `SCHEMA(Data String)`.
 
 Example query:
 

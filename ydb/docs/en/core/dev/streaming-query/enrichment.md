@@ -40,7 +40,7 @@ Create a [streaming query](../../concepts/streaming-query.md) that performs enri
 CREATE STREAMING QUERY query_with_table_join AS
 DO BEGIN
 
--- Чтение событий из входного топика
+-- Read events from the input topic
 $topic_data = SELECT
     *
 FROM
@@ -54,7 +54,7 @@ WITH (
     )
 );
 
--- Присоединение справочника к потоку по ServiceId
+-- Join the reference to the stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -65,7 +65,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Запись в выходной топик (JSON)
+-- Write to the output topic (JSON)
 INSERT INTO
     output_topic -- or external topic ext_source.output_topic
 SELECT
@@ -85,7 +85,7 @@ Create an additional [external data source](../../yql/reference/syntax/create-ex
 
 
 ```yql
--- Источник данных S3 для чтения справочника
+-- S3 data source for reading the reference
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "<s3_endpoint>",
@@ -105,7 +105,7 @@ Create a [streaming query](../../concepts/streaming-query.md) that performs enri
 CREATE STREAMING QUERY query_with_join AS
 DO BEGIN
 
--- Чтение событий из входного топика
+-- Read events from the input topic
 $topic_data = SELECT
     *
 FROM
@@ -119,7 +119,7 @@ WITH (
     )
 );
 
--- Чтение справочника сервисов из S3
+-- Read the services reference from S3
 $s3_data = SELECT
     *
 FROM
@@ -132,7 +132,7 @@ WITH (
     )
 );
 
--- Присоединение справочника к потоку по ServiceId
+-- Join the reference to the stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -143,7 +143,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Запись результата в выходной топик в формате JSON
+-- Write the result to the output topic as JSON
 INSERT INTO
     ext_source.output_topic -- or local topic output_topic
 SELECT

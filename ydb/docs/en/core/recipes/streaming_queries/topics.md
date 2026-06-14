@@ -74,6 +74,7 @@ Verify that the topics are created:
 
 ## Step 2. Create the streaming query {#step2}
 
+Create a [streaming query](../../concepts/streaming-query.md) with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md):
 
 ```sql
 CREATE STREAMING QUERY query_example AS
@@ -82,7 +83,7 @@ DO BEGIN
 $number_errors = SELECT
     Host,
     COUNT(*) AS ErrorCount,
-    CAST(HOP_START() AS String) AS Ts  -- Время начала окна, соответствующего результату агрегации
+    CAST(HOP_START() AS String) AS Ts  -- Window start time for the aggregation result
 FROM
     input_topic
 WITH (
@@ -96,24 +97,28 @@ WITH (
 WHERE
     Level = "error"
 GROUP BY
-    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Число ошибок на неперекрывающихся окнах длиной 10 минут
+    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Error count in non-overlapping 10-minute windows
     Host;
 
 INSERT INTO
     output_topic
 SELECT
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))  -- Сериализация всех колонок в JSON
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))  -- Serialize all columns to JSON
 FROM
     $number_errors;
 
 END DO
 ```
 
+More details:
 
-Details:
+- `GROUP BY HOP` aggregation and `HOP_START` — [{#T}](../../yql/reference/syntax/select/group-by.md#group-by-hop).
+- Writing to a topic — [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats).
+- JSON serialization: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
 ## Step 3. Check query state {#step3}
 
+Check query state in the [streaming_queries](../../dev/system-views.md#streaming_queries) system table:
 
 ```sql
 SELECT
@@ -128,8 +133,11 @@ FROM
 
 Make sure that the `Status` field has the value `RUNNING`. Otherwise, check the `Issues` field.
 
+If the query is in `SUSPENDED` status or the `Issues` field contains errors, see the error diagnostics section.
+
 ## Step 4. Produce sample input {#step4}
 
+Write test messages to the topic using the [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md):
 
 ```bash
 echo '{"Time": "2025-01-01T00:00:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
@@ -139,8 +147,11 @@ echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-2"
 echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
 ```
 
+Results appear in the output topic after the 10-minute aggregation window closes.
 
 ## Step 5. Read the output topic {#step5}
+
+Read data from the output topic:
 
 ```bash
 ./ydb --profile quickstart topic read output_topic --partition-ids 0 --start-offset 0 --limit 10 --format newline-delimited
@@ -156,6 +167,8 @@ Expected result:
 ```
 
 ## Step 6. Delete the query {#step6}
+
+Delete the query with [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md):
 
 ```sql
 DROP STREAMING QUERY query_example;

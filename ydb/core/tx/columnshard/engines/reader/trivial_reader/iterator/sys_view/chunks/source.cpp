@@ -346,7 +346,8 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
 
         THashSet<ui32> indexIds;
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            if (!i.GetBlobRangeOptional()) {
+            const auto* blobRangeLink = i.GetBlobRangeOptional();
+            if (!blobRangeLink) {
                 continue;
             }
             if (!indexIds.emplace(i.GetEntityId()).second) {

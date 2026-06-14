@@ -21,7 +21,7 @@ private:
     }
 
     virtual TString GetEntityStorageId(const ui32 entityId) const override {
-        return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
+        return GetPortionAccessor().GetPortionInfo().GetEntityStorageId(entityId, Schema->GetIndexInfo());
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
@@ -34,6 +34,14 @@ private:
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
         return GetPortionAccessor().RestoreBlobRange(rangeLink);
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        return Schema;
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
+        return Schema;
     }
 
     virtual bool DoStartFetchingAccessor(

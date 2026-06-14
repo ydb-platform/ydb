@@ -36,6 +36,30 @@ def estimate_single_job_minutes(total_weight_sec: float, threads: int) -> float:
     return total_weight_sec / 60.0 / threads
 
 
+def estimate_critical_path_minutes(shard_weights_sec: list[float], threads: int) -> float:
+    """Wall-clock lower bound for parallel shards: slowest shard / threads."""
+    if not shard_weights_sec:
+        return 0.0
+    return estimate_single_job_minutes(max(shard_weights_sec), threads)
+
+
+def enrich_plan_timing_estimate(plan: dict, threads: int) -> dict:
+    """Attach estimated_* timing fields from shard balance weights."""
+    shards = plan.get("shards") or []
+    loads = [float(shard.get("balance_weight") or 0) for shard in shards]
+    total_weight = float(plan.get("total_weight") or sum(loads) or 0.0)
+    max_load = max(loads) if loads else 0.0
+    plan["estimate_threads"] = threads
+    plan["estimated_max_shard_weight_sec"] = round(max_load, 1)
+    plan["estimated_critical_path_min"] = round(
+        estimate_critical_path_minutes(loads, threads), 1
+    )
+    plan["estimated_single_job_min"] = round(
+        estimate_single_job_minutes(total_weight, threads), 1
+    )
+    return plan
+
+
 def choose_shard_count(
     total_weight_sec: float,
     *,

@@ -23,7 +23,7 @@ for path in (_SCRIPT_DIR, _TESTS_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from choose_shard_count import choose_shard_count  # noqa: E402
+from choose_shard_count import choose_shard_count, enrich_plan_timing_estimate  # noqa: E402
 from get_test_duration_estimates import DEFAULT_DAYS_BACK, get_suite_duration_p50  # noqa: E402
 from graph_plan_utils import (  # noqa: E402
     component_weight,
@@ -72,6 +72,7 @@ def build_plan(
     duration_p50: dict[str, float],
     default_weight: float = 600.0,
     plan_mode: str = "increment_graph",
+    threads: int = 52,
 ) -> dict[str, Any]:
     nodes_by_uid = graph_nodes_by_uid(graph)
     uids = result_uids(graph)
@@ -109,7 +110,7 @@ def build_plan(
             }
         )
 
-    return {
+    plan = {
         "plan_mode": plan_mode,
         "requested_shard_count": shard_count,
         "shard_count": len(shards),
@@ -124,6 +125,7 @@ def build_plan(
         "uid_assignments": assignments,
         "shards": shards,
     }
+    return enrich_plan_timing_estimate(plan, threads)
 
 
 def main() -> int:
@@ -156,16 +158,19 @@ def main() -> int:
     graph = json.loads(args.graph.read_text(encoding="utf-8"))
     validate_graph(graph)
     if not result_uids(graph):
-        plan = {
-            "plan_mode": args.plan_mode,
-            "requested_shard_count": 0,
-            "shard_count": 0,
-            "total_graph_nodes": 0,
-            "total_components": 0,
-            "total_weight": 0,
-            "uid_assignments": {},
-            "shards": [],
-        }
+        plan = enrich_plan_timing_estimate(
+            {
+                "plan_mode": args.plan_mode,
+                "requested_shard_count": 0,
+                "shard_count": 0,
+                "total_graph_nodes": 0,
+                "total_components": 0,
+                "total_weight": 0,
+                "uid_assignments": {},
+                "shards": [],
+            },
+            args.threads,
+        )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print("Empty increment graph: shard_count=0", file=sys.stderr)
@@ -210,6 +215,7 @@ def main() -> int:
         duration_p50=duration_p50,
         default_weight=args.default_weight_sec,
         plan_mode=args.plan_mode,
+        threads=args.threads,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -218,7 +224,8 @@ def main() -> int:
     print(
         f"Graph replay plan ({args.plan_mode}): {plan['shard_count']} shards, "
         f"{plan['total_graph_nodes']} nodes, {plan['total_components']} components, "
-        f"weight={plan['total_weight']} -> {args.output}",
+        f"weight={plan['total_weight']}, "
+        f"est. critical path ~{plan.get('estimated_critical_path_min', 0):.1f} min -> {args.output}",
         file=sys.stderr,
     )
     print(f"Shard loads (nodes): {dict(sorted(loads.items()))}", file=sys.stderr)

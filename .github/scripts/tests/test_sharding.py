@@ -17,11 +17,16 @@ SHARDING_DIR = Path(__file__).resolve().parent / "sharding"
 if str(SHARDING_DIR) not in sys.path:
     sys.path.insert(0, str(SHARDING_DIR))
 
-from choose_shard_count import choose_shard_count  # noqa: E402
+from choose_shard_count import (  # noqa: E402
+    choose_shard_count,
+    enrich_plan_timing_estimate,
+    estimate_critical_path_minutes,
+)
 from estimate_runner_capacity import compute_max_new_runners  # noqa: E402
 from filter_graph_for_shard import filter_for_shard  # noqa: E402
 from graph_plan_utils import assign_result_uids_to_shards, load_graph  # noqa: E402
 from render_artifacts_nav import render_nav_html  # noqa: E402
+from render_shard_plan_summary import render as render_shard_plan_summary  # noqa: E402
 
 
 def _run(script: str, *args: str) -> subprocess.CompletedProcess:
@@ -567,6 +572,39 @@ class ChooseShardCountTest(unittest.TestCase):
     def test_max_shards_bound(self):
         self.assertEqual(self._choose(250, max_shards=6), 6)
 
+    def test_estimate_critical_path_minutes(self):
+        self.assertAlmostEqual(estimate_critical_path_minutes([5200.0, 4800.0], 52), 5200.0 / 60.0 / 52.0)
+
+    def test_enrich_plan_timing_estimate(self):
+        plan = {
+            "shard_count": 2,
+            "total_weight": 10000.0,
+            "shards": [{"balance_weight": 5200.0}, {"balance_weight": 4800.0}],
+        }
+        enrich_plan_timing_estimate(plan, 52)
+        self.assertEqual(plan["estimate_threads"], 52)
+        self.assertEqual(plan["estimated_max_shard_weight_sec"], 5200.0)
+        self.assertEqual(plan["estimated_critical_path_min"], round(5200.0 / 60.0 / 52.0, 1))
+        self.assertEqual(plan["estimated_single_job_min"], round(10000.0 / 60.0 / 52.0, 1))
+
+    def test_render_shard_plan_summary_includes_estimate(self):
+        plan = enrich_plan_timing_estimate(
+            {
+                "plan_mode": "increment_graph",
+                "shard_count": 2,
+                "total_graph_nodes": 10,
+                "total_weight": 10000.0,
+                "shards": [
+                    {"id": 0, "result_node_count": 5, "balance_weight": 5200.0, "sample_paths": ["a"]},
+                    {"id": 1, "result_node_count": 5, "balance_weight": 4800.0, "sample_paths": ["b"]},
+                ],
+            },
+            52,
+        )
+        text = render_shard_plan_summary(plan)
+        self.assertIn("Estimated wall time (slowest shard)", text)
+        self.assertIn("Monolith equivalent", text)
+
     def test_cli_reads_summary_json(self):
         with tempfile.TemporaryDirectory() as tmp:
             summary = Path(tmp) / "list_summary.json"
@@ -639,6 +677,8 @@ class FilterGraphForShardTest(unittest.TestCase):
             self.assertEqual(plan["plan_mode"], "increment_graph")
             self.assertEqual(plan["shard_count"], 2)
             self.assertEqual(len(plan["uid_assignments"]), plan["total_graph_nodes"])
+            self.assertIn("estimated_critical_path_min", plan)
+            self.assertEqual(plan["estimate_threads"], 52)
 
     def test_split_graph_result_balances_large_connected_component(self):
         graph = {

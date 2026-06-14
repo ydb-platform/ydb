@@ -8,6 +8,23 @@ import sys
 from pathlib import Path
 
 
+def _append_timing_estimate(lines: list[str], plan: dict) -> None:
+    critical = plan.get("estimated_critical_path_min")
+    if critical is None:
+        return
+    threads = plan.get("estimate_threads", 52)
+    max_weight = plan.get("estimated_max_shard_weight_sec")
+    est_line = f"**Estimated wall time (slowest shard):** ~{critical:.0f} min ({threads} threads"
+    if max_weight is not None:
+        est_line += f", max shard weight {max_weight}s"
+    est_line += ")"
+    lines.append(est_line)
+    single = plan.get("estimated_single_job_min")
+    if single is not None and plan.get("shard_count", 1) > 1:
+        lines.append(f"**Monolith equivalent:** ~{single:.0f} min (total weight / threads)")
+    lines.append("")
+
+
 def render(plan: dict, title: str = "Shard plan") -> str:
     lines = [f"## {title}", ""]
     plan_mode = plan.get("plan_mode")
@@ -17,6 +34,7 @@ def render(plan: dict, title: str = "Shard plan") -> str:
         lines.append(f"**Shard count:** {shard_count} (requested {requested}, capped to suite count)")
     else:
         lines.append(f"**Shard count:** {shard_count}")
+    _append_timing_estimate(lines, plan)
     if plan_mode in ("increment_graph", "full_graph"):
         graph_label = "Full graph" if plan_mode == "full_graph" else "Increment graph"
         total_nodes = plan.get("total_graph_nodes")

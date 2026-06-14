@@ -710,7 +710,7 @@ TOperationAttributes TRpcRawClient::GetOperation(
 {
     auto traceContextGuard = CreateTraceContext("RpcRawClient.GetOperation");
 
-    auto future = Clients_.Light->GetOperation(alias, SerializeOptionsForGetOperation(options, /*useAlias*/ true));
+    auto future = Clients_.Light->GetOperation(std::string(alias), SerializeOptionsForGetOperation(options, /*useAlias*/ true));
     auto result = WaitAndProcess(future);
     return ParseOperationAttributes(result);
 }

@@ -46,6 +46,11 @@ on:
         required: false
         type: boolean
         default: false
+      checkout_sha:
+        description: 'Optional pinned commit SHA (overrides PR merge commit or branch tip for parity runs)'
+        required: false
+        type: string
+        default: ''
       disable_peak_cap:
         description: 'Ignore the peak-hours shard cap'
         required: false
@@ -68,10 +73,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REF_INPUT: ${{ inputs.ref }}
+          CHECKOUT_SHA_INPUT: ${{ inputs.checkout_sha }}
         run: |
           set -euo pipefail
           ref="${REF_INPUT#pull/}"
           ref="${ref#\#}"
+          checkout_ref=""
+          pr_number=""
+          pr_head_sha=""
+          history_branch=""
           if [[ "$ref" =~ ^[0-9]+$ ]]; then
             pr_json=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail --show-error -sL \
               -H "Accept: application/vnd.github+json" \
@@ -84,22 +94,27 @@ jobs:
               echo "PR #$ref has no merge commit (conflicts or closed?)" >&2
               exit 1
             fi
-            echo "checkout_ref=$merge_sha" >> "$GITHUB_OUTPUT"
-            echo "pr_number=$ref" >> "$GITHUB_OUTPUT"
-            echo "pr_head_sha=$head_sha" >> "$GITHUB_OUTPUT"
-            echo "history_branch=$base_ref" >> "$GITHUB_OUTPUT"
+            checkout_ref="$merge_sha"
+            pr_number="$ref"
+            pr_head_sha="$head_sha"
+            history_branch="$base_ref"
             echo "PR #$ref: merge=$merge_sha head=$head_sha base=$base_ref"
           else
             case "$ref" in
-              main|stable-*|stream-*|prestable-*|release-*) history="$ref" ;;
-              *) history=main ;;
+              main|stable-*|stream-*|prestable-*|release-*) history_branch="$ref" ;;
+              *) history_branch=main ;;
             esac
-            echo "checkout_ref=$ref" >> "$GITHUB_OUTPUT"
-            echo "pr_number=" >> "$GITHUB_OUTPUT"
-            echo "pr_head_sha=" >> "$GITHUB_OUTPUT"
-            echo "history_branch=$history" >> "$GITHUB_OUTPUT"
-            echo "Branch run: $ref (history: $history)"
+            checkout_ref="$ref"
+            echo "Branch run: $ref (history: $history_branch)"
           fi
+          if [ -n "$CHECKOUT_SHA_INPUT" ]; then
+            echo "Pinning checkout SHA: $CHECKOUT_SHA_INPUT (was: $checkout_ref)"
+            checkout_ref="$CHECKOUT_SHA_INPUT"
+          fi
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "pr_head_sha=$pr_head_sha" >> "$GITHUB_OUTPUT"
+          echo "history_branch=$history_branch" >> "$GITHUB_OUTPUT"
 
   run_check:
     needs: resolve

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "future.h"
 #endif
-#undef FUTURE_INL_H_
 
 #include "bind.h"
 #include "cancelation_token.h"

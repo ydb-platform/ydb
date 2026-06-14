@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "rich_constrained.h"
 #endif
-#undef RICH_CONSTRAINED_INL_H_
 
 #include "parser_detail.h"
 

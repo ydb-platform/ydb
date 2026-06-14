@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "concurrent_cache.h"
 #endif
-#undef CONCURRENT_CACHE_INL_H_
 
 namespace NYT {
 

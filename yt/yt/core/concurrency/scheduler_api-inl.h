@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "scheduler_api.h"
 #endif
-#undef SCHEDULER_API_INL_H_
 
 namespace NYT::NConcurrency {
 

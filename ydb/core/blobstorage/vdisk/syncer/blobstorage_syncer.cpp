@@ -462,6 +462,13 @@ namespace NKikimr {
 
             const ui64 firstLsnToKeep = ev->Get()->FirstLsnToKeep;
             if (firstLsnToKeep < StartupDataSyncBlockedUntilCutLsn) {
+                StartupDataSyncCutRequested = false;
+                LOG_DEBUG(ctx, BS_SYNCER,
+                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                        "Startup data sync recovery log cut dependency is not satisfied yet"
+                        " firstLsnToKeep# %" PRIu64 " blockedUntilCutLsn# %" PRIu64 " Marker# BSS48",
+                        firstLsnToKeep, StartupDataSyncBlockedUntilCutLsn));
+                AskForRecoveryLogCut(ctx);
                 return;
             }
 

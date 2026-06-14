@@ -4,15 +4,14 @@ A **streaming query** is a query type designed for continuous processing of unbo
 
 Stream processing is widely used in systems such as [Apache Flink](https://flink.apache.org/), [Apache Kafka Streams](https://kafka.apache.org/documentation/streams/), and [Amazon Kinesis Data Analytics](https://aws.amazon.com/kinesis/data-analytics/). Typical use cases include monitoring and alerting, aggregating metrics over time windows, transforming and filtering events on the fly, enriching events from lookup tables, and detecting patterns in event sequences.
 
-{{ ydb-short-name }} implements stream processing as part of a unified data platform. Beyond typical streaming scenarios, integration into {{ ydb-short-name }} lets you ingest data from [topics](datamodel/topic.md), process change streams from [row-oriented tables](datamodel/table.md#row-oriented-tables) via [CDC](cdc.md), and write results to output topics or directly into tables. That way you can build low-latency data pipelines entirely inside {{ ydb-short-name }}.
+{{ ydb-short-name }} implements stream processing as part of a unified data platform. Beyond typical streaming scenarios, integration into {{ydb-short-name}} lets you ingest data from [topics](datamodel/topic.md) {{ydb-short-name}}, process change streams from [row-oriented tables](datamodel/table.md#row-oriented-tables) via [CDC](cdc.md), and write results to output topics or directly into tables. That way you can build low-latency data pipelines entirely inside {{ydb-short-name}}.
 
 ## Differences from regular queries {#differences}
 
 Regular queries operate on data already stored in tables. The query runs, returns a result, and completes. A streaming query is created and keeps running indefinitely until explicitly stopped by the user. Data continuously arrives in a topic, flows through the query, and is written to a sink—another topic or a table.
 
-
 | Characteristic | Regular queries | Streaming queries |
-|----------------|-----------------|-------------------|
+| --- | --- | --- |
 | Data | Finite sets in tables | Unbounded event streams |
 | Lifetime | Completes after processing | Runs continuously |
 | Result | Available after completion | Updates as data arrives |
@@ -20,7 +19,7 @@ Regular queries operate on data already stored in tables. The query runs, return
 
 ## Data sources and sinks {#data-flow}
 
-Streaming queries read data from {{ ydb-short-name }} [topics](datamodel/topic.md) and write results to [topics](datamodel/topic.md) or [tables](datamodel/table.md). Data may arrive in a topic from external systems (for example, an application writes events using an SDK), but the streaming query itself only works with {{ ydb-short-name }} entities. Direct reads from external systems such as Apache Kafka, or writes to other databases such as PostgreSQL, are not supported.
+Streaming queries read data from [topics](datamodel/topic.md) {{ ydb-short-name }} and write results to [topics](datamodel/topic.md) or [tables](datamodel/table.md) {{ ydb-short-name }}. Data may arrive in a topic from external systems (for example, an application writes events using an SDK), but the streaming query itself only works with {{ ydb-short-name }} entities. Direct reads from external systems such as Apache Kafka, or writes to other databases such as PostgreSQL, are not supported.
 
 ### Sources {#sources}
 
@@ -58,14 +57,8 @@ We are actively improving stream processing. Delivery guarantees will get strong
 
 - The query must contain at least one read from a topic, because streaming processing requires a continuous input stream.
 - `JOIN` between two streams is not supported (a temporary architectural limitation).
-- Enrichment from {{ ydb-short-name }} tables is not supported — streaming queries may only use [S3 external tables](query_execution/federated_query/s3/external_table.md) for enrichment (support for {{ ydb-short-name }} tables is planned for release 26.1).
-- Reading and writing **local** topics directly is not supported — use [external data sources](datamodel/external_data_source.md) that point at the current database (this restriction is planned to be lifted in release 26.1).
 
 {% endnote %}
-
-To work with local topics, use [external data sources](datamodel/external_data_source.md):
-
-- Create an [external data source](datamodel/external_data_source.md) pointing to the same or another {{ ydb-short-name }} database and access topics through it.
 
 Also not supported in the current version:
 

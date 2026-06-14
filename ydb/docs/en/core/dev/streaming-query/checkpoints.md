@@ -1,6 +1,6 @@
 # Checkpoints
 
-A **checkpoint** is persisted state of a running [streaming query](../../concepts/streaming-query.md), used to recover processing after failures. {{ ydb-short-name }} periodically checkpoints all running streaming queries.
+A **checkpoint** is the persisted state of a running [streaming query](../../concepts/streaming-query.md), used to recover processing after failures. {{ ydb-short-name }} periodically saves checkpoints of all running streaming queries.
 
 ## Checkpoint contents {#contents}
 
@@ -15,28 +15,30 @@ A checkpoint contains:
 
 When processing fails (compute node restart, network interruption, timeout), the query restarts automatically and restores state from the latest checkpoint: it resumes reading from saved offsets and restores aggregation state.
 
+
 ```mermaid
 sequenceDiagram
-    participant Topic
-    participant Query as Query<br/>GROUP BY HOP (1 min)
-    participant Sink
+    participant Топик
+    participant Запрос as Запрос<br/>GROUP BY HOP (1 мин)
+    participant Приемник
 
-    Note over Query: Checkpoint saved<br/>offset = 2, sum = 10
-    Topic->>Query: value = 3 (offset 3)
-    Note over Query: sum = 13
-    Topic->>Query: value = 7 (offset 4)
-    Note over Query: sum = 20
-    Query-xQuery: Processing failure
-    Note over Query: Recover from checkpoint<br/>offset = 2, sum = 10
-    Topic->>Query: value = 3 (again)
-    Note over Query: sum = 13
-    Topic->>Query: value = 7 (again)
-    Note over Query: sum = 20
-    Note over Query: Window closed
-    Query->>Sink: sum = 20
+    Note over Запрос: Чекпоинт сохранён<br/>смещение = 2, sum = 10
+    Топик->>Запрос: value = 3 (смещение 3)
+    Note over Запрос: sum = 13
+    Топик->>Запрос: value = 7 (смещение 4)
+    Note over Запрос: sum = 20
+    Запрос-xЗапрос: Сбой обработки
+    Note over Запрос: Восстановление из чекпоинта<br/>смещение = 2, sum = 10
+    Топик->>Запрос: value = 3 (повторно)
+    Note over Запрос: sum = 13
+    Топик->>Запрос: value = 7 (повторно)
+    Note over Запрос: sum = 20
+    Note over Запрос: Окно закрыто
+    Запрос->>Приемник: sum = 20
 ```
 
-Events that arrived between the last checkpoint and the failure are processed again. That provides [at-least-once](guarantees.md#at-least-once) delivery — each event is processed at least once.
+
+Events that arrived between the last checkpoint and the failure are processed again. That provides the [at-least-once](../../dev/streaming-query/guarantees.md#at-least-once) guarantee — each event is processed at least once.
 
 Saving and selecting checkpoints for recovery is automatic. Old checkpoints are removed after a new one is saved successfully.
 
@@ -44,22 +46,24 @@ Saving and selecting checkpoints for recovery is automatic. Old checkpoints are 
 
 When you delete a query ([DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md)), its checkpoint is deleted with it. Because offsets live only in the checkpoint, a new query ([CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md)) has no saved position and starts reading from the end of the topic. Events that arrived between deleting the old query and starting the new one are not read.
 
+
 ```mermaid
 sequenceDiagram
-    participant Topic
-    participant Query v1
-    participant Query v2
+    participant Топик
+    participant Запрос v1
+    participant Запрос v2
 
-    Topic->>Query v1: Events A..D
-    Note over Query v1: Checkpoint: offset = 4
-    Note over Query v1: DROP STREAMING QUERY<br/>(checkpoint removed)
-    Note over Topic: Events E, F arrive
-    Note over Query v2: CREATE STREAMING QUERY<br/>(start at end of topic)
-    Topic--xQuery v2: E, F (not read)
-    Topic->>Query v2: G (new)
+    Топик->>Запрос v1: События A..D
+    Note over Запрос v1: Чекпоинт: смещение = 4
+    Note over Запрос v1: DROP STREAMING QUERY<br/>(чекпоинт удалён)
+    Note over Топик: События E, F поступают в топик
+    Note over Запрос v2: CREATE STREAMING QUERY<br/>(старт с конца топика)
+    Топик--xЗапрос v2: E, F (не прочитаны)
+    Топик->>Запрос v2: G (новое)
 ```
 
-The same happens if data referenced by an offset in the checkpoint has already been removed from the topic due to [TTL](../../concepts/datamodel/topic.md#retention-time).
+
+The same happens if data referenced by an offset in the checkpoint has already been removed from the topic due to [TTL](../../concepts/datamodel/topic.md#message-retention).
 
 For how this affects delivery guarantees, see [{#T}](guarantees.md#incomplete-windows-restart).
 
@@ -73,6 +77,7 @@ With checkpoints disabled there are no consistency guarantees across user or int
 
 {% endnote %}
 
+
 ```sql
 CREATE STREAMING QUERY query_without_checkpoints AS
 DO BEGIN
@@ -80,14 +85,15 @@ DO BEGIN
 PRAGMA ydb.DisableCheckpoints = "TRUE";
 
 INSERT INTO
-    ydb_source.output_topic
+    output_topic
 SELECT
     *
 FROM
-    ydb_source.input_topic;
+    input_topic;
 
 END DO
 ```
+
 
 ## See also
 

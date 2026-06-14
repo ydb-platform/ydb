@@ -1292,8 +1292,17 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     }
     auto correctSeqNo = true;
     if (auto channelSeqNo = record.GetChannelSeqNo()) {
-        auto descriptorSeqNo = descriptor->SeqNo.fetch_add(1);
-        if (channelSeqNo != descriptorSeqNo + 1) {
+        auto descriptorSeqNo = descriptor->SeqNo.load();
+        if (channelSeqNo <= descriptorSeqNo) {
+            LOG_W(LogPrefix << "IGNORE CHANNEL SEQNO ID.SeqNo=" << descriptorSeqNo
+                << ", record.ChannelSeqNo=" << channelSeqNo
+                << ", ChannelId=" << info.ChannelId
+                << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                << ", Log=" << GetReconciliationLog());
+            correctSeqNo = false;
+        } else if (channelSeqNo == descriptorSeqNo + 1) {
+            descriptor->SeqNo++;
+        } else {
             TString errorMessage = TStringBuilder() << "CHANNEL SEQNO ID.SeqNo=" << descriptorSeqNo
                 << ", record.ChannelSeqNo=" << channelSeqNo
                 << ", ChannelId=" << info.ChannelId

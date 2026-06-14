@@ -56,6 +56,11 @@ on:
         required: false
         type: boolean
         default: false
+      publish:
+        description: 'Post test summary comment and commit statuses on the PR (sharded: from merge job)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   resolve:
@@ -130,7 +135,8 @@ jobs:
       increment: ${{ inputs.increment }}
       pr_number: ${{ needs.resolve.outputs.pr_number }}
       history_branch: ${{ needs.resolve.outputs.history_branch }}
-      publish: false
+      status_sha: ${{ needs.resolve.outputs.pr_head_sha }}
+      publish: ${{ inputs.publish }}
       disable_peak_cap: ${{ inputs.disable_peak_cap }}
 
   timing_summary:

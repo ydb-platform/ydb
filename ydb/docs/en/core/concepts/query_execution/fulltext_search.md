@@ -8,7 +8,7 @@
 * log/message search
 * searching document metadata and descriptions
 
-The core idea of a fulltext index is an **[inverted index](https://en.wikipedia.org/wiki/Inverted_index)**: for each term, the index stores the list of documents that contain that term. Each document is identified by the table's primary key, or — for non-integer or composite primary keys — by an internal row identifier (see [Primary key types](../../dev/fulltext-indexes.md#primary-key)). This allows queries like "documents containing terms A and B" to avoid full table scans.
+The core idea of a fulltext index is an **[inverted index](https://en.wikipedia.org/wiki/Inverted_index)**: for each term, the index stores the list of documents (primary keys) that contain that term. This allows queries like "documents containing terms A and B" to avoid full table scans.
 
 In {{ ydb-short-name }}, fulltext search can be performed in two main ways:
 

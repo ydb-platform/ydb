@@ -219,7 +219,7 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 
 * Reading from replicas.
 * Global secondary indexes.
-* Vector indexes.
+* Vector and fulltext indexes.
 * Change Data Capture.
 * Custom table attributes.
 

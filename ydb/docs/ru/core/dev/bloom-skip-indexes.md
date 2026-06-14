@@ -21,7 +21,7 @@
 
 Синтаксис создания: [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md), [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
-Изменение параметров после создания: [`ALTER INDEX`](../yql/reference/syntax/alter_table/indexes.md#alter-index).
+Изменение параметров после создания: [ALTER INDEX](../yql/reference/syntax/alter_table/indexes.md#alter-index).
 
 ## Примеры {#examples}
 
@@ -90,4 +90,4 @@ ALTER TABLE `/Root/events` ALTER INDEX idx_ngram SET (
 * [Справочник YQL: CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md)
 * [Справочник YQL: SELECT](../yql/reference/syntax/select/index.md)
 * [Справочник YQL: ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#local-bloom)
-* [Быстрый старт (рецепт)](../recipes/bloom-skip-indexes/bloom-skip-index-quickstart.md)
+* [Быстрый старт](../recipes/bloom-skip-indexes/bloom-skip-index-quickstart.md)

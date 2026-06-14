@@ -147,7 +147,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
 {% note info %}
 
-For global secondary index settings, `RESET` is not supported.
+`RESET` is not supported for `ALTER INDEX`.
 
 {% endnote %}
 

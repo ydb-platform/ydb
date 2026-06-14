@@ -200,7 +200,7 @@ The fulltext search capabilities and index parameters are described in [{#T}](..
 
 #### Local index {#local-index}
 
-A **local index** is an auxiliary structure stored together with table data (unlike a [global secondary index](#secondary-index), which materializes a separate index table). A local index is not selected in queries with `VIEW` and is applied while reading the main table in storage. {{ ydb-short-name }} currently implements local [Bloom skip indexes](#local-bloom-skip-index); other kinds are planned.
+A local index is an auxiliary structure stored together with table data (unlike a [global secondary index](#secondary-index), which materializes a separate index table). A local index is not selected in queries with `VIEW` and is applied while reading the main table in storage.
 
 #### Bloom filter {#bloom-filter}
 

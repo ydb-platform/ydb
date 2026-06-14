@@ -37,6 +37,8 @@ ALTER TABLE `/Root/events`
 
 After you load data, selective queries that filter on indexed columns may read less data: while scanning storage, the Bloom skip index skips fragments that cannot contain the requested value (compared to reading the full column without this filter).
 
+To verify that the index actually reduces read volume, run the same selective query before and after creating it on a table with enough data.
+
 Sample data and queries for the table above:
 
 ```yql

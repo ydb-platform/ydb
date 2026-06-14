@@ -21,7 +21,7 @@ Full list of `WITH (...)` parameters and defaults:
 
 Creation syntax: [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md), [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
-To change parameters after creation, use [`ALTER INDEX`](../yql/reference/syntax/alter_table/indexes.md#alter-index).
+To change parameters after creation, use [ALTER INDEX](../yql/reference/syntax/alter_table/indexes.md#alter-index).
 
 ## Examples {#examples}
 
@@ -90,4 +90,4 @@ Tips:
 * [YQL reference: CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md)
 * [YQL reference: SELECT](../yql/reference/syntax/select/index.md)
 * [YQL reference: ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md#local-bloom)
-* [Quickstart recipe](../recipes/bloom-skip-indexes/bloom-skip-index-quickstart.md)
+* [Quickstart](../recipes/bloom-skip-indexes/bloom-skip-index-quickstart.md)

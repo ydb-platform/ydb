@@ -250,7 +250,7 @@ CREATE TABLE article (
 
 * Чтение с реплик.
 * Глобальные вторичные индексы.
-* Векторные индексы.
+* Векторные и полнотекстовые индексы.
 * Change Data Capture.
 * Пользовательские атрибуты таблиц.
 
@@ -266,7 +266,7 @@ CREATE TABLE article_column_table (
 WITH (STORE = COLUMN);
 ```
 
-### Фильтр Блума {#bloom-filter}
+### Локальные блум-индексы {#local-bloom-indexes}
 
 {% include [bloom_filter_concept.md](bloom_filter_concept.md) %}
 

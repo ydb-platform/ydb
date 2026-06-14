@@ -105,6 +105,8 @@ message TDiskSpaceUsage {
 
 message TDomainState {
     optional bool DiskQuotaExceeded = 1;
+    optional bool SmallBlobsVolumeQuotaExceeded = 2;
+    optional bool SmallBlobsCountQuotaExceeded = 3;
 }
 
 message TAuditSettings {

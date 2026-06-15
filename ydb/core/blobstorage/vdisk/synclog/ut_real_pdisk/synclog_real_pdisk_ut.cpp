@@ -991,18 +991,24 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             << " actual# " << env.LocalSyncData.size());
         UNIT_ASSERT_C(env.SkeletonId, "failed to discover initial Skeleton actor");
         UNIT_ASSERT_C(env.WaitReady(), "target VDisk did not become ready before LocalSyncData injection");
+        // Persist LocalSyncData in PDisk, then drop the successful log result to emulate a crash
+        // after durable commit but before VDisk advances sync state or recovery-log cut.
         env.SendInterruptedLocalSyncData();
         UNIT_ASSERT_C(!env.ObservedOutOfSpace(),
             "initial LocalSyncData write exhausted space"
             << " details# " << env.Details);
         UNIT_ASSERT_C(env.InterruptedLsn, "test did not capture interrupted LocalSyncData LSN");
 
+        // After restart, local recovery replays the durable LocalSyncData. Startup sync must wait
+        // until the recovery log is durably cut past that replayed record.
         env.RestartVDisk();
         UNIT_ASSERT_C(env.WaitReady(),
             "target VDisk did not become ready after interrupted LocalSyncData"
             << " interruptedLsn# " << env.InterruptedLsn);
         env.WaitForCut();
 
+        // Repeat the same interrupted recovery window. Without the cut wait, these duplicate
+        // LocalSyncData writes eventually exhaust common log chunks.
         for (ui32 i = 0; i < 8 && !env.ObservedOutOfSpace(); ++i) {
             env.SendInterruptedLocalSyncData();
             if (!env.ObservedOutOfSpace()) {
@@ -1060,6 +1066,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         bool observedInsufficientCut = false;
         bool insufficientCutInjected = false;
         env.PreFilter = [&](TAutoPtr<IEventHandle>& ev) {
+            // Force the first cut notification to stop just before the replayed LocalSyncData.
+            // This makes the test deterministic even when the real PDisk layout would produce a
+            // sufficient first cut.
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvRecoveryLogCutDone &&
                     env.ObserveAfterRestart && env.InterruptedLsn && !insufficientCutInjected) {
                 const ui64 insufficientFirstLsnToKeep = env.InterruptedLsn;
@@ -1076,6 +1085,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
         UNIT_ASSERT_C(env.SkeletonId, "failed to discover initial Skeleton actor");
         UNIT_ASSERT_C(env.WaitReady(), "target VDisk did not become ready before LocalSyncData injection");
+        // Write LocalSyncData durably but hide the OK result from VDisk, matching the OOM/restart
+        // window covered by the main regression test.
         env.SendInterruptedLocalSyncData();
         UNIT_ASSERT_C(!env.ObservedOutOfSpace(), "initial LocalSyncData write exhausted space");
         UNIT_ASSERT_C(env.InterruptedLsn, "test did not capture interrupted LocalSyncData LSN");

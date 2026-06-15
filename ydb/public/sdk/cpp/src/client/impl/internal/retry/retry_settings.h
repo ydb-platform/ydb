@@ -54,8 +54,11 @@ template <typename TClient, typename TRunOnce>
 auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings, TRunOnce&& runOnce)
     -> decltype(runOnce(TDuration::Max()))
 {
-    if (!IsRetryEnabled(settings) || client.GetInRetryOperationContext()) {
+    if (client.GetInRetryOperationContext()) {
         return runOnce(TDuration::Max());
+    }
+    if (!IsRetryEnabled(settings)) {
+        return runOnce(settings.MaxTimeout_);
     }
 
     using TResult = decltype(runOnce(TDuration::Max()));

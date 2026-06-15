@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlsplit
 
@@ -9,6 +10,7 @@ from support_links_env import (
     CLUSTER_NAME,
     DATABASE_NAME,
     DATASOURCE_ID,
+    DATASOURCE_LOGGING_ID,
     MISSING_CLUSTER_ERROR,
     MISSING_CLUSTER_NAME,
     MISSING_CLUSTER_PARAMETER_ERROR,
@@ -63,6 +65,39 @@ def assert_bad_request_response(payload, message_substring):
     assert len(payload["errors"]) == 1
     assert payload["errors"][0]["source"] == "meta"
     assert message_substring in payload["errors"][0]["message"]
+
+
+def assert_logging_link(link, expected_title, expected_expr):
+    assert link["title"] == expected_title
+
+    actual_url = link["url"]
+    actual_split = urlsplit(actual_url)
+    assert actual_split.scheme == "https"
+    assert actual_split.netloc == "grafana.example.test"
+    assert actual_split.path == "/explore"
+
+    query = dict(parse_qsl(actual_split.query, keep_blank_values=True))
+    assert query["schemaVersion"] == "1"
+    assert query["orgId"] == "1"
+
+    panes = json.loads(query["panes"])
+    assert list(panes.keys()) == ["x"]
+    pane = panes["x"]
+    assert pane["datasource"] == DATASOURCE_LOGGING_ID
+    assert pane["range"] == {"from": "now-1h", "to": "now"}
+    assert pane["queries"][0]["expr"] == expected_expr
+    assert pane["queries"][0]["queryType"] == "range"
+    assert pane["queries"][0]["direction"] == "backward"
+    assert pane["queries"][0]["datasource"] == {
+        "type": "loki",
+        "uid": DATASOURCE_LOGGING_ID,
+    }
+
+
+def assert_logging_support_links_response(payload, expected_title, expected_expr):
+    assert len(payload["links"]) == 1
+    assert_logging_link(payload["links"][0], expected_title, expected_expr)
+    assert "errors" not in payload
 
 
 def assert_urls_match(actual_url, expected_url):

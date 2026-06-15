@@ -26,7 +26,7 @@ TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EA
 
     if (config.HasSupportLinks()) {
         const auto& supportLinks = config.GetSupportLinks();
-        ValidateSupportLinksConfig(supportLinks, settings);
+        NSupportLinks::ValidateSupportLinksConfig(supportLinks, settings);
         settings.SupportLinks.ClusterLinks.reserve(supportLinks.GetCluster().size());
         for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
             settings.SupportLinks.ClusterLinks.push_back(supportLinks.GetCluster(i));

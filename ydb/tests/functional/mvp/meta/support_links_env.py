@@ -14,6 +14,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 CLUSTER_NAME = "ydb-global"
 WORKSPACE_NAME = "ydb-workspace"
 DATASOURCE_ID = "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63"
+DATASOURCE_LOGGING_ID = "cd868168-09d4-4ece-82db-e646130697e5"
 ROOT_DATABASE = "/Root"
 META_TABLE_PATH = "/Root/ydb/MasterClusterExt.db"
 GRAFANA_DASHBOARD_PATH = "/d/ydb/overview"
@@ -56,6 +57,7 @@ def start_cluster_with_meta_table(
     cluster_name=CLUSTER_NAME,
     k8s_namespace=WORKSPACE_NAME,
     datasource=DATASOURCE_ID,
+    datasource_logging=DATASOURCE_LOGGING_ID,
 ):
     cluster = KiKiMR()
     cluster.start()
@@ -74,13 +76,14 @@ def start_cluster_with_meta_table(
             name Utf8,
             k8s_namespace Utf8,
             datasource Utf8,
+            datasource_logging Utf8,
             PRIMARY KEY (name)
         );
     """).format(table_path=META_TABLE_PATH))
 
     session.transaction().execute(textwrap.dedent(f"""
-        UPSERT INTO `{META_TABLE_PATH}` (name, k8s_namespace, datasource)
-        VALUES ("{cluster_name}", "{k8s_namespace}", "{datasource}");
+        UPSERT INTO `{META_TABLE_PATH}` (name, k8s_namespace, datasource, datasource_logging)
+        VALUES ("{cluster_name}", "{k8s_namespace}", "{datasource}", "{datasource_logging}");
     """), commit_tx=True)
 
     return cluster, driver
@@ -91,25 +94,35 @@ class MetaSupportLinksEnv(BaseHttpEnv):
         super().__init__(meta_service)
         self.meta_service = meta_service
 
-    def get_support_links(self, cluster_name=None, database=None):
+    def get_support_links(self, cluster_name=None, database=None, extra_params=None):
         params = {}
         if cluster_name is not None:
             params["cluster"] = cluster_name
         if database is not None:
             params["database"] = database
+        if extra_params:
+            params.update(extra_params)
         return self.get(
             "/meta/support_links",
             params=params,
             timeout=10,
         )
 
-    def get_ok_support_links_payload(self, cluster_name=None, database=None):
-        response = self.get_support_links(cluster_name=cluster_name, database=database)
+    def get_ok_support_links_payload(self, cluster_name=None, database=None, extra_params=None):
+        response = self.get_support_links(
+            cluster_name=cluster_name,
+            database=database,
+            extra_params=extra_params,
+        )
         assert response.status_code == 200, response.text
         return response.json()
 
-    def get_bad_request_support_links_payload(self, cluster_name=None, database=None):
-        response = self.get_support_links(cluster_name=cluster_name, database=database)
+    def get_bad_request_support_links_payload(self, cluster_name=None, database=None, extra_params=None):
+        response = self.get_support_links(
+            cluster_name=cluster_name,
+            database=database,
+            extra_params=extra_params,
+        )
         assert response.status_code == 400, response.text
         return response.json()
 
@@ -173,6 +186,7 @@ def started_meta_support_links_env(
     cluster_name=CLUSTER_NAME,
     k8s_namespace=WORKSPACE_NAME,
     datasource=DATASOURCE_ID,
+    datasource_logging=DATASOURCE_LOGGING_ID,
     url=GRAFANA_DASHBOARD_PATH,
     include_grafana_endpoint=True,
 ):
@@ -180,6 +194,7 @@ def started_meta_support_links_env(
         cluster_name=cluster_name,
         k8s_namespace=k8s_namespace,
         datasource=datasource,
+        datasource_logging=datasource_logging,
     )
     try:
         with PortManager() as port_manager:

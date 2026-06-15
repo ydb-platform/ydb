@@ -33,6 +33,8 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 sql, retry_settings=ydb.RetrySettings(max_retries=0)
             )
         message = str(exc_info.value)
+        if isinstance(substrings, str):
+            substrings = (substrings,)
         for substring in substrings:
             assert substring in message, f"expected '{substring}' in error, got: {message}"
         return message
@@ -131,7 +133,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
     def test_write_multiple_times_same_topic(
         self, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
     ) -> None:
-        pytest.skip("Write ordering is not guarantied now: YQ-5387")
+        pytest.skip("Write ordering is not guaranteed now: YQ-5387")
 
         endpoint, ref, path = self.get_write_topic(kikimr, "write_repeat", local_topics, entity_name)
 
@@ -195,7 +197,7 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 INSERT INTO {ref}(Data) VALUES("data2");
                 INSERT INTO {ref}(Data) VALUES("data3");
 
-                SELECT 
+                SELECT
                     SystemMetadata('offset') as offset,
                     SystemMetadata('seq_no') as seq_no,
                     SystemMetadata("write_time") as write_time,
@@ -299,7 +301,14 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
 
         # Write into a non-existent topic (under an existing source / locally).
         bad_topic_ref = "`non_existent_topic`" if local_topics else f"`{source_name}`.`non_existent_topic`"
-        self._expect_error(kikimr, f'INSERT INTO {bad_topic_ref} SELECT "Data";', "Cannot find table 'db.[/Root/non_existent_topic]' because it does not exist or you do not have access permissions")
+        if local_topics:
+            self._expect_error(kikimr, f'INSERT INTO {bad_topic_ref} SELECT "Data";', ["Cannot find table", "non_existent_topic", "because it does not exist or you do not have access permissions"])
+        else:
+            self._expect_error(
+                kikimr,
+                f'INSERT INTO {bad_topic_ref} SELECT "Data";',
+                ["determine external YDB entity type", "Describe path", "non_existent_topic", "in external YDB database", "with endpoint"],
+            )
 
         # Write into a non-existent external source.
         if not local_topics:
@@ -320,9 +329,18 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                         AUTH_METHOD = "NONE"
                     );"""
             )
-            self._expect_error(kikimr, f'INSERT INTO `{unavailable_source}`.`my_topic` SELECT "Data";', ["Describe path", "/Root/my_topic", "in external YDB database", "/Root", "with endpoint", "localhost:1", "failed"])
+            self._expect_error(
+                kikimr,
+                f'INSERT INTO `{unavailable_source}`.`my_topic` SELECT "Data";',
+                ["Describe path", "/Root/my_topic", "in external YDB database", "/Root", "with endpoint", "localhost:1", "failed"],
+            )
 
         try:
+            external_client = YdbClient(endpoint.endpoint, endpoint.database)
+            test_client = YdbClient(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
+            external_client.wait_connection()
+            test_client.wait_connection()
+
             test_secret_name = entity_name("test_secret")
             test_source_name = entity_name("test_target_source")
             kikimr.ydb_client.query(f"""
@@ -335,12 +353,6 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                     TOKEN_SECRET_PATH = "{test_secret_name}"
                 );
             """)
-
-            external_client = YdbClient(endpoint.endpoint, endpoint.database)
-            external_client.wait_connection()
-
-            test_client = YdbClient(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
-            test_client.wait_connection()
 
             path = f"{test_source_name}_test_topic"
             create_stream(path, partitions_count=1, default_endpoint=endpoint)
@@ -359,7 +371,10 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
 
             if not local_topics:
                 self._expect_error(
-                    kikimr, f'INSERT INTO `{unavailable_source}`.my_topic SELECT "Data";', ["Cannot find table", "/Root/unavailable_source", "my_topic", "because it does not exist or you do not have access permissions."], client=test_client
+                    kikimr,
+                    f'INSERT INTO `{unavailable_source}`.my_topic SELECT "Data";',
+                    ["Cannot find table", "/Root/unavailable_source", "my_topic", "because it does not exist or you do not have access permissions."],
+                    client=test_client,
                 )
         finally:
             test_client.stop()

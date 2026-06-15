@@ -220,6 +220,7 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 * Reading from replicas.
 * Global secondary indexes.
 * Vector and fulltext indexes.
+* Bloom filter for the primary key (`KEY_BLOOM_FILTER`; see [Bloom filter](#bloom-filter) for row-oriented tables).
 * Change Data Capture.
 * Custom table attributes.
 

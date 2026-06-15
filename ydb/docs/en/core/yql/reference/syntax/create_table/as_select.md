@@ -18,7 +18,7 @@ Names and types of columns will correspond to the `SELECT` results.
 
 When creating a table using `CREATE TABLE AS`, it is not possible to specify column names (column names of the created table will be derived from the query result), [secondary indexes](secondary_index.md), [vector indexes](vector_index.md), [fulltext indexes](fulltext_index.md), [local indexes](bloom_skip_index.md), or [column groups](family.md). All of those can be changed after the table has been created using [`ALTER TABLE`](../alter_table/index.md). [Additional parameters](with.md) are also supported.
 
-This limitation exists because `CREATE TABLE AS` derives the table schema only from the `SELECT` result: the command syntax allows a primary key and `WITH` options, but not `INDEX` clauses or other DDL elements. This is a current, permanent YQL language restriction; add [local Bloom skip indexes](bloom_skip_index.md) and other indexes with `ALTER TABLE` after the table is created.
+This limitation exists because `CREATE TABLE AS` derives the table schema only from the `SELECT` result: the command syntax allows a primary key and `WITH` options, but not `INDEX` clauses or other DDL elements. This is a permanent YQL language restriction; add [local Bloom skip indexes](bloom_skip_index.md) and other indexes with `ALTER TABLE` after the table is created.
 
 
 

@@ -108,7 +108,7 @@ ALTER TABLE `/Root/Table`
 ```yql
 ALTER TABLE `/Root/Table`
   ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
-  ON (resource_id)
+  ON (message)
   WITH (
     ngram_size = 3,
     false_positive_probability = 0.01,

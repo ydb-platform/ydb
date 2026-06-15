@@ -732,7 +732,8 @@
         },
         "restart_pdisk_root_force": {
             "debugMessage": "text",
-            "result": true
+            "error": "PDisk not found NodeId# 1 PDiskId# 999999",
+            "result": false
         },
         "restart_pdisk_three_part_pdisk_id_root": {
             "status_code": 400,

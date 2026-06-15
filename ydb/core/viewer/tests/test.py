@@ -1586,11 +1586,12 @@ class TestViewer(object):
             'action': 'execute-query',
             'schema': 'multipart',
         }
-        response = cls.call_viewer_api_post("/viewer/query", body, headers={
+        headers = dict(cls.default_headers)
+        headers.update({
             'Content-Type': 'application/json',
             'Accept': 'text/event-stream',
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
         })
+        response = cls.call_viewer_api_post("/viewer/query", body, headers=headers)
         result = {
             'status_code': response.status_code,
             'content_type': response.headers.get('Content-Type')
@@ -1886,7 +1887,7 @@ class TestViewer(object):
             'force': '1',
         }, headers=cls.make_cookie_headers(cls.monitoring_session_id)), ['debugMessage'])
         result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
+            'pdisk_id': '1-999999',
             'force': '1',
         }, headers=cls.make_cookie_headers(cls.root_session_id)), ['debugMessage'])
 

@@ -247,8 +247,13 @@ public:
         }
 
         void ResetStatusOnUpdate() {
+            if (Status && *Status == EStatus::ReplySent) {
+                NeedResendReplyFlag = true;
+            }
             Status = {};
         }
+
+        bool NeedResendReplyFlag = false;
 
         virtual TString DoDebugString() const = 0;
 
@@ -261,6 +266,10 @@ public:
 
         bool IsInProgress() const {
             return DoIsInProgress();
+        }
+
+        bool NeedResendReply() const {
+            return NeedResendReplyFlag;
         }
 
         bool PingTimeout(TColumnShard& owner, const TMonotonic now) {

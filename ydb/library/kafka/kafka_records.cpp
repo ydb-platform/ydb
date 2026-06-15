@@ -937,4 +937,12 @@ std::optional<TKafkaBatchHeader> ReadKafkaBatchHeader(TStringBuf data, TKafkaVer
     }
 }
 
+ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record) {
+    if (batch.ProducerId >= 0) {
+        return (static_cast<ui64>(batch.BaseSequence) + recordIndex)
+            % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1);
+    }
+    return static_cast<ui64>(batch.BaseOffset) + record.OffsetDelta;
+}
+
 } // namespace NKafka

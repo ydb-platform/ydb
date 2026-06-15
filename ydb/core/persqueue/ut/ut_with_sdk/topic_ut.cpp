@@ -1,4 +1,5 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -54,69 +55,6 @@ TTopicSdkTestSetup CreateBatchingSetup() {
     TTopicSdkTestSetup setup("KafkaBatchMessagesWriteRead", settings, false);
     setup.CreateTopic();
     return setup;
-}
-
-// Writes groups of messages as kafka batches: one tuple is {first seqno, message count, payload fill char}.
-void WriteKafkaBatchMessages(
-        TTopicClient& client,
-        const std::string& topicPath,
-        const std::string& producerId,
-        size_t dataSize,
-        ui64 maxBatchMessageCount,
-        const TVector<std::tuple<ui64, ui32, char>>& writes)
-{
-    TWriteSessionSettings writeSettings;
-    writeSettings.Path(topicPath)
-        .ProducerId(producerId)
-        .MessageGroupId(producerId)
-        .PartitionId(0)
-        .Codec(ECodec::RAW)
-        .BatchFlushMessageCount(maxBatchMessageCount)
-        .MessageFormat(EMessageFormat::KAFKA_BATCH)
-        // Groups smaller than BatchFlushMessageCount are flushed by this interval;
-        // writes within a group are fast enough to never split a group.
-        .BatchFlushInterval(TDuration::Seconds(1))
-        .BatchFlushSizeBytes(10_MB);
-
-    auto writeSession = client.CreateWriteSession(writeSettings);
-
-    std::optional<TContinuationToken> token;
-
-    for (const auto& [firstSeqNo, messageCount, fill] : writes) {
-        const ui64 lastSeqNo = firstSeqNo + messageCount - 1;
-        ui64 nextSeqNo = firstSeqNo;
-        THashSet<ui64> ackedSeqNos;
-
-        while (ackedSeqNos.size() < messageCount) {
-            if (token.has_value() && nextSeqNo <= lastSeqNo) {
-                TWriteMessage message(TString(dataSize, fill));
-                message.SeqNo(nextSeqNo++);
-                writeSession->Write(std::move(*token), std::move(message));
-                token.reset();
-                continue;
-            }
-
-            auto event = writeSession->GetEvent(true);
-            UNIT_ASSERT(event.has_value());
-            if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-                token = std::move(ready->ContinuationToken);
-            } else if (auto* ack = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-                for (const auto& item : ack->Acks) {
-                    UNIT_ASSERT_C(
-                        item.State == TWriteSessionEvent::TWriteAck::EES_WRITTEN,
-                        TStringBuilder() << "Unexpected ack state: " << item.State);
-                    UNIT_ASSERT_C(
-                        item.SeqNo >= firstSeqNo && item.SeqNo <= lastSeqNo,
-                        TStringBuilder() << "Unexpected ack seqNo: " << item.SeqNo);
-                    ackedSeqNos.insert(item.SeqNo);
-                }
-            } else if (auto* closed = std::get_if<TSessionClosedEvent>(&*event)) {
-                UNIT_FAIL(TStringBuilder() << "Unexpected session close: " << closed->DebugString());
-            }
-        }
-    }
-
-    UNIT_ASSERT(writeSession->Close(TDuration::Seconds(5)));
 }
 
 } // namespace
@@ -1127,7 +1065,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
         TTopicClient client(setup.MakeDriver());
 
-        const std::string producerId = "sourceid_batch_read";
+        const TString producerId = "sourceid_batch_read";
         constexpr size_t dataSize = 16;
         constexpr ui64 maxBatchMessageCount = 5;
 
@@ -1194,7 +1132,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
         TTopicClient client(setup.MakeDriver());
 
-        const std::string producerId = "sourceid_batch_commit";
+        const TString producerId = "sourceid_batch_commit";
         constexpr size_t dataSize = 16;
         constexpr ui64 maxBatchMessageCount = 5;
         constexpr ui64 totalMessages = 8;

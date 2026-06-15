@@ -681,4 +681,6 @@ TKafkaRecordBatch ReadKafkaRecordBatch(
     TKafkaVersion version = 2);
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
+ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record);
+
 } // namespace NKafka

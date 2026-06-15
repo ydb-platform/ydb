@@ -162,7 +162,9 @@ inline void FillChunkDataFromReq(
     proto.SetSeqNo(msg.seq_no());
     proto.SetCreateTime(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
     // TODO (ildar-khisam@): refactor codec enum convert
-    if (writeRequest.codec() > 0) {
+    if (writeRequest.codec() == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH)) {
+        proto.SetCodec(NPersQueueCommon::RAW);
+    } else if (writeRequest.codec() > 0) {
         proto.SetCodec(writeRequest.codec() - 1);
     }
     proto.SetData(msg.data());
@@ -196,6 +198,7 @@ void FillBatchFieldsFromTopicWriteMessage(
     const i64 maxSeqNo = msg.seq_no();
     cmdWrite.SetSeqNo(header->BaseSequence);
     cmdWrite.SetMessageCount(static_cast<size_t>(header->RecordsCount));
+    cmdWrite.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
     cmdWrite.SetMaxSeqNo(maxSeqNo);
 }
 

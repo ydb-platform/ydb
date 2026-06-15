@@ -11,12 +11,18 @@ other.
 
 File layout (under ``<summary-dir>/<test_name>/``):
     coredumps.txt      - one line per coredump (slot, core_id, core_hash, version)
-    oom.txt            - one line per node that experienced OOM
-    sanitizer.txt      - host header + sanitizer violation text per host
-    verify.txt         - one line per node with VERIFY fail count
+    oom.txt            - per-node OOM summary + full dmesg/OOM kernel messages
+    sanitizer.txt      - per-host sanitizer summary + full sanitizer violation text
+    verify.txt         - per-node VERIFY fail count + full VERIFY stacktraces
     workload_errors.txt- workload-level error messages (not host issues)
+    warden_violations.txt - cluster-wide warden checks with violations (full text)
+    warden_errors.txt  - cluster-wide warden checks in an infra-error state
     status.txt         - final status: passed | failed | broken (+ message)
     exception.txt      - exception type/message/traceback if the test raised
+
+Per-type files (``oom.txt``, ``sanitizer.txt``, ``verify.txt``) receive both the
+short per-node summary (from ``write_node_errors``) and the full error text (from
+``write_warden_results``), so each error type has a single self-contained file.
 """
 from __future__ import annotations
 
@@ -185,32 +191,40 @@ class SummaryWriter:
             self._append_lines('workload_errors.txt', errors)
 
     def write_warden_results(self, warden_results) -> None:
-        """Write non-OK warden checks (cluster-wide safety/liveness) into files.
+        """Write the *full text* of every non-OK warden check into per-type files.
 
-        Per-host issues (OOM, VERIFY, sanitizer) are already written via
-        ``write_node_errors`` from ``NodeErrors``; this method captures the
-        remaining cluster-wide checks (e.g. ``AllPDisksAreInValidState``,
-        ``LivenessChecks``) that otherwise would not appear anywhere.
+        ``write_node_errors`` only records per-host *counts* (taken from the
+        aggregated ``NodeErrors`` objects); it does NOT contain the actual error
+        messages.  The full violation text (VERIFY stacktraces, sanitizer dumps,
+        OOM kernel messages, etc.) is only available here, in
+        ``warden_results.checks[...].violations``.
+
+        Each error type is routed to its own file so that the full error text is
+        always persisted:
+            verify.txt    - VERIFY-failed checks (full stacktraces)
+            sanitizer.txt - sanitizer checks (full sanitizer output)
+            oom.txt       - dmesg/OOM checks (full kernel messages)
+            warden_violations.txt - other cluster-wide checks with violations
+            warden_errors.txt     - cluster-wide checks in an infra-error state
+
+        Per-host count summaries written by ``write_node_errors`` are kept; the
+        full-text blocks produced here are appended to the same type files, so a
+        single file per error type contains both the summary and full details.
 
         Args:
             warden_results: ``WardenResults`` object from the orchestrator.
         """
         if not self._enabled or warden_results is None:
             return
+        verify_blocks: list[str] = []
+        sanitizer_blocks: list[str] = []
+        oom_blocks: list[str] = []
         violation_blocks: list[str] = []
         error_blocks: list[str] = []
         for name, check in warden_results.checks.items():
             if check.is_ok():
                 continue
             name_lower = name.lower()
-            is_per_host_check = (
-                'grepdmesg' in name_lower
-                or 'grep_dmesg' in name_lower
-                or ('verify' in name_lower and 'failed' in name_lower)
-                or 'sanitizer' in name_lower
-            )
-            if is_per_host_check:
-                continue
             affected = ', '.join(sorted(check.affected_hosts)) if check.affected_hosts else '—'
             header = (
                 f"===== {name} [{check.status}] hosts={affected} "
@@ -218,11 +232,24 @@ class SummaryWriter:
             )
             body = '\n'.join(str(v) for v in check.violations) if check.violations else ''
             block = header if not body else f"{header}\n{body}"
-            if check.is_violation():
+
+            if 'verify' in name_lower and 'failed' in name_lower:
+                verify_blocks.append(block)
+            elif 'sanitizer' in name_lower:
+                sanitizer_blocks.append(block)
+            elif 'grepdmesg' in name_lower or 'grep_dmesg' in name_lower:
+                oom_blocks.append(block)
+            elif check.is_violation():
                 violation_blocks.append(block)
             else:
                 error_blocks.append(block)
 
+        if verify_blocks:
+            self._append_lines('verify.txt', verify_blocks)
+        if sanitizer_blocks:
+            self._append_lines('sanitizer.txt', sanitizer_blocks)
+        if oom_blocks:
+            self._append_lines('oom.txt', oom_blocks)
         if violation_blocks:
             self._append_lines('warden_violations.txt', violation_blocks)
         if error_blocks:

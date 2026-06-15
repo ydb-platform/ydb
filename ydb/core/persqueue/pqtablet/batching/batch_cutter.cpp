@@ -93,8 +93,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
         itemChunk.SetSeqNo(seqNo);
         itemChunk.SetCodec(codec);
         if (record.Value) {
-            const TString value(record.Value->data(), record.Value->size());
-            itemChunk.SetData(CompressPayload(value, codec));
+            itemChunk.SetData(CompressPayload(TStringBuf(record.Value->data(), record.Value->size()), codec));
         } else {
             itemChunk.ClearData();
         }

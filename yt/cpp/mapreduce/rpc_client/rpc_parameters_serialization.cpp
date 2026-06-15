@@ -1240,6 +1240,18 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     return result;
 }
 
+NApi::TCheckClusterLivenessOptions SerializeOptionsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options)
+{
+    NApi::TCheckClusterLivenessOptions result;
+    result.CheckCypressRoot = options.CheckCypressRoot_;
+    result.CheckSecondaryMasterCells = options.CheckSecondaryMasterCells_;
+    if (options.CheckTabletCellBundle_) {
+        result.CheckTabletCellBundle = *options.CheckTabletCellBundle_;
+    }
+    return result;
+}
+
 NApi::TDistributedWriteSessionStartOptions SerializeOptionsForStartDistributedTableSession(
     TMutationId& /*mutationId*/,
     const TTransactionId& transactionId,

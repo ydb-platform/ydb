@@ -1923,6 +1923,15 @@ TMultiTablePartitions TRpcRawClient::GetTablePartitions(
     return result;
 }
 
+void TRpcRawClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
+{
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.CheckClusterLiveness");
+
+    auto future = Clients_.Light->CheckClusterLiveness(
+        SerializeOptionsForCheckClusterLiveness(options));
+    WaitAndProcess(future);
+}
+
 ui64 TRpcRawClient::GenerateTimestamp()
 {
     auto traceContextGuard = CreateTraceContext("RpcRawClient.GenerateTimestamp");

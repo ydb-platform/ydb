@@ -435,7 +435,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
         {
             bufferSettings.WithoutCompression();
             
-            auto taskParquetSettings = Task.GetS3Settings().GetParquet();
+            auto taskParquetSettings = ParquetFormatFromTask(Task);
             TParquetExportSettings settings;
             settings
                 .WithColumns(Columns)

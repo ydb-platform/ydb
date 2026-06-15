@@ -1,5 +1,6 @@
 #include "backup_restore_traits.h"
 
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -81,14 +82,15 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
     }
 }
 
-TMaybe<NKikimrSchemeOp::TParquetFormat> ParquetFormatFromTask(const NKikimrSchemeOp::TBackupTask& task) {
+NKikimrSchemeOp::TParquetFormat ParquetFormatFromTask(const NKikimrSchemeOp::TBackupTask& task) {
     switch(task.GetSettingsCase()) {
     case NKikimrSchemeOp::TBackupTask::kS3Settings:        
         return task.GetS3Settings().GetParquet();
     case NKikimrSchemeOp::TBackupTask::kFSSettings:
         return task.GetFSSettings().GetParquet();
+    case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
     case NKikimrSchemeOp::TBackupTask::kYTSettings:
-        return Nothing();
+        return NKikimrSchemeOp::TParquetFormat();
     }
 }
 

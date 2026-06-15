@@ -1622,6 +1622,7 @@ public:
     //! Returns the size of session pool
     int64_t GetCurrentPoolSize() const;
 
+    // Internal: used by retry wrappers to suppress nested retries.
     bool GetInRetryOperationContext() const;
     void SetInRetryOperationContext(bool value);
 

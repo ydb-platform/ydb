@@ -843,7 +843,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         ResumeExecution(EResumeSource::CAResumeByWatermark);
     }
 
-    void ResumeInputsByCheckpoint() override final {
+    void ResumeInputsByCheckpoint() override {
         for (auto& [id, channelInfo] : InputChannelsMap) {
             if (channelInfo.PendingCheckpoint) {
                 channelInfo.ResumeByCheckpoint();
@@ -1888,6 +1888,7 @@ protected:
 
     virtual void DrainAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& outputInfo) = 0;
 
+    // sync CA only
     ui32 SendDataChunkToAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& outputInfo, ui64 bytes) {
         auto sink = outputInfo.Buffer;
 
@@ -1913,8 +1914,7 @@ protected:
         TMaybe<NDqProto::TCheckpoint> maybeCheckpoint;
         if (hasCheckpoint) {
             maybeCheckpoint = checkpoint;
-            CA_LOG_I("Resume inputs");
-            ResumeInputsByCheckpoint();
+            static_cast<TDerived *>(this)->AdvanceResumeInputsByCheckpoint();
         }
 
         outputInfo.AsyncOutput->SendData(std::move(dataBatch), dataSize, maybeCheckpoint, outputInfo.Finished);
@@ -1922,6 +1922,9 @@ protected:
 
         return dataSize + checkpointSize;
     }
+
+public:
+    void AdvanceResumeInputsByCheckpoint(); // must be implemented if SendDataChunkToAsyncOutput() is used (sync CA only)
 
 protected:
     const TMaybe<NDqProto::TRlPath>& GetRlPath() const {

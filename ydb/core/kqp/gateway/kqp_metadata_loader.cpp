@@ -188,13 +188,6 @@ void OlapIndexProtoToMetadata(
                 }
                 break;
             }
-            case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex: {
-                type = NYql::TIndexDescription::EType::LocalMinMax;
-                if (index.GetMaxIndex().HasColumnId()) {
-                    keyColumns = resolveColumns(std::initializer_list<ui32>{index.GetMaxIndex().GetColumnId()});
-                }
-                break;
-            }
             default:
                 // CountMinSketch and other implementations are not represented in
                 // TKikimrTableMetadata::Indexes; skip them.

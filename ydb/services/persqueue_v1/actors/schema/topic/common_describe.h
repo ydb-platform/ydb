@@ -35,10 +35,13 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
     }
 
 
-    template<typename TRequest>
-    class TDescribeBaseActor: public TGrpcProxyActor<TDescribeBaseActor<TRequest>, TRequest>
-                            , public NPQ::TPipeCacheClient {
-        using TBase = TGrpcProxyActor<TDescribeBaseActor<TRequest>, TRequest>;
+    template<class TDerived, typename TRequest>
+    class TDescribeBaseActor: public TGrpcProxyActor<TDerived, TRequest>
+                            , protected NPQ::TPipeCacheClient
+                            , protected NPQ::TConstantLogPrefix {
+        using TBase = TGrpcProxyActor<TDerived, TRequest>;
+
+        static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;
 
     public:
         TDescribeBaseActor(NGRpcService::IRequestOpCtx* request, NPQ::NDescriber::TAccessRights accessRights)
@@ -48,6 +51,14 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         {
         }
 
+        TStringBuilder LogBuilder() const {
+            return TStringBuilder() << "[" << this->SelfId() << "]";
+        }
+
+        TString BuildLogPrefix() const override {
+            return TStringBuilder() << "[" << typeid(TDerived).name() << "]";
+        }
+
         virtual const google::protobuf::Message& MakeResult() = 0;
         virtual bool ValidateSchema() = 0;
         virtual bool NeedProcessPartition(const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition& partition) = 0;
@@ -55,6 +66,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         virtual std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() = 0;
 
         void DoAction() {
+            LOG_D("DoAction " << this->GetProtoRequest()->path());
             this->RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
                 this->SelfId(),
                 this->GetDatabase(),
@@ -71,6 +83,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         void PassAway() override {
+            LOG_D("PassAway");
             TBase::PassAway();
             NPQ::TPipeCacheClient::Close();
         }
@@ -86,6 +99,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             TopicInfo = std::move(ev->Get()->Topics.begin()->second);
+            LOG_D("Handle TEvDescribeTopicsResponse. Status=" << TopicInfo.Status);
 
             if (TopicInfo.Status != NPQ::NDescriber::EStatus::SUCCESS) {
                 auto asIssueCode = [](Ydb::StatusIds::StatusCode status) {
@@ -152,6 +166,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         void Handle(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev) {
+            LOG_D("Handle TEvGetPartitionsLocationResponse");
             if (!TabletsInflight.contains(ReadBalancerTabletId)) {
                 return;
             }
@@ -178,6 +193,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev) {
             const auto tabletId = ev->Cookie;
+            LOG_D("Handle TEvStatusResponse. TabletId=" << tabletId);
             if (!TabletsInflight.contains(tabletId)) {
                 return;
             }
@@ -226,6 +242,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         void Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev) {
+            LOG_D("Handle TEvReadSessionsInfoResponse");
             if (!TabletsInflight.contains(ReadBalancerTabletId)) {
                 return;
             }
@@ -243,6 +260,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+            LOG_D("Handle TEvDeliveryProblem. TabletId=" << ev->Get()->TabletId);
             if (OnUndelivered(ev)) {
                 return;
             }
@@ -260,10 +278,12 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
         bool ReplyIfPossible() {
             if (TabletsInflight.empty()) {
+                LOG_D("ReplyWithResult");
                 this->ReplyWithResult(Ydb::StatusIds::SUCCESS, this->MakeResult());
                 return true;
             }
 
+            LOG_D("Waiting for tablets inflight: " << JoinSeq(", ", TabletsInflight));
             return false;
         }
 
@@ -272,11 +292,13 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 return;
             }
             if (!LocationsReceived) {
+                LOG_D("PartitionsLocation " << ReadBalancerTabletId);
                 SendToTablet(ReadBalancerTabletId, new TEvPersQueue::TEvGetPartitionsLocation());
             }
             if (!ReadSessionsReceived && this->GetProtoRequest()->include_stats()) {
                 auto ev = CreateReadSessionsInfoRequest();
                 if (ev) {
+                    LOG_D("ReadSessionsInfo " << ReadBalancerTabletId);
                     SendToTablet(ReadBalancerTabletId, ev.release());
                 } else {
                     ReadSessionsReceived = true;
@@ -286,6 +308,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         }
 
         void RequestStats(ui64 tabletId) {
+            LOG_D("Stats " << tabletId);
             SendToTablet(tabletId, CreateStatusRequest().release(), tabletId);
             TabletsInflight.insert(tabletId);
         }

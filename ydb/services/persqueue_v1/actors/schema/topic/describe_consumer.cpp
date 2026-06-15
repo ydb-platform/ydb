@@ -4,10 +4,10 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
 
-    class TDescribeActor: public TDescribeBaseActor<NGRpcService::TEvDescribeConsumerRequest> {
-        using TBase = TDescribeBaseActor<NGRpcService::TEvDescribeConsumerRequest>;
+    class TDescribeActor: public TDescribeBaseActor<TDescribeActor, NGRpcService::TEvDescribeConsumerRequest> {
+        using TBase = TDescribeBaseActor<TDescribeActor, NGRpcService::TEvDescribeConsumerRequest>;
 
-        public:
+    public:
         TDescribeActor(NGRpcService::IRequestOpCtx* request)
             : TBase(request, NACLib::EAccessRights::DescribeSchema)
         {
@@ -102,9 +102,9 @@ namespace {
             return Result;
         }
 
-        private:
-            Ydb::Topic::DescribeConsumerResult Result;
-            TString ConsumerName;
+    private:
+        Ydb::Topic::DescribeConsumerResult Result;
+        TString ConsumerName;
     };
 
 } // namespace

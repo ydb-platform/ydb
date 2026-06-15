@@ -4,10 +4,10 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
 namespace {
 
-    class TDescribeActor: public TDescribeBaseActor<NGRpcService::TEvDescribePartitionRequest> {
-        using TBase = TDescribeBaseActor<NGRpcService::TEvDescribePartitionRequest>;
+    class TDescribeActor: public TDescribeBaseActor<TDescribeActor, NGRpcService::TEvDescribePartitionRequest> {
+        using TBase = TDescribeBaseActor<TDescribeActor, NGRpcService::TEvDescribePartitionRequest>;
 
-        public:
+    public:
         TDescribeActor(NGRpcService::IRequestOpCtx* request)
             : TBase(request, { NACLib::EAccessRights::DescribeSchema, NACLib::EAccessRights::UpdateRow })
         {
@@ -43,7 +43,7 @@ namespace {
             const auto includeStats = GetProtoRequest()->include_stats();
 
             const auto partitionId = GetProtoRequest()->partition_id();
-            auto* p = FindIfPtr(TopicInfo.Info->Description.GetPartitions(), [&](const auto& p) {
+            auto* p = FindIfPtr(TopicInfo.Info->Description.GetPartitions(), [partitionId](const auto& p) {
                 return p.GetPartitionId() == partitionId;
             });
 
@@ -71,8 +71,8 @@ namespace {
             return Result;
         }
 
-        private:
-            Ydb::Topic::DescribePartitionResult Result;
+    private:
+        Ydb::Topic::DescribePartitionResult Result;
     };
 
 } // namespace

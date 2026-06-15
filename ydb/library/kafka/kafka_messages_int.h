@@ -11,7 +11,7 @@
 #include <type_traits>
 
 #include "kafka_records.h"
-#include "kafka_log_impl.h"
+#include "kafka_log.h"
 
 namespace NKafka {
 namespace NPrivate {
@@ -582,7 +582,7 @@ public:
 //
 template<typename Meta>
 inline void Write(TWriteCollector& collector, TKafkaWritable& writable, TKafkaInt16 version, const typename Meta::Type& value) {
-    if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) { 
+    if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
         if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
             if (!IsDefaultValue<Meta>(value)) {
                 ++collector.NumTaggedFields;
@@ -595,7 +595,7 @@ inline void Write(TWriteCollector& collector, TKafkaWritable& writable, TKafkaIn
 
 template<typename Meta>
 inline void Read(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::Type& value) {
-    if (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>() 
+    if (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()
         && VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
         return;
     } else {

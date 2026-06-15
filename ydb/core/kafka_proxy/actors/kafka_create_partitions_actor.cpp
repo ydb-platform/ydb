@@ -8,6 +8,8 @@
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 namespace NKafka {
 
@@ -223,10 +225,11 @@ public:
             databaseName)
         , PartionsNumber(partitionsNumber)
     {
-        KAFKA_LOG_D(
-            "Create partitions actor. DatabaseName: " << databaseName <<
-            ". TopicPath: " << TopicPath <<
-            ". PartitionsNumber: " << PartionsNumber);
+        YDB_LOG_DEBUG("Create partitions actor",
+            {"logPrefix", LogPrefix()},
+            {"databaseName", databaseName},
+            {"topicPath", TopicPath},
+            {"partitionsNumber", PartionsNumber});
     };
 
     void ModifyPersqueueConfig(
@@ -257,7 +260,9 @@ NActors::IActor* CreateKafkaCreatePartitionsActor(
 }
 
 void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    KAFKA_LOG_D(InputLogMessage());
+    YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
+        {"logPrefix", LogPrefix()},
+        {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {
         ProcessValidateOnly(ctx);

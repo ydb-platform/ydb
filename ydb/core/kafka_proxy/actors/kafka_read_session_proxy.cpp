@@ -2,6 +2,8 @@
 #include "kafka_read_session_utils.h"
 #include "kafka_balancer_actor.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 namespace NKafka {
 
 KafkaReadSessionProxyActor::KafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie)
@@ -19,14 +21,18 @@ template<bool handlePending, typename TRequest>
 void KafkaReadSessionProxyActor::DoHandle(TRequest& ev, const TString& event) {
     if constexpr (handlePending) {
         if (Context->ReadSession.PendingBalancingMode.has_value()) {
-            KAFKA_LOG_D("DoHandle " << event << " with pending balance mode");
+            YDB_LOG_DEBUG("DoHandle with pending balance mode",
+                {"logPrefix", LogPrefix()},
+                {"event", event});
             auto response = CreateChangeResponse(*ev->Get()->Request);
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(ev->Get()->CorrelationId, response, EKafkaErrors::REBALANCE_IN_PROGRESS));
             return;
         }
     }
 
-    KAFKA_LOG_D("DoHandle " << event);
+    YDB_LOG_DEBUG("DoHandle",
+        {"logPrefix", LogPrefix()},
+        {"event", event});
     switch (Context->ReadSession.BalancingMode) {
         case EBalancingMode::Native:
             Register(new TKafkaBalancerActor(Context, 0, ev->Get()->CorrelationId, ev->Get()->Request));
@@ -40,10 +46,13 @@ void KafkaReadSessionProxyActor::DoHandle(TRequest& ev, const TString& event) {
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
-    KAFKA_LOG_D("Handle TEvKafka::TEvJoinGroupRequest");
+    YDB_LOG_DEBUG("Handle TEvKafka::TEvJoinGroupRequest",
+        {"logPrefix", LogPrefix()});
     Context->ReadSession.BalancingMode = Context->ReadSession.PendingBalancingMode.value_or(GetBalancingMode(*ev->Get()->Request));
     Context->ReadSession.PendingBalancingMode.reset();
-    KAFKA_LOG_D("Balancing mode: " << Context->ReadSession.BalancingMode);
+    YDB_LOG_DEBUG("Balancing",
+        {"logPrefix", LogPrefix()},
+        {"mode", Context->ReadSession.BalancingMode});
 
     DoHandle<false>(ev, "TEvKafka::TEvJoinGroupRequest");
 }
@@ -61,7 +70,8 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvLeaveGroupRequest::TPtr& ev
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
-    KAFKA_LOG_D("Handle TEvKafka::TEvFetchRequest");
+    YDB_LOG_DEBUG("Handle TEvKafka::TEvFetchRequest",
+        {"logPrefix", LogPrefix()});
     Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
 }
 

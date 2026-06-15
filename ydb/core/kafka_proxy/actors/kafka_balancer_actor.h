@@ -143,7 +143,9 @@ public:
         InstanceId = JoinGroupRequestData->GroupInstanceId.value_or("");
         MemberId = JoinGroupRequestData->MemberId.value_or("");
 
-        KAFKA_LOG_D(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KAFKA_PROXY, "JOIN_GROUP request",
+            {"logPrefix", LogPrefix()},
+            {"memberId", MemberId});
 
         if (JoinGroupRequestData->SessionTimeoutMs) {
             SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;

@@ -132,6 +132,18 @@ static void MultiTenantSDK(bool asyncDiscovery) {
     driver.Stop(true);
 }
 
+namespace {
+
+NYdb::NRetry::TRetryOperationSettings FastNestedRetryTestSettings(ui32 maxRetries) {
+    return NYdb::NRetry::TRetryOperationSettings()
+        .MaxRetries(maxRetries)
+        .Idempotent(true)
+        .FastBackoffSettings(NYdb::NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(50)).Ceiling(2))
+        .SlowBackoffSettings(NYdb::NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(50)).Ceiling(2));
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(YdbYqlClient) {
     Y_UNIT_TEST(TestYqlWrongTable) {
         TKikimrWithGrpcAndRootSchema server;
@@ -4934,19 +4946,19 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     }
 
     Y_UNIT_TEST(BulkUpsertNoDoubleRetryInRetryOperation) {
-        TKikimrWithGrpcAndRootSchema server;
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-        NYdb::NTable::TTableClient client(driver);
-        auto session = client.CreateSession().ExtractValueSync().GetSession();
+        const ui32 outerMaxRetries = 2;
+        const ui32 innerMaxRetries = 5;
+        const auto outerRetrySettings = FastNestedRetryTestSettings(outerMaxRetries);
+        const auto innerRetrySettings = FastNestedRetryTestSettings(innerMaxRetries);
+        const auto bulkUpsertSettings = TBulkUpsertSettings().RetrySettings(innerRetrySettings);
 
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint64)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumn("Key");
-            UNIT_ASSERT(session.CreateTable("/Root/BuiltinRetryNested", tableBuilder.Build()).ExtractValueSync().IsSuccess());
-        }
+        // Use an unreachable endpoint to inject transport failures on every BulkUpsert attempt.
+        TPortManager portManager;
+        const ui16 badPort = portManager.GetPort(2136);
+        const TString badLocation = TStringBuilder() << "localhost:" << badPort;
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(badLocation));
+        NYdb::NTable::TTableClient client(driver, TClientSettings().RetrySettings(outerRetrySettings));
 
         NYdb::TValueBuilder rows;
         rows.BeginList();
@@ -4956,42 +4968,36 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .AddMember("Value").Utf8("value")
             .EndStruct();
         rows.EndList();
-        auto rowsValue = rows.Build();
+        const auto rowsValue = rows.Build();
 
-        auto status = client.RetryOperationSync([&](TTableClient& tableClient) {
-            return tableClient.BulkUpsert("/Root/BuiltinRetryNested", NYdb::TValue{rowsValue}).GetValueSync();
-        });
-        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        const auto startedAt = TInstant::Now();
+        client.RetryOperationSync([&](TTableClient& tableClient) {
+            return tableClient.BulkUpsert("/Root/BuiltinRetryNested", NYdb::TValue{rowsValue}, bulkUpsertSettings)
+                .GetValueSync();
+        }, outerRetrySettings);
+        const auto duration = TInstant::Now() - startedAt;
+
+        // Inner retries are suppressed inside RetryOperationSync. Without that guard, each outer attempt
+        // would run up to (innerMaxRetries + 1) BulkUpsert tries with backoff and take much longer.
+        UNIT_ASSERT(duration < TDuration::Seconds(1));
 
         driver.Stop(true);
     }
 
     Y_UNIT_TEST(ReadRowsNoDoubleRetryInRetryOperation) {
-        TKikimrWithGrpcAndRootSchema server;
-        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
-        NYdb::NTable::TTableClient client(driver);
-        auto session = client.CreateSession().ExtractValueSync().GetSession();
+        const ui32 outerMaxRetries = 2;
+        const ui32 innerMaxRetries = 5;
+        const auto outerRetrySettings = FastNestedRetryTestSettings(outerMaxRetries);
+        const auto innerRetrySettings = FastNestedRetryTestSettings(innerMaxRetries);
+        const auto readRowsSettings = TReadRowsSettings().RetrySettings(innerRetrySettings);
 
-        {
-            auto tableBuilder = client.GetTableBuilder();
-            tableBuilder
-                .AddNullableColumn("Key", EPrimitiveType::Uint64)
-                .AddNullableColumn("Value", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumn("Key");
-            UNIT_ASSERT(session.CreateTable("/Root/ReadRowsBuiltinRetryNested", tableBuilder.Build()).ExtractValueSync().IsSuccess());
-        }
+        // Use an unreachable endpoint to inject transport failures on every ReadRows attempt.
+        TPortManager portManager;
+        const ui16 badPort = portManager.GetPort(2137);
+        const TString badLocation = TStringBuilder() << "localhost:" << badPort;
 
-        NYdb::TValueBuilder rows;
-        rows.BeginList();
-        rows.AddListItem()
-            .BeginStruct()
-                .AddMember("Key").Uint64(1)
-                .AddMember("Value").Utf8("value")
-            .EndStruct();
-        rows.EndList();
-        auto rowsValue = rows.Build();
-
-        UNIT_ASSERT(client.BulkUpsert("/Root/ReadRowsBuiltinRetryNested", NYdb::TValue{rowsValue}).GetValueSync().IsSuccess());
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(badLocation));
+        NYdb::NTable::TTableClient client(driver, TClientSettings().RetrySettings(outerRetrySettings));
 
         NYdb::TValueBuilder keys;
         keys.BeginList();
@@ -5000,12 +5006,18 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .AddMember("Key").Uint64(1)
             .EndStruct();
         keys.EndList();
-        auto keysValue = keys.Build();
+        const auto keysValue = keys.Build();
 
-        auto status = client.RetryOperationSync([&](TTableClient& tableClient) {
-            return tableClient.ReadRows("/Root/ReadRowsBuiltinRetryNested", NYdb::TValue{keysValue}).GetValueSync();
-        });
-        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        const auto startedAt = TInstant::Now();
+        client.RetryOperationSync([&](TTableClient& tableClient) {
+            return tableClient.ReadRows("/Root/ReadRowsBuiltinRetryNested", NYdb::TValue{keysValue}, {}, readRowsSettings)
+                .GetValueSync();
+        }, outerRetrySettings);
+        const auto duration = TInstant::Now() - startedAt;
+
+        // Inner retries are suppressed inside RetryOperationSync. Without that guard, each outer attempt
+        // would run up to (innerMaxRetries + 1) ReadRows tries with backoff and take much longer.
+        UNIT_ASSERT(duration < TDuration::Seconds(1));
 
         driver.Stop(true);
     }

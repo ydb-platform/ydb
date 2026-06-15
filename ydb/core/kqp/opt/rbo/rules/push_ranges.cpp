@@ -225,15 +225,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     auto settings = PrepareExtractorSettings(kqpCtx);
     auto extractor = MakePredicateRangeExtractor(settings);
     auto schemeType = PrepareSchemeType(*read, tableDesc->SchemeNode, ctx);
-    bool prepareSuccess = false;
-    try {
-        prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
-    } catch (...) {
-        return input;
-    }
-    if (!prepareSuccess) {
-        return input;
-    }
+    const bool prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
+    YQL_ENSURE(prepareSuccess);
 
     // Key columns must be named exactly as the scheme type exposes them, so the compute node lines up
     // with the names the predicate extractor resolved.

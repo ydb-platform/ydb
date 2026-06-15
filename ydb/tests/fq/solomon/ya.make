@@ -29,3 +29,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    scalar_write
+)

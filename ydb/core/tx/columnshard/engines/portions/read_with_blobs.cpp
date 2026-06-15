@@ -125,19 +125,22 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     const auto& fromIndexInfo = from->GetIndexInfo();
     const ui32 recordsCount = source.PortionInfo.GetPortionInfo().GetRecordsCount();
     for (auto&& [indexId, toIndex] : to->GetIndexInfo().GetIndexes()) {
-        if (sameSchema && fromIndexInfo.HasIndexId(indexId)) {
-            const auto fromIndex = fromIndexInfo.GetIndexVerified(indexId);
-            if (fromIndex->CheckModificationCompatibility(toIndex.GetObjectPtr()).Ok()) {
+        bool reused = false;
+        if (fromIndexInfo.HasIndexId(indexId)) {
+            const bool canTryReuse =
+                sameSchema || fromIndexInfo.GetIndexVerified(indexId)->CheckModificationCompatibility(toIndex.GetObjectPtr()).Ok();
+            if (canTryReuse) {
                 auto existingChunks = source.GetEntityChunks(indexId);
                 if (!existingChunks.empty()) {
-                    to->GetIndexInfo()
-                        .ReuseIndexChunks(std::move(existingChunks), indexId, storages, recordsCount, targetTier, secondaryData)
-                        .Validate();
-                    continue;
+                    reused = to->GetIndexInfo()
+                                 .ReuseIndexChunks(std::move(existingChunks), indexId, storages, recordsCount, targetTier, secondaryData)
+                                 .Ok();
                 }
             }
         }
-        to->GetIndexInfo().AppendIndex(entityChunksNew, indexId, storages, recordsCount, targetTier, secondaryData).Validate();
+        if (!reused) {
+            to->GetIndexInfo().AppendIndex(entityChunksNew, indexId, storages, recordsCount, targetTier, secondaryData).Validate();
+        }
     }
 
     const NSplitter::TEntityGroups groups =

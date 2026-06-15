@@ -174,7 +174,7 @@ protected:
     void SendToKQP(THolder<NKqp::TEvKqp::TEvQueryRequest>&& event) {
         ActorIdToProto(TBase::SelfId(), event->Record.MutableRequestActorId());
         YDB_LOG_DEBUG("Sent event to kqpProxy",
-            {"shortDebugString", event->Record});
+            {"ev", event->Record.ShortDebugString()});
         TBase::Send(NKqp::MakeKqpProxyID(TBase::SelfId().NodeId()), event.Release());
     }
 
@@ -253,7 +253,7 @@ protected:
     void ReplyWithResponseAndPassAway() {
         Response_->TransactionStatus = Connection_.Transaction.Status;
         TBase::Send(Owner_, new TEvEvents::TEvProxyCompleted(Connection_));
-        YDB_LOG_DEBUG("Finally replying to cookie",
+        YDB_LOG_DEBUG("Finally replying",
             {"sender", EventRequest_->Sender},
             {"cookie", EventRequest_->Cookie});
         TBase::Send(EventRequest_->Sender, Response_.release(), 0, EventRequest_->Cookie);
@@ -273,10 +273,10 @@ protected:
 
         RowsSelected_ += response->DataRows.size();
 
-        YDB_LOG_DEBUG("Send rowset data",
+        YDB_LOG_DEBUG("Send rowset",
             {"selfId", this->SelfId()},
-            {"getQueryResultIndex", ev->Get()->Record.GetQueryResultIndex()},
-            {"getSeqNo", ev->Get()->Record.GetSeqNo()},
+            {"queryResultIndex", ev->Get()->Record.GetQueryResultIndex()},
+            {"seqNo", ev->Get()->Record.GetSeqNo()},
             {"sender", EventRequest_->Sender});
         TBase::Send(EventRequest_->Sender, response.release(), 0, EventRequest_->Cookie);
 
@@ -290,7 +290,7 @@ protected:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handling TEvKqp::TEvQueryResponse",
-            {"shortDebugString", ev->Get()->Record});
+            {"ev", ev->Get()->Record.ShortDebugString()});
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         if (record.GetResponse().HasExtraInfo()) {
             const auto& extraInfo = record.GetResponse().GetExtraInfo();
@@ -303,7 +303,7 @@ protected:
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
                     if(!record.GetResponse().GetYdbResults().empty()) {
-                        YDB_LOG_ERROR_COMP(NKikimrServices::LOCAL_PGWIRE, "Record.GetResponse().GetYdbResults().empty()");
+                        YDB_LOG_ERROR("Record.GetResponse().GetYdbResults() is empty");
                     }
 
                     // HACK
@@ -331,7 +331,7 @@ protected:
             ev->Record.MutableRequest()->SetSessionId(Connection_.SessionId);
         }
         YDB_LOG_DEBUG("Sent CancelQueryRequest to kqpProxy",
-            {"shortDebugString", ev->Record});
+            {"ev", ev->Record.ShortDebugString()});
         TBase::Send(NKqp::MakeKqpProxyID(TBase::SelfId().NodeId()), ev.Release());
 
         Response_->ErrorFields.push_back({'S', "ERROR"});
@@ -412,7 +412,7 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handling TEvKqp::TEvQueryResponse",
-            {"shortDebugString", ev->Get()->Record});
+            {"ev", ev->Get()->Record.ShortDebugString()});
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         try {
             if (record.HasYdbStatus()) {

@@ -39,7 +39,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvAuth::TPtr& ev) {
-        YDB_LOG_DEBUG("TEvAuth cookie",
+        YDB_LOG_DEBUG("TEvAuth",
             {"initialMessageDump", ev->Get()->InitialMessage->Dump()},
             {"cookie", ev->Cookie});
         std::unordered_map<TString, TString> clientParams = ev->Get()->InitialMessage->GetClientParams();
@@ -61,7 +61,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionOpened::TPtr& ev) {
-        YDB_LOG_DEBUG("TEvConnectionOpened cookie",
+        YDB_LOG_DEBUG("TEvConnectionOpened",
             {"sender", ev->Sender},
             {"cookie", ev->Cookie});
         auto params = ev->Get()->Message->GetClientParams();
@@ -79,19 +79,19 @@ public:
         IActor* actor = CreateConnection(std::move(params), std::move(ev), {.ConnectionNum = connectionState.ConnectionNum});
         TActorId actorId = Register(actor);
         connectionState.YdbConnection = actorId;
-        YDB_LOG_DEBUG("Created ydb connection num",
+        YDB_LOG_DEBUG("Created ydb connection",
             {"actorId", actorId},
             {"connectionNum", connectionState.ConnectionNum});
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionClosed::TPtr& ev) {
-        YDB_LOG_DEBUG("TEvConnectionClosed cookie",
+        YDB_LOG_DEBUG("TEvConnectionClosed",
             {"sender", ev->Sender},
             {"cookie", ev->Cookie});
         auto itConnection = ConnectionState.find(ev->Sender);
         if (itConnection != ConnectionState.end()) {
             Send(itConnection->second.YdbConnection, new TEvents::TEvPoisonPill());
-            YDB_LOG_DEBUG("Destroyed ydb connection num",
+            YDB_LOG_DEBUG("Destroyed ydb connection",
                 {"ydbConnection", itConnection->second.YdbConnection},
                 {"connectionNum", itConnection->second.ConnectionNum});
         }
@@ -147,13 +147,13 @@ public:
             uint32_t connectionNum = ev->Get()->Record.GetSecretKey();
             for (const auto& [pgConnectionId, connectionState] : ConnectionState) {
                 if (connectionState.ConnectionNum == connectionNum) {
-                    YDB_LOG_DEBUG("Cancelling ConnectionNum",
+                    YDB_LOG_DEBUG("Cancelling",
                         {"connectionNum", connectionNum});
                     Forward(ev, connectionState.YdbConnection);
                     return;
                 }
             }
-            YDB_LOG_WARN_CTX(*NActors::TlsActivationContext, "Cancelling ConnectionNum - connection not found",
+            YDB_LOG_WARN_CTX(*NActors::TlsActivationContext, "Cancelling - connection not found",
                 {"connectionNum", connectionNum});
         } else {
             YDB_LOG_DEBUG("Forwarding TEvCancelRequest to Node",

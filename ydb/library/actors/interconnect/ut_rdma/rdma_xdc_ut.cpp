@@ -490,7 +490,9 @@ namespace {
         ui32 DeclareSectionInline = 0;
         ui32 DeclareSectionRdma = 0;
         ui32 PushData = 0;
-        ui32 RdmaRead = 0;
+        ui32 RdmaReadWithChecksums = 0;
+        ui32 RdmaReadWithoutChecksums = 0;
+        ui32 RdmaRead() const { return RdmaReadWithChecksums + RdmaReadWithoutChecksums; }
     };
 
     static TString CollectStreamData(NInterconnect::TOutgoingStream& stream) {
@@ -540,22 +542,31 @@ namespace {
                         }
                         break;
                     }
-                    case EXdcCommand::PUSH_DATA: {
-                        constexpr size_t cmdLen = sizeof(ui16) + sizeof(ui32);
+                    case EXdcCommand::PUSH_DATA: 
+                    case EXdcCommand::PUSH_DATA_NO_CHECKSUMS: {
+                        const size_t cmdLen = sizeof(ui16) + (cmd == EXdcCommand::PUSH_DATA ? sizeof(ui32) : 0);
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= cmdLen, "invalid PUSH_DATA");
                         ptr += cmdLen;
                         ++counters.PushData;
                         break;
                     }
-                    case EXdcCommand::RDMA_READ: {
+                    case EXdcCommand::RDMA_READ: 
+                    case EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= sizeof(ui16), "invalid RDMA_READ");
                         const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                         ptr += sizeof(ui16);
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= credsSerializedSize + sizeof(ui32),
                             "invalid RDMA_READ payload");
                         ptr += credsSerializedSize;
+                        const ui32 checksum = ReadUnaligned<ui32>(ptr);
                         ptr += sizeof(ui32);
-                        ++counters.RdmaRead;
+                        if (cmd == EXdcCommand::RDMA_READ) {
+                            ++counters.RdmaReadWithChecksums;
+                            UNIT_ASSERT_C(checksum, "expected checksum");
+                        } else {
+                            ++counters.RdmaReadWithoutChecksums;
+                            UNIT_ASSERT_C(!checksum, "unexpected checksum");
+                        }
                         break;
                     }
                 }
@@ -651,13 +662,15 @@ TEST_F(XdcRdmaTest, ShuffleRdmaUsesIteratorOffsetInsideChunk) {
                         }
                         break;
                     }
-                    case EXdcCommand::PUSH_DATA: {
+                    case EXdcCommand::PUSH_DATA:
+                    case EXdcCommand::PUSH_DATA_NO_CHECKSUMS: {
                         constexpr size_t cmdLen = sizeof(ui16) + sizeof(ui32);
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= cmdLen, "invalid PUSH_DATA");
                         ptr += cmdLen;
                         break;
                     }
-                    case EXdcCommand::RDMA_READ: {
+                    case EXdcCommand::RDMA_READ: 
+                    case EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                         UNIT_ASSERT_C(static_cast<size_t>(partEnd - ptr) >= sizeof(ui16), "invalid RDMA_READ");
                         const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                         ptr += sizeof(ui16);
@@ -684,6 +697,91 @@ TEST_F(XdcRdmaTest, ShuffleRdmaUsesIteratorOffsetInsideChunk) {
     UNIT_ASSERT_VALUES_EQUAL(rdmaReadSize, rdmaSize);
     UNIT_ASSERT_VALUES_EQUAL(rdmaReadAddr, expectedAddr);
 }
+
+struct TRdmaPayloadChecksumTestParams {
+    bool AllowDisablingPayloadChecksums = false;
+    bool DisablePayloadChecksumsFlag = false;
+};
+
+class XdcRdmaPayloadChecksumTest
+    : public XdcRdmaTest
+    , public ::testing::WithParamInterface<TRdmaPayloadChecksumTestParams>
+{};
+
+TEST_P(XdcRdmaPayloadChecksumTest, RdmaPayloadChecksums) {
+    const TRdmaPayloadChecksumTestParams params = GetParam();
+    const bool disablePayloadChecksums = params.AllowDisablingPayloadChecksums && params.DisablePayloadChecksumsFlag;
+
+    auto common = MakeIntrusive<TInterconnectProxyCommon>();
+    common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+    std::shared_ptr<IInterconnectMetrics> ctr = CreateInterconnectCounters(common);
+    ctr->SetPeerInfo("peer", "1", "peer");
+
+    auto callback = [](THolder<IEventBase>) {};
+    TEventHolderPool pool(common, callback);
+
+    const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+
+    TSessionParams p;
+    p.UseExternalDataChannel = true;
+    p.UseXdcShuffle = true;
+    p.UseRdma = true;
+    p.ChecksumRdmaEvent = true;
+    p.AllowDisablingPayloadChecksums = params.AllowDisablingPayloadChecksums;
+    TEventOutputChannel channel(1, 1, 64 << 20, ctr, p, memPool);
+
+    constexpr size_t payloadSize = 257;
+    auto rcBuf = memPool->AllocRcBuf(payloadSize, 0).value();
+    for (size_t i = 0; i < payloadSize; ++i) {
+        rcBuf.GetDataMut()[i] = static_cast<char>(i);
+    }
+    const ui32 checksumIfCalculated = XXH3_64bits(rcBuf.GetData(), payloadSize);
+    UNIT_ASSERT_VALUES_UNEQUAL(checksumIfCalculated, 0u);
+
+    TEventSerializationInfo info;
+    info.Sections.push_back(TEventSectionInfo{0, payloadSize, 0, 0, false, true /*IsRdmaCapable*/});
+    auto serialized = MakeIntrusive<TEventSerializedData>(TRope(std::move(rcBuf)), std::move(info));
+
+    auto evHandle = MakeHolder<IEventHandle>(
+        TEvTestSerialization::EventType,
+        params.DisablePayloadChecksumsFlag ? IEventHandle::FlagDisablePayloadChecksums : 0,
+        TActorId(),
+        TActorId(),
+        serialized,
+        0
+    );
+    channel.Push(*evHandle, pool, TInstant::Zero());
+
+    NInterconnect::TOutgoingStream main;
+    NInterconnect::TOutgoingStream xdc;
+    TTcpPacketOutTask task(p, main, xdc);
+    UNIT_ASSERT(channel.FeedBuf(task, 1, 0));
+    task.Finish(1, 0);
+
+    TXdcCommandCounters counters;
+    AccumulateXdcCommandCounters(CollectStreamData(main), counters);
+
+    UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaReadWithChecksums, disablePayloadChecksums ? 0u : 1u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaReadWithoutChecksums, disablePayloadChecksums ? 1u : 0u);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DisablePayloadChecksums,
+    XdcRdmaPayloadChecksumTest,
+    ::testing::Values(
+        TRdmaPayloadChecksumTestParams{false, false},
+        TRdmaPayloadChecksumTestParams{false, true},
+        TRdmaPayloadChecksumTestParams{true, false},
+        TRdmaPayloadChecksumTestParams{true, true}
+    ),
+    [](const testing::TestParamInfo<TRdmaPayloadChecksumTestParams>& info) {
+        return std::string(info.param.AllowDisablingPayloadChecksums ? "AllowDisabling" : "DisablingNotAllowed")
+            + "_" + (info.param.DisablePayloadChecksumsFlag ? "FlagSet" : "FlagNotSet");
+    }
+);
 
 TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
@@ -730,7 +828,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenDeviceIndexIsInvalid) {
     UNIT_ASSERT(counters.DeclareSection > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
-    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 0u);
 }
 
 TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenSerializeToRopeFails) {
@@ -768,7 +866,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenSerializeToRopeFails) {
     UNIT_ASSERT(counters.DeclareSection > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
-    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 0u);
 }
 
 #ifndef NDEBUG
@@ -820,7 +918,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenChunkIsNotRdmaRegistered) 
     UNIT_ASSERT(counters.DeclareSection > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
-    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 0u);
 }
 
 TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunks) {
@@ -879,7 +977,7 @@ TEST_F(XdcRdmaTest, ShuffleRdmaFallsBackToPushDataWhenRdmaPartContainsMixedChunk
     UNIT_ASSERT(counters.DeclareSection > 0u);
     UNIT_ASSERT_VALUES_EQUAL(counters.DeclareSectionRdma, 0u);
     UNIT_ASSERT(counters.PushData > 0u);
-    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(counters.RdmaRead(), 0u);
 }
 #endif
 

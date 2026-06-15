@@ -17,16 +17,11 @@ Release date: April 3, 2026.
 
 #### Bug Fixes
 
-<<<<<<< HEAD
-* [Fixed ](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
-* [Fixed behavior ](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
-=======
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one who is not a member of a group allowed to access {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (LDAP search filter injection; special characters are now escaped per RFC 2254).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/33758) an issue that caused a server-side session leak.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36926) an issue where, in rare cases, reads from a table could block its deletion.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
 * [Fixed behavior](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
->>>>>>> 0267d5c6334 (Fix AI translation artifacts in 25-3 release notes (#43282))
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18088) nconsistent results in some read-write transactions — conflicting writes no longer overwrite uncommitted changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18234) serializability violations in read-write transactions after shard restarts.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/20560) a memory management issue when committing offsets in topics with automatic partitioning enabled.

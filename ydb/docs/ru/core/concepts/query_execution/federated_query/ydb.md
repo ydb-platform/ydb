@@ -46,7 +46,7 @@ SELECT * FROM ydb_datasource.`<table_name>`
 SELECT * FROM ydb_datasource.<table_name>
 ```
 
-## Ограничения
+## Ограничения {#limitations}
 
 При работе с внешними источниками данных {{ ydb-short-name }} существует ряд ограничений:
 

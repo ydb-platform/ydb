@@ -221,7 +221,7 @@ public:
 
     void CollectReadOnlyTablesSnapshots(TSet<NOlap::TSnapshot>& target) const {
         for (const auto& [_, pathInfo] : SchemeShardLocalPathIds) {
-            if (pathInfo.CopyVersion) {
+            if (pathInfo.CopyVersion && !pathInfo.DropVersion) {
                 target.insert(*pathInfo.CopyVersion);
             }
         }
@@ -392,6 +392,7 @@ private:
     TInternalPathId MaxInternalPathId;
 
     void RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& version);
+    void RebuildReadOnlyTablesSnapshots();
 
     friend class TTxInit;
 

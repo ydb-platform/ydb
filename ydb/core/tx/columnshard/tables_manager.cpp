@@ -92,6 +92,13 @@ void TTablesManager::RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& versi
     ReadOnlyTablesSnapshots.insert(version);
 }
 
+void TTablesManager::RebuildReadOnlyTablesSnapshots() {
+    ReadOnlyTablesSnapshots.clear();
+    for (const auto& [_, table] : Tables) {
+        table.CollectReadOnlyTablesSnapshots(ReadOnlyTablesSnapshots);
+    }
+}
+
 bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json) {
     NIceDb::TNiceDb db(txc.DB);
     {
@@ -432,11 +439,14 @@ void TTablesManager::DropTable(
     const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     auto* table = Tables.FindPtr(pathId);
     AFL_VERIFY(table);
+    const bool isReadOnly = table->IsReadOnly(schemeShardLocalPathId);
     table->SetDropVersion(schemeShardLocalPathId, version);
     if (table->IsDropped()) {
         AFL_VERIFY(PathsToDrop[version].emplace(pathId).second);
     }
-    if (!table->IsReadOnly(schemeShardLocalPathId)) {   // v0 can't be read-only
+    if (isReadOnly) {
+        RebuildReadOnlyTablesSnapshots();
+    } else {
         Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
     }
     Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
@@ -611,6 +621,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
         AFL_VERIFY(SchemeShardLocalToInternal.erase(unifiedPathId.GetSchemeShardLocalPathId()));
     }
     Tables.erase(itTable);
+    RebuildReadOnlyTablesSnapshots();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "TryFinalizeDropPathOnComplete")("path_id", pathId)("size", Tables.size());
     return true;
 }

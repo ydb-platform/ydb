@@ -177,23 +177,6 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaLoggingSource) {
         );
     }
 
-    Y_UNIT_TEST(ResolveSkipsForeignIdentityParametersAndAdditionalParameters) {
-        TGrafanaLoggingTestContext context;
-        context.ClusterInfo["datasource_logging"] = "ds-42";
-        context.UrlParameters = MakeUrlParameters("cluster=test-cluster&node=ignored-node&custom_label=kept&host=storage-1.example.net");
-        context.EntityType = EEntityType::Host;
-        auto result = context.Resolve();
-
-        UNIT_ASSERT_VALUES_EQUAL(result.Links.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(result.Errors.size(), 0u);
-        AssertPanesQuery(
-            result.Links[0].Url,
-            "https://grafana.example.net/explore",
-            "{cluster=\"test-cluster\", host=\"storage-1.example.net\"}",
-            "ds-42"
-        );
-    }
-
     Y_UNIT_TEST(ResolveDoesNotRequireWorkspace) {
         TGrafanaLoggingTestContext context;
         context.ClusterInfo["datasource_logging"] = "ds-42";

@@ -15,8 +15,6 @@ struct TSupportLinksSettings {
     TString GrafanaEndpoint;
     TVector<TSupportLinkEntryConfig> ClusterLinks;
     TVector<TSupportLinkEntryConfig> DatabaseLinks;
-    TVector<TSupportLinkEntryConfig> NodeLinks;
-    TVector<TSupportLinkEntryConfig> HostLinks;
 };
 
 struct TMetaSettings {

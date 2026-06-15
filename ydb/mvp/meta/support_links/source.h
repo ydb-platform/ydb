@@ -4,7 +4,6 @@
 #include <ydb/mvp/meta/support_links/types.h>
 
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/http/http.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>

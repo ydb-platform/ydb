@@ -20,16 +20,12 @@ META_TABLE_PATH = "/Root/ydb/MasterClusterExt.db"
 GRAFANA_DASHBOARD_PATH = "/d/ydb/overview"
 ABSOLUTE_GRAFANA_DASHBOARD_URL = "https://external.example.test/d/ydb/overview"
 DATABASE_NAME = "/Root/db1"
-NODE_ID = "static-node-1"
-HOST_NAME = "storage-1.example.net"
 MISSING_CLUSTER_NAME = "missing-cluster"
 MISSING_CLUSTER_ERROR = f"Cluster '{MISSING_CLUSTER_NAME}' is not found in MasterClusterExt.db"
 MISSING_CLUSTER_PARAMETER_ERROR = (
     "Invalid identity parameters. Supported entities: cluster requires 'cluster'; "
-    "database requires 'cluster' and 'database'; node requires 'cluster' and 'node'; "
-    "host requires 'cluster' and 'host'."
+    "database requires 'cluster' and 'database'."
 )
-DATABASE_WITH_NODE_OR_HOST_ERROR = "Invalid identity parameters. Parameter 'database' must not be specified together with 'node' or 'host'."
 
 
 def mvp_meta_bin():
@@ -98,16 +94,12 @@ class MetaSupportLinksEnv(BaseHttpEnv):
         super().__init__(meta_service)
         self.meta_service = meta_service
 
-    def get_support_links(self, cluster_name=None, database=None, node=None, host=None, extra_params=None):
+    def get_support_links(self, cluster_name=None, database=None, extra_params=None):
         params = {}
         if cluster_name is not None:
             params["cluster"] = cluster_name
         if database is not None:
             params["database"] = database
-        if node is not None:
-            params["node"] = node
-        if host is not None:
-            params["host"] = host
         if extra_params:
             params.update(extra_params)
         return self.get(
@@ -116,23 +108,19 @@ class MetaSupportLinksEnv(BaseHttpEnv):
             timeout=10,
         )
 
-    def get_ok_support_links_payload(self, cluster_name=None, database=None, node=None, host=None, extra_params=None):
+    def get_ok_support_links_payload(self, cluster_name=None, database=None, extra_params=None):
         response = self.get_support_links(
             cluster_name=cluster_name,
             database=database,
-            node=node,
-            host=host,
             extra_params=extra_params,
         )
         assert response.status_code == 200, response.text
         return response.json()
 
-    def get_bad_request_support_links_payload(self, cluster_name=None, database=None, node=None, host=None, extra_params=None):
+    def get_bad_request_support_links_payload(self, cluster_name=None, database=None, extra_params=None):
         response = self.get_support_links(
             cluster_name=cluster_name,
             database=database,
-            node=node,
-            host=host,
             extra_params=extra_params,
         )
         assert response.status_code == 400, response.text
@@ -175,12 +163,6 @@ def write_meta_support_links_config(
         '      - source: "grafana/dashboard"',
         '        title: "Overview"',
         f'        url: "{url}"',
-        "    node:",
-        '      - source: "grafana/logging"',
-        '        title: "Node Logs"',
-        "    host:",
-        '      - source: "grafana/logging"',
-        '        title: "Host Logs"',
         "",
     ])
     with open(config_path, "w") as config:

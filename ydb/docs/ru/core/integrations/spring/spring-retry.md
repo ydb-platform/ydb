@@ -13,7 +13,7 @@
 ## Возможности {#features}
 
 - Автоматический повтор методов `@Transactional` при повторяемых кодах статуса {{ ydb-short-name }}.
-- Аннотация `@YdbTransactional` с настройками повтора на уровне отдельного метода (число попыток, backoff, идемпотентность).
+- Аннотация `@YdbTransactional` с настройками повтора на уровне отдельного метода (максимальное число попыток, backoff, идемпотентность).
 - Двухуровневая стратегия задержки (быстрая/медленная) с джиттером, подобранная под семантику ошибок {{ ydb-short-name }}.
 - Режим идемпотентности для расширенного покрытия повторами на недетерминированных кодах статуса.
 - Полная конфигурация через `application.properties` или `application.yaml`.
@@ -91,7 +91,7 @@ public class UserService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    @YdbTransactional(maxRetries = 5, idempotent = true)
+    @YdbTransactional(maxAttempts = 5, idempotent = true)
     public void save(String login) {
         jdbcTemplate.update("UPSERT INTO users (login) VALUES (?)", login);
     }
@@ -103,12 +103,12 @@ public class UserService {
 | Атрибут | По умолчанию | Описание |
 | --- | --- | --- |
 | `enabled` | `true` | Включает или отключает повтор для метода. Локально повтор можно только отключить — включить его на методе нельзя, если он выключен глобально. |
-| `maxRetries` | `-1` | Число повторных попыток после первого неудачного выполнения. Метод выполняется до `maxRetries + 1` раз. `-1` — взять значение из [`ydb.transaction.retry.max-retries`](#configuration). `0` — без повторных попыток. |
+| `maxAttempts` | `0` | Максимальное число попыток, включая первую. Например, `maxAttempts = 5` означает до пяти выполнений метода всего: первую попытку и не более четырёх повторов, а `maxAttempts = 1` — ровно один запуск без повторов. `0` — взять значение из [`ydb.transaction.retry.max-attempts`](#configuration). Отрицательные значения недопустимы. |
 | `idempotent` | `false` | Помечает метод как идемпотентный. Часть кодов статуса {{ ydb-short-name }} повторяется только в этом режиме. |
-| `slowBackoffBaseMs` | `-1` | Базовая задержка медленного backoff, мс. `-1` — из глобальной конфигурации. |
-| `fastBackoffBaseMs` | `-1` | Базовая задержка быстрого backoff, мс. `-1` — из глобальной конфигурации. |
-| `slowCapBackoffMs` | `-1` | Потолок медленного backoff, мс. `-1` — из глобальной конфигурации. |
-| `fastCapBackoffMs` | `-1` | Потолок быстрого backoff, мс. `-1` — из глобальной конфигурации. |
+| `slowBackoffBaseMs` | `0` | Базовая задержка медленного backoff, мс. `0` — из глобальной конфигурации. |
+| `fastBackoffBaseMs` | `0` | Базовая задержка быстрого backoff, мс. `0` — из глобальной конфигурации. |
+| `slowCapBackoffMs` | `0` | Потолок медленного backoff, мс. `0` — из глобальной конфигурации. |
+| `fastCapBackoffMs` | `0` | Потолок быстрого backoff, мс. `0` — из глобальной конфигурации. |
 
 ### Идемпотентность {#idempotency}
 
@@ -159,8 +159,8 @@ public String findPayload(String guid, int id) {
 # Включение/отключение повтора
 ydb.transaction.retry.enabled=true
 
-# Максимальное число повторных попыток
-ydb.transaction.retry.max-retries=10
+# Максимальное число попыток, включая первую
+ydb.transaction.retry.max-attempts=10
 
 # Backoff для медленного уровня (OVERLOADED, CLIENT_RESOURCE_EXHAUSTED)
 ydb.transaction.retry.slow-backoff-base-ms=50
@@ -174,13 +174,13 @@ ydb.transaction.retry.fast-cap-backoff-ms=500
 | Свойство | По умолчанию | Описание |
 | --- | --- | --- |
 | `ydb.transaction.retry.enabled` | `true` | Глобальное включение/отключение повтора. |
-| `ydb.transaction.retry.max-retries` | `10` | Число повторных попыток после первого неудачного выполнения. `0` — без повторных попыток. |
+| `ydb.transaction.retry.max-attempts` | `10` | Максимальное число попыток, включая первую. Например, значение `10` означает до десяти выполнений метода всего: первую попытку и не более девяти повторов. Допустимый минимум — `0`. |
 | `ydb.transaction.retry.slow-backoff-base-ms` | `50` | Базовая задержка медленного backoff, мс. |
 | `ydb.transaction.retry.slow-cap-backoff-ms` | `5000` | Потолок медленного backoff, мс. |
 | `ydb.transaction.retry.fast-backoff-base-ms` | `5` | Базовая задержка быстрого backoff, мс. |
 | `ydb.transaction.retry.fast-cap-backoff-ms` | `500` | Потолок быстрого backoff, мс. |
 
-Параметры `@YdbTransactional` переопределяют глобальные для конкретного метода. Значение `-1` в аннотации означает «взять из глобальной конфигурации».
+Параметры `@YdbTransactional` переопределяют глобальные для конкретного метода. Значение `0` в аннотации означает «взять из глобальной конфигурации», отрицательные значения недопустимы.
 
 ## Смотрите также {#see-also}
 

@@ -591,7 +591,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie) {
+    void TDDiskActor::HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie) {
         auto eraseCnt = inflight.OperationCookies.erase(partCookie);
         Y_ABORT_UNLESS(eraseCnt == 1);
 
@@ -632,13 +632,19 @@ namespace NKikimr::NDDisk {
                 PersistentBufferSpaceAllocator.Free(inflight.OccupiedSectors);
             }
 
+            auto status = inflight.Status;
+            auto errorMessage = inflight.ErrorMessage;
+
+            // process duplicated write requests and clear PersistentBufferWriteInflightsByRecord
             for (auto& record : inflight.Records) {
                 auto it = PersistentBufferWriteInflightsByRecord.find({record.TabletId, record.Generation, record.Lsn});
                 Y_ABORT_UNLESS(it != PersistentBufferWriteInflightsByRecord.end());
                 Y_ABORT_UNLESS(!it->second.empty());
-                auto status = inflight.Status;
-                auto errorMessage = inflight.ErrorMessage;
                 for (auto [replyCookie, pos] : it->second) {
+                    if (replyCookie == opCookie) {
+                        continue;
+                    }
+
                     auto replyIt = PersistentBufferDiskOperationInflight.find(replyCookie);
                     Y_ABORT_UNLESS(replyIt != PersistentBufferDiskOperationInflight.end());
                     auto& replyInflight = replyIt->second;
@@ -656,6 +662,20 @@ namespace NKikimr::NDDisk {
                 }
                 PersistentBufferWriteInflightsByRecord.erase(it);
             }
+
+            // process current write requests
+            for (auto& record : inflight.Records) {
+                auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
+                    status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
+                auto h = std::make_unique<IEventHandle>(record.Sender, SelfId(), replyEv.release(), 0, record.Cookie);
+                if (record.Session) {
+                    h->Rewrite(TEvInterconnect::EvForward, record.Session);
+                }
+                TActivationContext::Send(h.release());
+                record.Span.End();
+            }
+            PersistentBufferDiskOperationInflight.erase(opCookie);
+
             *Counters.PersistentBuffer.TotalBytes =
                 (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
         }
@@ -748,7 +768,7 @@ namespace NKikimr::NDDisk {
             }
             HandleErasePart(inflight, opCookie, partCookie, resultStatus);
         } else {
-            HandleWritePart(inflight, partCookie);
+            HandleWritePart(inflight, opCookie, partCookie);
         }
     }
 

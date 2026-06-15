@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -68,7 +70,8 @@ void TKesusTablet::OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActor
 }
 
 void TKesusTablet::OnActivateExecutor(const TActorContext& ctx) {
-    LOG_INFO(ctx, NKikimrServices::KESUS_TABLET, "OnActivateExecutor: %" PRIu64, TabletID());
+    YDB_LOG_INFO_CTX(ctx, "OnActivateExecutor",
+        {"tabletID", TabletID()});
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
     Execute(CreateTxInitSchema(), ctx);
@@ -311,7 +314,8 @@ STFUNC(TKesusTablet::StateWork) {
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_WARN(*TActivationContext::ActorSystem(), NKikimrServices::KESUS_TABLET, "Unexpected event 0x%x", ev->GetTypeRewrite());
+                YDB_LOG_WARN_CTX(*TActivationContext::ActorSystem(), "Unexpected event 0x",
+                    {"typeRewrite", ev->GetTypeRewrite()});
             }
             break;
     }

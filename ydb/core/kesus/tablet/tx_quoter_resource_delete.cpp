@@ -1,5 +1,7 @@
 #include "tablet_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -27,9 +29,12 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxQuoterResourceDelete::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", id=" << Record.GetResourceId() << ", path=\"" << Record.GetResourcePath() << "\")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDelete::Execute path=",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie},
+            {"id", Record.GetResourceId()},
+            {"resourcePath", Record.GetResourcePath()});
 
         TQuoterResourceTree* resource = Record.GetResourceId() ?
             Self->QuoterResources.FindId(Record.GetResourceId()) :
@@ -56,18 +61,20 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
         db.Table<Schema::QuoterResources>().Key(resourceId).Delete();
 
         Self->TabletCounters->Simple()[COUNTER_QUOTER_RESOURCE_COUNT].Add(-1);
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] Deleted quoter resource "
-                << resourceId << " \"" << resourcePath << "\"");
+        YDB_LOG_DEBUG_CTX(ctx, "Deleted quoter resource",
+            {"tabletId", Self->TabletID()},
+            {"resourceId", resourceId},
+            {"resourcePath", resourcePath});
 
         ReplyOk();
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxQuoterResourceDelete::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDelete::Complete",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, std::move(Reply), 0, Cookie);

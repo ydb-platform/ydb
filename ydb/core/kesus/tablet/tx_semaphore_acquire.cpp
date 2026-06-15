@@ -1,5 +1,7 @@
 #include "tablet_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -42,10 +44,13 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSemaphoreAcquire::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", session=" << Record.GetSessionId()
-                << ", semaphore=" << Record.GetName().Quote() << " count=" << Record.GetCount() << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreAcquire::Execute",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie},
+            {"session", Record.GetSessionId()},
+            {"semaphore", Record.GetName().Quote()},
+            {"count", Record.GetCount()});
 
         auto* proxy = Self->Proxies.FindPtr(Sender);
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
@@ -121,9 +126,10 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
                 NIceDb::TUpdate<Schema::Semaphores::Limit>(semaphore->Limit),
                 NIceDb::TUpdate<Schema::Semaphores::Ephemeral>(semaphore->Ephemeral));
             Self->TabletCounters->Simple()[COUNTER_SEMAPHORE_COUNT].Add(1);
-            LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-                "[" << Self->TabletID() << "] Created new ephemeral semaphore "
-                    << semaphoreId << " " << Record.GetName().Quote());
+            YDB_LOG_DEBUG_CTX(ctx, "Created new ephemeral semaphore",
+                {"tabletId", Self->TabletID()},
+                {"semaphoreId", semaphoreId},
+                {"recordNameQuote", Record.GetName().Quote()});
         }
         ui64 semaphoreId = semaphore->Id;
 
@@ -258,9 +264,10 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSemaphoreAcquire::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreAcquire::Complete",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 
         for (auto& ev : Events) {

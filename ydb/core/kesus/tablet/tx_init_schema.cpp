@@ -1,5 +1,7 @@
 #include "tablet_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -11,14 +13,16 @@ struct TKesusTablet::TTxInitSchema : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxInitSchema::Execute", Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxInitSchema::Execute",
+            {"tabletId", Self->TabletID()});
         NIceDb::TNiceDb db(txc.DB);
         db.Materialize<Schema>();
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxInitSchema::Complete", Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxInitSchema::Complete",
+            {"tabletId", Self->TabletID()});
         Self->Execute(Self->CreateTxInit(), ctx);
     }
 };

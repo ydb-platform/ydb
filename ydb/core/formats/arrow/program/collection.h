@@ -451,7 +451,7 @@ public:
                 return;
             }
             // Exclusive duplicate interval: allow-all over explicit row span. Keep metadata for fetch gates.
-            if (!UseFilter) {
+            if (!UseFilter && Filter->IsEmpty()) {
                 *Filter = filter;
                 RecordsCountActual = filter.GetFilteredCount();
             }

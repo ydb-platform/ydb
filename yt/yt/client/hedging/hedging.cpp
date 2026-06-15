@@ -17,6 +17,8 @@
 
 #include <yt/yt/core/logging/log.h>
 
+#include <yt/yt/core/net/local_address.h>
+
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/rpc/dispatcher.h>
@@ -26,6 +28,7 @@
 #include <util/generic/va_args.h>
 
 #include <util/system/compiler.h>
+#include <util/system/env.h>
 
 namespace NYT::NClient::NHedging::NRpc {
 
@@ -280,6 +283,11 @@ NApi::IClientPtr DoCreateHedgingClient(
         counterTagSet.AddTag(NProfiling::TTag(tagName, tagValue));
     }
 
+    std::string localDataCenter;
+    if (config->RemoteDataCenterPenalty != TDuration::Zero()) {
+        localDataCenter = NNet::GetLocalYPCluster();
+    }
+
     std::vector<THedgingExecutor::TNode> executorNodes;
     executorNodes.reserve(config->Connections.size());
     for (auto& connectionConfig : config->Connections) {
@@ -298,7 +306,20 @@ NApi::IClientPtr DoCreateHedgingClient(
     }
 
     return New<THedgingClient>(
-        New<THedgingExecutor>(executorNodes, config->BanPenalty, config->BanDuration, penaltyProvider));
+        New<THedgingExecutor>(
+            executorNodes,
+            config->BanPenalty,
+            config->BanDuration,
+            penaltyProvider,
+            config->RatioCounterBucketCount,
+            config->RatioCounterShiftPeriod,
+            config->HedgingRatioLimit,
+            config->HedgingRequestDelays,
+            config->RemoteDataCenterPenalty,
+            localDataCenter,
+            New<THedgingExecutorCounters>(counterTagSet)
+        )
+    );
 }
 
 } // namespace

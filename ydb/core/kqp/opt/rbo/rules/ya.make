@@ -48,6 +48,7 @@ SRCS(
     propagate_hash_func_stage.cpp
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
+    rewrite_right_join.cpp
 )
 
 PEERDIR(

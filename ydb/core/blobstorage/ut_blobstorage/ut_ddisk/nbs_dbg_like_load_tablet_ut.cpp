@@ -483,8 +483,8 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             auto resp = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsWriteResult>(
                 f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(120)));
             UNIT_ASSERT(resp);
-            UNIT_ASSERT_VALUES_EQUAL_C(resp->Get()->Record.GetStatus(), 0u,
-                "write i=" << resp->Cookie << " status=" << resp->Get()->Record.GetStatus());
+            UNIT_ASSERT_C(resp->Get()->Record.GetStatus() == NBSIO_OK,
+                "write i=" << resp->Cookie << " status=" << static_cast<int>(resp->Get()->Record.GetStatus()));
             const ui64 cookie = resp->Cookie;
             UNIT_ASSERT_C(cookie < kNumBlocks, "cookie=" << cookie);
             UNIT_ASSERT_C(!writeOk[cookie], "duplicate ack for cookie=" << cookie);
@@ -506,8 +506,8 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             auto resp = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsReadResult>(
                 f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(120)));
             UNIT_ASSERT(resp);
-            UNIT_ASSERT_VALUES_EQUAL_C(resp->Get()->Record.GetStatus(), 0u,
-                "read i=" << resp->Cookie << " status=" << resp->Get()->Record.GetStatus());
+            UNIT_ASSERT_C(resp->Get()->Record.GetStatus() == NBSIO_OK,
+                "read i=" << resp->Cookie << " status=" << static_cast<int>(resp->Get()->Record.GetStatus()));
             const ui64 cookie = resp->Cookie;
             UNIT_ASSERT_C(cookie < kNumBlocks, "cookie=" << cookie);
             UNIT_ASSERT_C(!readOk[cookie], "duplicate result for cookie=" << cookie);
@@ -594,8 +594,8 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             auto resp = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsWriteResult>(
                 f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(120)));
             UNIT_ASSERT(resp);
-            UNIT_ASSERT_VALUES_EQUAL_C(resp->Get()->Record.GetStatus(), 0u,
-                "write cookie=" << resp->Cookie << " status=" << resp->Get()->Record.GetStatus());
+            UNIT_ASSERT_C(resp->Get()->Record.GetStatus() == NBSIO_OK,
+                "write cookie=" << resp->Cookie << " status=" << static_cast<int>(resp->Get()->Record.GetStatus()));
             const ui64 cookie = resp->Cookie;
             UNIT_ASSERT_C(cookie < kTotal, "cookie=" << cookie);
             UNIT_ASSERT_C(!writeOk[cookie], "duplicate ack for cookie=" << cookie);
@@ -618,8 +618,8 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             auto resp = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsReadResult>(
                 f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(120)));
             UNIT_ASSERT(resp);
-            UNIT_ASSERT_VALUES_EQUAL_C(resp->Get()->Record.GetStatus(), 0u,
-                "read cookie=" << resp->Cookie << " status=" << resp->Get()->Record.GetStatus());
+            UNIT_ASSERT_C(resp->Get()->Record.GetStatus() == NBSIO_OK,
+                "read cookie=" << resp->Cookie << " status=" << static_cast<int>(resp->Get()->Record.GetStatus()));
             const ui64 cookie = resp->Cookie;
             UNIT_ASSERT_C(cookie < kTotal, "cookie=" << cookie);
             UNIT_ASSERT_C(!readOk[cookie], "duplicate result for cookie=" << cookie);

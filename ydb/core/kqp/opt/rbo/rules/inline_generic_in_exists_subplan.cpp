@@ -142,21 +142,34 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
 
     if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || !extraJoinKeys.empty()) {
+        auto leftInput = filter->GetInput();
+        auto rightInput = uncorrSubplan;
+
+        const auto commonIUs = IUSetIntersect(leftInput->GetOutputIUs(), rightInput->GetOutputIUs());
+        const auto rightRenamings = MakeRenameMap(commonIUs, props.InternalVarIdx);
+        if (!rightRenamings.empty()) {
+            rightInput = MakeMapFromRenames(rightInput, rightRenamings, filter->Pos, &ctx.ExprCtx, &props);
+            extraJoinKeys = RemapJoinKeysRightSide(extraJoinKeys, rightRenamings);
+            for (auto& joinFilter : joinFilters) {
+                joinFilter = joinFilter.ApplyRenames(rightRenamings);
+            }
+        }
+
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        auto planIUs = uncorrSubplan->GetOutputIUs();
+        auto planIUs = rightInput->GetOutputIUs();
 
         for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
             joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
         }
 
         // Fetch keys
-        auto keyColumns = filter->GetInput()->Props.Metadata->KeyColumns;
+        auto keyColumns = leftInput->Props.Metadata->KeyColumns;
         Y_ENSURE(!keyColumns.empty(), "Cannot inline a join filter because key columns are missing");
-        Y_ENSURE(CheckNonNullKeys(filter->GetInput(), keyColumns), "Key columns cannot be optional when decorrelating generic IN/EXISTS");
+        Y_ENSURE(CheckNonNullKeys(leftInput, keyColumns), "Key columns cannot be optional when decorrelating generic IN/EXISTS");
 
         // Build the join
         joinKeys.insert(joinKeys.begin(), extraJoinKeys.begin(), extraJoinKeys.end());
-        join = MakeIntrusive<TOpJoin>(filter->GetInput(), uncorrSubplan, input->Pos, "Inner", joinKeys, joinFilters);
+        join = MakeIntrusive<TOpJoin>(leftInput, rightInput, input->Pos, "Inner", joinKeys, joinFilters);
 
         // Build the counting aggregate and use a map operator to compute count > 0
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);

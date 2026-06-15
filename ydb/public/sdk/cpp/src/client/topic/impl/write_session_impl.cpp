@@ -703,8 +703,8 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
                 MakeTransactionId(message.GetTxPtr())
         );
 
-        FlushWriteIfRequiredImpl();
         readyToAccept = OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk;
+        FlushWriteIfRequiredImpl();
     }
     if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
@@ -1241,7 +1241,8 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     size_t packedMessageCount = 1;
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
         const auto& front = SentPackedMessage.front();
-        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(front.OriginalMemoryUsage));
+        const ui64 memoryToRelease = front.Compressed ? front.Data.size() : front.OriginalMemoryUsage;
+        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(memoryToRelease));
         result = memoryUsage.NowOk && !memoryUsage.WasOk;
         packedMessageCount = front.MessageCount;
         if (front.Compressed) {
@@ -1507,7 +1508,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             block.MessageCount += 1;
             const auto& datum = currMessage.DataRef;
             block.OriginalSize += datum.size();
-            block.OriginalMemoryUsage = CurrentBatch.Data.size();
+            block.OriginalMemoryUsage += datum.size();
             block.OriginalDataRefs.emplace_back(datum);
             if (CurrentBatch.Messages[i].Codec.has_value()) {
                 Y_ABORT_UNLESS(CurrentBatch.Messages.size() == 1);

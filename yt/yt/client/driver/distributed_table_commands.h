@@ -74,6 +74,7 @@ private:
     using TBase = TWriteTableCommand;
 
     NYTree::INodePtr Cookie;
+    NYTree::INodePtr TableWriter;
     i64 MaxRowBufferSize;
 
     NApi::ITableFragmentWriterPtr CreateTableWriter(const ICommandContextPtr& context);

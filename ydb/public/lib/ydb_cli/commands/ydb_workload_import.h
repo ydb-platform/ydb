@@ -43,8 +43,11 @@ private:
     };
     class TFileWriter;
     class TDbWriter;
+    class TFlowController;
+    class TBatchQueue;
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
-    void ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept;
+    void ReaderFunc(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen, TBatchQueue& queue) noexcept;
+    void SenderFunc(TBatchQueue& queue) noexcept;
 
     THolder<TUploadParams> OwnedUploadParams;
     const TUploadParams& UploadParams;
@@ -53,7 +56,9 @@ private:
     TAdaptiveLock Lock;
     THolder<TFastSemaphore> InFlightSemaphore;
     TAtomic ErrorsCount;
+    TAtomic InFlightCounter;
     THolder<IWriter> Writer;
+    THolder<TFlowController> FlowCtl;
 };
 
 }

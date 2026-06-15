@@ -286,13 +286,24 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
 
         std::vector<typename TPortion::TPtr> expired;
         expired.reserve(std::min<size_t>(maxCount, PortionsByTime.size()));
-        for (auto it = PortionsByTime.begin();
-             expired.size() < maxCount && it != PortionsByTime.end() && (it->first + wait <= currentInstant || State == EState::BORED); ++it) {
+        for (auto it = PortionsByTime.begin(); expired.size() < maxCount && it != PortionsByTime.end(); ++it) {
             auto pit = PortionRegistry.find(it->second);
             if (pit != PortionRegistry.end()) {
-                expired.push_back(pit->second);
+                auto lit = InternalLevel.find(it->second);
+                if (lit != InternalLevel.end()) {
+                    if ((State == EState::BORED && lit->second.Level != 0) || it->first + wait <= currentInstant) {
+                        Cerr << "PROMOTING " << "level " << lit->second.Level << " bored " << (State == EState::BORED) << " time "
+                             << (it->first + wait <= currentInstant) << "\n";
+                        expired.push_back(pit->second);
+                    }
+                }
+            }
+            if (State != EState::BORED && it->first + wait > currentInstant) {
+                break;
             }
         }
+
+        Cerr << "GET PROMOTE " << expired.size() << "\n";
 
         for (const auto& p : expired) {
             const ui64 portionId = p->GetPortionId();
@@ -336,6 +347,9 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     }
 
     void ConsiderState() {
+        Cerr << "GET PROMOTE " << DoGetUsefulMetric().DebugString() << "\n";
+        Cerr << "GET PROMOTE " << (State == EState::REGULAR) << "\n";
+        Cerr << "GET PROMOTE " << (State == EState::BORED) << "\n";
         if (DoGetUsefulMetric().IsZeroLevel() && State == EState::REGULAR) {
             State = EState::BORED;
         } else if (!DoGetUsefulMetric().IsZeroLevel() && State == EState::BORED) {
@@ -344,6 +358,9 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
+        Cerr << "Acc " << Accumulator.DoGetUsefulMetric().DebugString() << "\n";
+        Cerr << "last " << LastLevel.DoGetUsefulMetric().DebugString() << "\n";
+        Cerr << "mid " << GetMiddleUsefulMetric().first.DebugString() << "\n";
         return std::max(Accumulator.DoGetUsefulMetric(), std::max(LastLevel.DoGetUsefulMetric(), GetMiddleUsefulMetric().first));
     }
 

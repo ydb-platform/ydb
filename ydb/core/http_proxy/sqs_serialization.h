@@ -2,6 +2,7 @@
 
 #include "serialization.h"
 
+#include <ydb/core/http_proxy/http_req.h>
 #include <ydb/library/http_proxy/error/error.h>
 
 namespace NKikimr::NHttpProxy::NSQS {
@@ -34,7 +35,7 @@ namespace NKikimr::NHttpProxy::NSQS {
         }
     };
 
-    TString Serialize(const MimeTypes mimeType, const NProtoBuf::Message& value);
+    TString Serialize(const THttpRequestContext& httpContext, const NProtoBuf::Message& value);
 
     struct TErrorResponse {
         TString StatusCode;

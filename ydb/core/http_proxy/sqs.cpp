@@ -318,7 +318,7 @@ namespace NKikimr::NHttpProxy {
                         .HttpCode = 200,
                         .ContentType = HttpContext.ContentType,
                         .Message = "",
-                        .Body = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message)
+                        .Body = NSQS::Serialize(HttpContext, *ev->Get()->Message)
                     }, ev->Get()->Message->ByteSizeLong());
                 } else {
                     auto retryClass =

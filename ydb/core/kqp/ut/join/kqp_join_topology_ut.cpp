@@ -1,6 +1,7 @@
 #include "kqp_join_topology_generator.h"
 
 #include <library/cpp/testing/common/env.h>
+#include <library/cpp/iterator/zip.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/generic/array_size.h>
@@ -19,9 +20,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <ydb/library/yql/dq/opt/dq_opt_make_join_hypergraph.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
-#include <ydb/library/yql/dq/opt/dq_opt_cbo_latency_predictor.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_make_join_hypergraph.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_cbo_latency_predictor.h>
 
 #include <cstdint>
 #include <exception>
@@ -574,9 +575,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     class BenchRunner {
     public:
         using THypergraphNodes = std::bitset<64>;
-        using TJoinHypergraph = NYql::NDq::TJoinHypergraph<THypergraphNodes>;
-        using TJoinTree = std::shared_ptr<NYql::IBaseOptimizerNode>;
-        using TOrderingsPtr = TSimpleSharedPtr<NYql::NDq::TOrderingsStateMachine>;
+        using TJoinHypergraph = NKikimr::NKqp::TJoinHypergraph<THypergraphNodes>;
+        using TJoinTree = std::shared_ptr<IBaseOptimizerNode>;
+        using TOrderingsPtr = TSimpleSharedPtr<TOrderingsStateMachine>;
 
         BenchRunner(TRNG& rng, const TBenchmarkConfig& config, TUnbufferedFileOutput& output, TTupleParser::TTable& args)
             : Config_(config)
@@ -778,7 +779,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
                 std::stringstream ss;
 
-                ui64 predictedLatency = NYql::NDq::PredictCBOTime(hypergraph);
+                ui64 predictedLatency = PredictCBOTime(hypergraph);
                 ss << "Time(pred) = " << TimeFormatter::Format(predictedLatency) << "&";
 
                 bool dryRun = params.GetValue<bool>("dry-run", false);
@@ -1056,20 +1057,20 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         void RandomizeJoinTypes(TRNG &rng, TJoinTree& tree, const TParamsMap& params) {
-            static const std::vector<std::pair<std::string, NYql::EJoinKind>> joins = {
-                { "inner-join",      NYql::EJoinKind::InnerJoin },
-                { "left-join",       NYql::EJoinKind::LeftJoin  },
-                { "right-join",      NYql::EJoinKind::RightJoin },
-                { "outer-join",      NYql::EJoinKind::OuterJoin },
-                { "cross-join",      NYql::EJoinKind::Cross     },
-                { "left-only-join",  NYql::EJoinKind::LeftOnly  },
-                { "right-only-join", NYql::EJoinKind::RightOnly },
-                { "left-semi-join",  NYql::EJoinKind::LeftSemi  },
-                { "right-semi-join", NYql::EJoinKind::RightSemi },
-                { "exclusion-join",  NYql::EJoinKind::Exclusion }
+            static const std::vector<std::pair<std::string, EJoinKind>> joins = {
+                { "inner-join",      InnerJoin },
+                { "left-join",       LeftJoin  },
+                { "right-join",      RightJoin },
+                { "outer-join",      OuterJoin },
+                { "cross-join",      Cross     },
+                { "left-only-join",  LeftOnly  },
+                { "right-only-join", RightOnly },
+                { "left-semi-join",  LeftSemi  },
+                { "right-semi-join", RightSemi },
+                { "exclusion-join",  Exclusion }
             };
 
-            std::map<NYql::EJoinKind, double> probabilities;
+            std::map<EJoinKind, double> probabilities;
             for(const auto& [name, kind] : joins) {
                 probabilities[kind] = params.GetValue<double>(name, 0.0);
             }
@@ -1083,28 +1084,43 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         TJoinHypergraph BuildHypergraph(TJoinTree tree) {
-            return NYql::NDq::MakeJoinHypergraph<THypergraphNodes>(tree);
+            return MakeJoinHypergraph<THypergraphNodes>(tree);
         }
 
-        TOrderingsPtr BuildOrderingsFSM(TJoinHypergraph hypergraph) {
-            NYql::NDq::TOrderingsStateMachineConstructor<THypergraphNodes> orderings(hypergraph);
-            auto stateMachine = orderings.Construct();
-            return new NYql::NDq::TOrderingsStateMachine(stateMachine);
+        TOrderingsPtr BuildOrderingsFSM(TJoinHypergraph& hypergraph) {
+            TFDStorage fdStorage;
+            for (const auto& edge : hypergraph.GetEdges()) {
+                if (edge.JoinKind == Cross) {
+                    continue;
+                }
+
+                for (const auto& [lhs, rhs] : Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
+                    fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence);
+                }
+
+                fdStorage.AddInterestingOrdering(edge.LeftJoinKeys, TOrdering::EShuffle);
+                fdStorage.AddInterestingOrdering(edge.RightJoinKeys, TOrdering::EShuffle);
+            }
+
+            return MakeSimpleShared<TOrderingsStateMachine>(std::move(fdStorage));
         }
 
         std::optional<TStatistics> BenchOptimizer(TJoinTree tree, TOrderingsPtr orderingsFSM) {
-            NYql::TCBOSettings settings{ .CBOTimeout = UINT32_MAX };
-            NYql::TBaseProviderContext ctx;
+            TCBOSettings settings{
+                .CBOTimeout = UINT32_MAX,
+                .CBOHardTimeout = 60'000
+            };
+            TBaseProviderContext ctx;
             NYql::TExprContext ectx;
 
-            auto optimizer = std::unique_ptr<NYql::IOptimizerNew>(
-                NYql::NDq::MakeNativeOptimizerNew(ctx, settings, ectx, /*enableShuffleElimination=*/true, orderingsFSM, nullptr, std::chrono::milliseconds(60000))
+            auto optimizer = std::unique_ptr<IOptimizerNew>(
+                MakeNativeOptimizerNew(ctx, settings, ectx, /*enableShuffleElimination=*/true, orderingsFSM, nullptr)
             );
 
             return Benchmark(Config_, [&]() -> bool {
                 try {
-                    if (tree->Kind == NYql::EOptimizerNodeKind::JoinNodeType) {
-                        auto join = std::static_pointer_cast<NYql::TJoinOptimizerNode>(tree);
+                    if (tree->Kind == JoinNodeType) {
+                        auto join = std::static_pointer_cast<TJoinOptimizerNode>(tree);
                         auto plan = optimizer->JoinSearch(join);
                         return !!plan;
                     }

@@ -1707,10 +1707,10 @@ TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& r
     if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
         return Impl_->ReadRows(table, std::move(rows), columns, settings);
     }
-    const TValue keysCopy = std::move(rows);
+    TValue keysCopy = std::move(rows);
 
     return NRetry::RunUnaryWithRetry(*this, retrySettings,
-        [this, table, keysCopy, columns, settings](TDuration timeout) {
+        [this, table, keysCopy = std::move(keysCopy), columns, settings](TDuration timeout) {
             auto opSettings = settings;
             if (timeout != TDuration::Max()) {
                 opSettings.ClientTimeout(timeout);

@@ -49,6 +49,7 @@ private:
     void Format(const Ydb::Table::TableIndex& index);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);
     bool Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings, TString& del, bool needWith);
+    bool Format(const google::protobuf::RepeatedPtrField<TString>& stableDcPlacement, TString& del, bool needWith);
     bool Format(const Ydb::Table::TtlSettings& ttlSettings, TString& del, bool needWith);
 
     void Format(ui64 expireAfterSeconds, std::optional<TString> storage = std::nullopt);

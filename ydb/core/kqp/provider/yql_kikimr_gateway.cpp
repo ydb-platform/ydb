@@ -177,7 +177,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
 bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
-        || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
+        || ReadReplicasSettings || StableDcPlacement || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
         || StoreExternalBlobs || ExternalDataChannelsCount;
 }
 
@@ -316,6 +316,38 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
             << "2) 'ANY_AZ:<read_replicas_count>' to set total read replicas count between all AZs; "
 //          << "3) '<az1_name>:<read_replicas_count1>, <az2_name>:<read_replicas_count2>, ...' "
             << "to specify read replicas count for each AZ in cluster.";
+        return false;
+    }
+    return true;
+}
+
+bool ConvertStableDcPlacementToProto(
+    const TString& settings,
+    google::protobuf::RepeatedPtrField<TString>& proto,
+    Ydb::StatusIds::StatusCode& code,
+    TString& error)
+{
+    proto.Clear();
+    THashSet<TString> uniqueDcs;
+    for (TStringBuf part : StringSplitter(settings).Split(',').SkipEmpty()) {
+        TString dc(StripString(part));
+        if (dc.empty()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Wrong format for stable dc placement '" << settings
+                << "'. Data center names must be comma-separated non-empty strings.";
+            return false;
+        }
+        if (!uniqueDcs.insert(dc).second) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Duplicate data center '" << dc << "' in stable dc placement";
+            return false;
+        }
+        *proto.Add() = dc;
+    }
+    if (proto.empty()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Wrong format for stable dc placement '" << settings
+            << "'. At least one data center must be specified.";
         return false;
     }
     return true;

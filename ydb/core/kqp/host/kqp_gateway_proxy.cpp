@@ -286,6 +286,13 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
+    if (metadata->TableSettings.StableDcPlacement) {
+        if (!NYql::ConvertStableDcPlacementToProto(metadata->TableSettings.StableDcPlacement.GetRef(),
+                *proto.mutable_stable_dc_placement(), code, error)) {
+            return false;
+        }
+    }
+
     if (const auto& ttl = metadata->TableSettings.TtlSettings) {
         if (ttl.IsSet()) {
             ConvertTtlSettingsToProto(ttl.GetValueSet(), *proto.mutable_ttl_settings());

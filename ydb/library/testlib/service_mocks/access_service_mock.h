@@ -235,12 +235,22 @@ public:
 
 class TTicketParserAccessServiceMockV2 : public yandex::cloud::priv::accessservice::v2::AccessService::Service {
 public:
-    std::atomic_uint64_t AuthorizeCount= 0;
+    std::atomic_uint64_t AuthenticateCount = 0;
+    std::atomic_uint64_t AuthorizeCount = 0;
     bool ShouldGenerateRetryableError = false;
     bool ShouldGenerateOneRetryableError = false;
     bool isUserAuthenticated = true;
 
     TString UnauthenticatedErrorMessage = "User is unauthenticated";
+    THashSet<TString> InvalidTokens = {"invalid"};
+    THashSet<TString> UnavailableTokens;
+    THashSet<TString> AllowedUserTokens = {"user1"};
+    THashMap<TString, TString> AllowedServiceTokens = {{"service1", "root1/folder1"}};
+
+    THashSet<TString> InvalidApiKeys = {"ApiKey-value-invalid"};
+    THashSet<TString> UnavailableApiKeys;
+    THashSet<TString> AllowedUserApiKeys = {"ApiKey-value-valid"};
+
     THashSet<TString> AllowedServiceAuthTokens;
     THashSet<TString> UnavailableUserPermissions;
     THashSet<TString> AllowedResourceIds;
@@ -255,9 +265,114 @@ public:
     TString CapturedXUserIP;
 
 public:
+    grpc::Status Authenticate(
+            grpc::ServerContext*,
+            const yandex::cloud::priv::accessservice::v2::AuthenticateRequest* request,
+            yandex::cloud::priv::accessservice::v2::AuthenticateResponse* response) override {
+
+        ++AuthenticateCount;
+        if (request->has_signature()) {
+            if (ShouldGenerateRetryableError) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            if (ShouldGenerateOneRetryableError) {
+                ShouldGenerateOneRetryableError = false;
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            response->mutable_subject()->mutable_user_account()->set_id("user1");
+            return grpc::Status::OK;
+        }
+
+        TString token = request->iam_token();
+        if (!isUserAuthenticated || InvalidTokens.count(token) > 0) {
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
+        }
+        if (UnavailableTokens.count(token) > 0) {
+            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+        }
+        if (AllowedUserTokens.count(token) > 0) {
+            response->mutable_subject()->mutable_user_account()->set_id(token);
+            return grpc::Status::OK;
+        }
+        if (AllowedServiceTokens.count(token) > 0) {
+            response->mutable_subject()->mutable_service_account()->set_id(token);
+            response->mutable_subject()->mutable_service_account()->set_folder_id(AllowedServiceTokens[token]);
+            return grpc::Status::OK;
+        }
+
+        TString apiKey = request->api_key();
+        if (InvalidApiKeys.count(apiKey) > 0) {
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Invalid ApiKey");
+        }
+        if (UnavailableApiKeys.count(apiKey) > 0) {
+            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+        }
+        if (AllowedUserApiKeys.count(apiKey) > 0) {
+            response->mutable_subject()->mutable_user_account()->set_id(apiKey);
+            return grpc::Status::OK;
+        }
+
+        return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
+    }
+
+    grpc::Status Authorize(
+            grpc::ServerContext* ctx,
+            const yandex::cloud::priv::accessservice::v2::AuthorizeRequest* request,
+            yandex::cloud::priv::accessservice::v2::AuthorizeResponse* response) override {
+
+        {
+            std::lock_guard guard(UserIPMutex);
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+        }
+
+        ++AuthorizeCount;
+        if (request->has_signature()) {
+            if (ShouldGenerateRetryableError) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            if (ShouldGenerateOneRetryableError) {
+                ShouldGenerateOneRetryableError = false;
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            response->mutable_subject()->mutable_user_account()->set_id("user1");
+            return grpc::Status::OK;
+        }
+
+        if (!isUserAuthenticated) {
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, UnauthenticatedErrorMessage);
+        }
+
+        TString token = request->has_iam_token() ? request->iam_token() : request->api_key();
+        if (UnavailableUserPermissions.count(token + '-' + request->permission()) > 0) {
+            return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+        }
+
+        bool allowedResource = true;
+        if (!AllowedResourceIds.empty()) {
+            allowedResource = false;
+            for (const auto& resourcePath : request->resource_path()) {
+                if (AllowedResourceIds.count(resourcePath.id()) > 0) {
+                    allowedResource = true;
+                }
+            }
+        }
+        if (allowedResource) {
+            if (AllowedUserPermissions.count(token + '-' + request->permission()) > 0) {
+                response->mutable_subject()->mutable_user_account()->set_id(token);
+                return grpc::Status::OK;
+            }
+            if (AllowedServicePermissions.count(token + '-' + request->permission()) > 0) {
+                response->mutable_subject()->mutable_service_account()->set_id(token);
+                response->mutable_subject()->mutable_service_account()->set_folder_id(AllowedServicePermissions[token + '-' + request->permission()]);
+                return grpc::Status::OK;
+            }
+        }
+        return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Access Denied");
+    }
+
     ::grpc::Status BulkAuthorize(::grpc::ServerContext* ctx,
                                  const ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest* request,
-                                 ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse* response) {
+                                 ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse* response) override {
 
         {
             std::lock_guard guard(UserIPMutex);

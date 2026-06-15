@@ -101,6 +101,8 @@ private:
     using TEvAccessServiceAuthenticateRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequest>;
     using TEvAccessServiceAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequest>;
     using TEvAccessServiceBulkAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvBulkAuthorizeRequest>;
+    using TEvAccessServiceAuthenticateRequestV2 = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequestV2>;
+    using TEvAccessServiceAuthorizeRequestV2 = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequestV2>;
     using TEvAccessServiceGetUserAccountRequest = TEvRequestWithKey<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>;
     using TEvAccessServiceGetServiceAccountRequest = TEvRequestWithKey<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>;
     using TEvNebiusAccessServiceAuthorizeRequest = TEvRequestWithKey<NNebiusCloud::TEvAccessService::TEvAuthorizeRequest>;
@@ -510,14 +512,24 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
-        for (const auto& [permissionName, permissionRecord] : record.Permissions) {
-            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << permissionName << ")");
-
-            auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
+        const auto setupAccessServiceRequest = [&](auto& request, const TString& permissionName) {
             request->Request.set_permission(permissionName);
             AddResourcePaths(record, permissionName, &request->Request);
+        };
+
+        for (const auto& [permissionName, permissionRecord] : record.Permissions) {
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << permissionName << ")");
             record.ResponsesLeft++;
-            Send(AccessServiceValidatorV1, request.Release());
+
+            if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+                auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequestV2>(key, record);
+                setupAccessServiceRequest(request, permissionName);
+                Send(AccessServiceValidatorV2, request.Release());
+            } else {
+                auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
+                setupAccessServiceRequest(request, permissionName);
+                Send(AccessServiceValidatorV1, request.Release());
+            }
         }
     }
 
@@ -578,8 +590,13 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
-        auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
-        Send(AccessServiceValidatorV1, request.Release());
+        if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+            auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequestV2>(key, record);
+            Send(AccessServiceValidatorV2, request.Release());
+        } else {
+            auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
+            Send(AccessServiceValidatorV1, request.Release());
+        }
     }
 
     template <typename TTokenRecord>
@@ -661,6 +678,10 @@ private:
         return ApplySubjectName(response.subject(), subject, error);
     }
 
+    bool ApplySubjectName(const yandex::cloud::priv::accessservice::v2::AuthenticateResponse& response, TString& subject, TString& error) {
+        return ApplySubjectName(response.subject(), subject, error);
+    }
+
     bool ApplySubjectName(const nebius::iam::v1::AuthenticateResponse& response, TString& subject, TString& error) {
         if (response.resultcode() != nebius::iam::v1::AuthenticateResponse::OK) {
             error = nebius::iam::v1::AuthenticateResponse::ResultCode_Name(response.resultcode());
@@ -685,6 +706,11 @@ private:
 
     template <>
     typename TPermissionRecord::TTypeCase ConvertSubjectType<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>(const yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse& response) {
+        return ConvertSubjectType(response.subject().type_case());
+    }
+
+    template <>
+    typename TPermissionRecord::TTypeCase ConvertSubjectType<yandex::cloud::priv::accessservice::v2::AuthenticateResponse>(const yandex::cloud::priv::accessservice::v2::AuthenticateResponse& response) {
         return ConvertSubjectType(response.subject().type_case());
     }
 
@@ -1113,6 +1139,14 @@ private:
         return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
     }
 
+    static auto GetTokenType(TEvAccessServiceAuthenticateRequestV2* request) {
+        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+    }
+
+    static auto GetTokenType(TEvAccessServiceAuthorizeRequestV2* request) {
+        return request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+    }
+
     static auto GetTokenType(TEvNebiusAccessServiceAuthenticateRequest*) {
         return TDerived::ETokenType::NebiusAccessService; // the only supported
     }
@@ -1201,6 +1235,10 @@ private:
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
         HandleIamAuthenticateResponse<TEvAccessServiceAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
+        HandleIamAuthenticateResponse<TEvAccessServiceAuthenticateRequestV2, NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev);
     }
 
     void Handle(TEvExternalIdpProvider::TEvAuthenticateResponse::TPtr& ev) {
@@ -1536,9 +1574,10 @@ private:
         }
     }
 
-    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
-        NCloud::TEvAccessService::TEvAuthorizeResponse* response = ev->Get();
-        TEvAccessServiceAuthorizeRequest* request = response->Request->Get<TEvAccessServiceAuthorizeRequest>();
+    template <typename TEvRequest, typename TEvResponse>
+    void HandleAuthorizeResponse(typename TEvResponse::TPtr& ev) {
+        TEvResponse* response = ev->Get();
+        TEvRequest* request = response->Request->template Get<TEvRequest>();
         const TString& key(request->Key);
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
@@ -1640,6 +1679,14 @@ private:
                 Respond(record);
             }
         }
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
+        HandleAuthorizeResponse<TEvAccessServiceAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(ev);
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeResponseV2::TPtr& ev) {
+        HandleAuthorizeResponse<TEvAccessServiceAuthorizeRequestV2, NCloud::TEvAccessService::TEvAuthorizeResponseV2>(ev);
     }
 
     void Handle(TEvTicketParser::TEvRefreshTicket::TPtr& ev) {
@@ -2327,6 +2374,20 @@ protected:
                 }
 
                 AccessServiceValidatorV2 = Register(NCloud::CreateAccessServiceV2(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
+                if (Config.GetCacheAccessServiceAuthentication()) {
+                    AccessServiceValidatorV2 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequestV2, NCloud::TEvAccessService::TEvAuthenticateResponseV2>(
+                                                            AccessServiceValidatorV2,
+                                                            Config.GetGrpcCacheSize(),
+                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
+                }
+                if (Config.GetCacheAccessServiceAuthorization()) {
+                    AccessServiceValidatorV2 = Register(NGrpcActorClient::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequestV2, NCloud::TEvAccessService::TEvAuthorizeResponseV2>(
+                                                            AccessServiceValidatorV2,
+                                                            Config.GetGrpcCacheSize(),
+                                                            TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
+                                                            TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
+                }
             } else if (Config.GetAccessServiceType() == "Nebius_v1") {
                 NNebiusCloud::TAccessServiceSettings settings;
                 FillAccessServiceSettings(settings);
@@ -2454,6 +2515,8 @@ public:
             hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeResponse, Handle);
+            hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, Handle);
+            hFunc(NCloud::TEvAccessService::TEvAuthorizeResponseV2, Handle);
             hFunc(NCloud::TEvUserAccountService::TEvGetUserAccountResponse, Handle);
             hFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse, Handle);
             hFunc(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse, Handle);

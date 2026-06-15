@@ -38,70 +38,92 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NCloud::TEvAccessService::TEvAuthenticateRequest, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeRequest, Handle);
+            hFunc(NCloud::TEvAccessService::TEvAuthenticateRequestV2, Handle);
+            hFunc(NCloud::TEvAccessService::TEvAuthorizeRequestV2, Handle);
             cFunc(TEvPoisonPill::EventType, PassAway);
         }
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
-        THolder<NCloud::TEvAccessService::TEvAuthenticateResponse> result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponse>();
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponse>();
+        HandleAuthenticateRequest(ev->Get()->Request, result->Status, result->Response);
+        Send(ev->Sender, result.Release());
+    }
+
+    template <typename TRequest, typename TResponse>
+    void HandleAuthenticateRequest(const TRequest& request, NYdbGrpc::TGrpcStatus& status, TResponse& response) {
         if (++RequestNumber % 3 == 0) {
-            result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::UNAVAILABLE, false);
+            status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::UNAVAILABLE, false);
         } else {
-            if (ev->Get()->Request.Hasiam_token()) {
-                result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+            if (request.Hasiam_token()) {
+                status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
             } else {
-                TString idStr = ev->Get()->Request.Getsignature().Getaccess_key_id();
+                TString idStr = request.Getsignature().Getaccess_key_id();
 
                 TStringBuf id = idStr;
                 id.SkipPrefix(SERVICE_ACCOUNT_PREFIX);
 
                 if (id == "alkonavt") {
-                    result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                    status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
                 } else if (!id) {
-                    result->Status = NYdbGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
+                    status = NYdbGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
                 } else {
-                    auto& serviceAccount = *result->Response.mutable_subject()->mutable_service_account();
+                    auto& serviceAccount = *response.mutable_subject()->mutable_service_account();
                     serviceAccount.Setid(TString(id));
                     serviceAccount.Setfolder_id(TString::Join("FOLDER_", id));
                 }
             }
         }
-
-        Send(ev->Sender, result.Release());
     }
 
-    void Handle(NCloud::TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {
-        THolder<NCloud::TEvAccessService::TEvAuthorizeResponse> result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponse>();
+    template <typename TRequest, typename TResponse>
+    void HandleAuthorizeRequest(const TRequest& request, NYdbGrpc::TGrpcStatus& status, TResponse& response) {
         if (++RequestNumber % 3 == 0) {
-            result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::DEADLINE_EXCEEDED, false);
+            status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::DEADLINE_EXCEEDED, false);
         } else {
             TString idStr;
-            if (ev->Get()->Request.Hasiam_token()) {
-                idStr = ev->Get()->Request.Getiam_token();
+            if (request.Hasiam_token()) {
+                idStr = request.Getiam_token();
             } else {
-                idStr = ev->Get()->Request.Getsignature().Getaccess_key_id();
+                idStr = request.Getsignature().Getaccess_key_id();
             }
 
             TStringBuf id = idStr;
             if (!id) {
-               result->Status = NYdbGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
+               status = NYdbGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
             } else if (id.SkipPrefix(USER_ACCOUNT_PREFIX)) {
                 if (id == "alkonavt") {
-                    result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                    status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
                 } else {
-                    result->Response.mutable_subject()->mutable_user_account()->set_id(TString(id));
-                    result->Status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
+                    response.mutable_subject()->mutable_user_account()->set_id(TString(id));
+                    status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
                 }
             } else if (id.SkipPrefix(SERVICE_ACCOUNT_PREFIX)) {
-                auto& serviceAccount = *result->Response.mutable_subject()->mutable_service_account();
+                auto& serviceAccount = *response.mutable_subject()->mutable_service_account();
                 serviceAccount.Setid(TString(id));
                 serviceAccount.Setfolder_id(TString::Join("FOLDER_", id));
-                result->Status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
+                status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
             } else {
-                result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
             }
         }
+    }
 
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponse>();
+        HandleAuthorizeRequest(ev->Get()->Request, result->Status, result->Response);
+        Send(ev->Sender, result.Release());
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateRequestV2::TPtr& ev) {
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponseV2>();
+        HandleAuthenticateRequest(ev->Get()->Request, result->Status, result->Response);
+        Send(ev->Sender, result.Release());
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthorizeRequestV2::TPtr& ev) {
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponseV2>();
+        HandleAuthorizeRequest(ev->Get()->Request, result->Status, result->Response);
         Send(ev->Sender, result.Release());
     }
 };
@@ -153,7 +175,7 @@ public:
     }
 };
 
-IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA) {
+IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA, bool enableV2Interface) {
     if (!address) {
         return new TSqsAccessServiceMock();
     }
@@ -162,7 +184,7 @@ IActor* CreateSqsAccessService(const TString& address, const TString& pathToRoot
     settings.Endpoint = address;
     settings.CertificateRootCA = TUnbufferedFileInput(pathToRootCA).ReadAll();
 
-    return NCloud::CreateAccessServiceWithCache(settings);
+    return NCloud::CreateAccessServiceWithCache(settings, enableV2Interface);
 }
 
 IActor* CreateMockSqsFolderService() {

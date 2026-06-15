@@ -17,7 +17,7 @@
 #include <util/stream/file.h>
 
 namespace NKikimr::NHttpProxy {
-    NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config)
+    NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, bool enableV2Interface)
     {
         NCloud::TAccessServiceSettings asSettings;
         asSettings.Endpoint = config.GetHttpConfig().GetAccessServiceEndpoint();
@@ -26,7 +26,7 @@ namespace NKikimr::NHttpProxy {
             TString certificate = TFileInput(config.GetCaCert()).ReadAll();
             asSettings.CertificateRootCA = certificate;
         }
-        return NCloud::CreateAccessServiceWithCache(asSettings);
+        return NCloud::CreateAccessServiceWithCache(asSettings, enableV2Interface);
     }
 
     NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config)
@@ -70,6 +70,7 @@ namespace NKikimr::NHttpProxy {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 HFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
+                HFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResultV2);
                 HFunc(NCloud::TEvIamTokenService::TEvCreateResponse, HandleServiceAccountIamToken);
                 HFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleTicketParser);
                 HFunc(TEvents::TEvPoisonPill, HandlePoison);
@@ -203,27 +204,35 @@ namespace NKikimr::NHttpProxy {
                 return;
             }
 
-            THolder<NCloud::TEvAccessService::TEvAuthenticateRequest> request =
-                MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
-            request->RequestId = RequestId;
+            const auto setupRequest = [&](auto& request) {
+                request->RequestId = RequestId;
 
-            auto& signature = *request->Request.mutable_signature();
-            signature.set_access_key_id(Signature->GetAccessKeyId());
-            signature.set_string_to_sign(Signature->GetStringToSign());
-            signature.set_signature(Signature->GetParsedSignature());
+                auto& signature = *request->Request.mutable_signature();
+                signature.set_access_key_id(Signature->GetAccessKeyId());
+                signature.set_string_to_sign(Signature->GetStringToSign());
+                signature.set_signature(Signature->GetParsedSignature());
 
-            auto& v4params = *signature.mutable_v4_parameters();
-            v4params.set_service("kinesis");
-            v4params.set_region(Signature->GetRegion());
+                auto& v4params = *signature.mutable_v4_parameters();
+                v4params.set_service("kinesis");
+                v4params.set_region(Signature->GetRegion());
 
-            const ui64 nanos = signedAt.NanoSeconds();
-            const ui64 seconds = nanos / 1'000'000'000ull;
-            const ui64 nanos_left = nanos % 1'000'000'000ull;
+                const ui64 nanos = signedAt.NanoSeconds();
+                const ui64 seconds = nanos / 1'000'000'000ull;
+                const ui64 nanos_left = nanos % 1'000'000'000ull;
 
-            v4params.mutable_signed_at()->set_seconds(seconds);
-            v4params.mutable_signed_at()->set_nanos(nanos_left);
+                v4params.mutable_signed_at()->set_seconds(seconds);
+                v4params.mutable_signed_at()->set_nanos(nanos_left);
+            };
 
-            ctx.Send(MakeAccessServiceID(), std::move(request));
+            if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+                auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
+                setupRequest(request);
+                ctx.Send(MakeAccessServiceID(), std::move(request));
+            } else {
+                auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+                setupRequest(request);
+                ctx.Send(MakeAccessServiceID(), std::move(request));
+            }
         }
 
         void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev) {
@@ -232,6 +241,30 @@ namespace NKikimr::NHttpProxy {
 
         void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev,
                                         const TActorContext& ctx) {
+            if (!ev->Get()->Status.Ok()) {
+                RetryCounter.Click();
+                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "can not authenticate service account user: " << ev->Get()->Status.Msg);
+                if (RetryCounter.HasAttemps()) {
+                    SendAuthenticationRequest(ctx);
+                    return;
+                }
+                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status) ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
+                                      TStringBuilder() << "requestid " << RequestId
+                                                       << "; can not authenticate service account user");
+
+            } else if (!ev->Get()->Response.subject().has_service_account()) {
+                return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
+                                      "(this error should not have been reached).");
+            }
+            RetryCounter.Void();
+
+            ServiceAccountId = ev->Get()->Response.subject().service_account().id();
+            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "authenticated to " << ServiceAccountId);
+            SendIamTokenRequest(ctx);
+        }
+
+        void HandleAuthenticationResultV2(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev,
+                                          const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "can not authenticate service account user: " << ev->Get()->Status.Msg);

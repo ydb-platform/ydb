@@ -322,4 +322,5 @@ message TFeatureFlags {
     optional bool EnableCompactFulltextIndex = 280 [default = false];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = false];
+    optional bool EnableAccessServiceV2Interface = 283 [default = false];
 }

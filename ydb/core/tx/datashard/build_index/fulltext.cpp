@@ -74,10 +74,19 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     ui64 DocCount = 0;
     ui64 TotalDocLength = 0;
 
+    // Diagnostic counters: how many entries the scan added to each destination
+    // buffer (cumulative, never reset on flush). These must match what
+    // eventually lands in the impl tables — when they don't, the docs build
+    // lost rows somewhere on the upload path.
+    ui64 PostingEntriesAdded = 0;
+    ui64 DocsEntriesAdded = 0;
+
     TTags ScanTags;
     TString TextColumn;
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
     bool IsBinaryJson = false;
+    bool UseRowIdAsDocId = false;
+    size_t RowIdRowIndex = 0; // position of __ydb_row_id in the row returned by the scan
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -136,6 +145,7 @@ public:
         Y_ENSURE(Request.settings().columns().size() == 1);
         TextColumn = Request.settings().columns().at(0).column();
         TextAnalyzers = Request.settings().columns().at(0).analyzers();
+        UseRowIdAsDocId = Request.GetUseRowIdAsDocId();
         Signed = (KeyTypeId == NScheme::NTypeIds::Int64 || KeyTypeId == NScheme::NTypeIds::Int32);
 
         auto tags = GetAllTags(table);
@@ -153,6 +163,11 @@ public:
                 if (dataColumn != TextColumn) {
                     ScanTags.push_back(tags.at(dataColumn));
                 }
+            }
+
+            if (UseRowIdAsDocId) {
+                RowIdRowIndex = ScanTags.size();
+                ScanTags.push_back(tags.at(NKikimr::NTableIndex::NFulltext::RowIdColumn));
             }
         }
 
@@ -180,6 +195,22 @@ public:
         }
 
         MaxSegmentDocuments = gFulltextMaxSegment;
+    }
+
+    // Emit the doc-id key columns for an upload destination: a single __ydb_row_id (UINT64) when the
+    // fulltext index uses rowid-as-docid, otherwise the base table primary-key columns.
+    void AddDocIdColumns(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TUserTable& table,
+        const std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>&, const TString&)>& addType)
+    {
+        if (UseRowIdAsDocId) {
+            Ydb::Type type;
+            type.set_type_id(Ydb::Type::UINT64);
+            uploadTypes->emplace_back(NKikimr::NTableIndex::NFulltext::RowIdColumn, type);
+        } else {
+            for (const auto& column : table.KeyColumnIds) {
+                addType(uploadTypes, table.Columns.at(column).Name);
+            }
+        }
     }
 
     void MakeTokenTypes(const TUserTable& table, const TColumnsTypes& types, std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TString& column)> addType)
@@ -224,17 +255,13 @@ public:
             break;
         case NKikimrTxDataShard::EFulltextIndexType::FulltextPlain:
         case NKikimrTxDataShard::EFulltextIndexType::Json:
-            for (const auto& column : table.KeyColumnIds) {
-                addType(uploadTypes, table.Columns.at(column).Name);
-            }
+            AddDocIdColumns(uploadTypes, table, addType);
             for (auto dataColumn : Request.GetDataColumns()) {
                 addType(uploadTypes, dataColumn);
             }
             break;
         case NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance:
-            for (const auto& column : table.KeyColumnIds) {
-                addType(uploadTypes, table.Columns.at(column).Name);
-            }
+            AddDocIdColumns(uploadTypes, table, addType);
             {
                 Ydb::Type type;
                 type.set_type_id(TokenCountType);
@@ -249,9 +276,7 @@ public:
     void MakeDocsTypes(const TUserTable& table, std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TString& column)> addType)
     {
         auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-        for (const auto& column : table.KeyColumnIds) {
-            addType(uploadTypes, table.Columns.at(column).Name);
-        }
+        AddDocIdColumns(uploadTypes, table, addType);
         for (auto dataColumn : Request.GetDataColumns()) {
             addType(uploadTypes, dataColumn);
         }
@@ -306,6 +331,14 @@ public:
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
+
+        // Effective doc-id key cells: either the table PK or the single __ydb_row_id cell.
+        TArrayRef<const TCell> docIdKey = key;
+        TCell rowIdCell;
+        if (UseRowIdAsDocId) {
+            rowIdCell = row.Get(RowIdRowIndex);
+            docIdKey = TArrayRef<const TCell>(&rowIdCell, 1);
+        }
 
         TVector<TString> tokens;
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
@@ -376,12 +409,17 @@ public:
                 UploadDocRow(key, row, tokens.size());
             }
         } else if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
-            UploadFulltextRelevance(key, tokens);
-            UploadDocRow(key, row, tokens.size());
             LastProcessedKey = TSerializedCellVec(key);
+            // Snapshot the source key BEFORE the uploads so that any flush they trigger records this
+            // key as the per-destination boundary; GetMinFlushedKey() then yields a checkpoint that is
+            // safe across the asymmetrically-filling posting and docs buffers.
+            Uploader.SetCurrentSourceKey(LastProcessedKey);
+            UploadFulltextRelevance(docIdKey, tokens);
+            UploadDocRow(docIdKey, row, tokens.size());
         } else {
-            UploadFulltextPlain(key, row, tokens);
             LastProcessedKey = TSerializedCellVec(key);
+            Uploader.SetCurrentSourceKey(LastProcessedKey);
+            UploadFulltextPlain(docIdKey, row, tokens);
         }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
@@ -406,6 +444,7 @@ public:
             uploadValue.push_back(TCell::Make(freq));
 
             UploadBuf->AddRow(uploadKey, uploadValue);
+            ++PostingEntriesAdded;
         }
     }
 
@@ -426,6 +465,7 @@ public:
         // Document length column
         uploadValue.push_back(TCell::Make(totalTokens));
         DocsBuf->AddRow(key, uploadValue);
+        ++DocsEntriesAdded;
 
         DocCount++;
         TotalDocLength += totalTokens;
@@ -453,6 +493,7 @@ public:
             }
 
             UploadBuf->AddRow(uploadKey, uploadValue);
+            ++PostingEntriesAdded;
         }
     }
 
@@ -508,7 +549,11 @@ public:
         if (JsonErrors > 0) {
             LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
         }
-        LOG_T("Exhausted " << Debug());
+        LOG_D("Exhausted ReadRows: " << ReadRows
+            << " DocCount: " << DocCount
+            << " posting added: " << PostingEntriesAdded
+            << " docs added: " << DocsEntriesAdded
+            << " " << Debug());
 
         // call Seek to wait uploads
         return EScan::Reset;
@@ -536,9 +581,15 @@ public:
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_N("Done " << Debug()
+                << " posting added: " << PostingEntriesAdded
+                << " docs added: " << DocsEntriesAdded
+                << " " << Response->Record.ShortDebugString());
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_E("Failed " << Debug()
+                << " posting added: " << PostingEntriesAdded
+                << " docs added: " << DocsEntriesAdded
+                << " " << Response->Record.ShortDebugString());
         }
         Send(ResponseActorId, Response.Release());
 
@@ -583,6 +634,8 @@ protected:
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
         LOG_D("Handle TEvUploadRowsResponse " << Debug()
+            << " posting added: " << PostingEntriesAdded
+            << " docs added: " << DocsEntriesAdded
             << " ev->Sender: " << ev->Sender.ToString());
 
         if (!Driver) {
@@ -592,19 +645,29 @@ protected:
         bool batchUploaded = Uploader.Handle(ev);
 
         if (Uploader.GetUploadStatus().IsSuccess()) {
-            if (batchUploaded && LastProcessedKey.GetBuffer() &&
-                LastProcessedKey.GetBuffer() != LastAckedKey.GetBuffer()) {
-                LastAckedKey = LastProcessedKey;
+            if (batchUploaded) {
+                // Use the cross-destination safe checkpoint, not the scan's
+                // LastProcessedKey. In relevance mode the posting buffer
+                // fills much faster than docs; advancing LastAckedKey on
+                // every posting flush would leave docs entries for those
+                // same rows still buffered. On shard restart the SchemeShard
+                // would resume from LastAckedKey-exclusive and the buffered
+                // docs entries would be permanently lost.
+                if (auto safeKey = Uploader.GetMinFlushedKey();
+                    safeKey && safeKey->GetBuffer() &&
+                    safeKey->GetBuffer() != LastAckedKey.GetBuffer()) {
+                    LastAckedKey = std::move(*safeKey);
 
-                auto progress = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
-                auto& record = progress->Record;
-                record.SetId(BuildId);
-                record.SetTabletId(TabletId);
-                record.SetRequestSeqNoGeneration(Request.GetSeqNoGeneration());
-                record.SetRequestSeqNoRound(Request.GetSeqNoRound());
-                record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
-                record.SetLastKeyAck(LastAckedKey.GetBuffer());
-                Send(ResponseActorId, progress.Release());
+                    auto progress = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
+                    auto& record = progress->Record;
+                    record.SetId(BuildId);
+                    record.SetTabletId(TabletId);
+                    record.SetRequestSeqNoGeneration(Request.GetSeqNoGeneration());
+                    record.SetRequestSeqNoRound(Request.GetSeqNoRound());
+                    record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                    record.SetLastKeyAck(LastAckedKey.GetBuffer());
+                    Send(ResponseActorId, progress.Release());
+                }
             }
             Driver->Touch(EScan::Feed);
             return;
@@ -745,6 +808,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             if (!tags.contains(dataColumn)) {
                 badRequest(TStringBuilder() << "Unknown data column: " << dataColumn);
             }
+        }
+
+        if (request.GetUseRowIdAsDocId() && !tags.contains(NKikimr::NTableIndex::NFulltext::RowIdColumn)) {
+            badRequest(TStringBuilder() << "UseRowIdAsDocId requested but column '"
+                << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' not found in table");
         }
 
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||

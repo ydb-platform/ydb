@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
@@ -46,6 +47,23 @@ static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
     }
     return result;
 }();
+
+void MaybeAutoBindRowIdSequence(NYql::TKikimrTableMetadata& meta) {
+    auto it = meta.Columns.find(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+    if (it == meta.Columns.end()) {
+        return;
+    }
+    auto& col = it->second;
+    if (col.Type != "Uint64" || !col.NotNull || col.IsDefaultKindDefined()) {
+        return;
+    }
+    // Use the dedicated RowIdSequenceName so the sequence is named identically no matter how the
+    // column was provisioned (CREATE TABLE here, ALTER ADD, or schemeshard auto-provisioning). A
+    // generic "_serial_column_<col>" name would also make the SDK report __ydb_row_id as a Serial
+    // column, which the auto-provision path does not do - keep the representation consistent.
+    col.DefaultFromSequence = NKikimr::NTableIndex::NFulltext::RowIdSequenceName;
+    col.SetDefaultFromSequence();
+}
 
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
@@ -651,6 +669,8 @@ private:
             return TStatus::Error;
         }
 
+        MaybeAutoBindRowIdSequence(*table->Metadata);
+
         auto pos = ctx.GetPosition(node.Pos());
         if (auto maybeTuple = node.Input().Maybe<TExprList>()) {
             auto tuple = maybeTuple.Cast();
@@ -922,6 +942,8 @@ private:
         if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
             return TStatus::Error;
         }
+
+        MaybeAutoBindRowIdSequence(*table->Metadata);
 
         auto rowType = table->SchemeNode;
         auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter);
@@ -1200,6 +1222,8 @@ private:
                 return TStatus::Error;
             }
         }
+
+        MaybeAutoBindRowIdSequence(*meta);
 
         if (meta->TableType == ETableType::Table) {
             for (auto&& setting : create.TableSettings()) {
@@ -1863,6 +1887,12 @@ private:
                     if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
                         return TStatus::Error;
                     }
+
+                    if (table->Metadata->IsOlap() && !columnMeta.Families.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                            "Column FAMILY is not supported for column tables"));
+                        return TStatus::Error;
+                    }
                 }
             } else if (name == "dropColumns") {
                 auto listNode = action.Value().Cast<TCoAtomList>();
@@ -1926,6 +1956,11 @@ private:
                             }
                         }
                     } else if (alterColumnAction == "setFamily") {
+                        if (table->Metadata->IsOlap()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                "Column FAMILY is not supported for column tables"));
+                            return TStatus::Error;
+                        }
                         auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                         if (families.Size() > 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
@@ -2134,9 +2169,13 @@ private:
                         return TStatus::Error;
                     }
                 }
-            } else if (name != "addColumnFamilies"
-                    && name != "alterColumnFamilies"
-                    && name != "setTableSettings"
+            } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
+                if (table->Metadata->IsOlap()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                        "Column FAMILY is not supported for column tables"));
+                    return TStatus::Error;
+                }
+            } else if (name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"

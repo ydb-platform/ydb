@@ -419,12 +419,10 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     if (UserToken != nullptr) {
         auto options = record.MutableOptions();
         if (entry.SecurityObject != nullptr) {
-            options->SetReturnBoundaries(false);
-            options->SetReturnRangeKey(false);
             ui32 access = NACLib::EAccessRights::SelectRow;
-            if (entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                options->SetReturnBoundaries(true);
-                options->SetReturnRangeKey(true);
+            if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
+                options->SetReturnBoundaries(false);
+                options->SetReturnRangeKey(false);
             }
         }
     }

@@ -199,6 +199,7 @@ struct TKikimrEvents : TEvents {
         ES_FORCED_COMPACTION = 4276,
         ES_NBS_V2_SS_PROXY = 4277,
         ES_SET_COLUMN_CONSTRAINT = 4278,
+        ES_EXTERNAL_IDP_PROVIDER = 4279,
     };
 };
 

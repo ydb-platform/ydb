@@ -131,6 +131,7 @@ message TDqConfig {
         optional bool UseLocalLDLibraryPath = 41 [default = false];
         optional string SchedulingTagFilter = 42;
         optional uint64 EnforceRegexpProbabilityFail = 43; // Same as _EnforceRegexpProbabilityFail.
+        optional string ProxyAddress = 44; // full URL to YT proxy, e.g. https://my.com
     }
 
     repeated TYtBackend YtBackends = 5;
@@ -147,6 +148,7 @@ message TDqConfig {
         repeated string ServiceNodeHostPort = 9; // for tests and debug only
         optional string Revision = 10; // for tests and debug only
         optional string LockType = 11 [default = "yt"]; // for tests and debug only
+        optional string ProxyAddress = 12; // full URL to YT proxy, e.g. https://my.com
     }
 
     optional TYtCoordinator YtCoordinator = 6;

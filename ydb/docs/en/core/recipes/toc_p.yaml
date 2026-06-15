@@ -28,7 +28,10 @@ items:
     mode: link
     path: fulltext-search/toc_p.yaml
 - name: Local indexes
-  href: bloom-skip-indexes/bloom-skip-index-quickstart.md
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
 - name: Transfer
   href: transfer/index.md
   include:

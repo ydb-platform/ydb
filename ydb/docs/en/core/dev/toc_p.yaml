@@ -30,7 +30,10 @@ items:
 - name: Fulltext indexes
   href: fulltext-indexes.md
 - name: Local indexes
-  href: bloom-skip-indexes.md
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
 - name: Query execution optimization
   href: query-execution-optimization/index.md
   include:

@@ -167,19 +167,14 @@ namespace NKikimr::NDDisk {
     }
 
     std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBufferData(
-        TRope data, std::vector<TPersistentBufferSectorInfo>& sectors)
+        TRope payload, std::vector<TPersistentBufferSectorInfo>& sectors)
     {
-
         for (ui32 i = 0; i < sectors.size(); ++i) {
-            auto it = data.Begin() + SectorSize * i;
+            auto it = payload.Begin() + SectorSize * i;
             if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
                 sectors[i].HasSignatureCorrection = true;
                 *it.ContiguousDataMut() = 0;
             }
-        }
-
-        for (ui32 i = 0; i < sectors.size(); ++i) {
-            auto it = data.Begin() + SectorSize * i;
             sectors[i].Checksum = CalculateChecksum(it);
         }
 
@@ -191,7 +186,7 @@ namespace NKikimr::NDDisk {
                     || sectors[first].SectorIdx + sectorIdx - first != sectors[sectorIdx].SectorIdx) {
                 TRope data;
                 const ui32 partSize = (sectorIdx - first) * SectorSize;
-                data.ExtractFront(partSize, &data);
+                payload.ExtractFront(partSize, &data);
                 parts.push_back({(ui32)sectors[first].ChunkIdx, sectors[first].SectorIdx * SectorSize, std::move(data)});
                 first = sectorIdx;
             }
@@ -882,6 +877,7 @@ namespace NKikimr::NDDisk {
         }
 
         ui32 sectorsCnt = selector.Size / SectorSize;
+        Y_ABORT_UNLESS(sectorsCnt <= TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord && sectorsCnt > 0);
         const TWriteInstruction instr(record.GetInstruction());
         Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
         TRope payload = ev->Get()->GetPayload(*instr.PayloadId);
@@ -918,8 +914,6 @@ namespace NKikimr::NDDisk {
             }
             return;
         }
-        Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord + 1 && sectorsCnt > 1);
-
 
         if (PersistentBufferBatchWriteCookie == 0) {
             PersistentBufferBatchWriteCookie = NextCookie++;

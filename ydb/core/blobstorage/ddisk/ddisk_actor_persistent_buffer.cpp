@@ -518,9 +518,23 @@ namespace NKikimr::NDDisk {
             PersistentBufferBarriersManager.RestoreBarriers(PersistentBuffers, PersistentBufferSpaceAllocator);
             PersistentBufferBarriersManager.RestoreErases(PersistentBuffers, PersistentBufferSpaceAllocator);
 
+            // When BatchSize > 1, multiple records share the same header sector (Sectors[0]).
+            // MarkOccupied must be called for that sector only once; subsequent records in the
+            // same batch must only mark their data sectors.
+            std::unordered_set<TPersistentBufferLocation> markedHeaderSectors;
             for (auto& [_, pb] : PersistentBuffers) {
                 for (auto& [__, record] : pb.Records) {
-                    PersistentBufferSpaceAllocator.MarkOccupied(record.Sectors);
+                    Y_ABORT_UNLESS(!record.Sectors.empty());
+                    const auto& hs = record.Sectors[0];
+                    const TPersistentBufferLocation headerLoc{.ChunkIdx = hs.ChunkIdx, .SectorIdx = hs.SectorIdx};
+                    if (markedHeaderSectors.insert(headerLoc).second) {
+                        // First time seeing this header sector — mark all sectors.
+                        PersistentBufferSpaceAllocator.MarkOccupied(record.Sectors);
+                    } else {
+                        // Shared header already marked — only mark data sectors (skip Sectors[0]).
+                        PersistentBufferSpaceAllocator.MarkOccupied(
+                            std::span<const TPersistentBufferSectorInfo>(record.Sectors).subspan(1));
+                    }
                 }
             }
 
@@ -648,16 +662,18 @@ namespace NKikimr::NDDisk {
                     auto replyIt = PersistentBufferDiskOperationInflight.find(replyCookie);
                     Y_ABORT_UNLESS(replyIt != PersistentBufferDiskOperationInflight.end());
                     auto& replyInflight = replyIt->second;
-                    for (auto& record : replyInflight.Records) {
-                        auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
-                            status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
-                        auto h = std::make_unique<IEventHandle>(record.Sender, SelfId(), replyEv.release(), 0, record.Cookie);
-                        if (record.Session) {
-                            h->Rewrite(TEvInterconnect::EvForward, record.Session);
-                        }
-                        TActivationContext::Send(h.release());
-                        record.Span.End();
+
+                    // duplicated write requests can not be batched
+                    Y_ABORT_UNLESS(replyInflight.Records.size() == 1);
+                    auto& record = replyInflight.Records[0];
+                    auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
+                        status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
+                    auto h = std::make_unique<IEventHandle>(record.Sender, SelfId(), replyEv.release(), 0, record.Cookie);
+                    if (record.Session) {
+                        h->Rewrite(TEvInterconnect::EvForward, record.Session);
                     }
+                    TActivationContext::Send(h.release());
+                    record.Span.End();
                     PersistentBufferDiskOperationInflight.erase(replyIt);
                 }
                 PersistentBufferWriteInflightsByRecord.erase(it);
@@ -1023,7 +1039,7 @@ namespace NKikimr::NDDisk {
         header->RecordLsn = 0;
         header->RecordIdx = 0;
         header->Flags = 0;
-        header->BatchSize = 1;
+        header->BatchSize = inflight.Records.size();
 
         auto* pos = headerRope.Begin().UnsafeContiguousDataMut() + sizeof(TPersistentBufferHeader);
         for (auto& record : inflight.Records) {
@@ -1043,7 +1059,7 @@ namespace NKikimr::NDDisk {
                 auto& loc = locations[i - 1];
                 loc = record.Sectors[i];
             }
-            pos += sizeof(TPersistentBufferSectorInfo) * record.Sectors.size();
+            pos += sizeof(TPersistentBufferSectorInfo) * (record.Sectors.size() - 1);
         }
         header->Checksum = CalculateChecksum(headerRope.Begin(), SectorSize);
 
@@ -1477,7 +1493,7 @@ namespace NKikimr::NDDisk {
             partOp->SetCookie(batchEraseCookie);
             partOp->SetPartCookie(cookie);
             partOp->SetIsErase(true);
-            partOp->PrepareWrite(TRope(zeroingData), diskOffset, pr.Sectors[0].ChunkIdx, chunkOffset);
+            partOp->PrepareWrite(TRope(zeroingData), diskOffset, pr.Sectors[1].ChunkIdx, chunkOffset);
 
             DirectUringOp(op);
         }

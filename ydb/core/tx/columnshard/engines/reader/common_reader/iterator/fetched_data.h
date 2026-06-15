@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>

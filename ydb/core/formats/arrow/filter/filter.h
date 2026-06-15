@@ -13,8 +13,6 @@ class IChunkedArray;
 
 namespace NKikimr::NArrow {
 
-class TGeneralContainer;
-
 enum class ECompareType {
     LESS = 1,
     LESS_OR_EQUAL,
@@ -296,7 +294,19 @@ public:
         TApplyContext& Slice(const ui32 start, const ui32 count);
     };
 
-    void Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    // Abstraction over a filterable batch-like container. TColumnFilter operates on this
+    // interface, so the filter library has no dependency on concrete container types.
+    class IFilterable {
+    public:
+        virtual ~IFilterable() = default;
+
+        virtual ui32 GetRecordsCount() const = 0;
+        virtual void ApplyArrowFilter(const TColumnFilter& filter) = 0;
+        virtual void ApplySlicesFilter(TSlicesIterator slices) = 0;
+        virtual void ApplyEmpty() = 0;
+    };
+
+    void Apply(std::shared_ptr<IFilterable>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
     void Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
     void Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
     void Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const;
@@ -306,5 +316,10 @@ public:
     // Combines filters by 'and' operator (extFilter count is true positions count in self, thought extFitler patch exactly that positions)
     TColumnFilter CombineSequentialAnd(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
 };
+
+// Table-level filtering primitives shared between TColumnFilter::IFilterable implementations.
+[[nodiscard]] std::shared_ptr<arrow::Table> ApplyArrowFilterToTable(const std::shared_ptr<arrow::Table>& table, const TColumnFilter& filter);
+[[nodiscard]] std::shared_ptr<arrow::Table> ApplySlicesToTable(
+    const std::shared_ptr<arrow::Table>& table, TColumnFilter::TSlicesIterator slices);
 
 }   // namespace NKikimr::NArrow

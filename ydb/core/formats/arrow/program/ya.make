@@ -5,6 +5,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/services
     ydb/core/formats/arrow/accessor/sub_columns
+    ydb/core/formats/arrow/filter
 
     yql/essentials/core/arrow_kernels/registry
     yql/essentials/core/arrow_kernels/request

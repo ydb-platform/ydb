@@ -1823,10 +1823,12 @@ public:
         for (ui32 i = 0; i < OutputColumns; ++i) {
             auto& arr = BlockArrays[i];
             if (auto& array = arr.front(); ui64(array->length) == sliceSize) {
+                // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
                 *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(array), NYql::EDatumValidationMode::None);
                 arr.pop_front();
             }
             else {
+                // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
                 *output[i] = Ctx.HolderFactory.CreateArrowBlock(NYql::NUdf::Chop(arr.front(), sliceSize), NYql::EDatumValidationMode::None);
             }
         }

@@ -19,10 +19,30 @@ CREATE TABLE documents (
 );
 
 UPSERT INTO documents (id, payload) VALUES
-    (1, JsonDocument(@@{"owner_id": 100, "tag": "active",  "archived": false}@@)),
-    (2, JsonDocument(@@{"owner_id": 100, "tag": "draft",   "archived": false}@@)),
-    (3, JsonDocument(@@{"owner_id": 101, "tag": "active",  "archived": true}@@)),
-    (4, JsonDocument(@@{"owner_id": 102, "tag": "pending", "archived": false}@@));
+    (1, JsonDocument(@@{
+        "owner_id": 100,
+        "tag": "active",
+        "archived": false,
+        "content": {"x": 1, "y": 1}
+    }@@)),
+    (2, JsonDocument(@@{
+        "owner_id": 100,
+        "tag": "draft",
+        "archived": false,
+        "content": {"x": 1, "y": 2}
+    }@@)),
+    (3, JsonDocument(@@{
+        "owner_id": 101,
+        "tag": "active",
+        "archived": true,
+        "content": {"x": 2, "y": 1}
+    }@@)),
+    (4, JsonDocument(@@{
+        "owner_id": 102,
+        "tag": "pending",
+        "archived": false,
+        "content": {"x": 2, "y": 2}
+    }@@));
 ```
 
 ## Прямое сравнение с параметром
@@ -74,12 +94,12 @@ SELECT id
 FROM documents VIEW json_idx
 WHERE JSON_EXISTS(
     payload,
-    '$.warehouses ? (@.stock > $threshold)'
+    '$.content ? (@.y > $threshold)'
     PASSING $min_stock AS threshold
 );
 ```
 
-Для поиска по индексу используется токен пути `$.warehouses.stock`, а условие `@.stock > $min_stock` проверяется пост-фильтром.
+Для поиска по индексу используется токен пути `$.content.y`, а условие `@.y > $threshold` проверяется пост-фильтром.
 
 Аналогично `PASSING` работает в `JSON_VALUE`:
 
@@ -90,8 +110,9 @@ SELECT id
 FROM documents VIEW json_idx
 WHERE JSON_VALUE(
     payload,
-    '$.x ? (@.y == $val)' RETURNING Int64
+    '$.content ? (@.y == $val)'
     PASSING $v AS val
+    RETURNING Int64
 ) = 10;
 ```
 

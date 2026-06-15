@@ -2,6 +2,8 @@
 
 #include <ydb/library/security/util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SLOW_LOG
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -125,83 +127,10 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             resultsSize += result.ByteSize();
         }
 
-        LOG_LOG_S(ctx, priority, NKikimrServices::KQP_SLOW_LOG, requestInfo
-            << "Slow query, duration: " << duration.ToString()
-            << ", status: " << status
-            << ", user: " << username
-            << ", results: " << resultsSize << 'b'
-            << ", text: \"" << EscapeC(protectedQueryText) << '"'
-            << ", parameters: " << paramsSize);
-    }
-}
-
-bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::TType& expected) {
-    if (actual.GetKind() != expected.GetKind()) {
-        return false;
-    }
-
-    switch (actual.GetKind()) {
-        case NKikimrMiniKQL::ETypeKind::Void:
-            return true;
-        case NKikimrMiniKQL::ETypeKind::Data:
-            return IsSameProtoTypeImpl(actual.GetData(), expected.GetData());
-        case NKikimrMiniKQL::ETypeKind::Optional:
-            return IsSameProtoType(actual.GetOptional().GetItem(), expected.GetOptional().GetItem());
-        case NKikimrMiniKQL::ETypeKind::EmptyList:
-            return true;
-        case NKikimrMiniKQL::ETypeKind::List:
-            return IsSameProtoType(actual.GetList().GetItem(), expected.GetList().GetItem());
-        case NKikimrMiniKQL::ETypeKind::Tuple:
-            return IsSameProtoTypeImpl(actual.GetTuple(), expected.GetTuple());
-        case NKikimrMiniKQL::ETypeKind::Struct:
-            return IsSameProtoTypeImpl(actual.GetStruct(), expected.GetStruct());
-        case NKikimrMiniKQL::ETypeKind::EmptyDict:
-            return true;
-        case NKikimrMiniKQL::ETypeKind::Dict:
-            return IsSameProtoType(actual.GetDict().GetKey(), expected.GetDict().GetKey()) &&
-                IsSameProtoType(actual.GetDict().GetPayload(), expected.GetDict().GetPayload());
-        case NKikimrMiniKQL::ETypeKind::Variant:
-            return IsSameProtoTypeImpl(actual.GetVariant(), expected.GetVariant());
-        case NKikimrMiniKQL::ETypeKind::Null:
-            return true;
-        case NKikimrMiniKQL::ETypeKind::Pg:
-            return actual.GetPg().Getoid() == expected.GetPg().Getoid();
-        case NKikimrMiniKQL::ETypeKind::Tagged:
-            return (actual.GetTagged().GetTag() == expected.GetTagged().GetTag()) &&
-                IsSameProtoType(actual.GetTagged().GetItem(), expected.GetTagged().GetItem());
-        case NKikimrMiniKQL::ETypeKind::Unknown:
-        case NKikimrMiniKQL::ETypeKind::Reserved_14:
-            return false;
-    }
-}
-
-bool CanCacheQuery(const NKqpProto::TKqpPhyQuery& query) {
-    for (const auto& tx : query.GetTransactions()) {
-        if (tx.GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
-            return false;
-        }
-
-        for (const auto& stage : tx.GetStages()) {
-            for (const auto& source : stage.GetSources()) {
-                if (!source.HasExternalSource()) {
-                    continue;
-                }
-                const auto& externalSourceType = source.GetExternalSource().GetType();
-
-                // S3 provider stores S3 paths to read in AST,
-                // S3 and solomon providers may use runtime listing,
-                // YT provider opens read session during compilation,
-                // so we can't cache such queries
-                if (externalSourceType == "S3Source" ||
-                    externalSourceType == "SolomonSource" ||
-                    externalSourceType == YtProviderName) {
-                    return false;
-                }
-            }
-        }
-    }
-
-    return true;
-}
-
-} // namespace NKikimr::NKqp
+        YDB_LOG_CTX(ctx, priority, "Slow query, b text",
+            {"requestInfo", requestInfo},
+            {"duration", duration},
+            {"status", status},
+            {"user", username},
+            {"results", resultsSize},
+            {"#_EscapeC(protectedQueryText)", EscapeC(protectedQueryText)})

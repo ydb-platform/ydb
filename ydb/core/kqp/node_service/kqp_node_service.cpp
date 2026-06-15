@@ -29,6 +29,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_NODE
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -76,8 +78,9 @@ public:
     }
 
     void Bootstrap() {
-        STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, "Starting KQP Node service",
-            (node_id, SelfId().NodeId()));
+        YDB_LOG_INFO("Starting KQP Node service",
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()});
 
         State_ = std::make_shared<TNodeState>();
 
@@ -132,10 +135,11 @@ private:
             IgnoreFunc(NConsole::TEvConsole::TEvConfigNotificationRequest);
 
             default: {
-                STLOG(PRI_WARN, NKikimrServices::KQP_NODE, KQPNS, "Ignoring unexpected event 0x%x (" << ev->GetTypeName()
-                    << ") during graceful shutdown",
-                    (node_id, SelfId().NodeId()),
-                    (sender, ev->Sender));
+                YDB_LOG_WARN("Ignoring unexpected event 0x%x during graceful shutdown",
+                    {"marker", "KQPNS"},
+                    {"#_ev->GetTypeName", ev->GetTypeName()},
+                    {"nodeId", SelfId().NodeId()},
+                    {"sender", ev->Sender});
             }
         }
     }
@@ -169,10 +173,11 @@ private:
         const auto executerId = ev->Sender;
         auto& reason = ev->Get()->Record.GetReason();
 
-        STLOG(PRI_WARN, NKikimrServices::KQP_NODE, KQPNS, "Terminate transaction",
-            (node_id, SelfId().NodeId()),
-            (tx_id, txId),
-            (reason, reason));
+        YDB_LOG_WARN("Terminate transaction",
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()},
+            {"txId", txId},
+            {"reason", reason});
         TerminateTx(txId, executerId, reason);
 
         Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
@@ -182,9 +187,11 @@ private:
         State_->MarkRequestAsCancelled(executerId);
 
         if (auto tasksToAbort = State_->GetTasksByExecuterId(executerId); !tasksToAbort.empty()) {
-            STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, "Node service cancelled the task, because it " << reason,
-                (node_id, SelfId().NodeId()),
-                (tx_id, txId));
+            YDB_LOG_ERROR("Node service cancelled the task, because it",
+                {"marker", "KQPNS"},
+                {"reason", reason},
+                {"nodeId", SelfId().NodeId()},
+                {"txId", txId});
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
                 auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(status, reason);
                 Send(computeActorId, abortEv.release());
@@ -202,12 +209,14 @@ private:
 
     void HandleWork(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
         if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
-            STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, "Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request",
-                (node_id, SelfId().NodeId()));
+            YDB_LOG_INFO("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()});
             return;
         }
-        STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, "Prepare to shutdown: do not accept any messages from this time",
-            (node_id, SelfId().NodeId()));
+        YDB_LOG_INFO("Prepare to shutdown: do not accept any messages from this time",
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()});
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
         Become(&TKqpNodeService::ShuttingDownState);
     }
@@ -217,14 +226,16 @@ private:
         // continue to process tasks that are already started before shutdown
         auto& msg = ev->Get()->Record;
         if (ev->Sender.NodeId() == SelfId().NodeId()) {
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Accepting local StartRequest during shutdown",
-                (node_id, SelfId().NodeId()),
-                (tx_id, msg.GetTxId()));
+            YDB_LOG_DEBUG("Accepting local StartRequest during shutdown",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()},
+                {"txId", msg.GetTxId()});
             HandleWork(ev);
         } else if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Rejecting remote StartRequest in ShuttingDown State",
-                (node_id, SelfId().NodeId()),
-                (tx_id, msg.GetTxId()));
+            YDB_LOG_DEBUG("Rejecting remote StartRequest in ShuttingDown State",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()},
+                {"txId", msg.GetTxId()});
             ReplyError(ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
         } else {
             HandleWork(ev);
@@ -258,7 +269,8 @@ private:
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Subscribed for config changes");
+        YDB_LOG_DEBUG("Subscribed for config changes",
+            {"marker", "KQPNS"});
     }
 
     void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -283,9 +295,10 @@ private:
             CaFactory_->ApplyConfig(Config);
             CaFactory_->AccountDefaultPoolInScheduler.store(event.GetConfig().GetTableServiceConfig().GetComputeSchedulerSettings().GetAccountDefaultPool());
 
-            STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, "Updated table service RM config",
-                (node_id, SelfId().NodeId()),
-                (config, Config.DebugString()));
+            YDB_LOG_INFO("Updated table service RM config",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()},
+                {"config", Config.DebugString()});
         }
 
         EnableChannelMemoryTracking = event.GetConfig().GetTableServiceConfig().GetEnableChannelMemoryTracking();
@@ -359,19 +372,22 @@ private:
             }
 
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                STLOG(PRI_CRIT, NKikimrServices::KQP_NODE, KQPNS, "Failed to deliver subscription request to config dispatcher",
-                    (node_id, SelfId().NodeId()));
+                YDB_LOG_CRIT("Failed to deliver subscription request to config dispatcher",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()});
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, "Failed to deliver config notification response",
-                    (node_id, SelfId().NodeId()));
+                YDB_LOG_ERROR("Failed to deliver config notification response",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()});
                 break;
 
             default:
-                STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, "Undelivered event with unexpected source type",
-                    (node_id, SelfId().NodeId()),
-                    (source_type, ev->Get()->SourceType));
+                YDB_LOG_ERROR("Undelivered event with unexpected source type",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()},
+                    {"sourceType", ev->Get()->SourceType});
                 break;
         }
     }

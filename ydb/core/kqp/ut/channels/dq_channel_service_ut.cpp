@@ -15,6 +15,8 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_CHANNELS
+
 using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
@@ -106,7 +108,9 @@ public:
         switch (Role) {
             case TEvTestPrivate::ERole::Producer: {
                 if (Buffer->IsFinished()) {
-                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                    YDB_LOG_DEBUG("TEST FINISHED",
+                        {"selfId", SelfId()},
+                        {"channelId", ChannelId});
                     Send(RunnerId, new TEvTestPrivate::TEvFinished(Role, false));
                     PassAway();
                     return;
@@ -128,7 +132,9 @@ public:
                     MessageIndex++;
                 }
                 if (Settings.EarlyFinish && MessageIndex == Settings.MessageCount) {
-                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "TEST EARLY FINISH SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                    YDB_LOG_DEBUG("TEST EARLY FINISH",
+                        {"selfId", SelfId()},
+                        {"channelId", ChannelId});
                     Buffer->EarlyFinish();
                     MessageIndex++;
                 }
@@ -136,8 +142,10 @@ public:
                     MessageIndex++;
                 }
                 if (Buffer->IsFinished()) {
-                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId
-                        << ", Role=" << (Role == TEvTestPrivate::ERole::Producer ? "Producer" : "Consumer"));
+                    YDB_LOG_DEBUG("TEST FINISHED",
+                        {"selfId", SelfId()},
+                        {"channelId", ChannelId},
+                        {"role", (Role == TEvTestPrivate::ERole::Producer ? "Producer" : "Consumer")});
                     Send(RunnerId, new TEvTestPrivate::TEvFinished(Role, false));
                     PassAway();
                 }
@@ -157,9 +165,11 @@ public:
     void HandleStart(TEvTestPrivate::TEvStart::TPtr& ev) {
         RunnerId = ev->Sender;
         PeerId = ev->Get()->PeerId;
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS,
-            "TEST WORKER START SelfId=" << SelfId() << ", ChannelId=" << ChannelId << ", PeerId=" << PeerId << ", Role=" << (Role == TEvTestPrivate::ERole::Producer ? "Producer" : "Consumer")
-        );
+        YDB_LOG_DEBUG("TEST WORKER START",
+            {"selfId", SelfId()},
+            {"channelId", ChannelId},
+            {"peerId", PeerId},
+            {"role", (Role == TEvTestPrivate::ERole::Producer ? "Producer" : "Consumer")});
         if (Settings.StartDelayMs) {
             Schedule(TDuration::MilliSeconds(RandomNumber<ui64>(Settings.StartDelayMs) + 1), new NActors::TEvents::TEvWakeup());
         } else {
@@ -168,9 +178,10 @@ public:
     }
 
     void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS,
-            "TEST WORKER ABORT SelfId=" << SelfId() << ", ChannelId=" << ChannelId << ", " << ev->Get()->GetIssues().ToOneLineString()
-        );
+        YDB_LOG_DEBUG("TEST WORKER ABORT",
+            {"selfId", SelfId()},
+            {"channelId", ChannelId},
+            {"#_ev->Get()->GetIssues().ToOneLineString", ev->Get()->GetIssues().ToOneLineString()});
         Send(RunnerId, new TEvTestPrivate::TEvFinished(Role, true));
         PassAway();
     }

@@ -22,6 +22,8 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr::NKqp {
 
 using namespace NActors;
@@ -52,7 +54,8 @@ public:
     }
 
     void Bootstrap() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Bootstrap");
+        YDB_LOG_DEBUG("TKqpSysViewSource Bootstrap",
+            {"selfId", SelfId()});
 
         const auto& table = Settings->GetTable();
         TTableId tableId(table.GetOwnerId(), table.GetTableId(), table.GetSysView());
@@ -108,7 +111,9 @@ public:
         if (!scanActor) {
             auto issue = TStringBuilder()
                 << "Failed to create system view scan, table id: " << tableId;
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << issue);
+            YDB_LOG_ERROR("TKqpSysViewSource",
+                {"selfId", SelfId()},
+                {"issue", issue});
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex,
                 TIssues({TIssue(issue)}),
                 NDqProto::StatusIds::INTERNAL_ERROR));
@@ -116,7 +121,9 @@ public:
         }
 
         ScanActorId = Register(scanActor.Release());
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Registered scan actor: " << ScanActorId);
+        YDB_LOG_DEBUG("TKqpSysViewSource Registered scan",
+            {"selfId", SelfId()},
+            {"actor", ScanActorId});
 
         // Send initial ack to start data flow
         Send(ScanActorId, new TEvKqpCompute::TEvScanDataAck(BufferSize));
@@ -134,13 +141,16 @@ public:
             hFunc(TEvKqpCompute::TEvScanData, Handle);
             hFunc(TEvKqpCompute::TEvScanError, Handle);
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Unexpected event: " << ev->GetTypeRewrite());
+                YDB_LOG_WARN("TKqpSysViewSource Unexpected",
+                    {"selfId", SelfId()},
+                    {"event", ev->GetTypeRewrite()});
         }
     }
 
 private:
     void Handle(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Got scan init actor event");
+        YDB_LOG_DEBUG("TKqpSysViewSource Got scan init actor event",
+            {"selfId", SelfId()});
         // Respond with ack so the scan actor knows we're ready
         Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(BufferSize));
     }
@@ -148,9 +158,11 @@ private:
     void Handle(TEvKqpCompute::TEvScanData::TPtr& ev) {
         auto& msg = *ev->Get();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Got scan data, rows: " << msg.Rows.size()
-            << ", finished: " << msg.Finished
-            << ", from: " << ev->Sender);
+        YDB_LOG_DEBUG("TKqpSysViewSource Got scan data,",
+            {"selfId", SelfId()},
+            {"rows", msg.Rows.size()},
+            {"finished", msg.Finished},
+            {"from", ev->Sender});
 
         if (!msg.Rows.empty()) {
             auto guard = Guard(*Alloc);
@@ -160,7 +172,8 @@ private:
         }
 
         if (msg.ArrowBatch && msg.ArrowBatch->num_rows() > 0) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Arrow batches not supported in sys view source, ignoring");
+            YDB_LOG_WARN("TKqpSysViewSource Arrow batches not supported in sys view source, ignoring",
+                {"selfId", SelfId()});
         }
 
         if (msg.Finished) {
@@ -179,12 +192,16 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             ScanWarnings.AddIssues(issues);
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Got partial compile cache scan warning: " << issues.ToOneLineString());
+            YDB_LOG_WARN("TKqpSysViewSource Got partial compile cache scan",
+                {"selfId", SelfId()},
+                {"warning", issues.ToOneLineString()});
             return;
         }
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Got scan error, status: " << Ydb::StatusIds::StatusCode_Name(status)
-            << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_ERROR("TKqpSysViewSource Got scan error,",
+            {"selfId", SelfId()},
+            {"status", Ydb::StatusIds::StatusCode_Name(status)},
+            {"issues", issues.ToOneLineString()});
 
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues,
             NYql::NDq::YdbStatusToDqStatus(status, NYql::NDq::EStatusCompatibilityLevel::WithUnauthorized)));
@@ -195,7 +212,9 @@ private:
             return;
         }
         ScanWarningsSent = true;
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TKqpSysViewSource " << SelfId() << " " << "Forwarding compile cache scan warnings to compute: " << ScanWarnings.ToOneLineString());
+        YDB_LOG_WARN("TKqpSysViewSource Forwarding compile cache scan warnings",
+            {"selfId", SelfId()},
+            {"toCompute", ScanWarnings.ToOneLineString()});
         Send(ComputeActorId, new NYql::NDq::IDqComputeActorAsyncInput::TEvAsyncInputError(
             InputIndex, ScanWarnings, NYql::NDqProto::StatusIds::UNSPECIFIED));
     }

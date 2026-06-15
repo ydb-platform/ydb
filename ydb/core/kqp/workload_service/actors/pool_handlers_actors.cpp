@@ -9,6 +9,8 @@
 #include <ydb/core/kqp/workload_service/common/helpers.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_WORKLOAD_SERVICE
+
 
 namespace NKikimr::NKqp::NWorkload {
 
@@ -174,12 +176,15 @@ public:
 
 private:
     void HandlePoison() {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got poison, stop pool handler");
+        YDB_LOG_WARN("[WorkloadService] Got poison, stop pool handler",
+            {"logPrefix", LogPrefix()});
         this->PassAway();
     }
 
     void Handle(TEvPrivate::TEvStopPoolHandler::TPtr& ev) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got stop pool handler request, waiting for " << LocalSessions.size() << " requests");
+        YDB_LOG_INFO("[WorkloadService] Got stop pool handler request, waiting for requests",
+            {"logPrefix", LogPrefix()},
+            {"#_LocalSessions.size", LocalSessions.size()});
         ResetCountersOnStrop = ev->Get()->ResetCounters;
         if (LocalSessions.empty()) {
             PassAway();
@@ -206,7 +211,11 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Received new request, worker id: " << workerActorId << ", session id: " << sessionId << ", request text: " << requestText);
+        YDB_LOG_DEBUG("[WorkloadService] Received new request, worker session request",
+            {"logPrefix", LogPrefix()},
+            {"id", workerActorId},
+            {"#_id", sessionId},
+            {"text", requestText});
         if (auto cancelAfter = PoolConfig.QueryCancelAfter) {
             this->Schedule(cancelAfter, new TEvPrivate::TEvCancelRequest(sessionId));
         }
@@ -251,7 +260,10 @@ private:
 
         request->State = TRequest::EState::Canceling;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Cancel request by deadline, worker id: " << request->WorkerActorId << ", session id: " << request->SessionId);
+        YDB_LOG_DEBUG("[WorkloadService] Cancel request by deadline, worker session",
+            {"logPrefix", LogPrefix()},
+            {"id", request->WorkerActorId},
+            {"#_id", request->SessionId});
         OnCleanupRequest(request);
     }
 
@@ -271,16 +283,21 @@ private:
 
         const auto& result = ev->Get()->Result;
         if (!result) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got empty notification");
+            YDB_LOG_WARN("[WorkloadService] Got empty notification",
+                {"logPrefix", LogPrefix()});
             return;
         }
 
         if (result->GetStatus() != NKikimrScheme::StatusSuccess) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got bad watch notification " << result->GetStatus() << ", reason: " << result->GetReason());
+            YDB_LOG_WARN("[WorkloadService] Got bad watch notification",
+                {"logPrefix", LogPrefix()},
+                {"#_result->GetStatus", result->GetStatus()},
+                {"reason", result->GetReason()});
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got watch notification");
+        YDB_LOG_DEBUG("[WorkloadService] Got watch notification",
+            {"logPrefix", LogPrefix()});
 
         NResourcePool::TPoolSettings poolConfig;
         ParsePoolSettings(result->GetPathDescription().GetResourcePoolDescription(), poolConfig);
@@ -300,7 +317,8 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got delete notification");
+        YDB_LOG_DEBUG("[WorkloadService] Got delete notification",
+            {"logPrefix", LogPrefix()});
         SendPoolInfoUpdate(std::nullopt, std::nullopt, Subscribers);
     }
 
@@ -330,11 +348,13 @@ public:
                 Counters.Cancelled->Inc();
             } else {
                 Counters.ContinueError->Inc();
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Reply continue error " << status
-                    << " to " << request->WorkerActorId
-                    << ", session id: " << request->SessionId
-                    << ", request text: " << request->RequestText
-                    << ", issues: " << issues.ToOneLineString());
+                YDB_LOG_WARN("[WorkloadService] Reply continue error to session request",
+                    {"logPrefix", LogPrefix()},
+                    {"status", status},
+                    {"#_request->WorkerActorId", request->WorkerActorId},
+                    {"id", request->SessionId},
+                    {"text", request->RequestText},
+                    {"issues", issues.ToOneLineString()});
             }
             RemoveRequest(request);
         }
@@ -410,7 +430,8 @@ protected:
 
         LocalSessions.erase(request->SessionId);
         if (StopHandler && LocalSessions.empty()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "All requests finished, stop handler");
+            YDB_LOG_INFO("[WorkloadService] All requests finished, stop handler",
+                {"logPrefix", LogPrefix()});
             PassAway();
         }
     }
@@ -448,10 +469,19 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             Counters.CleanupOk->Inc();
             Counters.CollectRequestLatency(request->ContinueTime);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Reply cleanup success to " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
+            YDB_LOG_DEBUG("[WorkloadService] Reply cleanup success to session local",
+                {"logPrefix", LogPrefix()},
+                {"#_request->WorkerActorId", request->WorkerActorId},
+                {"id", request->SessionId},
+                {"inFlight", LocalInFlight});
         } else {
             Counters.CleanupError->Inc();
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Reply cleanup error " << status << " to " << request->WorkerActorId << ", session id: " << request->SessionId << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[WorkloadService] Reply cleanup error to session",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"#_request->WorkerActorId", request->WorkerActorId},
+                {"id", request->SessionId},
+                {"issues", issues.ToOneLineString()});
         }
     }
 
@@ -462,7 +492,11 @@ private:
 
         Counters.Cancelled->Inc();
         Counters.CollectRequestLatency(request->ContinueTime);
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Cancel request for worker " << request->WorkerActorId << ", session id: " << request->SessionId << ", local in flight: " << LocalInFlight);
+        YDB_LOG_INFO("[WorkloadService] Cancel request for worker session local",
+            {"logPrefix", LogPrefix()},
+            {"#_request->WorkerActorId", request->WorkerActorId},
+            {"id", request->SessionId},
+            {"inFlight", LocalInFlight});
     }
 
     bool UpdateSchemeboardSubscription(TPathId pathId) {
@@ -471,13 +505,17 @@ private:
         }
 
         if (WatchPathId) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Pool path has changed, new path id: " << pathId.ToString());
+            YDB_LOG_INFO("[WorkloadService] Pool path has changed, new path",
+                {"logPrefix", LogPrefix()},
+                {"id", pathId});
             this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(WatchKey));
             WatchKey++;
             WatchPathId = nullptr;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Subscribed on schemeboard notifications for path: " << pathId.ToString());
+        YDB_LOG_DEBUG("[WorkloadService] Subscribed on schemeboard notifications",
+            {"logPrefix", LogPrefix()},
+            {"path", pathId});
         WatchPathId = std::make_unique<TPathId>(pathId);
         this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(*WatchPathId, WatchKey));
         return true;
@@ -487,7 +525,10 @@ private:
         if (PoolConfig == poolConfig) {
             return;
         }
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Pool config has changed, queue size: " << poolConfig.QueueSize << ", in flight limit: " << poolConfig.ConcurrentQueryLimit);
+        YDB_LOG_DEBUG("[WorkloadService] Pool config has changed, queue in flight",
+            {"logPrefix", LogPrefix()},
+            {"size", poolConfig.QueueSize},
+            {"limit", poolConfig.ConcurrentQueryLimit});
 
         PoolConfig = poolConfig;
         QueueSizeLimit = GetMaxQueueSize(poolConfig);
@@ -653,10 +694,11 @@ protected:
 
         PendingRequests.emplace_back(request->SessionId);
         FifoCounters.PendingRequestsCount->Inc();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Request placed into pending queue, session id: " << request->SessionId
-            << ", request text: " << request->RequestText
-            << ", queue size: " << PendingRequests.size()
-        );
+        YDB_LOG_DEBUG("[WorkloadService] Request placed into pending queue, session request queue",
+            {"logPrefix", LogPrefix()},
+            {"id", request->SessionId},
+            {"text", request->RequestText},
+            {"size", PendingRequests.size()});
 
         // Notify proxy that request entered WM pending queue via shared interface
         if (request->WmSessionUpdater) {
@@ -709,7 +751,8 @@ protected:
 private:
     void HandleRefreshState() {
         RefreshScheduled = false;
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Try to start scheduled refresh");
+        YDB_LOG_TRACE("[WorkloadService] Try to start scheduled refresh",
+            {"logPrefix", LogPrefix()});
 
         RefreshState();
         if (GetLocalSessionsCount() || GlobalState.AmountRequests()) {
@@ -718,7 +761,8 @@ private:
     }
 
     void HandleExternalRefreshState() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got remote refresh request");
+        YDB_LOG_DEBUG("[WorkloadService] Got remote refresh request",
+            {"logPrefix", LogPrefix()});
         RefreshState(true);
     }
 
@@ -727,7 +771,9 @@ private:
         LastNodesInfoRefreshTime = TInstant::Now();
         NodeCount = ev->Get()->NodeCount;
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Updated node info, node count: " << NodeCount);
+        YDB_LOG_TRACE("[WorkloadService] Updated node info, node",
+            {"logPrefix", LogPrefix()},
+            {"count", NodeCount});
     }
 
     void Handle(TEvPrivate::TEvTablesCreationFinished::TPtr& ev) {
@@ -750,7 +796,10 @@ private:
         RunningOperation = false;
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "refresh pool state failed " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[WorkloadService] refresh pool state failed",
+                {"logPrefix", LogPrefix()},
+                {"status", ev->Get()->Status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             RefreshRequired = true;
             ScheduleRefresh();
             return;
@@ -766,7 +815,10 @@ private:
             ScheduleRefresh();
         }
         FifoCounters.UpdateGlobalState(GlobalState);
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "successfully refreshed pool state, in flight: " << GlobalState.RunningRequests << ", delayed: " << GlobalState.DelayedRequests);
+        YDB_LOG_TRACE("[WorkloadService] successfully refreshed pool state,",
+            {"logPrefix", LogPrefix()},
+            {"inFlight", GlobalState.RunningRequests},
+            {"delayed", GlobalState.DelayedRequests});
 
         RemoveFinishedRequests();
 
@@ -797,7 +849,11 @@ private:
         ScheduleRefresh();
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "failed to delay request " << ev->Get()->Status << ", session id: " << ev->Get()->SessionId << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[WorkloadService] failed to delay request session",
+                {"logPrefix", LogPrefix()},
+                {"status", ev->Get()->Status},
+                {"id", ev->Get()->SessionId},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to put request in queue");
             ForUnfinished(ev->Get()->SessionId, [this, ev, issues](TRequest* request) {
                 ReplyContinue(request, ev->Get()->Status, issues);
@@ -817,7 +873,9 @@ private:
                 request->WmSessionUpdater->SetRequestState(IWmSessionUpdater::EWmState::DELAYED, TActivationContext::Now());
             }
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "successfully delayed request, session id: " << sessionId);
+            YDB_LOG_DEBUG("[WorkloadService] successfully delayed request, session",
+                {"logPrefix", LogPrefix()},
+                {"id", sessionId});
         }
 
         DoStartDelayedRequest(GetLoadCpuThreshold());
@@ -828,7 +886,8 @@ private:
         RunningOperation = false;
 
         if (!ev->Get()->QuotaAccepted) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Skipped request start due to load cpu threshold");
+            YDB_LOG_DEBUG("[WorkloadService] Skipped request start due to load cpu threshold",
+                {"logPrefix", LogPrefix()});
             if (static_cast<EStartRequestCase>(ev->Cookie) == EStartRequestCase::Pending) {
                 NYql::TIssues issues = GroupIssues(ev->Get()->Issues, TStringBuilder() << "Request was rejected, failed to request CPU quota for pool " << PoolId << ", current CPU threshold is " << 100.0 * ev->Get()->MaxClusterLoad << "%");
                 ForEachUnfinished(DelayedRequests.begin(), DelayedRequests.end(), [this, issues](TRequest* request) {
@@ -864,7 +923,11 @@ private:
 
         const TString& sessionId = ev->Get()->SessionId;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "failed start request " << ev->Get()->Status << ", session id: " << sessionId << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[WorkloadService] failed start request session",
+                {"logPrefix", LogPrefix()},
+                {"status", ev->Get()->Status},
+                {"id", sessionId},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to start request");
             ForUnfinished(sessionId, [this, ev, issues](TRequest* request) {
                 AddFinishedRequest(request->SessionId);
@@ -876,7 +939,9 @@ private:
 
         const ui32 nodeId = ev->Get()->NodeId;
         if (SelfId().NodeId() != nodeId) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "first request in queue is remote, send notification to node " << nodeId);
+            YDB_LOG_DEBUG("[WorkloadService] first request in queue is remote, send notification to node",
+                {"logPrefix", LogPrefix()},
+                {"nodeId", nodeId});
             auto event = std::make_unique<TEvPrivate::TEvRefreshPoolState>();
             event->Record.SetPoolId(PoolId);
             event->Record.SetDatabase(DatabaseId);
@@ -885,7 +950,9 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "started request, session id: " << sessionId);
+        YDB_LOG_DEBUG("[WorkloadService] started request, session",
+            {"logPrefix", LogPrefix()},
+            {"id", sessionId});
         bool requestFound = false;
         while (!DelayedRequests.empty() && !requestFound) {
             ForUnfinished(DelayedRequests.front(), [this, sessionId, &requestFound](TRequest* request) {
@@ -915,11 +982,16 @@ private:
         RunningOperation = false;
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "cleanup requests failed " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[WorkloadService] cleanup requests failed",
+                {"logPrefix", LogPrefix()},
+                {"status", ev->Get()->Status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
         }
 
         for (const TString& sessionId : ev->Get()->SesssionIds) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "cleanuped request, session id: " << sessionId);
+            YDB_LOG_TRACE("[WorkloadService] cleanuped request, session",
+                {"logPrefix", LogPrefix()},
+                {"id", sessionId});
             if (TRequest* request = GetRequestSafe(sessionId)) {
                 FinalReply(request, ev->Get()->Status, ev->Get()->Issues);
             }

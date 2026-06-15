@@ -47,10 +47,10 @@ public:
         auto& response = ev->Get()->Record;
         auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(response.GetStatus());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvProposeTransactionStatus for scheme request"
-            << ", TxId: " << response.GetTxId()
-            << ", status: " << status
-            << ", scheme shard status: " << response.GetSchemeShardStatus());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvProposeTransactionStatus for scheme request scheme shard",
+            {"txId", response.GetTxId()},
+            {"status", status},
+            {"#_status", response.GetSchemeShardStatus()});
 
         switch (status) {
             case TEvTxUserProxy::TResultStatus::ExecInProgress: {
@@ -66,15 +66,15 @@ public:
                 }
                 NTabletPipe::SendData(ctx, ShemePipeActorId, request.Release());
 
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Sent TEvNotifyTxCompletion request"
-                    << ", TxId: " << response.GetTxId());
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Sent TEvNotifyTxCompletion request",
+                    {"txId", response.GetTxId()});
 
                 return;
             }
 
             case TEvTxUserProxy::TResultStatus::AccessDenied: {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Access denied for scheme request"
-                    << ", TxId: " << response.GetTxId());
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Access denied for scheme request",
+                    {"txId", response.GetTxId()});
 
                 NYql::TIssue issue(NYql::TPosition(), "Access denied.");
                 Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_ACCESS_DENIED,
@@ -87,8 +87,8 @@ public:
                 if (response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess ||
                     (!FailedOnAlreadyExists && response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists))
                 {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
-                        << ", TxId: " << response.GetTxId());
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request",
+                        {"txId", response.GetTxId()});
 
                     if (!response.GetIssues().empty()) {
                         NYql::TIssues issues;
@@ -123,8 +123,8 @@ public:
             case TEvTxUserProxy::TResultStatus::ResolveError: {
                 if (response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist
                     && SuccessOnNotExist) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request: path does not exist,"
-                        << "SuccessOnNotExist: true, TxId: " << response.GetTxId());
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request: path does not exist, SuccessOnNotExist: true,",
+                        {"txId", response.GetTxId()});
                     TResult result;
                     result.SetSuccess();
                     Promise.SetValue(std::move(result));
@@ -206,10 +206,10 @@ public:
                 break;
         }
 
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_GATEWAY, "Unexpected error on scheme request"
-            << ", TxId: " << response.GetTxId()
-            << ", ProxyStatus: " << status
-            << ", SchemeShardReason: " << response.GetSchemeShardReason());
+        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Unexpected error on scheme request",
+            {"txId", response.GetTxId()},
+            {"proxyStatus", status},
+            {"schemeShardReason", response.GetSchemeShardReason()});
 
         TStringBuilder message;
         message << "Scheme operation failed, status: " << status;
@@ -224,11 +224,11 @@ public:
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         auto& response = ev->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvNotifyTxCompletionResult for scheme request"
-            << ", TxId: " << response.GetTxId());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvNotifyTxCompletionResult for scheme request",
+            {"txId", response.GetTxId()});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
-            << ", TxId: " << response.GetTxId());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request",
+            {"txId", response.GetTxId()});
 
         TResult result;
         result.SetSuccess();

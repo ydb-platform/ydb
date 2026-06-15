@@ -22,6 +22,8 @@
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_SERVICE
+
 
 namespace NKikimr::NKqp {
 
@@ -289,20 +291,22 @@ public:
         MaxConcurrentCompilations = std::max<ui32>(1u, Config.MaxConcurrentCompilations);
         HardDeadlineTimestamp = TActivationContext::Now() + hardDeadline;
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Warmup actor started, database: " << Database
-              << ", softDeadline: " << softDeadline
-              << ", hardDeadline: " << hardDeadline
-              << (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")
-              << ", maxConcurrent: " << MaxConcurrentCompilations
-              << (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")
-              << ", self-orchestrating topology discovery");
+        YDB_LOG_INFO("Warmup actor started, self-orchestrating topology discovery",
+            {"logPrefix", LogPrefix()},
+            {"database", Database},
+            {"softDeadline", softDeadline},
+            {"hardDeadline", hardDeadline},
+            {"#_num_0", (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")},
+            {"maxConcurrent", MaxConcurrentCompilations},
+            {"#_num_1", (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")});
 
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
         Schedule(softDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
 
         if (Database.empty()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Database is empty, skipping warmup");
+            YDB_LOG_INFO("Database is empty, skipping warmup",
+                {"logPrefix", LogPrefix()});
             SkipReason = "Skipped: empty database";
             ScheduleComplete();
             return;
@@ -329,7 +333,9 @@ private:
             hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "StateWaitingComplete: unexpected event " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("StateWaitingComplete: unexpected event",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -342,7 +348,9 @@ private:
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadlineInTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "StateWaitingTopology: unexpected event " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("StateWaitingTopology: unexpected event",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -357,7 +365,9 @@ private:
             IgnoreFunc(TEvPrivate::TEvCheckTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "StateFetching: unexpected event " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("StateFetching: unexpected event",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -371,7 +381,9 @@ private:
             IgnoreFunc(TEvPrivate::TEvCheckTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "StateCompiling: unexpected event " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("StateCompiling: unexpected event",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -390,19 +402,23 @@ private:
             Counters->WarmupQueriesTruncated->Set(ev->Get()->Count);
             Counters->WarmupQueriesEmptyQueryType->Set(ev->Get()->EmptyQueryTypeCount);
         }
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Truncated queries in cache: " << ev->Get()->Count
-              << ", empty QueryType: " << ev->Get()->EmptyQueryTypeCount
-              << ", success: " << ev->Get()->Success);
+        YDB_LOG_INFO("Truncated queries empty",
+            {"logPrefix", LogPrefix()},
+            {"inCache", ev->Get()->Count},
+            {"queryType", ev->Get()->EmptyQueryTypeCount},
+            {"success", ev->Get()->Success});
     }
 
     void HandleStartWarmup(TEvStartWarmup::TPtr& ev) {
         const auto discoveredNodes = ev->Get()->DiscoveredNodesCount;
         NodeIds = ev->Get()->NodeIds;
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Received TEvStartWarmup, discoveredNodes: " << discoveredNodes
-              << ", nodeIds count: " << NodeIds.size()
-              << ", maxNodesToQuery: " << Config.MaxNodesToRequest
-              << ", scheduling soft deadline: " << Config.SoftDeadline);
+        YDB_LOG_INFO("Received TEvStartWarmup, nodeIds scheduling soft",
+            {"logPrefix", LogPrefix()},
+            {"discoveredNodes", discoveredNodes},
+            {"count", NodeIds.size()},
+            {"maxNodesToQuery", Config.MaxNodesToRequest},
+            {"deadline", Config.SoftDeadline});
         RescheduleSoftDeadlineForFetch();
         StartFetch();
     }
@@ -426,14 +442,16 @@ private:
         }
 
         if (peerCount == 0) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "No peers in initial kqpexch+ board sync (boardSize=" << boardNodeIds.size()
-                  << "), skipping warmup");
+            YDB_LOG_INFO("No peers in initial kqpexch+ board sync skipping warmup",
+                {"logPrefix", LogPrefix()},
+                {"#_(boardSize", boardNodeIds.size()});
             Complete(true, "Skipped: no peers in initial kqpexch+ board sync");
             return;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Initial board sync delivered " << peerCount << " peer(s), waiting for "
-              "TEvStartWarmup from KqpProxy");
+        YDB_LOG_INFO("Initial board sync delivered",
+            {"logPrefix", LogPrefix()},
+            {"peerCount", peerCount});
     }
 
     void RescheduleSoftDeadlineForFetch() {
@@ -444,7 +462,8 @@ private:
 
     void StartFetch() {
         if (NodeIds.empty()) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "StartFetch called with empty NodeIds, skipping warmup");
+            YDB_LOG_WARN("StartFetch called with empty NodeIds, skipping warmup",
+                {"logPrefix", LogPrefix()});
             Complete(true, "Skipped: empty NodeIds");
             return;
         }
@@ -463,7 +482,9 @@ private:
             NodeIds.resize(maxNodesToQuery);
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Spawning fetch cache actor, filtering by " << NodeIds.size() << " nodes");
+        YDB_LOG_INFO("Spawning fetch cache actor, filtering by nodes",
+            {"logPrefix", LogPrefix()},
+            {"#_NodeIds.size", NodeIds.size()});
         const ui64 maxCompilationMs = Config.MaxCompilationDurationMs > 0
             ? Config.MaxCompilationDurationMs
             : Config.SoftDeadline.MilliSeconds() / 2;
@@ -476,17 +497,23 @@ private:
         auto* result = ev->Get();
 
         if (!result->Success) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Fetch failed (no compile cache nodes responded), skipping warmup: " << result->Error);
+            YDB_LOG_WARN("Fetch failed (no compile cache nodes responded), skipping",
+                {"logPrefix", LogPrefix()},
+                {"warmup", result->Error});
             Complete(false, "Fetch failed: " + result->Error);
             return;
         }
 
         if (!result->Warnings.empty()) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Fetch completed with warnings: " << result->Warnings);
+            YDB_LOG_WARN("Fetch completed with",
+                {"logPrefix", LogPrefix()},
+                {"warnings", result->Warnings});
         }
 
         QueriesToCompile = std::move(result->Queries);
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Fetched " << QueriesToCompile.size() << " queries from compile cache");
+        YDB_LOG_INFO("Fetched queries from compile cache",
+            {"logPrefix", LogPrefix()},
+            {"#_QueriesToCompile.size", QueriesToCompile.size()});
 
         if (Counters) {
             Counters->WarmupQueriesFetched->Add(QueriesToCompile.size());
@@ -523,10 +550,12 @@ private:
         if (auto it = PendingQueriesByCookie.find(cookie); it != PendingQueriesByCookie.end()) {
             auto& query = it->second;
             if (success) {
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Query compiled successfully, user: " << query.UserSID
-                      << ", has_metadata: " << !query.Metadata.empty()
-                      << ", query: " << query.QueryText.substr(0, 200)
-                      << (query.QueryText.size() > 200 ? "..." : ""));
+                YDB_LOG_INFO("Query compiled successfully,",
+                    {"logPrefix", LogPrefix()},
+                    {"user", query.UserSID},
+                    {"hasMetadata", !query.Metadata.empty()},
+                    {"query", query.QueryText.substr(0, 200)},
+                    {"#_num_0", (query.QueryText.size() > 200 ? "..." : "")});
             } else {
                 TString errorMsg;
                 const auto& issues = record.GetResponse().GetQueryIssues();
@@ -538,17 +567,21 @@ private:
                         errorMsg += issue.message();
                     }
                 }
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Query compilation failed, user: " << query.UserSID
-                      << ", has_metadata: " << !query.Metadata.empty()
-                      << ", status: " << Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())
-                      << ", error: " << errorMsg
-                      << ", query: " << query.QueryText.substr(0, 200)
-                      << (query.QueryText.size() > 200 ? "..." : ""));
+                YDB_LOG_WARN("Query compilation failed,",
+                    {"logPrefix", LogPrefix()},
+                    {"user", query.UserSID},
+                    {"hasMetadata", !query.Metadata.empty()},
+                    {"status", Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())},
+                    {"error", errorMsg},
+                    {"query", query.QueryText.substr(0, 200)},
+                    {"#_num_0", (query.QueryText.size() > 200 ? "..." : "")});
             }
             PendingQueriesByCookie.erase(it);
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Received response for unknown cookie: " << cookie
-                  << ", success: " << success);
+            YDB_LOG_WARN("Received response for unknown",
+                {"logPrefix", LogPrefix()},
+                {"cookie", cookie},
+                {"success", success});
         }
 
         if (success) {
@@ -634,10 +667,12 @@ private:
             timeout = TDuration::MilliSeconds(100);
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Sending PREPARE request for user: " << query.UserSID
-              << ", query length: " << query.QueryText.size()
-              << ", has_metadata: " << !query.Metadata.empty()
-              << ", timeout: " << timeout);
+        YDB_LOG_DEBUG("Sending PREPARE request for query",
+            {"logPrefix", LogPrefix()},
+            {"user", query.UserSID},
+            {"length", query.QueryText.size()},
+            {"hasMetadata", !query.Metadata.empty()},
+            {"timeout", timeout});
 
         auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID,
                                             timeout, query.Metadata, query.QueryType, query.Syntax);
@@ -656,8 +691,10 @@ private:
         }
 
         if (PendingCompilations == 0 && QueriesToCompile.empty()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "All compilations finished, loaded: " << EntriesLoaded
-                  << ", failed: " << EntriesFailed);
+            YDB_LOG_INFO("All compilations finished,",
+                {"logPrefix", LogPrefix()},
+                {"loaded", EntriesLoaded},
+                {"failed", EntriesFailed});
             TString msg = TStringBuilder() << "Compiled " << EntriesLoaded << " queries"
                 << (SoftDeadlineReached ? " (soft deadline)" : "");
             Complete(true, msg);
@@ -666,9 +703,11 @@ private:
 
 
     void HandleHardDeadline() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Hard deadline reached, compiled: " << EntriesLoaded
-              << ", failed: " << EntriesFailed
-              << ", pending: " << PendingCompilations);
+        YDB_LOG_INFO("Hard deadline reached,",
+            {"logPrefix", LogPrefix()},
+            {"compiled", EntriesLoaded},
+            {"failed", EntriesFailed},
+            {"pending", PendingCompilations});
 
         PendingQueriesByCookie.clear();
         PendingCompilations = 0;
@@ -680,25 +719,31 @@ private:
         SoftDeadlineReached = true;
         QueriesToCompile.clear();
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Soft deadline reached, compiled: " << EntriesLoaded
-              << ", failed: " << EntriesFailed
-              << ", pending: " << PendingCompilations);
+        YDB_LOG_INFO("Soft deadline reached,",
+            {"logPrefix", LogPrefix()},
+            {"compiled", EntriesLoaded},
+            {"failed", EntriesFailed},
+            {"pending", PendingCompilations});
 
         if (PendingCompilations == 0) {
             Complete(true, TStringBuilder() << "Soft deadline: compiled " << EntriesLoaded << " queries");
         } else {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Waiting for " << PendingCompilations << " in-flight compilations to finish");
+            YDB_LOG_INFO("Waiting for in-flight compilations to finish",
+                {"logPrefix", LogPrefix()},
+                {"pendingCompilations", PendingCompilations});
         }
     }
 
     void HandleSoftDeadlineInTopology() {
         // No peer NodeIds yet → can only read self (useless on warm restart).
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Soft deadline reached while waiting for topology, skipping warmup");
+        YDB_LOG_INFO("Soft deadline reached while waiting for topology, skipping warmup",
+            {"logPrefix", LogPrefix()});
         Complete(true, "Skipped: topology not delivered before soft deadline");
     }
 
     void HandlePoison() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Received poison, stop warmup");
+        YDB_LOG_DEBUG("Received poison, stop warmup",
+            {"logPrefix", LogPrefix()});
         PassAway();
     }
 
@@ -708,7 +753,10 @@ private:
         }
         Completed = true;
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << "Warmup " << (success ? "completed" : "finished") << ": " << message);
+        YDB_LOG_INFO("Warmup",
+            {"logPrefix", LogPrefix()},
+            {"#_num_0", (success ? "completed" : "finished")},
+            {"message", message});
 
         for (const auto& actorId : NotifyActorIds) {
             Send(actorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded, EntriesFailed));

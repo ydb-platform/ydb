@@ -235,13 +235,14 @@ public:
         ui32 lockNodeId = msg.GetLockNodeId();
         TMaybe<NKikimrDataEvents::ELockMode> lockMode = msg.HasLockMode() ? TMaybe<NKikimrDataEvents::ELockMode>(msg.GetLockMode()) : Nothing();
 
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "HandleStartKqpTasksRequest",
-            (node_id, SelfId().NodeId()),
-            (tx_id, txId),
-            (requester, executerId),
-            (tasks_count, msg.GetTasks().size()),
-            (task_ids, TasksIdsStr(msg.GetTasks())),
-            (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_NODE, "HandleStartKqpTasksRequest",
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()},
+            {"txId", txId},
+            {"requester", executerId},
+            {"tasksCount", msg.GetTasks().size()},
+            {"taskIds", TasksIdsStr(msg.GetTasks())},
+            {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
 
         const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
@@ -289,12 +290,13 @@ public:
                 ev->Cookie, "Request was cancelled");
         }
 
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, ((tasks.size() == taskCount) ? "Created new request" : "Added tasks to existing request"),
-                (node_id, SelfId().NodeId()),
-                (tx_id, txId),
-                (tasks_count, tasks.size()),
-                (executer, executerId),
-                (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_NODE, ((tasks.size() == taskCount) ? "Created new request" : "Added tasks to existing request"),
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()},
+            {"txId", txId},
+            {"tasksCount", tasks.size()},
+            {"executer", executerId},
+            {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
 
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
@@ -334,9 +336,12 @@ public:
             State_->MarkRequestAsCancelled(executerId);
 
             if (auto tasksToAbort = State_->GetTasksByExecuterId(executerId); !tasksToAbort.empty()) {
-                STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, "Node service unable to allocate " << tasksCount << " tasks, reason: " << rmResult.GetFailReason(),
-                    (node_id, SelfId().NodeId()),
-                    (tx_id, txId));
+                YDB_LOG_ERROR_COMP(NKikimrServices::KQP_NODE, "Node service unable to allocate tasks,",
+                    {"marker", "KQPNS"},
+                    {"tasksCount", tasksCount},
+                    {"reason", rmResult.GetFailReason()},
+                    {"nodeId", SelfId().NodeId()},
+                    {"txId", txId});
                 for (const auto& [taskId, computeActorId]: tasksToAbort) {
                     auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, rmResult.GetFailReason());
                     Send(computeActorId, abortEv.release());
@@ -393,19 +398,21 @@ public:
             startedTask->SetTaskId(taskId);
             ActorIdToProto(actorId, startedTask->MutableActorId());
             if (State_->OnTaskStarted(executerId, taskId, actorId)) {
-                STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Executing task",
-                    (node_id, SelfId().NodeId()),
-                    (tx_id, txId),
-                    (task_id, taskId),
-                    (compute_actor_id, actorId),
-                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_NODE, "Executing task",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()},
+                    {"txId", txId},
+                    {"taskId", taskId},
+                    {"computeActorId", actorId},
+                    {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
             } else {
-                STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Task finished in an instant",
-                    (node_id, SelfId().NodeId()),
-                    (tx_id, txId),
-                    (task_id, taskId),
-                    (compute_actor_id, actorId),
-                    (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_NODE, "Task finished in an instant",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()},
+                    {"txId", txId},
+                    {"taskId", taskId},
+                    {"computeActorId", actorId},
+                    {"traceId", ev->TraceId.GetHexTraceIdLowerCase()});
             }
         }
 

@@ -20,6 +20,8 @@
 
 #include <functional>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 
 namespace NKikimr::NKqp {
 
@@ -277,7 +279,12 @@ public:
             const auto errText = TStringBuilder()
                 << "Cannot resolve working dir."
                 << " path# " << JoinPath(dirPath);
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << errText);
+            YDB_LOG_DEBUG("Dump marker, actorId, txId, ctx, errText",
+                {"marker", "KQPSCHEME"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"errText", errText});
 
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
@@ -947,8 +954,12 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            (error_count, ev->Get()->Request.Get()->ErrorCount));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"errorCount", ev->Get()->Request.Get()->ErrorCount});
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
@@ -971,20 +982,33 @@ public:
             }
 
             TString error(builder);
-            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << error);
+            YDB_LOG_ERROR("",
+                {"marker", "KQPSCHEME"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"error", error});
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
 
         AFL_ENSURE(resp->ResultSet.size() <= 2);
 
         if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAlterAccess(*UserToken, resp)) {
-            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Access check failed");
+            YDB_LOG_ERROR("Access check failed",
+                {"marker", "KQPSCHEME"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()});
             return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, NYql::TIssue("Unauthorized"));
         }
 
         auto domainInfo = resp->ResultSet.front().DomainInfo;
         if (!domainInfo) {
-            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got empty domain info");
+            YDB_LOG_ERROR("Got empty domain info",
+                {"marker", "KQPSCHEME"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()});
             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssue("empty domain info"));
         }
 
@@ -1034,8 +1058,12 @@ public:
         const auto status = response.GetStatus();
         auto issuesProto = response.GetIssues();
 
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Handle TEvIndexBuilder::TEvCreateResponse",
-            (response, response.ShortUtf8DebugString()));
+        YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvCreateResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"response", response.ShortUtf8DebugString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (response.HasSchemeStatus() && response.GetSchemeStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) {
@@ -1053,8 +1081,12 @@ public:
         const auto status = response.GetStatus();
         auto issuesProto = response.GetIssues();
 
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Handle TEvForcedCompaction::TEvCreateResponse",
-            (response, response.ShortUtf8DebugString()));
+        YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvCreateResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"response", response.ShortUtf8DebugString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             DoSubscribe();
@@ -1116,8 +1148,12 @@ public:
 
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Handle TEvIndexBuilder::TEvGetResponse",
-            (record, record.ShortDebugString()));
+        YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvGetResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"record", record});
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             // Internal error: we made incorrect request to get status of index build operation
             NYql::TIssues responseIssues;
@@ -1141,8 +1177,12 @@ public:
 
     void Handle(NSchemeShard::TEvForcedCompaction::TEvGetResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Handle TEvForcedCompaction::TEvGetResponse",
-            (record, record.ShortDebugString()));
+        YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvGetResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"record", record});
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             // Internal error: we made incorrect request to get status of compaction operation
             NYql::TIssues responseIssues;
@@ -1226,9 +1266,13 @@ public:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got EvAbortExecution",
-            (status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
-            (issues, issues.ToOneLineString()));
+        YDB_LOG_DEBUG("Got EvAbortExecution",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"status", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
+            {"issues", issues.ToOneLineString()});
 
         if (AnalyzeActorId) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), issues);
@@ -1259,10 +1303,14 @@ private:
     }
 
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        STLOG(PRI_CRIT, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TKqpSchemeExecuter, unexpected event",
-            (event_type, eventType),
-            (state, state),
-            (self_id, SelfId()));
+        YDB_LOG_CRIT("TKqpSchemeExecuter, unexpected event",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"eventType", eventType},
+            {"state", state},
+            {"selfId", SelfId()});
 
         InternalError(TStringBuilder() << "Unexpected event at TKqpSchemeExecuter, state: " << state
             << ", event: " << eventType);
@@ -1282,7 +1330,12 @@ private:
     }
 
     void InternalError(const NYql::TIssues& issues) {
-        STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPSCHEME, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << issues.ToOneLineString());
+        YDB_LOG_ERROR("",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"#_issues.ToOneLineString", issues.ToOneLineString()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED,
             "Internal error while executing scheme operation.");
 

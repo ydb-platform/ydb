@@ -10,6 +10,8 @@
 
 #include <queue>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -116,7 +118,9 @@ private:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Failed to check script execution tables existence, got undelivered to scheme cache: " << ev->Get()->Reason);
+        YDB_LOG_WARN("Failed to check script execution tables existence, got undelivered to scheme",
+            {"logPrefix", LogPrefix()},
+            {"cache", ev->Get()->Reason});
         Retry();
     }
 
@@ -128,7 +132,10 @@ private:
 
         for (const auto& result : request.ResultSet) {
             if (result.Status != EStatus::Ok) {
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Failed to check script execution tables existence, scheme status: " << result.Status << ", path: " << JoinPath(result.Path));
+                YDB_LOG_WARN("Failed to check script execution tables existence, scheme",
+                    {"logPrefix", LogPrefix()},
+                    {"status", result.Status},
+                    {"path", JoinPath(result.Path)});
             }
 
             switch (result.Status) {
@@ -139,7 +146,9 @@ private:
                 case EStatus::RedirectLookupError:
                 case EStatus::RootUnknown:
                 case EStatus::PathErrorUnknown:
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Script execution table " << JoinPath(result.Path) << " not found");
+                    YDB_LOG_DEBUG("Script execution table not found",
+                        {"logPrefix", LogPrefix()},
+                        {"#_JoinPath(result.Path)", JoinPath(result.Path)});
                     return;
                 case EStatus::LookupError:
                 case EStatus::TableCreationNotComplete:
@@ -150,7 +159,8 @@ private:
             }
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start script execution background checks");
+        YDB_LOG_DEBUG("Start script execution background checks",
+            {"logPrefix", LogPrefix()});
         StartScriptExecutionBackgroundChecks();
     }
 
@@ -171,7 +181,8 @@ private:
         if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
             Schedule(*delay, new NActors::TEvents::TEvWakeup());
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Failed to check script execution tables existence, retry limit exceeded");
+            YDB_LOG_ERROR("Failed to check script execution tables existence, retry limit exceeded",
+                {"logPrefix", LogPrefix()});
         }
     }
 

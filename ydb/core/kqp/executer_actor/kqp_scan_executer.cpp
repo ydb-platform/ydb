@@ -24,6 +24,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -153,9 +155,13 @@ private:
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
-            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPSCAN, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Can not find default state storage group for database",
-                (database, Database),
-                (trace_id, TraceId()));
+            YDB_LOG_ERROR("Can not find default state storage group for database",
+                {"marker", "KQPSCAN"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"database", Database},
+                {"traceId", TraceId()});
         }
 
         ResourcesSnapshot = std::move(ev->Get()->Snapshot);
@@ -212,18 +218,26 @@ private:
 
         if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
-            STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, KQPSCAN, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Too many compute actors",
-                (total_tasks, TasksGraph.GetTasks().size()),
-                (trace_id, TraceId()));
+            YDB_LOG_NOTICE("Too many compute actors",
+                {"marker", "KQPSCAN"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"totalTasks", TasksGraph.GetTasks().size()},
+                {"traceId", TraceId()});
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
             return;
         }
 
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCAN, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TotalShardScans",
-            (count, nShardScans),
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG("TotalShardScans",
+            {"marker", "KQPSCAN"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"count", nShardScans},
+            {"traceId", TraceId()});
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         ExecuteScanTx();
@@ -267,9 +281,13 @@ private:
     {
         if (Planner) {
             if (!Planner->GetPendingComputeTasks().empty()) {
-                STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCAN, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "terminate pending resources request",
-                    (status, Ydb::StatusIds::StatusCode_Name(status)),
-                    (trace_id, TraceId()));
+                YDB_LOG_DEBUG("Terminate pending resources request",
+                    {"marker", "KQPSCAN"},
+                    {"actorId", SelfId()},
+                    {"txId", TxId},
+                    {"ctx", *GetUserRequestContext()},
+                    {"status", Ydb::StatusIds::StatusCode_Name(status)},
+                    {"traceId", TraceId()});
 
                 auto ev = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
                 ev->Record.SetTxId(TxId);

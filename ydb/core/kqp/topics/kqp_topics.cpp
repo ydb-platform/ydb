@@ -8,6 +8,8 @@
 
 #include <util/generic/set.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SESSION
+
 namespace NKikimr::NKqp::NTopic {
 
 static void UpdateSupportivePartition(TMaybe<ui32>& lhs, const TMaybe<ui32>& rhs)
@@ -524,10 +526,10 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                 TTopicPartition key{path, partition.GetPartitionId()};
 
                 if (auto p = Operations_.find(key); p != Operations_.end()) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, TStringBuilder() << "(topic, partition, tablet): "
-                          << "'" << key.Topic_ << "'"
-                          << ", " << partition.GetPartitionId()
-                          << ", " << partition.GetTabletId());
+                    YDB_LOG_DEBUG("(topic, partition, tablet)",
+                        {"#_key.Topic_", key.Topic_},
+                        {"#_partition.GetPartitionId", partition.GetPartitionId()},
+                        {"#_partition.GetTabletId", partition.GetTabletId()});
 
                     p->second.SetTabletId(partition.GetTabletId());
                 }

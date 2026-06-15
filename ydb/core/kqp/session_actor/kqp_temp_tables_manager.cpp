@@ -12,6 +12,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SESSION
+
 namespace NKikimr::NKqp {
 
 using namespace NThreading;
@@ -113,7 +115,8 @@ private:
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         if (navigate->ErrorCount != 0) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, TStringBuilder() << "Navigate errors: " << navigate->ErrorCount);
+            YDB_LOG_ERROR("Navigate",
+                {"errors", navigate->ErrorCount});
         }
 
         for (const auto& entry : navigate->ResultSet) {
@@ -129,7 +132,8 @@ private:
                     }
                 }
             } else {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, TStringBuilder() << "Navigate error. Entry: " << entry.ToString());
+                YDB_LOG_ERROR("Navigate error",
+                    {"entry", entry});
             }
         }
 

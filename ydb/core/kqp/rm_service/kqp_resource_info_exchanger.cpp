@@ -14,6 +14,8 @@
 
 #include <ydb/core/util/ulid.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
+
 namespace NKikimr {
 namespace NKqp {
 namespace NRm {
@@ -111,7 +113,8 @@ public:
     }
 
     void Bootstrap() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Start KqpResourceInfoExchangerActor at " << SelfId());
+        YDB_LOG_DEBUG("Start KqpResourceInfoExchangerActor",
+            {"selfId", SelfId()});
 
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
 
@@ -156,8 +159,9 @@ private:
         }
 
         if (BoardState.Subscriber) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Kill previous info exchanger subscriber for '" << BoardState.Path
-                << "' at " << BoardState.Subscriber << ", reason: tenant updated");
+            YDB_LOG_INFO("Kill previous info exchanger subscriber for at reason: tenant updated",
+                {"#_BoardState.Path", BoardState.Path},
+                {"#_BoardState.Subscriber", BoardState.Subscriber});
             Send(BoardState.Subscriber, new TEvents::TEvPoison);
         }
         BoardState.Subscriber = TActorId();
@@ -172,8 +176,9 @@ private:
 
     void CreatePublisher() {
         if (BoardState.Publisher) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Kill previous info exchanger publisher for '" << BoardState.Path
-                << "' at " << BoardState.Publisher << ", reason: tenant updated");
+            YDB_LOG_INFO("Kill previous info exchanger publisher for at reason: tenant updated",
+                {"#_BoardState.Path", BoardState.Path},
+                {"#_BoardState.Publisher", BoardState.Publisher});
             Send(BoardState.Publisher, new TEvents::TEvPoison);
         }
         BoardState.Publisher = TActorId();
@@ -362,7 +367,7 @@ private:
 private:
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Subscribed for config changes.");
+        YDB_LOG_DEBUG("Subscribed for config changes");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -371,7 +376,7 @@ private:
         NKikimrConfig::TTableServiceConfig tableServiceConfig;
 
         tableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Updated table service config.");
+        YDB_LOG_DEBUG("Updated table service config");
 
         const auto& infoExchangerSettings = tableServiceConfig.GetResourceManager().GetInfoExchangerSettings();
         const auto& publisherSettings = infoExchangerSettings.GetPublisherSettings();
@@ -400,11 +405,11 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Failed to deliver subscription request to config dispatcher.");
+                YDB_LOG_CRIT("Failed to deliver subscription request to config dispatcher");
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Failed to deliver config notification response.");
+                YDB_LOG_ERROR("Failed to deliver config notification response");
                 break;
 
             default:
@@ -419,7 +424,8 @@ private:
                 if (tenant.empty()) {
                     tenant = slot.GetAssignedTenant();
                 } else {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Multiple tenants are served by the node: " << ev->Get()->Record.ShortDebugString());
+                    YDB_LOG_ERROR("Multiple tenants are served by the",
+                        {"node", ev->Get()->Record});
                 }
             }
         }
@@ -428,7 +434,8 @@ private:
         BoardState.Path = MakeKqpInfoExchangerBoardPath(tenant);
 
         if (auto *domain = AppData()->DomainsInfo->GetDomain(); domain->Name != ExtractDomain(tenant)) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Can not find default state storage group for database " << BoardState.Tenant);
+            YDB_LOG_ERROR("Can not find default state storage group for database",
+                {"#_BoardState.Tenant", BoardState.Tenant});
             return;
         }
 
@@ -451,22 +458,25 @@ private:
         CreatePublisher();
         CreateSubscriber();
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Received tenant pool status for exchanger, serving tenant: " << BoardState.Tenant
-            << ", board: " << BoardState.Path);
+        YDB_LOG_INFO("Received tenant pool status for exchanger, serving",
+            {"tenant", BoardState.Tenant},
+            {"board", BoardState.Path});
     }
 
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
-                << ", board: " << BoardState.Path);
+            YDB_LOG_INFO("Subcriber is not available for info exchanger, serving",
+                {"tenant", BoardState.Tenant},
+                {"board", BoardState.Path});
             CreateSubscriber();
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Get board info from subscriber, serving tenant: " << BoardState.Tenant
-                << ", board: " << BoardState.Path
-                << ", with size: " << ev->Get()->InfoEntries.size());
+        YDB_LOG_DEBUG("Get board info from subscriber, serving with",
+            {"tenant", BoardState.Tenant},
+            {"board", BoardState.Path},
+            {"size", ev->Get()->InfoEntries.size()});
 
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->InfoEntries);
 
@@ -495,14 +505,16 @@ private:
 
     void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) {
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
-                << ", board: " << BoardState.Path);
+            YDB_LOG_INFO("Subcriber is not available for info exchanger, serving",
+                {"tenant", BoardState.Tenant},
+                {"board", BoardState.Path});
             CreateSubscriber();
             return;
         }
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Get board info update from subscriber, serving tenant: " << BoardState.Tenant
-                << ", board: " << BoardState.Path
-                << ", with size: " << ev->Get()->Updates.size());
+        YDB_LOG_DEBUG("Get board info update from subscriber, serving with",
+            {"tenant", BoardState.Tenant},
+            {"board", BoardState.Path},
+            {"size", ev->Get()->Updates.size()});
 
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->Updates);
 
@@ -527,7 +539,8 @@ private:
     void Handle(TEvKqpResourceInfoExchanger::TEvSendResources::TPtr& ev) {
         auto nodeId = ev->Sender.NodeId();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Get resources info from node: " << nodeId);
+        YDB_LOG_DEBUG("Get resources info",
+            {"fromNode", nodeId});
 
         const TVector<NKikimrKqp::TResourceExchangeNodeData> resourceInfos(
             ev->Get()->Record.GetSnapshot().begin(), ev->Get()->Record.GetSnapshot().end());

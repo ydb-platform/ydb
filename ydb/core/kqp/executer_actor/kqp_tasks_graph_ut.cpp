@@ -59,6 +59,8 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 namespace NKikimr::NKqp {
 
 using namespace NYql::NDq;
@@ -211,8 +213,8 @@ public:
         }
 
         Graph->BuildAllTasks({}, snapshot, nullptr);
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER,
-            "Tasks graph after BuildAllTasks:\n" << Graph->DumpToString());
+        YDB_LOG_DEBUG("Tasks graph after BuildAllTasks:\n",
+            {"#_Graph->DumpToString", Graph->DumpToString()});
 
         auto reply = MakeHolder<TEvBuildTasksDone>();
         for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {

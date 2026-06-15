@@ -10,6 +10,8 @@
 
 #include <ydb/library/table_creator/table_creator.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_WORKLOAD_SERVICE
+
 
 namespace NKikimr::NKqp::NWorkload {
 
@@ -179,7 +181,10 @@ public:
         TablePathsToCheck.clear();
         for (const auto& result : results) {
             const TString& fullPath = CanonizePath(result.Path);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Describe table " << fullPath << " status " << result.Status);
+            YDB_LOG_DEBUG("[WorkloadService] Describe table status",
+                {"logPrefix", LogPrefix()},
+                {"fullPath", fullPath},
+                {"#_result.Status", result.Status});
 
             std::pair<TString, TString> pathPair;
             if (TString error; !TrySplitPathByDb(fullPath, AppData()->TenantName, pathPair, error)) {
@@ -206,7 +211,9 @@ public:
                     TablesExists = false;
                     break;
                 case EStatus::Ok:
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Start cleanup for table " << fullPath);
+                    YDB_LOG_DEBUG("[WorkloadService] Start cleanup for table",
+                        {"logPrefix", LogPrefix()},
+                        {"fullPath", fullPath});
                     CleanupQueriesInFlight++;
                     Register(new TCleanupTablesRetryQuery(SelfId(), fullPath));
                     break;
@@ -219,7 +226,11 @@ public:
         Y_ABORT_UNLESS(CleanupQueriesInFlight);
         CleanupQueriesInFlight--;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Cleanup finished for table " << ev->Get()->Path << ", " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        YDB_LOG_DEBUG("[WorkloadService] Cleanup finished for table",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->Path", ev->Get()->Path},
+            {"status", ev->Get()->Status},
+            {"issues", ev->Get()->Issues.ToOneLineString()});
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             AddError(GroupIssues(ev->Get()->Issues, TStringBuilder() << "Cleanup table " << ev->Get()->Path << " failed, " << ev->Get()->Status));
@@ -238,7 +249,9 @@ public:
 
 protected:
     void StartRequest() override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Start check tables existence, number paths: " << TablePathsToCheck.size());
+        YDB_LOG_DEBUG("[WorkloadService] Start check tables existence, number",
+            {"logPrefix", LogPrefix()},
+            {"paths", TablePathsToCheck.size()});
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest(
             TablePathsToCheck
         ).Release()), IEventHandle::FlagTrackDelivery);
@@ -286,9 +299,12 @@ private:
         }
 
         if (Success) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Successfully finished");
+            YDB_LOG_DEBUG("[WorkloadService] Successfully finished",
+                {"logPrefix", LogPrefix()});
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed with issues: " << Issues.ToOneLineString());
+            YDB_LOG_ERROR("[WorkloadService] Failed with",
+                {"logPrefix", LogPrefix()},
+                {"issues", Issues.ToOneLineString()});
         }
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new TEvPrivate::TEvCleanupTablesFinished(Success, TablesExists, std::move(Issues)));
@@ -814,7 +830,9 @@ public:
 
         auto& param = params.AddParam("$session_ids").BeginList();
         for (const TString& sessionId : SessionIds) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Cleanup request with session id: " << sessionId);
+            YDB_LOG_TRACE("[WorkloadService] Cleanup request with session",
+                {"logPrefix", LogPrefix()},
+                {"id", sessionId});
             param.AddListItem().Utf8(sessionId);
         }
         param.EndList().Build();

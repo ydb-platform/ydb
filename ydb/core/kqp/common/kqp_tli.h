@@ -209,7 +209,8 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
         LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
+        {"#_ss.Str", ss.Str()});
 }
 
 }

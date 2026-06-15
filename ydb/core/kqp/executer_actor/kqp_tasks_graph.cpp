@@ -25,6 +25,8 @@
 
 #include <algorithm>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -435,13 +437,14 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 
 void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf::TUnboxedValue value) {
     if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::Data) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Cannot append parameter value to token, unexpected type: " << static_cast<int>(type->GetKind()));
+        YDB_LOG_WARN("Cannot append parameter value to token, unexpected",
+            {"type", static_cast<int>(type->GetKind())});
         return;
     }
 
     auto dataSlot = static_cast<NKikimr::NMiniKQL::TDataType*>(type)->GetDataSlot();
     if (!dataSlot) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Cannot append parameter value to token: no data slot");
+        YDB_LOG_WARN("Cannot append parameter value to token: no data slot");
         return;
     }
 
@@ -525,7 +528,8 @@ void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf
         }
 
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Cannot append parameter value to token, unexpected data slot: " << static_cast<int>(*dataSlot));
+            YDB_LOG_WARN("Cannot append parameter value to token, unexpected data",
+                {"slot", static_cast<int>(*dataSlot)});
     }
 }
 
@@ -539,7 +543,8 @@ TString ResolveFullTextQueryToken(const NKqpProto::TKqpFullTextSource::TKqpQuery
 
     auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
     if (!paramPtr) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Failed to get parameter value for token: " << token.GetParamName());
+        YDB_LOG_WARN("Failed to get parameter value",
+            {"token", token.GetParamName()});
         return fullToken;
     }
 
@@ -558,7 +563,8 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullText
 
     auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
     if (!paramPtr) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Failed to get parameter value for token: " << token.GetParamName());
+        YDB_LOG_WARN("Failed to get parameter value",
+            {"token", token.GetParamName()});
         return {baseToken};
     }
 
@@ -763,7 +769,8 @@ void TKqpTasksGraph::FillStages() {
             YQL_ENSURE(stageAdded);
 
             auto& stageInfo = GetStageInfo(stageId);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stageInfo.DebugString());
+            YDB_LOG_DEBUG("Dump #_stageInfo.DebugString",
+                {"#_stageInfo.DebugString", stageInfo.DebugString()});
 
             THashSet<TTableId> tables;
             for (const auto& op : stage.GetTableOps()) {
@@ -827,7 +834,10 @@ void TKqpTasksGraph::BuildResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, u
         taskOutput.Type = TTaskOutputType::Map;
         taskOutput.Channels.push_back(channel.Id);
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Create result channelId: " << channel.Id << " from task: " << originTaskId << " with index: " << outputIdx);
+        YDB_LOG_DEBUG("Create result with",
+            {"channelId", channel.Id},
+            {"fromTask", originTaskId},
+            {"index", outputIdx});
     }
 }
 
@@ -1148,10 +1158,14 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     }
 
     auto log = [&stageInfo, txId](ui64 channel, ui64 from, ui64 to, TStringBuf type, bool spilling) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,  "TxId: " << txId << ". "
-            << "Stage " << stageInfo.Id << " create channelId: " << channel
-            << " from task: " << from << " to task: " << to << " of type " << type
-            << (spilling ? " with spilling" : " without spilling"));
+        YDB_LOG_TRACE("Stage create of type",
+            {"txId", txId},
+            {"#_stageInfo.Id", stageInfo.Id},
+            {"channelId", channel},
+            {"fromTask", from},
+            {"toTask", to},
+            {"type", type},
+            {"#_num_0", (spilling ? " with spilling" : " without spilling")});
     };
 
     bool hasMap = false;
@@ -1164,12 +1178,13 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
             ui32 outputIdx = input.GetOutputIndex();
             columnShardHashV1Params = originStageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap || inputIndex == stage.InputsSize() - 1) { // this branch is only for logging purposes
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,  "Chose "
-                    << "[" << originStageInfo.Id.TxId << ":" << originStageInfo.Id.StageId << "]"
-                    << " outputIdx: " << outputIdx << " to propagate through inputs stages of the stage "
-                    << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << ": "
-                    << columnShardHashV1Params.KeyTypesToString();
-                );
+                YDB_LOG_DEBUG("Chose to propagate through inputs stages of the stage",
+                    {"#_originStageInfo.Id.TxId", originStageInfo.Id.TxId},
+                    {"#_originStageInfo.Id.StageId", originStageInfo.Id.StageId},
+                    {"outputIdx", outputIdx},
+                    {"#_stageInfo.Id.TxId", stageInfo.Id.TxId},
+                    {"#_stageInfo.Id.StageId", stageInfo.Id.StageId},
+                    {"#_columnShardHashV1Params.KeyTypesToString();", columnShardHashV1Params.KeyTypesToString();});
             }
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap) {
                 // We want to enforce sourceShardCount from map connection, cause it can be at most one map connection
@@ -1240,12 +1255,14 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                     case NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1: {
                         Y_ENSURE(enableShuffleElimination, "OptShuffleElimination wasn't turned on, but ColumnShardHashV1 detected!");
 
-                        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,  "Propagating columnhashv1 params to stage"
-                            << "[" << inputStageInfo.Id.TxId << ":" << inputStageInfo.Id.StageId << "]" << " which is input of stage "
-                            << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << ": "
-                            << columnShardHashV1Params.KeyTypesToString() << " "
-                            << "[" << JoinSeq(",", input.GetHashShuffle().GetKeyColumns()) << "]";
-                        );
+                        YDB_LOG_DEBUG("Propagating columnhashv1 params to stage which is input of stage",
+                            {"#_inputStageInfo.Id.TxId", inputStageInfo.Id.TxId},
+                            {"#_inputStageInfo.Id.StageId", inputStageInfo.Id.StageId},
+                            {"#_stageInfo.Id.TxId", stageInfo.Id.TxId},
+                            {"#_stageInfo.Id.StageId", stageInfo.Id.StageId},
+                            {"#_columnShardHashV1Params.KeyTypesToString", columnShardHashV1Params.KeyTypesToString()},
+                            {"#_num_0", JoinSeq(",", input.GetHashShuffle().GetKeyColumns())},
+                            {"#_num_1", "]";});
 
                         Y_ENSURE(
                             columnShardHashV1Params.SourceTableKeyColumnTypes->size() == input.GetHashShuffle().KeyColumnsSize(),
@@ -1404,11 +1421,11 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
                 }
                 case ColumnShardHashV1: {
                     const auto& columnShardHashV1Params = stageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,  "Filling columnshardhashv1 params for sending it to runtime "
-                        << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]"
-                        << ": " << columnShardHashV1Params.KeyTypesToString()
-                        << " for the columns: " << "[" << JoinSeq(",", output.KeyColumns) << "]"
-                    );
+                    YDB_LOG_DEBUG("Filling columnshardhashv1 params for sending it to runtime for the columns",
+                        {"#_stageInfo.Id.TxId", stageInfo.Id.TxId},
+                        {"#_stageInfo.Id.StageId", stageInfo.Id.StageId},
+                        {"#_columnShardHashV1Params.KeyTypesToString", columnShardHashV1Params.KeyTypesToString()},
+                        {"#_num_0", JoinSeq(",", output.KeyColumns)});
                     Y_ENSURE(columnShardHashV1Params.SourceShardCount != 0, "ShardCount for ColumnShardHashV1 Shuffle can't be equal to 0");
                     Y_ENSURE(columnShardHashV1Params.TaskIndexByHash != nullptr, "TaskIndexByHash for ColumnShardHashV1 wasn't propagated to this stage");
                     Y_ENSURE(columnShardHashV1Params.SourceTableKeyColumnTypes != nullptr, "SourceTableKeyColumnTypes for ColumnShardHashV1 wasn't propagated to this stage");
@@ -2900,7 +2917,8 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
         //     }
 
         //     sb << " ].";
-        //     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, sb);
+        //     YDB_LOG_DEBUG("Dump sb",
+                   {"sb", sb});
         // }
 
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {

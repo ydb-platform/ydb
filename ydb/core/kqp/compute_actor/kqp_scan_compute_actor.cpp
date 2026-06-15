@@ -283,8 +283,10 @@ void TKqpScanComputeActor::DoBootstrap() {
     NDq::TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem, NKikimrServices::KQP_TASKS_RUNNER)) {
         logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](const TString& message) {
-            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
-                << ", task: " << taskId << ": " << message);
+            YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "Dump txId, task, message",
+                {"txId", txId},
+                {"task", taskId},
+                {"message", message});
         };
     }
 

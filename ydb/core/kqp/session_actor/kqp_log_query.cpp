@@ -8,6 +8,8 @@
 #include <library/cpp/json/writer/json.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_REQUEST
+
 namespace NKikimr::NKqp {
 namespace {
 
@@ -153,7 +155,8 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.EndObject();
         json.EndObject();
 
-        LOG_LOG_S(*TlsActivationContext, (prio), NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << ss.Str());
+        YDB_LOG((prio), "[REQ_JSON]",
+            {"#_ss.Str", ss.Str()});
     }
 }
 

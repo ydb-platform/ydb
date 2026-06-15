@@ -141,10 +141,13 @@ TString ListSecrets(const TVector<TString>& paths) {
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvResolveSecret", LastRequestId) << "secrets=" << JoinSeq(',', ev->Get()->SecretNames));
+    YDB_LOG_DEBUG_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Dump #_num_0, secrets",
+        {"#_num_0", GetLogLabel("TEvResolveSecret", LastRequestId)},
+        {"secrets", JoinSeq(',', ev->Get()->SecretNames)});
 
     if (ev->Get()->SecretNames.empty()) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvResolveSecret", LastRequestId) << "empty secret names list");
+        YDB_LOG_WARN_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Empty secret names list",
+            {"#_num_0", GetLogLabel("TEvResolveSecret", LastRequestId)});
         static const auto emptyRequest = TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("empty secret names list") });
         ev->Get()->Promise.SetValue(emptyRequest);
         return;
@@ -156,7 +159,8 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
 }
 
 void TDescribeSchemaSecretsService::HandleIncomingRetryRequest(TEvResolveSecretRetry::TPtr& ev) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvResolveSecretRetry", ev->Get()->InitialRequestId));
+    YDB_LOG_DEBUG_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Dump #_num_0",
+        {"#_num_0", GetLogLabel("TEvResolveSecretRetry", ev->Get()->InitialRequestId)});
 
     const auto it = RequestsInFlight.find(ev->Get()->InitialRequestId);
     Y_ENSURE(it != RequestsInFlight.end(), "Such request requestId was not registered");
@@ -166,7 +170,8 @@ void TDescribeSchemaSecretsService::HandleIncomingRetryRequest(TEvResolveSecretR
 
 void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     const auto requestId = ev->Cookie;
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvNavigateKeySetResult", requestId));
+    YDB_LOG_DEBUG_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Dump #_num_0",
+        {"#_num_0", GetLogLabel("TEvNavigateKeySetResult", requestId)});
 
     auto respIt = ResolveInFlight.find(requestId);
     Y_ENSURE(respIt != ResolveInFlight.end(), "such requestId is not registered");
@@ -206,12 +211,14 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCa
 
 void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
     const auto requestId = ev->Cookie;
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvDescribeSchemeResult", requestId));
+    YDB_LOG_DEBUG_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Dump #_num_0",
+        {"#_num_0", GetLogLabel("TEvDescribeSchemeResult", requestId)});
 
     const auto respIt = ResolveInFlight.find(requestId);
     if (respIt == ResolveInFlight.end()) {        
         Y_ENSURE(respIt->second.Secrets.size() > 1, "This is possible only for batch requests");
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvDescribeSchemeResult", requestId) << "response handling was skipped due to previous errors");
+        YDB_LOG_NOTICE_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Response handling was skipped due to previous errors",
+            {"#_num_0", GetLogLabel("TEvDescribeSchemeResult", requestId)});
         // no need to fill response, since it has been filled on the first SchemeShard error
         return;
     }
@@ -219,7 +226,9 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
     const auto& rec = ev->Get()->GetRecord();
     const auto& secretName = CanonizePath(rec.GetPath());
     if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvDescribeSchemeResult", requestId) << "SchemeShard error: " << EStatus_Name(rec.GetStatus()));
+        YDB_LOG_NOTICE_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "SchemeShard",
+            {"#_num_0", GetLogLabel("TEvDescribeSchemeResult", requestId)},
+            {"error", EStatus_Name(rec.GetStatus())});
         const auto errorStatus =
             rec.GetStatus() == NKikimrScheme::EStatus::StatusNotAvailable
             ? Ydb::StatusIds::UNAVAILABLE
@@ -254,7 +263,7 @@ void TDescribeSchemaSecretsService::FillResponse(const ui64& requestId, const TE
 }
 
 void TDescribeSchemaSecretsService::Bootstrap() {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, "Bootstrap");
+    YDB_LOG_DEBUG_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Bootstrap");
     Become(&TDescribeSchemaSecretsService::StateWait);
 }
 
@@ -302,7 +311,8 @@ bool TDescribeSchemaSecretsService::LocalCacheHasActualObject(const TVersionedSe
 
 bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result) {
     if (result.ResultSet.empty()) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvNavigateKeySetResult", requestId) << "SchemeCache error: empty response");
+        YDB_LOG_NOTICE_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "SchemeCache error: empty response",
+            {"#_num_0", GetLogLabel("TEvNavigateKeySetResult", requestId)});
         FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secrets were not found") }));
         return true;
     }
@@ -339,8 +349,10 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
                     }
                 }
 
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvNavigateKeySetResult", requestId) << "SchemeCache error "
-                    << ToString(entry.Status) << " for " << ListSecrets(unresolvedPaths));
+                YDB_LOG_NOTICE_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "SchemeCache error",
+                    {"#_num_0", GetLogLabel("TEvNavigateKeySetResult", requestId)},
+                    {"#_ToString(entry.Status)", ToString(entry.Status)},
+                    {"#_ListSecrets(unresolvedPaths)", ListSecrets(unresolvedPaths)});
                 FillResponse(
                     requestId,
                     TEvDescribeSecretsResponse::TDescription(
@@ -358,8 +370,8 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
         }
 
         // no more retries
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvNavigateKeySetResult", requestId)
-            << "retry limit exceeded for secret `" + firstUnresolvedPath + "`");
+        YDB_LOG_NOTICE_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "",
+            {"#_num_0", GetLogLabel("TEvNavigateKeySetResult", requestId)});
         FillResponse(
             requestId,
             TEvDescribeSecretsResponse::TDescription(
@@ -388,8 +400,10 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
     }
 
     if (const auto delay = requestIt->second.RetryState->GetNextRetryDelay()) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("TEvNavigateKeySetResult", requestId) << "secret `" << unresolvedSecretPath
-            << "` not found. Request will be retried in: " << *delay);
+        YDB_LOG_NOTICE_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Secret ` ` not found. Request will be retried",
+            {"#_num_0", GetLogLabel("TEvNavigateKeySetResult", requestId)},
+            {"unresolvedSecretPath", unresolvedSecretPath},
+            {"in", *delay});
         this->Schedule(*delay, new TEvResolveSecretRetry(requestId));
         return true;
     }
@@ -408,7 +422,9 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
         const auto& secretPath = secret.first;
         auto it = VersionedSecrets.find(secret.first);
         if (it == VersionedSecrets.end()) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, GetLogLabel("FillResponseIfFinished", requestId) << "secret `" << secretPath << "` was dropped during request");
+            YDB_LOG_NOTICE_COMP(NKikimrServices::SCHEMA_SECRET_CACHE, "Secret ` ` was dropped during request",
+                {"#_num_0", GetLogLabel("FillResponseIfFinished", requestId)},
+                {"secretPath", secretPath});
             FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretPath + "` not found") }));
             return;
         }
@@ -632,18 +648,22 @@ private:
             .AuthToken(Token);
         auto actorSystem = TlsActivationContext->ActorSystem();
         auto selfId = SelfId();
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << Database << " at " << Endpoint << (Ssl ? " (Ssl)" : ""));
+        YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: DescribeTable",
+            {"selfId", selfId},
+            {"database", Database},
+            {"endpoint", Endpoint},
+            {"#_num_0", (Ssl ? " (Ssl)" : "")});
         Y_ABORT_UNLESS(AppData()->YdbDriver);
         NYdb::NTable::TTableClient tableClient(*AppData()->YdbDriver, settings);
         tableClient.GetSession().Subscribe([promise = Promise, actorSystem, selfId, backoff = Backoff, database = Database](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
             try {
                 auto& result = future.GetValue();
                 if (!result.IsSuccess()) {
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " GetSession failed"
-                            << ", status# " << result.GetStatus()
-                            << ", issues# " << result.GetIssues().ToOneLineString()
-                            << ", iteration# " << backoff->GetIteration());
+                    YDB_LOG_WARN_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: GetSession failed",
+                        {"selfId", selfId},
+                        {"status", result.GetStatus()},
+                        {"issues", result.GetIssues().ToOneLineString()},
+                        {"iteration", backoff->GetIteration()});
                     if (IsRetryableError(result) && backoff->HasMore()) {
                         actorSystem->Schedule(backoff->Next(),
                                 new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
@@ -660,10 +680,11 @@ private:
                           try {
                               const auto& result = future.GetValue();
                               if (!result.IsSuccess()) {
-                                  LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " DescribeTable failed"
-                                      << ", status# " << result.GetStatus()
-                                      << ", issues# " << result.GetIssues().ToOneLineString()
-                                      << ", iteration# " << backoff->GetIteration());
+                                  YDB_LOG_WARN_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: DescribeTable failed",
+                                      {"selfId", selfId},
+                                      {"status", result.GetStatus()},
+                                      {"issues", result.GetIssues().ToOneLineString()},
+                                      {"iteration", backoff->GetIteration()});
 
                                   if (IsRetryableError(result) && backoff->HasMore()) {
                                       actorSystem->Schedule(backoff->Next(),
@@ -674,27 +695,36 @@ private:
                                   }
                                   return;
                               }
-                              LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                                      "DescribeResourceId: SelfId=" << selfId << " Succeed");
+                              YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: Succeed",
+                                  {"selfId", selfId});
 
                               for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
-                                  LOG_TRACE_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                                          "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
+                                  YDB_LOG_TRACE_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId",
+                                      {"selfId", selfId},
+                                      {"key", k},
+                                      {"value", v});
                                   if (k == "cloud_id") {
-                                      LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
+                                      YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: Resolved",
+                                          {"selfId", selfId},
+                                          {"resourceId", v});
                                       promise.SetValue(TString{v});
                                       return;
                                   }
                               }
-                              LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
+                              YDB_LOG_WARN_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: cloud_id not found",
+                                  {"selfId", selfId});
                               promise.SetValue(TString(""));
                           } catch(const std::exception& ex) {
-                              LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+                              YDB_LOG_WARN_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: got",
+                                  {"selfId", selfId},
+                                  {"exception", ex.what()});
                               promise.SetException(std::current_exception());
                           }
                       });
               } catch(const std::exception& ex) {
-                LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+                YDB_LOG_WARN_CTX_COMP(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: got",
+                    {"selfId", selfId},
+                    {"exception", ex.what()});
                 promise.SetException(std::current_exception());
               }
         });

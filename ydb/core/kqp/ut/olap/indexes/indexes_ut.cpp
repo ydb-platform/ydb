@@ -392,8 +392,10 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         EXPECTED: [[4u;]]
     )";
     Y_UNIT_TEST(AllScalarColumnShardIndexesOnInsert) {
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         Variator::ToExecutor(Variator::SingleScript(scriptAllScalarIndexesOnInsert))
-            .Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
+            .Execute(settings);
     }
 
     TString scriptCategoryBloomIndexOnInsert = R"(

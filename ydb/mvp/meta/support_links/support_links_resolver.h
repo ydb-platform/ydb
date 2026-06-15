@@ -4,6 +4,7 @@
 #include "source.h"
 
 #include <ydb/mvp/meta/meta_settings.h>
+#include <ydb/library/actors/http/http.h>
 
 #include <util/generic/hash.h>
 #include <memory>

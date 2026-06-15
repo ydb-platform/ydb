@@ -249,4 +249,16 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSource) {
         );
     }
 
+    Y_UNIT_TEST(ResolveSkipsForeignIdentityParametersButKeepsAdditionalParameters) {
+        TGrafanaDashboardTestContext context;
+        context.SetDefaultClusterInfo();
+        context.EntityType = EEntityType::Host;
+        context.UrlParameters = MakeUrlParameters("cluster=ydb-global&node=ignored-node&custom_label=kept&host=storage-1.example.net");
+        auto result = context.Resolve();
+
+        AssertSingleResolvedLink(
+            result,
+            "https://grafana.example.net/d/cpu?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global&var-host=storage-1.example.net&var-custom_label=kept"
+        );
+    }
 }

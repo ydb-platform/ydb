@@ -40,6 +40,12 @@ inline void ApplyEntityIdentityParameters(TCgiParameters& queryParameters, const
     if (entityIdentity.Database && !entityIdentity.Database->empty()) {
         queryParameters.InsertUnescaped("database", *entityIdentity.Database);
     }
+    if (entityIdentity.Node && !entityIdentity.Node->empty()) {
+        queryParameters.InsertUnescaped("node", *entityIdentity.Node);
+    }
+    if (entityIdentity.Host && !entityIdentity.Host->empty()) {
+        queryParameters.InsertUnescaped("host", *entityIdentity.Host);
+    }
 }
 
 inline TCgiParameters BuildForwardedParameters(const TEntityIdentity& entityIdentity, const TCgiParameters& additionalRequestParams) {

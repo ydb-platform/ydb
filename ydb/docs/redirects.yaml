@@ -500,9 +500,9 @@ common:
   - from: /concepts/secondary_indexes.md
     to: /concepts/query_execution/secondary_indexes.md
   - from: /concepts/scan_query.md
-    to: /reference/ydb-cli/table-query-execute.md
+    to: /concepts/query_execution/scan_query.md
   - from: /reference/ydb-cli/commands/scan-query.md
-    to: /reference/ydb-cli/table-query-execute.md
+    to: /reference/ydb-cli/scan-query.md
   - from: /yql/reference/syntax/analyze.md
     to: /concepts/query_execution/optimizer.md
   - from: /concepts/federated_query/(.*)$

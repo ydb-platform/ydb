@@ -1740,21 +1740,15 @@ class TestViewer(object):
         result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',

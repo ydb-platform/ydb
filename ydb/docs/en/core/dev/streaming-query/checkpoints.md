@@ -9,11 +9,12 @@ A checkpoint contains:
 - [Offsets](../../concepts/datamodel/topic.md#consumer-offset) in input topics — positions up to which events were read and processed;
 - Aggregation state — intermediate results such as accumulators for [GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop).
 
-{{ ydb-short-name }} stores read offsets in its own checkpoints and does not rely on external [consumer](../../concepts/datamodel/topic.md#consumer) offsets. When a query is removed ([DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md)), offsets are removed with the checkpoint — external systems are not aware how far the query read in the topic.
+{{ ydb-short-name }} stores read offsets in its own checkpoints and does not rely on external [consumer](../../concepts/datamodel/topic.md#consumer) offsets. When a query is removed ([DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md)), offsets are removed with the checkpoint — external systems are not aware how far the query has read in the topic.
 
 ## Recovery after failure {#recovery}
 
 When processing fails (compute node restart, network interruption, timeout), the query restarts automatically and restores state from the latest checkpoint: it resumes reading from saved offsets and restores aggregation state.
+
 
 ```mermaid
 sequenceDiagram
@@ -36,13 +37,15 @@ sequenceDiagram
     Query->>Sink: sum = 20
 ```
 
+
 Events that arrived between the last checkpoint and the failure are processed again. That provides [at-least-once](guarantees.md#at-least-once) delivery — each event is processed at least once.
 
-Saving and selecting checkpoints for recovery is automatic. Old checkpoints are removed after a new one is saved successfully.
+Saving and selecting checkpoints for recovery are automatic. Old checkpoints are removed after a new one is saved successfully.
 
 ## Checkpoint deleted when recreating a query {#drop-checkpoint}
 
 When you delete a query ([DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md)), its checkpoint is deleted with it. Because offsets live only in the checkpoint, a new query ([CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md)) has no saved position and starts reading from the end of the topic. Events that arrived between deleting the old query and starting the new one are not read.
+
 
 ```mermaid
 sequenceDiagram
@@ -59,6 +62,7 @@ sequenceDiagram
     Topic->>Query v2: G (new)
 ```
 
+
 The same happens if data referenced by an offset in the checkpoint has already been removed from the topic due to [TTL](../../concepts/datamodel/topic.md#retention-time).
 
 For how this affects delivery guarantees, see [{#T}](guarantees.md#incomplete-windows-restart).
@@ -73,6 +77,7 @@ With checkpoints disabled there are no consistency guarantees across user or int
 
 {% endnote %}
 
+
 ```sql
 CREATE STREAMING QUERY query_without_checkpoints AS
 DO BEGIN
@@ -80,14 +85,15 @@ DO BEGIN
 PRAGMA ydb.DisableCheckpoints = "TRUE";
 
 INSERT INTO
-    ydb_source.output_topic
+    output_topic
 SELECT
     *
 FROM
-    ydb_source.input_topic;
+    input_topic;
 
 END DO
 ```
+
 
 ## See also
 

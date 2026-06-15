@@ -54,16 +54,6 @@ public:
     };
 
     template <typename T>
-    class THasShortDebugStringMethod {
-        // check the signature if it exists
-        template <typename X> static constexpr typename std::is_same<decltype(&X::ShortDebugString), TString(X::*)()const>::type check(int);
-        // in case when there is no such signature
-        template <typename>   static constexpr std::false_type check(...);
-    public:
-        static constexpr bool value = decltype(check<T>(0))::value;
-    };
-
-    template <typename T>
     class THasToStructuredMessageMethod {
         // check the signature if it exists
         template <typename X> static constexpr typename std::is_same<decltype(&X::ToStructuredMessage), TStructuredMessage(X::*)()const>::type check(int);
@@ -128,10 +118,6 @@ public:
             // By default, Out<T> can't write classes with ToString() method. (see TStateStorageInfo as example)
             // Because of this, OutputParam must be able to process various standard containers, variants, tuples, etc...
             s << value.ToString();
-        } else if constexpr (THasShortDebugStringMethod<Tx>::value) {
-            // By default, Out<T> can't write classes with ShortDebugString() method.
-            // Because of this, OutputParam must be able to process various standard containers, variants, tuples, etc...
-            s << value.ShortDebugString();
         } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
             // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
             // So, it is required to process optional data using this OutputParam<TValue> (instead of Out<T>).

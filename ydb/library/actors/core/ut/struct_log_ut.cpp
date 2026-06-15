@@ -261,39 +261,10 @@ Y_UNIT_TEST_SUITE(StructLog) {
         }
     };
 
-    struct TTestTypeShortDebugString {
-        TString ShortDebugString() const {
-            return "short_debug_string";
-        }
-    };
-
-    struct TTestTypeShortDebugStringToString {
-        TString ShortDebugString() const {
-            return "short_debug_string";
-        }
-
-        TString ToString() const {
-            return "some value";
-        }
-    };
-
-    struct TTestTypeShortDebugStringToStructuredMessage {
-        TString ShortDebugString() const {
-            return "short_debug_string";
-        }
-
-        TStructuredMessage ToStructuredMessage() const {
-            return YDB_LOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2});
-        }
-    };
-
     Y_UNIT_TEST(CreateMessageToMethods) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToString{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStructuredMessage{}}), "value.value1=1, value.value2=2");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStringToStructuredMessage{}}), "value.value1=1, value.value2=2");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeShortDebugString{}}), "value=short_debug_string");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeShortDebugStringToString{}}), "value=some value");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeShortDebugStringToStructuredMessage{}}), "value.value1=1, value.value2=2");
     }
 
     Y_UNIT_TEST(CreateMessageIterable) {
@@ -415,6 +386,15 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 TEST_MESSAGE(TLogStack::GetTop(), "v1=1, v2=2");
             }
 
+            TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+        }
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+    }
+
+    Y_UNIT_TEST(LogStackCreateContext) {
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+        {
+            YDB_LOG_CREATE_CONTEXT({"v1", 1});
             TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
         }
         TEST_MESSAGE(TLogStack::GetTop(), "");

@@ -6863,6 +6863,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "IsReadOnly",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -6897,6 +6902,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
@@ -9683,6 +9689,11 @@
                 "ColumnId": 3,
                 "ColumnName": "LocalPathId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LastTxId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -9691,7 +9702,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

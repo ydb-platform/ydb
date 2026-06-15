@@ -11,12 +11,6 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum class EWriteMode: ui32
-{
-    PBufferReplication,
-    DirectPBuffersFilling,
-};
-
 EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode);
 NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode);
 

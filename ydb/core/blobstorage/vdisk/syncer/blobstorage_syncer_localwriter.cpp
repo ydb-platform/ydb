@@ -124,22 +124,45 @@ namespace NKikimr {
             Squeeze(logoBlobs);
             Extracted.LogoBlobs =
                 std::make_shared<TFreshAppendixLogoBlobs>(std::move(logoBlobs), vctx->FreshIndex, true);
+            LogoBlobsSize = Extracted.LogoBlobs->SizeApproximation();
         }
         if (blocks) {
             Squeeze(blocks);
             // blocks are already sorted
             Extracted.Blocks =
                 std::make_shared<TFreshAppendixBlocks>(std::move(blocks), vctx->FreshIndex, true);
+            BlocksSize = Extracted.Blocks->SizeApproximation();
         }
         if (barriers) {
             Squeeze(barriers);
             Extracted.Barriers =
                 std::make_shared<TFreshAppendixBarriers>(std::move(barriers), vctx->FreshIndex, true);
+            BarriersSize = Extracted.Barriers->SizeApproximation();
         }
         Y_ABORT_UNLESS(Extracted.IsReady());
     }
 
+    void TEvLocalSyncData::CalculateSizesFromData() {
+        LogoBlobsSize = 0;
+        BlocksSize = 0;
+        BarriersSize = 0;
 
+        auto blobHandler = [&] (const NSyncLog::TLogoBlobRec*) {
+            LogoBlobsSize += sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob);
+        };
+        auto blockHandler = [&] (const NSyncLog::TBlockRec*) {
+            BlocksSize += sizeof(TKeyBlock) + sizeof(TMemRecBlock);
+        };
+        auto barrierHandler = [&] (const NSyncLog::TBarrierRec*) {
+            BarriersSize += sizeof(TKeyBarrier) + sizeof(TMemRecBarrier);
+        };
+        auto blockHandlerV2 = [&] (const NSyncLog::TBlockRecV2*) {
+            BlocksSize += sizeof(TKeyBlock) + sizeof(TMemRecBlock);
+        };
+
+        NSyncLog::TFragmentReader fragment(Data);
+        fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+    }
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // TLocalSyncDataExtractorActor -- actor extracts data from TEvLocalSyncData
     ///////////////////////////////////////////////////////////////////////////////////////////////

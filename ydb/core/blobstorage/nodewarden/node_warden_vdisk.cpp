@@ -324,6 +324,8 @@ namespace NKikimr::NStorage {
 
             vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
 
+            vdiskConfig->EnableFreshSyncDataThrottling = EnableFreshSyncDataThrottling;
+
             // debug options
             if (Cfg->TinySyncLog) {
                 vdiskConfig->SyncLogMaxDiskAmount = 1;

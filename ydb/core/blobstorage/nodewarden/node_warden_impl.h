@@ -286,6 +286,8 @@ namespace NKikimr::NStorage {
 
         TControlWrapper EnableDeepScrubbing;
 
+        TControlWrapper EnableFreshSyncDataThrottling;
+
     public:
         struct TGroupRecord;
 

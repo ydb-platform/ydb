@@ -255,6 +255,9 @@ namespace NKikimr {
             SendVDiskResponse(ctx, id, msg, cookie, vCtx, {});
         };
 
+        hull.RemoveLocalSyncDataInFlight(
+            OrigEv->Get()->LogoBlobsSize, OrigEv->Get()->BlocksSize, OrigEv->Get()->BarriersSize);
+
 #ifdef UNPACK_LOCALSYNCDATA
         hull.AddSyncDataCmd(ctx, std::move(OrigEv->Get()->Extracted), Seg, replySender);
 #else

@@ -8,6 +8,7 @@
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, stream)
@@ -610,6 +611,9 @@ public:
 
     void Bootstrap() {
         Become(&TDescribeResourceIdActor::StateFunc);
+        auto ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(TlsActivationContext->ActorSystem());
+        const auto& queryServiceConfig = AppData()->QueryServiceConfig;
+        Driver = MakeYdbDriver(ActorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
         Request();
         Promise.GetFuture().Subscribe([actorSystem = TlsActivationContext->ActorSystem(), selfId = SelfId()](const auto&) {
             actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
@@ -638,8 +642,7 @@ private:
         auto selfId = SelfId();
         LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
                 "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << Database << " at " << Endpoint << (Ssl ? " (Ssl)" : ""));
-        Y_ABORT_UNLESS(AppData()->YdbDriver);
-        NYdb::NTable::TTableClient tableClient(*AppData()->YdbDriver, settings);
+        NYdb::NTable::TTableClient tableClient(*Driver, settings);
         tableClient.GetSession().Subscribe([promise = Promise, actorSystem, selfId, backoff = Backoff, database = Database](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
             try {
                 auto& result = future.GetValue();
@@ -711,6 +714,7 @@ private:
     const TString Token;
     NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> Promise;
     std::shared_ptr<TBackoff> Backoff = std::make_shared<TBackoff>(10, TDuration::MilliSeconds(100), TDuration::Seconds(10));
+    std::unique_ptr<NYdb::TDriver> Driver;
 };
 
 IActor* CreateDescribeResourceIdActor(

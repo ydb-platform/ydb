@@ -148,7 +148,6 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
     }
 
     TOptimizationPriority BuildPriority(ui64 locked) const {
-        Cerr << "???" << Portions.size();
         return TOptimizationPriority::Normalize(Settings.Trigger.Portions, Settings.Overload.Portions, Portions.size() - locked);
     }
 

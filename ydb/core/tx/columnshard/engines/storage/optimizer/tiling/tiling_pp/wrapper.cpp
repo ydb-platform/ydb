@@ -207,10 +207,8 @@ protected:
 
         const auto task = Core.GetNextOptimizationTask(isLocked);
         if (!task) {
-            Cerr << "GET ZERO\n";
             return nullptr;
         }
-        Cerr << "GET priority:" << task->Priority.GetGeneralPriority() << " size: " << task->Portions.size() << "\n";
 
         ui64 taskBlobBytes = 0;
         for (const auto& p : task->Portions) {
@@ -243,7 +241,6 @@ protected:
     }
 
     void DoActualize(const TInstant currentInstant) override {
-        Cerr << "Actualise\n";
         Core.DoActualize(currentInstant);
     }
 

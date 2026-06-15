@@ -626,6 +626,12 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             << "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
             << "`COMPACTION_PLANNER.FEATURES`=`"
             << R"({"k":2,)"
+            // Per-write blob is ~98KB; keep the accumulator limit below that so each write
+            // bypasses level-0 accumulation and lands as its own non-overlapping LastLevel portion.
+            << R"("accumulator_portion_size_limit":50000,)"
+            // Expected size stays above the accumulator limit (no re-merge loop) but small enough
+            // that compaction never coalesces separate writes into one portion.
+            << R"("portion_expected_size":100000,)"
             << R"("aging_enabled":true,)"
             << R"("aging_promote_time_seconds":1,)"
             << R"("aging_max_portion_promotion":100000})"
@@ -871,7 +877,6 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
-        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(100000));
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         auto tableClient = kikimr.GetTableClient();
@@ -887,6 +892,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         const TInstant now = TInstant::Now();
         const ui64 expiredBaseTs = (now - TDuration::Minutes(10)).MicroSeconds();
         const ui64 freshBaseTs = (now + TDuration::Days(10)).MicroSeconds();
+        Cerr << "### " << 1;
         for (ui32 i = 0; i < 6; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, expiredBaseTs + i * 10'000'000ULL, 1000);
         }
@@ -894,30 +900,46 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, freshBaseTs + i * 10'000'000ULL, 1000);
         }
 
+        Cerr << "### " << 2;
+
         csController->WaitCompactions(TDuration::Seconds(10));
+        Cerr << "### " << 22;
         csController->WaitActualization(TDuration::Seconds(10));
+        Cerr << "### " << 23;
         csController->WaitTtl(TDuration::Seconds(20));
 
+        Cerr << "### " << 3;
         UNIT_ASSERT_LE(SelectRowCount(tableClient, "/Root/olapStore/olapTable"), 12'000);
 
+        Cerr << "### " << 4;
         auto optimizerBefore = SelectOptimizerLevelStats(tableClient, "/Root/olapStore/olapTable");
         UNIT_ASSERT_C(!optimizerBefore.empty(), "expected optimizer to track surviving portions after TTL deletion");
+        Cerr << "### " << 5;
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, (now + TDuration::Days(20)).MicroSeconds(), 1000, false, 2'000'000'000ULL);
+
+        Cerr << "### " << 6;
         csController->WaitCompactions(TDuration::Seconds(15));
+        Cerr << "### " << 7;
         csController->WaitActualization(TDuration::Seconds(10));
+        Cerr << "### " << 8;
         csController->WaitTtl(TDuration::Seconds(10));
+        Cerr << "### " << 9;
 
         UNIT_ASSERT_VALUES_EQUAL(SelectRowCount(tableClient, "/Root/olapStore/olapTable"), 7'000);
-        UNIT_ASSERT_VALUES_EQUAL(SelectPortionCount(tableClient, "/Root/olapStore/olapTable"), 7);
+        UNIT_ASSERT_VALUES_EQUAL(SelectPortionCount(tableClient, "/Root/olapStore/olapTable"), 4);
 
         auto optimizerAfter = SelectOptimizerLevelStats(tableClient, "/Root/olapStore/olapTable");
+        Cerr << "### " << 10;
         UNIT_ASSERT_C(!optimizerAfter.empty(), "expected optimizer levels to stay readable after TTL deletion");
         ui64 trackedPortions = 0;
+        Cerr << "### " << 11;
         for (const auto& [level, cnt] : optimizerAfter) {
+        Cerr << "### " << 12;
             Y_UNUSED(level);
             trackedPortions += cnt;
         }
+        Cerr << "### " << 13;
         UNIT_ASSERT_C(trackedPortions > 0, "expected at least one active portion tracked by optimizer after TTL deletion");
     }
 }

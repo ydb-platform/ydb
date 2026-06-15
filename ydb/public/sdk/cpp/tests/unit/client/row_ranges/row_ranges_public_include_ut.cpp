@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "row_ranges_fixtures.h"
+#include "row_ranges_test_helpers.h"
 
 #include <concepts>
 #include <initializer_list>
@@ -10,6 +10,8 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+
+using namespace NYdb;
 
 using namespace NYdb;
 
@@ -40,7 +42,7 @@ static_assert(std::same_as<
 
 Y_UNIT_TEST_SUITE(TRowRangePublicIncludeTest) {
     Y_UNIT_TEST(SmokeIterateAndGet) {
-        TRowRange range(MakeSingleInt32ResultSet(42));
+        TRowRange range(NRowRangesTest::MakeSingleInt32ResultSet(42));
         int32_t sum = 0;
         for (auto it = range.begin(); it != range.end(); ++it) {
             sum += static_cast<int32_t>(it->ColumnParser("v").GetInt32());

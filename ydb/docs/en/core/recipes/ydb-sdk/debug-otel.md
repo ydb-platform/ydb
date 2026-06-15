@@ -1,78 +1,80 @@
 # Tracing with OpenTelemetry
 
-{{ ydb-short-name }} SDK instrument Query Service operations with OpenTelemetry spans, providing distributed tracing from the application code to each gRPC call to YDB. The spans are exported via the standard OTLP protocol and are compatible with Jaeger, Grafana Tempo, Zipkin, and any other backend that supports OpenTelemetry.
+{{ ydb-short-name }} SDK instruments Query Service operations with [OpenTelemetry](https://opentelemetry.io/) spans, providing distributed tracing from application code to each gRPC call to YDB. Spans are exported via the standard OTLP protocol and are compatible with Jaeger, Grafana Tempo, Zipkin, and any other backend that supports OpenTelemetry.
 
-## Created Spans {#spans}
+## Created spans {#spans}
 
-Currently, spans are supported for Query Service operations. Support for topics and other services is planned for future versions of the SDK.
+Currently, spans are supported for Query Service operations. Support for topics and other services is planned for future SDK versions.
 
 The following spans are created:
 
 | Span | Type | Description |
-|---|---|---|
-| `ydb.RunWithRetry` | `Internal` | Covers the entire cycle of retries for a single operation |
-| `ydb.Try` | `Internal` | One span for each attempt, including the first one; child RPC spans are attached to it |
-| `ydb.CreateSession` | `Client` | Creating a session via gRPC `CreateSession` and `AttachStream` |
-| `ydb.ExecuteQuery` | `Client` | Executing a single YQL query |
-| `ydb.BeginTransaction` | `Client` | Explicitly starting a transaction |
-| `ydb.Commit` | `Client` | Committing a transaction |
-| `ydb.Rollback` | `Client` | Rolling back a transaction |
-| `ydb.Driver.Initialize` | `Internal` | Initial driver initialization: cluster discovery and authentication |
+| --- | --- | --- |
+| `ydb.RunWithRetry` | `Internal` | Covers the entire retry cycle for a single operation |
+| `ydb.Try` | `Internal` | One span per attempt, including the first; child RPC spans are attached to it |
+| `ydb.CreateSession` | `Client` | Session creation via gRPC `CreateSession` and `AttachStream` |
+| `ydb.ExecuteQuery` | `Client` | Execution of a single YQL query |
+| `ydb.BeginTransaction` | `Client` | Explicit call to start a transaction |
+| `ydb.Commit` | `Client` | Transaction commit |
+| `ydb.Rollback` | `Client` | Transaction rollback |
+| `ydb.Driver.Initialize` | `Internal` | Driver initial initialization: cluster discovery and authentication |
 
-A typical span tree for a transactional operation with a retry attempt looks like this:
+A typical span tree for a transactional operation with retry looks as follows:
+
 
 ```text
 ydb.RunWithRetry  (Internal)
-├─ ydb.Try        (Internal)   ← 1st attempt: ERROR
+├─ ydb.Try        (Internal)   ← 1-я попытка: ERROR
 │  ├─ ydb.ExecuteQuery (Client)
 │  ├─ ydb.ExecuteQuery (Client)
 │  └─ ydb.Commit       (Client) ← ERROR: Transaction Lock Invalidated
-└─ ydb.Try        (Internal)   ← 2nd attempt: SUCCESS, ydb.retry.backoff_ms=50
+└─ ydb.Try        (Internal)   ← 2-я попытка: SUCCESS, ydb.retry.backoff_ms=50
    ├─ ydb.ExecuteQuery (Client)
    ├─ ydb.ExecuteQuery (Client)
    └─ ydb.Commit       (Client)
 ```
 
-`ydb.RunWithRetry` is the parent span for the entire operation with retries. A separate child span `ydb.Try` is created for each attempt: the first `ydb.Try` corresponds to the first attempt, the second — to the first **retry** attempt, and so on. RPC spans for a specific attempt, such as `ydb.ExecuteQuery` and `ydb.Commit`, are created within the corresponding `ydb.Try`.
+
+`ydb.RunWithRetry` is the parent span for the entire retry operation. For each attempt, a separate child span `ydb.Try` is created: the first `ydb.Try` corresponds to the first attempt, the second to the first **retry** attempt, and so on. RPC spans of a specific attempt, for example `ydb.ExecuteQuery` and `ydb.Commit`, are created inside the corresponding `ydb.Try`.
 
 {% note info %}
 
-If an attempt ends with an error, its `ydb.Try` span ends with an error status. A new `ydb.Try` is created for a retry attempt; starting from the second attempt, it includes the `ydb.retry.backoff_ms` attribute — the wait time before this attempt in milliseconds. This wait is included in the duration of the next `ydb.Try` span: the span starts before the backoff pause, and then RPC calls for this attempt are executed after the pause.
+If an attempt ends with an error, its span `ydb.Try` ends with an error status. On retry, a new `ydb.Try` is created; starting from the second attempt, the attribute `ydb.retry.backoff_ms` is set on it — the wait time before this attempt in milliseconds. This wait is included in the duration of the next span `ydb.Try`: the span starts before the backoff pause, then after the pause the RPC calls of this attempt are executed.
 
 {% endnote %}
 
-## Span Attributes {#attributes}
+## Span attributes {#attributes}
 
-The SDK uses both standard OpenTelemetry semantic conventions and YDB-specific extensions.
+SDK uses both standard OpenTelemetry semantic convention attributes and YDB-specific extensions.
 
-### Standard OpenTelemetry Attributes
+### Standard OpenTelemetry attributes
 
-The following attributes belong to the stable [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/) and can be processed by tracing backends as standard ones:
+The following attributes belong to the stable [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/) and can be processed by tracing backends as standard:
 
 | Attribute | Where set | Description |
-|---|---|---|
+| --- | --- | --- |
 | `db.system.name` | RPC spans | Always `"ydb"` |
-| `db.namespace` | RPC spans | Path to the YDB database |
-| `server.address` | RPC spans | Main host from the connection string |
-| `server.port` | RPC spans | Main port from the connection string |
+| `db.namespace` | RPC spans | YDB database path |
+| `server.address` | RPC spans | Primary host from the connection string |
+| `server.port` | RPC spans | Primary port from the connection string |
 | `network.peer.address` | RPC spans | Actual gRPC endpoint used for the call |
 | `network.peer.port` | RPC spans | Actual port of the gRPC endpoint used for the call |
-| `error.type` | Spans that ended with an error | Error type. For example: `"transport_error"`, `"ydb_error"`, or the full name of the exception class |
-| `db.response.status_code` | RPC spans with `YdbException` | Textual name of the YDB status from the error, for example `ABORTED`, `UNAVAILABLE`, `OVERLOADED` |
+| `error.type` | Spans that ended with an error | Error type. For example: `"transport_error"`, `"ydb_error"`, or the full exception class name |
+| `db.response.status_code` | RPC spans on `YdbException` | Text name of the YDB status from the error, for example `ABORTED`, `UNAVAILABLE`, `OVERLOADED` |
 
-### YDB-Specific Attributes
+### YDB-specific attributes
 
 The following attributes are YDB extensions on top of the standard semantic conventions:
 
 | Attribute | Where set | Description |
-|---|---|---|
+| --- | --- | --- |
 | `ydb.node.id` | RPC spans | ID of the YDB node that processed the request |
-| `ydb.node.dc` | RPC spans | Data center of the YDB node that processed the request |
-| `ydb.retry.backoff_ms` | `ydb.Try` spans starting from the second attempt | Wait time before the retry attempt in milliseconds |
+| `ydb.node.dc` | RPC spans | Datacenter of the YDB node that processed the request |
+| `ydb.retry.backoff_ms` | Spans `ydb.Try`, starting from the second attempt | Wait time before retry in milliseconds |
 
 ## W3C trace context {#w3c}
 
-The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC call. This allows the YDB server to trace internal operations within the same trace without additional configuration. More about server-side tracing is in the section [Passing an external trace-id to {{ ydb-short-name }}](../../reference/observability/tracing/external-traces.md).
+SDK automatically propagates the W3C `traceparent` header in every outgoing gRPC call. This allows the YDB server to trace internal operations within the same trace — without additional configuration. For more details on server-side tracing, see the section [Passing an external trace-id to {{ ydb-short-name }}](../../reference/observability/tracing/external-traces.md).
 
 ## Connecting to the SDK {#integration}
 
@@ -82,11 +84,14 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
 
   Install the OpenTelemetry adapter for the {{ ydb-short-name }} Go SDK:
 
+
   ```bash
   go get github.com/ydb-platform/ydb-go-sdk-otel
   ```
 
+
   Configure `TracerProvider` and pass the adapter to `ydb.Open`:
+
 
   ```go
   package main
@@ -142,12 +147,15 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
 
   Install additional dependencies `opentelemetry` and the OTLP exporter:
 
+
   ```bash
   pip install ydb[opentelemetry]
   pip install opentelemetry-exporter-otlp-proto-grpc
   ```
 
-  Call `enable_tracing()` after setting up the global `TracerProvider`:
+
+  Call `enable_tracing()` after configuring the global `TracerProvider`:
+
 
   ```python
   from opentelemetry import trace
@@ -180,11 +188,14 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
 
   Add the NuGet package:
 
+
   ```bash
   dotnet add package Ydb.Sdk.OpenTelemetry
   ```
 
-  Register {{ ydb-short-name }} instrumentation when setting up OpenTelemetry in your service:
+
+  Register the {{ ydb-short-name }} instrumentation when configuring OpenTelemetry in your service:
+
 
   ```csharp
   services.AddOpenTelemetry()
@@ -196,6 +207,7 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
 - Java
 
   Add YDB SDK and OpenTelemetry dependencies (example for Maven):
+
 
   ```xml
   <dependency>
@@ -215,7 +227,9 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   </dependency>
   ```
 
-  Create an instance of the OpenTelemetry SDK and pass it to the transport via `OpenTelemetryTracer`:
+
+  Create an OpenTelemetry SDK instance and pass it to the transport via `OpenTelemetryTracer`:
+
 
   ```java
   import io.opentelemetry.api.OpenTelemetry;
@@ -256,7 +270,9 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   }
   ```
 
-  When using the JDBC driver, it is enough to add the `enableOpenTelemetryTracer=true` parameter to the connection string — the driver will automatically pick up the global OTel provider:
+
+  When using the JDBC driver, simply add the `enableOpenTelemetryTracer=true` parameter to the connection string — the driver will automatically pick up the global OTel provider:
+
 
   ```text
   jdbc:ydb://<host>:<port>/<database>?enableOpenTelemetryTracer=true
@@ -265,6 +281,7 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
 - C++
 
   Include the OpenTelemetry tracing header from the {{ ydb-short-name }} C++ SDK and add a dependency on the OTel C++ SDK:
+
 
   ```cpp
   #include <ydb-cpp-sdk/client/driver/driver.h>
@@ -282,7 +299,7 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   namespace resource = opentelemetry::sdk::resource;
   using namespace NYdb;
 
-  // 1. Initialize the OTel tracing provider
+  // 1. Initialize the OTel trace provider
   otlp::OtlpHttpExporterOptions opts;
   opts.url = "http://localhost:4318/v1/traces";
   auto exporter  = otlp::OtlpHttpExporterFactory::Create(opts);
@@ -292,10 +309,10 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
       std::move(processor), res);
   opentelemetry::trace::Provider::SetTracerProvider(otelProvider);
 
-  // 2. Wrap in the YDB tracing provider
+  // 2. Wrap in the YDB trace provider
   auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(otelProvider);
 
-  // 3. Create a YDB driver with tracing enabled
+  // 3. Create the YDB driver with tracing enabled
   auto driverConfig = TDriverConfig()
       .SetEndpoint("localhost:2136")
       .SetDatabase("/local")
@@ -306,13 +323,16 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
 
 - JavaScript
 
-  Install `@ydbjs/telemetry` along with the OpenTelemetry Node SDK and the OTLP exporter:
+  Install `@ydbjs/telemetry` together with the OpenTelemetry Node SDK and OTLP exporter:
+
 
   ```bash
   npm install @ydbjs/telemetry @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
   ```
 
+
   Initialize `NodeSDK` before creating the driver and call `register()` from `@ydbjs/telemetry`:
+
 
   ```js
   import { NodeSDK } from '@opentelemetry/sdk-node'
@@ -327,7 +347,8 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   })
   sdk.start()
 
-  // This must be called BEFORE creating the Driver — the W3C trace context propagation middleware is set up once during driver construction.
+  // Must be called BEFORE creating the Driver — W3C propagation middleware
+  // trace context is set once during driver construction.
   const instrumentation = register()
 
   using driver = new Driver(process.env.YDB_CONNECTION_STRING)
@@ -339,7 +360,9 @@ The SDK automatically passes the W3C `traceparent` header in each outgoing gRPC 
   await sdk.shutdown()
   ```
 
-  Alternatively, using `--import` for autoloading before the application starts:
+
+  Alternatively, via `--import` for auto-loading before the application starts:
+
 
   ```bash
   node --import @opentelemetry/sdk-node/register --import @ydbjs/telemetry/register your-app.js

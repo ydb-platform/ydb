@@ -53,6 +53,8 @@ TBuffer BuildKafkaRecordBatchData(
 
     TKafkaRecordBatch kafkaBatch;
     kafkaBatch.Magic = 2;
+    kafkaBatch.ProducerId = 0;
+    kafkaBatch.ProducerEpoch = 0;
     kafkaBatch.BaseSequence = static_cast<TKafkaRecordBatch::BaseSequenceMeta::Type>(baseSequence);
 
     const i64 baseTimestamp = static_cast<i64>(createdAt.front().MilliSeconds());

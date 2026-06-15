@@ -53,8 +53,8 @@ struct TUnversionedValue
 
     //! Assuming #IsStringLikeType(Type), return string data as a TStringBuf.
     TStringBuf AsStringBuf() const;
-    //! Assuming #IsStringLikeType(Type), return string data as a TString.
-    TString AsString() const;
+    //! Assuming #IsStringLikeType(Type), return string data as a std::string.
+    std::string AsString() const;
 };
 
 static_assert(

@@ -15,7 +15,7 @@ Not supported:
 
 ## Example
 
-The query reads events from a topic and writes them to `output_table`. `Ts` is cast from string to `Timestamp`, and [Unwrap](../../yql/reference/builtins/basic#unwrap) removes optionality.
+The query reads events from a topic and writes them to `output_table`. Field `Ts` is converted from string to `Timestamp` using `CAST`, and [Unwrap](...) removes optionality., and [Unwrap](../../yql/reference/builtins/basic#unwrap) removes optionality.
 
 ```sql
 CREATE STREAMING QUERY query_with_table_write AS

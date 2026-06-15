@@ -391,7 +391,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
 
     ActorSystem1->Start();
     Monitoring->Start(ActorSystem1.get());
-    YDB_LOG_CTX_NOTICE(*ActorSystem1, "Actor system started");
+    YDB_LOG_NOTICE_CTX(*ActorSystem1, "Actor system started");
 
 }
 
@@ -425,8 +425,8 @@ class TDbInitWaitActor : public TActorBootstrapped<TDbInitWaitActor> {
     }
 
     void Finish(const TActorContext &ctx, bool ok) {
-        YDB_LOG_CTX_NOTICE(ctx, "TDBInitWaitActor finish",
-            {"db_status", (ok ? "DB IS READY" : "DB INIT TIMEOUT")});
+        YDB_LOG_NOTICE_CTX(ctx, "TDBInitWaitActor finish",
+            {"dbStatus", (ok ? "DB IS READY" : "DB INIT TIMEOUT")});
         Conf->DbInitEvent.Signal();
         Die(ctx);
     }

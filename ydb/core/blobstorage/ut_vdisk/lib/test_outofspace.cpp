@@ -30,7 +30,7 @@ protected:
         ret = SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSet, hndl));
         UNIT_ASSERT_VALUES_EQUAL(ret.Id, 0);
         UNIT_ASSERT_EQUAL(ret.Status, NKikimrProto::OUT_OF_SPACE);
-        YDB_LOG_CTX_NOTICE(ctx, " Data is loaded until ORANGE ZONE");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded until ORANGE ZONE");
     }
 
 public:
@@ -67,7 +67,7 @@ protected:
         ret = SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSet, hndl));
         UNIT_ASSERT_VALUES_EQUAL(ret.Id, 0);
         UNIT_ASSERT_VALUES_EQUAL(ret.Status, 0x28733642);
-        YDB_LOG_CTX_NOTICE(ctx, " Data is loaded until YELLOW ZONE");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded until YELLOW ZONE");
     }
 
 public:

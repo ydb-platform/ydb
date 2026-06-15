@@ -96,7 +96,7 @@ public:
                 VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
         TLogoBlobID id{LogoBlobIDFromLogoBlobID(record.GetBlobID())};
 
-        YDB_LOG_CTX_DEBUG(ctx, "TEvVPut# ",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump event",
             {"event", ev->Get()->ToString().data()});
 
         auto sendResponse = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
@@ -137,7 +137,7 @@ public:
                 "record.VDiskId# %s VDiskId# %s",
                 VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
 
-        YDB_LOG_CTX_DEBUG(ctx, "TEvVMultiPut# ",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump event",
             {"event", ev->Get()->ToString().data()});
 
         ui64 cookie = record.GetCookie();
@@ -147,7 +147,7 @@ public:
                 &record, nullptr, nullptr, nullptr, 0, 0, TString());
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            YDB_LOG_CTX_DEBUG(ctx, "TEvVMultiPut -> ",
+            YDB_LOG_DEBUG_CTX(ctx, "TEvVMultiPut ->",
                 {"event", ev->Get()->ToString().data()},
                 {"response", response->ToString().data()});
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
@@ -187,7 +187,7 @@ public:
 
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            YDB_LOG_CTX_DEBUG(ctx, "TEvVGet# -> ",
+            YDB_LOG_DEBUG_CTX(ctx, "->",
                 {"event", ev->Get()->ToString().data()},
                 {"response", response->ToString().data()});
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
@@ -329,7 +329,7 @@ public:
         }
 
         // send final response
-        YDB_LOG_CTX_DEBUG(ctx, "TEvVGet# -> ",
+        YDB_LOG_DEBUG_CTX(ctx, "->",
             {"event", ev->Get()->ToString().data()},
             {"response", response->ToString().data()});
         FinalizeAndSend(std::move(response), ctx, ev->Sender);

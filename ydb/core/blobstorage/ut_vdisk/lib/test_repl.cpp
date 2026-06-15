@@ -83,7 +83,7 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             it->Next();
         }
 
-        YDB_LOG_CTX_INFO(ctx, "TReadUntilSuccessActor bootsrtap",
+        YDB_LOG_INFO_CTX(ctx, "TReadUntilSuccessActor bootsrtap",
             {"numBlobs", numBlobs},
             {"blobsSize", blobsSize});
 
@@ -95,7 +95,7 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         --Counter;
 
-        YDB_LOG_CTX_DEBUG(ctx, "received reply",
+        YDB_LOG_DEBUG_CTX(ctx, "Received reply",
             {"event", ev->Get()->ToString()});
 
         ui32 ok = 0, notOk = 0, dataCorrupt = 0, miss = 0, noData = 0;
@@ -129,7 +129,7 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             }
         }
 
-        YDB_LOG_CTX_INFO(ctx, "Handle TEvBlobStorage::TEvVGetResult",
+        YDB_LOG_INFO_CTX(ctx, "Handle TEvBlobStorage::TEvVGetResult",
             {"ok", ok},
             {"notOk", notOk},
             {"noData", noData},
@@ -301,11 +301,11 @@ SYNC_TEST_WITH_DATASET_BEGIN(TTestReplDataWriteAndSync)
 virtual void Scenario(const TActorContext &ctx) {
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, DataSet));
-    YDB_LOG_CTX_NOTICE(ctx, " Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 }
 SYNC_TEST_WITH_DATASET_END(TTestReplDataWriteAndSync)
 
@@ -314,18 +314,18 @@ SYNC_TEST_WITH_DATASET_BEGIN(TTestReplDataWriteAndSyncMultipart)
 virtual void Scenario(const TActorContext &ctx) {
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, DataSet));
-    YDB_LOG_CTX_NOTICE(ctx, " Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // duplicate data to handoff
     for (ui8 part = 1; part <= 3; ++part) {
         SyncRunner->Run(ctx, ManyPutsToOneVDisk(SyncRunner->NotifyID(), Conf->VDisks->Get(3), DataSet, part,
                 NKikimrBlobStorage::EPutHandleClass::TabletLog));
     }
-    YDB_LOG_CTX_NOTICE(ctx, " Data is duplicated");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is duplicated");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 }
 SYNC_TEST_WITH_DATASET_END(TTestReplDataWriteAndSyncMultipart)
 
@@ -337,11 +337,11 @@ SYNC_TEST_BEGIN(TTestReplProxyData, TSyncTestWithSmallCommonDataset)
 virtual void Scenario(const TActorContext &ctx) {
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &DataSet));
-    YDB_LOG_CTX_NOTICE(ctx, " Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 
     TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
     for (ui32 i = 1; i < 7; i++) {
@@ -353,7 +353,7 @@ virtual void Scenario(const TActorContext &ctx) {
         }
 
         SyncRunner->Run(ctx, CreateVDiskReplProxyReader(Conf, SyncRunner->NotifyID(), instance, expSetPtr, &DataSet));
-        YDB_LOG_CTX_NOTICE(ctx, " REPL PROXY READER done");
+        YDB_LOG_NOTICE_CTX(ctx, "REPL PROXY READER done");
     }
 }
 SYNC_TEST_END(TTestReplProxyData, TSyncTestWithSmallCommonDataset)
@@ -376,21 +376,21 @@ virtual void Scenario(const TActorContext &ctx) {
                                                           channel, collect, collectGen, collectStep, keep, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    YDB_LOG_CTX_NOTICE(ctx, " GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
 
     TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
     for (ui32 i = 1; i < 7; i++) {
         TAutoPtr<TExpectedSet> expSetPtr(new TExpectedSet()); // empty, it's ok
         SyncRunner->Run(ctx, CreateVDiskReplProxyReader(Conf, SyncRunner->NotifyID(), instance, expSetPtr, &DataSet));
-        YDB_LOG_CTX_NOTICE(ctx, " REPL PROXY READER done");
+        YDB_LOG_NOTICE_CTX(ctx, "REPL PROXY READER done");
     }
 }
 SYNC_TEST_END(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset)
@@ -412,23 +412,23 @@ virtual void Scenario(const TActorContext &ctx) {
                                                           nullptr, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    YDB_LOG_CTX_NOTICE(ctx, " GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    YDB_LOG_CTX_NOTICE(ctx, " COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 }
 SYNC_TEST_END(TTestCollectAllSimpleDataset, TSyncTestBase)
 

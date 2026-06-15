@@ -29,7 +29,7 @@ protected:
         TSyncRunner::TReturnValue ret;
         ret = SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSet,
                               PDiskPutStatusHandlerDefault, 100));
-        YDB_LOG_CTX_NOTICE(ctx, " Data is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
     }
 
 public:

@@ -51,7 +51,7 @@ void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings,
     TChaoticManyPutsTest w(settings.Parallel, settings.MsgNum, settings.MsgSize, cls1, settings.WorkingTime,
         settings.RequestTimeout);
     bool success1 = Conf.Run<TChaoticManyPutsTest>(&w, testTimeout);
-    YDB_LOG_CTX_NOTICE(*Conf.ActorSystem1, "Chaotic write done");
+    YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "Chaotic write done");
     UNIT_ASSERT(success1);
     Conf.Shutdown();
 
@@ -60,7 +60,7 @@ void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings,
     TChaoticManyPutsTest x(settings.Parallel, 1, settings.MsgSize, cls2, settings.WorkingTime,
         settings.RequestTimeout);
     bool success2 = Conf.Run<TChaoticManyPutsTest>(&x, testTimeout);
-    YDB_LOG_CTX_NOTICE(*Conf.ActorSystem1, "System has been restarted");
+    YDB_LOG_NOTICE_CTX(*Conf.ActorSystem1, "System has been restarted");
     UNIT_ASSERT(success2);
     Conf.Shutdown();
 }

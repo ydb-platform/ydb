@@ -40,7 +40,7 @@ private:
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::ERROR, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
-        YDB_LOG_CTX_NOTICE(ctx, " TEvVPut failed successfully");
+        YDB_LOG_NOTICE_CTX(ctx, "TEvVPut failed successfully");
         AtomicIncrement(Conf->SuccessCount);
         Conf->SignalDoneEvent();
         Die(ctx);

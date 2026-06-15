@@ -10,7 +10,10 @@ For debugging and inspection only. For production, create streaming queries with
 
 {% note info %}
 
-In the examples, `ydb_source` is a pre-created [external data source](../../concepts/datamodel/external_data_source.md), and `topic_name` / `input_topic` are topics available through it.
+In the examples:
+
+- `ext_source` — a pre-created [external data source](../../concepts/datamodel/external_data_source.md);
+- `input_topic` — a local or external topic (see [local and external topics in streaming queries](../../dev/streaming-query/local-and-external-topics.md)).
 
 {% endnote %}
 
@@ -22,7 +25,7 @@ Simplest option — read messages in `raw` format without parsing:
 SELECT
     Data
 FROM
-    ydb_source.topic_name
+    input_topic -- or external topic ext_source.input_topic
 WITH (
     FORMAT = raw,
     SCHEMA = (
@@ -43,7 +46,7 @@ If the topic stores JSON, parse fields directly:
 SELECT
     *
 FROM
-    ydb_source.topic_name
+    input_topic -- or external topic ext_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (

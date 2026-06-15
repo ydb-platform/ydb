@@ -114,13 +114,14 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
     Y_ENSURE(!stageIds.empty());
     const auto maybeFinalStage = finalizedStages.at(stageIds.back());
     const auto finalStage = GetFinalStage(maybeFinalStage);
-    const auto finalNarrowedStage = BuildFinalNarrowStage(finalStage);
+    const bool needFinalNarrowing = NeedFinalNarrowing();
+    const auto finalResultStage = needFinalNarrowing ? BuildFinalNarrowStage(finalStage) : finalStage;
     if (finalStage.Get() != maybeFinalStage.Get()) {
-        phyStages.push_back(finalNarrowedStage);
-    } else {
+        phyStages.push_back(finalResultStage);
+    } else if (needFinalNarrowing) {
         Y_ENSURE(!phyStages.empty());
         Y_ENSURE(phyStages.back().Get() == finalStage.Get());
-        phyStages.back() = finalNarrowedStage;
+        phyStages.back() = finalResultStage;
     }
 
     return phyStages;
@@ -177,6 +178,21 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(TExprNode::TPtr node) {
 
 bool TPhysicalQueryBuilder::IsSingleTaskConnection(const TExprBase& input) const {
     return input.Maybe<TDqCnUnionAll>() || input.Maybe<TDqCnMerge>();
+}
+
+bool TPhysicalQueryBuilder::NeedFinalNarrowing() {
+    const auto outputIUs = Root.GetInput()->GetOutputIUs();
+    if (outputIUs.size() != Root.ColumnOrder.size()) {
+        return true;
+    }
+
+    for (ui32 i = 0; i < Root.ColumnOrder.size(); ++i) {
+        if (outputIUs[i] != TInfoUnit(Root.ColumnOrder[i])) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stage) const {

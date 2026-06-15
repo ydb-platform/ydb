@@ -10,6 +10,7 @@ from security_test_helpers import (
     tablet_devui_new_action_paths,
     tablet_devui_sid_matrix,
 )
+from ydb.tests.library.clients.kikimr_http_client import DEFAULT_HIVE_ID
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -216,29 +217,10 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
     )
 
 
-def _hive_tablet_id_from_viewer(cluster):
-    node = cluster.nodes[1]
-    response = requests.get(
-        f'https://{node.host}:{node.mon_port}/viewer/json/describe',
-        params={
-            'database': '/Root',
-            'path': '/Root',
-            'enums': 'true',
-        },
-        headers={'Authorization': 'root@builtin'},
-        verify=False,
-        timeout=10,
-    )
-    response.raise_for_status()
-    path_description = response.json()['PathDescription']
-    processing_params = path_description.get('DomainDescription', {}).get('ProcessingParams', {})
-    return int(processing_params['Hive'])
-
-
 @pytest.fixture(scope='module')
 def ydb_cluster_with_enforce_user_token_and_hive_tablet(ydb_cluster_with_enforce_user_token):
     cluster = ydb_cluster_with_enforce_user_token
-    cluster.hive_tablet_id = _hive_tablet_id_from_viewer(cluster)
+    cluster.hive_tablet_id = DEFAULT_HIVE_ID
     yield cluster
 
 
@@ -247,7 +229,7 @@ def ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet(
     ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
 ):
     cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-    cluster.hive_tablet_id = _hive_tablet_id_from_viewer(cluster)
+    cluster.hive_tablet_id = DEFAULT_HIVE_ID
     yield cluster
 
 

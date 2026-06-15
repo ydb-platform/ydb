@@ -474,12 +474,8 @@ TProgram::TProgram(
 TProgram::~TProgram() {
     try {
         CloseLastSession().GetValueSync();
-        // stop all non complete execution before deleting TExprCtx
-        with_lock (DataProvidersLock_) {
-            DataProviders_.clear();
-        }
     } catch (...) {
-        Cerr << CurrentExceptionMessage() << Endl;
+        Cerr << "CloseLastSession failed when destroying TProgram: " << CurrentExceptionMessage() << Endl;
     }
 }
 
@@ -2038,10 +2034,20 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
         }
     }
 
-    return NThreading::WaitExceptionOrAll(closeFutures)
-        .Apply([promise = std::move(promise)](const NThreading::TFuture<void>&) mutable {
-            promise.SetValue();
+    // TODO: should be WaitAll()
+    NThreading::WaitExceptionOrAll(closeFutures)
+        .Subscribe([promise = std::move(promise), sessionId = std::move(sessionId)](const NThreading::TFuture<void>& f) mutable {
+            try {
+                f.TryRethrow();
+                promise.SetValue();
+            } catch (...) {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+                YQL_LOG(ERROR) << "CloseSession failed: " << CurrentExceptionMessage();
+                promise.SetException(std::current_exception());
+            }
         });
+
+    return CloseLastSessionFuture_;
 }
 
 TString TProgram::ResultsAsString() const {

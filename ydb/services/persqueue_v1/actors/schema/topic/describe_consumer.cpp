@@ -93,7 +93,7 @@ namespace {
     
                         UpdateProtoTime(*stats->mutable_min_partitions_last_read_time(), consumerStats->last_read_time(), true);
                         UpdateProtoTime(*stats->mutable_max_read_time_lag(), consumerStats->max_read_time_lag(), false);
-                        UpdateProtoTime(*stats->mutable_max_write_time_lag(), consumerStats->max_read_time_lag(), false);
+                        UpdateProtoTime(*stats->mutable_max_write_time_lag(), consumerStats->max_write_time_lag(), false);
                         UpdateProtoTime(*stats->mutable_max_committed_time_lag(), consumerStats->max_committed_time_lag(), false);
                     }
                 }

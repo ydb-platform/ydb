@@ -1,3 +1,5 @@
+#pragma once
+
 #include "actors.h"
 
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
@@ -20,7 +22,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
     
     template<class T>
     void UpdateProtoTime(T& proto, const T& time, bool storeMin) {
-        bool cmp = proto.seconds() > time.seconds() || (proto.nanos() == time.seconds() && proto.nanos() > time.seconds());
+        bool cmp = proto.seconds() > time.seconds() || (proto.seconds() == time.seconds() && proto.nanos() > time.nanos());
         if (cmp == storeMin) {
             proto.CopyFrom(time);
         }

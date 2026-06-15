@@ -16,6 +16,8 @@ items:
     mode: link
 - name: Топология кластера
   href: topology.md
+- name: Подсистемы распространения метаданных
+  href: metadata-distribution.md
 - name: Выполнение запросов
   href: query_execution/index.md
   include:
@@ -24,7 +26,7 @@ items:
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы
-  href: secondary_indexes.md  
+  href: secondary_indexes.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed

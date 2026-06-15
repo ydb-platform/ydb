@@ -27,8 +27,10 @@ inline TRetryOperationSettings ResolveRetrySettings(
     TRetryOperationSettings settings = explicitOverride.value_or(
         operationOverride.value_or(clientDefault));
 
-    if (settings.MaxTimeout_ == TDuration::Max() && operationClientTimeout != TDuration::Max()) {
-        settings.MaxTimeout(operationClientTimeout);
+    if (operationClientTimeout != TDuration::Max()) {
+        if (settings.MaxTimeout_ == TDuration::Max() || operationClientTimeout < settings.MaxTimeout_) {
+            settings.MaxTimeout(operationClientTimeout);
+        }
     }
 
     if (!explicitOverride && !operationOverride && idempotentDefault == ERetryIdempotentDefault::True

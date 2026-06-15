@@ -1001,7 +1001,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                     ("offset", offset)("CompactionBlobEncoder.EndOffset", Partition()->CompactionBlobEncoder.EndOffset);
                 PQ_INIT_ENSURE(size == read.GetValue().size())("size", size)("read.GetValue().size()", read.GetValue().size());
 
-                for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
+                for (TBlobIterator it(key, read.GetValue(), TBlobIterator::EDataOwnership::Shared); it.IsValid(); it.Next()) {
                     PQ_LOG_D("add batch");
                     head.AddBatch(it.GetBatch());
                 }

@@ -846,7 +846,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 rowSet.GetValueOrDefault<Schema::SharedShards::OwnerPathId>(Self->TabletID()),
                 rowSet.GetValue<Schema::SharedShards::LocalPathId>()
             );
-            Self->SharedShards[shardIdx].insert(pathId);
+            const auto currentTxId = TTxId(rowSet.GetValueOrDefault<Schema::SharedShards::LastTxId>(0));
+            Self->SharedShards[shardIdx][pathId] = currentTxId;
             if (!rowSet.Next()) {
                 return false;
             }
@@ -2339,11 +2340,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             for (const auto& [shardIdx, paths]: Self->SharedShards) {
                 Y_ABORT_UNLESS(Self->ShardInfos.contains(shardIdx));
-                for (const auto& path: paths) {
+                for (const auto& [path, lastTxId]: paths) {
                     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "TTxInit for Shared Shards"
                             << ", read: " << shardIdx
                             << ", PathId: " << path
+                            << ", LastTxId: " << lastTxId
                             << ", at schemeshard: " << Self->TabletID());
                 }
             }
@@ -5477,6 +5479,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (rowset.HaveValue<Schema::ColumnTables::IsRestore>()) {
                     tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
+                }
+
+                if (rowset.HaveValue<Schema::ColumnTables::IsReadOnly>()) {
+                    tableInfo->IsReadOnly = rowset.GetValue<Schema::ColumnTables::IsReadOnly>();
                 }
 
                 if (!rowset.Next()) {

@@ -1,5 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
+
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
 using namespace NKikimrSchemeOp;
@@ -555,13 +557,13 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
+            // Alter on a read-only copy column table must fail
             TestAlterColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
                 Name: "NewTable"
                 AlterSchema {
                     AddColumns { Name: "add_2" Type: "Uint64" }
                 }
-            )");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            )", {{NKikimrScheme::StatusSchemeError, "path is a read-only copy column table; only Copy and Drop are allowed"}});
 
             {
                 TInactiveZone inactive(activeZone);
@@ -687,6 +689,485 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                     TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/Table%d", i)),
                                        {NLs::PathNotExist});
                 }
+            }
+        });
+    }
+
+    // Reboot test: drop a read-only copy (non-owner) of a shared shard.
+    // The source table's shard must survive and SharedShards must be cleaned up.
+    Y_UNIT_TEST(DropCopySharedShardCleanupWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", defaultTableSchema);
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "CopyTable", "/MyRoot/ColumnTable");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", "CopyTable"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/CopyTable", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/ColumnTable", false, NLs::PathExist);
+
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+                const auto tabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/ColumnTable");
+                UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+                const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+                UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+                UNIT_ASSERT_VALUES_UNEQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
+            }
+        });
+    }
+
+    // Reboot test: drop the owner while a copy (sharer) still exists.
+    // Ownership must be transferred to the copy.
+    Y_UNIT_TEST(DropOwnerWithSharerTransfersOwnershipWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", defaultTableSchema);
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "CopyTable", "/MyRoot/ColumnTable");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", "ColumnTable"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/ColumnTable", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/CopyTable", false, NLs::PathExist);
+
+                const auto tabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/CopyTable");
+                UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+                const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+                UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+
+                const ui64 copyPathId = GetLocalPathId(runtime, "/MyRoot/CopyTable");
+                UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), copyPathId);
+
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "CopyTable");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                TestLs(runtime, "/MyRoot/CopyTable", false, NLs::PathNotExist);
+            }
+        });
+    }
+
+    // Reboot test: chained copy-of-copy-of-copy, then drop originals leaving
+    // only the last copy, then drop the last copy. Tests ownership transfer
+    // through a chain. Most drops are in the inactive zone to keep the number
+    // of reboot iterations manageable; only the final ownership-transfer drop
+    // (T3, the last intermediate) is tested with reboots.
+    Y_UNIT_TEST(ChainedCopyDropOriginalsWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            const int chainLen = 4;
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "T1"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (int i = 2; i <= chainLen; ++i) {
+                    TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot",
+                        Sprintf("T%d", i), Sprintf("/MyRoot/T%d", i - 1));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+
+                for (int i = 1; i <= chainLen - 2; ++i) {
+                    TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("T%d", i));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", Sprintf("T%d", chainLen - 1)),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                for (int i = 1; i < chainLen; ++i) {
+                    TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/T%d", i)),
+                                       {NLs::PathNotExist});
+                }
+                TestLs(runtime, Sprintf("/MyRoot/T%d", chainLen), false, NLs::PathExist);
+
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+                const auto tabletIds = GetColumnShardTabletIds(runtime, Sprintf("/MyRoot/T%d", chainLen));
+                UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+                const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+                UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+
+                const ui64 lastPathId = GetLocalPathId(runtime, Sprintf("/MyRoot/T%d", chainLen));
+                UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), lastPathId);
+
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("T%d", chainLen));
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/T%d", chainLen)),
+                                   {NLs::PathNotExist});
+                UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
+            }
+        });
+    }
+
+    // Reboot test: chained copies where we drop the last copy first, then
+    // work backwards to the original. Shared shard entries must be cleaned
+    // up correctly at each step.
+    Y_UNIT_TEST(ChainedCopyDropInReverseOrderWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            const int chainLen = 4;
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "T1"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (int i = 2; i <= chainLen; ++i) {
+                    TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot",
+                        Sprintf("T%d", i), Sprintf("/MyRoot/T%d", i - 1));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            {
+                TInactiveZone inactive(activeZone);
+                for (int i = chainLen; i >= 2; --i) {
+                    TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("T%d", i));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", "T1"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                for (int i = 1; i <= chainLen; ++i) {
+                    TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/T%d", i)),
+                                       {NLs::PathNotExist});
+                }
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+            }
+        });
+    }
+
+    // Reboot test: interleaved copy and drop operations. Create original,
+    // copy it, drop original (ownership transfers), copy the surviving table,
+    // drop the intermediate, and so on.
+    Y_UNIT_TEST(InterleavedCopyDropOwnershipChainWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "A"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "B", "/MyRoot/A");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "A");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "C", "/MyRoot/B");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "B");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                CopyColumnTableRequest(++t.TxId, "/MyRoot", "D", "/MyRoot/C"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", "C"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/A", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/B", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/C", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/D", false, NLs::PathExist);
+
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+                const auto tabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/D");
+                UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+                const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+                UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+
+                const ui64 dPathId = GetLocalPathId(runtime, "/MyRoot/D");
+                UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), dPathId);
+
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "D");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                TestLs(runtime, "/MyRoot/D", false, NLs::PathNotExist);
+                UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
+            }
+        });
+    }
+
+    // Reboot test: multiple copies from the same source, then drop the source
+    // (owner). Ownership must transfer to one of the copies, and the remaining
+    // copies must still be in SharedShards.
+    Y_UNIT_TEST(MultipleCopiesDropOwnerWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Src"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (int i = 1; i <= 3; ++i) {
+                    TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot",
+                        Sprintf("Copy%d", i), "/MyRoot/Src");
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", "Src"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/Src", false, NLs::PathNotExist);
+                for (int i = 1; i <= 3; ++i) {
+                    TestLs(runtime, Sprintf("/MyRoot/Copy%d", i), false, NLs::PathExist);
+                }
+
+                const auto tabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/Copy1");
+                UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+                const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+                UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+
+                const ui64 ownerPathId = GetShardOwnerLocalPathId(runtime, localShardIdx);
+                UNIT_ASSERT_VALUES_UNEQUAL(ownerPathId, 0u);
+
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 2u * tabletIds.size());
+
+                for (int i = 1; i <= 3; ++i) {
+                    TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("Copy%d", i));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
+            }
+        });
+    }
+
+    // Reboot test: multiple copies from the same source, drop all copies first,
+    // then drop the owner. SharedShards must be cleaned up at each step.
+    Y_UNIT_TEST(MultipleCopiesDropAllCopiesThenOwnerWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Src"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (int i = 1; i <= 3; ++i) {
+                    TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot",
+                        Sprintf("Copy%d", i), "/MyRoot/Src");
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            {
+                TInactiveZone inactive(activeZone);
+                for (int i = 1; i <= 2; ++i) {
+                    TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("Copy%d", i));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", "Copy3"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", "Src"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/Src", false, NLs::PathNotExist);
+                for (int i = 1; i <= 3; ++i) {
+                    TestLs(runtime, Sprintf("/MyRoot/Copy%d", i), false, NLs::PathNotExist);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+            }
+        });
+    }
+
+    // Reboot test: copy-of-copy chain with concurrent async drops of original
+    // and copy. Tests that shared shard state is consistent after concurrent
+    // drops with reboots.
+    Y_UNIT_TEST(ChainedCopyConcurrentDropWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "T1"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "T2", "/MyRoot/T1");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot", "T3", "/MyRoot/T2");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            AsyncDropColumnTable(runtime, ++t.TxId, "/MyRoot", "T1");
+            AsyncDropColumnTable(runtime, ++t.TxId, "/MyRoot", "T2");
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", "T3");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/T1"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/T2"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/T3"), {NLs::PathNotExist});
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+            }
+        });
+    }
+
+    // Reboot test: deep chain of copies (6 levels), drop from the middle
+    // outward. Tests that ownership transfers correctly through a deep chain.
+    Y_UNIT_TEST(DeepChainedCopyDropFromMiddleWithReboots) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            const int chainLen = 6;
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "T1"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                        Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                        Columns { Name: "Value" Type: "Utf8" }
+                        KeyColumnNames: ["key1", "key2"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (int i = 2; i <= chainLen; ++i) {
+                    TestCopyColumnTable(runtime, ++t.TxId, "/MyRoot",
+                        Sprintf("T%d", i), Sprintf("/MyRoot/T%d", i - 1));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            {
+                TInactiveZone inactive(activeZone);
+                const int inactiveDropOrder[] = {3, 4, 2, 5, 1};
+                for (int idx : inactiveDropOrder) {
+                    TestDropColumnTable(runtime, ++t.TxId, "/MyRoot", Sprintf("T%d", idx));
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropColumnTableRequest(++t.TxId, "/MyRoot", "T6"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                for (int i = 1; i <= chainLen; ++i) {
+                    TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/T%d", i)),
+                                       {NLs::PathNotExist});
+                }
+                UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
             }
         });
     }

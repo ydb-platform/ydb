@@ -4,6 +4,8 @@
 #include "schemeshard_info_types.h"
 #include "schemeshard_path_element.h"
 
+#include <ydb/core/tx/schemeshard/olap/table/table.h>
+
 #include <util/generic/ptr.h>
 #include <util/generic/stack.h>
 
@@ -31,6 +33,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 
     using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
     TStack<TTableState> Tables;
+
+    using TColumnTableState = std::pair<TPathId, TColumnTableInfo::TPtr>;
+    TStack<TColumnTableState> ColumnTables;
 
     using TSequenceState = std::pair<TPathId, TSequenceInfo::TPtr>;
     TStack<TSequenceState> Sequences;
@@ -86,6 +91,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TStreamingQueryState = std::pair<TPathId, TStreamingQueryInfo::TPtr>;
     TStack<TStreamingQueryState> StreamingQueries;
 
+    using TSharedShardEntry = std::tuple<TShardIdx, TPathId, std::optional<TTxId>>;
+    TStack<TSharedShardEntry> SharedShardEntries;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -96,6 +104,9 @@ public:
 
     void GrabNewTable(TSchemeShard* ss, const TPathId& pathId);
     void GrabTable(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId);
+    void GrabColumnTable(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewShard(TSchemeShard* ss, const TShardIdx& shardId);
     void GrabShard(TSchemeShard* ss, const TShardIdx& shardId);
@@ -144,6 +155,9 @@ public:
 
     void GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
     void GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabNewSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
+    void GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

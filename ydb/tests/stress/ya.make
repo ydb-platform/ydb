@@ -26,6 +26,7 @@ RECURSE(
     system_tablet_backup
     testshard_workload
     topic
+    topic_head_memory
     topic_kafka
     topic_sqs
     transfer

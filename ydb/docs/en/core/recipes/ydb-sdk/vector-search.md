@@ -4,13 +4,13 @@ This section contains code recipes in different programming languages for [vecto
 
 The following operations are covered in detail:
 
-- [Vector search](#vector-search)
-  - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
-  - [Creating a table {#create-table}](#creating-a-table-create-table)
-  - [Inserting vectors {#insert-vectors}](#inserting-vectors-insert-vectors)
-  - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)
-  - [Vector search {#search-by-vector}](#vector-search-search-by-vector)
-  - [Full example {#full-example}](#full-example-full-example)
+  - [Vector search](#vector-search)
+  - [Connecting to {{ ydb-short-name }}](#connect-ydb)
+  - [Creating a table](#create-table)
+  - [Inserting vectors](#insert-vectors)
+  - [Adding an index](#add-vector-index)
+  - [Search by vector](#search-by-vector)
+  - [Full example](#full-example)
 
 This recipe creates a text store with the following structure:
 
@@ -218,6 +218,42 @@ The `String` type is used to store vectors. For details, see the [exact vector s
       ```
 
     {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+  );`
+  ```
+
+- Java
+
+  ```java
+  import tech.ydb.common.transaction.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.table.query.Params;
+
+  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
+      String query = String.format("""
+              CREATE TABLE IF NOT EXISTS `%s` (
+                  id Utf8,
+                  document Utf8,
+                  embedding String,
+                  PRIMARY KEY (id)
+              );""", tableName);
+
+      retryCtx.supplyResult(session -> QueryReader.readFrom(
+              session.createQuery(query, TxMode.NONE, Params.empty())
+      )).join().getValue();
+
+      System.out.println("Vector table created: " + tableName);
+  }
+  ```
 
 - C++
 
@@ -1690,6 +1726,21 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
         return result;
     }
     ```
+
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
 
 {% endlist %}
 

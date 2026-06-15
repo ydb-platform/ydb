@@ -8,6 +8,8 @@ import sys
 
 import subprocess
 
+from collections import defaultdict
+
 load_yaml = None
 
 
@@ -123,6 +125,25 @@ def find_header(p, h):
     raise Exception('can not find inc dir')
 
 
+def compact_profile(profile):
+    PREFIX = 'time.clang-tidy.'
+    SUFFIX = '.wall'
+
+    # Metrics look like:
+    # 'time.clang-tidy.performance-implicit-conversion-in-loop.wall': 1.9073486328125e-06,
+    # 'time.clang-tidy.performance-implicit-conversion-in-loop.user': 1.0000000000001327e-06
+    # So (1), leave just wall, (2) sum by 1st word of name, and (3) round to 3 digits after '.'
+    grouped_sums = defaultdict(float)
+    for key, value in profile.items():
+        if key.startswith(PREFIX) and key.endswith(SUFFIX):
+            metric_full_name = key[len(PREFIX) : -len(SUFFIX)]
+            group_name = metric_full_name.split('-')[0]
+            group_key = f"{PREFIX}{group_name}{SUFFIX}"
+            grouped_sums[group_key] += value
+
+    return {k: round(v, 3) for k, v in grouped_sums.items()}
+
+
 def main():
     args, clang_cmd = parse_args()
     if '-gz=zstd' in clang_cmd:
@@ -198,7 +219,7 @@ def main():
             {
                 "file": testing_src,
                 "exit_code": res.returncode,
-                "profile": profile,
+                "profile": compact_profile(profile),
                 "stderr": err,
                 "stdout": out,
                 "fixes": tidy_fixes,

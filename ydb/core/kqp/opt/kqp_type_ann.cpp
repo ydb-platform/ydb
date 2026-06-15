@@ -2553,6 +2553,85 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
     return TStatus::Ok;
 }
 
+// Logical node TKqlReadTableVectorIndex: reads the top-K rows of the main table
+// nearest to the target vector. Output type is a list of the requested main-table columns.
+TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+    if (!EnsureArgsCount(*node, 6, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqlReadTableVectorIndex::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqlReadTableVectorIndex::idx_Index), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*node->Child(TKqlReadTableVectorIndex::idx_Columns), ctx)) {
+        return TStatus::Error;
+    }
+    TCoAtomList columns{node->ChildPtr(TKqlReadTableVectorIndex::idx_Columns)};
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
+
+    return TStatus::Ok;
+}
+
+// Physical input-transform connection TKqpCnVectorIndexRead: same output as the
+// logical node but as a stream (it feeds a compute stage).
+TStatus AnnotateVectorIndexReadConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+    if (!EnsureArgsCount(*node, 7, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureCallable(*node->Child(TKqpCnVectorIndexRead::idx_Output), ctx)) {
+        return TStatus::Error;
+    }
+    if (!TDqOutput::Match(node->Child(TKqpCnVectorIndexRead::idx_Output))) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorIndexRead::idx_Output)->Pos()),
+            TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqpCnVectorIndexRead::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureType(*node->Child(TKqpCnVectorIndexRead::idx_InputType), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpCnVectorIndexRead::idx_Index), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*node->Child(TKqpCnVectorIndexRead::idx_Columns), ctx)) {
+        return TStatus::Error;
+    }
+    TCoAtomList columns{node->ChildPtr(TKqpCnVectorIndexRead::idx_Columns)};
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+
+    return TStatus::Ok;
+}
+
 TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     if (!EnsureArgsCount(*node, 4, ctx)) {
@@ -3201,6 +3280,8 @@ public:
             TKqpReadTableFullTextIndex::CallableName(),
             TKqlReadTableFullTextIndex::CallableName(),
         }, HndlInt(&AnnotateReadTableFullTextIndex));
+        AddHandler({TKqlReadTableVectorIndex::CallableName()}, HndlInt(&AnnotateReadTableVectorIndex));
+        AddHandler({TKqpCnVectorIndexRead::CallableName()}, HndlInt(&AnnotateVectorIndexReadConnection));
         AddHandler({
             TKqpLookupTable::CallableName(),
             TKqlStreamLookupTable::CallableName(),

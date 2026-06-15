@@ -150,6 +150,19 @@
             ]
         },
         {
+            "Name": "TKqlReadTableVectorIndex",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqlReadTableVectorIndex"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 4, "Name": "TargetVector", "Type": "TExprBase"},
+                {"Index": 5, "Name": "IsDesc", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqlReadTableRanges",
             "Base": "TKqlReadTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"},
@@ -520,6 +533,19 @@
                 {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
                 {"Index": 3, "Name": "Index", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "WithData", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpCnVectorIndexRead",
+            "Base": "TKqpConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnVectorIndexRead"},
+            "Children": [
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 6, "Name": "IsDesc", "Type": "TCoAtom"}
             ]
         },
         {

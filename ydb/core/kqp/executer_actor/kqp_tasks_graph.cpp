@@ -705,6 +705,28 @@ void TKqpTasksGraph::FillStages() {
                     meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                 }
 
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorIndexRead) {
+                    const auto& vectorIndexRead = input.GetVectorIndexRead();
+
+                    meta.TableId = MakeTableId(vectorIndexRead.GetTable());
+                    meta.TablePath = vectorIndexRead.GetTable().GetPath();
+                    meta.AccessCheckOperations.insert(TKeyDesc::ERowOperation::Read);
+                    meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                    YQL_ENSURE(meta.TableConstInfo);
+                    meta.TableKind = meta.TableConstInfo->TableKind;
+
+                    YQL_ENSURE(!meta.IndexMetas.size());
+                    // [0] = level table, [1] = posting table
+                    meta.IndexMetas.emplace_back();
+                    meta.IndexMetas.back().TableId = MakeTableId(vectorIndexRead.GetLevelTable());
+                    meta.IndexMetas.back().TablePath = vectorIndexRead.GetLevelTable().GetPath();
+                    meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                    meta.IndexMetas.emplace_back();
+                    meta.IndexMetas.back().TableId = MakeTableId(vectorIndexRead.GetPostingTable());
+                    meta.IndexMetas.back().TablePath = vectorIndexRead.GetPostingTable().GetPath();
+                    meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                }
+
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
                     meta.TableId = MakeTableId(input.GetSequencer().GetTable());
                     meta.TablePath = input.GetSequencer().GetTable().GetPath();
@@ -1080,6 +1102,88 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
         inputStageInfo, outputIndex, enableSpilling, logFunc);
 }
 
+void TKqpTasksGraph::BuildVectorIndexReadChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo, ui32 outputIndex,
+    const NKqpProto::TKqpPhyCnVectorIndexRead& vectorIndexRead, bool enableSpilling, const TChannelLogFunc& logFunc)
+{
+    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
+
+    auto* settings = GetMeta().Allocate<NKikimrTxDataShard::TKqpVectorIndexReadSettings>();
+
+    *settings->MutableIndexSettings() = vectorIndexRead.GetIndexSettings();
+    settings->SetOverlapClusters(vectorIndexRead.GetOverlapClusters());
+    settings->SetOverlapRatio(vectorIndexRead.GetOverlapRatio());
+    settings->SetIndexLevels(vectorIndexRead.GetLevels());
+    settings->SetTopK(vectorIndexRead.GetTopK());
+    settings->SetIsDesc(vectorIndexRead.GetIsDesc());
+    settings->SetLevelTop(vectorIndexRead.GetLevelTop());
+    settings->SetVectorColumnIndex(vectorIndexRead.GetVectorColumnIndex());
+    settings->SetInputType(vectorIndexRead.GetInputType());
+    settings->SetOutputType(vectorIndexRead.GetOutputType());
+
+    YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 2);
+    const auto& levelTableInfo = stageInfo.Meta.IndexMetas[0].TableConstInfo;
+    const auto& postingTableInfo = stageInfo.Meta.IndexMetas[1].TableConstInfo;
+    const auto& mainTableInfo = stageInfo.Meta.TableConstInfo;
+
+    settings->SetDatabase(GetMeta().Database);
+
+    const auto& poolId = GetMeta().UserRequestContext->PoolId;
+    if (!poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID) {
+        settings->SetPoolId(poolId);
+    }
+
+    auto fillTableMeta = [](NKikimrTxDataShard::TKqpTransaction::TTableMeta* meta,
+        const NKqpProto::TKqpPhyTableId& kqpMeta, const auto& info) {
+        meta->SetTablePath(kqpMeta.GetPath());
+        meta->MutableTableId()->SetTableId(kqpMeta.GetTableId());
+        meta->MutableTableId()->SetOwnerId(kqpMeta.GetOwnerId());
+        meta->SetSchemaVersion(kqpMeta.GetVersion());
+        meta->SetTableKind((ui32)info->TableKind);
+    };
+
+    auto fillColumnMeta = [](NKikimrTxDataShard::TKqpTransaction::TColumnMeta* meta,
+        const TString& name, const auto& col) {
+        meta->SetId(col.Id);
+        meta->SetName(name);
+        meta->SetType(col.Type.GetTypeId());
+        if (NScheme::NTypeIds::IsParametrizedType(col.Type.GetTypeId())) {
+            ProtoFromTypeInfo(col.Type, col.TypeMod, *meta->MutableTypeInfo());
+        }
+        meta->SetNotNull(col.NotNull);
+    };
+
+    // Level table
+    fillTableMeta(settings->MutableLevelTable(), vectorIndexRead.GetLevelTable(), levelTableInfo);
+    settings->SetLevelTableParentColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::ParentColumn).Id);
+    settings->SetLevelTableClusterColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::IdColumn).Id);
+    settings->SetLevelTableCentroidColumnId(levelTableInfo->Columns.at(NTableIndex::NKMeans::CentroidColumn).Id);
+
+    // Posting table: key columns are (__ydb_parent, <main PK columns>)
+    fillTableMeta(settings->MutablePostingTable(), vectorIndexRead.GetPostingTable(), postingTableInfo);
+    for (const auto& keyColumn : postingTableInfo->KeyColumns) {
+        settings->AddPostingTableKeyColumnIds(postingTableInfo->Columns.at(keyColumn).Id);
+    }
+
+    // Main table: PK columns, output columns
+    fillTableMeta(settings->MutableMainTable(), vectorIndexRead.GetTable(), mainTableInfo);
+    for (const auto& keyColumn : mainTableInfo->KeyColumns) {
+        fillColumnMeta(settings->AddMainTableKeyColumns(), keyColumn, mainTableInfo->Columns.at(keyColumn));
+    }
+    for (const auto& column : vectorIndexRead.GetColumns()) {
+        fillColumnMeta(settings->AddOutputColumns(), column, mainTableInfo->Columns.at(column));
+    }
+
+    TTransform vectorIndexReadTransform;
+    vectorIndexReadTransform.Type = "VectorIndexReadInputTransformer";
+    vectorIndexReadTransform.InputType = vectorIndexRead.GetInputType();
+    vectorIndexReadTransform.OutputType = vectorIndexRead.GetOutputType();
+    TTaskInputMeta meta;
+    meta.VectorIndexReadSettings = settings;
+    meta.TablePath = stageInfo.Meta.TablePath;
+    BuildTransformChannels(vectorIndexReadTransform, meta, "VectorIndexRead/Map", stageInfo, inputIndex,
+        inputStageInfo, outputIndex, enableSpilling, logFunc);
+}
+
 void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
     ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const TChannelLogFunc& logFunc) {
     YQL_ENSURE(stageInfo.Tasks.size() == 1);
@@ -1325,6 +1429,11 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
 
             case NKqpProto::TKqpPhyConnection::kVectorResolve: {
                 BuildVectorResolveChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, input.GetVectorResolve(), enableSpilling, log);
+                break;
+            }
+
+            case NKqpProto::TKqpPhyConnection::kVectorIndexRead: {
+                BuildVectorIndexReadChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, input.GetVectorIndexRead(), enableSpilling, log);
                 break;
             }
 
@@ -1660,6 +1769,43 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.VectorResolveSettings);
+        } else if (input.Meta.VectorIndexReadSettings) {
+            enableMetering = true;
+            YQL_ENSURE(input.Meta.VectorIndexReadSettings);
+
+            // Unlike the write-path VectorResolve, the read path is not guaranteed an
+            // MVCC snapshot (e.g. multi-phase data queries that compute the target
+            // vector in an earlier phase). The read actor reads without a snapshot in
+            // that case, so set it only when valid.
+            if (snapshot.IsValid()) {
+                input.Meta.VectorIndexReadSettings->MutableSnapshot()->SetStep(snapshot.Step);
+                input.Meta.VectorIndexReadSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+            }
+
+            // The index impl tables (level, posting) are immutable, so under stale-RO
+            // they are read from followers without a snapshot, regardless of whether the
+            // whole query forced an MVCC snapshot for the (mutable) main table.
+            input.Meta.VectorIndexReadSettings->SetUseFollowers(
+                GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_STALE);
+
+            if (lockTxId) {
+                input.Meta.VectorIndexReadSettings->SetLockTxId(*lockTxId);
+                input.Meta.VectorIndexReadSettings->SetLockNodeId(GetMeta().LockNodeId);
+            }
+
+            if (GetMeta().LockMode) {
+                input.Meta.VectorIndexReadSettings->SetLockMode(*GetMeta().LockMode);
+            }
+
+            {
+                const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                    GetMeta().QuerySpanId, input.Meta.TablePath);
+                if (effectiveSpanId) {
+                    input.Meta.VectorIndexReadSettings->SetQuerySpanId(effectiveSpanId);
+                }
+            }
+
+            transformProto->MutableSettings()->PackFrom(*input.Meta.VectorIndexReadSettings);
         } else {
             *transformProto->MutableSettings() = input.Transform->Settings;
         }
@@ -1789,6 +1935,12 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             auto* transformSettings = meta.VectorResolveSettings = GetMeta().Allocate<NKikimrTxDataShard::TKqpVectorResolveSettings>();
             YQL_ENSURE(settings.UnpackTo(transformSettings), "Failed to parse vector resolve settings");
             // TODO: should we setup Database and PoolId for settings?
+            transformSettings->ClearSnapshot();
+            transformSettings->ClearLockTxId();
+            transformSettings->ClearLockNodeId();
+        } else if (settings.Is<NKikimrTxDataShard::TKqpVectorIndexReadSettings>()) {
+            auto* transformSettings = meta.VectorIndexReadSettings = GetMeta().Allocate<NKikimrTxDataShard::TKqpVectorIndexReadSettings>();
+            YQL_ENSURE(settings.UnpackTo(transformSettings), "Failed to parse vector index read settings");
             transformSettings->ClearSnapshot();
             transformSettings->ClearLockTxId();
             transformSettings->ClearLockNodeId();
@@ -2145,7 +2297,7 @@ void TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo) {
 
     for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
         const auto& input = stage.GetInputs(inputIndex);
-        GetMeta().UnknownAffectedShardCount |= input.HasStreamLookup() || input.HasVectorResolve();
+        GetMeta().UnknownAffectedShardCount |= input.HasStreamLookup() || input.HasVectorResolve() || input.HasVectorIndexRead();
     }
 
     auto tasksCount = MaxTasksGraph.GetStageTasksCount(stageId);

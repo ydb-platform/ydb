@@ -2190,17 +2190,17 @@ void FormatValue(TStringBuilderBase* builder, const TUnversionedOwningRow& row, 
     FormatValue(builder, TUnversionedRow(row), format);
 }
 
-TString ToString(TUnversionedRow row, bool valuesOnly)
+std::string ToString(TUnversionedRow row, bool valuesOnly)
 {
     return ToStringViaBuilder(row, valuesOnly ? "k" : "");
 }
 
-TString ToString(TMutableUnversionedRow row, bool valuesOnly)
+std::string ToString(TMutableUnversionedRow row, bool valuesOnly)
 {
     return ToString(TUnversionedRow(row), valuesOnly);
 }
 
-TString ToString(const TUnversionedOwningRow& row, bool valuesOnly)
+std::string ToString(const TUnversionedOwningRow& row, bool valuesOnly)
 {
     return ToString(row.Get(), valuesOnly);
 }

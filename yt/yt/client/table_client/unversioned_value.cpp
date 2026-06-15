@@ -168,7 +168,7 @@ void FormatValue(TStringBuilderBase* builder, const TUnversionedValue& value, TS
     }
 }
 
-TString ToString(const TUnversionedValue& value, bool valueOnly)
+std::string ToString(const TUnversionedValue& value, bool valueOnly)
 {
     return ToStringViaBuilder(value, valueOnly ? "k" : "");
 }

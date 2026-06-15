@@ -915,9 +915,9 @@ void FormatValue(TStringBuilderBase* builder, TUnversionedRow row, TStringBuf fo
 void FormatValue(TStringBuilderBase* builder, TMutableUnversionedRow row, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, const TUnversionedOwningRow& row, TStringBuf format);
 
-TString ToString(TUnversionedRow row, bool valuesOnly = false);
-TString ToString(TMutableUnversionedRow row, bool valuesOnly = false);
-TString ToString(const TUnversionedOwningRow& row, bool valuesOnly = false);
+std::string ToString(TUnversionedRow row, bool valuesOnly = false);
+std::string ToString(TMutableUnversionedRow row, bool valuesOnly = false);
+std::string ToString(const TUnversionedOwningRow& row, bool valuesOnly = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

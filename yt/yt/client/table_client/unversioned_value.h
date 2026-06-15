@@ -75,7 +75,7 @@ TFingerprint GetFarmFingerprint(const TUnversionedValue& value);
 void PrintTo(const TUnversionedValue& value, ::std::ostream* os);
 
 void FormatValue(TStringBuilderBase* builder, const TUnversionedValue& value, TStringBuf format);
-TString ToString(const TUnversionedValue& value, bool valueOnly = false);
+std::string ToString(const TUnversionedValue& value, bool valueOnly = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

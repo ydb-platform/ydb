@@ -1,6 +1,6 @@
 # Рекомендации по безопасности Developer UI
 
-Эта статья предназначена для разработчиков и контрибьюторов {{ ydb-short-name }} и описывает требования безопасности при написании на C++ страниц мониторинга ([Developer UI](../../reference/embedded-ui/index.md)). Такие страницы генерируются во время выполнения с помощью макросов `HTML(str) { ... }` и отдаются встроенным HTTP-сервером мониторинга.
+Эта статья предназначена для разработчиков и контрибьюторов {{ ydb-short-name }} и описывает требования безопасности при написании на C++ страниц мониторинга ([Developer UI](../reference/embedded-ui/index.md)). Такие страницы генерируются во время выполнения с помощью макросов `HTML(str) { ... }` и отдаются встроенным HTTP-сервером мониторинга.
 
 Цель статьи — помочь безопасно добавлять и изменять страницы Developer UI: с корректной политикой Content Security Policy (CSP), защитой от межсайтовой подделки запросов (Cross-Site Request Forgery, CSRF) и безопасным выводом данных в HTML.
 
@@ -441,8 +441,8 @@ ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html", htmlContent));     // m
 
 ## См. также {#see-also}
 
-- [{#T}](../../reference/embedded-ui/index.md)
-- [{#T}](../../security/index.md)
+- [{#T}](../reference/embedded-ui/index.md)
+- [{#T}](../security/index.md)
 - [OWASP CSP Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
 - [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
 - [MDN: Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)

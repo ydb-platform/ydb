@@ -40,16 +40,26 @@ public:
     NExportScan::IBuffer* CreateBuffer(EDataFormat dataFormat) {
         TS3ExportBufferSettings settings = S3ExportBufferSettings;
         settings.WithColumns(Columns);
-        settings.WithParquetRowGroupSize(1000);
         
         NExportScan::IBuffer* buffer = nullptr;
         switch (dataFormat) {
         case EDataFormat::YDB_DUMP:
-            buffer = CreateS3ExportBuffer(std::move(settings));
-            break;
+            {
+                TYdbDumpExportSettings dataFormatSettings;
+                dataFormatSettings.WithColumns(Columns);
+                std::unique_ptr<IExportDataFormat> dataFormat(CreateExportDataFormat(std::move(dataFormatSettings)));
+                buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
+                break;
+            }
         case EDataFormat::PARQUET:
-            buffer = CreateS3ParquetExportBuffer(std::move(settings));
-            break;
+            {
+                TParquetExportSettings dataFormatSettings;
+                dataFormatSettings.WithColumns(Columns);
+                dataFormatSettings.WithRowGroupSize(2);
+                std::unique_ptr<IExportDataFormat> dataFormat(CreateExportDataFormat(std::move(dataFormatSettings)));
+                buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
+                break;
+            }
         }
         
         buffer->ColumnsOrder(Tags);

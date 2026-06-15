@@ -306,9 +306,11 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
+        export_parquet.cpp
         export_s3_buffer.cpp
-        export_s3_parquet_buffer.cpp
+        # export_s3_parquet_buffer.cpp
         export_s3_uploader.cpp
+        export_ydb_dump.cpp
         import_s3.cpp
     )
 ENDIF()

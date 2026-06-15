@@ -6,6 +6,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/ydb_convert/compression.h>

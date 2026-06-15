@@ -1,6 +1,8 @@
 #include "backup_restore_traits.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/hash.h>
@@ -33,9 +35,33 @@ ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task) {
     return codec;
 }
 
+EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task) {
+    switch (task.GetSettingsCase()) {
+    case NKikimrSchemeOp::TBackupTask::kS3Settings:
+        switch (task.GetS3Settings().GetFormatCase()) {
+        case NKikimrSchemeOp::TS3Settings::FORMAT_NOT_SET:
+        case NKikimrSchemeOp::TS3Settings::kYdbDump:
+            return EDataFormat::YdbDump;
+        case NKikimrSchemeOp::TS3Settings::kParquet:
+            return EDataFormat::Parquet;
+        }
+    case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:    
+    case NKikimrSchemeOp::TBackupTask::kFSSettings:
+        switch (task.GetFSSettings().GetFormatCase()) {
+        case NKikimrSchemeOp::TFSSettings::FORMAT_NOT_SET:
+        case NKikimrSchemeOp::TFSSettings::kYdbDump:
+            return EDataFormat::YdbDump;
+        case NKikimrSchemeOp::TFSSettings::kParquet:
+            return EDataFormat::Parquet;
+        }
+    case NKikimrSchemeOp::TBackupTask::kYTSettings:
+        return EDataFormat::Invalid;
+    }
+}
+
 EDataFormat NextDataFormat(EDataFormat cur) {
     switch (cur) {
-    case EDataFormat::Csv:
+    case EDataFormat::YdbDump:
         return EDataFormat::Parquet;
     case EDataFormat::Parquet:
         return EDataFormat::Invalid;
@@ -55,9 +81,20 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
     }
 }
 
+TMaybe<NKikimrSchemeOp::TParquetFormat> ParquetFormatFromTask(const NKikimrSchemeOp::TBackupTask& task) {
+    switch(task.GetSettingsCase()) {
+    case NKikimrSchemeOp::TBackupTask::kS3Settings:        
+        return task.GetS3Settings().GetParquet();
+    case NKikimrSchemeOp::TBackupTask::kFSSettings:
+        return task.GetFSSettings().GetParquet();
+    case NKikimrSchemeOp::TBackupTask::kYTSettings:
+        return Nothing();
+    }
+}
+
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     static THashMap<EDataFormat, TString> formats = {
-        {EDataFormat::Csv, ".csv"},
+        {EDataFormat::YdbDump, ".csv"},
         {EDataFormat::Parquet, ".parquet"},
     };
 

@@ -13,7 +13,7 @@ namespace NBackupRestoreTraits {
 
 enum class EDataFormat: int {
     Invalid /* "invalid" */,
-    Csv /* "csv" */,
+    YdbDump /* "csv" */,
     Parquet /* "parquet" */,
 };
 
@@ -25,6 +25,7 @@ enum class ECompressionCodec: int {
 
 bool TryCodecFromTask(const NKikimrSchemeOp::TBackupTask& task, ECompressionCodec& codec);
 ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task);
+EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task);
 
 EDataFormat NextDataFormat(EDataFormat cur);
 ECompressionCodec NextCompressionCodec(ECompressionCodec cur);

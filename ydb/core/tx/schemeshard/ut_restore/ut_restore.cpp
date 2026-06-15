@@ -151,7 +151,7 @@ namespace {
         TDataWithChecksum RawData;
         TString Data; // RawData after compression/encryption
         TString YsonStr;
-        EDataFormat DataFormat = EDataFormat::Csv;
+        EDataFormat DataFormat = EDataFormat::YdbDump;
         ECompressionCodec CompressionCodec;
 
         TTestData(TString csvData, TString ysonStr, ECompressionCodec codec = ECompressionCodec::None)
@@ -166,7 +166,7 @@ namespace {
             TStringBuilder result;
 
             switch (DataFormat) {
-            case EDataFormat::Csv:
+            case EDataFormat::YdbDump:
                 result << ".csv";
                 break;
             case EDataFormat::Parquet:

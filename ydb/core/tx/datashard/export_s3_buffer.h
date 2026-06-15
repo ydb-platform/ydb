@@ -3,6 +3,7 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "export_iface.h"
+#include "export_data_format.h"
 #include "export_scan.h"
 
 #include <ydb/core/backup/common/encryption.h>
@@ -102,11 +103,6 @@ struct TS3ExportBufferSettings {
         return *this;
     }
 
-    TS3ExportBufferSettings& WithParquetRowGroupSize(ui64 rowGroupSize) {
-        ParquetRowGroupSize = rowGroupSize;
-        return *this;
-    }
-
     TS3ExportBufferSettings& WithChecksum(TChecksumSettings settings) {
         ChecksumSettings.ConstructInPlace(std::move(settings));
         return *this;
@@ -114,6 +110,11 @@ struct TS3ExportBufferSettings {
 
     TS3ExportBufferSettings& WithCompression(TCompressionSettings settings) {
         CompressionSettings.ConstructInPlace(std::move(settings));
+        return *this;
+    }
+
+    TS3ExportBufferSettings& WithoutCompression() {
+        CompressionSettings.Clear();
         return *this;
     }
 
@@ -127,7 +128,6 @@ struct TS3ExportBufferSettings {
     ui64 MaxRows = 0;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
-    ui64 ParquetRowGroupSize = 0;
 
     // Data processing
     TMaybe<TChecksumSettings> ChecksumSettings;
@@ -135,8 +135,7 @@ struct TS3ExportBufferSettings {
     TMaybe<TEncryptionSettings> EncryptionSettings;
 };
 
-NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings);
-NExportScan::IBuffer* CreateS3ParquetExportBuffer(TS3ExportBufferSettings&& settings);
+NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings, std::unique_ptr<IExportDataFormat> dataFormat);
 
 } // NDataShard
 } // NKikimr

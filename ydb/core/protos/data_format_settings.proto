@@ -1,0 +1,10 @@
+package NKikimrSchemeOp;
+option java_package = "ru.yandex.kikimr.proto";
+
+// YdbDump is actually a CSV.
+message TYdbDumpFormat {
+}
+
+message TParquetFormat {
+    optional uint32 RowGroupSize = 1 [default = 1000];
+}

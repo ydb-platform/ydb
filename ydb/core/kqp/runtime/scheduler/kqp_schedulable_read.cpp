@@ -28,7 +28,7 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query)
     LastRefill = TMonotonic::Now();
 
     YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+        {"thisPtr", uintptr_t(this)},
         {"maxQuotaMs", MaxQuotaMs});
 
     YQL_ENSURE(MaxQuotaMs <= 1000);
@@ -39,7 +39,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
     YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+        {"thisPtr", uintptr_t(this)},
         {"expectedQuotaMs", expectedQuotaMs});
 
     // Refill quota
@@ -50,7 +50,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     }
 
     YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+        {"thisPtr", uintptr_t(this)},
         {"availableQuotaMs", AvailableQuotaMs});
 
     if (AvailableQuotaMs <= 0 || !TryIncreaseUsage()) {
@@ -62,7 +62,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     ReservedQuotaMs = expectedQuotaMs;
 
     YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+        {"thisPtr", uintptr_t(this)},
         {"reservedQuotaMs", ReservedQuotaMs});
 
     return true;
@@ -78,7 +78,7 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
     ReservedQuotaMs = 0;
 
     YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+        {"thisPtr", uintptr_t(this)},
         {"returnedQuotaMs", ms});
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
 

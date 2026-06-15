@@ -86,7 +86,7 @@ namespace {
                     }
                     TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
                     YDB_LOG_WARN_CTX(*actorSystem, "",
-                        {"#_message + describePathResult.GetIssues", message + describePathResult.GetIssues()});
+                        {"issuesMessage", message + describePathResult.GetIssues()});
                     auto rootIssue = NYql::TIssue(message);
                     for (const auto& issue : describePathResult.GetIssues()) {
                         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));

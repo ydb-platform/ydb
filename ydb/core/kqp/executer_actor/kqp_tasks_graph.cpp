@@ -770,7 +770,7 @@ void TKqpTasksGraph::FillStages() {
 
             auto& stageInfo = GetStageInfo(stageId);
             YDB_LOG_DEBUG("Dump #_stageInfo.DebugString",
-                {"#_stageInfo.DebugString", stageInfo.DebugString()});
+                {"stageInfoDebugString", stageInfo.DebugString()});
 
             THashSet<TTableId> tables;
             for (const auto& op : stage.GetTableOps()) {
@@ -1160,12 +1160,12 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     auto log = [&stageInfo, txId](ui64 channel, ui64 from, ui64 to, TStringBuf type, bool spilling) {
         YDB_LOG_TRACE("Stage create of type",
             {"txId", txId},
-            {"#_stageInfo.Id", stageInfo.Id},
+            {"stageInfoId", stageInfo.Id},
             {"channelId", channel},
             {"fromTask", from},
             {"toTask", to},
             {"type", type},
-            {"#_num_0", (spilling ? " with spilling" : " without spilling")});
+            {"spillingMode", (spilling ? " with spilling" : " without spilling")});
     };
 
     bool hasMap = false;
@@ -1179,12 +1179,12 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
             columnShardHashV1Params = originStageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap || inputIndex == stage.InputsSize() - 1) { // this branch is only for logging purposes
                 YDB_LOG_DEBUG("Chose to propagate through inputs stages of the stage",
-                    {"#_originStageInfo.Id.TxId", originStageInfo.Id.TxId},
-                    {"#_originStageInfo.Id.StageId", originStageInfo.Id.StageId},
+                    {"originStageTxId", originStageInfo.Id.TxId},
+                    {"originStageId", originStageInfo.Id.StageId},
                     {"outputIdx", outputIdx},
-                    {"#_stageInfo.Id.TxId", stageInfo.Id.TxId},
-                    {"#_stageInfo.Id.StageId", stageInfo.Id.StageId},
-                    {"#_columnShardHashV1Params.KeyTypesToString();", columnShardHashV1Params.KeyTypesToString();});
+                    {"stageTxId", stageInfo.Id.TxId},
+                    {"stageId", stageInfo.Id.StageId},
+                    {"columnShardKeyTypes", columnShardHashV1Params.KeyTypesToString();});
             }
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap) {
                 // We want to enforce sourceShardCount from map connection, cause it can be at most one map connection
@@ -1256,13 +1256,13 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                         Y_ENSURE(enableShuffleElimination, "OptShuffleElimination wasn't turned on, but ColumnShardHashV1 detected!");
 
                         YDB_LOG_DEBUG("Propagating columnhashv1 params to stage which is input of stage",
-                            {"#_inputStageInfo.Id.TxId", inputStageInfo.Id.TxId},
-                            {"#_inputStageInfo.Id.StageId", inputStageInfo.Id.StageId},
-                            {"#_stageInfo.Id.TxId", stageInfo.Id.TxId},
-                            {"#_stageInfo.Id.StageId", stageInfo.Id.StageId},
-                            {"#_columnShardHashV1Params.KeyTypesToString", columnShardHashV1Params.KeyTypesToString()},
-                            {"#_num_0", JoinSeq(",", input.GetHashShuffle().GetKeyColumns())},
-                            {"#_num_1", "]";});
+                            {"inputStageTxId", inputStageInfo.Id.TxId},
+                            {"inputStageId", inputStageInfo.Id.StageId},
+                            {"stageTxId", stageInfo.Id.TxId},
+                            {"stageId", stageInfo.Id.StageId},
+                            {"columnShardKeyTypes", columnShardHashV1Params.KeyTypesToString()},
+                            {"keyColumns", JoinSeq(",", input.GetHashShuffle().GetKeyColumns())},
+                            {"keyColumnsSuffix", "]";});
 
                         Y_ENSURE(
                             columnShardHashV1Params.SourceTableKeyColumnTypes->size() == input.GetHashShuffle().KeyColumnsSize(),
@@ -1422,10 +1422,10 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
                 case ColumnShardHashV1: {
                     const auto& columnShardHashV1Params = stageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
                     YDB_LOG_DEBUG("Filling columnshardhashv1 params for sending it to runtime for the columns",
-                        {"#_stageInfo.Id.TxId", stageInfo.Id.TxId},
-                        {"#_stageInfo.Id.StageId", stageInfo.Id.StageId},
-                        {"#_columnShardHashV1Params.KeyTypesToString", columnShardHashV1Params.KeyTypesToString()},
-                        {"#_num_0", JoinSeq(",", output.KeyColumns)});
+                        {"stageTxId", stageInfo.Id.TxId},
+                        {"stageId", stageInfo.Id.StageId},
+                        {"columnShardKeyTypes", columnShardHashV1Params.KeyTypesToString()},
+                        {"outputKeyColumns", JoinSeq(",", output.KeyColumns)});
                     Y_ENSURE(columnShardHashV1Params.SourceShardCount != 0, "ShardCount for ColumnShardHashV1 Shuffle can't be equal to 0");
                     Y_ENSURE(columnShardHashV1Params.TaskIndexByHash != nullptr, "TaskIndexByHash for ColumnShardHashV1 wasn't propagated to this stage");
                     Y_ENSURE(columnShardHashV1Params.SourceTableKeyColumnTypes != nullptr, "SourceTableKeyColumnTypes for ColumnShardHashV1 wasn't propagated to this stage");

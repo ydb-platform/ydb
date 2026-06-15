@@ -148,7 +148,7 @@ private:
                 case EStatus::PathErrorUnknown:
                     YDB_LOG_DEBUG("Script execution table not found",
                         {"logPrefix", LogPrefix()},
-                        {"#_JoinPath(result.Path)", JoinPath(result.Path)});
+                        {"resultPath", JoinPath(result.Path)});
                     return;
                 case EStatus::LookupError:
                 case EStatus::TableCreationNotComplete:

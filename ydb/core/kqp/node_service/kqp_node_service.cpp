@@ -137,7 +137,7 @@ private:
             default: {
                 YDB_LOG_WARN("Ignoring unexpected event 0x%x during graceful shutdown",
                     {"marker", "KQPNS"},
-                    {"#_ev->GetTypeName", ev->GetTypeName()},
+                    {"eventTypeName", ev->GetTypeName()},
                     {"nodeId", SelfId().NodeId()},
                     {"sender", ev->Sender});
             }

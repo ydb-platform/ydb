@@ -44,7 +44,7 @@ private:
             default: {
                 YDB_LOG_CRIT("ResolveKeysState: unexpected event",
                     {"txId", TxId},
-                    {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                    {"eventTypeRewrite", ev->GetTypeRewrite()});
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -58,7 +58,7 @@ private:
             default: {
                 YDB_LOG_CRIT("ResolveKeysState: unexpected event",
                     {"txId", TxId},
-                    {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                    {"eventTypeRewrite", ev->GetTypeRewrite()});
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }

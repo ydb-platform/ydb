@@ -2288,7 +2288,7 @@ public:
             YDB_LOG_DEBUG("Forwarded TEvExecuterProgress",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
-                {"#_QueryState->RequestActorId", QueryState->RequestActorId},
+                {"requestActorId", QueryState->RequestActorId},
                 {"traceId", TraceId()});
             Send(QueryState->RequestActorId, ev->Release().Release(), 0, QueryState->ProxyRequestId);
         }
@@ -2638,7 +2638,7 @@ public:
         YDB_LOG_DEBUG("Forwarded TEvStreamData",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
-            {"#_QueryState->RequestActorId", QueryState->RequestActorId},
+            {"requestActorId", QueryState->RequestActorId},
             {"traceId", TraceId()});
 
         QueryState->QueryData->AddBuiltResultIndex(ev->Get()->Record.GetQueryResultIndex());

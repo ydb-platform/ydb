@@ -736,13 +736,13 @@ private:
             YDB_LOG_TRACE("[WorkloadService] Reply unsupported",
                 {"logPrefix", LogPrefix()},
                 {"replyActorId", replyActorId},
-                {"#_issues.ToOneLineString", issues.ToOneLineString()});
+                {"issuesOneLine", issues.ToOneLineString()});
         } else {
             YDB_LOG_WARN("[WorkloadService] Reply continue error",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"replyActorId", replyActorId},
-                {"#_issues.ToOneLineString", issues.ToOneLineString()});
+                {"issuesOneLine", issues.ToOneLineString()});
         }
         Send(replyActorId, new TEvContinueRequest(status, {}, {}, std::move(issues)));
     }

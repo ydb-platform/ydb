@@ -642,7 +642,7 @@ private:
                             {"actorId", SelfId()},
                             {"txId", TxId},
                             {"ctx", *GetUserRequestContext()},
-                            {"#_*error", *error},
+                            {"error", *error},
                             {"traceId", TraceId()});
                         ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, *error));
@@ -909,7 +909,7 @@ private:
             {"ctx", *GetUserRequestContext()},
             {"status", msg->Status},
             {"step", msg->Snapshot.Step},
-            {"#_txId", msg->Snapshot.TxId},
+            {"txId", msg->Snapshot.TxId},
             {"traceId", TraceId()});
 
         if (msg->Status != Ydb::StatusIds::SUCCESS) {

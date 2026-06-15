@@ -133,4 +133,4 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             {"status", status},
             {"user", username},
             {"results", resultsSize},
-            {"#_EscapeC(protectedQueryText)", EscapeC(protectedQueryText)})
+            {"protectedQueryText", EscapeC(protectedQueryText)})

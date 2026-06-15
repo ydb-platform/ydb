@@ -100,7 +100,7 @@ public:
 
         YDB_LOG_DEBUG("Add",
             {"database", ev->Get()->DatabaseId},
-            {"#_attrs", attrs});
+            {"attrs", attrs});
     }
 
     void Handle(TEvRemoveDatabase::TPtr&) {
@@ -130,7 +130,7 @@ public:
         YDB_LOG_DEBUG("Add /",
             {"pool", databaseId},
             {"poolId", poolId},
-            {"#_attrs", attrs});
+            {"attrs", attrs});
 
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
@@ -179,7 +179,7 @@ public:
             YDB_LOG_DEBUG("Update /",
                 {"pool", databaseId},
                 {"poolId", poolId},
-                {"#_attrs", attrs});
+                {"attrs", attrs});
         } else if (poolIt != PoolSubscribtions.end()) {
             if (!poolIt->second.IsFirstRemoval) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.

@@ -214,7 +214,7 @@ public:
 
         Graph->BuildAllTasks({}, snapshot, nullptr);
         YDB_LOG_DEBUG("Tasks graph after BuildAllTasks:\n",
-            {"#_Graph->DumpToString", Graph->DumpToString()});
+            {"graphDump", Graph->DumpToString()});
 
         auto reply = MakeHolder<TEvBuildTasksDone>();
         for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {

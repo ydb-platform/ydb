@@ -67,7 +67,7 @@ public:
                 Y_PROTOBUF_SUPPRESS_NODISCARD resources[i].ParseFromString(entry.Payload);
                 YDB_LOG_DEBUG("WhiteBoard",
                     {"i", i},
-                    {"#_]", resources[i]});
+                    {"resource", resources[i]});
                 i++;
             }
         } else {

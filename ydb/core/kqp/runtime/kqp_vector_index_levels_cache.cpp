@@ -117,8 +117,8 @@ public:
             if (res) {
                 Cache_->SetMaxBytes(maxCurrentSizeBytes + increaseBatchSize);
                 YDB_LOG_NOTICE("VectorIndexLevelsCacheMaintainer: Altered max bytes to prev size",
-                    {"#_HumanReadableSize(maxCurrentSizeBytes + increaseBatchSize, ESizeFormat::SF_BYTES)", HumanReadableSize(maxCurrentSizeBytes + increaseBatchSize, ESizeFormat::SF_BYTES)},
-                    {"#_HumanReadableSize(maxCurrentSizeBytes, ESizeFormat::SF_BYTES)", HumanReadableSize(maxCurrentSizeBytes, ESizeFormat::SF_BYTES)});
+                    {"maxSizeWithBatch", HumanReadableSize(maxCurrentSizeBytes + increaseBatchSize, ESizeFormat::SF_BYTES)},
+                    {"maxCurrentSize", HumanReadableSize(maxCurrentSizeBytes, ESizeFormat::SF_BYTES)});
             }
 
         } else if (maxAllowedSizeBytes < static_cast<ui64>(maxCurrentSizeBytes)) {
@@ -128,8 +128,8 @@ public:
             i64 newSize = maxCurrentSizeBytes - static_cast<i64>(change);
             Cache_->SetMaxBytes(newSize);
             YDB_LOG_NOTICE("VectorIndexLevelsCacheMaintainer: Altered max bytes to prev size",
-                {"#_HumanReadableSize(newSize, ESizeFormat::SF_BYTES)", HumanReadableSize(newSize, ESizeFormat::SF_BYTES)},
-                {"#_HumanReadableSize(maxCurrentSizeBytes, ESizeFormat::SF_BYTES)", HumanReadableSize(maxCurrentSizeBytes, ESizeFormat::SF_BYTES)});
+                {"newSize", HumanReadableSize(newSize, ESizeFormat::SF_BYTES)},
+                {"maxCurrentSize", HumanReadableSize(maxCurrentSizeBytes, ESizeFormat::SF_BYTES)});
         }
 
         Schedule(TDuration::Seconds(1), new TEvPrivate::TEvIncreaseCacheSize);

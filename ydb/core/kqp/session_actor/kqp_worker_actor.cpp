@@ -444,7 +444,7 @@ private:
             {"logPrefix", LogPrefix()},
             {"action", (ui32)queryRequest->GetAction()},
             {"type", (ui32)queryRequest->GetType()},
-            {"#_queryRequest->GetQuery().substr(0, 1000)", queryRequest->GetQuery().substr(0, 1000)});
+            {"queryPreview", queryRequest->GetQuery().substr(0, 1000)});
 
         return false;
     }

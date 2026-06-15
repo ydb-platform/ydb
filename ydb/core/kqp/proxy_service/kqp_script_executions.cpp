@@ -1450,7 +1450,7 @@ private:
         if (const auto delay = CheckAliveRetryState->GetNextRetryDelay(longDelay)) {
             YDB_LOG_DEBUG("[ScriptExecutions] Schedule retry check alive",
                 {"logPrefix", LogPrefix()},
-                {"#_*delay", *delay});
+                {"delay", *delay});
             Schedule(*delay, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RetryCheckAlive)));
             WaitRetryCheckAlive = true;
         } else {
@@ -1482,7 +1482,7 @@ private:
                 CheckAliveRetries++;
                 YDB_LOG_DEBUG("[ScriptExecutions] Start check alive request",
                     {"logPrefix", LogPrefix()},
-                    {"#_CheckAliveRetries + 1", CheckAliveRetries + 1});
+                    {"checkAliveRetry", CheckAliveRetries + 1});
                 Send(RunScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
                 Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
                 break;
@@ -1513,7 +1513,7 @@ private:
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         YDB_LOG_WARN("[ScriptExecutions] Node with TRunScriptActor was disconnected, retry check alive",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->NodeId", ev->Get()->NodeId});
+            {"nodeId", ev->Get()->NodeId});
         RetryCheckAlive(/* longDelay */ false);
     }
 
@@ -1654,7 +1654,7 @@ public:
         if (const auto ownerUser = executionsResult.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
             YDB_LOG_WARN("[ScriptExecutions] Access denied for user",
                 {"logPrefix", LogPrefix()},
-                {"#_*UserSID", *UserSID});
+                {"userSid", *UserSID});
             Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
             return;
         }
@@ -1870,15 +1870,15 @@ private:
         Response = std::move(ev);
         YDB_LOG_DEBUG("[ScriptExecutions] Extracted script execution operation",
             {"logPrefix", LogPrefix()},
-            {"#_Response->Sender", Response->Sender},
+            {"responseSender", Response->Sender},
             {"status", Response->Get()->Status},
             {"issues", Response->Get()->Issues.ToOneLineString()},
             {"leaseExpired", Response->Get()->LeaseExpired},
             {"retryRequired", Response->Get()->RetryRequired},
-            {"#_num_0", (Response->Get()->OperationStatus ? ", OperationStatus: " + Ydb::StatusIds::StatusCode_Name(*Response->Get()->OperationStatus) : "")},
-            {"#_num_1", (Response->Get()->ExecutionStatus ? ", ExecutionStatus: " + Ydb::Query::ExecStatus_Name(*Response->Get()->ExecutionStatus) : "")},
-            {"#_num_2", (Response->Get()->OperationIssues ? ", OperationIssues: " + Response->Get()->OperationIssues->ToOneLineString() : "")},
-            {"#_(Response->Get()->FinalizationStatus ? (TStringBuilder", (Response->Get()->FinalizationStatus ? (TStringBuilder()},
+            {"operationStatusSuffix", (Response->Get()->OperationStatus ? ", OperationStatus: " + Ydb::StatusIds::StatusCode_Name(*Response->Get()->OperationStatus) : "")},
+            {"executionStatusSuffix", (Response->Get()->ExecutionStatus ? ", ExecutionStatus: " + Ydb::Query::ExecStatus_Name(*Response->Get()->ExecutionStatus) : "")},
+            {"operationIssuesSuffix", (Response->Get()->OperationIssues ? ", OperationIssues: " + Response->Get()->OperationIssues->ToOneLineString() : "")},
+            {"finalizationStatusPrefix", (Response->Get()->FinalizationStatus ? (TStringBuilder()},
             {"finalizationStatus", static_cast<ui64>(*Response->Get()->FinalizationStatus)) : TStringBuilder())},
             {"runScriptActorId", Response->Get()->RunScriptActorId},
             {"leaseGeneration", Response->Get()->LeaseGeneration});
@@ -2065,9 +2065,9 @@ public:
         auto& resultSet = ResultSets.back();
         YDB_LOG_DEBUG("[ScriptExecutions] Deleting rows from result set remains rows range",
             {"logPrefix", LogPrefix()},
-            {"#_resultSet.Id", resultSet.Id},
-            {"#_resultSet.MinRowId", resultSet.MinRowId},
-            {"#_resultSet.MaxRowId", resultSet.MaxRowId});
+            {"resultSetId", resultSet.Id},
+            {"resultSetMinRowId", resultSet.MinRowId},
+            {"resultSetMaxRowId", resultSet.MaxRowId});
 
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::DeleteScriptResults
@@ -2120,7 +2120,7 @@ public:
         if (resultSet.MaxRowId < resultSet.MinRowId) {
             YDB_LOG_DEBUG("[ScriptExecutions] Deleting of script result set is finished, remains result",
                 {"logPrefix", LogPrefix()},
-                {"#_resultSet.Id", resultSet.Id},
+                {"resultSetId", resultSet.Id},
                 {"sets", ResultSets.size() - 1});
             ResultSets.pop_back();
         }
@@ -2368,7 +2368,7 @@ public:
             if (const auto ownerUser = result.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
                 YDB_LOG_WARN("[ScriptExecutions] Access denied for user",
                     {"logPrefix", LogPrefix()},
-                    {"#_*UserSID", *UserSID});
+                    {"userSid", *UserSID});
                 Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
                 return;
             }
@@ -2613,13 +2613,13 @@ private:
         Response = std::move(ev);
         YDB_LOG_DEBUG("[ScriptExecutions] Extracted script execution operation",
             {"logPrefix", LogPrefix()},
-            {"#_Response->Sender", Response->Sender},
+            {"responseSender", Response->Sender},
             {"status", Response->Get()->Status},
             {"issues", Response->Get()->Issues.ToOneLineString()},
             {"ready", Response->Get()->Ready},
             {"leaseExpired", Response->Get()->LeaseExpired},
             {"waitRetry", Response->Get()->WaitRetry},
-            {"#_(Response->Get()->FinalizationStatus ? (TStringBuilder", (Response->Get()->FinalizationStatus ? (TStringBuilder()},
+            {"finalizationStatusPrefix", (Response->Get()->FinalizationStatus ? (TStringBuilder()},
             {"finalizationStatus", static_cast<ui64>(*Response->Get()->FinalizationStatus)) : TStringBuilder())},
             {"runScriptActorId", Response->Get()->RunScriptActorId},
             {"leaseGeneration", Response->Get()->LeaseGeneration});
@@ -2897,8 +2897,8 @@ public:
         if (Response->Get()->Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_DEBUG("[ScriptExecutions] Listing failed",
                 {"logPrefix", LogPrefix()},
-                {"#_Response->Sender", Response->Sender},
-                {"#_Response->Get()->Status", Response->Get()->Status},
+                {"responseSender", Response->Sender},
+                {"responseStatus", Response->Get()->Status},
                 {"issues", Response->Get()->Issues.ToOneLineString()});
             Reply();
             return;
@@ -2906,11 +2906,11 @@ public:
 
         YDB_LOG_DEBUG("[ScriptExecutions] Listing response listed operations",
             {"logPrefix", LogPrefix()},
-            {"#_Response->Sender", Response->Sender},
-            {"#_Response->Get()->Status", Response->Get()->Status},
+            {"responseSender", Response->Sender},
+            {"responseStatus", Response->Get()->Status},
             {"issues", Response->Get()->Issues.ToOneLineString()},
             {"nextPageToken", Response->Get()->NextPageToken},
-            {"#_Response->Get()->Operations.size", Response->Get()->Operations.size()});
+            {"operationsCount", Response->Get()->Operations.size()});
 
         for (ui64 i = 0; i < Response->Get()->Operations.size(); ++i) {
             const Ydb::Operations::Operation& op = Response->Get()->Operations[i];
@@ -2941,7 +2941,7 @@ public:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_WARN("[ScriptExecutions] Lease check failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Cookie", ev->Cookie},
+                {"cookie", ev->Cookie},
                 {"sender", ev->Sender},
                 {"status", ev->Get()->Status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
@@ -2957,9 +2957,9 @@ public:
         --OperationsToCheck;
         YDB_LOG_DEBUG("[ScriptExecutions] Lease check success",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Cookie", ev->Cookie},
+            {"cookie", ev->Cookie},
             {"sender", ev->Sender},
-            {"#_num_0", (operationStatus ? ", operation status: " + Ydb::StatusIds::StatusCode_Name(*operationStatus) : "")},
+            {"operationStatusSuffix", (operationStatus ? ", operation status: " + Ydb::StatusIds::StatusCode_Name(*operationStatus) : "")},
             {"operationsToCheck", OperationsToCheck});
 
         if (operationStatus) {
@@ -2990,7 +2990,7 @@ private:
     void Reply() {
         YDB_LOG_DEBUG("[ScriptExecutions] Reply",
             {"logPrefix", LogPrefix()},
-            {"#_Response->Get()->Status", Response->Get()->Status},
+            {"responseStatus", Response->Get()->Status},
             {"issues", Response->Get()->Issues.ToOneLineString()});
         Forward(Response, Request->Sender);
         PassAway();
@@ -3428,7 +3428,7 @@ private:
             YDB_LOG_WARN("[ScriptExecutions] Schedule retry",
                 {"logPrefix", LogPrefix()},
                 {"error", issues.ToOneLineString()},
-                {"#_*delay", *delay});
+                {"delay", *delay});
             Issues.AddIssues(issues);
             Schedule(*delay, new TEvents::TEvWakeup());
             WaitRetry = true;
@@ -3622,7 +3622,7 @@ public:
             {"firstRow", FirstRow},
             {"accumulatedSize", AccumulatedSize},
             {"toSave", ResultSet.rows_size()},
-            {"#_to_save", SavedSize});
+            {"savedSize", SavedSize});
 
         RunDataQuery(sql, &params);
     }
@@ -3676,7 +3676,7 @@ public:
         YDB_LOG_DEBUG("[ScriptExecutions] Start saving rows range remains saver",
             {"logPrefix", LogPrefix()},
             {"firstRow", FirstRow},
-            {"#_FirstRow + numberRows", FirstRow + numberRows},
+            {"lastRow", FirstRow + numberRows},
             {"parts", ResultSets.size()},
             {"actor", saverId});
 
@@ -3815,7 +3815,7 @@ public:
         if (const auto ownerUser = result.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
             YDB_LOG_WARN("[ScriptExecutions] Access denied for user",
                 {"logPrefix", LogPrefix()},
-                {"#_*UserSID", *UserSID});
+                {"userSid", *UserSID});
             Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
             return;
         }
@@ -4027,7 +4027,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             YDB_LOG_DEBUG("[ScriptExecutions] Successfully fetched rows",
                 {"logPrefix", LogPrefix()},
-                {"#_ResultSet.rows_size", ResultSet.rows_size()});
+                {"resultSetRowsCount", ResultSet.rows_size()});
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
@@ -4149,7 +4149,7 @@ public:
     void OnRunQuery() override {
         YDB_LOG_DEBUG("[ScriptExecutions] Save sinks,",
             {"logPrefix", LogPrefix()},
-            {"#_Request.Sinks.size", Request.Sinks.size()},
+            {"sinksCount", Request.Sinks.size()},
             {"customerSuppliedId", Request.CustomerSuppliedId});
 
         TString sql = R"(
@@ -4542,13 +4542,13 @@ public:
 
         YDB_LOG_DEBUG("[ScriptExecutions] Do finalization with status exec finalization status (applicate retry deadline (wait lease",
             {"logPrefix", LogPrefix()},
-            {"#_Request.OperationStatus", Request.OperationStatus},
+            {"requestOperationStatus", Request.OperationStatus},
             {"status", Ydb::Query::ExecStatus_Name(Request.ExecStatus)},
             {"effect", Response->ApplicateScriptExternalEffectRequired},
-            {"#_)", static_cast<ui64>(Request.FinalizationStatus)},
+            {"finalizationStatus", static_cast<ui64>(Request.FinalizationStatus)},
             {"issues", Request.Issues.ToOneLineString()},
             {"retry", Response->WaitRetry},
-            {"#_#_)", retryDeadline},
+            {"retryDeadline", retryDeadline},
             {"state", static_cast<i32>(leaseState)});
 
         NYdb::TParamsBuilder params;
@@ -4670,7 +4670,7 @@ public:
     void OnRunQuery() override {
         YDB_LOG_DEBUG("[ScriptExecutions] Start",
             {"logPrefix", LogPrefix()},
-            {"#_num_0", (OperationStatus ? " with status " + Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "")},
+            {"operationStatusSuffix", (OperationStatus ? " with status " + Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "")},
             {"issues", OperationIssues.ToOneLineString()});
 
         TString sql = R"(
@@ -4852,11 +4852,11 @@ public:
 
         YDB_LOG_DEBUG("[ScriptExecutions] Do finalization with status exec retry deadline (wait lease",
             {"logPrefix", LogPrefix()},
-            {"#_*OperationStatus", *OperationStatus},
+            {"operationStatus", *OperationStatus},
             {"status", Ydb::Query::ExecStatus_Name(ExecutionStatus)},
             {"issues", OperationIssues.ToOneLineString()},
             {"retry", WaitRetry},
-            {"#_)", retryDeadline},
+            {"retryDeadline", retryDeadline},
             {"state", static_cast<i32>(leaseInfo.NewLeaseState)});
 
         NYdb::TParamsBuilder params;
@@ -5085,7 +5085,7 @@ public:
             if (!executionId) {
                 YDB_LOG_ERROR("[ScriptExecutions] Execution id field is null for script execution lease in database",
                     {"logPrefix", LogPrefix()},
-                    {"#_*database", *database});
+                    {"database", *database});
                 continue;
             }
 
@@ -5094,7 +5094,7 @@ public:
 
         YDB_LOG_DEBUG("[ScriptExecutions] Found expired leases (fetched rows",
             {"logPrefix", LogPrefix()},
-            {"#_Leases.size", Leases.size()},
+            {"leasesCount", Leases.size()},
             {"rowsCount", rowsCount});
         Finish();
     }
@@ -5135,7 +5135,7 @@ public:
         YDB_LOG_DEBUG("[ScriptExecutions] Got list expired leases response found expired leases",
             {"logPrefix", LogPrefix()},
             {"sender", ev->Sender},
-            {"#_leases.size", leases.size()});
+            {"leasesCount", leases.size()});
 
         for (const auto& lease : leases) {
             const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, true, CookieId++));
@@ -5176,7 +5176,7 @@ public:
             const auto& issues = ev->Get()->Issues;
             YDB_LOG_WARN("[ScriptExecutions] Lease check failed,",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Cookie", ev->Cookie},
+                {"cookie", ev->Cookie},
                 {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()},
@@ -5191,7 +5191,7 @@ public:
         } else {
             YDB_LOG_DEBUG("[ScriptExecutions] Lease check successfully completed,",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Cookie", ev->Cookie},
+                {"cookie", ev->Cookie},
                 {"sender", ev->Sender},
                 {"operationsToCheck", OperationsToCheck});
         }

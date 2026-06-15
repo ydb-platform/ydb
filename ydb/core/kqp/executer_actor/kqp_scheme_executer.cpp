@@ -1335,7 +1335,7 @@ private:
             {"actorId", SelfId()},
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
-            {"#_issues.ToOneLineString", issues.ToOneLineString()});
+            {"issuesOneLine", issues.ToOneLineString()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED,
             "Internal error while executing scheme operation.");
 

@@ -184,7 +184,7 @@ private:
     void Handle(TEvPrivate::TEvStopPoolHandler::TPtr& ev) {
         YDB_LOG_INFO("[WorkloadService] Got stop pool handler request, waiting for requests",
             {"logPrefix", LogPrefix()},
-            {"#_LocalSessions.size", LocalSessions.size()});
+            {"localSessionsCount", LocalSessions.size()});
         ResetCountersOnStrop = ev->Get()->ResetCounters;
         if (LocalSessions.empty()) {
             PassAway();
@@ -214,7 +214,7 @@ private:
         YDB_LOG_DEBUG("[WorkloadService] Received new request, worker session request",
             {"logPrefix", LogPrefix()},
             {"id", workerActorId},
-            {"#_id", sessionId},
+            {"sessionId", sessionId},
             {"text", requestText});
         if (auto cancelAfter = PoolConfig.QueryCancelAfter) {
             this->Schedule(cancelAfter, new TEvPrivate::TEvCancelRequest(sessionId));
@@ -263,7 +263,7 @@ private:
         YDB_LOG_DEBUG("[WorkloadService] Cancel request by deadline, worker session",
             {"logPrefix", LogPrefix()},
             {"id", request->WorkerActorId},
-            {"#_id", request->SessionId});
+            {"sessionId", request->SessionId});
         OnCleanupRequest(request);
     }
 
@@ -291,7 +291,7 @@ private:
         if (result->GetStatus() != NKikimrScheme::StatusSuccess) {
             YDB_LOG_WARN("[WorkloadService] Got bad watch notification",
                 {"logPrefix", LogPrefix()},
-                {"#_result->GetStatus", result->GetStatus()},
+                {"resultStatus", result->GetStatus()},
                 {"reason", result->GetReason()});
             return;
         }
@@ -351,7 +351,7 @@ public:
                 YDB_LOG_WARN("[WorkloadService] Reply continue error to session request",
                     {"logPrefix", LogPrefix()},
                     {"status", status},
-                    {"#_request->WorkerActorId", request->WorkerActorId},
+                    {"workerActorId", request->WorkerActorId},
                     {"id", request->SessionId},
                     {"text", request->RequestText},
                     {"issues", issues.ToOneLineString()});
@@ -471,7 +471,7 @@ private:
             Counters.CollectRequestLatency(request->ContinueTime);
             YDB_LOG_DEBUG("[WorkloadService] Reply cleanup success to session local",
                 {"logPrefix", LogPrefix()},
-                {"#_request->WorkerActorId", request->WorkerActorId},
+                {"workerActorId", request->WorkerActorId},
                 {"id", request->SessionId},
                 {"inFlight", LocalInFlight});
         } else {
@@ -479,7 +479,7 @@ private:
             YDB_LOG_WARN("[WorkloadService] Reply cleanup error to session",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
-                {"#_request->WorkerActorId", request->WorkerActorId},
+                {"workerActorId", request->WorkerActorId},
                 {"id", request->SessionId},
                 {"issues", issues.ToOneLineString()});
         }
@@ -494,7 +494,7 @@ private:
         Counters.CollectRequestLatency(request->ContinueTime);
         YDB_LOG_INFO("[WorkloadService] Cancel request for worker session local",
             {"logPrefix", LogPrefix()},
-            {"#_request->WorkerActorId", request->WorkerActorId},
+            {"workerActorId", request->WorkerActorId},
             {"id", request->SessionId},
             {"inFlight", LocalInFlight});
     }

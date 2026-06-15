@@ -56,7 +56,7 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
                     YDB_LOG_INFO("Scheme version mismatch expected actual",
                         {"pathId", entry.TableId.PathId},
                         {"version", *expectedVersion},
-                        {"#_version", entry.TableId.SchemaVersion});
+                        {"schemaVersion", entry.TableId.SchemaVersion});
                     return false;
                 }
 

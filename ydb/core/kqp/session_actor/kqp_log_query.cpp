@@ -156,7 +156,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.EndObject();
 
         YDB_LOG((prio), "[REQ_JSON]",
-            {"#_ss.Str", ss.Str()});
+            {"json", ss.Str()});
     }
 }
 

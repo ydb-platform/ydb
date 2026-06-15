@@ -149,8 +149,8 @@ private:
             Snapshot = IKqpGateway::TKqpSnapshot(msg->Record.GetStep(), msg->Record.GetTxId());
 
             YDB_LOG_DEBUG("KqpSnapshotManager: snapshot created in cleanup state. Send discard",
-                {"#_Snapshot.Step", Snapshot.Step},
-                {"#_Snapshot.TxId", Snapshot.TxId});
+                {"snapshotStep", Snapshot.Step},
+                {"snapshotTxId", Snapshot.TxId});
 
             SendDiscard();
         }
@@ -178,8 +178,8 @@ private:
             Snapshot = IKqpGateway::TKqpSnapshot(msg->Record.GetStep(), msg->Record.GetTxId());
 
             YDB_LOG_DEBUG("KqpSnapshotManager: snapshot created",
-                {"#_Snapshot.Step", Snapshot.Step},
-                {"#_Snapshot.TxId", Snapshot.TxId});
+                {"snapshotStep", Snapshot.Step},
+                {"snapshotTxId", Snapshot.TxId});
 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                 Snapshot, TSnapshotHandle(), NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
@@ -193,7 +193,7 @@ private:
 
             YDB_LOG_ERROR("KqpSnapshotManager: CreateSnapshot got unexpected status",
                 {"status", status},
-                {"#_issues", issues});
+                {"issues", issues});
             ReplyErrorAndDie(msg->Record.GetStatusCode(), std::move(issues));
         }
     }

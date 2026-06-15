@@ -623,7 +623,7 @@ private:
 
         YDB_LOG_DEBUG_CTX(NActors::TActivationContext::AsActorContext(), "Save result meta for result sets saver",
             {"logPrefix", LogPrefix()},
-            {"#_ResultSetInfos.size", ResultSetInfos.size()},
+            {"resultSetInfosCount", ResultSetInfos.size()},
             {"id", saverId});
     }
 
@@ -772,7 +772,7 @@ private:
             YDB_LOG_WARN_CTX(NActors::TActivationContext::AsActorContext(), "Script query failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
-                {"#_record.GetYdbStatus", record.GetYdbStatus()},
+                {"ydbStatus", record.GetYdbStatus()},
                 {"issues", Issues.ToOneLineString()});
         }
 

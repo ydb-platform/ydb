@@ -1092,7 +1092,7 @@ public:
         if (proxyResources.empty()) {
             PeerProxyNodeResources.clear();
             YDB_LOG_DEBUG("Received unexpected data from rm for database",
-                {"#_AppData()->TenantName", AppData()->TenantName});
+                {"tenantName", AppData()->TenantName});
             return;
         }
 
@@ -1122,7 +1122,7 @@ public:
                 nodeIds.push_back(resource.GetNodeId());
             }
             YDB_LOG_INFO("Discovered proxy nodes, starting warmup",
-                {"#_PeerProxyNodeResources.size", PeerProxyNodeResources.size()});
+                {"peerProxyNodeResourcesCount", PeerProxyNodeResources.size()});
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
     }
@@ -1475,7 +1475,7 @@ private:
         }
 
         YDB_LOG_WARN("Reply process error for request",
-            {"#_static_cast<ui64>(request->EventType)", static_cast<ui64>(request->EventType)},
+            {"eventType", static_cast<ui64>(request->EventType)},
             {"status", ydbStatus},
             {"issues", issues.ToOneLineString()});
 
@@ -1517,7 +1517,7 @@ private:
         } else {
             YDB_LOG_DEBUG("Request has seconds to be completed",
                 {"requestInfo", requestInfo},
-                {"#_deadline - now", deadline - now});
+                {"deadlineRemaining", deadline - now});
             return true;
         }
     }
@@ -1877,7 +1877,7 @@ private:
         if (sessions) {
             YDB_LOG_TRACE("Got TEvNodeConnected event has sessions",
                 {"fromNode", nodeId},
-                {"#_sessions.size", sessions.size()});
+                {"sessionsCount", sessions.size()});
         } else {
             YDB_LOG_ERROR("Got TEvNodeConnected event from node without",
                 {"sessions", nodeId});
@@ -1889,7 +1889,7 @@ private:
         auto sessions = LocalSessions->FindSessions(nodeId);
         YDB_LOG_DEBUG("Disconnected, had sessions",
             {"node", nodeId},
-            {"#_sessions.size", sessions.size()});
+            {"sessionsCount", sessions.size()});
         const static auto IdleDurationAfterDisconnect = TDuration::Seconds(1);
         // Just start standard idle check with small timeout
         // It allows to use common code to close and delete expired session
@@ -1900,8 +1900,8 @@ private:
 
     void Handle(TEvKqp::TEvListSessionsRequest::TPtr& ev) {
         YDB_LOG_DEBUG("Incoming list sessions request local sessions",
-            {"#_ev->Get()->Record.ShortUtf8DebugString", ev->Get()->Record.ShortUtf8DebugString()},
-            {"#_LocalSessions->size", LocalSessions->size()});
+            {"recordDebugString", ev->Get()->Record.ShortUtf8DebugString()},
+            {"localSessionsCount", LocalSessions->size()});
 
         auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
 

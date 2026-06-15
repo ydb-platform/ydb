@@ -527,9 +527,9 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
 
                 if (auto p = Operations_.find(key); p != Operations_.end()) {
                     YDB_LOG_DEBUG("(topic, partition, tablet)",
-                        {"#_key.Topic_", key.Topic_},
-                        {"#_partition.GetPartitionId", partition.GetPartitionId()},
-                        {"#_partition.GetTabletId", partition.GetTabletId()});
+                        {"topic", key.Topic_},
+                        {"partitionId", partition.GetPartitionId()},
+                        {"tabletId", partition.GetTabletId()});
 
                     p->second.SetTabletId(partition.GetTabletId());
                 }

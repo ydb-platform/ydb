@@ -124,7 +124,7 @@ private:
     void RefreshNodesInfo() {
         YDB_LOG_DEBUG("Do RefreshNodesInfo next refresh after",
             {"logPrefix", LogPrefix()},
-            {"#_(WaitRefreshNodes", WaitRefreshNodes},
+            {"waitRefreshNodes", WaitRefreshNodes},
             {"REFRESHNODESPERIOD", REFRESH_NODES_PERIOD});
         Schedule(REFRESH_NODES_PERIOD, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RefreshNodesInfo)));
 
@@ -137,7 +137,7 @@ private:
     void ScheduleRefreshScriptExecutions() {
         YDB_LOG_DEBUG("Do ScheduleRefreshScriptExecutions next refresh after",
             {"logPrefix", LogPrefix()},
-            {"#_(WaitRefreshScriptExecutions", WaitRefreshScriptExecutions},
+            {"waitRefreshScriptExecutions", WaitRefreshScriptExecutions},
             {"refreshLeasePeriod", RefreshLeasePeriod});
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
 

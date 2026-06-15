@@ -181,7 +181,7 @@ public:
         YDB_LOG_DEBUG("TEST WORKER ABORT",
             {"selfId", SelfId()},
             {"channelId", ChannelId},
-            {"#_ev->Get()->GetIssues().ToOneLineString", ev->Get()->GetIssues().ToOneLineString()});
+            {"issuesOneLine", ev->Get()->GetIssues().ToOneLineString()});
         Send(RunnerId, new TEvTestPrivate::TEvFinished(Role, true));
         PassAway();
     }

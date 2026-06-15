@@ -51,7 +51,7 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, c
     if (operationId != OperationId) {
         YDB_LOG_CRIT("TAnalyzeActor, TEvAnalyzeResponse has but expected",
             {"operationId", operationId},
-            {"#_operationId", OperationId});
+            {"operationId", OperationId});
         result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
         result.AddIssue(NYql::TIssue("ANALYZE failed: OperationId mismatch"));
     } else if (status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS) {

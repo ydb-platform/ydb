@@ -403,7 +403,7 @@ public:
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event for data",
-            {"#_this->SelfId", this->SelfId()},
+            {"selfId", this->SelfId()},
             {"query", msg});
 
         TBase::HandleError(msg, ctx);

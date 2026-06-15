@@ -184,7 +184,7 @@ public:
             YDB_LOG_DEBUG("[WorkloadService] Describe table status",
                 {"logPrefix", LogPrefix()},
                 {"fullPath", fullPath},
-                {"#_result.Status", result.Status});
+                {"resultStatus", result.Status});
 
             std::pair<TString, TString> pathPair;
             if (TString error; !TrySplitPathByDb(fullPath, AppData()->TenantName, pathPair, error)) {
@@ -228,7 +228,7 @@ public:
 
         YDB_LOG_DEBUG("[WorkloadService] Cleanup finished for table",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->Path", ev->Get()->Path},
+            {"path", ev->Get()->Path},
             {"status", ev->Get()->Status},
             {"issues", ev->Get()->Issues.ToOneLineString()});
 

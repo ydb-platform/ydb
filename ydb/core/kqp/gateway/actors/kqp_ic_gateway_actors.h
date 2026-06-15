@@ -40,7 +40,7 @@ public:
     void HandleUnexpectedEvent(const TString& requestType, ui32 eventType) {
         YDB_LOG_CRIT_COMP(NKikimrServices::KQP_GATEWAY, "TRequestHandlerBase, unexpected event, request event",
             {"type", requestType},
-            {"#_type", eventType});
+            {"eventType", eventType});
 
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, TStringBuilder()
             << "Unexpected event in " << requestType << ": " << eventType)));

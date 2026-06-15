@@ -359,7 +359,7 @@ public:
             YDB_LOG_DEBUG_CTX(*ActorSystem, "Allocated",
                 {"txId", txId},
                 {"taskId", taskId},
-                {"#_resources", resources});
+                {"resources", resources});
         }
         FireResourcesPublishing();
         return result;
@@ -763,7 +763,7 @@ private:
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
             YDB_LOG_INFO("Cannot start publishing usage for kqp_proxy,",
                 {"tenants", AppData()->TenantName},
-                {"#_num_0", SelfDataCenterId.value_or("empty")});
+                {"dataCenterId", SelfDataCenterId.value_or("empty")});
             return;
         }
         PublishResourceUsage("kqp_proxy");
@@ -772,7 +772,7 @@ private:
     void HandleWork(TEvResourceBroker::TEvConfigResponse::TPtr& ev) {
         if (!ev->Get()->QueueConfig) {
             YDB_LOG_ERROR("Not configured!",
-                {"#_NLocalDb::KqpResourceManagerQueue", NLocalDb::KqpResourceManagerQueue});
+                {"resourceManagerQueue", NLocalDb::KqpResourceManagerQueue});
             return;
         }
         auto& queueConfig = *ev->Get()->QueueConfig;
@@ -989,8 +989,8 @@ private:
 
             Schedule(*PublishResourcesScheduledAt - now, new TEvPrivate::TEvPublishResources);
             YDB_LOG_DEBUG("Schedule publish at after",
-                {"#_*PublishResourcesScheduledAt", *PublishResourcesScheduledAt},
-                {"#_(*PublishResourcesScheduledAt - now)", (*PublishResourcesScheduledAt - now)});
+                {"publishResourcesScheduledAt", *PublishResourcesScheduledAt},
+                {"publishResourcesDelay", (*PublishResourcesScheduledAt - now)});
             return;
         }
 
@@ -1039,7 +1039,7 @@ private:
 
         YDB_LOG_INFO("Send to publish resource usage",
             {"reason", reason},
-            {"#_num_0", (WarmupInProgress ? " (warmup: zero resources)" : "")},
+            {"warmupNote", (WarmupInProgress ? " (warmup: zero resources)" : "")},
             {"payload", payload});
         WbState.LastPublishTime = now;
         if (ResourceManager->ResourceInfoExchanger) {

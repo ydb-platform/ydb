@@ -305,7 +305,7 @@ private:
     void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
         auto snapshot = QueryCache->GetSnapshot();
         YDB_LOG_DEBUG("Got query compile cache request, snapshot has entries",
-            {"#_snapshot.size", snapshot.size()});
+            {"snapshotSize", snapshot.size()});
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
 
@@ -410,7 +410,7 @@ private:
                 break;
             default:
                 YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source type",
-                    {"#_ev->Get()->SourceType", ev->Get()->SourceType});
+                    {"sourceType", ev->Get()->SourceType});
                 break;
         }
     }
@@ -434,17 +434,17 @@ private:
         auto& request = *ev->Get();
 
         YDB_LOG_DEBUG_CTX(ctx, "Perform request,",
-            {"#_TraceId.SpanIdPtr", ev->TraceId.GetSpanIdPtr()});
+            {"spanIdPtr", ev->TraceId.GetSpanIdPtr()});
 
         NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "CompileService");
 
         YDB_LOG_DEBUG_CTX(ctx, "Received compile request queryText",
             {"sender", ev->Sender},
             {"queryUid", (request.Uid ? *request.Uid : "<empty>")},
-            {"#_num_0", (request.Query ? EscapeC(request.Query->Text) : "<empty>")},
+            {"queryText", (request.Query ? EscapeC(request.Query->Text) : "<empty>")},
             {"keepInCache", request.KeepInCache},
             {"split", request.Split},
-            {"#_*request.UserRequestContext", *request.UserRequestContext});
+            {"userRequestContext", *request.UserRequestContext});
 
         auto userSid = request.UserToken->GetUserSID();
         auto dbCounters = request.DbCounters;
@@ -476,7 +476,7 @@ private:
                         {"sender", ev->Sender},
                         {"queryUid", *request.Uid},
                         {"sid", compileResult->Query->UserSid},
-                        {"#_sid", userSid});
+                        {"userSid", userSid});
                 }
             } else {
                 Counters->ReportQueryCacheHit(dbCounters, false);
@@ -1342,7 +1342,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
                     {"sender", sender},
                     {"queryUid", *uid},
                     {"sid", compileResult->Query->UserSid},
-                    {"#_sid", userSid});
+                    {"userSid", userSid});
             }
         }
 

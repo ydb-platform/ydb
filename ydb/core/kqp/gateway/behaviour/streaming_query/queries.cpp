@@ -472,7 +472,7 @@ protected:
             YDB_LOG_WARN("[StreamingQueries] Schedule retry",
                 {"logPrefix", LogPrefix()},
                 {"error", issues.ToOneLineString()},
-                {"#_*delay", *delay});
+                {"delay", *delay});
             TBase::Issues.AddIssues(std::move(issues));
             TBase::Schedule(*delay, new TEvents::TEvWakeup());
             return true;
@@ -633,7 +633,7 @@ public:
 
         YDB_LOG_DEBUG("[StreamingQueries] Got propose transaction response",
             {"logPrefix", LogPrefix()},
-            {"#_NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())", NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())},
+            {"operationType", NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())},
             {"status", status},
             {"schemeShardStatus", NKikimrScheme::EStatus_Name(ssStatus)},
             {"txId", TxId},
@@ -674,7 +674,7 @@ public:
                     {"logPrefix", LogPrefix()},
                     {"error", status},
                     {"id", SchemeShardTabletId},
-                    {"#_id", TxId});
+                    {"txId", TxId});
                 ScheduleRetry(response, TStringBuilder() << "proxy shard not available " << status);
                 break;
             }
@@ -717,7 +717,7 @@ public:
                         YDB_LOG_WARN("[StreamingQueries] Retry scheme transaction, previous tx execution is not finished, tablet failed tx",
                             {"logPrefix", LogPrefix()},
                             {"id", SchemeShardTabletId},
-                            {"#_id", TxId});
+                            {"txId", TxId});
                         ScheduleRetry(response, "multiple modifications");
                         break;
                     }
@@ -818,7 +818,7 @@ protected:
     void StartRequest() final {
         YDB_LOG_DEBUG("[StreamingQueries] Start scheme transaction",
             {"logPrefix", LogPrefix()},
-            {"#_NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())", NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())},
+            {"operationType", NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())},
             {"inDatabase", Database});
 
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -1245,7 +1245,7 @@ public:
 
         YDB_LOG_DEBUG("[StreamingQueries] Start check alive",
             {"logPrefix", LogPrefix()},
-            {"#_Info.PreviousOwner", Info.PreviousOwner});
+            {"previousOwner", Info.PreviousOwner});
         Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
         Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
     }
@@ -1269,7 +1269,7 @@ public:
                 WaitRetryCheckAlive = false;
                 YDB_LOG_DEBUG("[StreamingQueries] Retry check alive request",
                     {"logPrefix", LogPrefix()},
-                    {"#_Info.PreviousOwner", Info.PreviousOwner});
+                    {"previousOwner", Info.PreviousOwner});
                 Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
                 Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
                 break;
@@ -1277,7 +1277,7 @@ public:
             case EWakeup::CheckAliveTimeout: {
                 YDB_LOG_WARN("[StreamingQueries] Deliver streaming query owner check alive request timeouted, retry check alive",
                     {"logPrefix", LogPrefix()},
-                    {"#_Info.PreviousOwner", Info.PreviousOwner});
+                    {"previousOwner", Info.PreviousOwner});
                 RetryCheckAlive(/* longDelay */ false);
                 break;
             }
@@ -1303,7 +1303,7 @@ public:
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         YDB_LOG_WARN("[StreamingQueries] Node with streaming query operation owner was disconnected, retry check alive",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->NodeId", ev->Get()->NodeId});
+            {"nodeId", ev->Get()->NodeId});
         RetryCheckAlive(/* longDelay */ true);
     }
 
@@ -1359,7 +1359,7 @@ private:
         if (const auto delay = CheckAliveRetryState->GetNextRetryDelay(longDelay)) {
             YDB_LOG_DEBUG("[StreamingQueries] Schedule retry check alive",
                 {"logPrefix", LogPrefix()},
-                {"#_*delay", *delay});
+                {"delay", *delay});
             Schedule(*delay, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RetryCheckAlive)));
             WaitRetryCheckAlive = true;
         } else {
@@ -1502,7 +1502,7 @@ public:
     void OnRunQuery() final {
         YDB_LOG_DEBUG("[StreamingQueries] Updating streaming query state",
             {"logPrefix", LogPrefix()},
-            {"#_LogQueryState(State)", LogQueryState(State)});
+            {"queryState", LogQueryState(State)});
         SetQueryResultHandler(&TUpdateStreamingQueryStateRequestActor::OnGetQueryInfo, "Get query info");
         ReadQueryInfo(TTxControl::BeginTx());
     }
@@ -1612,7 +1612,7 @@ public:
         --OperationsToForget;
         YDB_LOG_DEBUG("[StreamingQueries] Forget streaming query execution finished execution",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Cookie", ev->Cookie},
+            {"cookie", ev->Cookie},
             {"sender", ev->Sender},
             {"status", status},
             {"id", executionId},
@@ -1657,7 +1657,7 @@ private:
         if (State.PreviousExecutionIdsSize() > 0) {
             YDB_LOG_DEBUG("[StreamingQueries] Cleanup previous executions",
                 {"logPrefix", LogPrefix()},
-                {"#_State.PreviousExecutionIdsSize", State.PreviousExecutionIdsSize()});
+                {"previousExecutionIdsSize", State.PreviousExecutionIdsSize()});
 
             for (const auto& executionId : State.GetPreviousExecutionIds()) {
                 SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA), OperationsToForget++);
@@ -1708,7 +1708,7 @@ public:
         YDB_LOG_DEBUG("[StreamingQueries] Bootstrap. SS text last query execution start new",
             {"logPrefix", LogPrefix()},
             {"revision", Settings.QueryTextRevision},
-            {"#_revision", State.GetQueryTextRevision()},
+            {"revision", State.GetQueryTextRevision()},
             {"query", State.GetQueryText()});
 
         if (State.HasCurrentExecutionId()) {
@@ -1767,7 +1767,7 @@ public:
         --OperationsToForget;
         YDB_LOG_DEBUG("[StreamingQueries] Forget streaming query execution finished execution",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Cookie", ev->Cookie},
+            {"cookie", ev->Cookie},
             {"sender", ev->Sender},
             {"status", status},
             {"id", executionId},
@@ -2009,7 +2009,7 @@ private:
         if (const auto delay = GetOperationRetryState->GetNextRetryDelay()) {
             YDB_LOG_DEBUG("[StreamingQueries] Schedule get script execution operation",
                 {"logPrefix", LogPrefix()},
-                {"#_*delay", *delay});
+                {"delay", *delay});
             Schedule(*delay, new TEvents::TEvWakeup());
         } else {
             YDB_LOG_WARN("[StreamingQueries] Script execution operation not started after send response",
@@ -2407,7 +2407,7 @@ public:
             if (const auto& securityObject = *SchemeInfo->SecurityObject; !securityObject.CheckAccess(Access, *Context.GetUserToken())) {
                 YDB_LOG_WARN("[StreamingQueries] Access denied",
                     {"logPrefix", LogPrefix()},
-                    {"#_Context.GetUserToken()->GetUserSID", Context.GetUserToken()->GetUserSID()},
+                    {"userSid", Context.GetUserToken()->GetUserSID()},
                     {"access", Access});
 
                 if (!securityObject.CheckAccess(NACLib::DescribeSchema, *Context.GetUserToken())) {

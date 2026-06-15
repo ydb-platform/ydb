@@ -296,9 +296,9 @@ public:
             {"database", Database},
             {"softDeadline", softDeadline},
             {"hardDeadline", hardDeadline},
-            {"#_num_0", (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")},
+            {"hardDeadlineNote", (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")},
             {"maxConcurrent", MaxConcurrentCompilations},
-            {"#_num_1", (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")});
+            {"maxConcurrentCompilationsNote", (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")});
 
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
@@ -335,7 +335,7 @@ private:
         default:
             YDB_LOG_WARN("StateWaitingComplete: unexpected event",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                {"eventTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -350,7 +350,7 @@ private:
         default:
             YDB_LOG_WARN("StateWaitingTopology: unexpected event",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                {"eventTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -367,7 +367,7 @@ private:
         default:
             YDB_LOG_WARN("StateFetching: unexpected event",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                {"eventTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -383,7 +383,7 @@ private:
         default:
             YDB_LOG_WARN("StateCompiling: unexpected event",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                {"eventTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -444,7 +444,7 @@ private:
         if (peerCount == 0) {
             YDB_LOG_INFO("No peers in initial kqpexch+ board sync skipping warmup",
                 {"logPrefix", LogPrefix()},
-                {"#_(boardSize", boardNodeIds.size()});
+                {"boardSize", boardNodeIds.size()});
             Complete(true, "Skipped: no peers in initial kqpexch+ board sync");
             return;
         }
@@ -484,7 +484,7 @@ private:
 
         YDB_LOG_INFO("Spawning fetch cache actor, filtering by nodes",
             {"logPrefix", LogPrefix()},
-            {"#_NodeIds.size", NodeIds.size()});
+            {"nodeIdsCount", NodeIds.size()});
         const ui64 maxCompilationMs = Config.MaxCompilationDurationMs > 0
             ? Config.MaxCompilationDurationMs
             : Config.SoftDeadline.MilliSeconds() / 2;
@@ -513,7 +513,7 @@ private:
         QueriesToCompile = std::move(result->Queries);
         YDB_LOG_INFO("Fetched queries from compile cache",
             {"logPrefix", LogPrefix()},
-            {"#_QueriesToCompile.size", QueriesToCompile.size()});
+            {"queriesToCompileCount", QueriesToCompile.size()});
 
         if (Counters) {
             Counters->WarmupQueriesFetched->Add(QueriesToCompile.size());
@@ -555,7 +555,7 @@ private:
                     {"user", query.UserSID},
                     {"hasMetadata", !query.Metadata.empty()},
                     {"query", query.QueryText.substr(0, 200)},
-                    {"#_num_0", (query.QueryText.size() > 200 ? "..." : "")});
+                    {"queryTextSuffix", (query.QueryText.size() > 200 ? "..." : "")});
             } else {
                 TString errorMsg;
                 const auto& issues = record.GetResponse().GetQueryIssues();
@@ -574,7 +574,7 @@ private:
                     {"status", Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())},
                     {"error", errorMsg},
                     {"query", query.QueryText.substr(0, 200)},
-                    {"#_num_0", (query.QueryText.size() > 200 ? "..." : "")});
+                    {"queryTextSuffix", (query.QueryText.size() > 200 ? "..." : "")});
             }
             PendingQueriesByCookie.erase(it);
         } else {
@@ -755,7 +755,7 @@ private:
 
         YDB_LOG_INFO("Warmup",
             {"logPrefix", LogPrefix()},
-            {"#_num_0", (success ? "completed" : "finished")},
+            {"completionStatus", (success ? "completed" : "finished")},
             {"message", message});
 
         for (const auto& actorId : NotifyActorIds) {

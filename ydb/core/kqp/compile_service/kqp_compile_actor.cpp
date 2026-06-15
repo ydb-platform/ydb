@@ -278,14 +278,14 @@ private:
         Counters->ReportCompileStart(DbCounters);
 
         YDB_LOG_DEBUG_CTX(ctx, "TraceId: verbosity trace_id",
-            {"#_std::to_string(CompileActorSpan.GetTraceId().GetVerbosity())", std::to_string(CompileActorSpan.GetTraceId().GetVerbosity())},
-            {"#_std::to_string(CompileActorSpan.GetTraceId().GetTraceId())", std::to_string(CompileActorSpan.GetTraceId().GetTraceId())});
+            {"traceVerbosity", std::to_string(CompileActorSpan.GetTraceId().GetVerbosity())},
+            {"traceId", std::to_string(CompileActorSpan.GetTraceId().GetTraceId())});
 
         YDB_LOG_DEBUG_CTX(ctx, "Start compilation text",
             {"self", ctx.SelfID},
             {"cluster", QueryId.Cluster},
             {"database", QueryId.Database},
-            {"#_EscapeC(QueryId.Text)", EscapeC(QueryId.Text)},
+            {"queryText", EscapeC(QueryId.Text)},
             {"startTime", StartTime});
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
@@ -670,7 +670,7 @@ private:
             {"self", SelfId()},
             {"cluster", QueryId.Cluster},
             {"database", QueryId.Database},
-            {"#_EscapeC(QueryId.Text)", EscapeC(QueryId.Text)},
+            {"queryText", EscapeC(QueryId.Text)},
             {"startTime", StartTime});
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -697,7 +697,7 @@ private:
             {"logMessage", logMessage},
             {"self", ctx.SelfID},
             {"database", QueryId.Database},
-            {"#_EscapeC(QueryId.Text)", EscapeC(QueryId.Text)});
+            {"queryText", EscapeC(QueryId.Text)});
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.

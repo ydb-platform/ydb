@@ -1617,7 +1617,7 @@ protected:
             {"actorId", SelfId()},
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
-            {"#_issues.ToOneLineString", issues.ToOneLineString()},
+            {"issuesOneLine", issues.ToOneLineString()},
             {"traceId", TraceId()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         for (const NYql::TIssue& i : issues) {

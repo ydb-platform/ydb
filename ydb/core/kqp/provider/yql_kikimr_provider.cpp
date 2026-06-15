@@ -157,7 +157,7 @@ struct TKikimrData {
             TYdbOperation::TruncateTable;
 
         SystemColumns = {
-            {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
+            {NKikimr::YqlPartitionColumnName, NKikimr::NUdf::EDataSlot::Uint64}
         };
     }
 };

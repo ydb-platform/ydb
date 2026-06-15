@@ -593,7 +593,8 @@ public:
         NKikimrKeyValue::Statuses::ReplyStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info = nullptr)
     {
-        ALOG_INFO(NKikimrServices::KEYVALUE, errorDescription);
+        YDB_LOG_INFO_COMP(NKikimrServices::KEYVALUE, "",
+            {"errorDescription", errorDescription});
         Y_ABORT_UNLESS(!intermediate->IsReplied);
         std::unique_ptr<TResponse> response = std::make_unique<TResponse>();
         response->Record.set_status(status);

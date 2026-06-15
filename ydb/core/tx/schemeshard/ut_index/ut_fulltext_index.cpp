@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         }
     }
 
-    Y_UNIT_TEST(CreateTablePrefix) { // not supported for now, maybe later
+    Y_UNIT_TEST(CreateTablePrefix) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -92,6 +92,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 }
             }
         )";
+        // The index key columns are [prefix..., text]; here "another" is a prefix column.
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
                 Name: "texts"
@@ -106,18 +107,37 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 KeyColumnNames: [ "another", "text"]
                 DataColumnNames: ["covered"]
                 Type: EIndexTypeGlobalFulltextPlain
-                FulltextIndexDescription: { 
-                    Settings: { 
+                FulltextIndexDescription: {
+                    Settings: {
                         %s
                     }
                 }
             }
-        )", fulltextSettings.c_str()), {NKikimrScheme::StatusInvalidParameter});
+        )", fulltextSettings.c_str()));
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
-            NLs::PathNotExist,
-        });
+        for (ui32 reboot = 0; reboot < 2; reboot++) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"another", "text"}),
+                NLs::IndexDataColumns({"covered"}),
+                NLs::SpecializedIndexDescription(fulltextSettings),
+                NLs::ChildrenCount(1),
+            });
+
+            // Posting impl table key is [prefix..., __ydb_token, doc_id...] = [another, __ydb_token, id].
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext/indexImplTable"),{
+                NLs::PathExist,
+                NLs::CheckColumns("indexImplTable",
+                        { NTableIndex::NFulltext::TokenColumn, "id", "covered", "another" }, {},
+                        { "another", NTableIndex::NFulltext::TokenColumn, "id" }, true) });
+
+            Cerr << "Reboot SchemeShard.." << Endl;
+            TActorId sender = runtime.AllocateEdgeActor();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        }
     }
 
     Y_UNIT_TEST(CreateTableMultipleColumns) { // not supported for now, maybe later

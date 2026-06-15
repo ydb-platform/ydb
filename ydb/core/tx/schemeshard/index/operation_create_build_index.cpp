@@ -250,7 +250,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
                     indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
                 : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
+                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
@@ -271,7 +272,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
                     indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
                 : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
+                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));

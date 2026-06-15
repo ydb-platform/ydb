@@ -3461,6 +3461,310 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextMatchPrefixed) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    auto kikimr = Kikimr(std::move(featureFlags));
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with a prefixed fulltext index ON (UserId, Text)
+        TString query = R"sql(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                UserId Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx
+                    GLOBAL USING fulltext_plain
+                    ON (UserId, Text)
+                    WITH (tokenizer=standard, use_filter_lowercase=true)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Same words appear across different users
+        TString query = R"sql(
+            UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                (1, 100, "cats love to play"),
+                (2, 100, "dogs love to run"),
+                (3, 200, "cats love milk"),
+                (4, 200, "birds love to fly")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    auto selectKeys = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        return NYdb::FormatResultSetYson(result.GetResultSet(0));
+    };
+
+    { // user 100 sees only its own "cats" document, not user 200's
+        CompareYson("[[[1u]]]", selectKeys(R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;
+        )sql"));
+    }
+    { // user 200 sees only its own "cats" document
+        CompareYson("[[[3u]]]", selectKeys(R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;
+        )sql"));
+    }
+    { // "love" is isolated per prefix as well
+        CompareYson("[[[1u]];[[2u]]]", selectKeys(R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE UserId = 100 AND FulltextMatch(Text, "love") ORDER BY Key;
+        )sql"));
+        CompareYson("[[[3u]];[[4u]]]", selectKeys(R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE UserId = 200 AND FulltextMatch(Text, "love") ORDER BY Key;
+        )sql"));
+    }
+
+    { // prefix value passed as a parameter
+        TString query = R"sql(
+            DECLARE $uid AS Uint64;
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE UserId = $uid AND FulltextMatch(Text, "cats") ORDER BY Key;
+        )sql";
+        auto params = NYdb::TParamsBuilder().AddParam("$uid").Uint64(200).Build().Build();
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[3u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    { // missing equality on the prefix column => the index cannot be used
+        TString query = R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "cats") ORDER BY Key;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST(CreatePrefixedFulltextIndexDisabled) {
+    auto kikimr = Kikimr(); // EnableFulltextIndexPrefix is off
+    auto db = kikimr.GetQueryClient();
+
+    TString query = R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64,
+            UserId Uint64,
+            Text Utf8,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (UserId, Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        );
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "prefix columns support is disabled");
+}
+
+Y_UNIT_TEST(CreatePrefixedFulltextIndexOnPrimaryKey) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    auto kikimr = Kikimr(std::move(featureFlags));
+    auto db = kikimr.GetQueryClient();
+
+    // A prefix column must not be a primary key (doc-id) column.
+    TString query = R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64,
+            Text Utf8,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Key, Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        );
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "must not be a primary key column");
+}
+
+Y_UNIT_TEST(SelectWithFulltextRelevancePrefixed) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    auto kikimr = Kikimr(std::move(featureFlags));
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                UserId Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx
+                    GLOBAL USING fulltext_relevance
+                    ON (UserId, Text)
+                    WITH (tokenizer=standard, use_filter_lowercase=true)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                (1, 100, "cats love to play"),
+                (2, 100, "dogs love to run"),
+                (3, 200, "cats love milk"),
+                (4, 200, "birds love to fly")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // relevance query is isolated to the requested prefix
+        TString query = R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE UserId = 200 AND FulltextScore(Text, "cats") > 0
+            ORDER BY Key;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[3u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextMatchMultiPrefixReversedOrder) {
+    // Two prefix columns; the WHERE equality predicates are written in the opposite order to the
+    // index key columns. The prefix cells must still be assembled in index order [Region, UserId],
+    // otherwise the posting-table read key is wrong and matches are missed. Uses the relevance index
+    // so the equality predicates are extracted from the lambda (in predicate traversal order), which
+    // is exactly the path that needs the reorder.
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    auto kikimr = Kikimr(std::move(featureFlags));
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                Region Uint64,
+                UserId Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx
+                    GLOBAL USING fulltext_relevance
+                    ON (Region, UserId, Text)
+                    WITH (tokenizer=standard, use_filter_lowercase=true)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Docs` (Key, Region, UserId, Text) VALUES
+                (1, 10, 100, "cats love to play"),
+                (2, 10, 200, "cats love milk"),
+                (3, 20, 100, "cats hate water")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    auto selectKeys = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        return NYdb::FormatResultSetYson(result.GetResultSet(0));
+    };
+
+    // Predicate order (UserId, Region) is reversed vs index order (Region, UserId).
+    CompareYson("[[[1u]]]", selectKeys(R"sql(
+        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+        WHERE UserId = 100 AND Region = 10 AND FulltextScore(Text, "cats") > 0 ORDER BY Key;
+    )sql"));
+    // (Region=20, UserId=100) must be isolated from (Region=10, UserId=100).
+    CompareYson("[[[3u]]]", selectKeys(R"sql(
+        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+        WHERE UserId = 100 AND Region = 20 AND FulltextScore(Text, "cats") > 0 ORDER BY Key;
+    )sql"));
+    // Same prefix, different doc.
+    CompareYson("[[[2u]]]", selectKeys(R"sql(
+        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+        WHERE Region = 10 AND UserId = 200 AND FulltextScore(Text, "cats") > 0 ORDER BY Key;
+    )sql"));
+}
+
+Y_UNIT_TEST(SelectWithFulltextMatchPrefixedBuild) {
+    // Exercises the index-build scan path (ALTER ADD INDEX over populated data) with prefix columns.
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    auto kikimr = Kikimr(std::move(featureFlags));
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                UserId Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                (1, 100, "cats love to play"),
+                (2, 100, "dogs love to run"),
+                (3, 200, "cats love milk"),
+                (4, 200, "birds love to fly")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Docs` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (UserId, Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[3u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+    {
+        TString query = R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE UserId = 100 AND FulltextMatch(Text, "love") ORDER BY Key;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[1u]];[[2u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

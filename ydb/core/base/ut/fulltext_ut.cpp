@@ -105,13 +105,21 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         settings.add_columns()->set_column("column2");
 
         UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"column2"}, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "columns [ column1 column2 ] should be [ column2 ]");
+        UNIT_ASSERT_VALUES_EQUAL(error, "indexed columns [ column1 column2 ] should be the suffix of index columns [ column2 ]");
 
         UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"column2", "column1"}, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "columns [ column1 column2 ] should be [ column2 column1 ]");
+        UNIT_ASSERT_VALUES_EQUAL(error, "indexed columns [ column1 column2 ] should be the suffix of index columns [ column2 column1 ]");
 
         UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"column1", "column2"}, settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // prefix columns are allowed before the indexed (text) suffix
+        Ydb::Table::FulltextIndexSettings single;
+        single.add_columns()->set_column("text");
+        UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"user_id", "text"}, single, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+        UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"a", "b", "text"}, single, error));
+        UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"user_id", "other"}, single, error));
     }
 
     Y_UNIT_TEST(ValidateSettings) {

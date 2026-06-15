@@ -136,8 +136,8 @@ NYql::NNodes::TExprBase BuildFulltextDictRows(const NYql::NNodes::TExprBase& tok
 
 NYql::NNodes::TExprBase CombineFulltextDictRows(const TVector<NYql::NNodes::TExprBase>& deltas, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
-NYql::NNodes::TExprBase BuildFulltextPostingKeys(const NYql::TKikimrTableDescription& table, const NYql::NNodes::TExprBase& tokenRows,
-    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+NYql::NNodes::TExprBase BuildFulltextPostingKeys(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
+    const NYql::NNodes::TExprBase& tokenRows, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase BuildFulltextDictUpsert(const NYql::TKikimrTableDescription& dictTable,
     const NYql::NNodes::TExprBase& tokenRows, NYql::TPositionHandle pos, NYql::TExprContext& ctx);

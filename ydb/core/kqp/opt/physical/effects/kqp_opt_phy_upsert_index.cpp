@@ -1011,7 +1011,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     if (withRelevance) {
                         fulltextDictDelta.push_back(deleteIndexKeys);
                         // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
-                        deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, pos, ctx);
+                        deleteIndexKeys = BuildFulltextPostingKeys(table, indexDesc, deleteIndexKeys, pos, ctx);
                         // Delete document rows
                         auto docsKeys = ProjectColumns(deleteKeysPrecompute, table.Metadata->KeyColumnNames, ctx);
                         effects.emplace_back(Build<TKqlDeleteRows>(ctx, pos)

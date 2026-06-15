@@ -30,9 +30,9 @@ using namespace NKikimr::NFulltext;
  *
  * This scan takes the main table and writes output to indexImplTable.
  *
- * Source columns: <PK columns>, <text column>, <data columns>
- * Destination columns with a FulltextPlain index: __ydb_token, <PK columns>, <data columns>
- * Destination columns with a FulltextRelevance index: __ydb_token, <PK columns>, __ydb_freq
+ * Source columns: <PK columns>, <text column>, <data columns>, <prefix columns>
+ * Destination columns with a FulltextPlain index: <prefix columns>, __ydb_token, <PK columns>, <data columns>
+ * Destination columns with a FulltextRelevance index: <prefix columns>, __ydb_token, <PK columns>, __ydb_freq
  * Destination columns with a FulltextCompact/FulltextCompactRelevance/JsonCompact index:
  *   __ydb_token, __ydb_max_id, __ydb_generation (always max), __ydb_added (always true), __ydb_segment
  *
@@ -87,6 +87,12 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     bool IsBinaryJson = false;
     bool UseRowIdAsDocId = false;
     size_t RowIdRowIndex = 0; // position of __ydb_row_id in the row returned by the scan
+
+    // Prefix (leading) key columns of the posting table. The posting key is
+    // [prefix..., __ydb_token, doc_id...]. PrefixRowIndices are their positions
+    // in the row returned by the scan.
+    TVector<TString> PrefixColumns;
+    TVector<size_t> PrefixRowIndices;
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -169,6 +175,12 @@ public:
                 RowIdRowIndex = ScanTags.size();
                 ScanTags.push_back(tags.at(NKikimr::NTableIndex::NFulltext::RowIdColumn));
             }
+
+            PrefixColumns.assign(Request.GetPrefixColumns().begin(), Request.GetPrefixColumns().end());
+            for (const auto& prefixColumn : PrefixColumns) {
+                PrefixRowIndices.push_back(ScanTags.size());
+                ScanTags.push_back(tags.at(prefixColumn));
+            }
         }
 
         auto addType = [&](auto& uploadTypes, const auto& column) {
@@ -216,6 +228,11 @@ public:
     void MakeTokenTypes(const TUserTable& table, const TColumnsTypes& types, std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TString& column)> addType)
     {
         auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+
+        // Leading prefix key columns come first in the posting key.
+        for (const auto& prefixColumn : PrefixColumns) {
+            addType(uploadTypes, prefixColumn);
+        }
 
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
             Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
@@ -340,6 +357,12 @@ public:
             docIdKey = TArrayRef<const TCell>(&rowIdCell, 1);
         }
 
+        // Leading prefix key cells of the posting table.
+        TVector<TCell> prefixCells(::Reserve(PrefixRowIndices.size()));
+        for (size_t prefixIndex : PrefixRowIndices) {
+            prefixCells.push_back(row.Get(prefixIndex));
+        }
+
         TVector<TString> tokens;
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
             Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
@@ -414,29 +437,30 @@ public:
             // key as the per-destination boundary; GetMinFlushedKey() then yields a checkpoint that is
             // safe across the asymmetrically-filling posting and docs buffers.
             Uploader.SetCurrentSourceKey(LastProcessedKey);
-            UploadFulltextRelevance(docIdKey, tokens);
+            UploadFulltextRelevance(prefixCells, docIdKey, tokens);
             UploadDocRow(docIdKey, row, tokens.size());
         } else {
             LastProcessedKey = TSerializedCellVec(key);
             Uploader.SetCurrentSourceKey(LastProcessedKey);
-            UploadFulltextPlain(docIdKey, row, tokens);
+            UploadFulltextPlain(prefixCells, docIdKey, row, tokens);
         }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 
-    void UploadFulltextRelevance(TArrayRef<const TCell> key, const TVector<TString>& tokens)
+    void UploadFulltextRelevance(TArrayRef<const TCell> prefix, TArrayRef<const TCell> key, const TVector<TString>& tokens)
     {
         THashMap<TString, ui32> tokenFreq;
         for (const auto& token : tokens) {
             tokenFreq[token]++;
         }
 
-        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        TVector<TCell> uploadKey(::Reserve(prefix.size() + key.size() + 1));
         TVector<TCell> uploadValue(::Reserve(1));
 
         for (const auto& [token, freq] : tokenFreq) {
             uploadKey.clear();
+            uploadKey.insert(uploadKey.end(), prefix.begin(), prefix.end());
             uploadKey.push_back(TCell(token));
             uploadKey.insert(uploadKey.end(), key.begin(), key.end());
 
@@ -471,13 +495,14 @@ public:
         TotalDocLength += totalTokens;
     }
 
-    void UploadFulltextPlain(TArrayRef<const TCell> key, const TRow& row, const TVector<TString>& tokens)
+    void UploadFulltextPlain(TArrayRef<const TCell> prefix, TArrayRef<const TCell> key, const TRow& row, const TVector<TString>& tokens)
     {
-        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        TVector<TCell> uploadKey(::Reserve(prefix.size() + key.size() + 1));
         TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
 
         for (const auto& token : tokens) {
             uploadKey.clear();
+            uploadKey.insert(uploadKey.end(), prefix.begin(), prefix.end());
             uploadKey.push_back(TCell(token));
             uploadKey.insert(uploadKey.end(), key.begin(), key.end());
 
@@ -813,6 +838,19 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         if (request.GetUseRowIdAsDocId() && !tags.contains(NKikimr::NTableIndex::NFulltext::RowIdColumn)) {
             badRequest(TStringBuilder() << "UseRowIdAsDocId requested but column '"
                 << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' not found in table");
+        }
+
+        for (const auto& prefixColumn : request.GetPrefixColumns()) {
+            if (!tags.contains(prefixColumn)) {
+                badRequest(TStringBuilder() << "Unknown prefix column: " << prefixColumn);
+            }
+        }
+
+        if (request.GetPrefixColumns().size() &&
+            (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
+             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
+             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact)) {
+            badRequest(TStringBuilder() << "Prefix columns are not supported for compact fulltext indexes");
         }
 
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||

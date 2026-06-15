@@ -123,7 +123,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                     auto dictRows = BuildFulltextDictRows(deleteIndexKeys, false /*useSum*/, true /*useStage*/, del.Pos(), ctx);
                     effects.emplace_back(BuildFulltextDictUpsert(dictTable, dictRows, del.Pos(), ctx));
                     // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
-                    deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, del.Pos(), ctx);
+                    deleteIndexKeys = BuildFulltextPostingKeys(table, indexDesc, deleteIndexKeys, del.Pos(), ctx);
                     // Delete document rows
                     const auto& docsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
                         << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable);

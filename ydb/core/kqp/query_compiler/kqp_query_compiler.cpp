@@ -1631,6 +1631,20 @@ private:
                 }
             }
 
+            for (const auto& [colName, valuePtr] : settingsObj.PrefixColumns) {
+                auto* prefixProto = fullTextProto.MutableQuerySettings()->AddPrefixColumns();
+                auto* columnPtr = tableMeta->Columns.FindPtr(colName);
+                YQL_ENSURE(columnPtr, "Prefix column " << colName << " not found in table");
+                fillCol(columnPtr, prefixProto->MutableColumn());
+                auto value = TExprBase(valuePtr);
+                auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+                if (inner.Maybe<TCoParameter>()) {
+                    prefixProto->MutableValue()->MutableParamValue()->SetParamName(inner.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(inner.Cast<TCoDataCtor>(), *prefixProto->MutableValue()->MutableLiteralValue());
+                }
+            }
+
         } else if (auto settings = source.Settings().Maybe<TKqpReadSysViewSourceSettings>()) {
             NKqpProto::TKqpSysViewSource& sysViewProto = *protoSource->MutableSysViewSource();
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);

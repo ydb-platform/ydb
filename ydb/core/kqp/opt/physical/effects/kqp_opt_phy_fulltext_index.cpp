@@ -28,6 +28,15 @@ void ForEachFulltextDocIdColumn(const NYql::TKikimrTableMetadata& table, const T
     }
 }
 
+// Fulltext index key columns are [prefix..., text]; the text column is the last one.
+// Invokes f for each leading prefix column (none for a non-prefixed index).
+template <class F>
+void ForEachFulltextPrefixColumn(const TIndexDescription* indexDesc, F&& f) {
+    for (size_t i = 0; i + 1 < indexDesc->KeyColumns.size(); ++i) {
+        f(TStringBuf(indexDesc->KeyColumns[i]));
+    }
+}
+
 }
 
 TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExprBase& inputRow,
@@ -161,6 +170,11 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
             .Build()
         .Done();
     tokenRowTuples.emplace_back(tokenTuple);
+
+    // Add leading prefix key columns (read from the input row).
+    ForEachFulltextPrefixColumn(indexDesc, [&](TStringBuf column) {
+        addIndexColumn(column);
+    });
 
     // Add document-id columns (main-table PK, or __ydb_row_id when UseRowIdAsDocId is set)
     ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
@@ -468,10 +482,14 @@ TExprBase CombineFulltextDictRows(const TVector<TExprBase>& deltas, TPositionHan
 
 // This is...
 // SELECT <pk columns>, token FROM <tokenRows> - to delete this set of keys during deletion
-TExprBase BuildFulltextPostingKeys(const TKikimrTableDescription& table, const NNodes::TExprBase& tokenRows,
-    TPositionHandle pos, NYql::TExprContext& ctx)
+TExprBase BuildFulltextPostingKeys(const TKikimrTableDescription& table, const TIndexDescription* indexDesc,
+    const NNodes::TExprBase& tokenRows, TPositionHandle pos, NYql::TExprContext& ctx)
 {
     TVector<TExprBase> keyColumns;
+    // Posting key is [prefix..., __ydb_token, doc_id...].
+    ForEachFulltextPrefixColumn(indexDesc, [&](TStringBuf column) {
+        keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(column).Done());
+    });
     keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(NTableIndex::NFulltext::TokenColumn).Done());
     for (const auto& column : table.Metadata->KeyColumnNames) {
         keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(column).Done());

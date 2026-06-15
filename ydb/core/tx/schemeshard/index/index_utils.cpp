@@ -508,7 +508,8 @@ auto CalcFulltextImplTableDescImpl(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType)
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns)
 {
     auto tableColumns = ExtractInfo(baseTable);
     const bool useRowId = indexDesc.GetUseRowIdAsDocId();
@@ -529,6 +530,12 @@ auto CalcFulltextImplTableDescImpl(
             indexColumns.insert(keyColumn);
         }
     }
+    // Prefix columns become the leading key columns of the posting table.
+    // Prefix columns must be disjoint from the doc-id columns (validated at index creation),
+    // so the posting key is [prefix..., __ydb_token, doc_id...] with no duplicate key column.
+    for (const auto& prefixColumn : prefixColumns) {
+        indexColumns.insert(prefixColumn);
+    }
 
     TColumnTypes baseColumnTypes;
     TString error;
@@ -545,6 +552,10 @@ auto CalcFulltextImplTableDescImpl(
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    // Leading prefix key columns (their column descriptions are filled by FillIndexImplTableColumns below).
+    for (const auto& prefixColumn : prefixColumns) {
+        implTableDesc.AddKeyColumnNames(prefixColumn);
+    }
     {
         auto tokenColumn = implTableDesc.AddColumns();
         tokenColumn->SetName(NFulltext::TokenColumn);
@@ -806,9 +817,10 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType)
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns)
 {
-    return CalcFulltextImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType);
+    return CalcFulltextImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType, prefixColumns);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
@@ -817,9 +829,10 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType)
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns)
 {
-    return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType);
+    return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType, prefixColumns);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(

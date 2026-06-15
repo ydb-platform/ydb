@@ -1291,6 +1291,13 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
+        // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+        if (buildInfo.IndexColumns.size() > 1) {
+            for (size_t i = 0; i + 1 < buildInfo.IndexColumns.size(); ++i) {
+                ev->Record.AddPrefixColumns(buildInfo.IndexColumns[i]);
+            }
+        }
+
         bool compact = buildInfo.IsBuildFulltextCompact();
         if (buildInfo.TargetName.empty()) {
             TPath implTable = GetBuildPath(Self, buildInfo, TString(NTableIndex::ImplTable) + (compact ? NTableIndex::NKMeans::BuildSuffix0 : ""));

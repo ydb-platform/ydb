@@ -25,6 +25,15 @@ struct TIndexObjectCounts {
 
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
+// Fulltext index key columns are ordered [prefix..., text]; the text column is always last.
+// Returns the leading prefix columns (empty for a non-prefixed index).
+inline TVector<TString> GetFulltextPrefixColumns(const NProtoBuf::RepeatedPtrField<TString>& keyColumnNames) {
+    if (keyColumnNames.size() <= 1) {
+        return {};
+    }
+    return TVector<TString>{keyColumnNames.begin(), keyColumnNames.end() - 1};
+}
+
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const TTableColumns& implTableColumns,
@@ -83,7 +92,8 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType);
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
@@ -91,7 +101,8 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType);
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,

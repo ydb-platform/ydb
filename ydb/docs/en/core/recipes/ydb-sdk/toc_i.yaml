@@ -36,7 +36,7 @@ items:
 - name: Setting the session pool size
   href: session-pool-limit.md
 - name: Upserting data
-  href: upsert.md           
+  href: upsert.md
 - name: Bulk-upserting data
   href: bulk-upsert.md
 - name: Setting up the transaction execution mode

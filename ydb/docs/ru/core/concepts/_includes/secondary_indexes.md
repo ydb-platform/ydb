@@ -45,7 +45,7 @@
 
 [JSON-индекс](../../dev/json-indexes.md) является особым видом полнотекстового индекса.
 
-JSON-индексы позволяют ускорять предикаты с функциями [JSON_EXISTS](../../yql/reference/builtins/json.md) и [JSON_VALUE](../../yql/reference/builtins/json.md) по содержимому колонки типа `Json` или `JsonDocument`. Индекс строится по путям [JsonPath](../../yql/reference/builtins/json.md#jsonpath) внутри JSON-документа и по парам «путь + значение», что позволяет находить соответствующие строки по произвольным атрибутам без полного сканирования таблицы. См. также: [Поиск по JSON](../query_execution/json_search.md).
+JSON-индексы позволяют ускорять предикаты с функциями [JSON_EXISTS](../../yql/reference/builtins/json.md) и [JSON_VALUE](../../yql/reference/builtins/json.md) по содержимому колонки типа `Json` или `JsonDocument`. Индекс строится с помощью разбиения JSON-документов на токены путей и пар вида «путь + значение», что позволяет находить соответствующие строки по путям [JsonPath](../../yql/reference/builtins/json.md#jsonpath) без полного сканирования таблицы. См. также: [Поиск по JSON](../query_execution/json_search.md).
 
 ## Локальные индексы {#bloom-skip-index}
 

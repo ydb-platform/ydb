@@ -158,15 +158,16 @@ WHERE JSON_VALUE(doc, '$.status' RETURNING Utf8) IN $status_list
 -- PASSING для переменных JsonPath
 WHERE JSON_VALUE(doc, '$.x ? (@.y == $v)' RETURNING Int64 PASSING 42 AS v) = 10
 
--- Предикаты JsonPath внутри пути (как у JSON_EXISTS)
+-- Предикаты JsonPath внутри пути.
+-- В отличие от JSON_EXISTS, разрешены предикаты на верхнем уровне.
 WHERE JSON_VALUE(doc, '$.user ? (@.role == "admin")' RETURNING Utf8) = "ok"u
 WHERE JSON_VALUE(doc, '$.code starts with "A"' RETURNING String) != ""
 WHERE JSON_VALUE(doc, 'exists($.meta)' RETURNING Bool)
 
 -- Комбинации AND / OR на одной колонке
-WHERE JSON_VALUE(doc, '$.a' RETURNING Int32) == 1
-   OR JSON_VALUE(doc, '$.b' RETURNING Int32) == 2
-WHERE JSON_EXISTS(doc, '$.a') AND JSON_VALUE(doc, '$.a' RETURNING Int32) == 10
+WHERE JSON_VALUE(doc, '$.a' RETURNING Int32) = 1
+   OR JSON_VALUE(doc, '$.b' RETURNING Int32) = 2
+WHERE JSON_EXISTS(doc, '$.a') AND JSON_VALUE(doc, '$.a' RETURNING Int32) = 10
 ```
 
 **Запрещено или не индексируется:**
@@ -191,7 +192,7 @@ WHERE JSON_VALUE(doc, '$.k' RETURNING Utf8) IS NULL
 WHERE JSON_VALUE(doc1, '$.k' RETURNING Utf8) = JSON_VALUE(doc2, '$.k' RETURNING Utf8)
 
 -- Вложенные JSON_* в аргументах
-WHERE JSON_VALUE(JSON_VALUE(doc, '$.a' RETURNING Utf8), '$.b' RETURNING Utf8) = "x"
+WHERE JSON_VALUE(JSON_QUERY(doc, '$.a'), '$.b' RETURNING Utf8) = "x"
 ```
 
 {% note info %}
@@ -205,10 +206,10 @@ WHERE JSON_VALUE(JSON_VALUE(doc, '$.a' RETURNING Utf8), '$.b' RETURNING Utf8) = 
 * JSON-индексы поддерживаются только для [строковых](../concepts/datamodel/table.md#row-oriented-tables) таблиц.
 * Первичный ключ таблицы должен состоять из единственной колонки целочисленного типа (`Uint64`, `Uint32`, `Int64` или `Int32`). Временное ограничение, будет снято в ходе дальнейшего развития.
 * В одном JSON-индексе индексируется ровно одна колонка типа `Json` или `JsonDocument`.
-* Покрывающие индексы (выражение `COVER`) для JSON-индексов не поддерживаются.
+* Выражение `COVER` для JSON-индексов не поддерживается.
 * Для таблиц с JSON-индексами [не поддерживается](#update) ряд операций и механизмов модификации данных.
-* Тип параметра запроса не может быть обёрнут в `Optional<T>` — опциональные параметры не поддерживаются.
-* Сравнение по равенству с целочисленным литералом, абсолютное значение которого превышает 2⁵³, не ускоряется индексом по значению (такие числа не помещаются в тип `Double` без потери точности) и сводится к проверке существования пути.
+* Тип параметра запроса чтения из индекса не может быть обёрнут в `Optional<T>` — опциональные параметры не поддерживаются.
+* Сравнение по равенству с целочисленным литералом, абсолютное значение которого превышает 2⁵³, не ускоряется индексом по значению (такие числа не помещаются в численный тип, используемый в `Json` и `JsonDocument`) и сводится к проверке существования пути.
 * Приведение вещественных литералов (`Float`, `Double`) к целочисленным типам при сравнении не выполняется — такое сравнение не ускоряется индексом.
 
 ## Рецепты {#recipes}

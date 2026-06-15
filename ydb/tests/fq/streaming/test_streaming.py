@@ -790,10 +790,8 @@ LIMIT 1"""
         ]
         self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
 
-        results = []
-        for _ in range(3):
-            raw = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
-            results.append(json.loads(raw))
+        raw_results = self.read_stream(3, topic_path=self.output_topic, endpoint=endpoint)
+        results = [json.loads(raw) for raw in raw_results]
 
         # Each message must have its own msg_id, not mixed
         msg_ids = {r["msg_id"] for r in results}
@@ -905,7 +903,7 @@ LIMIT 1"""
         sql = f"""SELECT
     field1,
     Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id,
-    SystemMetadata("_message_group_id") AS producer_id
+    SystemMetadata("message_group_id") AS producer_id
 FROM {inp}
 WITH (
     STREAMING = "TRUE",

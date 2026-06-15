@@ -155,6 +155,29 @@ TStringBuf LogSince(const TStringStream& logStream, size_t offset) {
     return offset < blob.size() ? blob.SubStr(offset) : TStringBuf{};
 }
 
+// Drives KqpProxy with an explicit UserToken — SDK clients can't set the
+// SID, but metadata-service local RPCs do exactly this internally.
+void SendKqpQueryAsUser(TTestActorRuntime& runtime,
+                       const TActorId& edge,
+                       const TString& userSid,
+                       const TString& query) {
+    auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+    ev->Record.SetUserToken(NACLib::TUserToken(userSid, {}).SerializeAsString());
+    ActorIdToProto(edge, ev->Record.MutableRequestActorId());
+    auto& req = *ev->Record.MutableRequest();
+    req.SetDatabase("/Root");
+    req.SetQuery(query);
+    req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+    auto* txControl = req.MutableTxControl();
+    txControl->mutable_begin_tx()->mutable_serializable_read_write();
+    txControl->set_commit_tx(true);
+
+    runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId(0)), edge, ev.release()));
+    auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(edge);
+    UNIT_ASSERT_C(reply, "no TEvQueryResponse for metadata-user query");
+}
+
 Y_UNIT_TEST_SUITE(KqpQueryEventLog) {
 
 // At KQP_REQUEST=DEBUG a successful query emits one completed envelope at
@@ -250,6 +273,42 @@ Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
         foundFailure = true;
     }
     UNIT_ASSERT_C(foundFailure, "expected failure completed for broken_syntax at WARN");
+}
+
+// WARN failure with empty query text must still carry issues (dataChunks==0 path).
+Y_UNIT_TEST(FailureWithEmptyQueryTextLogsIssuesAtWarn) {
+    TStringStream logStream;
+    size_t logStart = 0;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_WARN);
+        logStart = logStream.Size();
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto edge = runtime.AllocateEdgeActor();
+        SendKqpQueryAsUser(runtime, edge, "user@domain", "");
+    }
+    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    DumpEntries("FailureWithEmptyQueryTextLogsIssuesAtWarn", entries, logStream.Str());
+
+    bool found = false;
+    for (const auto& e : entries) {
+        if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        const auto& req = e.Json["request"];
+        if (req["status"].GetStringSafe("") == "SUCCESS") {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(e.Total, 1, e.RawLine);
+        UNIT_ASSERT_C(!req.Has("data") || req["data"].GetStringSafe("").empty(),
+            TStringBuilder() << "empty query must not carry SQL data: " << e.RawLine);
+        UNIT_ASSERT_C(req.Has("issues"),
+            TStringBuilder() << "failure without query text must still log issues: " << e.RawLine);
+        UNIT_ASSERT_C(!req["issues"].GetStringSafe("").empty(), e.RawLine);
+        found = true;
+    }
+    UNIT_ASSERT_C(found, "expected a single-envelope failure with issues for empty query at WARN");
 }
 
 // At TRACE successful queries are emitted as a multi-part envelope tagged
@@ -552,30 +611,6 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
         sawTruncated = true;
     }
     UNIT_ASSERT_C(sawTruncated, "expected a truncated completed envelope at DEBUG");
-}
-
-
-// Drives KqpProxy with an explicit UserToken — SDK clients can't set the
-// SID, but metadata-service local RPCs do exactly this internally.
-void SendKqpQueryAsUser(TTestActorRuntime& runtime,
-                       const TActorId& edge,
-                       const TString& userSid,
-                       const TString& query) {
-    auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
-    ev->Record.SetUserToken(NACLib::TUserToken(userSid, {}).SerializeAsString());
-    ActorIdToProto(edge, ev->Record.MutableRequestActorId());
-    auto& req = *ev->Record.MutableRequest();
-    req.SetDatabase("/Root");
-    req.SetQuery(query);
-    req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-    auto* txControl = req.MutableTxControl();
-    txControl->mutable_begin_tx()->mutable_serializable_read_write();
-    txControl->set_commit_tx(true);
-
-    runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId(0)), edge, ev.release()));
-    auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(edge);
-    UNIT_ASSERT_C(reply, "no TEvQueryResponse for metadata-user query");
 }
 
 Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {

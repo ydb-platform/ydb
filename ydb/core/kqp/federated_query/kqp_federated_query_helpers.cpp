@@ -62,7 +62,7 @@ namespace {
                 {"path", path},
                 {"database", database},
                 {"endpoint", endpoint});
-            return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table}); 
+            return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
         }
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
         auto driver = federatedQuerySetup->Driver;
@@ -85,7 +85,10 @@ namespace {
                         return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, structuredTokenJson, p, true);
                     }
                     TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
-                    YDB_LOG_WARN_CTX(*actorSystem, "",
+                    YDB_LOG_WARN_CTX(*actorSystem, "Describe path in external YDB database with endpoint failed",
+                        {"path", p},
+                        {"database", database},
+                        {"endpoint", endpoint},
                         {"issuesMessage", message + describePathResult.GetIssues()});
                     auto rootIssue = NYql::TIssue(message);
                     for (const auto& issue : describePathResult.GetIssues()) {

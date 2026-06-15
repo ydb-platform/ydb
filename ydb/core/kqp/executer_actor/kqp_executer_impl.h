@@ -1631,12 +1631,11 @@ protected:
     }
 
     void ReplyUnavailable(const TString& message) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::KQP_EXECUTER, "",
+        YDB_LOG_ERROR_COMP(NKikimrServices::KQP_EXECUTER, message,
             {"marker", "KQPEX"},
             {"actorId", SelfId()},
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
-            {"UNAVAILABLE", message},
             {"traceId", TraceId()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
         issue.AddSubIssue(new NYql::TIssue(message));

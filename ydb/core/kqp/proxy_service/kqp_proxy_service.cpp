@@ -1506,9 +1506,9 @@ private:
         auto now = TInstant::Now();
         if (now >= deadline) {
             TString error = TStringBuilder() << "Request deadline has expired for " << now - deadline << " seconds";
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR(error,
                 {"requestInfo", requestInfo},
-                {"error", error});
+                {"seconds", now - deadline});
 
             // In theory client should not see this status due to internal grpc deadline accounting.
             result.YdbStatus = Ydb::StatusIds::TIMEOUT;
@@ -1534,9 +1534,8 @@ private:
         if (!database.empty() && AppData()->TenantName.empty()) {
             TString error = TStringBuilder() << "Node isn't ready to serve database requests.";
 
-            YDB_LOG_ERROR("",
-                {"requestInfo", requestInfo},
-                {"error", error});
+            YDB_LOG_ERROR(error,
+                {"requestInfo", requestInfo});
 
             result.YdbStatus = Ydb::StatusIds::UNAVAILABLE;
             result.Error = error;
@@ -1546,9 +1545,8 @@ private:
         if (ShutdownRequested) {
             TString error = TStringBuilder() << "Cannot create session: system shutdown requested.";
 
-            YDB_LOG_NOTICE("",
-                {"requestInfo", requestInfo},
-                {"error", error});
+            YDB_LOG_NOTICE(error,
+                {"requestInfo", requestInfo});
 
             result.ResourceExhausted = true;
             result.YdbStatus = Ydb::StatusIds::OVERLOADED;
@@ -1560,9 +1558,8 @@ private:
         if (sessionsLimitPerNode && !LocalSessions->CheckDatabaseLimits(database, sessionsLimitPerNode)) {
             TString error = TStringBuilder() << "Active sessions limit exceeded, maximum allowed: "
                 << sessionsLimitPerNode;
-            YDB_LOG_WARN("",
-                {"requestInfo", requestInfo},
-                {"error", error});
+            YDB_LOG_WARN(error,
+                {"requestInfo", requestInfo});
 
             result.YdbStatus = Ydb::StatusIds::OVERLOADED;
             result.Error = error;
@@ -1611,18 +1608,16 @@ private:
         auto nodeId = TryDecodeYdbSessionId(sessionId);
         if (!nodeId) {
             TString error = TStringBuilder() << "Failed to parse session id: " << sessionId;
-            YDB_LOG_WARN("",
-                {"requestInfo", requestInfo},
-                {"error", error});
+            YDB_LOG_WARN(error,
+                {"requestInfo", requestInfo});
             ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
             return TActorId();
         }
 
         if (*nodeId == SelfId().NodeId()) {
             TString error = TStringBuilder() << "Session not found: " << sessionId;
-            YDB_LOG_NOTICE("",
-                {"requestInfo", requestInfo},
-                {"error", error});
+            YDB_LOG_NOTICE(error,
+                {"requestInfo", requestInfo});
             ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
             return TActorId();
         }

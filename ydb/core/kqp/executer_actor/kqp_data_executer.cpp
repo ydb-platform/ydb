@@ -637,7 +637,7 @@ private:
                     }
 
                     if (error) {
-                        YDB_LOG_ERROR("",
+                        YDB_LOG_ERROR(error,
                             {"marker", "KQPDATA"},
                             {"actorId", SelfId()},
                             {"txId", TxId},
@@ -653,7 +653,7 @@ private:
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))) {
                     auto error = TStringBuilder()
                         << "Data manipulation queries with column-oriented tables are supported only by API QueryService.";
-                    YDB_LOG_ERROR("",
+                    YDB_LOG_ERROR(error,
                         {"marker", "KQPDATA"},
                         {"actorId", SelfId()},
                         {"txId", TxId},

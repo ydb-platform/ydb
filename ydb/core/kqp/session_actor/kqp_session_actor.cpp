@@ -2693,10 +2693,9 @@ public:
                 {"traceId", TraceId()});
             return;
         } else {
-            YDB_LOG_WARN("",
+            YDB_LOG_WARN(logMsg,
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
-                {"logMsg", logMsg},
                 {"traceId", TraceId()});
         }
 
@@ -2741,10 +2740,9 @@ public:
                 {"traceId", TraceId()});
             return;
         } else {
-            YDB_LOG_WARN("",
+            YDB_LOG_WARN(logMsg,
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
-                {"logMsg", logMsg},
                 {"traceId", TraceId()});
         }
 

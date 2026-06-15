@@ -907,7 +907,7 @@ public:
 
     void Navigate(const TActorId& schemeCache) {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-    
+
         TString path;
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kBuildOperation: {
@@ -982,12 +982,11 @@ public:
             }
 
             TString error(builder);
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR(error,
                 {"marker", "KQPSCHEME"},
                 {"actorId", SelfId()},
                 {"txId", TxId},
-                {"ctx", *GetUserRequestContext()},
-                {"error", error});
+                {"ctx", *GetUserRequestContext()});
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
 

@@ -877,9 +877,8 @@ private:
     bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId,
         Ydb::StatusIds::StatusCode ydbStatus, const TString& message)
     {
-        YDB_LOG_WARN("",
-            {"logPrefix", LogPrefix()},
-            {"message", message});
+        YDB_LOG_WARN(message,
+            {"logPrefix", LogPrefix()});
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
         response->Record.SetYdbStatus(ydbStatus);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);

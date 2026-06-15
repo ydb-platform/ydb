@@ -13,6 +13,9 @@
 Y_UNIT_TEST_SUITE(LargeMessage) {
     using namespace NActors;
 
+    constexpr ui32 MaxSerializedEventSize = 1024 * 1024;
+    constexpr size_t OversizedPayloadSize = MaxSerializedEventSize + 1024;
+
     class TProducer: public TActorBootstrapped<TProducer> {
         const TActorId RecipientActorId;
 
@@ -24,7 +27,8 @@ Y_UNIT_TEST_SUITE(LargeMessage) {
         void Bootstrap(const TActorContext& ctx) {
             Become(&TThis::StateFunc);
             ctx.Send(RecipientActorId, new TEvTest(1, "hello"), IEventHandle::FlagTrackDelivery, 1);
-            ctx.Send(RecipientActorId, new TEvTest(2, TString(150 * 1024 * 1024, 'X')), IEventHandle::FlagTrackDelivery, 2);
+            ctx.Send(RecipientActorId, new TEvTest(2, TString(OversizedPayloadSize, 'X')),
+                IEventHandle::FlagTrackDelivery, 2);
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& ctx) {
@@ -73,7 +77,18 @@ Y_UNIT_TEST_SUITE(LargeMessage) {
     };
 
     Y_UNIT_TEST(Test) {
-        TTestICCluster testCluster(2);
+        TTestICCluster testCluster(
+            2,
+            TChannelsConfig(),
+            nullptr,
+            nullptr,
+            TTestICCluster::EMPTY,
+            TTestICCluster::TCheckerFactory{},
+            TDuration::Seconds(2),
+            TNode::DefaultInflight(),
+            [](ui32, TInterconnectSettings& settings) {
+                settings.MaxSerializedEventSize = MaxSerializedEventSize;
+            });
 
         TManualEvent done;
         TConsumer* consumer = new TConsumer(done);

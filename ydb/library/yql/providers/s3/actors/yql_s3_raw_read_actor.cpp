@@ -41,6 +41,7 @@ public:
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TString& url,
         const TS3Credentials& credentials,
         const TString& pattern,
@@ -64,6 +65,7 @@ public:
         : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
+        , Alloc(std::move(alloc))
         , InputIndex(inputIndex)
         , TxId(txId)
         , ComputeActorId(computeActorId)
@@ -98,6 +100,13 @@ public:
             TaskQueueDataLimit->Add(ReadActorFactoryCfg.DataInflight);
         }
         IngressStats.Level = statsLevel;
+    }
+
+    ~TS3ReadActor() {
+        if (Alloc) {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ClearMkqlData();
+        }
     }
 
     void Bootstrap() {
@@ -440,15 +449,21 @@ private:
         }
         QueueTotalDataSize = 0;
 
-        ContainerCache.Clear();
+        ClearMkqlData();
         FileQueueEvents.Unsubscribe();
         TActorBootstrapped<TS3ReadActor>::PassAway();
+    }
+
+    // Should be called with bound MKQL alloc
+    void ClearMkqlData() {
+        ContainerCache.Clear();
     }
 
 private:
     const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const IHTTPGateway::TPtr Gateway;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NKikimr::NMiniKQL::TPlainContainerCache ContainerCache;
 
     const ui64 InputIndex;
@@ -507,6 +522,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     const TTxId& txId,
     IHTTPGateway::TPtr gateway,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const TString& url,
     const TS3Credentials& credentials,
     const TString& pattern,
@@ -534,6 +550,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
         txId,
         std::move(gateway),
         holderFactory,
+        std::move(alloc),
         url,
         credentials,
         pattern,

@@ -1292,6 +1292,7 @@ public:
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TString& url,
         const TS3Credentials& credentials,
         const TString& pattern,
@@ -1319,6 +1320,7 @@ public:
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
+        , Alloc(std::move(alloc))
         , InputIndex(inputIndex)
         , TxId(txId)
         , ComputeActorId(computeActorId)
@@ -1367,6 +1369,13 @@ public:
             RawInflightSize = TaskCounters->GetCounter("RawInflightSize");
         }
         IngressStats.Level = statsLevel;
+    }
+
+    ~TS3StreamReadActor() {
+        if (Alloc) {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ClearMkqlData();
+        }
     }
 
     void Bootstrap() {
@@ -1670,9 +1679,7 @@ private:
             LOG_T("TS3StreamReadActor", "PassAway FileQueue RemoveConfirmedEvents=" << FileQueueEvents.RemoveConfirmedEvents());
             FileQueueEvents.Unsubscribe();
 
-            ContainerCache.Clear();
-            ArrowTupleContainerCache.Clear();
-            ArrowRowContainerCache.Clear();
+            ClearMkqlData();
 
             MemoryQuotaManager->FreeQuota(ReadActorFactoryCfg.DataInflight);
         } else {
@@ -1879,9 +1886,17 @@ private:
         return RowsRemained && *RowsRemained == 0;
     }
 
+    // Should be called with bound MKQL alloc
+    void ClearMkqlData() {
+        ContainerCache.Clear();
+        ArrowTupleContainerCache.Clear();
+        ArrowRowContainerCache.Clear();
+    }
+
     const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const IHTTPGateway::TPtr Gateway;
     const THolderFactory& HolderFactory;
+    const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TPlainContainerCache ContainerCache;
     TPlainContainerCache ArrowTupleContainerCache;
     TPlainContainerCache ArrowRowContainerCache;
@@ -2087,6 +2102,7 @@ NDB::FormatSettings::TimestampFormat ToTimestampFormat(const TString& formatName
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TTypeEnvironment& typeEnv,
     const THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     IHTTPGateway::TPtr gateway,
     NS3::TSource&& params,
     ui64 inputIndex,
@@ -2296,7 +2312,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             sizeLimit = FromString<ui64>(it->second);
         }
 
-        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc), params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
@@ -2308,7 +2324,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
             sizeLimit = FromString<ui64>(it->second);
 
-        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
+        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc), params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
                                             params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);

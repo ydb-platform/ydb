@@ -132,6 +132,7 @@ public:
         const TTxId& txId,
         ui64 taskId,
         const THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
         NYdb::TDriver driver,
@@ -145,6 +146,7 @@ public:
         , Metrics(txId, taskId, counters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
+        , Alloc(std::move(alloc))
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , PqGateway(pqGateway)
@@ -158,6 +160,13 @@ public:
 
         InitWatermarkTracker();
         IngressStats.Level = statsLevel;
+    }
+
+    ~TDqPqReadActor() {
+        if (Alloc) {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ClearMkqlData();
+        }
     }
 
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const {
@@ -245,7 +254,8 @@ private:
         if (ReadSession) {
             ReadSession->Close(TDuration::Zero());
             ReadSession.reset();
-            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ClearMkqlData();
         }
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
@@ -253,8 +263,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        std::queue<TReadyBatch> empty;
-        ReadyBuffer.swap(empty);
+        ClearMkqlData();
 
         if (ReadSession) {
             ReadSession->Close(TDuration::Zero());
@@ -463,6 +472,13 @@ private:
         ReadyBuffer.back().Watermark = watermark;
     }
 
+    // must be called with bound allocator
+    void ClearMkqlData() {
+        std::queue<TReadyBatch> empty;
+        ReadyBuffer.swap(empty);
+    }
+
+    // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         static TString ToString(const TPartitionKey& key) {
             return TStringBuilder{} << "[" << key.first << ", " << key.second << "]";
@@ -607,6 +623,7 @@ private:
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;
+    const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     ITopicClient::TPtr TopicClient;
@@ -635,6 +652,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
     i64 bufferSize
@@ -656,6 +674,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         txId,
         taskId,
         holderFactory,
+        std::move(alloc),
         std::move(settings),
         std::move(readTaskParamsMsg),
         std::move(driver),
@@ -694,7 +713,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
-                counters,
+                std::move(args.Alloc),
+                counters ? counters : args.TaskCounters,
                 pqGateway,
                 PQReadDefaultFreeSpace);
         }

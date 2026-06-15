@@ -144,7 +144,8 @@ namespace NActors {
         }
     };
 
-    static const size_t EventMaxByteSize = 140 << 20; // (140MB)
+    static constexpr size_t EventLargeByteSize = 50 << 20; // (50MB)
+    static constexpr size_t EventMaxByteSize = (140 << 20) * 2; // (280MB)
     static constexpr char ExtendedPayloadMarker = 0x06;
     static constexpr char PayloadMarker = 0x07;
     static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;

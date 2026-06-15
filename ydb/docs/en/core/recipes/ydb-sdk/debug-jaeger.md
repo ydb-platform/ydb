@@ -145,27 +145,27 @@ Below are examples of code for enabling tracing in Jaeger in different {{ ydb-sh
 
 - Java
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Feature not supported
 
 - Python
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Feature not supported
 
 - C#
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Feature not supported
 
 - JavaScript
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Feature not supported
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Feature not supported
 
 - PHP
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Feature not supported
 
 - Python
 

@@ -103,8 +103,9 @@ namespace NActors {
         event.Span.EndOk();
 
         Y_ABORT_UNLESS(SerializationInfo);
-        const ui32 flags = (event.Descr.Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession)) |
-            (SerializationInfo->IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0);
+        const ui32 flags = (event.Descr.Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession))
+            | (SerializationInfo->IsExtendedFormat ? IEventHandle::FlagExtendedFormat : 0)
+            | event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums;
 
         // prepare descriptor record
         TEventDescr2 descr{
@@ -285,13 +286,13 @@ namespace NActors {
     }
 
     template<bool External>
-    bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized) {
+    bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool disableChecksums, size_t *bytesSerialized) {
         auto addChunk = [&](const void *data, size_t len, bool allowCopy) {
             event.UpdateChecksum(data, len);
             if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
                 task.Write<External>(data, len);
             } else {
-                task.Append<External>(data, len, &event.ZcTransferId);
+                task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
             }
             *bytesSerialized += len;
             Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
@@ -392,7 +393,7 @@ namespace NActors {
         auto partBookmark = task.Bookmark(sizeof(TChannelPart));
 
         size_t bytesSerialized = 0;
-        const bool complete = SerializeEvent<false>(task, event, &bytesSerialized);
+        const bool complete = SerializeEvent<false>(task, event, false /*disableChecksums*/, &bytesSerialized);
 
         Y_DEBUG_ABORT_UNLESS(bytesSerialized);
         Y_ABORT_UNLESS(bytesSerialized <= Max<ui16>());
@@ -425,8 +426,12 @@ namespace NActors {
 
     std::optional<bool> TEventOutputChannel::FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex, bool checksumming) {
         Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
-
         Y_ABORT_UNLESS(event.Buffer);
+
+        const bool checksumsDisabledForEvent = Params.AllowDisablingPayloadChecksums &&
+            (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
+        const bool checksumsDisabled = !checksumming || checksumsDisabledForEvent;
+
         if (RdmaCredsBuffer.CredsSize() == 0) {
             for (; Iter.Valid() && PartLenRemain; ) {
                 TRcBuf buf = Iter.GetChunk();
@@ -441,7 +446,7 @@ namespace NActors {
                 const size_t leftInChunk = buf.GetSize() - offset;
                 const size_t chunkSize = Min(leftInChunk, PartLenRemain);
 
-                if (checksumming) {
+                if (!checksumsDisabled) {
                     XXH3_64bits_update(&RdmaCumulativeChecksumState, data, chunkSize);
                 }
                 auto cred = RdmaCredsBuffer.AddCreds();
@@ -534,7 +539,10 @@ namespace NActors {
             .Size = static_cast<ui16>(partSize - sizeof(TChannelPart))
         };
         char *ptr = reinterpret_cast<char*>(part + 1);
-        *ptr++ = static_cast<ui8>(EXdcCommand::RDMA_READ);
+
+        // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
+        //  \todo replace with checksumsDisabled
+        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ); 
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
 
@@ -545,7 +553,14 @@ namespace NActors {
 
         Y_ABORT_UNLESS(rdmaCreds->SerializePartialToArray(ptr, credsSerializedSize));
         ptr += credsSerializedSize;
-        WriteUnaligned<ui32>(ptr, checksumming ? XXH3_64bits_digest(&RdmaCumulativeChecksumState) : 0);
+
+        if (checksumsDisabled) {
+            WriteUnaligned<ui32>(ptr, 0);
+        }
+        else {
+            WriteUnaligned<ui32>(ptr, XXH3_64bits_digest(&RdmaCumulativeChecksumState));
+        }
+
         OutputQueueSize -= payloadSz;
 
         task.Write<false>(buffer, partSize);
@@ -562,18 +577,22 @@ namespace NActors {
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
-        const size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
+        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums 
+            && (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
+        const bool disableChecksums = Params.Encryption || disableChecksumsForEvent;
+
+        const size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + (disableChecksums ? 0 : sizeof(ui32));
         if (task.GetInternalFreeAmount() < partSize || task.GetExternalFreeAmount() == 0) {
             return std::nullopt;
         }
 
-        // clear external checksum for this chunk
+        // clear external crc checksum for this chunk, it will be written to in SerializeEvent() below
         task.ExternalChecksum = 0;
 
         auto partBookmark = task.Bookmark(partSize);
 
         size_t bytesSerialized = 0;
-        const bool complete = SerializeEvent<true>(task, event, &bytesSerialized);
+        const bool complete = SerializeEvent<true>(task, event, disableChecksums, &bytesSerialized);
 
         Y_ABORT_UNLESS(0 < bytesSerialized && bytesSerialized <= Max<ui16>());
 
@@ -584,20 +603,27 @@ namespace NActors {
             .Size = static_cast<ui16>(partSize - sizeof(TChannelPart))
         };
         char *ptr = reinterpret_cast<char*>(part + 1);
-        *ptr++ = static_cast<ui8>(EXdcCommand::PUSH_DATA);
+
+        // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
+        //  \todo replace with checksumsDisabled
+        *ptr++ = static_cast<ui8>(disableChecksumsForEvent ? EXdcCommand::PUSH_DATA_NO_CHECKSUMS : EXdcCommand::PUSH_DATA);
 
         WriteUnaligned<ui16>(ptr, bytesSerialized);
         ptr += sizeof(ui16);
-        if (task.ChecksummingXxhash()) {
-            XXH3_state_t state;
-            XXH3_64bits_reset(&state);
-            task.XdcStream.ScanLastBytes(bytesSerialized, [&state](TContiguousSpan span) {
-                XXH3_64bits_update(&state, span.data(), span.size());
-            });
-            const ui32 cs = XXH3_64bits_digest(&state);
-            WriteUnaligned<ui32>(ptr, cs);
-        } else if (task.ChecksummingCrc32c()) {
-            WriteUnaligned<ui32>(ptr, task.ExternalChecksum);
+
+        if (!disableChecksums)
+        {
+            if (task.ChecksummingXxhash()) {
+                XXH3_state_t state;
+                XXH3_64bits_reset(&state);
+                task.XdcStream.ScanLastBytes(bytesSerialized, [&state](TContiguousSpan span) {
+                    XXH3_64bits_update(&state, span.data(), span.size());
+                });
+                const ui32 cs = XXH3_64bits_digest(&state);
+                WriteUnaligned<ui32>(ptr, cs);
+            } else if (task.ChecksummingCrc32c()) {
+                WriteUnaligned<ui32>(ptr, task.ExternalChecksum);
+            }
         }
 
         task.WriteBookmark(std::move(partBookmark), buffer, partSize);

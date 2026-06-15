@@ -14,7 +14,7 @@ CREATE TABLE article (
 
 {{ ydb-short-name }} supports the creation of both row-oriented and column-oriented tables. The primary difference between them lies in their use cases and how data is stored on the disk drive. In row-oriented tables, data is stored sequentially in the form of rows, while in column-oriented tables, data is stored in the form of columns. Each table type has its own specific purpose.
 
-# Column Naming Rules {#column-naming-rules}
+## Column Naming Rules {#column-naming-rules}
 
 Column names in {{ ydb-short-name }} must meet the following requirements:
 

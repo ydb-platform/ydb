@@ -747,36 +747,38 @@ class FilterGraphForShardTest(unittest.TestCase):
 
 
 class RenderArtifactsNavTest(unittest.TestCase):
-    def test_render_nav_links_merged_build_and_shards(self):
+    def test_render_root_index_lists_top_level_folders(self):
         with tempfile.TemporaryDirectory() as tmp:
             merged = Path(tmp)
             (merged / "try_1").mkdir()
             (merged / "try_2").mkdir()
             (merged / "try_1" / "shard_0.json").write_text("{}", encoding="utf-8")
             (merged / "try_1" / "shard_1.json").write_text("{}", encoding="utf-8")
-            (merged / "try_2" / "shard_0.json").write_text("{}", encoding="utf-8")
-            (merged / "try_2" / "shard_1.json").write_text("{}", encoding="utf-8")
             html = render_nav_html(
                 base_url="https://s3.example/run/x86-64",
                 tries_dir=merged,
                 include_build=True,
+                include_plan=True,
             )
-            self.assertIn("https://s3.example/run/x86-64/index.html", html)
-            self.assertIn("https://s3.example/run/x86-64/build/index.html", html)
-            self.assertIn("https://s3.example/run/x86-64/shard_0/try_1/index.html", html)
-            self.assertIn("https://s3.example/run/x86-64/shard_1/try_2/index.html", html)
-            self.assertIn("https://s3.example/run/x86-64/final/index.html", html)
+            self.assertIn('href="build/"', html)
+            self.assertIn('href="plan/"', html)
+            self.assertIn('href="shard_0/"', html)
+            self.assertIn('href="shard_1/"', html)
+            self.assertIn('href="try_1/"', html)
+            self.assertIn('href="try_2/"', html)
+            self.assertIn('href="final/"', html)
+            self.assertIn("<table", html)
+            self.assertNotIn("<h2>Merged</h2>", html)
 
-    def test_render_nav_includes_plan_section(self):
+    def test_render_root_index_without_plan(self):
         html = render_nav_html(
             base_url="https://s3.example/run/x86-64",
             tries_dir=None,
-            include_build=False,
-            include_plan=True,
+            include_build=True,
+            include_plan=False,
         )
-        self.assertIn("https://s3.example/run/x86-64/plan/graph.json", html)
-        self.assertIn("https://s3.example/run/x86-64/plan/shard_plan.json", html)
-        self.assertIn("https://s3.example/run/x86-64/plan/index.html", html)
+        self.assertIn('href="build/"', html)
+        self.assertNotIn('href="plan/"', html)
 
 
 class RunnerCapacityTest(unittest.TestCase):

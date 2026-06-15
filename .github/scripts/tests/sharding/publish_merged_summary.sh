@@ -36,8 +36,8 @@ touch "$SUMMARY_LINKS"
 : > "$SUMMARY_LINKS"
 if [[ -n "$PUBLIC_DIR_URL" ]]; then
   nav_args=(
-    --output "$PUBLIC_DIR/artifacts_nav.html"
-    --base-url "$PUBLIC_DIR_URL"
+    --output "$PUBLIC_DIR/index.html"
+    --public-dir "$PUBLIC_DIR"
   )
   if [[ -n "$TRIES_DIR" && -d "$TRIES_DIR" ]]; then
     nav_args+=(--tries-dir "$TRIES_DIR")
@@ -49,11 +49,7 @@ if [[ -n "$PUBLIC_DIR_URL" ]]; then
     nav_args+=(--include-plan)
   fi
   python3 .github/scripts/tests/sharding/render_artifacts_nav.py "${nav_args[@]}"
-  echo "00 [Artifact navigation](${PUBLIC_DIR_URL}/artifacts_nav.html)" >> "$SUMMARY_LINKS"
-  echo "01 [Merged test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
-  if [[ "${INCLUDE_PLAN_ARTIFACTS:-}" == "1" ]]; then
-    echo "02 [Plan (graph & sharding)](${PUBLIC_DIR_URL}/plan/index.html)" >> "$SUMMARY_LINKS"
-  fi
+  echo "00 [Test artifacts](${PUBLIC_DIR_URL}/index.html)" >> "$SUMMARY_LINKS"
 fi
 
 export GITHUB_HEAD_SHA="${ORIGINAL_HEAD:-$STATUS_SHA}"
@@ -126,7 +122,6 @@ if [[ "$try_count" -gt 0 ]]; then
 fi
 
 if [[ -n "${S3_BUCKET_PATH:-}" ]]; then
-  .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/" || true
   s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
 fi
 

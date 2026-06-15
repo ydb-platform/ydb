@@ -27,7 +27,15 @@
 
 namespace NKikimr::NKqp {
 
-static const TString YqlName = "CompileActor";
+namespace {
+
+const TString YqlName = "CompileActor";
+
+inline TString GetQueryTextForLog(const TString& queryText) {
+    return EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText));
+}
+
+} // namespace
 
 using namespace NKikimrConfig;
 using namespace NThreading;
@@ -106,7 +114,7 @@ public:
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
                 "Enforced SQL version 1, "
                 << "current sql version: " << tableServiceConfig.GetSqlVersion()
-                << " queryText: " << EscapeC(QueryId.Text)
+                << " queryText: " << GetQueryTextForLog(QueryId.Text)
             );
 
             config->SetSqlVersion(1);
@@ -279,7 +287,7 @@ private:
             << ", self: " << ctx.SelfID
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(QueryId.Text) << "\""
+            << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\""
             << ", startTime: " << StartTime);
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
@@ -646,7 +654,7 @@ private:
             << ", self: " << SelfId()
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(QueryId.Text) << "\""
+            << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\""
             << ", startTime: " << StartTime);
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -672,7 +680,7 @@ private:
         LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, logMessage
                 << ", self: " << ctx.SelfID
                 << ", database: " << QueryId.Database
-                << ", text: \"" << EscapeC(QueryId.Text) << "\"");
+                << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\"");
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.

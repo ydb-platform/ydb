@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: Resolve pull request
         id: pr
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
@@ -71,7 +71,7 @@ jobs:
       # 3. For fork PRs, "Allow edits from maintainers" must be enabled.
       - name: Verify rebase preconditions
         id: preflight
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
@@ -103,7 +103,7 @@ jobs:
 
       - name: Decline rebase — pull request is not open
         if: steps.preflight.outputs.pr_is_open != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const sender = '${{ steps.preflight.outputs.sender }}';
@@ -119,7 +119,7 @@ jobs:
 
       - name: Decline rebase — trigger is not a collaborator
         if: steps.preflight.outputs.pr_is_open == 'true' && steps.preflight.outputs.sender_is_collaborator != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const sender = '${{ steps.preflight.outputs.sender }}';
@@ -135,7 +135,7 @@ jobs:
 
       - name: Decline rebase — fork does not allow maintainer push
         if: steps.preflight.outputs.pr_is_open == 'true' && steps.preflight.outputs.sender_is_collaborator == 'true' && steps.preflight.outputs.fork_push_allowed != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const sender = '${{ steps.preflight.outputs.sender }}';
@@ -154,7 +154,7 @@ jobs:
         run: exit 1
 
       - name: Remove previous failure label
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
@@ -172,13 +172,14 @@ jobs:
             }
 
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ steps.pr.outputs.head_sha }}
           repository: ${{ steps.pr.outputs.head_repo_full_name }}
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
 
       - name: Configure git
         run: |
@@ -208,7 +209,7 @@ jobs:
 
       - name: Handle unexpected rebase failure
         if: steps.rebase.outputs.rebase_status == ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
@@ -236,7 +237,7 @@ jobs:
 
       - name: Add push failure comment
         if: steps.rebase.outputs.rebase_status == 'success' && steps.push.outcome == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
@@ -254,7 +255,7 @@ jobs:
 
       - name: Add success comment
         if: steps.push.outcome == 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
         with:
@@ -271,7 +272,7 @@ jobs:
 
       - name: Add failure comment for conflicts
         if: steps.rebase.outputs.rebase_status == 'failed'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
         with:
@@ -304,7 +305,7 @@ jobs:
 
       - name: Remove trigger label
         if: always() && steps.pr.outputs.number != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
@@ -323,7 +324,7 @@ jobs:
 
       - name: Mark rebase as failed
         if: always() && steps.pr.outputs.number != '' && steps.push.outcome != 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);

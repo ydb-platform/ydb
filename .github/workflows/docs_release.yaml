@@ -18,10 +18,12 @@ jobs:
     permissions: write-all
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Build
-        uses: diplodoc-platform/docs-build-action@v3
+        uses: diplodoc-platform/docs-build-action@268b947d162d573117b9d4f1b15ed79684f0d252 # v3
         with:
           revision: "${{ github.sha }}"
           src-root: ${{ vars.SRC_ROOT }}
@@ -37,7 +39,7 @@ jobs:
     permissions: write-all
     steps:
       - name: Upload
-        uses: diplodoc-platform/docs-upload-action@v1
+        uses: diplodoc-platform/docs-upload-action@a6d281b6388974496d2278bcdae4db97beb331b7 # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           storage-bucket: "common/${{ secrets.DOCS_PROJECT_NAME }}"
@@ -79,7 +81,7 @@ jobs:
           fi
 
       - name: Release
-        uses: diplodoc-platform/docs-release-action@v2
+        uses: diplodoc-platform/docs-release-action@ee5ec919763fdaab08f4bc0997f9cf498dffd70d # v2
         with:
           revision: "${{ github.sha }}"
           version:  "${{ steps.extract_version.outputs.version }}"

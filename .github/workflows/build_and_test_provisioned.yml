@@ -48,9 +48,10 @@ jobs:
     runs-on: [ self-hosted, "${{ inputs.runner_label }}" ]
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       with:
         ref: ${{ inputs.checkout_ref }}
+        persist-credentials: false
     - name: Build
       uses: ./.github/actions/build
       if: inputs.run_build

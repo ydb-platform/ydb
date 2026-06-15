@@ -33,22 +33,29 @@ runs:
       run: |
           git config --global user.name YDBot
           git config --global user.email ydbot@ydb.tech
-          git config --local github.token ${{ inputs.gh_personal_access_token }}
+          git config --local github.token ${INPUTS_GH_PERSONAL_ACCESS_TOKEN}
+      env:
+        INPUTS_GH_PERSONAL_ACCESS_TOKEN: ${{ inputs.gh_personal_access_token }}
 
     - name: run-command
       shell: bash
       env:
         REPO: ${{ inputs.repository }}
         TOKEN: ${{ inputs.gh_personal_access_token }}
+        INPUTS_MERGE_OURS: ${{ inputs.merge_ours }}
+        INPUTS_MERGE_THEIRS: ${{ inputs.merge_theirs }}
+        INPUTS_BASE_BRANCH: ${{ inputs.base_branch }}
+        INPUTS_HEAD_BRANCH: ${{ inputs.head_branch }}
+        INPUTS_LABEL: ${{ inputs.label }}
       run: |
         cd ./ydb/ci/rightlib
         MERGE_ARGS=''
-        if [ -n "${{ inputs.merge_ours }}" ]; then
-          MERGE_ARGS+="--merge-ours ${{ inputs.merge_ours }}"
+        if [ -n "${INPUTS_MERGE_OURS}" ]; then
+          MERGE_ARGS+="--merge-ours ${INPUTS_MERGE_OURS}"
         fi
-        if [ -n "${{ inputs.merge_theirs }}" ]; then
-          MERGE_ARGS+=" --merge-theirs ${{ inputs.merge_theirs }}"
+        if [ -n "${INPUTS_MERGE_THEIRS}" ]; then
+          MERGE_ARGS+=" --merge-theirs ${INPUTS_MERGE_THEIRS}"
         fi
         echo $MERGE_ARGS
-        ./create_sync_pr.py --base-branch="${{ inputs.base_branch }}" --head-branch="${{ inputs.head_branch }}" --process-label="${{ inputs.label }}" $MERGE_ARGS
+        ./create_sync_pr.py --base-branch="${INPUTS_BASE_BRANCH}" --head-branch="${INPUTS_HEAD_BRANCH}" --process-label="${INPUTS_LABEL}" $MERGE_ARGS
 

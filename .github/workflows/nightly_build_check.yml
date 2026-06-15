@@ -65,9 +65,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           sparse-checkout: .github/scripts/telegram
+          persist-credentials: false
       - name: Install dependencies
         run: pip install requests
       # Best-effort: if gh query fails (permissions/rate limits/transient errors),
@@ -89,11 +90,12 @@ jobs:
       - name: Send Telegram notification
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.YDBOT_TELEGRAM_BOT_TOKEN }}
+          STEPS_FAILED_JOBS_OUTPUTS_JOBS: ${{ steps.failed-jobs.outputs.jobs }}
         run: |
           BUILD_TARGET="${{ inputs.build-target || 'ydb/apps/ydb' }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           CHAT_ID="${{ inputs.telegram-chat-id || '311589523' }}"
-          FAILED="${{ steps.failed-jobs.outputs.jobs }}"
+          FAILED="${STEPS_FAILED_JOBS_OUTPUTS_JOBS}"
           if [ -n "$FAILED" ]; then
             MESSAGE="Nightly build check FAILED for *${BUILD_TARGET}*. Failed jobs: ${FAILED}. [View run](${RUN_URL})"
           else

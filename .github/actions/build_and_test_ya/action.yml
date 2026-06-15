@@ -78,9 +78,9 @@ runs:
       shell: bash
       run: |
         # Check if custom_branch_name is set and not empty
-        if [ -n "${{ inputs.custom_branch_name }}" ]; then
+        if [ -n "${INPUTS_CUSTOM_BRANCH_NAME}" ]; then
           # Extract and sanitize custom_branch_name
-          CUSTOM_BRANCH_NAME="${{ inputs.custom_branch_name }}"
+          CUSTOM_BRANCH_NAME="${INPUTS_CUSTOM_BRANCH_NAME}"
           # Replace all unsupported characters with hyphens
           SANITIZED_NAME="${CUSTOM_BRANCH_NAME//[^a-zA-Z0-9-]/-}"
           # Optionally limit the length to, say, 50 characters
@@ -93,6 +93,8 @@ runs:
         fi
         # Output the folder_prefix for use in subsequent steps
         echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
+      env:
+        INPUTS_CUSTOM_BRANCH_NAME: ${{ inputs.custom_branch_name }}
 
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd

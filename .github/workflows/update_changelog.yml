@@ -31,13 +31,15 @@ jobs:
       prs: ${{ steps.pr-list.outputs.prs }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Get merged PRs
         id: pr-list
         run: |
-          TYPE="${{ github.event.inputs.type }}"
-          START="${{ github.event.inputs.start }}"
+          TYPE="${GITHUB_EVENT_INPUTS_TYPE}"
+          START="${GITHUB_EVENT_INPUTS_START}"
           BRANCH="${GITHUB_REF_NAME}"
           echo "::notice:: branch = ${GITHUB_REF_NAME}, start = $START"
 
@@ -63,13 +65,16 @@ jobs:
           fi
           echo "$PRS" > prs.json
           echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_EVENT_INPUTS_TYPE: ${{ github.event.inputs.type }}
+          GITHUB_EVENT_INPUTS_START: ${{ github.event.inputs.start }}
 
       - name: Debug PR list output
         run: |
           cat prs.json
 
       - name: Upload PRs JSON
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: prs-json
           path: prs.json
@@ -80,7 +85,9 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Update Changelog
         uses: ./.github/actions/update_changelog 

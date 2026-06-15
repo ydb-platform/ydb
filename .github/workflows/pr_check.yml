@@ -40,7 +40,7 @@ jobs:
 
       - name: Check if running tests is allowed
         id: check-ownership-membership
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
@@ -91,7 +91,7 @@ jobs:
       - name: comment-if-waiting-on-ok
         if: steps.check-ownership-membership.outputs.result == 'false' &&
             github.event.action == 'opened'
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             let externalContributorLabel = 'external';
@@ -110,7 +110,7 @@ jobs:
             });
 
       - name: cleanup-test-label
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             let labelsToRemove = ['ok-to-test', 'rebase-and-check'];
@@ -136,7 +136,7 @@ jobs:
       - name: check is mergeable
         id: check-is-mergeable
         if: steps.check-ownership-membership.outputs.result == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           result-encoding: string
           script: |
@@ -230,10 +230,11 @@ jobs:
     name: Build and test ${{ matrix.build_preset }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
+        persist-credentials: false
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

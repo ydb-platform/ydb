@@ -72,12 +72,13 @@ jobs:
           docker compose version
 
       - name: Checkout current version
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ inputs.fork_repository || github.repository }}
           ref: ${{ inputs.fork_ref || github.ref }}
           path: current
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Configure git
         uses: ./current/.github/actions/configure_git
@@ -86,8 +87,8 @@ jobs:
         id: baseline
         run: |
           cd current
-          if [[ -n "${{ inputs.baseline_ref }}" ]]; then
-            BASELINE="${{ inputs.baseline_ref }}"
+          if [[ -n "${INPUTS_BASELINE_REF}" ]]; then
+            BASELINE="${INPUTS_BASELINE_REF}"
           else
             BASELINE=$(git merge-base HEAD origin/main)
           fi
@@ -108,13 +109,16 @@ jobs:
             fi
           fi
           echo "ref=$BASELINE_REF" >> $GITHUB_OUTPUT
+        env:
+          INPUTS_BASELINE_REF: ${{ inputs.baseline_ref }}
 
       - name: Checkout baseline version
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ steps.baseline.outputs.sha }}
           path: baseline
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Build Workload Image
         run: |
@@ -158,7 +162,7 @@ jobs:
             docker build -t ydb-app-baseline \
               --build-arg SRC_PATH=key_value \
               --build-arg BINARY_NAME=key_value \
-              --build-arg REF="${{ steps.baseline.outputs.ref }}" \
+              --build-arg REF="${STEPS_BASELINE_OUTPUTS_REF}" \
               -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
 
             # Clean up .dockerignore
@@ -173,6 +177,8 @@ jobs:
 
           echo "Final disk space after builds:"
           df -h
+        env:
+          STEPS_BASELINE_OUTPUTS_REF: ${{ steps.baseline.outputs.ref }}
 
       - name: Initialize YDB SLO
         uses: ydb-platform/ydb-slo-action/init@main
@@ -273,7 +279,7 @@ jobs:
           docker logs ydb-app-baseline > baseline.log 2>&1 || echo "No baseline container"
 
       - if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ${{matrix.workload}}-slo-cpp-sdk-logs
           path: |

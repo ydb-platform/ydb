@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Upload
-        uses: diplodoc-platform/docs-upload-action@v1
+        uses: diplodoc-platform/docs-upload-action@a6d281b6388974496d2278bcdae4db97beb331b7 # v1
         if: github.event.workflow_run.conclusion == 'success'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -29,7 +29,7 @@ jobs:
           cli-version: stable
 
       - name: Comment message
-        uses: diplodoc-platform/docs-message-action@v1
+        uses: diplodoc-platform/docs-message-action@b34ecbdb0aa67338a76e64de76b3a345571067eb # v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           project-link: ${{ vars.DIPLODOC_PROJECT_LINK }}

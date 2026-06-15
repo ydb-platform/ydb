@@ -41,31 +41,36 @@ runs:
       id: read-version
       shell: bash
       run: |
-        CURRENT_VERSION=$(cat ${{ inputs.version-file }})
+        CURRENT_VERSION=$(cat ${INPUTS_VERSION_FILE})
         echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
         echo "Current version: $CURRENT_VERSION"
+      env:
+        INPUTS_VERSION_FILE: ${{ inputs.version-file }}
     - name: Calculate new version
       id: update-version
       shell: bash
       run: |
-        CURRENT_VERSION="${{ steps.read-version.outputs.current-version }}"
+        CURRENT_VERSION="${STEPS_READ_VERSION_OUTPUTS_CURRENT_VERSION}"
         IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
         MAJOR=${VERSION_PARTS[0]}
         MINOR=${VERSION_PARTS[1]}
         PATCH=${VERSION_PARTS[2]}
-        if [ "${{ inputs.version-change }}" = "MAJOR" ]; then
+        if [ "${INPUTS_VERSION_CHANGE}" = "MAJOR" ]; then
           MAJOR=$((MAJOR+1))
           MINOR=0
           PATCH=0
-        elif [ "${{ inputs.version-change }}" = "MINOR" ]; then
+        elif [ "${INPUTS_VERSION_CHANGE}" = "MINOR" ]; then
           MINOR=$((MINOR+1))
           PATCH=0
-        elif [ "${{ inputs.version-change }}" = "PATCH" ]; then
+        elif [ "${INPUTS_VERSION_CHANGE}" = "PATCH" ]; then
           PATCH=$((PATCH+1))
         fi
         NEW_VERSION="$MAJOR.$MINOR.$PATCH"
         echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
         echo "New version: $NEW_VERSION"
+      env:
+        STEPS_READ_VERSION_OUTPUTS_CURRENT_VERSION: ${{ steps.read-version.outputs.current-version }}
+        INPUTS_VERSION_CHANGE: ${{ inputs.version-change }}
     - name: Create release branch
       id: create-branch
       shell: bash
@@ -73,45 +78,59 @@ runs:
         git fetch origin main
         git checkout main
         git reset --hard origin/main
-        BRANCH_NAME="${{ inputs.branch-prefix }}${{ steps.update-version.outputs.new-version }}"
+        BRANCH_NAME="${INPUTS_BRANCH_PREFIX}${STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION}"
         git checkout -b "$BRANCH_NAME"
         echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
         echo "Created branch: $BRANCH_NAME"
+      env:
+        INPUTS_BRANCH_PREFIX: ${{ inputs.branch-prefix }}
+        STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION: ${{ steps.update-version.outputs.new-version }}
     - name: Check CHANGELOG.md format
       if: ${{ inputs.changelog-file != '' }}
       shell: bash
       run: |
-        FIRST_LINE=$(head -n 1 ${{ inputs.changelog-file }})
-        SECOND_LINE=$(head -n 2 ${{ inputs.changelog-file }} | tail -n 1)
-        THIRD_LINE=$(head -n 3 ${{ inputs.changelog-file }} | tail -n 1)
+        FIRST_LINE=$(head -n 1 ${INPUTS_CHANGELOG_FILE})
+        SECOND_LINE=$(head -n 2 ${INPUTS_CHANGELOG_FILE} | tail -n 1)
+        THIRD_LINE=$(head -n 3 ${INPUTS_CHANGELOG_FILE} | tail -n 1)
         if [[ -z "$FIRST_LINE" ]] && [[ "$SECOND_LINE" =~ ^##.*##$ ]] && [[ -z "$THIRD_LINE" ]]; then
           echo "Error: CHANGELOG has nothing new since last release"
           exit 1
         fi
+      env:
+        INPUTS_CHANGELOG_FILE: ${{ inputs.changelog-file }}
     - name: Update version file
       shell: bash
       run: |
-        echo "${{ steps.update-version.outputs.new-version }}" > ${{ inputs.version-file }}
-        git add ${{ inputs.version-file }}
+        echo "${STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION}" > ${INPUTS_VERSION_FILE}
+        git add ${INPUTS_VERSION_FILE}
+      env:
+        STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION: ${{ steps.update-version.outputs.new-version }}
+        INPUTS_VERSION_FILE: ${{ inputs.version-file }}
     - name: Update CHANGELOG
       if: ${{ inputs.changelog-file != '' }}
       shell: bash
       run: |
-        NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
+        NEW_VERSION="${STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION}"
         echo "" > /tmp/changelog_header.md
         echo "## $NEW_VERSION ##" >> /tmp/changelog_header.md
         echo "" >> /tmp/changelog_header.md
-        cat /tmp/changelog_header.md ${{ inputs.changelog-file }} > /tmp/new_changelog.md
-        mv /tmp/new_changelog.md ${{ inputs.changelog-file }}
-        git add ${{ inputs.changelog-file }}
+        cat /tmp/changelog_header.md ${INPUTS_CHANGELOG_FILE} > /tmp/new_changelog.md
+        mv /tmp/new_changelog.md ${INPUTS_CHANGELOG_FILE}
+        git add ${INPUTS_CHANGELOG_FILE}
+      env:
+        STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION: ${{ steps.update-version.outputs.new-version }}
+        INPUTS_CHANGELOG_FILE: ${{ inputs.changelog-file }}
     - name: Create version file
       shell: bash
       run: |
-        NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
-        echo "$NEW_VERSION" > ${{ inputs.version-artifact-file }}
-        echo "Created ${{ inputs.version-artifact-file }} with version: $NEW_VERSION"
+        NEW_VERSION="${STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION}"
+        echo "$NEW_VERSION" > ${INPUTS_VERSION_ARTIFACT_FILE}
+        echo "Created ${INPUTS_VERSION_ARTIFACT_FILE} with version: $NEW_VERSION"
+      env:
+        STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION: ${{ steps.update-version.outputs.new-version }}
+        INPUTS_VERSION_ARTIFACT_FILE: ${{ inputs.version-artifact-file }}
     - name: Upload version artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
       with:
         name: ${{ inputs.version-artifact-name }}
         path: ${{ inputs.version-artifact-file }}
@@ -120,12 +139,17 @@ runs:
     - name: Commit changes
       shell: bash
       run: |
-        git commit -m "${{ inputs.product-name }} release ${{ steps.update-version.outputs.new-version }}"
+        git commit -m "${INPUTS_PRODUCT_NAME} release ${STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION}"
+      env:
+        INPUTS_PRODUCT_NAME: ${{ inputs.product-name }}
+        STEPS_UPDATE_VERSION_OUTPUTS_NEW_VERSION: ${{ steps.update-version.outputs.new-version }}
     - name: Push branch
       id: push-branch
       shell: bash
       run: |
-        git push origin "${{ steps.create-branch.outputs.branch-name }}"
+        git push origin "${STEPS_CREATE_BRANCH_OUTPUTS_BRANCH_NAME}"
         RELEASE_SHA=$(git rev-parse HEAD)
         echo "release-commit-sha=$RELEASE_SHA" >> $GITHUB_OUTPUT
         echo "Release commit SHA: $RELEASE_SHA"
+      env:
+        STEPS_CREATE_BRANCH_OUTPUTS_BRANCH_NAME: ${{ steps.create-branch.outputs.branch-name }}

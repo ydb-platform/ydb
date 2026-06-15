@@ -33,9 +33,12 @@ runs:
         -DCCACHE_PATH=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
         -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake \
-        -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${{ inputs.extra_compile_flags }}" \
-        -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${{ inputs.extra_compile_flags }}" \
+        -DCMAKE_CXX_FLAGS="-fsanitize=${INPUTS_SANITIZER} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${INPUTS_EXTRA_COMPILE_FLAGS}" \
+        -DCMAKE_C_FLAGS="-fsanitize=${INPUTS_SANITIZER} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${INPUTS_EXTRA_COMPILE_FLAGS}" \
         ../ydb
+    env:
+      INPUTS_SANITIZER: ${{ inputs.sanitizer }}
+      INPUTS_EXTRA_COMPILE_FLAGS: ${{ inputs.extra_compile_flags }}
   - name: Configure
     shell: bash
     if: ${{!inputs.sanitizer}}
@@ -53,21 +56,26 @@ runs:
         -DCCACHE_PATH=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
         -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake \
-        -DCMAKE_C_FLAGS="${{ inputs.extra_compile_flags }}" \
-        -DCMAKE_CXX_FLAGS="${{ inputs.extra_compile_flags }}" \
+        -DCMAKE_C_FLAGS="${INPUTS_EXTRA_COMPILE_FLAGS}" \
+        -DCMAKE_CXX_FLAGS="${INPUTS_EXTRA_COMPILE_FLAGS}" \
         ../ydb
+    env:
+      INPUTS_EXTRA_COMPILE_FLAGS: ${{ inputs.extra_compile_flags }}
   - name: Build
     shell: bash
     run: |
       ccache -z
       export CCACHE_BASEDIR=`realpath ..`
-      export CCACHE_REMOTE_STORAGE="${{inputs.ccache_remote_path}}"
+      export CCACHE_REMOTE_STORAGE="${INPUTS_CCACHE_REMOTE_PATH}"
       export CCACHE_SLOPPINESS=locale
       export CCACHE_MAXSIZE=50G
       cd ../build
-      ninja ${{ inputs.ninja_target }}
+      ninja ${INPUTS_NINJA_TARGET}
       ccache -s
       df -h
+    env:
+      INPUTS_CCACHE_REMOTE_PATH: ${{inputs.ccache_remote_path}}
+      INPUTS_NINJA_TARGET: ${{ inputs.ninja_target }}
   - name: report Build failed
     if: ${{ failure() }}
     shell: bash

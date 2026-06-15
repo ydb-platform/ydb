@@ -10,13 +10,14 @@ jobs:
     permissions: {}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           sparse-checkout: |
             .github
             ydb/ci/
+          persist-credentials: false
       - name: Set up S3cmd cli tool
-        uses: s3-actions/s3cmd@v1.6.1
+        uses: s3-actions/s3cmd@ef6ce583c6f4e5c121c53777f2f17740c36243be # v1.6.1
       - name: Prepare s3cmd
         uses: ./.github/actions/s3cmd
         with:

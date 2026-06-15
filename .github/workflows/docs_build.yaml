@@ -20,7 +20,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Add documentation label
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             github.rest.issues.addLabels({
@@ -41,16 +41,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
+          persist-credentials: false
           
       - name: Get commit SHA
         id: sha
         run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
           
       - name: Build
-        uses: diplodoc-platform/docs-build-action@v3
+        uses: diplodoc-platform/docs-build-action@268b947d162d573117b9d4f1b15ed79684f0d252 # v3
         with:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
@@ -61,7 +62,7 @@ jobs:
       # For workflow_dispatch this field is empty, so patch the artifact.
       - name: Download inputs artifact
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: inputs
           path: ./inputs
@@ -74,7 +75,7 @@ jobs:
 
       - name: Upload inputs artifact
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: inputs
           path: ./inputs/

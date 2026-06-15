@@ -33,12 +33,13 @@ jobs:
     runs-on: [self-hosted, tiny-worker]
     steps:
       - name: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 1
           ref: ${{ inputs.script_version_sha }}
           sparse-checkout: |
             .github
+          persist-credentials: false
       - name: install packages
         shell: bash
         run: |
@@ -49,7 +50,7 @@ jobs:
         run: |
           git config --global user.name YDBot
           git config --global user.email ydbot@ydb.tech
-          git config --local github.token ${{ env.GH_TOKEN }}
+          git config --local github.token ${GH_TOKEN}
 
       - name: run-command
         shell: bash
@@ -59,15 +60,17 @@ jobs:
           GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+          INPUTS_COMMITS_AND_PRS: ${{ inputs.commits_and_prs }}
+          INPUTS_TARGET_BRANCHES: ${{ inputs.target_branches }}
         run: |
           export RESULTS_PATH=$(realpath created_pulls.json)
           python3 ./.github/scripts/cherry_pick_v2.py \
-            --commits="${{ inputs.commits_and_prs }}" \
-            --target-branches="${{ inputs.target_branches }}" \
+            --commits="${INPUTS_COMMITS_AND_PRS}" \
+            --target-branches="${INPUTS_TARGET_BRANCHES}" \
             ${{ inputs.allow_unmerged == true && '--allow-unmerged' || '' }}
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: created-pulls
           path: created_pulls.json

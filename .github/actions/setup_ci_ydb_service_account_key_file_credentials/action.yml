@@ -17,10 +17,12 @@ runs:
         set -eu
         export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/tmp/ydb_service_account.json
         cat << EOF > $CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS
-        ${{ inputs.ci_ydb_service_account_key_file_credentials}}
+        ${INPUTS_CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS}
         EOF
 
         echo "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=$CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" >> $GITHUB_ENV
+      env:
+        INPUTS_CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS: ${{ inputs.ci_ydb_service_account_key_file_credentials}}
 
     - name: Setup YDB QA config
       if: "${{ inputs.ydb_qa_config != '' }}"

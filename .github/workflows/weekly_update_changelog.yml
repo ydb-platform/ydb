@@ -16,7 +16,9 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
         
       - name: List 'main' and 'stable-*' branches
         id: branch-list
@@ -42,9 +44,10 @@ jobs:
       base_branch: ${{ steps.branch-name.outputs.base_branch }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
            ref: ${{ github.ref }}
+           persist-credentials: false
            
       - name: Set up date range
         id: date-setup
@@ -55,23 +58,27 @@ jobs:
       - name: Get merged PRs
         id: pr-list
         run: |
-          REF_NAME=${{ matrix.branch }}
+          REF_NAME=${MATRIX_BRANCH}
           echo "::notice:: branch = $REF_NAME, date = $LAST_WEEK_DATE"
           PRS=$(gh pr list -L 1000 --state merged --json number,title,baseRefName,mergedAt --jq ".[] | select(.baseRefName == \"$REF_NAME\" and .mergedAt >= \"$LAST_WEEK_DATE\") | {id: .number}" | jq -c -s ".")
 
           if [ -z "$PRS" ]; then
             PRS="[]"
           fi
-          echo "$PRS" > prs-${{ matrix.branch }}.json
+          echo "$PRS" > prs-${MATRIX_BRANCH}.json
           echo "PRS=$PRS" >> $GITHUB_ENV          
           echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+        env:
+          MATRIX_BRANCH: ${{ matrix.branch }}
 
       - name: Debug PR list output
         run: |
-          cat prs-${{ matrix.branch }}.json
+          cat prs-${MATRIX_BRANCH}.json
+        env:
+          MATRIX_BRANCH: ${{ matrix.branch }}
 
       - name: Upload PRs JSON
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: prs-json-${{ matrix.branch }}
           path: prs-${{ matrix.branch }}.json

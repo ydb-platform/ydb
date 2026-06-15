@@ -15,10 +15,11 @@ jobs:
 
     steps:
     - name: Checkout x86-simd-sort
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
       with:
         fetch-depth: 0
         path: x86-simd-sort
+        persist-credentials: false
 
     - name: Specify branch name
       working-directory: ${{ github.workspace }}/x86-simd-sort
@@ -30,15 +31,16 @@ jobs:
         sudo apt -y install g++-12 gcc-12 git
 
     - name: Checkout NumPy main
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
       with:
         repository: numpy/numpy
         submodules: recursive
         fetch-depth: 0
         ref: main
         path: numpy
+        persist-credentials: false
 
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # v4
       with:
         python-version: '3.10'
 

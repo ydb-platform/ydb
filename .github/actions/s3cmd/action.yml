@@ -52,7 +52,7 @@ runs:
       run: |
         folder="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         
-        BUILD_PRESET="${{ inputs.build_preset }}"
+        BUILD_PRESET="${INPUTS_BUILD_PRESET}"
         
         case "$BUILD_PRESET" in
           relwithdebinfo)
@@ -64,11 +64,16 @@ runs:
             folder+="-${BUILD_PRESET/release-/}"
             ;;
           *)
-            echo "Invalid preset: ${{ inputs.build_preset }}"
+            echo "Invalid preset: ${INPUTS_BUILD_PRESET}"
             exit 1
             ;;
         esac
-        echo "S3_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_TEST_ARTIFACTS_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_TEST_ARTIFACTS_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
+        echo "S3_BUCKET_PATH=s3://${INPUTS_S3_BUCKET}/${{ github.repository }}/${GITHUB_WORKFLOW}/${{ github.run_id }}/${INPUTS_FOLDER_PREFIX}${folder}" >> $GITHUB_ENV
+        echo "S3_URL_PREFIX=${INPUTS_S3_ENDPOINT}/${INPUTS_S3_BUCKET}/${{ github.repository }}/${GITHUB_WORKFLOW}/${{ github.run_id }}/${INPUTS_FOLDER_PREFIX}${folder}" >> $GITHUB_ENV
+        echo "S3_TEST_ARTIFACTS_BUCKET_PATH=s3://${INPUTS_S3_BUCKET}/testing_out_stuff/${{ github.repository }}/${GITHUB_WORKFLOW}/${{ github.run_id }}/${INPUTS_FOLDER_PREFIX}${folder}" >> $GITHUB_ENV
+        echo "S3_TEST_ARTIFACTS_URL_PREFIX=${INPUTS_S3_ENDPOINT}/${INPUTS_S3_BUCKET}/testing_out_stuff/${{ github.repository }}/${GITHUB_WORKFLOW}/${{ github.run_id }}/${INPUTS_FOLDER_PREFIX}${folder}" >> $GITHUB_ENV
+      env:
+        INPUTS_BUILD_PRESET: ${{ inputs.build_preset }}
+        INPUTS_S3_BUCKET: ${{ inputs.s3_bucket }}
+        INPUTS_FOLDER_PREFIX: ${{ inputs.folder_prefix }}
+        INPUTS_S3_ENDPOINT: ${{ inputs.s3_endpoint }}

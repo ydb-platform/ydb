@@ -54,11 +54,12 @@ jobs:
       release-commit-sha: ${{ steps.do-prepare-release.outputs.release-commit-sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Configure git
         uses: ./.github/actions/configure_git
       - name: Prepare release
@@ -93,11 +94,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ needs.prepare-release.outputs.branch-name }}
+          persist-credentials: false
       - name: Print YDB CLI version ${{ needs.prepare-release.outputs.new-version }}
-        run: echo ${{ needs.prepare-release.outputs.new-version }}
+        run: echo ${NEEDS_PREPARE_RELEASE_OUTPUTS_NEW_VERSION}
+        env:
+          NEEDS_PREPARE_RELEASE_OUTPUTS_NEW_VERSION: ${{ needs.prepare-release.outputs.new-version }}
       - name: Gather and upload to S3
         uses: ./.github/actions/gather_and_upload_to_s3
         with:
@@ -120,7 +124,9 @@ jobs:
       pr_url: ${{ steps.do_finalize.outputs['pr-url'] }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
       - name: Finalize release
         id: do_finalize
         uses: ./.github/actions/finalize_release
@@ -146,13 +152,16 @@ jobs:
       )
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Configure git
         uses: ./.github/actions/configure_git
       - name: Delete release branch
         run: |
           # Delete the branch
-          git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}" || echo "Branch already deleted"
+          git push origin --delete "${NEEDS_PREPARE_RELEASE_OUTPUTS_BRANCH_NAME}" || echo "Branch already deleted"
+        env:
+          NEEDS_PREPARE_RELEASE_OUTPUTS_BRANCH_NAME: ${{ needs.prepare-release.outputs.branch-name }}

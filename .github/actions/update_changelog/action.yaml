@@ -20,7 +20,7 @@ runs:
   using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
         python-version: "3.x"
 
@@ -33,12 +33,18 @@ runs:
     - name: Store PR data to a temporary file
       shell: bash
       run: |
-        echo '${{ inputs.pr_data }}' > pr_data.txt
+        echo '${INPUTS_PR_DATA}' > pr_data.txt
+      env:
+        INPUTS_PR_DATA: ${{ inputs.pr_data }}
 
     - name: Run update_changelog.py
       shell: bash
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git config --local github.token ${{ env.GH_TOKEN }}
-        python ${{ github.action_path }}/update_changelog.py pr_data.txt "${{ inputs.changelog_path }}" "${{ inputs.base_branch }}" "${{ inputs.suffix }}"
+        git config --local github.token ${GH_TOKEN}
+        python ${{ github.action_path }}/update_changelog.py pr_data.txt "${INPUTS_CHANGELOG_PATH}" "${INPUTS_BASE_BRANCH}" "${INPUTS_SUFFIX}"
+      env:
+        INPUTS_CHANGELOG_PATH: ${{ inputs.changelog_path }}
+        INPUTS_BASE_BRANCH: ${{ inputs.base_branch }}
+        INPUTS_SUFFIX: ${{ inputs.suffix }}

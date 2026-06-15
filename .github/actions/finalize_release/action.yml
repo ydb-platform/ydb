@@ -30,10 +30,11 @@ runs:
   using: 'composite'
   steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       with:
         token: ${{ inputs.token }}
         fetch-depth: 0
+        persist-credentials: false
     - name: Configure git
       uses: ./.github/actions/configure_git
     - name: Create and auto-merge PR
@@ -41,8 +42,11 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
+        INPUTS_PRODUCT_NAME: ${{ inputs.product-name }}
+        INPUTS_VERSION: ${{ inputs.version }}
+        INPUTS_BRANCH_NAME: ${{ inputs.branch-name }}
       run: |
-        PR_TITLE="${{ inputs.product-name }} release ${{ inputs.version }}"
+        PR_TITLE="${INPUTS_PRODUCT_NAME} release ${INPUTS_VERSION}"
         printf -v PR_BODY '%s\n' \
           '### Changelog entry' \
           '' \
@@ -51,11 +55,11 @@ runs:
           '* Not for changelog (changelog entry is not required)' \
           '' \
           '### Description for reviewers' \
-          "Automated release PR for ${{ inputs.product-name }} version ${{ inputs.version }}"
+          "Automated release PR for ${INPUTS_PRODUCT_NAME} version ${INPUTS_VERSION}"
         PR_URL=$(gh pr create \
           --title "$PR_TITLE" \
           --body "$PR_BODY" \
-          --head "${{ inputs.branch-name }}" \
+          --head "${INPUTS_BRANCH_NAME}" \
           --base main \
           --repo ${{ github.repository }})
         PR_NUMBER=$(basename "$PR_URL")
@@ -73,10 +77,12 @@ runs:
     - name: Create PR URL file
       shell: bash
       run: |
-        echo "${{ steps.create-pr.outputs.pr-url }}" > pr_url.txt
-        echo "Created pr_url.txt with PR URL: ${{ steps.create-pr.outputs.pr-url }}"
+        echo "${STEPS_CREATE_PR_OUTPUTS_PR_URL}" > pr_url.txt
+        echo "Created pr_url.txt with PR URL: ${STEPS_CREATE_PR_OUTPUTS_PR_URL}"
+      env:
+        STEPS_CREATE_PR_OUTPUTS_PR_URL: ${{ steps.create-pr.outputs.pr-url }}
     - name: Upload PR URL artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
       with:
         name: pr-url
         path: pr_url.txt
@@ -86,8 +92,9 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
+        STEPS_CREATE_PR_OUTPUTS_PR_NUMBER: ${{ steps.create-pr.outputs.pr-number }}
       run: |
-        PR_NUMBER="${{ steps.create-pr.outputs.pr-number }}"
+        PR_NUMBER="${STEPS_CREATE_PR_OUTPUTS_PR_NUMBER}"
         echo "Waiting for PR #$PR_NUMBER to be merged (CI may take 1-3 hours)..."
         for i in {1..48}; do
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
@@ -115,9 +122,13 @@ runs:
     - name: Create release tag
       shell: bash
       run: |
-        RELEASE_SHA="${{ inputs.release-commit-sha }}"
-        TAG_NAME="${{ inputs.tag-prefix }}${{ inputs.version }}"
+        RELEASE_SHA="${INPUTS_RELEASE_COMMIT_SHA}"
+        TAG_NAME="${INPUTS_TAG_PREFIX}${INPUTS_VERSION}"
         git fetch origin main
         git tag "$TAG_NAME" "$RELEASE_SHA"
         git push origin "$TAG_NAME"
         echo "Created and pushed tag $TAG_NAME on commit $RELEASE_SHA"
+      env:
+        INPUTS_RELEASE_COMMIT_SHA: ${{ inputs.release-commit-sha }}
+        INPUTS_TAG_PREFIX: ${{ inputs.tag-prefix }}
+        INPUTS_VERSION: ${{ inputs.version }}

@@ -32,7 +32,7 @@ jobs:
       matrix_include: ${{ steps.set-mute-matrix.outputs.matrix_include }}
     steps:
       - name: Checkout branch list and mute files
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           path: config-repo
@@ -41,6 +41,7 @@ jobs:
             .github/scripts/tests/mute/mute_helper.py
             .github/scripts/tests/mute/mute_utils.py
           sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       - id: set-mute-matrix
         env:
@@ -56,9 +57,10 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -95,11 +97,12 @@ jobs:
         include: ${{ fromJson(needs.setup.outputs.matrix_include) }}
     steps:
       - name: Checkout workflow branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -246,7 +249,7 @@ jobs:
 
       - name: Upload all generated files as artifacts
         if: steps.changes_check.outputs.changes == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: muted-tests-all-files-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
           path: |
@@ -318,7 +321,7 @@ jobs:
 
       - name: Add comment, reviewers and labels
         if: steps.changes_check.outputs.changes == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           LABELS: ${{ env.LABELS }}
           REVIEWERS: ${{ env.REVIEWERS }}
@@ -385,7 +388,7 @@ jobs:
           
       - name: Enable auto-merge (squash)
         if: steps.changes_check.outputs.changes == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |

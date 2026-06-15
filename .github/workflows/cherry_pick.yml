@@ -27,12 +27,13 @@ jobs:
     runs-on: [self-hosted, tiny-worker]
     steps:
       - name: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 1
           ref: ${{ inputs.commit_sha }}
           sparse-checkout: |
             .github
+          persist-credentials: false
       - name: install packages
         shell: bash
         run: |
@@ -43,7 +44,7 @@ jobs:
         run: |
             git config --global user.name YDBot
             git config --global user.email ydbot@ydb.tech
-            git config --local github.token ${{ env.GH_TOKEN }}
+            git config --local github.token ${GH_TOKEN}
 
       - name: run-command
         shell: bash
@@ -51,7 +52,9 @@ jobs:
           REPO: ${{ github.repository }}
           TOKEN: ${{ env.GH_TOKEN }}
           GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+          INPUTS_COMMITS: ${{ inputs.commits }}
+          INPUTS_TARGET_BRANCHES: ${{ inputs.target_branches }}
         run: |
           ./.github/scripts/cherry_pick.py \
-            --commits="${{ inputs.commits }}" \
-            --target-branches="${{ inputs.target_branches }}"
+            --commits="${INPUTS_COMMITS}" \
+            --target-branches="${INPUTS_TARGET_BRANCHES}"

@@ -23,10 +23,10 @@ jobs:
     - name: Set Gate State
       shell: bash
       run: |
-        echo "Performing manual gate ${{ github.event.inputs.action }} operation"
+        echo "Performing manual gate ${GITHUB_EVENT_INPUTS_ACTION} operation"
         
         # Set limit count if provided
-        LIMIT_COUNT="${{ github.event.inputs.count_of_runners_to_change_label }}"
+        LIMIT_COUNT="${GITHUB_EVENT_INPUTS_COUNT_OF_RUNNERS_TO_CHANGE_LABEL}"
         if [[ -n "$LIMIT_COUNT" && "$LIMIT_COUNT" =~ ^[0-9]+$ ]]; then
           echo "Will change labels for up to $LIMIT_COUNT runners"
           LIMIT_OPTION=true
@@ -35,7 +35,7 @@ jobs:
           LIMIT_OPTION=false
         fi
         
-        if [[ "${{ github.event.inputs.action }}" == "close" ]]; then
+        if [[ "${GITHUB_EVENT_INPUTS_ACTION}" == "close" ]]; then
           echo "Closing gate for postcommits - removing postcommit labels"
           query='.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id'
           OPERATION="Closing"
@@ -119,7 +119,7 @@ jobs:
           changed_count=$((changed_count + 1))
           echo "Processing runner $changed_count/${#all_runner_ids[@]}: ID $runner_id"
           
-          if [[ "${{ github.event.inputs.action }}" == "close" ]]; then
+          if [[ "${GITHUB_EVENT_INPUTS_ACTION}" == "close" ]]; then
             echo "Removing postcommit label from runner $runner_id"
             response=$(curl -s -w "\n%{http_code}" -X DELETE -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${{secrets.GH_PERSONAL_ACCESS_TOKEN}}" \
@@ -201,7 +201,7 @@ jobs:
         # Console summary
         echo ""
         echo "=== OPERATION SUMMARY ==="
-        echo "Action: ${{ github.event.inputs.action }} gate"
+        echo "Action: ${GITHUB_EVENT_INPUTS_ACTION} gate"
         echo "Total eligible runners: $total_runners"
         if [[ "$LIMIT_OPTION" == "true" ]]; then
           echo "Limited to: $LIMIT_COUNT"
@@ -221,4 +221,7 @@ jobs:
           exit 1
         fi
         
-        echo "Gate ${{ github.event.inputs.action }} operation completed successfully"
+        echo "Gate ${GITHUB_EVENT_INPUTS_ACTION} operation completed successfully"
+      env:
+        GITHUB_EVENT_INPUTS_ACTION: ${{ github.event.inputs.action }}
+        GITHUB_EVENT_INPUTS_COUNT_OF_RUNNERS_TO_CHANGE_LABEL: ${{ github.event.inputs.count_of_runners_to_change_label }}

@@ -39,56 +39,68 @@ runs:
     - name: Prepare directory for linux-amd binary
       if: ${{ inputs.build-linux-amd == 'true' }}
       shell: bash
-      run: mkdir -p ${{ inputs.version }}/linux/amd64
+      run: mkdir -p ${INPUTS_VERSION}/linux/amd64
+      env:
+        INPUTS_VERSION: ${{ inputs.version }}
     - name: Prepare directory for linux-arm binary
       if: ${{ inputs.build-linux-arm == 'true' }}
       shell: bash
-      run: mkdir -p ${{ inputs.version }}/linux/arm64
+      run: mkdir -p ${INPUTS_VERSION}/linux/arm64
+      env:
+        INPUTS_VERSION: ${{ inputs.version }}
     - name: Prepare directory for darwin-amd binary
       if: ${{ inputs.build-darwin-amd == 'true' }}
       shell: bash
-      run: mkdir -p ${{ inputs.version }}/darwin/amd64
+      run: mkdir -p ${INPUTS_VERSION}/darwin/amd64
+      env:
+        INPUTS_VERSION: ${{ inputs.version }}
     - name: Prepare directory for darwin-arm binary
       if: ${{ inputs.build-darwin-arm == 'true' }}
       shell: bash
-      run: mkdir -p ${{ inputs.version }}/darwin/arm64
+      run: mkdir -p ${INPUTS_VERSION}/darwin/arm64
+      env:
+        INPUTS_VERSION: ${{ inputs.version }}
     - name: Prepare directory for windows-amd binary
       if: ${{ inputs.build-windows-amd == 'true' }}
       shell: bash
-      run: mkdir -p ${{ inputs.version }}/windows/amd64/unsigned
+      run: mkdir -p ${INPUTS_VERSION}/windows/amd64/unsigned
+      env:
+        INPUTS_VERSION: ${{ inputs.version }}
     - name: Copy linux-amd binary
       if: ${{ inputs.build-linux-amd == 'true' }}
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
       with:
         name: linux-amd-binary
         path: ${{ inputs.version }}/linux/amd64/
     - name: Copy linux-arm binary
       if: ${{ inputs.build-linux-arm == 'true' }}
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
       with:
         name: linux-arm-binary
         path: ${{ inputs.version }}/linux/arm64/
     - name: Copy darwin amd64 binary
       if: ${{ inputs.build-darwin-amd == 'true' }}
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
       with:
         name: darwin-amd-binary
         path: ${{ inputs.version }}/darwin/amd64/
     - name: Copy darwin arm64 binary
       if: ${{ inputs.build-darwin-arm == 'true' }}
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
       with:
         name: darwin-arm-binary
         path: ${{ inputs.version }}/darwin/arm64/
     - name: Copy windows-amd binary (unsigned)
       if: ${{ inputs.build-windows-amd == 'true' }}
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
       with:
         name: windows-amd-binary
         path: ${{ inputs.version }}/windows/amd64/unsigned/
     - name: Print resulting file hierarchy
       shell: bash
-      run: find ${{ inputs.version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+      run: find ${INPUTS_VERSION} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+      env:
+        INPUTS_VERSION: ${{ inputs.version }}
     - name: Download s3
       shell: bash
       run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
@@ -108,4 +120,7 @@ runs:
         S3_BUCKET: ${{ inputs.s3-bucket }}
         S3_DNS_HOST_BUCKET: "%(bucket)s.storage.yandexcloud.net"
         S3_REGION: ru-central1
-      run: s3cmd --access_key=${{ inputs.s3-key-id }} --secret_key=${{ inputs.s3-key-secret }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ inputs.version }} "s3://$S3_BUCKET/release/"
+        INPUTS_S3_KEY_ID: ${{ inputs.s3-key-id }}
+        INPUTS_S3_KEY_SECRET: ${{ inputs.s3-key-secret }}
+        INPUTS_VERSION: ${{ inputs.version }}
+      run: s3cmd --access_key=${INPUTS_S3_KEY_ID} --secret_key=${INPUTS_S3_KEY_SECRET} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${INPUTS_VERSION} "s3://$S3_BUCKET/release/"

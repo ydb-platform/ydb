@@ -22,17 +22,20 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Fetch merge base ref
         run: |
-          git fetch origin ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
+          git fetch origin ${GITHUB_EVENT_PULL_REQUEST_BASE_REF}:refs/remotes/origin/${GITHUB_EVENT_PULL_REQUEST_BASE_REF}
+        env:
+          GITHUB_EVENT_PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}
 
       - name: Verify translation PR
-        uses: ydb-platform/ydbdoc-review@v0.1.0
+        uses: ydb-platform/ydbdoc-review@b436354800af4c1e5966555f84a668eced40b747 # v0.1.0
         with:
           mode: verify
           repo: ${{ github.repository }}
@@ -50,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger PR-check and docs rebuild on translation PR
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |

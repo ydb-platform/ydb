@@ -19,17 +19,18 @@ jobs:
       branches: ${{ steps.set-branches.outputs.branches }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       with:
         sparse-checkout: |
           .github/config
+        persist-credentials: false
     - name: Read branches from config
       id: set-branches
       run: |
-          if [[ "${{ github.event_name }}" == "schedule" || ("${{ inputs.use_default_branches }}" == "true"  && "${{ github.ref_type }}" != "tag") ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" || ("${{ inputs.use_default_branches }}" == "true"  && "${GITHUB_REF_TYPE}" != "tag") ]]; then
             echo "branches=$(jq -c '.' .github/config/stable_nightly_branches.json)" >> $GITHUB_OUTPUT
           else
-            echo "branches=['${{ github.ref_name }}']" >> $GITHUB_OUTPUT
+            echo "branches=['${GITHUB_REF_NAME}']" >> $GITHUB_OUTPUT
           fi
 
   build_and_test:
@@ -43,10 +44,11 @@ jobs:
     name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       with:
         ref: ${{ matrix.branch }}
         fetch-depth: 2
+        persist-credentials: false
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -79,8 +81,11 @@ jobs:
       shell: bash
       run: |
         set -x
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/ydbd" -d
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "ydb/apps/ydbd/ydbd" "s3://ydb-builds/${MATRIX_BRANCH}/${{ matrix.build_preset }}/ydbd" -d
         if [ -e ydb/tests/library/compatibility/configs/dump/config-meta.json ]; then
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json" -d
-          echo 'Config dump uploaded to [storage](${{ vars.AWS_ENDPOINT }}/ydb-builds/${{ matrix.branch }}/${{ matrix.build_preset }}/config-meta.json).' >> $GITHUB_STEP_SUMMARY
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --check-md5 "ydb/tests/library/compatibility/configs/dump/config-meta.json" "s3://ydb-builds/${MATRIX_BRANCH}/${{ matrix.build_preset }}/config-meta.json" -d
+          echo 'Config dump uploaded to [storage](${VARS_AWS_ENDPOINT}/ydb-builds/${MATRIX_BRANCH}/${{ matrix.build_preset }}/config-meta.json).' >> $GITHUB_STEP_SUMMARY
         fi
+      env:
+        MATRIX_BRANCH: ${{ matrix.branch }}
+        VARS_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}

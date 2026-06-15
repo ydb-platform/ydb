@@ -47,9 +47,9 @@ jobs:
       - name: Create file with future platform list
         id: set-matrix
         run: |
-          BINARY="${{ inputs.binary-name }}"
-          BINARY_WIN="${{ inputs.binary-name }}.exe"
-          MACOS_RUNNER="${{ inputs.macos-runner }}"
+          BINARY="${INPUTS_BINARY_NAME}"
+          BINARY_WIN="${INPUTS_BINARY_NAME}.exe"
+          MACOS_RUNNER="${INPUTS_MACOS_RUNNER}"
           MATRIX='{"include":[]}'
           if [ "${{ inputs.build-linux-amd }}" == "true" ]; then
             MATRIX=$(echo $MATRIX | jq -c --arg binary "$BINARY" '.include += [{"os": "linux-amd", "runner": "ubuntu-latest", "shell": "bash", "binary": $binary, "platform": "DEFAULT-LINUX-X86_64"}]')
@@ -76,6 +76,9 @@ jobs:
           MATRIX=$(echo $MATRIX | jq '.')
           echo "Final pretty printed matrix: $MATRIX"
           echo "Platform matrix: $MATRIX" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          INPUTS_BINARY_NAME: ${{ inputs.binary-name }}
+          INPUTS_MACOS_RUNNER: ${{ inputs.macos-runner }}
 
   build-platform-specific-binary:
     strategy:
@@ -88,9 +91,10 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       with:
         ref: ${{ inputs.ref }}
+        persist-credentials: false
     - name: Print debug information
       run: |
         uname -a
@@ -131,9 +135,11 @@ jobs:
 
         echo Using full compiler path: [%TOOLCHAIN_PATH%]
 
-        call .\ya.bat make ${{ inputs.build-target }} -r -DUSE_SSE4=no -o .\ ^
+        call .\ya.bat make %INPUTS_BUILD_TARGET% -r -DUSE_SSE4=no -o .\ ^
           --c-compiler "%TOOLCHAIN_PATH%" ^
           --cxx-compiler "%TOOLCHAIN_PATH%"
+      env:
+        INPUTS_BUILD_TARGET: ${{ inputs.build-target }}
 
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
@@ -153,7 +159,7 @@ jobs:
 
         "$BINARY_PATH" version
     - name: Upload binary to artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
       with:
         name: ${{ matrix.os }}-binary
         path: ${{ inputs.build-target }}/${{ matrix.binary }}

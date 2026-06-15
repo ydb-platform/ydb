@@ -33,7 +33,7 @@ jobs:
     name: "Build/Test ${{matrix.compiler}}"
     steps:
     - name: Cancel previous
-      uses: styfle/cancel-workflow-action@0.8.0
+      uses: styfle/cancel-workflow-action@3d86a7cc43670094ac248017207be0295edbc31d # 0.8.0
       with:
         access_token: ${{ github.token }}
 
@@ -42,18 +42,19 @@ jobs:
         sudo apt-get update -qq
         sudo apt install -y g++ clang
 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
       with:
         fetch-depth: 0
+        persist-credentials: false
 
     - name: Create Cache Timestamp
       id: cache_timestamp
-      uses: nanzm/get-time-action@v1.1
+      uses: nanzm/get-time-action@5fb6a88787f272aeb246a10ebb8fabeb5f3c7b9c # v1.1
       with:
         format: 'YYYY-MM-DD-HH-mm-ss'
 
     - name: Mount bazel cache
-      uses: actions/cache@v2
+      uses: actions/cache@8492260343ad570701412c2f464a5877dc76bace # v2
       with:
         path: "/home/runner/.cache/bazel"
         key: bazelcache_${{matrix.compiler}}_${{ steps.cache_timestamp.outputs.time }}

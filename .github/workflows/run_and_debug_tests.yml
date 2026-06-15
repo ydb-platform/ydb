@@ -34,15 +34,15 @@ jobs:
       - name: Format branches
         id: format-branches
         run: |
-          if [ -z "${{ inputs.branches }}" ]; then
+          if [ -z "${INPUTS_BRANCHES}" ]; then
             # Empty - will use branches_config_path or default
             echo "branches_json=" >> $GITHUB_OUTPUT
-          elif [[ "${{ inputs.branches }}" == \[* ]]; then
+          elif [[ "${INPUTS_BRANCHES}" == \[* ]]; then
             # Already JSON array
-            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
+            echo "branches_json=${INPUTS_BRANCHES}" >> $GITHUB_OUTPUT
           else
             # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
-            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
+            IFS=',' read -ra BRANCHES <<< "${INPUTS_BRANCHES}"
             JSON_BRANCHES="["
             FIRST=true
             for branch in "${BRANCHES[@]}"; do
@@ -58,13 +58,15 @@ jobs:
             done
             JSON_BRANCHES+="]"
             echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
+            echo "Converted '${INPUTS_BRANCHES}' to $JSON_BRANCHES"
           fi
+        env:
+          INPUTS_BRANCHES: ${{ inputs.branches }}
 
       - name: Format build presets
         id: format-build-preset
         run: |
-          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
+          BUILD_PRESET_INPUT="${INPUTS_BUILD_PRESET}"
           if [ -z "$BUILD_PRESET_INPUT" ]; then
             BUILD_PRESET_INPUT="relwithdebinfo"
           fi
@@ -92,6 +94,8 @@ jobs:
             echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
             echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
           fi
+        env:
+          INPUTS_BUILD_PRESET: ${{ inputs.build_preset }}
 
   main:
     name: Run and debug tests

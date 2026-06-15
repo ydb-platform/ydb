@@ -14,11 +14,12 @@ jobs:
     timeout-minutes: 70
     steps:
       - name: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           sparse-checkout: |
             .github
             ydb/ci/
+          persist-credentials: false
       - name: install packages
         shell: bash
         run: |
@@ -29,7 +30,7 @@ jobs:
         run: |
             git config --global user.name YDBot
             git config --global user.email ydbot@ydb.tech
-            git config --local github.token ${{ env.GH_TOKEN }}
+            git config --local github.token ${GH_TOKEN}
 
       - name: run-command
         shell: bash

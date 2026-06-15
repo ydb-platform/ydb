@@ -79,9 +79,10 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v5
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       with:
         ref: ${{ inputs.commit_sha }}
+        persist-credentials: false
 
     - name: Print debug information
       run: |
@@ -99,7 +100,7 @@ jobs:
       run: ./ya make ydb/apps/dstool -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
 
     - name: Upload binary to artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
       with:
         name: ${{ matrix.os }}-binary
         path: ydb/apps/dstool/${{ matrix.binary }}
@@ -112,64 +113,79 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
       - name: Get YDB DSTool version from ydb/apps/dstool/version.txt
         id: getver
         run: echo "dstool_version=$(cat ydb/apps/dstool/version.txt)" >> $GITHUB_OUTPUT
       - name: Print YDB DSTool version ${{ steps.getver.outputs.dstool_version }}
-        run: echo ${{ steps.getver.outputs.dstool_version }}
+        run: echo ${STEPS_GETVER_OUTPUTS_DSTOOL_VERSION}
+        env:
+          STEPS_GETVER_OUTPUTS_DSTOOL_VERSION: ${{ steps.getver.outputs.dstool_version }}
 
       - name: Prepare directory for linux-amd binary
         if: ${{ inputs.build-linux-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.dstool_version }}/linux/amd64
+        run: mkdir -p ${STEPS_GETVER_OUTPUTS_DSTOOL_VERSION}/linux/amd64
+        env:
+          STEPS_GETVER_OUTPUTS_DSTOOL_VERSION: ${{ steps.getver.outputs.dstool_version }}
       - name: Prepare directory for linux-arm binary
         if: ${{ inputs.build-linux-arm }}
-        run: mkdir -p ${{ steps.getver.outputs.dstool_version }}/linux/arm64
+        run: mkdir -p ${STEPS_GETVER_OUTPUTS_DSTOOL_VERSION}/linux/arm64
+        env:
+          STEPS_GETVER_OUTPUTS_DSTOOL_VERSION: ${{ steps.getver.outputs.dstool_version }}
       - name: Prepare directory for darwin-amd binary
         if: ${{ inputs.build-darwin-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.dstool_version }}/darwin/amd64
+        run: mkdir -p ${STEPS_GETVER_OUTPUTS_DSTOOL_VERSION}/darwin/amd64
+        env:
+          STEPS_GETVER_OUTPUTS_DSTOOL_VERSION: ${{ steps.getver.outputs.dstool_version }}
       - name: Prepare directory for darwin-arm binary
         if: ${{ inputs.build-darwin-arm }}
-        run: mkdir -p ${{ steps.getver.outputs.dstool_version }}/darwin/arm64
+        run: mkdir -p ${STEPS_GETVER_OUTPUTS_DSTOOL_VERSION}/darwin/arm64
+        env:
+          STEPS_GETVER_OUTPUTS_DSTOOL_VERSION: ${{ steps.getver.outputs.dstool_version }}
       - name: Prepare directory for windows-amd binary
         if: ${{ inputs.build-windows-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.dstool_version }}/windows/amd64/unsigned
+        run: mkdir -p ${STEPS_GETVER_OUTPUTS_DSTOOL_VERSION}/windows/amd64/unsigned
+        env:
+          STEPS_GETVER_OUTPUTS_DSTOOL_VERSION: ${{ steps.getver.outputs.dstool_version }}
 
       - name: Copy linux-amd binary
         if: ${{ inputs.build-linux-amd }}
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: linux-amd-binary
           path: ${{ steps.getver.outputs.dstool_version }}/linux/amd64/
       - name: Copy linux-arm binary
         if: ${{ inputs.build-linux-arm }}
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: linux-arm-binary
           path: ${{ steps.getver.outputs.dstool_version }}/linux/arm64/
       - name: Copy darwin amd64 binary
         if: ${{ inputs.build-darwin-amd }}
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: darwin-amd-binary
           path: ${{ steps.getver.outputs.dstool_version }}/darwin/amd64/
       - name: Copy darwin arm64 binary
         if: ${{ inputs.build-darwin-arm }}
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: darwin-arm-binary
           path: ${{ steps.getver.outputs.dstool_version }}/darwin/arm64/
       - name: Copy windows-amd binary (unsigned)
         if: ${{ inputs.build-windows-amd }}
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: windows-amd-binary
           path: ${{ steps.getver.outputs.dstool_version }}/windows/amd64/unsigned/
 
       - name: Print resulting file hierarchy
-        run: find ${{ steps.getver.outputs.dstool_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+        run: find ${STEPS_GETVER_OUTPUTS_DSTOOL_VERSION} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+        env:
+          STEPS_GETVER_OUTPUTS_DSTOOL_VERSION: ${{ steps.getver.outputs.dstool_version }}
 
       - name: Download s3
         run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
@@ -187,5 +203,6 @@ jobs:
           S3_BUCKET: "yandexcloud-ydb-dstool"
           S3_DNS_HOST_BUCKET: "%(bucket)s.storage.yandexcloud.net"
           S3_REGION: ru-central1
-        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ steps.getver.outputs.dstool_version }} "s3://$S3_BUCKET/release/"
+          STEPS_GETVER_OUTPUTS_DSTOOL_VERSION: ${{ steps.getver.outputs.dstool_version }}
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${STEPS_GETVER_OUTPUTS_DSTOOL_VERSION} "s3://$S3_BUCKET/release/"
       

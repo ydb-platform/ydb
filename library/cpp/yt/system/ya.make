@@ -15,8 +15,13 @@ PEERDIR(
     library/cpp/yt/cpu_clock
     library/cpp/yt/exception
     library/cpp/yt/misc
-    library/cpp/yt/rseq
 )
+
+IF (OS_LINUX)
+    PEERDIR(
+        library/cpp/yt/rseq
+    )
+ENDIF()
 
 END()
 

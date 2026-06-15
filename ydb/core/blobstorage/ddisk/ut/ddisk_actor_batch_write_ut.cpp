@@ -836,8 +836,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
             "Only record A must remain after B's header write failed");
 
         // Sectors allocated for B (data + header) must be freed.
+        // B allocated 2 sectors (1 header + 1 data); after failure both must be returned.
         const ui32 freeAfterFail = GetPBFreeSectors(ctx, disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(freeAfterFail, freeAfterA,
+        const ui32 bSectors = selectorB.Size / BlockSize + 1; // data sectors + 1 header
+        UNIT_ASSERT_VALUES_EQUAL_C(freeAfterFail, freeAfterA + bSectors,
             "Sectors allocated for the failed batch write must be freed");
     }
 

@@ -953,13 +953,15 @@ namespace NKikimr::NDDisk {
 
         if (PersistentBufferBatchWriteCookie == 0) {
             PersistentBufferBatchWriteCookie = NextCookie++;
-            auto [_, inserted] = PersistentBufferDiskOperationInflight.try_emplace(PersistentBufferBatchWriteCookie, TPersistentBufferDiskOperationInFlight{
+            auto headerSector = sectors.back();
+            sectors.pop_back();
+            auto [it, inserted] = PersistentBufferDiskOperationInflight.try_emplace(PersistentBufferBatchWriteCookie, TPersistentBufferDiskOperationInFlight{
                 .BatchWrite = true,
-                .BatchHeaderSectorInfo = sectors.back(),
+                .BatchHeaderSectorInfo = headerSector,
+                .OccupiedSectors = {headerSector},
                 .StartTs = HPNow(),
             });
             Y_ABORT_UNLESS(inserted);
-            sectors.pop_back();
             Schedule(TDuration::MicroSeconds(PersistentBufferFormat.WritesBatchingPeriodMicroseconds), new TEvents::TEvWakeup(EWakeupTag::WakeupProcessPersistentBufferBatchWrite));
         }
         auto& inflight = PersistentBufferDiskOperationInflight[PersistentBufferBatchWriteCookie];
@@ -995,6 +997,9 @@ namespace NKikimr::NDDisk {
         auto& r = inflight.Records.back();
         r.Sectors.push_back(inflight.BatchHeaderSectorInfo);
         r.Sectors.insert(r.Sectors.end(), sectors.begin(), sectors.end());
+        // Accumulate data sectors into OccupiedSectors so the error path can free them.
+        // The header sector was already added when the batch inflight was created.
+        inflight.OccupiedSectors.insert(inflight.OccupiedSectors.end(), sectors.begin(), sectors.end());
 
         PersistentBufferWriteInflightsByRecord[TPersistentBufferRecordId{creds.TabletId, creds.Generation, lsn}].emplace_back(
             PersistentBufferBatchWriteCookie,

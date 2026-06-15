@@ -4,6 +4,8 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 EXPLICIT_DATA()
 
+DATA(arcadia/yt/yt/client/hedging/unittests/canondata)
+
 SRCS(
     helper.cpp
 

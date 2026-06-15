@@ -3,6 +3,7 @@
 #include <yt/yt/client/hedging/cache.h>
 #include <yt/yt/client/hedging/counter.h>
 #include <yt/yt/client/hedging/hedging.h>
+#include <yt/yt/client/hedging/hedging_executor.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
 
@@ -17,6 +18,15 @@
 #include <library/cpp/iterator/zip.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
+
+#include <library/cpp/testing/common/env.h>
+
+#include <util/generic/hash.h>
+#include <util/random/random.h>
+#include <util/string/printf.h>
+
+#include <atomic>
+#include <memory>
 
 namespace NYT::NClient::NHedging::NRpc {
 namespace {
@@ -76,6 +86,70 @@ IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
     config->ClearPenaltiesOnErrors = clearPenaltiesOnErrors;
 
     return CreateReplicationLagPenaltyProvider(config, client);
+}
+
+// A synchronous stand-in for the replication-lag penalty provider: reports a fixed external penalty
+// per cluster (it would report LagPenalty for a lagging cluster).
+class TFixedPenaltyProvider
+    : public IPenaltyProvider
+{
+public:
+    explicit TFixedPenaltyProvider(THashMap<std::string, TDuration> penaltyByCluster)
+        : PenaltyByCluster_(std::move(penaltyByCluster))
+    { }
+
+    TDuration Get(const std::string& cluster) override
+    {
+        auto it = PenaltyByCluster_.find(cluster);
+        return it != PenaltyByCluster_.end() ? it->second : TDuration::Zero();
+    }
+
+private:
+    const THashMap<std::string, TDuration> PenaltyByCluster_;
+};
+
+// Builds a hedging client straight from THedgingExecutor. ClientPriority is set explicitly so the
+// background DC resolver is a no-op; hedgingRequestDelays enables delays mode (node order picks the
+// primary), remoteDataCenterPenalty is the random tie-break step between remotes.
+NApi::IClientPtr CreateRemoteAwareHedgingClient(
+    std::vector<NApi::IClientPtr> clients,
+    std::vector<NApi::EClientPriority> priorities,
+    std::vector<TDuration> hedgingRequestDelays,
+    TDuration remoteDataCenterPenalty,
+    const std::string& localDataCenter = "local-dc",
+    TDuration banPenalty = SleepQuantum * 2,
+    TDuration banDuration = SleepQuantum,
+    const IPenaltyProviderPtr& penaltyProvider = CreateDummyPenaltyProvider(),
+    double hedgingRatioLimit = 1.0)
+{
+    YT_VERIFY(clients.size() == priorities.size());
+
+    std::vector<THedgingExecutor::TNode> nodes;
+    nodes.reserve(clients.size());
+    for (int nodeIndex = 0; nodeIndex < std::ssize(clients); ++nodeIndex) {
+        nodes.push_back({
+            .Client = clients[nodeIndex],
+            .Counter = New<TCounter>(ToString(nodeIndex)),
+            .ClusterName = ToString(nodeIndex),
+            .InitialPenalty = TDuration::Zero(),
+            .ClientPriority = priorities[nodeIndex],
+        });
+    }
+
+    // Hedging-ratio counter: the shift period is far longer than the test run, so no bucket shift
+    // happens and the ratio is a deterministic cumulative count; 5 buckets so a stray shift would
+    // degrade gracefully instead of zeroing the whole window.
+    return CreateHedgingClient(New<THedgingExecutor>(
+        nodes,
+        banPenalty,
+        banDuration,
+        penaltyProvider,
+        /*ratioCounterBucketCount*/ 5,
+        /*ratioCounterShiftPeriod*/ TDuration::Hours(1),
+        hedgingRatioLimit,
+        hedgingRequestDelays,
+        remoteDataCenterPenalty,
+        localDataCenter));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -501,6 +575,154 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
     // Check that query result is from first client, because replication lag was cleaned.
     ASSERT_TRUE(queryResultWithCleanedPenalty.IsOK());
     EXPECT_EQ(queryResultWithCleanedPenalty.Value().AsStringBuf(), clientResult1.AsStringBuf());
+}
+
+// Canonizes the served-by distribution over 100 requests, "local fresh" vs "local lagging" crossed
+// with the second remote's error rate (the first always fails 1/10). A fresh local serves everything;
+// a lagging local gets LagPenalty (42), above the remote slots (+10/+20), so it sorts last and - since
+// only the top two of three clusters are dispatched (one hedge delay) - is tried only once a remote is
+// heavily banned. Hedging is capped at 20% of requests (HedgingRatioLimit), so the total-requests
+// column shows backend load held down once the cap is hit.
+//
+// Determinism: per-request error flags + a fixed lag penalty + a seeded tie-break, so background hedge
+// tasks never affect the outcome.
+//
+// Regenerate the golden with:
+//   ya make -tA --test-param GTEST_UPDATE_GOLDEN=1 yt/yt/client/hedging/unittests
+TEST(THedgingClientTest, HedgingSimulation)
+{
+    NYPath::TYPath path = "/test/1234";
+    NYson::TYsonString remote1Result("remote-1"_sb);
+    NYson::TYsonString remote2Result("remote-2"_sb);
+    NYson::TYsonString localResult("local"_sb);
+    constexpr int iterations = 100;
+    // Production eagle LagPenalty; it exceeds RemoteDataCenterPenalty so a lagging local sorts last.
+    auto lagPenalty = TDuration::MilliSeconds(42);
+    // CreateRemoteAwareHedgingClient names clusters by position; the local one is passed 3rd -> "2".
+    std::string localClusterName = "2";
+
+    // The primary is the only request dispatched synchronously inside ListNode(); the first client hit
+    // (before the call returns) wins this compare-exchange and is recorded as the primary. Hedges fire
+    // later, off-thread, and lose the exchange.
+    auto primaryCluster = std::make_shared<std::atomic<int>>(-1);
+    // Counts every backend request that actually runs (primary + each hedge that fires), to show how
+    // the hedging ratio limit caps total load.
+    auto totalRequests = std::make_shared<std::atomic<int>>(0);
+
+    // A client fails iff its error flag is set; flags are set per request, so outcomes don't depend on
+    // background hedge-task timing.
+    auto makeClient = [&] (std::shared_ptr<std::atomic<bool>> errorFlag, NYson::TYsonString result, int clusterId) {
+        auto client = New<TStrictMockClient>();
+        EXPECT_CALL(*client, ListNode(path, _))
+            .WillRepeatedly([=] (const NYPath::TYPath&, const NApi::TListNodeOptions&) -> TFuture<NYson::TYsonString> {
+                totalRequests->fetch_add(1);
+                int expected = -1;
+                primaryCluster->compare_exchange_strong(expected, clusterId);
+                if (errorFlag->load()) {
+                    return MakeFuture<NYson::TYsonString>(TError("Failure"));
+                }
+                return MakeFuture(result);
+            });
+        return client;
+    };
+
+    // Pseudo-random but deterministic error placement: a well-mixed hash of the request index gives a
+    // stable bucket in [0, 10), so "bucket < rate" yields the requested failure rate at scattered (not
+    // block-contiguous) positions. Independent of the executor's tie-break RNG.
+    auto errorAt = [] (int index, ui64 salt, int per10) {
+        ui64 x = static_cast<ui64>(index) * 0x9E3779B97F4A7C15ULL + salt * 0xBF58476D1CE4E5B9ULL;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+        x ^= x >> 31;
+        return static_cast<int>(x % 10) < per10;
+    };
+
+    TString table = "localLagging remote1Err remote2Err -> local remote1 remote2 failed || primLocal primR1 primR2 || total\n";
+    // Local is either fresh or lagging; remote1 always fails 1/10, remote2 sweeps 0/10 .. 10/10.
+    for (bool localLagging : {false, true}) {
+        for (int remote2ErrorsPer10 = 0; remote2ErrorsPer10 <= 10; ++remote2ErrorsPer10) {
+            int remote1ErrorsPer10 = 1;
+
+            // Fix the RNG so every row uses the same tie-break sequence and only the inputs differ.
+            SetRandomSeed(42);
+
+            auto remote1Error = std::make_shared<std::atomic<bool>>(false);
+            auto remote2Error = std::make_shared<std::atomic<bool>>(false);
+            auto localNeverErrors = std::make_shared<std::atomic<bool>>(false);
+
+            auto remote1 = makeClient(remote1Error, remote1Result, /*clusterId*/ 0);
+            auto remote2 = makeClient(remote2Error, remote2Result, /*clusterId*/ 1);
+            auto local = makeClient(localNeverErrors, localResult, /*clusterId*/ 2);
+
+            IPenaltyProviderPtr penaltyProvider = CreateDummyPenaltyProvider();
+            if (localLagging) {
+                penaltyProvider = New<TFixedPenaltyProvider>(
+                    THashMap<std::string, TDuration>{{localClusterName, lagPenalty}});
+            }
+
+            // Production-eagle config: one hedge delay, BanPenalty (3) < RemoteDataCenterPenalty (10),
+            // long ban duration, hedging capped at 20% of requests. Only the hedge delay is scaled down
+            // for test speed.
+            auto hedgingClient = CreateRemoteAwareHedgingClient(
+                {remote1, remote2, local},
+                {NApi::EClientPriority::Remote, NApi::EClientPriority::Remote, NApi::EClientPriority::Local},
+                /*hedgingRequestDelays*/ {TDuration::MilliSeconds(2)},
+                /*remoteDataCenterPenalty*/ TDuration::MilliSeconds(10),
+                /*localDataCenter*/ "local-dc",
+                /*banPenalty*/ TDuration::MilliSeconds(3),
+                /*banDuration*/ TDuration::Hours(1),
+                penaltyProvider,
+                /*hedgingRatioLimit*/ 0.2);
+
+            int servedLocal = 0;
+            int servedRemote1 = 0;
+            int servedRemote2 = 0;
+            int failed = 0;
+            int primaryLocal = 0;
+            int primaryRemote1 = 0;
+            int primaryRemote2 = 0;
+            totalRequests->store(0);
+            for (int requestIndex = 0; requestIndex < iterations; ++requestIndex) {
+                remote1Error->store(errorAt(requestIndex, /*salt*/ 1, remote1ErrorsPer10));
+                remote2Error->store(errorAt(requestIndex, /*salt*/ 2, remote2ErrorsPer10));
+
+                primaryCluster->store(-1);
+                auto resultFuture = hedgingClient->ListNode(path);
+                // The primary was dispatched synchronously by the call above, so it is recorded by now.
+                switch (primaryCluster->load()) {
+                    case 0: ++primaryRemote1; break;
+                    case 1: ++primaryRemote2; break;
+                    case 2: ++primaryLocal; break;
+                }
+
+                auto queryResult = NConcurrency::WaitFor(resultFuture);
+                if (!queryResult.IsOK()) {
+                    ++failed;
+                } else if (queryResult.Value().AsStringBuf() == localResult.AsStringBuf()) {
+                    ++servedLocal;
+                } else if (queryResult.Value().AsStringBuf() == remote1Result.AsStringBuf()) {
+                    ++servedRemote1;
+                } else {
+                    ++servedRemote2;
+                }
+            }
+
+            table += Sprintf("%12s %10d %10d -> %5d %7d %7d %6d || %5d %7d %7d || %5d\n",
+                localLagging ? "true" : "false",
+                remote1ErrorsPer10,
+                remote2ErrorsPer10,
+                servedLocal,
+                servedRemote1,
+                servedRemote2,
+                failed,
+                primaryLocal,
+                primaryRemote1,
+                primaryRemote2,
+                totalRequests->load());
+        }
+    }
+
+    EXPECT_THAT(table, NGTest::GoldenFileEq(SRC_("canondata/hedging_simulation.txt")));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

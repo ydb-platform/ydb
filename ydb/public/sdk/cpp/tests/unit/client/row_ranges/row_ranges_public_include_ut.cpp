@@ -12,9 +12,6 @@
 #include <utility>
 
 using namespace NYdb;
-
-using namespace NYdb;
-
 namespace {
 
 static_assert(std::is_same_v<

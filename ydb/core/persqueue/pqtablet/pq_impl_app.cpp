@@ -326,7 +326,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
             AppData(ctx),
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            IsPersQueueDevUiAdminRequest(cgi)))
+            !IsPersQueueDevUiAdminRequest(cgi)))
     {
         ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

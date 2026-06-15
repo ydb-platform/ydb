@@ -24,6 +24,8 @@
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_user_data.h>
+#include <yql/essentials/providers/common/mkql_simple_file/mkql_simple_file.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yt/yql/providers/yt/lib/res_pull/res_or_pull.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -149,6 +151,7 @@ public:
         CoordinatorPingInterval_(settings.CoordinatorPingInterval),
         MaxDirectPullBytes_(settings.MaxDirectPullBytes),
         MaxDirectPullRows_(settings.MaxDirectPullRows),
+        Local_(settings.Local),
         FmrServices_(fmrServices),
         MkqlCompiler_(MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>()),
         YtJobService_(fmrServices->YtJobService)
@@ -2805,8 +2808,28 @@ private:
         std::vector<TYtResourceInfo>& ytResources,
         std::vector<TFmrResourceOperationInfo>& fmrResources
     ) {
+        if (Local_) {
+            // Embedded/local mode: resolve FilePath/FileContent callables to literals directly
+            // from the user data blocks, matching the file gateway's behavior.
+            const auto& userDataBlocks = execCtx->Options_.UserDataBlocks();
+            bool hasUserFiles = AnyOf(userDataBlocks, [](const auto& kv) {
+                return kv.second.Usage.Test(EUserDataBlockUsage::Path) ||
+                       kv.second.Usage.Test(EUserDataBlockUsage::Content);
+            });
+            if (hasUserFiles) {
+                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
+                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc, nullptr,
+                    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
+                size_t nodeCount = 0;
+                builder.UpdateLambdaCode(lambdaCode, nodeCount,
+                    TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks));
+                fmrJob->SetLambdaCode(lambdaCode);
+            }
+            return;
+        }
+
         if (!Clusters_ || !UrlMapper_) {
-            // No gateway config (unit-test setup) — nothing to transform/upload.
             return;
         }
 
@@ -3470,6 +3493,7 @@ private:
     TDuration CoordinatorPingInterval_;
     ui64 MaxDirectPullBytes_;
     ui64 MaxDirectPullRows_;
+    bool Local_;
     std::thread GetOperationStatusesThread_;
     std::thread PingSessionThread_;
     std::atomic<bool> StopFmrGateway_;

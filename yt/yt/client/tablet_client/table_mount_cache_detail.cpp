@@ -322,20 +322,40 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(
     std::vector<std::pair<TSmoothMovementRedirectionHint, TTabletInfoPtr>> hints)
     -> std::optional<TInvalidationResult>
 {
+    YT_VERIFY(!hints.empty());
+
     // Validate all hints first. If any is invalid, bail out entirely.
-    for (const auto& [smoothMovementHint, tabletInfo] : hints) {
-        if (!smoothMovementHint.NewMountRevision ||
-            !smoothMovementHint.OldMountRevision ||
-            !smoothMovementHint.CellId ||
-            !smoothMovementHint.CellDescriptor)
+    decltype(hints) filteredHints;
+    for (auto&& [hint, tabletInfo] : hints) {
+        if (!hint.NewMountRevision ||
+            !hint.OldMountRevision ||
+            !hint.CellId ||
+            !hint.CellDescriptor)
         {
             return {};
         }
 
-        if (tabletInfo->MountRevision != smoothMovementHint.OldMountRevision) {
+        if (tabletInfo->MountRevision == hint.OldMountRevision) {
+            filteredHints.emplace_back(std::move(hint), std::move(tabletInfo));
+        } else if (tabletInfo->MountRevision == hint.NewMountRevision) {
+            // Recent mount info already contains the new tablet.
+            continue;
+        } else {
             return {};
         }
     }
+
+    if (filteredHints.empty()) {
+        // Recent mount info already is up-to-date.
+        return {{
+            .Retryable = true,
+            .ErrorCode = NTabletClient::EErrorCode::TabletServantIsNotActive,
+            .TabletInfo = hints[0].second,
+            .TableInfoUpdatedFromError = true,
+        }};
+    }
+
+    hints = std::move(filteredHints);
 
     // Build a map from (TabletId, OldMountRevision) -> newTabletInfo for fast lookup.
     // Also register cells and log.
@@ -371,6 +391,8 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(
             MakeFormattableView(owners, [] (auto* builder, const auto& weakOwner) {
                 if (auto owner = weakOwner.Lock()) {
                     builder->AppendString(owner->Path);
+                } else {
+                    builder->AppendString("<expired>");
                 }
             }));
 
@@ -382,14 +404,11 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(
     }
 
     // Collect all unique owner tables that contain any of the affected tablets.
-    THashSet<TTableMountInfo*> seenOwners;
-    std::vector<TTableMountInfoPtr> allOwners;
+    THashSet<TYPath> ownerPaths;
     for (const auto& [tabletId, replacement] : replacements) {
         for (auto& weakOwner : TabletInfoOwnerCache_.GetOwners(tabletId)) {
             if (auto owner = weakOwner.Lock()) {
-                if (seenOwners.insert(owner.Get()).second) {
-                    allOwners.push_back(owner);
-                }
+                ownerPaths.insert(owner->Path);
             }
         }
     }
@@ -399,25 +418,33 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(
         MakeFormattableView(replacements, [] (auto* builder, const auto& pair) {
             builder->AppendFormat("%v", pair.first);
         }),
-        MakeFormattableView(allOwners, [] (auto* builder, const auto& owner) {
-            builder->AppendString(owner->Path);
-        }));
+        ownerPaths);
 
     std::vector<TTableMountInfoPtr> clonedTableInfos;
 
-    for (const auto& owner : allOwners) {
-        auto clone = owner->Clone();
+    for (const auto& path : ownerPaths) {
+        auto errorOrOwner = Find(path);
+        if (!errorOrOwner || !errorOrOwner->IsOK()) {
+            continue;
+        }
+
+        auto clone = errorOrOwner->Value()->Clone();
+
+        bool replaced = false;
 
         for (auto& tableTabletInfo : Concatenate(clone->Tablets, clone->MountedTablets)) {
             if (auto it = replacements.find(tableTabletInfo->TabletId); it != replacements.end()) {
                 const auto& replacement = it->second;
                 if (tableTabletInfo->MountRevision == replacement.OldTabletInfo->MountRevision) {
                     tableTabletInfo = replacement.NewTabletInfo;
+                    replaced = true;
                 }
             }
         }
 
-        clonedTableInfos.push_back(std::move(clone));
+        if (replaced) {
+            clonedTableInfos.push_back(std::move(clone));
+        }
     }
 
     SetTableInfos(std::move(clonedTableInfos));
@@ -439,7 +466,12 @@ auto TTableMountCacheBase::TryHandleTabletReshardedError(
         return {};
     }
 
-    auto owners = TabletInfoOwnerCache_.GetOwners(tabletInfo->TabletId);
+    THashSet<TYPath> ownerPaths;
+    for (const auto& weakOwner : TabletInfoOwnerCache_.GetOwners(tabletInfo->TabletId)) {
+        if (auto owner = weakOwner.Lock()) {
+            ownerPaths.insert(owner->Path);
+        }
+    }
 
     const auto& oldTabletIds = reshardHint->OldTabletIds;
     const auto& oldTabletMountRevisions = reshardHint->OldTabletMountRevisions;
@@ -465,21 +497,18 @@ auto TTableMountCacheBase::TryHandleTabletReshardedError(
         tabletInfo->CellId,
         newTabletIds,
         newTabletsMountRevision,
-        MakeFormattableView(owners, [] (auto* builder, const auto& weakOwner) {
-            if (auto owner = weakOwner.Lock()) {
-                builder->AppendString(owner->Path);
-            }
-        }));
+        ownerPaths);
 
-    THashSet<TTabletId> ReshardedTabletIds(oldTabletIds.begin(), oldTabletIds.end());
+    THashSet<TTabletId> reshardedTabletIds(oldTabletIds.begin(), oldTabletIds.end());
 
     std::vector<TTabletInfoPtr> newTabletInfos;
     std::vector<TTableMountInfoPtr> clonedTableInfos;
-    for (auto weakOwner : owners) {
-        auto owner = weakOwner.Lock();
-        if (!owner) {
+    for (const auto& path : ownerPaths) {
+        auto errorOrOwner = Find(path);
+        if (!errorOrOwner || !errorOrOwner->IsOK()) {
             continue;
         }
+        auto owner = errorOrOwner->Value();
 
         int relativeOldTabletIndex = 0;
         int firstTabletInfoOffset = 0;
@@ -538,7 +567,7 @@ auto TTableMountCacheBase::TryHandleTabletReshardedError(
             clone->MountedTablets.begin(),
             clone->MountedTablets.end(),
             [&] (const TTabletInfoPtr& tabletInfo) {
-                return ReshardedTabletIds.contains(tabletInfo->TabletId);
+                return reshardedTabletIds.contains(tabletInfo->TabletId);
             });
         bool allTabletsPresentInMountedTablets = clone->MountedTablets.end() - endIt == ssize(oldTabletIds);
         clone->MountedTablets.erase(endIt, clone->MountedTablets.end());

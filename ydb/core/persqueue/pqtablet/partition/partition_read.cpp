@@ -872,6 +872,9 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     if (!userInfo) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(read->ClientId));
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
+        if (BatchProcessorActor) {
+            Send(BatchProcessorActor, new TEvPQ::TEvConsumerRemoved(user));
+        }
         OnReadRequestFinished(read->Cookie, 0, user, ctx);
         return;
     }

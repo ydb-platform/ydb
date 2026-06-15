@@ -239,6 +239,8 @@ struct TEvPQ {
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
         EvRewindCommitResult,
+        EvProcessBatchRead,
+        EvProcessBatchReadResult,
         EvEnd,
     };
 

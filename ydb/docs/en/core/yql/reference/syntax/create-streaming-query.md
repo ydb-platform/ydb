@@ -4,6 +4,7 @@
 
 ## Syntax
 
+
 ```sql
 CREATE [OR REPLACE] STREAMING QUERY [IF NOT EXISTS] <query_name> [WITH (
     <key1> = <value1>,
@@ -17,9 +18,10 @@ DO BEGIN
 END DO
 ```
 
+
 ### Parameters
 
-* `OR REPLACE` — if a streaming query with this name already exists, replace it while preserving read offsets from topics.
+* `OR REPLACE` — if a streaming query with this name already exists, replace it while preserving read offsets from the topic.
 * `IF NOT EXISTS` — do not fail if a streaming query with this name already exists; leave the existing query unchanged.
 * `query_name` — name of the streaming query to create.
 * `WITH (<key> = <value>)` — optional list of settings for the new streaming query.
@@ -27,7 +29,7 @@ END DO
 
 You cannot use `OR REPLACE` and `IF NOT EXISTS` together.
 
-`WITH` parameters:
+`WITH` block parameters:
 
 * `RUN = (TRUE|FALSE)` — start the query after creation; default `TRUE`.
 * `RESOURCE_POOL = <resource_pool_name>` — name of the [resource pool](../../../concepts/glossary.md#resource-pool) where the query runs.
@@ -40,9 +42,11 @@ A [consumer](../../../concepts/datamodel/topic.md#consumer) is a named subscript
 
 Create a consumer with the [CLI](../../../reference/ydb-cli/topic-consumer-add.md) or when creating a topic with [CREATE TOPIC](create-topic.md). Set the consumer name in the query with a pragma:
 
+
 ```sql
 PRAGMA pq.Consumer="my_consumer";
 ```
+
 
 If no consumer is specified, the topic is read without a named consumer. In both cases the read position is stored in a [checkpoint](../../../dev/streaming-query/checkpoints.md). A consumer lets you track position and lag from the topic side, for example via the [CLI](../../../reference/ydb-cli/topic-read.md).
 
@@ -52,28 +56,32 @@ If no consumer is specified, the topic is read without a named consumer. In both
 
 The query reads events from the input topic, builds a JSON object from fields, and writes to the output topic.
 
-`AsStruct` builds a structure, `Yson::From` converts to Yson, `Yson::SerializeJson` serializes to JSON, and `ToBytes` converts to `String` for topic writes.
+`AsStruct` builds a structure from the specified fields, `Yson::From` converts it to Yson, `Yson::SerializeJson` serializes it to a JSON string, and `ToBytes` converts it to `String`, which is required for writing to a topic.
 
 {% note info %}
 
-Topic writes go through an [external data source](../../../concepts/datamodel/external_data_source.md). In the example, `ydb_source` is a pre-created external data source; `output_topic` and `input_topic` are topics available through it.
+Streaming queries can use [local and external topics](../../../dev/streaming-query/local-and-external-topics.md).
+
+In the example:
+
+- `ext_source` — a pre-created [`external data source`](../../../concepts/datamodel/external_data_source.md);
+- `input_topic` and `output_topic` — local or external [topics](../../../concepts/datamodel/topic.md).
 
 {% endnote %}
+
 
 ```yql
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
-    -- ydb_source — external data source for topics
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic -- or external topic ext_source.output_topic
     SELECT
         -- Build JSON from fields
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
-        -- Read from topic
-        ydb_source.input_topic
+        ext_source.input_topic -- or local topic input_topic
     WITH (
         FORMAT = json_each_row,  -- Input format
         SCHEMA = (               -- Input schema
@@ -85,15 +93,17 @@ DO BEGIN
 END DO
 ```
 
+
 ### Write to a table {#example-table}
 
-The query reads events from a topic and writes them to `output_table`. Create the table beforehand with a matching schema.
+The query reads events from a topic and writes them to `output_table`. The table must be created beforehand with a schema matching the selected columns.
 
 {% note warning %}
 
 Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not supported: with [at-least-once](../../../concepts/streaming-query.md#guarantees) retries, it would duplicate rows. With `UPSERT`, an existing row with the same primary key is updated; otherwise a row is inserted, while `INSERT INTO` fails.
 
 {% endnote %}
+
 
 ```sql
 CREATE STREAMING QUERY my_streaming_query AS
@@ -105,8 +115,7 @@ DO BEGIN
         Id,
         Name
     FROM
-        -- ydb_source — external data source for topics
-        ydb_source.input_topic
+        input_topic -- or external topic ext_source.input_topic
     WITH (
         FORMAT = json_each_row,  -- Input format
         SCHEMA = (               -- Input schema
@@ -118,9 +127,11 @@ DO BEGIN
 END DO
 ```
 
+
 ### Start in a resource pool {#example-resource-pool}
 
 The query is created in the given [resource pool](../../../concepts/glossary.md#resource-pool) but not started automatically (`RUN = FALSE`). You can validate configuration first or start later with [ALTER STREAMING QUERY](alter-streaming-query.md).
+
 
 ```sql
 CREATE STREAMING QUERY my_streaming_query WITH (
@@ -129,14 +140,13 @@ CREATE STREAMING QUERY my_streaming_query WITH (
 ) AS
 DO BEGIN
 
-    -- ydb_source — external data source for topics
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic -- or external topic ext_source.output_topic
     SELECT
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
-        ydb_source.input_topic
+        ext_source.input_topic -- or local topic input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -147,6 +157,7 @@ DO BEGIN
 
 END DO
 ```
+
 
 More examples: [{#T}](../../../dev/streaming-query/patterns.md).
 

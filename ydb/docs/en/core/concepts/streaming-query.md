@@ -10,9 +10,8 @@ Stream processing is widely used in systems such as [Apache Flink](https://flink
 
 Regular queries operate on data already stored in tables. The query runs, returns a result, and completes. A streaming query is created and keeps running indefinitely until explicitly stopped by the user. Data continuously arrives in a topic, flows through the query, and is written to a sink—another topic or a table.
 
-
 | Characteristic | Regular queries | Streaming queries |
-|----------------|-----------------|-------------------|
+| --- | --- | --- |
 | Data | Finite sets in tables | Unbounded event streams |
 | Lifetime | Completes after processing | Runs continuously |
 | Result | Available after completion | Updates as data arrives |
@@ -56,16 +55,10 @@ We are actively improving stream processing. Delivery guarantees will get strong
 
 {% note warning %}
 
-- The query must contain at least one read from a topic, because streaming processing requires a continuous input stream.
+- The query must contain at least one read from a topic, because stream processing requires a continuous input stream.
 - `JOIN` between two streams is not supported (a temporary architectural limitation).
-- Enrichment from {{ ydb-short-name }} tables is not supported — streaming queries may only use [S3 external tables](query_execution/federated_query/s3/external_table.md) for enrichment (support for {{ ydb-short-name }} tables is planned for release 26.1).
-- Reading and writing **local** topics directly is not supported — use [external data sources](datamodel/external_data_source.md) that point at the current database (this restriction is planned to be lifted in release 26.1).
 
 {% endnote %}
-
-To work with local topics, use [external data sources](datamodel/external_data_source.md):
-
-- Create an [external data source](datamodel/external_data_source.md) pointing to the same or another {{ ydb-short-name }} database and access topics through it.
 
 Also not supported in the current version:
 
@@ -78,7 +71,7 @@ Also not supported in the current version:
 Streaming queries are created, modified, and deleted using YQL commands:
 
 - [CREATE STREAMING QUERY](../yql/reference/syntax/create-streaming-query.md) — create;
-- [ALTER STREAMING QUERY](../yql/reference/syntax/alter-streaming-query.md) — change settings and control lifecycle;
+- [ALTER STREAMING QUERY](../yql/reference/syntax/alter-streaming-query.md) — modify and manage state;
 - [DROP STREAMING QUERY](../yql/reference/syntax/drop-streaming-query.md) — delete.
 
 Query state is available in the system table [`.sys/streaming_queries`](../dev/system-views.md#streaming).

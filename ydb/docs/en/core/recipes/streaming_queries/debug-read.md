@@ -4,13 +4,16 @@ When developing [streaming queries](../../concepts/streaming-query.md), it is of
 
 {% note warning %}
 
-For debugging and inspection only. For production, create streaming queries with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
+For debugging and inspection of data in the topic only. For production, create streaming queries with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
 
 {% endnote %}
 
 {% note info %}
 
-In the examples, `ydb_source` is a pre-created [external data source](../../concepts/datamodel/external_data_source.md), and `topic_name` / `input_topic` are topics available through it.
+In the examples:
+
+- `ext_source` — a pre-created [external data source](../../concepts/datamodel/external_data_source.md);
+- `input_topic` — a local or external topic (see [local and external topics in streaming queries](../../dev/streaming-query/local-and-external-topics.md)).
 
 {% endnote %}
 
@@ -18,11 +21,12 @@ In the examples, `ydb_source` is a pre-created [external data source](../../conc
 
 Simplest option — read messages in `raw` format without parsing:
 
+
 ```sql
 SELECT
     Data
 FROM
-    ydb_source.topic_name
+    input_topic -- or external topic ext_source.input_topic
 WITH (
     FORMAT = raw,
     SCHEMA = (
@@ -33,17 +37,19 @@ WITH (
 LIMIT 1
 ```
 
+
 `LIMIT` is required; without it the query never completes because it waits for new messages indefinitely.
 
 ## JSON parsing
 
 If the topic stores JSON, parse fields directly:
 
+
 ```sql
 SELECT
     *
 FROM
-    ydb_source.topic_name
+    input_topic -- or external topic ext_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -56,8 +62,9 @@ WITH (
 LIMIT 5
 ```
 
+
 ## See also
 
 * [{#T}](../../concepts/streaming-query.md)
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md) — supported data formats
-* [{#T}](../../yql/reference/syntax/select/streaming.md) — `STREAMING = TRUE` in the YQL reference
+* [{#T}](../../yql/reference/syntax/select/streaming.md) — description of `STREAMING = TRUE` in the YQL reference

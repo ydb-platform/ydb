@@ -1,7 +1,8 @@
 #include "kqp_compute_scheduler_service.h"
 
-#include "log.h"
 #include "tree/dynamic.h"
+
+#include <ydb/library/actors/core/log.h>
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
@@ -39,9 +40,9 @@ public:
         );
 
         if (Scheduler->IsEnabled()) {
-            LOG_I("Enabled on start");
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Enabled on start");
         } else {
-            LOG_I("Disabled on start");
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Disabled on start");
         }
 
         Scheduler->SetTotalCpuLimit(CalculateTotalCpuLimit()); // TODO: take total cpu limit from outside
@@ -66,12 +67,12 @@ public:
             hFunc(NActors::TEvents::TEvWakeup, Handle);
 
             default:
-                LOG_E("Unexpected event: " << ev->GetTypeRewrite());
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Unexpected event: " << ev->GetTypeRewrite());
         }
     }
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_D("Subscribed to config changes");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Subscribed to config changes");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -79,9 +80,9 @@ public:
 
         Scheduler->ToggleEnabled(event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler());
         if (Scheduler->IsEnabled()) {
-            LOG_I("Become enabled");
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Become enabled");
         } else {
-            LOG_I("Become disabled");
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Become disabled");
         }
 
         auto responseEvent = std::make_unique<NKikimr::NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -94,7 +95,7 @@ public:
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->DatabaseId, attrs);
 
-        LOG_D("Add database: " << ev->Get()->DatabaseId << " (" << attrs.ToString() << ")");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Add database: " << ev->Get()->DatabaseId << " (" << attrs.ToString() << ")");
     }
 
     void Handle(TEvRemoveDatabase::TPtr&) {
@@ -121,7 +122,7 @@ public:
 
         Y_ASSERT(!poolId.empty());
 
-        LOG_D("Add pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Add pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
 
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
@@ -167,7 +168,7 @@ public:
 
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
 
-            LOG_D("Update pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Update pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
         } else if (poolIt != PoolSubscribtions.end()) {
             if (!poolIt->second.IsFirstRemoval) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.
@@ -180,7 +181,7 @@ public:
                 // TODO: Scheduler->UpdatePool(…);
             }
         } else {
-            LOG_E("Trying to remove unknown pool: " << databaseId << "/" << poolId);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Trying to remove unknown pool: " << databaseId << "/" << poolId);
             // TODO: the removing message for unknown pool - should we check?
         }
     }
@@ -197,7 +198,7 @@ public:
         if (Scheduler->IsEnabled()) {
             auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
             response->Query = query;
-            LOG_D("Add query: " << databaseId << "/" << poolId << ", TxId: " << queryId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Add query: " << databaseId << "/" << poolId << ", TxId: " << queryId);
         }
         Send(ev->Sender, response.Release(), 0, queryId);
     }
@@ -205,9 +206,9 @@ public:
     void Handle(TEvRemoveQuery::TPtr& ev) {
         const auto& queryId = ev->Get()->QueryId;
         if (!Scheduler->RemoveQuery(queryId)) {
-            LOG_E("Trying to remove unknown query: " << queryId);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Trying to remove unknown query: " << queryId);
         } else {
-            LOG_D("Remove query: TxId: " << queryId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Remove query: TxId: " << queryId);
         }
     }
 

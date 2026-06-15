@@ -86,7 +86,7 @@ public:
     }
 
     void HandlePoison() {
-        LOG_W("Got poison, stop workload service");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got poison, stop workload service");
 
         // Unsubscribe from all scheme cache watches
         for (const auto& [_, databaseState] : DatabaseToState) {
@@ -106,7 +106,7 @@ public:
     }
 
     void HandleSetConfigSubscriptionResponse() const {
-        LOG_D("Subscribed for config changes");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Subscribed for config changes");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -117,10 +117,10 @@ public:
         EnabledResourcePoolsOnServerless = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsCounters();
         if (EnabledResourcePools) {
-            LOG_I("Resource pools was enabled");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Resource pools was enabled");
             InitializeWorkloadService();
         } else {
-            LOG_I("Resource pools was disabled");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Resource pools was disabled");
         }
 
         auto responseEvent = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -129,33 +129,33 @@ public:
 
     void Handle(TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
         if (!ev->Get()->Success) {
-            LOG_W("Failed to discover tenant nodes");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to discover tenant nodes");
             return;
         }
 
         NodeCount = ev->Get()->AssignedNodes.size();
         ScheduleNodeInfoRequest();
 
-        LOG_T("Updated node info, node count: " << NodeCount);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Updated node info, node count: " << NodeCount);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) const {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_C("Failed to deliver subscription request to config dispatcher");
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to deliver subscription request to config dispatcher");
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_E("Failed to deliver config notification response");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to deliver config notification response");
                 break;
 
             case TEvInterconnect::EvListNodes:
-                LOG_W("Failed to deliver list nodes request");
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to deliver list nodes request");
                 ScheduleNodeInfoRequest();
                 break;
 
             default:
-                LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Undelivered event with unexpected source type: " << ev->Get()->SourceType);
                 break;
         }
     }
@@ -168,7 +168,7 @@ public:
             return;
         }
 
-        LOG_D("Received subscription request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Received subscription request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
         GetOrCreateDatabaseState(databaseId)->DoSubscribeRequest(std::move(ev));
     }
 
@@ -180,7 +180,7 @@ public:
         }
 
         const TString& databaseId = ev->Get()->DatabaseId;
-        LOG_D("Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         GetOrCreateDatabaseState(databaseId)->DoPlaceRequest(std::move(ev));
     }
 
@@ -189,7 +189,7 @@ public:
         const TString& poolId = ev->Get()->PoolId;
         const TString& sessionId = ev->Get()->SessionId;
         if (GetOrCreateDatabaseState(databaseId)->PendingSessionIds.contains(sessionId)) {
-            LOG_D("Finished request with worker actor " << ev->Sender << ", wait for place request, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Finished request with worker actor " << ev->Sender << ", wait for place request, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
             GetOrCreateDatabaseState(databaseId)->PendingCancelRequests[sessionId].emplace_back(std::move(ev));
             return;
         }
@@ -200,7 +200,7 @@ public:
             return;
         }
 
-        LOG_D("Finished request with worker actor " << ev->Sender << ", DatabaseId: " << databaseId << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Finished request with worker actor " << ev->Sender << ", DatabaseId: " << databaseId << ", PoolId: " << poolId << ", SessionId: " << ev->Get()->SessionId);
         poolState->DoCleanupRequest(std::move(ev));
     }
 
@@ -259,7 +259,7 @@ private:
         const TString& databaseId = ev->Get()->DatabaseId;
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Successfully fetched database info, DatabaseId: " << databaseId
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Successfully fetched database info, DatabaseId: " << databaseId
                 << ", Serverless: " << ev->Get()->Serverless
                 << ", PathId: " << ev->Get()->PathId
             );
@@ -274,13 +274,13 @@ private:
 
                 Send(MakeSchemeCacheID(), subscribeEvent);
 
-                LOG_D("Subscribed to scheme cache watch for database: " << databaseId
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Subscribed to scheme cache watch for database: " << databaseId
                     << ", PathId: " << ev->Get()->PathId
                     << ", WatchKey: " << databaseState->WatchKey
                 );
             }
         } else {
-            LOG_D("Failed to fetch database info, DatabaseId: " << databaseId
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to fetch database info, DatabaseId: " << databaseId
                 << ", Status: " << ev->Get()->Status
                 << ", Issues: " << ev->Get()->Issues.ToOneLineString());
         }
@@ -293,7 +293,7 @@ private:
     ///
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
         const TString& databasePath = ev->Get()->Path;
-        LOG_W("Database deleted: " << databasePath << ". Cleaning all related states.");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Database deleted: " << databasePath << ". Cleaning all related states.");
 
         // Find all database states for this path
         std::vector<TString> databaseIdsToRemove;
@@ -305,7 +305,7 @@ private:
 
         // Cleaning all pools and database state for each matching database ID
         for (const TString& databaseId : databaseIdsToRemove) {
-            LOG_I("Removing database state for: " << databaseId);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Removing database state for: " << databaseId);
             CleanupDatabasePools(databaseId);
             DatabaseToState.erase(databaseId);
         }
@@ -320,7 +320,7 @@ private:
 
         for (const auto& [poolKey, poolState] : PoolIdToState) {
             if (poolKey.StartsWith(prefix)) {
-                LOG_I("Cleaning pool handler for: " << poolKey);
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Cleaning pool handler for: " << poolKey);
                 Send(poolState.PoolHandler, new TEvPrivate::TEvStopPoolHandler(true));
 
                 if (poolState.NewPoolHandler) {
@@ -347,10 +347,10 @@ private:
 
         TActorId poolHandler;
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Successfully fetched pool: " << poolId << ", DatabaseId: " << databaseId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Successfully fetched pool: " << poolId << ", DatabaseId: " << databaseId);
             poolHandler = GetOrCreatePoolState(databaseId, poolId, ev->Get()->PoolConfig)->PoolHandler;
         } else {
-            LOG_W("Failed to fetch pool: " << poolId << ", DatabaseId: " << databaseId << ", status: " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to fetch pool: " << poolId << ", DatabaseId: " << databaseId << ", status: " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
         GetOrCreateDatabaseState(databaseId)->UpdatePoolInfo(ev, poolHandler);
@@ -373,7 +373,7 @@ private:
             return;
         }
 
-        LOG_D("Successfully fetched pool " << poolId << ", DatabaseId: " << databaseId << ", SessionId: " << event->Get()->SessionId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Successfully fetched pool " << poolId << ", DatabaseId: " << databaseId << ", SessionId: " << event->Get()->SessionId);
 
         auto poolState = GetOrCreatePoolState(databaseId, poolId, ev->Get()->PoolConfig);
         poolState->PendingRequests.emplace(std::move(ev));
@@ -384,7 +384,7 @@ private:
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
         const TString& sessionId = ev->Get()->SessionId;
-        LOG_T("Request placed into pool, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", SessionId: " << sessionId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Request placed into pool, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", SessionId: " << sessionId);
 
         auto poolState = GetPoolState(databaseId, poolId);
         GetOrCreateDatabaseState(databaseId)->RemovePendingSession(sessionId, [this, poolState](TEvCleanupRequest::TPtr event) {
@@ -410,7 +410,7 @@ private:
         const auto& event = ev->Get()->Record;
         const TString& databaseId = event.GetDatabase();
         const TString& poolId = event.GetPoolId();
-        LOG_T("Got remote refresh request, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", NodeId: " << ev->Sender.NodeId());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got remote refresh request, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", NodeId: " << ev->Sender.NodeId());
 
         if (auto poolState = GetPoolState(databaseId, poolId)) {
             Send(ev->Forward(poolState->PoolHandler));
@@ -420,7 +420,7 @@ private:
     void Handle(TEvPrivate::TEvCpuQuotaRequest::TPtr& ev) {
         const TActorId& poolHandler = ev->Sender;
         const double maxClusterLoad = ev->Get()->MaxClusterLoad;
-        LOG_T("Requested cpu quota from handler " << poolHandler << ", MaxClusterLoad: " << maxClusterLoad);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Requested cpu quota from handler " << poolHandler << ", MaxClusterLoad: " << maxClusterLoad);
 
         CpuQuotaManager->RequestCpuQuota(poolHandler, maxClusterLoad, ev->Cookie);
         ScheduleCpuLoadRequest();
@@ -429,7 +429,7 @@ private:
     void Handle(TEvPrivate::TEvFinishRequestInPool::TPtr& ev) {
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
-        LOG_T("Request finished in pool, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", Duration: " << ev->Get()->Duration << ", CpuConsumed: " << ev->Get()->CpuConsumed << ", AdjustCpuQuota: " << ev->Get()->AdjustCpuQuota);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Request finished in pool, DatabaseId: " << databaseId << ", PoolId: " << poolId << ", Duration: " << ev->Get()->Duration << ", CpuConsumed: " << ev->Get()->CpuConsumed << ", AdjustCpuQuota: " << ev->Get()->AdjustCpuQuota);
 
         if (auto poolState = GetPoolState(databaseId, poolId)) {
             poolState->OnRequestFinished();
@@ -443,7 +443,7 @@ private:
     void Handle(TEvPrivate::TEvPrepareTablesRequest::TPtr& ev) {
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
-        LOG_T("Got create teables request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got create teables request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
 
         auto poolState = GetPoolState(databaseId, poolId);
         if (!poolState) {
@@ -461,9 +461,9 @@ private:
 
     void Handle(TEvPrivate::TEvCleanupTablesFinished::TPtr& ev) {
         if (ev->Get()->Success) {
-            LOG_D("Cleanup completed, tables exists: " << ev->Get()->TablesExists);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Cleanup completed, tables exists: " << ev->Get()->TablesExists);
         } else {
-            LOG_C("Failed to cleanup tables, issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to cleanup tables, issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
         TablesCreationStatus = ETablesCreationStatus::NotStarted;
@@ -479,12 +479,12 @@ private:
         TablesCreationStatus = ev->Get()->Success ? ETablesCreationStatus::Finished : ETablesCreationStatus::NotStarted;
 
         if (ev->Get()->Success) {
-            LOG_D("Succefully created tables, send response to handlers");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Succefully created tables, send response to handlers");
             OnTabelsCreated(true);
             return;
         }
 
-        LOG_E("Failed to create tables, issues: " << ev->Get()->Issues.ToOneLineString());
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to create tables, issues: " << ev->Get()->Issues.ToOneLineString());
         NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to create workload service tables");
         OnTabelsCreated(false, issues);
     }
@@ -492,9 +492,9 @@ private:
     void Handle(TEvPrivate::TEvCpuLoadResponse::TPtr& ev) {
         const bool success = ev->Get()->Status == Ydb::StatusIds::SUCCESS;
         if (!success) {
-            LOG_E("Failed to fetch cpu load " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to fetch cpu load " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
         } else {
-            LOG_T("Succesfully fetched cpu load: " << 100.0 * ev->Get()->InstantLoad << "%, cpu number: " << ev->Get()->CpuNumber);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Succesfully fetched cpu load: " << 100.0 * ev->Get()->InstantLoad << "%, cpu number: " << ev->Get()->CpuNumber);
         }
 
         CpuQuotaManager->CpuLoadRequestRunning = false;
@@ -505,7 +505,7 @@ private:
     void Handle(TEvPrivate::TEvResignPoolHandler::TPtr& ev) {
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
-        LOG_T("Got resign request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got resign request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
 
         if (auto poolState = GetPoolState(databaseId, poolId)) {
             if (poolState->NewPoolHandler) {
@@ -519,7 +519,7 @@ private:
     void Handle(TEvPrivate::TEvStopPoolHandlerResponse::TPtr& ev) {
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
-        LOG_T("Got stop pool handler response, DatabaseId: " << databaseId << ", PoolId: " << poolId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Got stop pool handler response, DatabaseId: " << databaseId << ", PoolId: " << poolId);
 
         Counters.ActivePools->Dec();
         if (auto poolState = GetPoolState(databaseId, poolId)) {
@@ -534,7 +534,7 @@ private:
         }
         ServiceInitialized = true;
 
-        LOG_I("Started workload service initialization");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Started workload service initialization");
         Register(CreateCleanupTablesActor());
         RunNodeInfoRequest();
     }
@@ -545,7 +545,7 @@ private:
         }
 
         if (TablesCreationStatus == ETablesCreationStatus::NotStarted) {
-            LOG_I("Started workload service tables creation");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Started workload service tables creation");
             TablesCreationStatus = ETablesCreationStatus::Pending;
             Register(CreateTablesCreator());
         }
@@ -638,15 +638,15 @@ private:
 
     void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
         if (status == Ydb::StatusIds::UNSUPPORTED) {
-            LOG_T("Reply unsupported to " << replyActorId << ": " << issues.ToOneLineString());
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Reply unsupported to " << replyActorId << ": " << issues.ToOneLineString());
         } else {
-            LOG_W("Reply continue error " << status << " to " << replyActorId << ": " << issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Reply continue error " << status << " to " << replyActorId << ": " << issues.ToOneLineString());
         }
         Send(replyActorId, new TEvContinueRequest(status, {}, {}, std::move(issues)));
     }
 
     void ReplyCleanupError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
-        LOG_W("Reply cleanup error " << status << " to " << replyActorId << ": " << message);
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Reply cleanup error " << status << " to " << replyActorId << ": " << message);
         Send(replyActorId, new TEvCleanupResponse(status, {NYql::TIssue(message)}));
     }
 
@@ -657,7 +657,7 @@ private:
             return &databaseIt->second;
         }
 
-        LOG_I("Creating new database state for id " << databaseId);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Creating new database state for id " << databaseId);
         return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless, .WorkloadManagerConfig = WorkloadManagerConfig}}).first->second;
     }
 
@@ -667,7 +667,7 @@ private:
             return poolState;
         }
 
-        LOG_I("Creating new handler for pool " << poolKey);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Creating new handler for pool " << poolKey);
 
         const auto poolHandler = Register(CreatePoolHandlerActor(databaseId, poolId, poolConfig, EnableResourcePoolsCounters ? Counters.Counters : MakeIntrusive<NMonitoring::TDynamicCounters>()));
         const auto poolState = &PoolIdToState.insert({poolKey, TPoolState{.PoolHandler = poolHandler}}).first->second;

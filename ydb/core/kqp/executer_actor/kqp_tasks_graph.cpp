@@ -25,14 +25,6 @@
 
 #include <algorithm>
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stream)
-
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -443,13 +435,13 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 
 void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf::TUnboxedValue value) {
     if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::Data) {
-        LOG_W("Cannot append parameter value to token, unexpected type: " << static_cast<int>(type->GetKind()));
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Cannot append parameter value to token, unexpected type: " << static_cast<int>(type->GetKind()));
         return;
     }
 
     auto dataSlot = static_cast<NKikimr::NMiniKQL::TDataType*>(type)->GetDataSlot();
     if (!dataSlot) {
-        LOG_W("Cannot append parameter value to token: no data slot");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Cannot append parameter value to token: no data slot");
         return;
     }
 
@@ -533,7 +525,7 @@ void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf
         }
 
         default:
-            LOG_W("Cannot append parameter value to token, unexpected data slot: " << static_cast<int>(*dataSlot));
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Cannot append parameter value to token, unexpected data slot: " << static_cast<int>(*dataSlot));
     }
 }
 
@@ -547,7 +539,7 @@ TString ResolveFullTextQueryToken(const NKqpProto::TKqpFullTextSource::TKqpQuery
 
     auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
     if (!paramPtr) {
-        LOG_W("Failed to get parameter value for token: " << token.GetParamName());
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Failed to get parameter value for token: " << token.GetParamName());
         return fullToken;
     }
 
@@ -566,7 +558,7 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullText
 
     auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
     if (!paramPtr) {
-        LOG_W("Failed to get parameter value for token: " << token.GetParamName());
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Failed to get parameter value for token: " << token.GetParamName());
         return {baseToken};
     }
 
@@ -771,7 +763,7 @@ void TKqpTasksGraph::FillStages() {
             YQL_ENSURE(stageAdded);
 
             auto& stageInfo = GetStageInfo(stageId);
-            LOG_D(stageInfo.DebugString());
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, stageInfo.DebugString());
 
             THashSet<TTableId> tables;
             for (const auto& op : stage.GetTableOps()) {
@@ -835,7 +827,7 @@ void TKqpTasksGraph::BuildResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, u
         taskOutput.Type = TTaskOutputType::Map;
         taskOutput.Channels.push_back(channel.Id);
 
-        LOG_D("Create result channelId: " << channel.Id << " from task: " << originTaskId << " with index: " << outputIdx);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "Create result channelId: " << channel.Id << " from task: " << originTaskId << " with index: " << outputIdx);
     }
 }
 
@@ -1156,7 +1148,7 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     }
 
     auto log = [&stageInfo, txId](ui64 channel, ui64 from, ui64 to, TStringBuf type, bool spilling) {
-        LOG_T( "TxId: " << txId << ". "
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,  "TxId: " << txId << ". "
             << "Stage " << stageInfo.Id << " create channelId: " << channel
             << " from task: " << from << " to task: " << to << " of type " << type
             << (spilling ? " with spilling" : " without spilling"));
@@ -1172,7 +1164,7 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
             ui32 outputIdx = input.GetOutputIndex();
             columnShardHashV1Params = originStageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kMap || inputIndex == stage.InputsSize() - 1) { // this branch is only for logging purposes
-                LOG_D( "Chose "
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,  "Chose "
                     << "[" << originStageInfo.Id.TxId << ":" << originStageInfo.Id.StageId << "]"
                     << " outputIdx: " << outputIdx << " to propagate through inputs stages of the stage "
                     << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << ": "
@@ -1248,7 +1240,7 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                     case NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1: {
                         Y_ENSURE(enableShuffleElimination, "OptShuffleElimination wasn't turned on, but ColumnShardHashV1 detected!");
 
-                        LOG_D( "Propagating columnhashv1 params to stage"
+                        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,  "Propagating columnhashv1 params to stage"
                             << "[" << inputStageInfo.Id.TxId << ":" << inputStageInfo.Id.StageId << "]" << " which is input of stage "
                             << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]" << ": "
                             << columnShardHashV1Params.KeyTypesToString() << " "
@@ -1412,7 +1404,7 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
                 }
                 case ColumnShardHashV1: {
                     const auto& columnShardHashV1Params = stageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
-                    LOG_D( "Filling columnshardhashv1 params for sending it to runtime "
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,  "Filling columnshardhashv1 params for sending it to runtime "
                         << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]"
                         << ": " << columnShardHashV1Params.KeyTypesToString()
                         << " for the columns: " << "[" << JoinSeq(",", output.KeyColumns) << "]"
@@ -2908,7 +2900,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
         //     }
 
         //     sb << " ].";
-        //     LOG_D(sb);
+        //     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, sb);
         // }
 
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {

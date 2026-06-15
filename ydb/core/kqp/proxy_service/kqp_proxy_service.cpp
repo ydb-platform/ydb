@@ -75,15 +75,6 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-#define KQP_PROXY_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-#define KQP_PROXY_LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, stream)
-
-
 static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(5000);
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(50);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
@@ -257,7 +248,7 @@ public:
             TStringStream errorStream;
             ModuleResolverState->ExprCtx.IssueManager.GetIssues().PrintTo(errorStream);
 
-            KQP_PROXY_LOG_E("Failed to load default YQL libraries: " << errorStream.Str());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Failed to load default YQL libraries: " << errorStream.Str());
             PassAway();
         }
 
@@ -523,14 +514,14 @@ public:
     }
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        KQP_PROXY_LOG_D("Subscribed for config changes.");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Subscribed for config changes.");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
-        KQP_PROXY_LOG_D("Updated table service config.");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Updated table service config.");
 
         ExecuterConfig->ApplyFromTableServiceConfig(TableServiceConfig);
         RebuildKqpConfig();
@@ -569,26 +560,26 @@ public:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                KQP_PROXY_LOG_C("Failed to deliver subscription request to config dispatcher.");
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Failed to deliver subscription request to config dispatcher.");
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                KQP_PROXY_LOG_E("Failed to deliver config notification response.");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Failed to deliver config notification response.");
                 break;
 
             case NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest:
-                KQP_PROXY_LOG_D("Failed to get system details");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Failed to get system details");
                 break;
 
             case TKqpEvents::EvCreateSessionRequest: {
-                KQP_PROXY_LOG_D("Remote create session request failed");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Remote create session request failed");
                 ReplyProcessError(Ydb::StatusIds::UNAVAILABLE, "Session not found.", ev->Cookie);
                 break;
             }
 
             case TKqpEvents::EvQueryRequest:
             case TKqpEvents::EvPingSessionRequest: {
-                KQP_PROXY_LOG_D("Session not found, targetId: " << ev->Sender << " requestId: " << ev->Cookie);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Session not found, targetId: " << ev->Sender << " requestId: " << ev->Cookie);
 
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, "Session not found.", ev->Cookie);
                 RemoveSession("", ev->Sender);
@@ -596,13 +587,13 @@ public:
             }
 
             default:
-                KQP_PROXY_LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Undelivered event with unexpected source type: " << ev->Get()->SourceType);
                 break;
         }
     }
 
     void Handle(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
-        KQP_PROXY_LOG_N("KQP proxy shutdown requested.");
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "KQP proxy shutdown requested.");
         ShutdownRequested = true;
         ShutdownState.Reset(ev->Get()->ShutdownState.Get());
         ShutdownState->Update(LocalSessions->size());
@@ -684,7 +675,7 @@ public:
         }
 
         Counters->ReportCreateSession(dbCounters, request.ByteSize());
-        KQP_PROXY_LOG_D("Received create session request, trace_id: " << event.GetTraceId());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Received create session request, trace_id: " << event.GetTraceId());
 
         responseEv->Record.SetResourceExhausted(result.ResourceExhausted);
         responseEv->Record.SetYdbStatus(result.YdbStatus);
@@ -808,7 +799,7 @@ public:
         if (cancelAfter) {
             timerDuration = Min(timerDuration, cancelAfter);
         }
-        KQP_PROXY_LOG_D("Ctx: " << *ev->Get()->GetUserRequestContext() << ". TEvQueryRequest, set timer for: " << timerDuration
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Ctx: " << *ev->Get()->GetUserRequestContext() << ". TEvQueryRequest, set timer for: " << timerDuration
             << " timeout: " << timeout << " cancelAfter: " << cancelAfter
             << ". " << "Send request to target, requestId: " << requestId << ", targetId: " << targetId);
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
@@ -875,7 +866,7 @@ public:
         // Local session
         if (sessionInfo) {
             const bool sameNode = ev->Sender.NodeId() == SelfId().NodeId();
-            KQP_PROXY_LOG_D("Received ping session request, has local session: " << sessionId
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Received ping session request, has local session: " << sessionId
                 << ", rpc ctrl: " << ctrlActor
                 << ", sameNode: " << sameNode
                 << ", trace_id: " << traceId);
@@ -899,13 +890,13 @@ public:
                 //TODO: fix
                 ui32 flags = IEventHandle::FlagTrackDelivery;
                 if (sameNode) {
-                    KQP_PROXY_LOG_T("Attach local session: " << sessionInfo->WorkerId
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Attach local session: " << sessionInfo->WorkerId
                         << " to rpc: " << ctrlActor << " on same node");
 
                     LocalSessions->AttachSession(sessionInfo, 0, ctrlActor);
                 } else {
                     const TNodeId nodeId = ev->Sender.NodeId();
-                    KQP_PROXY_LOG_T("Subscribe local session: " << sessionInfo->WorkerId
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Subscribe local session: " << sessionInfo->WorkerId
                         << " to remote: " << ev->Sender << " , nodeId: " << nodeId << ", with rpc: " << ctrlActor);
 
                     LocalSessions->AttachSession(sessionInfo, nodeId, ctrlActor);
@@ -922,7 +913,7 @@ public:
         // Forward request to another proxy
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
 
-        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Received ping session request, request_id: " << requestId
             << ", sender: " << ev->Sender
             << ", trace_id: " << traceId);
 
@@ -951,7 +942,7 @@ public:
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvCancelQueryRequest);
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
-        KQP_PROXY_LOG_D("Received cancel query request, request_id: " << requestId << ", trace_id: " << traceId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Received cancel query request, request_id: " << requestId << ", trace_id: " << traceId);
         Counters->ReportCancelQuery(dbCounters, request.ByteSize());
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
@@ -968,7 +959,7 @@ public:
         }
 
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
-        KQP_PROXY_LOG_D("Sent request to target, requestId: " << requestId
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Sent request to target, requestId: " << requestId
             << ", targetId: " << targetId << ", sessionId: " << sessionId);
     }
 
@@ -979,7 +970,7 @@ public:
         StopQueryTimeout(requestId);
         auto proxyRequest = PendingRequests.FindPtr(requestId);
         if (!proxyRequest) {
-            KQP_PROXY_LOG_E("Unknown sender for proxy response, requestId: " << requestId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Unknown sender for proxy response, requestId: " << requestId);
             return;
         }
 
@@ -995,7 +986,7 @@ public:
         }
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
-        KQP_PROXY_LOG_D(requestInfo << "Forwarded response to sender actor, requestId: " << requestId
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << "Forwarded response to sender actor, requestId: " << requestId
             << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId() << ", source: " << ev->Sender);
 
         PendingRequests.Erase(requestId);
@@ -1006,14 +997,14 @@ public:
 
         auto proxyRequest = PendingRequests.FindPtr(requestId);
         if (!proxyRequest) {
-            KQP_PROXY_LOG_E("Unknown sender for proxy response, requestId: " << requestId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Unknown sender for proxy response, requestId: " << requestId);
             return;
         }
 
         Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
-        KQP_PROXY_LOG_D(requestInfo << "Forwarded response to sender actor, requestId: " << requestId
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << "Forwarded response to sender actor, requestId: " << requestId
             << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId() << ", source: " << ev->Sender);
     }
 
@@ -1069,7 +1060,7 @@ public:
 
         if (proxyResources.empty()) {
             PeerProxyNodeResources.clear();
-            KQP_PROXY_LOG_D("Received unexpected data from rm for database " <<
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Received unexpected data from rm for database " <<
                 AppData()->TenantName);
             return;
         }
@@ -1099,7 +1090,7 @@ public:
             for (const auto& resource : PeerProxyNodeResources) {
                 nodeIds.push_back(resource.GetNodeId());
             }
-            KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size()
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Discovered " << PeerProxyNodeResources.size()
                 << " proxy nodes, starting warmup");
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
@@ -1188,7 +1179,7 @@ public:
             return;
 
         const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-        KQP_PROXY_LOG_D("Started grace shutdown of session, session id: " << sessionInfo->SessionId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Started grace shutdown of session, session id: " << sessionInfo->SessionId);
         ui32 hardTimeout = sbs.GetHardSessionShutdownTimeoutMs();
         ui32 softTimeout = sbs.GetSoftSessionShutdownTimeoutMs();
         Counters->ReportSessionShutdownRequest(sessionInfo->DbCounters);
@@ -1304,7 +1295,7 @@ public:
             new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvOnRequestTimeout{requestId, timeout, status, 0})
         );
 
-        KQP_PROXY_LOG_D("Scheduled timeout timer for requestId: " << requestId << " timeout: " << timeout << " actor id: " << timeoutTimer);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Scheduled timeout timer for requestId: " << requestId << " timeout: " << timeout << " actor id: " << timeoutTimer);
         if (timeoutTimer) {
             TimeoutTimers.emplace(requestId, timeoutTimer);
         }
@@ -1323,14 +1314,14 @@ public:
         ui64 requestId = ev->Get()->RequestId;
         TimeoutTimers.erase(requestId);
 
-        KQP_PROXY_LOG_D("Handle TEvPrivate::TEvOnRequestTimeout(" << requestId << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Handle TEvPrivate::TEvOnRequestTimeout(" << requestId << ")");
         const TKqpProxyRequest* reqInfo = PendingRequests.FindPtr(requestId);
         if (!reqInfo) {
-            KQP_PROXY_LOG_D("Invalid request info while on request timeout handle. RequestId: " <<  requestId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Invalid request info while on request timeout handle. RequestId: " <<  requestId);
             return;
         }
 
-        KQP_PROXY_LOG_D("Reply timeout: requestId " << requestId << " sessionId: " << reqInfo->SessionId
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Reply timeout: requestId " << requestId << " sessionId: " << reqInfo->SessionId
             << " status: " << NYql::NDq::DqStatusToYdbStatus(msg->Status) << " round: " << msg->Round);
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(reqInfo->SessionId);
@@ -1362,7 +1353,7 @@ public:
 
             RemoveSession(sessionId, workerId);
 
-            KQP_PROXY_LOG_D("Session closed, sessionId: " << event.GetResponse().GetSessionId()
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Session closed, sessionId: " << event.GetResponse().GetSessionId()
                 << ", workerId: " << workerId << ", local sessions count: " << LocalSessions->size());
         }
     }
@@ -1441,7 +1432,7 @@ private:
             return true;
         }
 
-        KQP_PROXY_LOG_W("Reply process error for request " << static_cast<ui64>(request->EventType) << ", status: " << ydbStatus << ", issues: " << issues.ToOneLineString());
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Reply process error for request " << static_cast<ui64>(request->EventType) << ", status: " << ydbStatus << ", issues: " << issues.ToOneLineString());
 
         if (request->EventType == TKqpEvents::EvPingSessionRequest) {
             auto response = std::make_unique<TEvKqp::TEvPingSessionResponse>();
@@ -1470,14 +1461,14 @@ private:
         auto now = TInstant::Now();
         if (now >= deadline) {
             TString error = TStringBuilder() << "Request deadline has expired for " << now - deadline << " seconds";
-            KQP_PROXY_LOG_E(requestInfo << error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << error);
 
             // In theory client should not see this status due to internal grpc deadline accounting.
             result.YdbStatus = Ydb::StatusIds::TIMEOUT;
             result.Error = error;
             return false;
         } else {
-            KQP_PROXY_LOG_D(requestInfo << "Request has " << deadline - now << " seconds to be completed");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << "Request has " << deadline - now << " seconds to be completed");
             return true;
         }
     }
@@ -1494,7 +1485,7 @@ private:
         if (!database.empty() && AppData()->TenantName.empty()) {
             TString error = TStringBuilder() << "Node isn't ready to serve database requests.";
 
-            KQP_PROXY_LOG_E(requestInfo << error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << error);
 
             result.YdbStatus = Ydb::StatusIds::UNAVAILABLE;
             result.Error = error;
@@ -1504,7 +1495,7 @@ private:
         if (ShutdownRequested) {
             TString error = TStringBuilder() << "Cannot create session: system shutdown requested.";
 
-            KQP_PROXY_LOG_N(requestInfo << error);
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << error);
 
             result.ResourceExhausted = true;
             result.YdbStatus = Ydb::StatusIds::OVERLOADED;
@@ -1516,7 +1507,7 @@ private:
         if (sessionsLimitPerNode && !LocalSessions->CheckDatabaseLimits(database, sessionsLimitPerNode)) {
             TString error = TStringBuilder() << "Active sessions limit exceeded, maximum allowed: "
                 << sessionsLimitPerNode;
-            KQP_PROXY_LOG_W(requestInfo << error);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << error);
 
             result.YdbStatus = Ydb::StatusIds::OVERLOADED;
             result.Error = error;
@@ -1546,7 +1537,7 @@ private:
         sessionInfo->ClientPID = clientPid;
         sessionInfo->ClientApplicationName = clientApplicationName;
 
-        KQP_PROXY_LOG_D(requestInfo << "Created new session"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << "Created new session"
             << ", sessionId: " << sessionInfo->SessionId
             << ", workerId: " << sessionInfo->WorkerId
             << ", database: " << sessionInfo->Database
@@ -1564,14 +1555,14 @@ private:
         auto nodeId = TryDecodeYdbSessionId(sessionId);
         if (!nodeId) {
             TString error = TStringBuilder() << "Failed to parse session id: " << sessionId;
-            KQP_PROXY_LOG_W(requestInfo << error);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << error);
             ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
             return TActorId();
         }
 
         if (*nodeId == SelfId().NodeId()) {
             TString error = TStringBuilder() << "Session not found: " << sessionId;
-            KQP_PROXY_LOG_N(requestInfo << error);
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, requestInfo << error);
             ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
             return TActorId();
         }
@@ -1663,7 +1654,7 @@ private:
             if (entry.GetComponent() == kqpYqlName && entry.HasLevel()) {
                 auto yqlPriority = static_cast<NActors::NLog::EPriority>(entry.GetLevel());
                 NYql::NDq::SetYqlLogLevels(yqlPriority);
-                KQP_PROXY_LOG_D("Updated YQL logs priority: " << (ui32)yqlPriority);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Updated YQL logs priority: " << (ui32)yqlPriority);
                 return;
             }
         }
@@ -1672,7 +1663,7 @@ private:
         ui8 currentLevel = TlsActivationContext->LoggerSettings()->GetComponentSettings(NKikimrServices::KQP_YQL).Raw.X.Level;
         auto yqlPriority = static_cast<NActors::NLog::EPriority>(currentLevel);
 
-        KQP_PROXY_LOG_D("Updated YQL logs priority to current level: " << (ui32)yqlPriority);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Updated YQL logs priority to current level: " << (ui32)yqlPriority);
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
@@ -1822,17 +1813,17 @@ private:
         TNodeId nodeId = ev->Get()->NodeId;
         auto sessions = LocalSessions->FindSessions(nodeId);
         if (sessions) {
-            KQP_PROXY_LOG_T("Got TEvNodeConnected event from node: " << nodeId
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Got TEvNodeConnected event from node: " << nodeId
                 << ", has " << sessions.size() << " sessions");
         } else {
-            KQP_PROXY_LOG_E("Got TEvNodeConnected event from node without sessions: " << nodeId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Got TEvNodeConnected event from node without sessions: " << nodeId);
         }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
         auto sessions = LocalSessions->FindSessions(nodeId);
-        KQP_PROXY_LOG_D("Node: " << nodeId << " disconnected, had " << sessions.size() << " sessions.");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "Node: " << nodeId << " disconnected, had " << sessions.size() << " sessions.");
         const static auto IdleDurationAfterDisconnect = TDuration::Seconds(1);
         // Just start standard idle check with small timeout
         // It allows to use common code to close and delete expired session
@@ -1842,7 +1833,7 @@ private:
     }
 
     void Handle(TEvKqp::TEvListSessionsRequest::TPtr& ev) {
-        KQP_PROXY_LOG_D("incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString() << ", local sessions #" << LocalSessions->size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "incoming list sessions request " << ev->Get()->Record.ShortUtf8DebugString() << ", local sessions #" << LocalSessions->size());
 
         auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
 

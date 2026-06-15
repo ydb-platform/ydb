@@ -1,8 +1,8 @@
 #include "kqp_schedulable_read.h"
 
-#include "log.h"
 #include "tree/dynamic.h"
 
+#include <ydb/library/actors/core/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yt/yt/core/utilex/random.h>
 
@@ -25,7 +25,7 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query)
     AvailableQuotaMs = MaxQuotaMs;
     LastRefill = TMonotonic::Now();
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] MaxQuotaMs: " << MaxQuotaMs);
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "TSchedulableRead [" << uintptr_t(this) << "] MaxQuotaMs: " << MaxQuotaMs);
 
     YQL_ENSURE(MaxQuotaMs <= 1000);
 }
@@ -34,7 +34,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     // TODO: support update of the pool's read quota on AddOrUpdatePool().
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ExpectedQuotaMs: " << expectedQuotaMs);
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "TSchedulableRead [" << uintptr_t(this) << "] ExpectedQuotaMs: " << expectedQuotaMs);
 
     // Refill quota
     if (const auto now = TMonotonic::Now(); Y_LIKELY(now >= LastRefill)) {
@@ -43,7 +43,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
         LastRefill = now;
     }
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
 
     if (AvailableQuotaMs <= 0 || !TryIncreaseUsage()) {
         return false;
@@ -53,7 +53,7 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     AvailableQuotaMs -= expectedQuotaMs;
     ReservedQuotaMs = expectedQuotaMs;
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ReservedQuotaMs: " << ReservedQuotaMs);
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "TSchedulableRead [" << uintptr_t(this) << "] ReservedQuotaMs: " << ReservedQuotaMs);
 
     return true;
 }
@@ -67,8 +67,8 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
     AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + ReservedQuotaMs - ms);
     ReservedQuotaMs = 0;
 
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] ReturnedQuotaMs: " << ms);
-    LOG_T("TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "TSchedulableRead [" << uintptr_t(this) << "] ReturnedQuotaMs: " << ms);
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
 
     DecreaseUsage(TDuration::MilliSeconds(ms), READ_DEFAULT);
 }

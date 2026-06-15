@@ -28,9 +28,6 @@ namespace {
 
 constexpr ui64 LevelCacheTxId = std::numeric_limits<ui64>::max() - 1;
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "VectorIndexLevelsCacheMaintainer: " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "VectorIndexLevelsCacheMaintainer: " << stream)
-
 
 class TVectorIndexLevelsCacheMaintainer
     : public TActorBootstrapped<TVectorIndexLevelsCacheMaintainer>
@@ -83,13 +80,13 @@ public:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_E("Failed to deliver subscription request to config dispatcher");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "VectorIndexLevelsCacheMaintainer: " << "Failed to deliver subscription request to config dispatcher");
                 break;
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_E("Failed to deliver config notification response");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "VectorIndexLevelsCacheMaintainer: " << "Failed to deliver config notification response");
                 break;
             default:
-                LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "VectorIndexLevelsCacheMaintainer: " << "Undelivered event with unexpected source type: " << ev->Get()->SourceType);
                 break;
         }
     }
@@ -116,7 +113,7 @@ public:
             auto res = ResourceManager->AllocateResources(*Tx, 1, NRm::TKqpResourcesRequest{.Memory=increaseBatchSize});
             if (res) {
                 Cache_->SetMaxBytes(maxCurrentSizeBytes + increaseBatchSize);
-                LOG_N("Altered max bytes to " << HumanReadableSize(maxCurrentSizeBytes + increaseBatchSize, ESizeFormat::SF_BYTES)
+                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "VectorIndexLevelsCacheMaintainer: " << "Altered max bytes to " << HumanReadableSize(maxCurrentSizeBytes + increaseBatchSize, ESizeFormat::SF_BYTES)
                     << ", prev size " << HumanReadableSize(maxCurrentSizeBytes, ESizeFormat::SF_BYTES));
             }
 
@@ -126,7 +123,7 @@ public:
             ResourceManager->FreeResources(*Tx, 1, NRm::TKqpResourcesRequest{.Memory=change});
             i64 newSize = maxCurrentSizeBytes - static_cast<i64>(change);
             Cache_->SetMaxBytes(newSize);
-            LOG_N("Altered max bytes to " << HumanReadableSize(newSize, ESizeFormat::SF_BYTES)
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "VectorIndexLevelsCacheMaintainer: " << "Altered max bytes to " << HumanReadableSize(newSize, ESizeFormat::SF_BYTES)
                 << ", prev size " << HumanReadableSize(maxCurrentSizeBytes, ESizeFormat::SF_BYTES));
         }
 

@@ -58,13 +58,6 @@
 LWTRACE_USING(KQP_PROVIDER);
 
 namespace NKikimr::NKqp {
-#define KQP_STLOG_T(MARKER, MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
-#define KQP_STLOG_D(MARKER, MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
-#define KQP_STLOG_I(MARKER, MESSAGE, ...) STLOG(PRI_INFO,  NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
-#define KQP_STLOG_N(MARKER, MESSAGE, ...) STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
-#define KQP_STLOG_W(MARKER, MESSAGE, ...) STLOG(PRI_WARN,  NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
-#define KQP_STLOG_E(MARKER, MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
-#define KQP_STLOG_C(MARKER, MESSAGE, ...) STLOG(PRI_CRIT,  NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
 
 using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
@@ -186,7 +179,7 @@ public:
             CancelAt = StartTime + *Request.CancelAfter;
         }
 
-        KQP_STLOG_T(KQPEX, "Bootstrap done, become ReadyState",
+        STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Bootstrap done, become ReadyState",
             (trace_id, TraceId()));
     }
 
@@ -322,7 +315,7 @@ protected:
         }
 
         if (shardIds.size() > 0) {
-            KQP_STLOG_D(KQPDATA, "Start resolving tablets nodes...",
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Start resolving tablets nodes...",
                     (shard_ids_count, shardIds.size()),
                     (trace_id, TraceId()));
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
@@ -351,7 +344,7 @@ protected:
                 ExecuterStateSpan.EndError(Ydb::StatusIds_StatusCode_Name(reply.Status));
             }
 
-            KQP_STLOG_W(KQPEX, "Shards nodes resolve failed",
+            STLOG(PRI_WARN, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Shards nodes resolve failed",
                 (Status, Ydb::StatusIds_StatusCode_Name(reply.Status)),
                 (Issues, reply.Issues.ToString()),
                 (trace_id, TraceId()));
@@ -362,7 +355,7 @@ protected:
             ExecuterStateSpan.EndOk();
         }
 
-        KQP_STLOG_D(KQPEX, "Shards nodes resolved",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Shards nodes resolved",
             (SuccessNodes, reply.ShardsToNodes.size()),
             (FailedNodes, reply.Unresolved),
             (trace_id, TraceId()));
@@ -385,7 +378,7 @@ protected:
                        << "(total " << pair.second.size() << ") " << Endl;
                 }
             }
-            KQP_STLOG_D(KQPEX, sb,
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << sb,
                 (trace_id, TraceId()));
         }
 
@@ -436,7 +429,7 @@ protected:
         --PendingPartitionStatsRequests;
 
         if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
-            KQP_STLOG_W(KQPEX, "DescribeScheme for partition stats returned non-success, using uniform distribution",
+            STLOG(PRI_WARN, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "DescribeScheme for partition stats returned non-success, using uniform distribution",
                 (Status, record.GetStatus()),
                 (Path, record.GetPath()),
                 (trace_id, TraceId()));
@@ -531,7 +524,7 @@ protected:
             txResult.ColumnOrder, txResult.ColumnHints);
 
         // TODO: Calculate rows/bytes count for the arrow format of result set
-        KQP_STLOG_D(KQPEX, "Send TEvStreamData",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send TEvStreamData",
             (Recipient, Target),
             (SeqNo, streamEv->Record.GetSeqNo()),
             (Rows, streamEv->Record.GetResultSet().rows().size()),
@@ -679,7 +672,7 @@ protected:
                 ui64 rowCount = batch.RowCount();
                 ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                 txResult.HasTrailingResult = true;
-                KQP_STLOG_D(KQPEX, "Staging TEvStreamData",
+                STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Staging TEvStreamData",
                     (Recipient, Target),
                     (SeqNo, computeData.Proto.GetSeqNo()),
                     (Rows, rowCount),
@@ -701,7 +694,7 @@ protected:
         Stats->ResultBytes += batch.Size();
         Stats->ResultRows += batch.RowCount();
 
-        KQP_STLOG_T(KQPEX, "Got result",
+        STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got result",
             (ChannelId, channel.Id),
             (InputIndex, channel.DstInputIndex),
             (Sender, ev->Sender),
@@ -709,7 +702,7 @@ protected:
             (trace_id, TraceId()));
 
         ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
-        KQP_STLOG_T(KQPEX, "Send ack",
+        STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send ack",
             (ChannelId, channel.Id),
             (SeqNo, record.GetSeqNo()),
             (Recipient, ev->Sender),
@@ -750,7 +743,7 @@ protected:
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         i64 freeSpace = ev->Get()->Record.GetFreeSpace();
 
-        KQP_STLOG_D(KQPEX, "Send ack",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send ack",
             (ChannelId, channelId),
             (SeqNo, seqNo),
             (Enough, ev->Get()->Record.GetEnough()),
@@ -771,7 +764,7 @@ protected:
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
 
-        KQP_STLOG_D(KQPEX, "Got execution state from compute actor",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got execution state from compute actor",
             (ActorState, CurrentStateFuncName()),
             (ComputeActor, computeActor),
             (TaskId, taskId),
@@ -1080,7 +1073,7 @@ protected:
 
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
-                KQP_STLOG_D(KQPEX, "Executing physical tx",
+                STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Executing physical tx",
                     (TxType, (ui32)tx.Body->GetType()),
                     (Stages, tx.Body->StagesSize()),
                     (trace_id, TraceId()));
@@ -1097,7 +1090,7 @@ protected:
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
-        KQP_STLOG_T(KQPEX, "Got request, become WaitResolveState",
+        STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got request, become WaitResolveState",
             (trace_id, TraceId()));
         this->Become(&TDerived::WaitResolveState);
 
@@ -1130,7 +1123,7 @@ protected:
                     sb << "CA " << ca.first << ", ";
                 }
             }
-            KQP_STLOG_D(KQPEX, sb,
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << sb,
                 (trace_id, TraceId()));
         }
 
@@ -1151,7 +1144,7 @@ protected:
             case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
                 switch (reason) {
                     case TEvents::TEvUndelivered::EReason::ReasonActorUnknown: {
-                        KQP_STLOG_D(KQPEX, "Schedule a retry by ActorUnknown reason",
+                        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Schedule a retry by ActorUnknown reason",
                             (NodeId, ev->Sender.NodeId()),
                             (RequestId, ev->Cookie),
                             (trace_id, TraceId()));
@@ -1172,7 +1165,7 @@ protected:
                 }
             }
             default: {
-                KQP_STLOG_E(KQPEX, "Event lost",
+                STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Event lost",
                     (EventType, eventType),
                     (Reason, reason),
                     (trace_id, TraceId()));
@@ -1191,7 +1184,7 @@ protected:
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         auto nodeId = ev->Get()->NodeId;
-        KQP_STLOG_N(KQPEX, "Disconnected node", (node_id, nodeId),
+        STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Disconnected node", (node_id, nodeId),
             (trace_id, TraceId()));
 
         if (Planner) {
@@ -1220,7 +1213,7 @@ protected:
             auto reason = record.GetNotStartedTasks()[0].GetReason();
             auto& message = record.GetNotStartedTasks()[0].GetMessage();
 
-            KQP_STLOG_E(KQPEX, "Stop executing",
+            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Stop executing",
                 (Reason, NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(reason)),
                 (Message, message),
                 (trace_id, TraceId()));
@@ -1251,7 +1244,7 @@ protected:
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
                     if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
-                        KQP_STLOG_D(KQPEX, "Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled",
+                        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled",
                             (trace_id, TraceId()));
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -1259,7 +1252,7 @@ protected:
                         break;
                     }
 
-                    KQP_STLOG_D(KQPEX, "Received NODE_SHUTTING_DOWN, attempting run tasks locally",
+                    STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Received NODE_SHUTTING_DOWN, attempting run tasks locally",
                         (trace_id, TraceId()));
 
                     ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
@@ -1289,7 +1282,7 @@ protected:
             auto& task = TasksGraph.GetTask(taskId);
 
             TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
-            KQP_STLOG_D(KQPEX, "Executing task",
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Executing task",
                 (TaskId, taskId),
                 (ComputeActor, computeActorId),
                 (trace_id, TraceId()));
@@ -1324,7 +1317,7 @@ protected:
             NYql::NDqProto::StatusIds::StatusCode statusCode,
             const NYql::TIssues& issues,
             const bool isTargetSender) {
-        KQP_STLOG_D(KQPEX, "Got EvAbortExecution",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got EvAbortExecution",
             (Status, NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)),
             (Issues, issues.ToOneLineString()),
             (trace_id, TraceId()));
@@ -1368,7 +1361,7 @@ protected:
         if (Request.RlPath) {
             auto actorId = ReportToRl(ru, Database, UserToken->GetSerializedToken(), Request.RlPath.GetRef());
 
-            KQP_STLOG_D(KQPEX, "Resource usage for last stat interval",
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Resource usage for last stat interval",
                 (Consumption, consumption),
                 (RequestUnits, ru),
                 (RlPath, Request.RlPath.GetRef()),
@@ -1376,7 +1369,7 @@ protected:
                 (ForceFlag, force),
                 (trace_id, TraceId()));
         } else {
-            KQP_STLOG_D(KQPEX, "Resource usage for last stat interval, rate limiter was not found",
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Resource usage for last stat interval, rate limiter was not found",
                 (Consumption, consumption),
                 (RequestUnits, ru),
                 (ForceFlag, force),
@@ -1455,7 +1448,7 @@ protected:
     void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         for (const auto& task : this->TasksGraph.GetTasks()) {
             if (task.ComputeActorId && !task.Meta.Completed) {
-                KQP_STLOG_I(KQPEX, "Aborting compute actor execution",
+                STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Aborting compute actor execution",
                     (Issues, issues.ToOneLineString()),
                     (ComputeActor, task.ComputeActorId),
                     (TaskId, task.Id),
@@ -1464,7 +1457,7 @@ protected:
                 auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(code), issues);
                 this->Send(task.ComputeActorId, ev.Release());
             } else {
-                KQP_STLOG_I(KQPEX, "Task does not have the CA id yet or is already complete",
+                STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Task does not have the CA id yet or is already complete",
                     (TaskId, task.Id),
                     (trace_id, TraceId()));
             }
@@ -1484,13 +1477,13 @@ protected:
     }
     void UnexpectedEvent(const TString& state, ui32 eventType) {
         if (eventType == TEvents::TEvPoison::EventType) {
-            KQP_STLOG_D(KQPEX, "TKqpExecuter, TEvPoison event",
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TKqpExecuter, TEvPoison event",
                 (State, state),
                 (SelfId, this->SelfId()),
                 (trace_id, TraceId()));
             InternalError(TStringBuilder() << "TKqpExecuter got poisoned, state: " << state);
         } else {
-            KQP_STLOG_E(KQPEX, "TKqpExecuter, unexpected event",
+            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TKqpExecuter, unexpected event",
                 (EventType, eventType),
                 (State, state),
                 (SelfId, this->SelfId()),
@@ -1500,7 +1493,7 @@ protected:
     }
 
     void InternalError(const NYql::TIssues& issues) {
-        KQP_STLOG_E(KQPEX, issues.ToOneLineString(),
+        STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << issues.ToOneLineString(),
             (trace_id, TraceId()));
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         for (const NYql::TIssue& i : issues) {
@@ -1514,7 +1507,7 @@ protected:
     }
 
     void ReplyUnavailable(const TString& message) {
-        KQP_STLOG_E(KQPEX, "UNAVAILABLE: " << message,
+        STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "UNAVAILABLE: " << message,
             (trace_id, TraceId()));
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
         issue.AddSubIssue(new NYql::TIssue(message));
@@ -1522,7 +1515,7 @@ protected:
     }
 
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
-        KQP_STLOG_E(KQPEX, "Runtime error",
+        STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Runtime error",
             (Status, Ydb::StatusIds_StatusCode_Name(code)),
             (Issues, issues.ToOneLineString()),
             (trace_id, TraceId()));
@@ -1543,7 +1536,7 @@ protected:
 
     void TimeoutError(bool isTargetSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
-            KQP_STLOG_E(KQPEX, "Timeout when we already replied - not good",
+            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Timeout when we already replied - not good",
                 (Backtrace, TBackTrace().PrintToString()),
                 (trace_id, TraceId()));
             return;
@@ -1558,7 +1551,7 @@ protected:
 
         AlreadyReplied = true;
 
-        KQP_STLOG_E(KQPEX, "Abort execution",
+        STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Abort execution",
             (Status, NYql::NDqProto::StatusIds_StatusCode_Name(status)),
             (Issues, issues.ToOneLineString()),
             (trace_id, TraceId()));
@@ -1575,7 +1568,7 @@ protected:
             this->Send(Target, abortEv.Release());
         }
 
-        KQP_STLOG_E(KQPEX, "Sending timeout response", (Recipient, Target),
+        STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Sending timeout response", (Recipient, Target),
             (trace_id, TraceId()));
 
         // Pass away immediately, since we already sent response - don't wait for stats.
@@ -1586,7 +1579,7 @@ protected:
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
         if (AlreadyReplied) {
-            KQP_STLOG_E(KQPEX, "Error when we already replied - not good",
+            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Error when we already replied - not good",
                 (Backtrace, TBackTrace().PrintToString()),
                 (trace_id, TraceId()));
             return;
@@ -1602,7 +1595,7 @@ protected:
             response.MutableIssues()->Swap(issues);
         }
 
-        KQP_STLOG_T(KQPEX, "ReplyErrorAndDie",
+        STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "ReplyErrorAndDie",
             (Response, response.DebugString()),
             (TargetActor, Target),
             (trace_id, TraceId()));
@@ -1677,7 +1670,7 @@ protected:
                     if (Stats->CollectStatsByLongTasks) {
                         const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
                         if (!txPlansWithStats.empty()) {
-                            KQP_STLOG_I(KQPEX, "Full stats: " << response.GetResult().GetStats(),
+                            STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Full stats: " << response.GetResult().GetStats(),
                                 (trace_id, TraceId()));
                         }
                     }
@@ -1734,7 +1727,7 @@ protected:
         }
 
         for (auto channelPair: ResultChannelProxies) {
-            KQP_STLOG_D(KQPEX, "Terminate result channel",
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Terminate result channel",
                 (ChannelId, channelPair.first),
                 (ProxyActor, channelPair.second->SelfId()),
                 (trace_id, TraceId()));
@@ -1745,7 +1738,7 @@ protected:
             channelPair.second->Receive(ev);
         }
 
-        KQP_STLOG_D(KQPEX, "Terminate execution",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Terminate execution",
             (trace_id, TraceId()));
         if (KqpShardsResolverId) {
             this->Send(KqpShardsResolverId, new TEvents::TEvPoison);
@@ -1766,7 +1759,7 @@ protected:
         }
 
         this->Send(this->SelfId(), new TEvents::TEvPoison);
-        KQP_STLOG_T(KQPEX, "Terminate, become ZombieState",
+        STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPEX, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Terminate, become ZombieState",
             (trace_id, TraceId()));
         this->Become(&TKqpExecuterBase::ZombieState);
     }

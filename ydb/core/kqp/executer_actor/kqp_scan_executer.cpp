@@ -153,7 +153,7 @@ private:
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
-            KQP_STLOG_E(KQPSCAN, "Can not find default state storage group for database",
+            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPSCAN, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Can not find default state storage group for database",
                 (database, Database),
                 (trace_id, TraceId()));
         }
@@ -212,7 +212,7 @@ private:
 
         if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
-            KQP_STLOG_N(KQPSCAN, "Too many compute actors",
+            STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, KQPSCAN, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Too many compute actors",
                 (total_tasks, TasksGraph.GetTasks().size()),
                 (trace_id, TraceId()));
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -221,7 +221,7 @@ private:
             return;
         }
 
-        KQP_STLOG_D(KQPSCAN, "TotalShardScans",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCAN, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TotalShardScans",
             (count, nShardScans),
             (trace_id, TraceId()));
 
@@ -267,7 +267,7 @@ private:
     {
         if (Planner) {
             if (!Planner->GetPendingComputeTasks().empty()) {
-                KQP_STLOG_D(KQPSCAN, "terminate pending resources request",
+                STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPSCAN, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "terminate pending resources request",
                     (status, Ydb::StatusIds::StatusCode_Name(status)),
                     (trace_id, TraceId()));
 

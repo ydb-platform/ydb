@@ -17,9 +17,6 @@ constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB;
 constexpr size_t ISSUES_TEXT_LIMIT = 1_KB;
 constexpr TStringBuf UI_QUERY_EXCLUDE_MARKER = "/*UI-QUERY-EXCLUDE*/";
 
-#define _KQP_REQ_LOG_AT(prio, stream) \
-    LOG_LOG_S(*TlsActivationContext, (prio), NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << stream)
-
 bool IsUiExcludedQuery(TStringBuf queryText) {
     return queryText.StartsWith(UI_QUERY_EXCLUDE_MARKER);
 }
@@ -156,7 +153,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.EndObject();
         json.EndObject();
 
-        _KQP_REQ_LOG_AT(prio, ss.Str());
+        LOG_LOG_S(*TlsActivationContext, (prio), NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << ss.Str());
     }
 }
 

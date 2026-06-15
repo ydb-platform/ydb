@@ -41,7 +41,7 @@ public:
     }
 
     void StartPoolFetchRequest() const {
-        LOG_D("Start pool fetching");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Start pool fetching");
         Register(CreatePoolFetcherActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, Event->Get()->UserToken, WorkloadManagerConfig));
     }
 
@@ -53,7 +53,7 @@ public:
         }
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            LOG_E("Failed to fetch pool info " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to fetch pool info " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
             NYql::TIssues issues = GroupIssues(ev->Get()->Issues, TStringBuilder() << "Failed to resolve pool id " << Event->Get()->PoolId);
             Reply(ev->Get()->Status, std::move(issues));
             return;
@@ -63,7 +63,7 @@ public:
     }
 
     void StartCreateDefaultPoolRequest() const {
-        LOG_I("Start default pool creation");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Start default pool creation");
 
         NACLib::TDiffACL diffAcl;
         for (const TString& usedSid : AppData()->AdministrationAllowedSIDs) {
@@ -83,12 +83,12 @@ public:
 
     void Handle(TEvPrivate::TEvCreatePoolResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            LOG_E("Failed to create default pool " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to create default pool " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
             Reply(ev->Get()->Status, GroupIssues(ev->Get()->Issues, TStringBuilder() << "Failed to create default pool in database " << Event->Get()->DatabaseId));
             return;
         }
 
-        LOG_D("Successfully created default pool");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Successfully created default pool");
         DefaultPoolCreated = true;
         StartPoolFetchRequest();
     }
@@ -104,14 +104,14 @@ private:
     }
 
     void Reply(NResourcePool::TPoolSettings poolConfig, TPathId pathId) {
-        LOG_D("Pool info successfully resolved");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Pool info successfully resolved");
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new TEvPrivate::TEvResolvePoolResponse(Ydb::StatusIds::SUCCESS, poolConfig, pathId, DefaultPoolCreated, std::move(Event)));
         PassAway();
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        LOG_W("Failed to resolve pool, " << status << ", issues: " << issues.ToOneLineString());
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to resolve pool, " << status << ", issues: " << issues.ToOneLineString());
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new TEvPrivate::TEvResolvePoolResponse(status, {}, {}, DefaultPoolCreated, std::move(Event), std::move(issues)));
         PassAway();
@@ -182,7 +182,7 @@ public:
 
 protected:
     void StartRequest() override {
-        LOG_D("Start pool fetching");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Start pool fetching");
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
             {{".metadata/workload_manager/pools", PoolId}},
             DatabaseIdToDatabase(DatabaseId),
@@ -220,9 +220,9 @@ private:
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Pool info successfully fetched");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Pool info successfully fetched");
         } else {
-            LOG_W("Failed to fetch pool info, " << status << ", issues: " << issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to fetch pool info, " << status << ", issues: " << issues.ToOneLineString());
         }
 
         Issues.AddIssues(std::move(issues));
@@ -271,13 +271,13 @@ private:
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        LOG_W("Failed to fetch static pool info, " << status << ", issues: " << issues.ToOneLineString());
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to fetch static pool info, " << status << ", issues: " << issues.ToOneLineString());
         Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(status, DatabaseId, PoolId, {}, {}, std::move(issues)));
         PassAway();
     }
 
     void Reply(const NResourcePool::TPoolSettings& poolConfig) {
-        LOG_D("Static Pool info successfully fetched");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Static Pool info successfully fetched");
         Send(ReplyActorId, new TEvPrivate::TEvFetchPoolResponse(Ydb::StatusIds::SUCCESS, DatabaseId, PoolId, poolConfig, {}, {}));
         PassAway();
     }
@@ -341,7 +341,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status == NKikimrProto::OK) {
-            LOG_T("Tablet to pipe successfully connected");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Tablet to pipe successfully connected");
             return;
         }
 
@@ -376,7 +376,7 @@ public:
 
 protected:
     void StartRequest() override {
-        LOG_D("Start pool creating");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Start pool creating");
         const auto& database = DatabaseIdToDatabase(DatabaseId);
 
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -418,7 +418,7 @@ private:
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
-        LOG_D("Subscribe on create pool tx: " << txId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Subscribe on create pool tx: " << txId);
     }
 
     void ClosePipeClient() {
@@ -469,9 +469,9 @@ private:
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Pool successfully created");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Pool successfully created");
         } else {
-            LOG_W("Failed to create pool, " << status << ", issues: " << issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to create pool, " << status << ", issues: " << issues.ToOneLineString());
         }
 
         ClosePipeClient();
@@ -563,7 +563,7 @@ public:
 
 protected:
     void StartRequest() override {
-        LOG_D("Start database fetching");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Start database fetching");
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
             {{}},
             Database ? Database : AppData()->TenantName,
@@ -589,9 +589,9 @@ private:
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Database info successfully fetched, serverless: " << Serverless);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Database info successfully fetched, serverless: " << Serverless);
         } else {
-            LOG_W("Failed to fetch database info, " << status << ", issues: " << issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Failed to fetch database info, " << status << ", issues: " << issues.ToOneLineString());
         }
 
         Issues.AddIssues(std::move(issues));

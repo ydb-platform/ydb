@@ -162,10 +162,8 @@ inline void FillChunkDataFromReq(
     proto.SetSeqNo(msg.seq_no());
     proto.SetCreateTime(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
     // TODO (ildar-khisam@): refactor codec enum convert
-    if (writeRequest.codec() == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH)) {
-        proto.SetCodec(NPersQueueCommon::RAW);
-    } else if (writeRequest.codec() > 0) {
-        proto.SetCodec(writeRequest.codec() - 1);
+    if (writeRequest.codec() > 0) {
+        proto.SetCodec(static_cast<NPersQueueCommon::ECodec>(writeRequest.codec() - 1));
     }
     proto.SetData(msg.data());
     auto* msgMeta = proto.MutableMessageMeta();
@@ -198,7 +196,7 @@ void FillBatchFieldsFromTopicWriteMessage(
     const i64 maxSeqNo = msg.seq_no();
     cmdWrite.SetSeqNo(header->BaseSequence);
     cmdWrite.SetMessageCount(static_cast<size_t>(header->RecordsCount));
-    cmdWrite.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+    cmdWrite.SetIsBatch(true);
     cmdWrite.SetMaxSeqNo(maxSeqNo);
 }
 
@@ -1555,8 +1553,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
             }
 
             const ui32 codecID = data.codec();
+            const bool isKafkaBatch = codecID == static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH);
             TString error = "unspecified (id 0)";
-            if (codecID == 0 || !ValidateWriteWithCodec(InitialPQTabletConfig, codecID - 1, error)) {
+            if (codecID == 0 || (!isKafkaBatch && !ValidateWriteWithCodec(InitialPQTabletConfig, codecID - 1, error))) {
                 CloseSession(TStringBuilder() << "bad write request - codec is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx);
                 return false;
             }

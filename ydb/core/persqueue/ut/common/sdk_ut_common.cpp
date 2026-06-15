@@ -29,9 +29,8 @@ void WriteKafkaBatchMessages(
         .ProducerId(producerId)
         .MessageGroupId(producerId)
         .PartitionId(0)
-        .Codec(NYdb::NTopic::ECodec::RAW)
+        .Codec(NYdb::NTopic::ECodec::KAFKA_BATCH)
         .BatchFlushMessageCount(maxBatchMessageCount)
-        .MessageFormat(NYdb::NTopic::EMessageFormat::KAFKA_BATCH)
         .DirectWriteToPartition(directWriteToPartition)
         .BatchFlushInterval(TDuration::Seconds(1))
         .BatchFlushSizeBytes(10_MB);

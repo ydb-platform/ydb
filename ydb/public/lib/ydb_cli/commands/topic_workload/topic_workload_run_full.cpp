@@ -140,10 +140,6 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(1)
         .Hidden()
         .StoreResult(&Scenario.BatchFlushMessageCount);
-    config.Opts->AddLongOption("message-format", "Write block payload format: standard or kafka-batch. Non-standard format is required when --batch-flush-message-count is greater than 1.")
-        .DefaultValue("standard")
-        .Hidden()
-        .StoreMappedResult(&Scenario.MessageFormat, &TCommandWorkloadTopicParams::StrToMessageFormat);
 
     Scenario.ConfigMetadataMonitoringOptions(config);
 
@@ -157,7 +153,6 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
     Scenario.EnsureRatesIsValid();
-    Scenario.EnsureBatchSettingsAreValid();
 }
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config)

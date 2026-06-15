@@ -15,8 +15,6 @@ namespace NYdb::NConsoleClient {
         UNIT_TEST(TestRun_StrToBytes_Mega);
         UNIT_TEST(TestRun_StrToBytes_Giga);
         UNIT_TEST(TestRun_StrToBytes_Error);
-        UNIT_TEST(TestRun_StrToMessageFormat);
-        UNIT_TEST(TestRun_StrToMessageFormat_Error);
         UNIT_TEST_SUITE_END();
 
         void TestRun_StrToBytes_Simple() {
@@ -40,22 +38,6 @@ namespace NYdb::NConsoleClient {
 
         void TestRun_StrToBytes_Error() {
             UNIT_ASSERT_EXCEPTION(TCommandWorkloadTopicParams::StrToBytes("WrongNumber"), NLastGetopt::TException);
-        }
-
-        void TestRun_StrToMessageFormat() {
-            UNIT_ASSERT_EQUAL(
-                TCommandWorkloadTopicParams::StrToMessageFormat("standard"),
-                static_cast<ui32>(NTopic::EMessageFormat::STANDARD));
-            UNIT_ASSERT_EQUAL(
-                TCommandWorkloadTopicParams::StrToMessageFormat("kafka-batch"),
-                static_cast<ui32>(NTopic::EMessageFormat::KAFKA_BATCH));
-            UNIT_ASSERT_EQUAL(
-                TCommandWorkloadTopicParams::StrToMessageFormat("KAFKA_BATCH"),
-                static_cast<ui32>(NTopic::EMessageFormat::KAFKA_BATCH));
-        }
-
-        void TestRun_StrToMessageFormat_Error() {
-            UNIT_ASSERT_EXCEPTION(TCommandWorkloadTopicParams::StrToMessageFormat("unknown"), yexception);
         }
     };
 

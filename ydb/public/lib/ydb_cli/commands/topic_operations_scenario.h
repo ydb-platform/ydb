@@ -42,7 +42,6 @@ public:
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
     void EnsureRatesIsValid() const;
-    void EnsureBatchSettingsAreValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;

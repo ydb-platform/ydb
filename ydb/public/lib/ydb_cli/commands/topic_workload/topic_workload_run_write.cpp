@@ -125,10 +125,6 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue(1)
         .Hidden()
         .StoreResult(&Scenario.BatchFlushMessageCount);
-    config.Opts->AddLongOption("message-format", "Write block payload format: standard or kafka-batch. Non-standard format is required when --batch-flush-message-count is greater than 1.")
-        .DefaultValue("standard")
-        .Hidden()
-        .StoreMappedResult(&Scenario.MessageFormat, &TCommandWorkloadTopicParams::StrToMessageFormat);
     config.Opts->AddLongOption("keyed-writes", "Use keyed writes. This mode will write messages to topic, choosing partition by random generated keys.")
         .DefaultValue(false)
         .Hidden()
@@ -150,7 +146,6 @@ void TCommandWorkloadTopicRunWrite::Parse(TConfig& config)
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
     Scenario.EnsureRatesIsValid();
-    Scenario.EnsureBatchSettingsAreValid();
 }
 
 int TCommandWorkloadTopicRunWrite::Run(TConfig& config)

@@ -154,7 +154,6 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
         settings.BatchFlushSizeBytes(Params.BatchFlushSizeBytes.value());
     }
     settings.BatchFlushMessageCount(Params.BatchFlushMessageCount);
-    settings.MessageFormat(static_cast<NYdb::NTopic::EMessageFormat>(Params.MessageFormat));
     if (Params.MaxMemoryUsageBytes.has_value()) {
         settings.MaxMemoryUsage(Params.MaxMemoryUsageBytes.value());
     }

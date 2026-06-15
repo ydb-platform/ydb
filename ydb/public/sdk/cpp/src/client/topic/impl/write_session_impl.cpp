@@ -35,12 +35,6 @@ using TTxIdOpt = std::optional<TTxId>;
 
 static constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
 
-void ValidateWriteSessionSettings(const TWriteSessionSettings& settings) {
-    if (settings.BatchFlushMessageCount_ > 1 && settings.MessageFormat_ == EMessageFormat::STANDARD) {
-        ythrow yexception() << "MessageFormat must be set when BatchFlushMessageCount > 1";
-    }
-}
-
 TBuffer BuildKafkaRecordBatchData(
         const std::vector<std::string_view>& payloads,
         const std::vector<TInstant>& createdAt,
@@ -142,7 +136,6 @@ TWriteSessionImpl::TWriteSessionImpl(
                 TDuration::MilliSeconds(100)
     )
 {
-    ValidateWriteSessionSettings(settings);
     if (!Settings.RetryPolicy_) {
         Settings.RetryPolicy_ = IRetryPolicy::GetDefaultPolicy();
     }
@@ -1469,14 +1462,6 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
 
     Y_ABORT_UNLESS(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
 
-    if (Settings.MessageFormat_ == EMessageFormat::KAFKA_BATCH) {
-        for (const auto& message : CurrentBatch.Messages) {
-            if (message.Codec.has_value()) {
-                ythrow yexception() << "Pre-compressed messages are not supported with KAFKA_BATCH format";
-            }
-        }
-    }
-
     while (!CurrentBatch.Acquired) {
         if (!CurrentBatch.Acquire()) {
             break;
@@ -1495,7 +1480,8 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
         }
     }
 
-    const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
+    const bool isKafkaBatchMode = Settings.Codec_ == ECodec::KAFKA_BATCH;
+    const bool skipCompression = Settings.Codec_ == ECodec::RAW || isKafkaBatchMode || CurrentBatch.HasCodec();
     if (!skipCompression && Settings.CompressionExecutor_->IsAsync()) {
         MessagesAcquired += static_cast<uint64_t>(CurrentBatch.Acquire());
     }
@@ -1543,8 +1529,8 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             }
         }
 
-        // A single message is sent as a standard block; multi-message blocks use CODEC_KAFKA_BATCH.
-        const bool isKafkaBatchBlock = Settings.MessageFormat_ == EMessageFormat::KAFKA_BATCH;
+        // In Kafka batch mode, multi-message blocks are sent as CODEC_KAFKA_BATCH.
+        const bool isKafkaBatchBlock = isKafkaBatchMode && block.MessageCount > 1;
         if (isKafkaBatchBlock) {
             std::vector<std::string_view> payloads;
             std::vector<TInstant> createdAt;
@@ -1644,7 +1630,6 @@ void TWriteSessionImpl::SendBatchBlock(
     Y_ABORT_UNLESS(Lock.IsLocked());
     Y_ABORT_UNLESS(writeRequest);
     Y_ABORT_UNLESS(block.MessageCount > 1);
-    Y_ABORT_UNLESS(Settings.MessageFormat_ != EMessageFormat::STANDARD);
 
     if (!BatchingSupported) {
         ThrowFatalError("Server does not support messages batching");
@@ -1762,8 +1747,7 @@ void TWriteSessionImpl::SendImpl() {
             prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
 
-            const bool sendAsBatchBlock = Settings.MessageFormat_ != EMessageFormat::STANDARD
-                && block.MessageCount > 1;
+            const bool sendAsBatchBlock = block.MessageCount > 1;
 
             if (sendAsBatchBlock) {
                 SendBatchBlock(block, writeRequest);

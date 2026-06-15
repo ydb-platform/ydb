@@ -129,14 +129,13 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
         NKikimrPQClient::TDataChunk dataChunk;
         dataChunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
-        dataChunk.SetCodec(NPersQueueCommon::RAW);
+        dataChunk.SetCodec(static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1));
         dataChunk.SetData(MakeKafkaBatchPayload(values, seqNo));
 
         TString serializedDataChunk;
         Y_ENSURE(dataChunk.SerializeToString(&serializedDataChunk));
         write->SetData(std::move(serializedDataChunk));
         write->SetMessageCount(values.size());
-        write->SetMessageFormat(NKikimrClient::KAFKA_BATCH);
         write->SetMaxSeqNo(seqNo + values.size() - 1);
 
         setup.GetRuntime().SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());

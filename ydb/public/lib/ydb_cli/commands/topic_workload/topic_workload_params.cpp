@@ -15,23 +15,13 @@ ui32 TCommandWorkloadTopicParams::StrToCodec(const TString& str) {
     THashMap<TString, NYdb::NTopic::ECodec> codecs{
         {"raw", NYdb::NTopic::ECodec::RAW},
         {"gzip", NYdb::NTopic::ECodec::GZIP},
-        {"zstd", NYdb::NTopic::ECodec::ZSTD}};
+        {"zstd", NYdb::NTopic::ECodec::ZSTD},
+        {"kafka-batch", NYdb::NTopic::ECodec::KAFKA_BATCH},
+    };
     TString loweredStr(str);
     loweredStr.to_lower();
     codecs.contains(loweredStr) ?: throw yexception() << "Unsupported codec: " << str;
     return (ui32)codecs[loweredStr];
-}
-
-ui32 TCommandWorkloadTopicParams::StrToMessageFormat(const TString& str) {
-    THashMap<TString, NYdb::NTopic::EMessageFormat> formats{
-        {"standard", NYdb::NTopic::EMessageFormat::STANDARD},
-        {"kafka-batch", NYdb::NTopic::EMessageFormat::KAFKA_BATCH},
-        {"kafka_batch", NYdb::NTopic::EMessageFormat::KAFKA_BATCH},
-    };
-    TString loweredStr(str);
-    loweredStr.to_lower();
-    formats.contains(loweredStr) ?: throw yexception() << "Unsupported message format: " << str;
-    return (ui32)formats[loweredStr];
 }
 
 ui64 TCommandWorkloadTopicParams::StrToBytes(const TString& str)

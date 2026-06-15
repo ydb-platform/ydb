@@ -18,6 +18,7 @@ enum class ECodec : uint32_t {
     GZIP = 2,
     LZOP = 3,
     ZSTD = 4,
+    KAFKA_BATCH = 5,
     CUSTOM = 10000,
 };
 

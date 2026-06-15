@@ -1,5 +1,4 @@
 #include "partition_util.h"
-#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 #include "partition_compactification.h"
 #include "partition_common.h"
 
@@ -360,7 +359,7 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
     }
 
     cc->SetMessageCount(blob.MessageCount);
-    cc->SetMessageFormat(ToProtoMessageFormat(blob.MessageFormat));
+    cc->SetIsBatch(blob.IsBatch);
 }
 
 template <typename T>

@@ -8,7 +8,6 @@ namespace NYdb {
         class TCommandWorkloadTopicParams {
         public:
             static ui32 StrToCodec(const TString& str);
-            static ui32 StrToMessageFormat(const TString& str);
             static ui64 StrToBytes(const TString& str);
         };
     }

@@ -70,12 +70,13 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
                                             const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
+    const auto& appConfig = ev->Get()->GetConfig();
 
     LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS,
                "TImmediateControlsConfigurator: got new config: "
-               << rec.GetConfig().ShortDebugString());
+               << appConfig.ShortDebugString());
 
-    ApplyConfig(rec.GetConfig().GetImmediateControlsConfig(), AppData(ctx)->Icb);
+    ApplyConfig(appConfig.GetImmediateControlsConfig(), AppData(ctx)->Icb);
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 

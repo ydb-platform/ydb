@@ -2603,7 +2603,7 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
 void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
 {
-    const auto& appConfig = ev->Get()->Record.GetConfig();
+    const auto& appConfig = ev->Get()->GetConfig();
     if (appConfig.HasFeatureFlags()) {
         const auto& featureFlags = appConfig.GetFeatureFlags();
         if (featureFlags.HasEnableCMSRequestPriorities()) {

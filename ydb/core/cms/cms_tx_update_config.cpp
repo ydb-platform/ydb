@@ -70,7 +70,7 @@ ITransaction *TCms::CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationReques
     auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
     response->Record.MutableConfigId()->CopyFrom(rec.GetConfigId());
 
-    return new TTxUpdateConfig(this, rec.GetConfig().GetCmsConfig(),
+    return new TTxUpdateConfig(this, ev->Get()->GetConfig().GetCmsConfig(),
         new IEventHandle(ev->Sender, ev->Recipient, response.Release(), 0, ev->Cookie)
     );
 }

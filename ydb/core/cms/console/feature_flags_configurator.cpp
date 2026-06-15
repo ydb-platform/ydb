@@ -40,11 +40,12 @@ namespace NKikimr::NConsole {
 
         void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
             const auto& record = ev->Get()->Record;
+            const auto& appConfig = ev->Get()->GetConfig();
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,
-                "TFeatureFlagsConfigurator: new config: " << record.GetConfig().ShortDebugString());
+                "TFeatureFlagsConfigurator: new config: " << appConfig.ShortDebugString());
 
             // Atomically replace runtime feature flags with the new config
-            AppDataVerified().UpdateRuntimeFlags(record.GetConfig().GetFeatureFlags());
+            AppDataVerified().UpdateRuntimeFlags(appConfig.GetFeatureFlags());
             Updated = true;
 
             Send(ev->Sender, new TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);

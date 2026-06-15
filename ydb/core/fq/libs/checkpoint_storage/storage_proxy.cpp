@@ -229,8 +229,10 @@ void TStorageProxy::Bootstrap() {
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
 
-    Send(NKikimr::NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-        new NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({NKikimrConsole::TConfigItem::FeatureFlagsItem}));
+    auto storageSubReq = MakeHolder<NKikimr::NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest>(
+        TVector<ui32>{(ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem});
+    storageSubReq->UseSharedConfig = false; // mutates the notification record inline - needs a private copy
+    Send(NKikimr::NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), storageSubReq.Release());
 
     Become(&TStorageProxy::StateFunc);
     FeatureFlags = NKikimr::AppData()->FeatureFlags;

@@ -298,8 +298,42 @@ namespace TEvConsole {
 
     struct TEvReplaceConfigSubscriptionsResponse : public TEventShortDebugPB<TEvReplaceConfigSubscriptionsResponse, NKikimrConsole::TReplaceConfigSubscriptionsResponse, EvReplaceConfigSubscriptionsResponse> {};
 
+    // Immutable config shared between locally delivered notifications of one config update.
+    struct TSharedAppConfig
+        : public TThrRefBase
+        , public NKikimrConfig::TAppConfig
+    {};
+
     struct TEvConfigNotificationRequest : public TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest> {
-        const NKikimrConfig::TAppConfig& GetConfig() const { return Record.GetConfig(); }
+        using TBase = TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest>;
+
+        // When set, read the config via GetConfig() (Record.GetConfig() is EMPTY). Local-only
+        // and never serialized; opt out with UseSharedConfig = false to mutate inline.
+        TIntrusiveConstPtr<TSharedAppConfig> SharedConfig;
+
+        const NKikimrConfig::TAppConfig& GetConfig() const { return SharedConfig ? *SharedConfig : Record.GetConfig(); }
+
+        // Local-only: report non-serializable so a stray cross-node send is refused rather
+        // than silently shipped with an empty config (the serializers below also abort).
+        bool IsSerializable() const override {
+            return !SharedConfig && TBase::IsSerializable();
+        }
+
+        bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
+            Y_ABORT_UNLESS(!SharedConfig,
+                "attempt to serialize a shared-config TEvConfigNotificationRequest: the shared "
+                "payload is local-only and never serialized; forward it on the same node or opt "
+                "out via UseSharedConfig = false");
+            return TBase::SerializeToArcadiaStream(chunker);
+        }
+
+        std::optional<TRope> SerializeToRope(IRcBufAllocator* allocator) const override {
+            Y_ABORT_UNLESS(!SharedConfig,
+                "attempt to serialize a shared-config TEvConfigNotificationRequest: the shared "
+                "payload is local-only and never serialized; forward it on the same node or opt "
+                "out via UseSharedConfig = false");
+            return TBase::SerializeToRope(allocator);
+        }
     };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {

@@ -140,9 +140,10 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
 
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
-                    NKikimrConsole::TConfigItem::MemoryControllerConfigItem}));
+        auto memSubReq = MakeHolder<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest>(
+            TVector<ui32>{(ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem});
+        memSubReq->UseSharedConfig = false; // mutates the notification record inline - needs a private copy
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), memSubReq.Release());
 
         // When profiling memory it's convenient to set initial tcmalloc soft limit
 #ifdef PROFILE_MEMORY_ALLOCATIONS

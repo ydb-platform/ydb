@@ -913,11 +913,12 @@ void TDynamicNameserver::Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigS
 
 void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev, const TActorContext &ctx) {
     auto& record = ev->Get()->Record;
-    if (SubscribedToConsoleNSConfig && record.HasConfig() && record.GetConfig().HasNameserviceConfig()) {
-        ReplaceNameserverSetup(BuildNameserverTable(record.GetConfig().GetNameserviceConfig()));
+    const auto& appConfig = ev->Get()->GetConfig();
+    if (SubscribedToConsoleNSConfig && appConfig.HasNameserviceConfig()) {
+        ReplaceNameserverSetup(BuildNameserverTable(appConfig.GetNameserviceConfig()));
     }
-    if (record.HasConfig() && record.GetConfig().HasFeatureFlags()) {
-        const auto& featureFlags = record.GetConfig().GetFeatureFlags();
+    if (appConfig.HasFeatureFlags()) {
+        const auto& featureFlags = appConfig.GetFeatureFlags();
         if (EnableDeltaProtocol != featureFlags.GetEnableNodeBrokerDeltaProtocol()) {
             EnableDeltaProtocol = featureFlags.GetEnableNodeBrokerDeltaProtocol();
             ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;

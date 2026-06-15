@@ -43,8 +43,7 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxUpdateConfig Complete");
 
         if (Modify) {
-            auto &rec = Event->Get()->Record;
-            Self->LoadConfigFromProto(rec.GetConfig().GetTenantSlotBrokerConfig());
+            Self->LoadConfigFromProto(Event->Get()->GetConfig().GetTenantSlotBrokerConfig());
         }
 
         if (Response)

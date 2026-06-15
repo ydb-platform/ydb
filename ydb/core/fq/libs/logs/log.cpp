@@ -29,9 +29,11 @@ public:
 
         // Subscribe for Logger config changes
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
+        auto logSubReq = MakeHolder<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest>(
+            TVector<ui32>{logConfigKind});
+        logSubReq->UseSharedConfig = false; // mutates the notification record inline - needs a private copy
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {logConfigKind}),
+            logSubReq.Release(),
             IEventHandle::FlagTrackDelivery);
 
         Become(&TYqlLogsUpdater::MainState);

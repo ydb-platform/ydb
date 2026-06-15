@@ -8830,11 +8830,12 @@ void TSchemeShard::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscripti
 
 void TSchemeShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx) {
     auto &rec = ev->Get()->Record;
+    const auto& appConfig = ev->Get()->GetConfig();
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Got new config: " << rec.GetConfig().ShortDebugString());
+               "Got new config: " << appConfig.ShortDebugString());
 
-    ApplyConsoleConfigs(rec.GetConfig(), ctx);
+    ApplyConsoleConfigs(appConfig, ctx);
 
     auto resp = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(rec);
 

@@ -76,6 +76,8 @@ namespace TEvConfigsDispatcher {
 
         TVector<ui32> ConfigItemKinds;
         const TActorId Subscriber;
+        // Shared immutable payload; set false for a private inline copy to mutate the record.
+        bool UseSharedConfig = true;
     };
 
     struct TEvSetConfigSubscriptionResponse : public TEventLocal<TEvSetConfigSubscriptionResponse, EvSetConfigSubscriptionResponse> {

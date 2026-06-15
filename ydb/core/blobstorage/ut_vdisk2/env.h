@@ -54,6 +54,7 @@ namespace NKikimr {
                 for (auto& id : Subscribers) {
                     auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
                     update->Record.CopyFrom(ev->Get()->Record);
+                    if (ev->Get()->SharedConfig) { update->Record.MutableConfig()->CopyFrom(*ev->Get()->SharedConfig); }
                     Send(id, update.Release());
                 }
             }

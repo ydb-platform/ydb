@@ -229,8 +229,9 @@ void TGraphShard::Handle(TEvGraph::TEvGetMetrics::TPtr& ev) {
 
 void TGraphShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
-    BLOG_D("Received TEvConsole::TEvConfigNotificationRequest with update of config: " << record.GetConfig().GetGraphConfig().ShortDebugString());
-    ApplyConfig(record.GetConfig().GetGraphConfig());
+    const auto& appConfig = ev->Get()->GetConfig();
+    BLOG_D("Received TEvConsole::TEvConfigNotificationRequest with update of config: " << appConfig.GetGraphConfig().ShortDebugString());
+    ApplyConfig(appConfig.GetGraphConfig());
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }
 

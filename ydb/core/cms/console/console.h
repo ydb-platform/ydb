@@ -308,7 +308,7 @@ namespace TEvConsole {
         // Node-local only: parsed forms of opaque config sections (kind -> message),
         // produced by the configs dispatcher via an injected OpaqueConfigParser.
         // .second != nullptr - config either not empty and present or not added into map
-        THashMap<ui32, std::shared_ptr<::google::protobuf::Message>> OpaqueConfigs;
+        THashMap<ui32, std::shared_ptr<const ::google::protobuf::Message>> OpaqueConfigs;
     };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {

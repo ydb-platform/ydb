@@ -65,7 +65,7 @@ ui64 GetConfigHash(const TString& config);
 //  auto* dispatcher = NKikimr::NConsole::CreateConfigsDispatcher(initInfo);
 //
 template<typename Proto>
-std::shared_ptr<::google::protobuf::Message> DefaultOpaqueConfigParser(const TString& opaqueYamlConfig, bool allowUnknownFields)
+std::shared_ptr<const ::google::protobuf::Message> DefaultOpaqueConfigParser(const TString& opaqueYamlConfig, bool allowUnknownFields)
 {
     const auto& subYaml = ( opaqueYamlConfig.StartsWith("---") ? opaqueYamlConfig.substr(3) : opaqueYamlConfig);
     if ( subYaml.find_first_not_of(" \t\n\r") == TString::npos )

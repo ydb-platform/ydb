@@ -30,7 +30,7 @@ endpoints:
             // (as long as fields happened to match), masking a real bug.
             // CopyFrom() is correct choise for production code where you already trust the source type
             // and just need to extract the data.
-            auto* cfg = dynamic_cast<NYamlConfigTest::TTestServiceConfig*>(msg.get());
+            auto* cfg = dynamic_cast<const NYamlConfigTest::TTestServiceConfig*>(msg.get());
             UNIT_ASSERT(cfg != nullptr);
 
             UNIT_ASSERT(cfg->HasServiceName());

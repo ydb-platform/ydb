@@ -272,7 +272,7 @@ struct TDebugInfo {
 //
 // @param opaqueYamlConfig - string content of opaque config section in YAML config
 // @return the parsed message, or nullptr to attach nothing.
-using TOpaqueConfigParser = std::function<std::shared_ptr<::google::protobuf::Message>(const TString& opaqueYamlConfig)>;
+using TOpaqueConfigParser = std::function<std::shared_ptr<const ::google::protobuf::Message>(const TString& opaqueYamlConfig)>;
 
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;

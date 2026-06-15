@@ -189,7 +189,7 @@ public:
         TString RawJson;
         // May be null in the cache (parser produced nothing), but null
         // never placed into an outgoing event — see PopulateWithOpaqueConfigs.
-        std::shared_ptr<::google::protobuf::Message> Parsed;
+        std::shared_ptr<const ::google::protobuf::Message> Parsed;
     };
 
     THashMap<ui32, TParsedOpaqueConfig> ParseOpaqueConfigs() const;
@@ -1171,7 +1171,7 @@ catch (...) {
 THashMap<ui32, TConfigsDispatcher::TParsedOpaqueConfig> TConfigsDispatcher::ParseOpaqueConfigs() const
 {
     THashMap<ui32, TParsedOpaqueConfig> result;
-    if (OpaqueConfigParsers.empty() || ResolvedJsonConfig.empty()) {
+    if (!YamlConfigEnabled || OpaqueConfigParsers.empty() || ResolvedJsonConfig.empty()) {
         return result;
     }
     // The opaque carrier proto is empty by design — its content lives in the
@@ -1297,33 +1297,36 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     // remove / mutation / empty<->non-empty transition into affectedKinds.
     // Opaque sections are invisible to AffectedKinds and to the proto diff,
     // so without this an opaque-only update never reaches subscribers.
-    auto newOpaqueConfigs = ParseOpaqueConfigs();
-    for (const auto& [kind, parsed] : newOpaqueConfigs) {
-        auto it = CurrentOpaqueConfigs.find(kind);
-        if (it == CurrentOpaqueConfigs.end() || it->second.RawJson != parsed.RawJson) {
-            // config was added or changed
-            affectedKinds.insert(kind);
+    THashSet<ui32> affectedOpaqueKinds;
+    if (isYamlChanged) {
+        auto newOpaqueConfigs = ParseOpaqueConfigs();
+        for (const auto& [kind, parsed] : newOpaqueConfigs) {
+            auto it = CurrentOpaqueConfigs.find(kind);
+            if (it == CurrentOpaqueConfigs.end() || it->second.RawJson != parsed.RawJson) {
+                // config was added or changed
+                affectedOpaqueKinds.insert(kind);
+            }
         }
-    }
-    for (const auto& [kind, _] : CurrentOpaqueConfigs) {
-        if (!newOpaqueConfigs.contains(kind)) {
-            // config was removed
-            affectedKinds.insert(kind);
+        for (const auto& [kind, _] : CurrentOpaqueConfigs) {
+            if (!newOpaqueConfigs.contains(kind)) {
+                // config was removed
+                affectedOpaqueKinds.insert(kind);
+            }
         }
+        CurrentOpaqueConfigs = std::move(newOpaqueConfigs);
     }
-    CurrentOpaqueConfigs = std::move(newOpaqueConfigs);
 
     for (auto &[kinds, subscription] : SubscriptionsByKinds) {
         NKikimrConfig::TAppConfig trunc;
 
         bool hasAffectedKinds = false;
-        Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
-            if (affectedKinds.contains(kind)) {
-                hasAffectedKinds = true;
-            }
-        }
 
         if (subscription->Yaml && YamlConfigEnabled) {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
+                if (affectedOpaqueKinds.contains(kind)) {
+                    hasAffectedKinds = true;
+                }
+            }
             if (!isYamlChanged && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
                 continue;
             }
@@ -1333,6 +1336,11 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             }
             ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
         } else {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
+                if (affectedKinds.contains(kind)) {
+                    hasAffectedKinds = true;
+                }
+            }
             // we try resend all configs if yaml config was turned off
             if (!hasAffectedKinds && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
                 continue;

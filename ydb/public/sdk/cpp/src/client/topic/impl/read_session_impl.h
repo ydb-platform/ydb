@@ -426,6 +426,7 @@ public:
                   size_t& messagesTaken) const;
 
     size_t GetDataSize() const;
+    size_t GetMessageCount() const;
 
     TDataDecompressionInfoPtr<UseMigrationProtocol> GetParent() const {
         return Parent;

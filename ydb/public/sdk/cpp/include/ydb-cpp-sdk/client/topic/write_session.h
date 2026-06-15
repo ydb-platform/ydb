@@ -134,7 +134,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     //! Max number of logical messages packed into a single write block.
     //! Values greater than 1 require non-STANDARD MessageFormat.
-    FLUENT_SETTING_DEFAULT(uint32_t, MaxMessageCount, 1);
+    FLUENT_SETTING_DEFAULT(uint32_t, BatchFlushMessageCount, 1);
 
     //! Format of message payload in write block data field.
     FLUENT_SETTING_DEFAULT(EMessageFormat, MessageFormat, EMessageFormat::STANDARD);

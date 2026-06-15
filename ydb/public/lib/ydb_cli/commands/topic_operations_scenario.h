@@ -96,7 +96,7 @@ public:
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
     TDuration BatchFlushInterval = TDuration::Seconds(1);
     std::optional<ui64> BatchFlushSizeBytes;
-    ui32 MaxMessageCount = 1;
+    ui32 BatchFlushMessageCount = 1;
     ui32 MessageFormat = 0;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;

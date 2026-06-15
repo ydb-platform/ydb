@@ -133,7 +133,7 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     if (Params.BatchFlushSizeBytes.has_value()) {
         settings.BatchFlushSizeBytes(Params.BatchFlushSizeBytes.value());
     }
-    settings.MaxMessageCount(Params.MaxMessageCount);
+    settings.BatchFlushMessageCount(Params.BatchFlushMessageCount);
     settings.MessageFormat(static_cast<NYdb::NTopic::EMessageFormat>(Params.MessageFormat));
     settings.PartitionChooserStrategy(
         isAutoPartitioningEnabled ?

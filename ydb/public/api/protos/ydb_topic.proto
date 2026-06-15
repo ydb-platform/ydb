@@ -22,7 +22,8 @@ enum Codec {
     CODEC_GZIP = 2;
     CODEC_LZOP = 3;
     CODEC_ZSTD = 4;
-    reserved 5 to 9999;
+    CODEC_KAFKA_BATCH = 5;
+    reserved 6 to 9999;
     // User-defined codecs from 10000 to 19999
     CODEC_CUSTOM = 10000;
     reserved 20000 to max;
@@ -154,7 +155,7 @@ message StreamWriteMessage {
         optional TransactionIdentity tx = 3;
 
         message MessageData {
-            // Message sequence number, provided by client for deduplication.
+            // Message sequence number, provided by client for deduplication. Max sequence number for batch messages.
             // Starts at 1
             int64 seq_no = 1;
             // Creation timestamp.
@@ -174,27 +175,6 @@ message StreamWriteMessage {
             }
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
             repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
-
-            enum MessageFormat {
-                STANDARD = 0;
-                KAFKA_BATCH = 1;
-            }
-
-            // Format of message payload in data field.
-            MessageFormat message_format = 9;
-
-            // Metadata of a batch of client messages packed into the data field.
-            message BatchMetadata {
-                // Sequence number of the first (minimal) message in the batch.
-                int64 first_seq_no = 1;
-
-                // Number of messages in batch. If not set or <= 1, that means that this message is not a batch.
-                int64 message_count = 2;
-            }
-
-            // Present when several logical messages are packed into data.
-            // May be absent for single-message writes even with non-STANDARD message_format.
-            optional BatchMetadata batch_metadata = 10;
         }
     }
 
@@ -408,7 +388,7 @@ message StreamReadMessage {
         message MessageData {
             // Partition offset in partition that assigned for message.
             int64 offset = 1; //unique value for client side deduplication - Topic:Partition:Offset
-            // Sequence number that provided with message on write from client.
+            // Sequence number that provided with message on write from client. Max sequence number for batch messages.
             int64 seq_no = 2;
             // Timestamp of creation of message provided on write from client.
             google.protobuf.Timestamp created_at = 3;
@@ -422,24 +402,6 @@ message StreamReadMessage {
             // Filled if message_group_id was set on message write.
             string message_group_id = 7 [(Ydb.length).le = 2048];
             repeated MetadataItem metadata_items = 8;
-
-            enum MessageFormat {
-                STANDARD = 0;
-                KAFKA_BATCH = 1;
-            }
-
-            // Format of message payload in data field.
-            MessageFormat message_format = 9;
-
-            // Metadata of a batch of client messages packed into the data field.
-            message BatchMetadata {
-                // Number of messages in batch. If not set or <= 1, that means that this message is not a batch.
-                int64 message_count = 1;
-            }
-
-            // Present when several logical messages are packed into data.
-            // May be absent for single-message reads even with non-STANDARD message_format.
-            optional BatchMetadata batch_metadata = 10;
         }
 
         // Representation of sequence of client messages from one write session.

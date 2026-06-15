@@ -3,6 +3,7 @@
 #include "codecs.h"
 #include "helpers.h"
 
+#include <ydb/library/kafka/kafka_records.h>
 #include <ydb/services/metadata/manager/common.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>
@@ -178,42 +179,24 @@ static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 // metering
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
 
-TMaybe<TString> FillBatchFieldsFromTopicWriteMessage(
+void FillBatchFieldsFromTopicWriteMessage(
+        const Ydb::Topic::StreamWriteMessage::WriteRequest& writeRequest,
         const Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData& msg,
         NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite)
 {
-    // Even a single message may be serialized in a non-standard format,
-    // so the format must be stored regardless of message count.
-    switch (msg.message_format()) {
-        case Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::STANDARD:
-            return Nothing();
-        case Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH:
-            cmdWrite.SetMessageFormat(NKikimrClient::KAFKA_BATCH);
-            break;
-        default:
-            return TString(TStringBuilder() << "unsupported message_format: " << static_cast<int>(msg.message_format()));
+    if (writeRequest.codec() != static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH)) {
+        return;
     }
 
-    if (!msg.has_batch_metadata()) {
-        return Nothing();
+    const auto header = NKafka::ReadKafkaBatchHeader(msg.data());
+    if (!header || header->RecordsCount == 0) {
+        return;
     }
 
-    const auto& batchMeta = msg.batch_metadata();
-    const i64 messageCount = batchMeta.message_count();
-    if (messageCount < 0) {
-        return TString("message_count must be >= 0");
-    }
-    if (batchMeta.first_seq_no() != 0 && batchMeta.first_seq_no() != msg.seq_no()) {
-        return TString("first_seq_no must be equal to seq_no of the batch message");
-    }
-
-    if (messageCount <= 1) {
-        return Nothing();
-    }
-
-    cmdWrite.SetMessageCount(messageCount);
-    cmdWrite.SetMaxSeqNo(msg.seq_no() + messageCount - 1);
-    return Nothing();
+    const i64 maxSeqNo = msg.seq_no();
+    cmdWrite.SetSeqNo(header->BaseSequence);
+    cmdWrite.SetMessageCount(static_cast<size_t>(header->RecordsCount));
+    cmdWrite.SetMaxSeqNo(maxSeqNo);
 }
 
 //TODO: add here tracking of bytes in/out
@@ -1154,11 +1137,18 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
                     return;
                 }
                 const auto& partitionCmdWriteResult = response.GetCmdWriteResult(partitionCmdWriteResultIndex);
-                const auto writtenSequenceNumber = userWriteRequest->Request.write_request().messages(messageIndex).seq_no();
-                if (UseDeduplication && partitionCmdWriteResult.GetSeqNo() != writtenSequenceNumber) {
+                const auto& writeMessage = userWriteRequest->Request.write_request().messages(messageIndex);
+                const auto writtenSequenceNumber = writeMessage.seq_no();
+                auto expectedPartitionSequenceNumber = writtenSequenceNumber;
+                if (userWriteRequest->Request.write_request().codec() == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH)) {
+                    if (const auto header = NKafka::ReadKafkaBatchHeader(writeMessage.data())) {
+                        expectedPartitionSequenceNumber = header->BaseSequence;
+                    }
+                }
+                if (UseDeduplication && partitionCmdWriteResult.GetSeqNo() != expectedPartitionSequenceNumber) {
                     CloseSession(TStringBuilder() << "Expected partition " << Partition
                                                   << " write result for message with sequence number "
-                                                  << writtenSequenceNumber << " but got for "
+                                                  << expectedPartitionSequenceNumber << " but got for "
                                                   << partitionCmdWriteResult.GetSeqNo(), PersQueue::ErrorCode::ERROR, ctx);
                     return;
                 }
@@ -1301,10 +1291,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
 
-        if (const auto error = FillBatchFieldsFromTopicWriteMessage(msg, *w)) {
-            batchError = *error;
-            return;
-        }
+        FillBatchFieldsFromTopicWriteMessage(writeRequest, msg, *w);
 
         payloadSize += w->GetData().size() + w->GetSourceId().size();
 

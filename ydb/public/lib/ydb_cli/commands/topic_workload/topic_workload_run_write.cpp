@@ -121,11 +121,11 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Optional()
         .Hidden()
         .StoreMappedResult(&Scenario.BatchFlushSizeBytes, &TCommandWorkloadTopicParams::StrToBytes);
-    config.Opts->AddLongOption("max-message-count", "Max number of logical messages packed into a single write block.")
+    config.Opts->AddLongOption("batch-flush-message-count", "Max number of logical messages packed into a single write block.")
         .DefaultValue(1)
         .Hidden()
-        .StoreResult(&Scenario.MaxMessageCount);
-    config.Opts->AddLongOption("message-format", "Write block payload format: standard or kafka-batch. Non-standard format is required when --max-message-count is greater than 1.")
+        .StoreResult(&Scenario.BatchFlushMessageCount);
+    config.Opts->AddLongOption("message-format", "Write block payload format: standard or kafka-batch. Non-standard format is required when --batch-flush-message-count is greater than 1.")
         .DefaultValue("standard")
         .Hidden()
         .StoreMappedResult(&Scenario.MessageFormat, &TCommandWorkloadTopicParams::StrToMessageFormat);

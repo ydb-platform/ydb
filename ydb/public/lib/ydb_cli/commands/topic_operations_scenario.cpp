@@ -55,10 +55,10 @@ void TTopicOperationsScenario::EnsureRatesIsValid() const
 
 void TTopicOperationsScenario::EnsureBatchSettingsAreValid() const
 {
-    Y_ENSURE_EX(MaxMessageCount > 0, TMisuseException() << "--max-message-count should be positive.");
+    Y_ENSURE_EX(BatchFlushMessageCount > 0, TMisuseException() << "--batch-flush-message-count should be positive.");
 
-    if (MaxMessageCount > 1 && static_cast<NTopic::EMessageFormat>(MessageFormat) == NTopic::EMessageFormat::STANDARD) {
-        throw TMisuseException() << "--message-format should be non-standard when --max-message-count is greater than 1.";
+    if (BatchFlushMessageCount > 1 && static_cast<NTopic::EMessageFormat>(MessageFormat) == NTopic::EMessageFormat::STANDARD) {
+        throw TMisuseException() << "--message-format should be non-standard when --batch-flush-message-count is greater than 1.";
     }
 }
 
@@ -326,7 +326,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .MaxMemoryUsageBytes = ProducerMaxMemoryUsageBytes,
             .BatchFlushInterval = BatchFlushInterval,
             .BatchFlushSizeBytes = BatchFlushSizeBytes,
-            .MaxMessageCount = MaxMessageCount,
+            .BatchFlushMessageCount = BatchFlushMessageCount,
             .MessageFormat = MessageFormat,
         };
 

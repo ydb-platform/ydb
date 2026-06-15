@@ -39,27 +39,25 @@ using NKafka::TKafkaBytes;
 using NKafka::TKafkaRecordBatch;
 using NKafka::ReadKafkaRecordBatch;
 
-ui64 GetLogicalMessageCount(i64 messageCountField) {
-    if (messageCountField > 1) {
-        return static_cast<ui64>(messageCountField);
-    }
-    return 1;
-}
-
-i64 GetReadMessageCountField(
-    const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& messageData)
-{
-    if (messageData.has_batch_metadata()) {
-        return messageData.batch_metadata().message_count();
-    }
-    return 0;
-}
-
 std::string KafkaBytesToString(const TKafkaBytes& bytes) {
     if (!bytes) {
         return {};
     }
     return std::string(bytes->data(), bytes->size());
+}
+
+size_t GetReadMessageCount(const Ydb::Topic::StreamReadMessage_ReadResponse_MessageData& messageData, int32_t codec) {
+    const auto& dataBytes = messageData.data();
+
+    switch (codec) {
+        case Ydb::Topic::CODEC_KAFKA_BATCH:
+            if (const auto header = NKafka::ReadKafkaBatchHeader(dataBytes)) {
+                return static_cast<size_t>(header->RecordsCount);
+            }
+            return 1;
+        default:
+            return 1;
+    }
 }
 
 } // namespace
@@ -257,7 +255,10 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
                 ready.push_back(std::move(event));
             } else if (isDataEvent) {
                 // We should release memory for this ready event here
-                accumulator.Add(event.GetDataEvent().GetParent(), event.GetDataEvent().GetDataSize());
+                accumulator.Add(
+                    event.GetDataEvent().GetParent(),
+                    event.GetDataEvent().GetDataSize(),
+                    event.GetDataEvent().GetMessageCount());
             }
         } else {
             hasNonReadyEvents = true;
@@ -1375,7 +1376,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                     firstOffset = messageData.offset();
                 }
                 currentOffset = messageData.offset();
-                const ui64 logicalMessageCount = GetLogicalMessageCount(GetReadMessageCountField(messageData));
+                const ui64 logicalMessageCount = GetReadMessageCount(messageData, batch.codec());
                 desiredOffset = Max(desiredOffset, currentOffset + static_cast<i64>(logicalMessageCount));
                 partitionStream->UpdateMaxReadOffset(currentOffset + static_cast<i64>(logicalMessageCount) - 1);
                 const i64 messageSize = static_cast<i64>(messageData.data().size());
@@ -2882,7 +2883,7 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
             if constexpr (UseMigrationProtocol) {
                 ++messagesCount;
             } else {
-                messagesCount += static_cast<i64>(GetLogicalMessageCount(GetReadMessageCountField(messageData)));
+                messagesCount += static_cast<i64>(GetReadMessageCount(messageData, batch.codec()));
             }
         }
     }
@@ -3103,22 +3104,18 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
 
     if constexpr (!UseMigrationProtocol) {
         const auto& messageMeta = Parent->GetMessageMeta(Batch, Message);
-        const i64 messageCountField = GetReadMessageCountField(messageData);
         const bool expandBatch = Parent->GetDoDecompress()
-            && messageData.message_format() == Ydb::Topic::StreamReadMessage::ReadResponse::MessageData::KAFKA_BATCH;
+            && batch.codec() == Ydb::Topic::CODEC_KAFKA_BATCH;
 
         if (expandBatch) {
             try {
                 TKafkaRecordBatch kafkaBatch = ReadKafkaRecordBatch(messageData.data());
-                const ui64 declaredCount = messageCountField > 0
-                    ? static_cast<ui64>(messageCountField)
-                    : kafkaBatch.Records.size();
-                const ui64 recordsToTake = Min<ui64>(declaredCount, kafkaBatch.Records.size());
+                const ui64 recordsCount = kafkaBatch.Records.size();
                 const ui64 committedOffset = partitionStream->GetMaxCommittedOffset();
 
                 messagesTaken = 0;
                 ui64 recordsSkipped = 0;
-                for (ui64 i = 0; i < recordsToTake; ++i) {
+                for (ui64 i = 0; i < recordsCount; ++i) {
                     const auto& record = kafkaBatch.Records[i];
                     const ui64 offset = static_cast<ui64>(messageData.offset()) + static_cast<ui64>(record.OffsetDelta);
                     // A batch is stored and redelivered as a whole blob, so after restarting
@@ -3129,7 +3126,7 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
                         ++recordsSkipped;
                         continue;
                     }
-                    const ui64 seqNo = static_cast<ui64>(messageData.seq_no()) + static_cast<ui64>(record.OffsetDelta);
+                    const ui64 seqNo = static_cast<ui64>(kafkaBatch.BaseSequence) + static_cast<ui64>(record.OffsetDelta);
                     const TInstant createTime = TInstant::MilliSeconds(kafkaBatch.BaseTimestamp + record.TimestampDelta);
                     std::string recordData = KafkaBytesToString(record.Value);
 
@@ -3261,6 +3258,16 @@ size_t TDataDecompressionEvent<UseMigrationProtocol>::GetDataSize() const {
 }
 
 template<bool UseMigrationProtocol>
+size_t TDataDecompressionEvent<UseMigrationProtocol>::GetMessageCount() const {
+    if constexpr (UseMigrationProtocol) {
+        return 1;
+    } else {
+        const auto& batch = Parent->GetServerMessage().batches(Batch);
+        return GetReadMessageCount(batch.message_data(Message), batch.codec());
+    }
+}
+
+template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount)
 {
     CompressedDataSize -= sourceSize;
@@ -3336,7 +3343,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
 
             ++messagesProcessed;
             if constexpr (!UseMigrationProtocol) {
-                messagesProcessed += GetLogicalMessageCount(GetReadMessageCountField(data)) - 1;
+                messagesProcessed += GetReadMessageCount(data, batch.codec()) - 1;
             }
             dataProcessed += static_cast<i64>(data.data().size());
             minOffset = Min(minOffset, static_cast<i64>(data.offset()));
@@ -3357,6 +3364,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                     if (parent->DoDecompress
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_RAW
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED
+                        && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_KAFKA_BATCH
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());

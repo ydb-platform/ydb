@@ -35,27 +35,16 @@ using TTxIdOpt = std::optional<TTxId>;
 
 static constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
 
-using TProtoMessageFormat = Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::MessageFormat;
-
-TProtoMessageFormat ToProtoMessageFormat(EMessageFormat format) {
-    switch (format) {
-        case EMessageFormat::STANDARD:
-            return Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::STANDARD;
-        case EMessageFormat::KAFKA_BATCH:
-            return Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData::KAFKA_BATCH;
-    }
-    ythrow yexception() << "unsupported message format: " << static_cast<int>(format);
-}
-
 void ValidateWriteSessionSettings(const TWriteSessionSettings& settings) {
-    if (settings.MaxMessageCount_ > 1 && settings.MessageFormat_ == EMessageFormat::STANDARD) {
-        ythrow yexception() << "MessageFormat must be set when MaxMessageCount > 1";
+    if (settings.BatchFlushMessageCount_ > 1 && settings.MessageFormat_ == EMessageFormat::STANDARD) {
+        ythrow yexception() << "MessageFormat must be set when BatchFlushMessageCount > 1";
     }
 }
 
 TBuffer BuildKafkaRecordBatchData(
         const std::vector<std::string_view>& payloads,
-        const std::vector<TInstant>& createdAt)
+        const std::vector<TInstant>& createdAt,
+        i64 baseSequence)
 {
     using namespace NKafka;
 
@@ -64,6 +53,7 @@ TBuffer BuildKafkaRecordBatchData(
 
     TKafkaRecordBatch kafkaBatch;
     kafkaBatch.Magic = 2;
+    kafkaBatch.BaseSequence = static_cast<TKafkaRecordBatch::BaseSequenceMeta::Type>(baseSequence);
 
     const i64 baseTimestamp = static_cast<i64>(createdAt.front().MilliSeconds());
     kafkaBatch.BaseTimestamp = baseTimestamp;
@@ -141,7 +131,7 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
     , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
-    , MaxBlockMessageCount(Settings.MaxMessageCount_)
+    , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
             Settings.BatchFlushInterval_ != TDuration::Zero() ?
@@ -1453,7 +1443,9 @@ void TWriteSessionImpl::FlushWriteIfRequiredImpl() {
     if (!CurrentBatch.Empty() && !CurrentBatch.FlushRequested) {
         MessagesAcquired += static_cast<uint64_t>(CurrentBatch.Acquire());
         if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_
-            || CurrentBatch.CurrentSize >= Settings.BatchFlushSizeBytes_.value_or(0)
+            || (Settings.BatchFlushSizeBytes_.has_value()
+                && (Settings.BatchFlushSizeBytes_.value() == 0
+                    || CurrentBatch.CurrentSize >= Settings.BatchFlushSizeBytes_.value()))
             || CurrentBatch.CurrentSize >= MaxBlockSize
             || CurrentBatch.Messages.size() >= MaxBlockMessageCount
             || CurrentBatch.HasCodec()
@@ -1549,9 +1541,9 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             }
         }
 
-        // A single message is sent in the standard format: SendImpl routes
-        // one-message blocks through SendStandardBlock without message_format.
-        if (Settings.MessageFormat_ == EMessageFormat::KAFKA_BATCH && block.MessageCount > 1) {
+        // A single message is sent as a standard block; multi-message blocks use CODEC_KAFKA_BATCH.
+        const bool isKafkaBatchBlock = Settings.MessageFormat_ == EMessageFormat::KAFKA_BATCH;
+        if (isKafkaBatchBlock) {
             std::vector<std::string_view> payloads;
             std::vector<TInstant> createdAt;
             payloads.reserve(block.MessageCount);
@@ -1561,13 +1553,17 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
                 payloads.push_back(message.DataRef);
                 createdAt.push_back(message.CreatedAt);
             }
-            block.Data = BuildKafkaRecordBatchData(payloads, createdAt);
+            block.Data = BuildKafkaRecordBatchData(
+                payloads,
+                createdAt,
+                static_cast<i64>(GetSeqNoImpl(CurrentBatch.Messages[blockStartIndex].Id)));
             block.OriginalDataRefs.assign(1, std::string_view(block.Data.data(), block.Data.size()));
+            block.CodecID = static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH);
         } else {
             block.Data = std::move(CurrentBatch.Data);
         }
 
-        if (skipCompression) {
+        if (skipCompression || isKafkaBatchBlock) {
             PackedMessagesToSend.emplace(std::move(block));
         } else {
             CompressImpl(std::move(block));
@@ -1669,12 +1665,7 @@ void TWriteSessionImpl::SendBatchBlock(
         writeRequest->mutable_tx()->set_session(firstMessage.Tx->SessionId);
     }
 
-    const ui64 firstSeqNo = GetSeqNoImpl(firstMessage.Id);
-    msgData->set_seq_no(static_cast<i64>(firstSeqNo));
-    auto* batchMeta = msgData->mutable_batch_metadata();
-    batchMeta->set_first_seq_no(static_cast<i64>(firstSeqNo));
-    batchMeta->set_message_count(static_cast<i64>(block.MessageCount));
-    msgData->set_message_format(ToProtoMessageFormat(Settings.MessageFormat_));
+    msgData->set_seq_no(static_cast<i64>(GetSeqNoImpl(batchMessages.back().Id)));
     *msgData->mutable_created_at() =
         ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(firstMessage.CreatedAt.MilliSeconds());
 

@@ -71,9 +71,9 @@ void WriteKafkaBatchMessages(
         .MessageGroupId(producerId)
         .PartitionId(0)
         .Codec(ECodec::RAW)
-        .MaxMessageCount(maxBatchMessageCount)
+        .BatchFlushMessageCount(maxBatchMessageCount)
         .MessageFormat(EMessageFormat::KAFKA_BATCH)
-        // Groups smaller than MaxMessageCount are flushed by this interval;
+        // Groups smaller than BatchFlushMessageCount are flushed by this interval;
         // writes within a group are fast enough to never split a group.
         .BatchFlushInterval(TDuration::Seconds(1))
         .BatchFlushSizeBytes(10_MB);

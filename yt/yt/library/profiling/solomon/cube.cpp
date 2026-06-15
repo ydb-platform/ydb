@@ -190,7 +190,7 @@ T TCube<T>::Rollup(const TProjection& window, int index) const
 
 template <class T>
 int TCube<T>::ReadSensors(
-    const std::string& name,
+    TStringBuf name,
     const TReadOptions& options,
     TTagWriter* tagWriter,
     ::NMonitoring::IMetricConsumer* consumer) const

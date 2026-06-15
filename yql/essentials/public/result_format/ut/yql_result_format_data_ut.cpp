@@ -37,8 +37,8 @@ Y_UNIT_TEST(EmptyVisitor) {
     v.OnUint32(1);
     v.OnInt64(1);
     v.OnUint64(1);
-    v.OnFloat(1.2f);
-    v.OnDouble(1.2f);
+    v.OnFloat(1.2F);
+    v.OnDouble(1.2F);
     v.OnString("foo", true);
     v.OnUtf8("foo");
     v.OnYson("foo", true);
@@ -106,8 +106,8 @@ Y_UNIT_TEST(ThrowingVisitor) {
     UNIT_ASSERT_EXCEPTION(v.OnUint32(1), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnInt64(1), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnUint64(1), TUnsupportedException);
-    UNIT_ASSERT_EXCEPTION(v.OnFloat(1.2f), TUnsupportedException);
-    UNIT_ASSERT_EXCEPTION(v.OnDouble(1.2f), TUnsupportedException);
+    UNIT_ASSERT_EXCEPTION(v.OnFloat(1.2F), TUnsupportedException);
+    UNIT_ASSERT_EXCEPTION(v.OnDouble(1.2F), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnString("foo", true), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnUtf8("foo"), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnYson("foo", true), TUnsupportedException);

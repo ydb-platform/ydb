@@ -264,14 +264,12 @@ Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
         const TActorId sender21Id = cluster.RegisterActor(sender21, 1);
 
         WaitForCondition(TDuration::Seconds(20), [&] {
-            // NodeConnected notifications can briefly flap around reconnect races.
-            // Require that each sender has observed at least one connect and the current
-            // interconnect sockets are established on both directions.
-            return sender12->GetConnects() > 0 &&
-                sender21->GetConnects() > 0 &&
-                TryGetSessionSocketFd(cluster, 1, 2) >= 0 &&
+            // NodeConnected notifications can briefly flap around simultaneous handshake races.
+            // The flood itself does not depend on these subscriptions, so wait for the actual
+            // interconnect sockets that will be blackholed below.
+            return TryGetSessionSocketFd(cluster, 1, 2) >= 0 &&
                 TryGetSessionSocketFd(cluster, 2, 1) >= 0;
-        }, "senders connected to peer");
+        }, "interconnect sockets connected to peer");
 
         UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 1ULL);

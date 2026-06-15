@@ -1,14 +1,13 @@
-PROTO_LIBRARY()
-PROTOC_FATAL_WARNINGS()
-
-INCLUDE_TAGS(GO_PROTO)
-
-SRCS(
-    aclib.proto
-)
+LIBRARY()
 
 PEERDIR(
-    ydb/public/api/protos/annotations
+    ydb/library/aclib/protos/identity
+    ydb/library/aclib/protos/acl
 )
 
 END()
+
+RECURSE(
+    identity
+    acl
+)

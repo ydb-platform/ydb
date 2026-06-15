@@ -71,3 +71,47 @@ public:
 }
 
 #define Y_UNIT_TEST_WITH_REBOOTS(N) Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(N, 1, 1, false)
+
+#define Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(N, REBOOT_BUCKETS, PIPE_RESET_BUCKETS, KILL_ON_COMMIT, OPT) \
+    template <bool OPT>                                                      \
+    void N(TTestWithReboots& t);                                             \
+    struct TTestRegistration##N {                                            \
+        std::vector<std::string> names;                                      \
+        template <bool Opt>                                                  \
+        void AddVariant(const char* optSuffix) {                             \
+            for (int i = 0; i < REBOOT_BUCKETS; i++) {                       \
+                std::string name = (REBOOT_BUCKETS > 1                       \
+                    ? (std::string(#N) + optSuffix + "[TabletRebootsBucket") + std::to_string(i) + "]" \
+                    : (std::string(#N) + optSuffix + "[TabletReboots]"));    \
+                names.push_back(name);                                       \
+                TCurrentTest::AddTest(names.back().c_str(),                  \
+                    [i](NUnitTest::TTestContext&) {                          \
+                        TTestWithTabletReboots t(KILL_ON_COMMIT);            \
+                        t.TotalBuckets = REBOOT_BUCKETS;                     \
+                        t.Bucket = i;                                        \
+                        N<Opt>(t);                                           \
+                    }, false);                                               \
+            }                                                                \
+            for (int i = 0; i < PIPE_RESET_BUCKETS; i++) {                   \
+                std::string name = (PIPE_RESET_BUCKETS > 1                   \
+                    ? (std::string(#N) + optSuffix + "[PipeResetsBucket") + std::to_string(i) + "]" \
+                    : (std::string(#N) + optSuffix + "[PipeResets]"));       \
+                names.push_back(name);                                       \
+                TCurrentTest::AddTest(names.back().c_str(),                  \
+                    [i](NUnitTest::TTestContext&) {                          \
+                        TTestWithPipeResets t(KILL_ON_COMMIT);               \
+                        t.TotalBuckets = PIPE_RESET_BUCKETS;                 \
+                        t.Bucket = i;                                        \
+                        N<Opt>(t);                                           \
+                    }, false);                                               \
+            }                                                                \
+        }                                                                    \
+        TTestRegistration##N() {                                             \
+            names.reserve(2 * (REBOOT_BUCKETS + PIPE_RESET_BUCKETS));        \
+            AddVariant<false>("-" #OPT);                                     \
+            AddVariant<true>("+" #OPT);                                      \
+        }                                                                    \
+    };                                                                       \
+    static TTestRegistration##N testRegistration##N;                         \
+    template <bool OPT>                                                      \
+    void N(TTestWithReboots& t)

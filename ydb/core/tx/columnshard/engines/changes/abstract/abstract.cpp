@@ -75,8 +75,7 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Abort")("reason", context.ErrorMessage);
     AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted)(
-                                              "stage", StateGuard.GetStage())(
-                                                             "reason", context.ErrorMessage)("prev_reason", AbortedReason);
+                                              "stage", StateGuard.GetStage())("reason", context.ErrorMessage)("prev_reason", AbortedReason);
     SetStage(NChanges::EStage::Aborted);
     AbortedReason = context.ErrorMessage;
     OnFinish(self, context);
@@ -89,17 +88,17 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
     DoStart(self);
     SetStage(NChanges::EStage::Started);
-//    if (!NeedConstruction()) {
-//        SetStage(NChanges::EStage::Constructed);
-//    }
+    //    if (!NeedConstruction()) {
+    //        SetStage(NChanges::EStage::Constructed);
+    //    }
 }
 
 void TColumnEngineChanges::StartEmergency() {
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     SetStage(NChanges::EStage::Started);
-//    if (!NeedConstruction()) {
-//        SetStage(NChanges::EStage::Constructed);
-//    }
+    //    if (!NeedConstruction()) {
+    //        SetStage(NChanges::EStage::Constructed);
+    //    }
 }
 
 void TColumnEngineChanges::AbortEmergency(const TString& reason) {
@@ -127,7 +126,8 @@ TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrap
     : DB(db)
     , DBWrapper(dbWrapper)
     , EngineLogs(engineLogs)
-    , Snapshot(snapshot) {
+    , Snapshot(snapshot)
+{
 }
 
 }   // namespace NKikimr::NOlap

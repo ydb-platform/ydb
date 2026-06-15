@@ -12,7 +12,7 @@ namespace NSQLComplete {
 struct TYqlContext {
     THashMap<TString, THashSet<TString>> TablesByCluster;
 
-    THashSet<TString> Clusters() const;
+    [[nodiscard]] THashSet<TString> Clusters() const;
 };
 
 class IYqlAnalysis: public TThrRefBase {

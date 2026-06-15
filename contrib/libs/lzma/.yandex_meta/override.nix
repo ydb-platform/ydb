@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "5.8.2";
+  version = "5.8.3";
 
   src = fetchFromGitHub {
     owner = "tukaani-project";
     repo = "xz";
     rev = "v${version}";
-    hash = "sha256-51gKoWSNAEyGPjIcvKzYIQD+WbRAYvXYMBVP6/OVeH4=";
+    hash = "sha256-tdgRR5QCIrR5um0NGIXHY79c8ppCvsL+AA9xlvnj/jE=";
   };
 
   nativeBuildInputs = [ autoreconfHook ];

@@ -273,7 +273,7 @@ LIMIT 3;
 
 {% endif %}
 
-## GROUP BY ... HOP
+## GROUP BY ... HOP {#group-by-hop}
 
 Group the table by the values of the specified columns or expressions and subsets by time (the time window).
 

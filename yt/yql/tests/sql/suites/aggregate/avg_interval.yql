@@ -1,2 +1,3 @@
 /* syntax version 1 */
-discard select EnsureType(avg(cast(key As Interval)), Interval?) from plato.Input;
+discard select EnsureType(Avg(CAST(key AS Interval)), Interval?) from plato.Input;
+discard select EnsureType(AvgIf(CAST(key AS Interval), key > '0'), Interval?) from plato.Input;

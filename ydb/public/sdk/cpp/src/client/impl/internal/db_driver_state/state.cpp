@@ -3,6 +3,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -44,7 +45,12 @@ TDbDriverState::TDbDriverState(
         auto self = shared_from_this();
         return client->GetEndpoints(self);
     }, client)
-    , StatCollector(database, client->GetMetricRegistry(), client->GetExternalMetricRegistry())
+    , StatCollector(
+        database,
+        client->GetMetricRegistry(),
+        client->GetExternalMetricRegistry(),
+        discoveryEndpoint
+    )
     , Log(Client->GetLog())
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
 {
@@ -58,6 +64,23 @@ void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider
     CallCredentials = grpc::MetadataCredentialsFromPlugin(
         std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(CredentialsProvider)));
 #endif
+}
+
+bool TDbDriverState::AreClientTlsCredentialsValid() const {
+    std::call_once(ClientTlsValidationOnceFlag_, [this]() {
+        ClientTlsValidationDetail_.clear();
+        grpc::SslCredentialsOptions sslOptions{
+            .pem_root_certs = NYdb::TStringType{SslCredentials.CaCert},
+            .pem_private_key = NYdb::TStringType{SslCredentials.PrivateKey},
+            .pem_cert_chain = NYdb::TStringType{SslCredentials.Cert}
+        };
+        ClientTlsCredentialsValid_ = NYdbGrpc::ValidateTlsCredentials(sslOptions, ClientTlsValidationDetail_);
+    });
+    return ClientTlsCredentialsValid_;
+}
+
+const std::string& TDbDriverState::GetClientTlsValidationDetail() const {
+    return ClientTlsValidationDetail_;
 }
 
 void TDbDriverState::AddCb(TCb&& cb, ENotifyType type) {
@@ -141,8 +164,8 @@ TDbDriverStateTracker::TDbDriverStateTracker(IInternalClient* client)
 {}
 
 TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
-    std::string database,
-    std::string discoveryEndpoint,
+    const std::string& database,
+    const std::string& discoveryEndpoint,
     EDiscoveryMode discoveryMode,
     const TSslCredentials& sslCredentials,
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
@@ -151,8 +174,9 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     if (credentialsProviderFactory) {
         clientIdentity = credentialsProviderFactory->GetClientIdentity();
     }
-    Quote(database);
-    const TStateKey key{database, discoveryEndpoint, clientIdentity, discoveryMode, sslCredentials};
+    std::string quotedDatabase = database;
+    Quote(quotedDatabase);
+    const TStateKey key{quotedDatabase, discoveryEndpoint, clientIdentity, discoveryMode, sslCredentials};
     {
         std::shared_lock lock(Lock_);
         auto state = States_.find(key);
@@ -195,7 +219,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             };
             strongState = std::shared_ptr<TDbDriverState>(
                 new TDbDriverState(
-                    database,
+                    quotedDatabase,
                     discoveryEndpoint,
                     discoveryMode,
                     sslCredentials,
@@ -241,6 +265,10 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
 
 void TDbDriverState::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
     Client->AddPeriodicTask(std::move(cb), period);
+}
+
+void TDbDriverState::PostToResponseQueue(TPostTaskCb&& f) {
+    Client->PostToResponseQueue(std::move(f));
 }
 
 NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(

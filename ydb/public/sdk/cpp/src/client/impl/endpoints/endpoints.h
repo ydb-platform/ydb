@@ -14,20 +14,23 @@ struct TEndpointRecord {
     std::int32_t Priority;
     std::string SslTargetNameOverride;
     std::uint64_t NodeId = 0;
+    std::string Location;
 
     TEndpointRecord()
         : Endpoint()
         , Priority(0)
         , SslTargetNameOverride()
         , NodeId(0)
+        , Location()
     {
     }
 
-    TEndpointRecord(std::string endpoint, std::int32_t priority, std::string sslTargetNameOverride = std::string(), std::uint64_t nodeId = 0)
+    TEndpointRecord(std::string endpoint, std::int32_t priority, std::string sslTargetNameOverride = std::string(), std::uint64_t nodeId = 0, std::string location = std::string())
         : Endpoint(std::move(endpoint))
         , Priority(priority)
         , SslTargetNameOverride(std::move(sslTargetNameOverride))
         , NodeId(nodeId)
+        , Location(std::move(location))
     {
     }
 

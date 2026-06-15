@@ -1042,15 +1042,31 @@ public:
         Y_UNUSED(existingOk);
     }
 
-    TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
-        auto schemaTxPromise = NewPromise<NPQ::NSchema::TAlterTopicResponse>();
+    TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> CreateTopicPrepared(NYql::TCreateTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NSchema::TSchemaResponse>();
+        auto schemaTxFuture = schemaTxPromise.GetFuture();
+
+        IActor* requestHandler = NPQ::NSchema::CreateCreateTopicActor(std::move(schemaTxPromise), {
+            .Database = Database,
+            .Request = std::move(settings.Request),
+            .UserToken = GetTokenCompat().empty() ? nullptr : UserToken,
+            .IfNotExists = settings.ExistingOk,
+            .PrepareOnly = true
+        });
+        RegisterActor(requestHandler);
+        return schemaTxFuture;
+    }
+
+    TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NSchema::TSchemaResponse>();
         auto schemaTxFuture = schemaTxPromise.GetFuture();
 
         IActor* requestHandler = NPQ::NSchema::CreateAlterTopicActor(std::move(schemaTxPromise), {
             .Database = Database,
             .Request = std::move(settings.Request),
             .UserToken = GetTokenCompat().empty() ? nullptr : UserToken,
-            .IfExists = settings.MissingOk
+            .IfExists = settings.MissingOk,
+            .PrepareOnly = true
         });
         RegisterActor(requestHandler);
         return schemaTxFuture;
@@ -1177,9 +1193,10 @@ public:
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
             schemeTx.SetFailedOnAlreadyExists(!existingOk);
+            schemeTx.SetReplaceIfExists(replaceIfExists);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, replaceIfExists, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
             return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {

@@ -160,12 +160,14 @@ class OrchestratorWardenChecker:
 
             if cluster is not None:
                 loop = asyncio.get_running_loop()
+                _settings = get_orchestrator_settings()
                 liveness_results = await loop.run_in_executor(
                     None,
                     partial(
                         run_orchestrator_liveness_subprocess_sync,
                         self._nemesis_agent_binary(),
-                        get_orchestrator_settings().yaml_config_location,
+                        _settings.yaml_config_location,
+                        database_yaml_config=_settings.database_config_location or None,
                     ),
                 )
                 self._publish_running(liveness_results, safety_results)
@@ -269,8 +271,17 @@ class OrchestratorWardenChecker:
 
     def _get_cluster(self):
         if self._cluster is None and self._hosts:
+            settings = get_orchestrator_settings()
+            cluster_yaml = None
+            template_yaml = settings.yaml_config_location
+            if settings.database_config_location:
+                template_yaml = settings.database_config_location
+                cluster_yaml = settings.yaml_config_location
             self._cluster = ExternalKiKiMRCluster(
-                get_orchestrator_settings().yaml_config_location, None, None
+                cluster_template=template_yaml,
+                kikimr_configure_binary_path=None,
+                kikimr_path=None,
+                yaml_config=cluster_yaml,
             )
         return self._cluster
 

@@ -34,7 +34,7 @@ TPlanStep TShardWriter::StartCommit(const ui64 txId) {
     AFL_VERIFY(now.MilliSeconds() <= event.GetMinStep());
     AFL_VERIFY(event.GetMinStep() <= event.GetMaxStep());
     AFL_VERIFY(event.GetMaxStep() < Max<ui64>());
-    return TPlanStep{event.GetMinStep()};
+    return TPlanStep{ event.GetMinStep() };
 }
 
 NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
@@ -54,7 +54,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
 NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
     TString blobData = NArrow::SerializeBatchNoCompression(batch);
-//    AFL_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
+    //    AFL_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
     auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evWrite->SetTxId(txId);

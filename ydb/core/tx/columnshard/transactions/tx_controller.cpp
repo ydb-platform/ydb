@@ -9,7 +9,8 @@ namespace NKikimr::NColumnShard {
 
 TTxController::TTxController(TColumnShard& owner)
     : Owner(owner)
-    , Counters(owner.Counters.GetCSCounters().TxProgress) {
+    , Counters(owner.Counters.GetCSCounters().TxProgress)
+{
 }
 
 bool TTxController::HaveOutdatedTxs() const {
@@ -218,7 +219,7 @@ void TTxController::OnTxCompleted(const ui64 txId) {
 
 THashSet<ui64> TTxController::GetTxs() const {
     THashSet<ui64> result;
-    for (const auto& [txId, _]: Operators) {
+    for (const auto& [txId, _] : Operators) {
         result.emplace(txId);
     }
     return result;
@@ -303,7 +304,8 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
         }
         return EPlanResult::Planned;
     } else {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_plan_tx_plan_step_is_not_zero")("tx_id", txId)("plan_step", txInfo.PlanStep)("schemeshard_plan_step", planStep);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_plan_tx_plan_step_is_not_zero")("tx_id", txId)("plan_step", txInfo.PlanStep)(
+            "schemeshard_plan_step", planStep);
     }
     return EPlanResult::AlreadyPlanned;
 }
@@ -398,8 +400,7 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
 }
 
 void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {
-    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)(
-                             "details", DebugString());
+    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)("details", DebugString());
     Status = to;
 }
 

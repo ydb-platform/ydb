@@ -56,10 +56,7 @@ class TIssueId {
     }
 
     bool CheckSeverityNameFormat(const TString& name) const {
-        if (name.size() > 2 && name.StartsWith("S_")) {
-            return true;
-        }
-        return false;
+        return name.size() > 2 && name.StartsWith("S_");
     }
 
 public:

@@ -157,6 +157,12 @@ public:
     void CollectRetryStatAsync(EStatus status);
     void CollectRetryStatSync(EStatus status);
 
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryRootSpan();
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryAttemptSpan(std::uint32_t attempt
+        , std::int64_t backoffMs
+        , const std::shared_ptr<NObservability::TRequestSpan>& parent = nullptr
+    );
+
 public:
     TClientSettings Settings_;
 
@@ -288,10 +294,9 @@ private:
                     sessionPtr->SessionImpl_->AddQueryToCache(*dataQuery);
                 }
 
+                obs->End(status.Status, status.Endpoint);
                 TDataQueryResult dataQueryResult(TStatus(std::move(status)),
                     std::move(res), tx, dataQuery, fromCache, queryStats);
-
-                obs->End(dataQueryResult.GetStatus());
 
                 delete sessionPtr;
                 tx.reset();
@@ -347,9 +352,7 @@ private:
             &OperationStatCollector_,
             Tracer_,
             operationName,
-            DbDriverState_->DiscoveryEndpoint,
-            DbDriverState_->Database,
-            DbDriverState_->Log
+            DbDriverState_
         );
     }
 };

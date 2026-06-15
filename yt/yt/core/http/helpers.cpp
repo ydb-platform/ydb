@@ -49,6 +49,7 @@ void FillYTError(
     const THeadersPtr& headers,
     const TError& error)
 {
+    // TODO(babenko): migrate to std::string
     TString errorString;
     TStringOutput errorStringOutput(errorString);
 
@@ -107,6 +108,7 @@ TError ParseYTError(
         errorHeader = rsp->GetHeaders()->Find(XYTErrorHeaderName);
     }
 
+    // TODO(babenko): migrate to std::string
     TString errorString;
     if (errorHeader) {
         errorString = *errorHeader;
@@ -303,12 +305,12 @@ THashMap<std::string, std::string> ParseCookies(TStringBuf cookies)
 
         auto valueStartIndex = nameEndIndex + 1;
         auto valueEndIndex = cookies.find(';', valueStartIndex);
-        if (valueEndIndex == TString::npos) {
+        if (valueEndIndex == std::string::npos) {
             valueEndIndex = cookies.size();
         }
         auto value = StripString(cookies.substr(valueStartIndex, valueEndIndex - valueStartIndex));
 
-        map.emplace(TString(name), TString(value));
+        map.emplace(std::string(name), std::string(value));
 
         index = valueEndIndex + 1;
     }
@@ -379,7 +381,7 @@ void ReplyJson(const IResponseWriterPtr& rsp, std::function<void(NYson::IYsonCon
     producer(json.get());
     json->Flush();
 
-    TString body;
+    std::string body;
     out.Buffer().AsString(body);
     WaitFor(rsp->WriteBody(TSharedRef::FromString(body)))
         .ThrowOnError();
@@ -448,7 +450,7 @@ bool TryParseTraceParent(TStringBuf traceParent, NTracing::TSpanContext& spanCon
         if (parts[0].size() != 2) {
             return false;
         }
-        if (!TryIntFromString<10>(parts[0], version)) {
+        if (!TryIntFromString<16>(parts[0], version)) {
             return false;
         }
         parts.erase(parts.begin());

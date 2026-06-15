@@ -75,7 +75,7 @@ class TAlterPQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }
@@ -558,7 +558,7 @@ public:
 
         if (!alter.HasName() && !alter.HasPathId()) {
             errStr = "Neither topic name nor pathId in Alter";
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -582,7 +582,7 @@ public:
             }
 
             if (!checks) {
-                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -591,11 +591,11 @@ public:
         Y_ABORT_UNLESS(topic);
 
         if (topic->AlterVersion == 0) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "PQGroup is not created yet", context);
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "PQGroup is not created yet");
             return result;
         }
         if (topic->AlterData) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight", context);
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
             return result;
         }
 
@@ -605,7 +605,7 @@ public:
         TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
 
         if (!alterData) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -621,7 +621,7 @@ public:
         if (alterData->TotalGroupCount < topic->TotalGroupCount) {
             errStr = TStringBuilder() << "Invalid total groups count specified: " << alterData->TotalGroupCount
                                       << " vs " << topic->TotalGroupCount << " (current)";
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -641,7 +641,7 @@ public:
                 const auto reserve = indexGenerator.ReservePartitionIndex(set.GetPartition(), set.GetPartition(), !set.GetCreatePartition());
                 if (!reserve.has_value()) {
                     errStr = TStringBuilder() << "Set root partition boundaries: " << reserve.error();
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
             }
@@ -650,7 +650,7 @@ public:
                     const auto reserve = indexGenerator.ReservePartitionIndex(childId, split.GetPartition(), ShouldCreateSiblingAtRootLevel(split, topic));
                     if (!reserve.has_value()) {
                         errStr = TStringBuilder() << "Split with prescribed partition ids: " << reserve.error();
-                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
                 }
@@ -660,7 +660,7 @@ public:
                     const auto reserve = indexGenerator.ReservePartitionIndex(merge.GetChildPartitionId(), merge.GetPartition(), false);
                     if (!reserve.has_value()) {
                         errStr = TStringBuilder() << "Merge with prescribed partition id: " << reserve.error();
-                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
                 }
@@ -669,14 +669,14 @@ public:
                 const size_t rootPartitionsCnt = std::ranges::count_if(topic->Partitions, [](const auto& pair) { return pair.second->ParentPartitionIds.empty();});
                 if (rootPartitionsCnt > alter.RootPartitionBoundariesSize()) {
                     errStr = std::format("Only {} root partitions has new bounds, required: {}",  alter.RootPartitionBoundariesSize(), rootPartitionsCnt);
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
                 for (const auto& set : alter.GetRootPartitionBoundaries()) {
                     const auto partitionId = set.GetPartition();
                     if (!set.HasKeyRange() && alter.RootPartitionBoundariesSize() > 1) {
                         errStr = std::format("Partition #{} doesn't have KeyRange", partitionId);
-                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
                     const TMaybe<TTopicTabletInfo::TKeyRange> range = !set.HasKeyRange()
@@ -689,35 +689,35 @@ public:
                         const auto partitionIdIndex = indexGenerator.GetNextReservedId(partitionId);
                         if (!partitionIdIndex.has_value()) {
                             errStr = TStringBuilder() << "Set partition bounds:  " << partitionIdIndex.error();
-                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                             return result;
                         }
                         if (set.GetCreatePartition()) {
                             errStr = TStringBuilder() << "Partition already exists: " << partitionId;
-                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                             return result;
                         }
                         if (!prevPart->ParentPartitionIds.empty()) {
                             errStr = TStringBuilder() << "Unable to change bounds of non-root partition: " << partitionId;
-                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                             return result;
                         }
                         auto [_, unique] = alterData->KeyRangesToChange.emplace(prevPart->PqId, range);
                         if (!unique) {
                             errStr = std::format("Multiple bounds modifications for the partition {}", partitionId);
-                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                             return result;
                         }
                     } else {
                         if (!set.GetCreatePartition()) {
                             errStr = TStringBuilder() << "Cannot set bounds of non-existing partition: " << partitionId;
-                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                             return result;
                         }
                         const auto partitionIdIndex = indexGenerator.GetNextReservedId(partitionId);
                         if (!partitionIdIndex.has_value()) {
                             errStr = TStringBuilder() << "Create new partition with bounds:  " << partitionIdIndex.error();
-                            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                             return result;
                         }
                         alterData->PartitionsToAdd.emplace(partitionIdIndex.value(), partitionIdIndex.value() + 1, range);
@@ -734,27 +734,27 @@ public:
                 const auto splittedPartitionId = split.GetPartition();
                 if (!topic->Partitions.contains(splittedPartitionId)) {
                     errStr = TStringBuilder() << "Splitting partition does not exists: " << splittedPartitionId;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
                 if (!involvedPartitions.emplace(splittedPartitionId).second) {
                     errStr = TStringBuilder()
                              << "Partition can be involved only in one split/merge operation: " << splittedPartitionId;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
 
                 auto splittedPartition = topic->Partitions[splittedPartitionId];
                 if (splittedPartition->Status != NKikimrPQ::ETopicPartitionStatus::Active) {
                     errStr = TStringBuilder() << "Invalid partition status: " << (ui32)splittedPartition->Status;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
 
                 auto splitBoundary = split.GetSplitBoundary();
                 if (splitBoundary.empty()) {
                     errStr = TStringBuilder() << "Split boundary is empty";
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
                 const auto keyRange = splittedPartition->KeyRange;
@@ -763,7 +763,7 @@ public:
                         errStr = TStringBuilder()
                                  << "Split boundary less or equals FromBound of partition: '" << Hex(splitBoundary)
                                  << "' <= '" << Hex(*keyRange->FromBound) << "'";
-                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
                     if (keyRange->ToBound && splitBoundary >= *keyRange->ToBound) {
@@ -771,14 +771,14 @@ public:
                                  << "Split boundary greate or equals ToBound of partition: '" << Hex(splitBoundary)
                                  << "' >= '" << Hex(*keyRange->ToBound)
                                  << "' (FromBound is '" << Hex(keyRange->FromBound ? *keyRange->FromBound : TString{}) << "')";
-                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
                 }
                 if (!EqualToOneOf(split.ChildPartitionIdsSize(), 0u, 2u)) {
                     errStr = TStringBuilder()
                              << "Invalid number of child partitions: " << split.ChildPartitionIdsSize();
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
 
@@ -802,7 +802,7 @@ public:
                                                       : indexGenerator.GetNextUnreservedId();
                     if (!childPartitionId.has_value()) {
                         errStr = TStringBuilder() << "Split with prescribed partition ids: " << childPartitionId.error();
-                        FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                         return result;
                     }
                     if (prescribedChildPartitionId && ShouldCreateSiblingAtRootLevel(split, topic)) [[unlikely]] {
@@ -829,39 +829,39 @@ public:
                 const auto partitionId = merge.GetPartition();
                 if (!topic->Partitions.contains(partitionId)) {
                     errStr = TStringBuilder() << "Merging partition does not exists: " << partitionId;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
                 if (!involvedPartitions.emplace(partitionId).second) {
                     errStr = TStringBuilder()
                              << "Partition can be involved only in one split/merge operation: " << partitionId;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
                 auto partition = topic->Partitions[partitionId];
                 if (partition->Status != NKikimrPQ::ETopicPartitionStatus::Active) {
                     errStr = TStringBuilder() << "Invalid partition status: " << (ui32)partition->Status;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
 
                 const auto adjacentPartitionId = merge.GetAdjacentPartition();
                 if (!topic->Partitions.contains(adjacentPartitionId)) {
                     errStr = TStringBuilder() << "Invalid adjacent partition for merge: " << adjacentPartitionId;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
                 if (!involvedPartitions.emplace(adjacentPartitionId).second) {
                     errStr = TStringBuilder()
                              << "Partition can be involved only in one split/merge operation: " << adjacentPartitionId;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
                 auto adjacentPartition = topic->Partitions[adjacentPartitionId];
                 if (adjacentPartition->Status != NKikimrPQ::ETopicPartitionStatus::Active) {
                     errStr = TStringBuilder()
                              << "Invalid adjacent partition status: " << (ui32)adjacentPartition->Status;
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
 
@@ -876,7 +876,7 @@ public:
                     right = adjacentPartition;
                 } else {
                     errStr = TStringBuilder() << "You cannot merge non-contiguous partitions";
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
 
@@ -896,7 +896,7 @@ public:
                                                   : indexGenerator.GetNextUnreservedId();
                 if (!childPartitionId.has_value()) {
                     errStr = TStringBuilder() << "Merge with prescribed partition ids: " << childPartitionId.error();
-                    FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                     return result;
                 }
                 alterData->PartitionsToAdd.emplace(childPartitionId.value(), childPartitionId.value() + 1, rangem, parents);
@@ -904,7 +904,7 @@ public:
 
             if (const auto seq = indexGenerator.ValidateAllocationSequence(); !seq.has_value()) {
                 errStr = TStringBuilder() << "Split/Merge operation with prescribed partition ids: " << seq.error();
-                FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
         }
@@ -931,7 +931,7 @@ public:
             if (p.GroupId == 0 || p.GroupId > alterData->TotalGroupCount) {
                 errStr = TStringBuilder()
                          << "Invalid partition group id " << p.GroupId << " vs " << topic->TotalGroupCount;
-                FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
 
@@ -942,7 +942,7 @@ public:
             errStr =
                 TStringBuilder() << "Invalid partition per tablet count specified: " << alterData->MaxPartsPerTablet
                                  << " vs " << topic->MaxPartsPerTablet << " (current)";
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -956,7 +956,7 @@ public:
             errStr = TStringBuilder()
                     << "Invalid partition count specified: " << alterData->TotalGroupCount
                     << " vs " << TSchemeShard::MaxPQGroupPartitionsCount;
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -966,7 +966,7 @@ public:
             errStr = TStringBuilder() << "Invalid write speed"
                 << ": specified: " << partConfig.GetWriteSpeedInBytesPerSecond() << "bps"
                 << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps";
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -987,13 +987,13 @@ public:
                 .PQReservedStorageLimit(storageToReserve);
 
             if (!checks) {
-                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusPreconditionFailed, errStr, context);
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
@@ -1003,8 +1003,7 @@ public:
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, path.GetPathIdForDomain(), tabletChannelsBinding)) {
-            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter,
-                "Unable to construct channel binding for PQ with the storage pool", context);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PQ with the storage pool");
             return result;
         }
 
@@ -1026,8 +1025,7 @@ public:
                 path.GetPathIdForDomain(),
                 pqChannelsBinding);
             if (!resolved) {
-                FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter,
-                    "Unable to construct channel binding for PersQueue with the storage pool", context);
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PersQueue with the storage pool");
                 return result;
             }
 

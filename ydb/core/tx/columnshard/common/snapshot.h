@@ -1,9 +1,10 @@
 #pragma once
-#include <ydb/library/conclusion/status.h>
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/conclusion/status.h>
+
+#include <util/datetime/base.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
-#include <util/datetime/base.h>
 
 namespace NKikimrColumnShardProto {
 class TSnapshot;
@@ -23,12 +24,14 @@ private:
 public:
     constexpr TSnapshot(const ui64 planStep, const ui64 txId) noexcept
         : PlanStep(planStep)
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 
     constexpr TSnapshot(const TPositiveIncreasingControlInteger planStep, const ui64 txId) noexcept
         : PlanStep(planStep.Val())
-        , TxId(txId) {
+        , TxId(txId)
+    {
     }
 
     NJson::TJsonValue SerializeToJson() const;
@@ -117,4 +120,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

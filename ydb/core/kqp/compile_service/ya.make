@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/compile_service/helpers
     ydb/library/actors/interconnect
     ydb/library/query_actor
+    ydb/library/security
     library/cpp/protobuf/json
 )
 
@@ -28,8 +29,10 @@ END()
 
 RECURSE(
     helpers
+    obfuscate
 )
 
 RECURSE_FOR_TESTS(
+    obfuscate/ut
     ut
 )

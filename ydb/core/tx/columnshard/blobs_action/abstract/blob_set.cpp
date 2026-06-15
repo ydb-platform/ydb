@@ -65,4 +65,4 @@ TString TTabletsByBlob::DebugString() const {
     return sb;
 }
 
-}
+}   // namespace NKikimr::NOlap

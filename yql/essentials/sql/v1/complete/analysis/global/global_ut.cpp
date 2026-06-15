@@ -61,8 +61,6 @@ Y_UNIT_TEST(LocalNamesCollected) {
         "acc",
         "b",
         "i",
-        "plus",
-        "sum",
         "x",
         "y",
     };
@@ -79,6 +77,17 @@ Y_UNIT_TEST(RecursiveName) {
 
     TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
     UNIT_ASSERT_VALUES_EQUAL(ctx.Names, TVector<TString>{"x"});
+}
+
+Y_UNIT_TEST(LetVsLetRec) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+    TString query = R"(
+            $x = #;
+        )";
+
+    TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+    UNIT_ASSERT_VALUES_EQUAL(ctx.Names, TVector<TString>{});
 }
 
 Y_UNIT_TEST(EnclosingFunctionName) {
@@ -118,6 +127,18 @@ Y_UNIT_TEST(EnclosingFunctionName) {
         TClusterContext expected = {.Provider = "", .Name = "plato"};
         UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction->Cluster, expected);
     }
+}
+
+Y_UNIT_TEST(EnclosingFunctionNameUtf8) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+    TString query = R"sql(
+        USE example; --абвгдабвгда
+        FROM (SELECT a FROM # . RANGE(           ));
+    )sql";
+
+    TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+    UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, Nothing());
 }
 
 Y_UNIT_TEST(SimpleSelectFrom) {

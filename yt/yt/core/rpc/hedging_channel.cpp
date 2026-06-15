@@ -129,7 +129,7 @@ public:
 
             NRpc::NProto::TResponseHeader header;
             if (!TryParseResponseHeader(message, &header)) {
-                ResponseHandler_->HandleError(TError(
+                responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error parsing response header from backup")
                     << TErrorAttribute(BackupFailedKey, Request_->GetRequestId())

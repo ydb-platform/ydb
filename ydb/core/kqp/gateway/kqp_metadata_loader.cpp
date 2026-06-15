@@ -254,6 +254,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         for (const auto& column: entry.ColumnTableInfo->Description.GetSharding().GetHashSharding().GetColumns()) {
             tableMeta->PartitionedByColumns.push_back(column);
         }
+
     }
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);
@@ -481,7 +482,8 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
         EKind::KindExternalDataSource,
         EKind::KindView,
         EKind::KindSysView,
-        EKind::KindTopic
+        EKind::KindTopic,
+        EKind::KindCdcStream,
     }, entry.Kind)) {
         return ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, "Path is not a table or topic"));
     }
@@ -501,6 +503,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             result = GetSysViewMetadataResult(entry, cluster, tableName);
             break;
         case EKind::KindTopic:
+        case EKind::KindCdcStream:
             result = GetTopicMetadataResult(entry, cluster, database, tableName, userToken);
             break;
         default:
@@ -578,11 +581,27 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Service account auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
                     return;
                 }
+                if (authDescription.GetServiceAccount().GetId().empty()) {
+                    SetError(externalDataSourceMetadata, "Service account auth requires non-empty SERVICE_ACCOUNT_ID");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Service account auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];
                 return;
             }
 
-            case NKikimrSchemeOp::TAuth::kIam:
+            case NKikimrSchemeOp::TAuth::kIam: {
+                // SERVICE_ACCOUNT_ID and RESOURCE_ID are not user-provided here:
+                // RESOURCE_ID is auto-resolved from the database's cloud_id at CREATE
+                // time, and post-creation INITIAL_TOKEN_SECRET is not resolved into
+                // SecretValues. Emptiness of these fields/secret list is therefore an
+                // internal-contract violation and not an actionable BAD_REQUEST.
+                return;
+            }
+
             case NKikimrSchemeOp::TAuth::kNone: {
                 if (objectDescription.SecretValues.size() != 0) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "None auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 0");
@@ -596,12 +615,32 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Basic auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
                     return;
                 }
+                if (authDescription.GetBasic().GetLogin().empty()) {
+                    SetError(externalDataSourceMetadata, "Basic auth requires non-empty LOGIN");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.Password = objectDescription.SecretValues[0];
                 return;
             }
             case NKikimrSchemeOp::TAuth::kMdbBasic: {
                 if (objectDescription.SecretValues.size() != 2) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Mdb basic auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 2");
+                    return;
+                }
+                if (authDescription.GetMdbBasic().GetServiceAccountId().empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty SERVICE_ACCOUNT_ID");
+                    return;
+                }
+                if (authDescription.GetMdbBasic().GetLogin().empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty LOGIN");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
+                    return;
+                }
+                if (objectDescription.SecretValues[1].empty()) {
+                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by PASSWORD_SECRET_NAME");
                     return;
                 }
                 externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];
@@ -613,6 +652,14 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Aws auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 2");
                     return;
                 }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "AWS auth requires non-empty value for the secret referenced by AWS_ACCESS_KEY_ID_SECRET_NAME");
+                    return;
+                }
+                if (objectDescription.SecretValues[1].empty()) {
+                    SetError(externalDataSourceMetadata, "AWS auth requires non-empty value for the secret referenced by AWS_SECRET_ACCESS_KEY_SECRET_NAME");
+                    return;
+                }
                 externalDataSourceMetadata.Metadata->ExternalSource.AwsAccessKeyId = objectDescription.SecretValues[0];
                 externalDataSourceMetadata.Metadata->ExternalSource.AwsSecretAccessKey = objectDescription.SecretValues[1];
                 return;
@@ -620,6 +667,10 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
             case NKikimrSchemeOp::TAuth::kToken: {
                 if (objectDescription.SecretValues.size() != 1) {
                     SetError(externalDataSourceMetadata, TStringBuilder{} << "Token auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
+                    return;
+                }
+                if (objectDescription.SecretValues[0].empty()) {
+                    SetError(externalDataSourceMetadata, "Token auth requires non-empty value for the secret referenced by TOKEN_SECRET_NAME");
                     return;
                 }
                 externalDataSourceMetadata.Metadata->ExternalSource.Token = objectDescription.SecretValues[0];
@@ -1075,9 +1126,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                 auto locked = ptr.lock();
                 if (!locked) {
-                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_INDEX_METADATA_LOAD_FAILED, "lock failed")));
+                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed")));
                     return;
                 }
+
                 const bool resolveEntityInsideDataSource = (cluster != locked->Cluster);
                 // resolveEntityInsideDataSource => entry.Kind == EKind::KindExternalDataSource
                 if (resolveEntityInsideDataSource && entry.Kind != EKind::KindExternalDataSource) {
@@ -1101,7 +1153,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, database, locked->ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, locked](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
@@ -1126,10 +1178,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
                                     externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
                                     externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
-                                    .Subscribe([promise, externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
+                                        .Subscribe([promise, externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
                                             TTableMetadataResult wrapper;
                                             try {
-                                                auto& dynamicMetadata = result.GetValue();
+                                                const auto& dynamicMetadata = result.GetValue();
                                                 if (!dynamicMetadata->Changed || EnrichMetadata(*externalDataSourceMetadata.Metadata, *dynamicMetadata)) {
                                                     wrapper.SetSuccess();
                                                     wrapper.Metadata = externalDataSourceMetadata.Metadata;
@@ -1141,6 +1193,20 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                             }
                                             promise.SetValue(wrapper);
                                         });
+                                } else if (externalSource && settings.ReadAttributes.contains("withinfer")) {
+                                    // The user explicitly requested schema inference via `with_infer`,
+                                    // but the external source cannot load dynamic metadata (typically
+                                    // because the EnableExternalSourceSchemaInference feature flag is
+                                    // disabled). Surface a clear error instead of silently proceeding
+                                    // with the static metadata.
+                                    TTableMetadataResult wrapper;
+                                    wrapper.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                    wrapper.AddIssue(NYql::TIssue(TStringBuilder()
+                                        << "Schema inference (with_infer) is not enabled for external source '"
+                                        << externalDataSourceMetadata.Metadata->ExternalSource.Type
+                                        << "'. Please contact your system administrator to enable the "
+                                        << "EnableExternalSourceSchemaInference feature flag."));
+                                    promise.SetValue(wrapper);
                                 } else {
                                     promise.SetValue(externalDataSourceMetadata);
                                 }
@@ -1156,6 +1222,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 bool useTls = useTlsStr == "true"sv;
 
                                 auto path = databaseName + "/" + *externalPath;
+                                auto locked = ptr.lock();
+                                if (!locked) {
+                                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed during external source metadata loading")));
+                                    return;
+                                }
 
                                 GetSchemeEntryType(
                                     locked->FederatedQuerySetup,
@@ -1230,8 +1301,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table, userToken, queryName, enableOnlineAddUniqueIndex));
                     }
                 }
-            }
-            catch (yexception& e) {
+            } catch (const yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
         }
@@ -1286,7 +1356,6 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 result.Metadata->StatsLoaded = response.Success;
                 promise.SetValue(result);
         });
-
     });
 }
 

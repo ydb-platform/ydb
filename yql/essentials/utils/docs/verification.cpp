@@ -128,8 +128,8 @@ double Coverage(const TFameReport& report, const TVector<TString>& names) {
 } // namespace NYql::NDocs
 
 template <>
-void Out<NYql::NDocs::EFame>(IOutputStream& out, NYql::NDocs::EFame fame) {
-    switch (fame) {
+void Out<NYql::NDocs::EFame>(IOutputStream& out, NYql::NDocs::EFame value) {
+    switch (value) {
         case NYql::NDocs::EFame::BadLinked:
             out << "BadLinked";
             break;

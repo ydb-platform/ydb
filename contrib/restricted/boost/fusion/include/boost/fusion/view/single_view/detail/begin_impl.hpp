@@ -5,7 +5,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying 
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(BOOST_FUSION_SINGLE_VIEW_BEGIN_IMPL_05052005_0305)
+#ifndef BOOST_FUSION_SINGLE_VIEW_BEGIN_IMPL_05052005_0305
 #define BOOST_FUSION_SINGLE_VIEW_BEGIN_IMPL_05052005_0305
 
 #include <boost/fusion/support/config.hpp>

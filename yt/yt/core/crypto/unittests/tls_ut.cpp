@@ -95,7 +95,7 @@ TEST_F(TTlsTest, SimplePingPong)
     auto firstSide = WaitForFast(asyncFirstSide).ValueOrThrow();
     auto secondSide = WaitForFast(asyncSecondSide).ValueOrThrow();
 
-    auto buffer = TSharedRef::FromString(TString("ping"));
+    auto buffer = TSharedRef::FromString(std::string("ping"));
     auto outputBuffer = TSharedMutableRef::Allocate(4);
 
     auto result = WaitForFast(firstSide->Write(buffer));

@@ -2,6 +2,9 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -10,14 +13,14 @@ TEraseRequestExecutor::TEraseRequestExecutor(
     NActors::TActorSystem* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    ELocation location,
+    THostIndex host,
     TEraseHint hint,
     NWilson::TSpan span)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
-    , Location(location)
+    , Host(host)
     , Hint(std::move(hint))
 {}
 
@@ -35,9 +38,9 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
 
 void TEraseRequestExecutor::Run()
 {
-    auto future = DirectBlockGroup->EraseFromPBuffer(
-        VChunkConfig.VChunkIndex,
-        VChunkConfig.GetHostIndex(Location),
+    auto future = DirectBlockGroup->BatchEraseFromPBuffer(
+        VChunkConfig.GetVChunkIndex(),
+        Host,
         Hint.Segments,
         Span.GetTraceId());
     future.Subscribe(
@@ -82,7 +85,7 @@ void TEraseRequestExecutor::Reply(
     TVector<ui64> eraseFailed)
 {
     Promise.TrySetValue(TResponse{
-        .Location = Location,
+        .Host = Host,
         .EraseOk = std::move(eraseOk),
         .EraseFailed = std::move(eraseFailed)});
 }

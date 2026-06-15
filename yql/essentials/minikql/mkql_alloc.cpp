@@ -248,8 +248,8 @@ void MKQLFreeSlow(TAllocPageHeader* header, TAllocState* state, const EMemorySub
     }
 }
 
-void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool mPool) {
-    auto& currentPage = CurrentPages_[(TMemorySubPoolIdx)mPool];
+void* TPagedArena::AllocSlow(const size_t sz, const EMemorySubPool pagePool) {
+    auto& currentPage = CurrentPages_[(TMemorySubPoolIdx)pagePool];
     auto prevLink = currentPage;
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);

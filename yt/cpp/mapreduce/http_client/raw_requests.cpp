@@ -220,6 +220,12 @@ TJobAttributes ParseJobAttributes(const TNode& node)
             result.CoreInfos->push_back(std::move(coreInfo));
         }
     }
+    if (auto execAttributesNode = mapNode.FindPtr("exec_attributes")) {
+        result.ExecAttributes = *execAttributesNode;
+    }
+    if (auto jobCookieNode = mapNode.FindPtr("job_cookie")) {
+        result.Cookie = jobCookieNode->AsUint64();
+    }
     return result;
 }
 

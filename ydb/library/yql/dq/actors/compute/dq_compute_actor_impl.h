@@ -4,7 +4,6 @@
 #include "dq_compute_actor_channels.h"
 #include "dq_compute_actor_checkpoints.h"
 #include "dq_compute_actor_metrics.h"
-#include "dq_compute_actor_watermarks.h"
 #include "dq_compute_actor.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
@@ -24,10 +23,12 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <library/cpp/html/escape/escape.h>
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
 #include <util/system/hostname.h>
@@ -136,6 +137,15 @@ protected:
         RlNoResourceTag = 102,
     };
 
+    // See the comment on the call site in Bootstrap(): we re-arm the timeout wakeup in
+    // bounded chunks so the scheduler heap never holds a far-future entry per CA.
+    static constexpr TDuration TimeoutChunkSize = TDuration::Seconds(15);
+
+    void ScheduleNextTimeoutChunk(TDuration remaining) {
+        this->Schedule(Min(TimeoutChunkSize, remaining),
+            new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
+    }
+
 public:
     void Bootstrap() {
         try {
@@ -153,7 +163,12 @@ public:
 
             if (RuntimeSettings.Timeout) {
                 CA_LOG_D("Set execution timeout " << *RuntimeSettings.Timeout);
-                this->Schedule(*RuntimeSettings.Timeout, new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
+                // Schedule a chunked timeout wakeup instead of a single full-timeout one.
+                // A full-timeout Schedule (potentially many minutes/hours ahead) pins an entry
+                // in the actor system's scheduler heap per CA until it fires, even when the CA
+                // dies normally well before the deadline.
+                TimeoutDeadline = NActors::TActivationContext::Monotonic() + *RuntimeSettings.Timeout;
+                ScheduleNextTimeoutChunk(*RuntimeSettings.Timeout);
             }
 
             if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) {
@@ -436,6 +451,10 @@ protected:
                         outputChannel.Finished = true;
                     } else {
                         ProcessOutputsState.HasDataToSend = true;
+                        CA_LOG_T("Wait for finish of channelId: " << channelId
+                            << ", Push/Pop=" << outputChannel.Channel->GetPushStats().Bytes << '/' << outputChannel.Channel->GetPopStats().Bytes
+                            << ", EarlyFinish=" << outputChannel.EarlyFinish
+                        );
                     }
                 }
             } else {
@@ -1169,6 +1188,15 @@ protected:
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
+                // re-arm until the configured deadline has actually elapsed.
+                if (RuntimeSettings.Timeout) {
+                    const TMonotonic now = NActors::TActivationContext::Monotonic();
+                    if (now < TimeoutDeadline) {
+                        ScheduleNextTimeoutChunk(TimeoutDeadline - now);
+                        break;
+                    }
+                }
+
                 if (ComputeActorSpan) {
                     ComputeActorSpan.EndError(
                         TStringBuilder()
@@ -1249,7 +1277,9 @@ protected:
         if (!Checkpoints) {
             Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
-            Channels->SetCheckpointsSupport();
+            if (Channels) {
+                Channels->SetCheckpointsSupport();
+            }
         }
         TAutoPtr<NActors::IEventHandle> handle = new NActors::IEventHandle(Checkpoints->SelfId(), ev->Sender, ev->Release().Release());
         Checkpoints->Receive(handle);
@@ -1635,6 +1665,10 @@ protected:
                         str << stats->CurrentWaitOutputStartTime;
                     }
                     str << Endl;
+                    str << "  InputWaitCount: " << stats->InputWaitCount << Endl;
+                    str << "  OutputWaitCount: " << stats->OutputWaitCount << Endl;
+                    str << "  TotalInputsConsumed: " << stats->TotalInputsConsumed << Endl;
+                    str << "  TotalOutputsProduced: " << stats->TotalOutputsProduced << Endl;
                 }
                 ExtraMonitoringInfo(str, cgi);
 
@@ -1647,6 +1681,17 @@ protected:
                     str << "  LastRunStatus: " << ProcessOutputsState.LastRunStatus << Endl;
                     str << "  LastRunTime: " << ProcessOutputsState.LastRunTime << Endl;
                     str << "  LastPopReturnedNoData: " << ProcessOutputsState.LastPopReturnedNoData << Endl;
+                }
+
+                if (auto stats = GetTaskRunnerStats(); stats && !stats->ComputationLogBuffer.empty()) {
+                    str << Endl << Endl;
+                    COLLAPSED_BUTTON_CONTENT("ComputationLog", TStringBuilder() << "Compute graph log: " << stats->ComputationLogBuffer.size() << " entries") {
+                        str << Endl;
+                        for (const auto& line : stats->ComputationLogBuffer) {
+                            str << "  " << line.first << " " << NHtml::EscapeText(line.second);
+                        }
+                    }
+                    str << Endl;
                 }
 
                 str << Endl;
@@ -2717,6 +2762,7 @@ protected:
     TDuration InputTransformCpuTime;
 private:
     TInstant StartTime;
+    TMonotonic TimeoutDeadline;
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;

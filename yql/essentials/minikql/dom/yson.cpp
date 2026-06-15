@@ -257,9 +257,11 @@ bool CheckValue(TReader& reader) {
 
 void WriteValue(TWriter& writer, const TUnboxedValue& x) {
     switch (GetNodeType(x)) {
-        case ENodeType::String:
-            writer.String(x.AsStringRef());
+        case ENodeType::String: {
+            auto y = ClearUtf8Mark(x);
+            writer.String(y.AsStringRef());
             break;
+        }
         case ENodeType::Bool:
             writer.Boolean(x.Get<bool>());
             break;

@@ -1,6 +1,7 @@
 #include "yql_yt_file.h"
 #include "yql_yt_file_mkql_compiler.h"
 #include "yql_yt_file_comp_nodes.h"
+#include "yql_yt_file_row_count.h"
 
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -167,9 +168,11 @@ struct TFileYtLambdaBuilder: public TLambdaBuilder {
     TFileYtLambdaBuilder(TScopedAlloc& alloc, const TSession& /*session*/,
         TIntrusivePtr<IFunctionRegistry> customFunctionRegistry,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
-        TLangVersion langver)
+        TLangVersion langver,
+        TRuntimeSettings::TConstPtr runtimeSettings
+    )
         : TLambdaBuilder(customFunctionRegistry.Get(), alloc, nullptr, CreateDeterministicRandomProvider(1), CreateDeterministicTimeProvider(10000000),
-          nullptr, nullptr, secureParamsProvider, nullptr, langver)
+          nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings)
         , CustomFunctionRegistry_(customFunctionRegistry)
     {}
 
@@ -456,7 +459,7 @@ public:
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
                         MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -789,7 +792,7 @@ public:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -839,7 +842,7 @@ public:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles),
-                nullptr, UnknownLangVersion);
+                nullptr, UnknownLangVersion, MakeRuntimeSettings());
 
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), builder.GetFunctionRegistry());
             TMkqlBuildContext ctx(*MkqlCompiler_, pgmBuilder, exprCtx);
@@ -896,12 +899,19 @@ public:
             ThrowNonConsumedLinear(*compGraph);
             YQL_ENSURE(1 == outTableContent.size());
 
+            ui64 publishedRowCount = 0;
             {
                 TMemoryInput in(outTableContent.front());
                 TOFStream of(destFilePath);
                 TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
-                NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
-                parser.Parse();
+                if (Services_->GetWriteOutputRowCount()) {
+                    auto counting = NFile::MakeRowCountingYsonConsumer(&writer, publishedRowCount);
+                    NYson::TYsonParser parser(counting.get(), &in, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                } else {
+                    NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                }
             }
 
             {
@@ -999,6 +1009,9 @@ public:
                     }
                 }
 
+                if (Services_->GetWriteOutputRowCount()) {
+                    attrs["row_count"] = static_cast<i64>(publishedRowCount);
+                }
                 TOFStream ofAttr(destFilePath + ".attr");
                 ofAttr.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));
             }
@@ -1278,13 +1291,19 @@ private:
     }
 
     static void LoadTableStatInfo(const TString& path, TYtTableStatInfo& info) {
-        NYT::TNode inputList = LoadTableContent(path);
-        info.RecordsCount = inputList.AsList().size();
+        NYT::TNode attrs = LoadTableAttrs(path);
+        if (attrs.HasKey("row_count")) {
+            info.RecordsCount = attrs["row_count"].AsInt64();
+        } else {
+            NYT::TNode inputList = LoadTableContent(path);
+            info.RecordsCount = inputList.AsList().size();
+        }
         if (!info.IsEmpty()) {
             info.DataSize = TFileStat(path).Size;
             info.ChunkCount = 1;
         }
     }
+
 
     static NYT::TNode LoadTableContent(const TString& path) {
         NYT::TNode inputList = NYT::TNode::CreateList();
@@ -1307,7 +1326,7 @@ private:
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
             MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer());
+            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1389,7 +1408,7 @@ private:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(),
-                externalFiles), secureParamsProvider.get(), options.LangVer());
+                externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1411,7 +1430,6 @@ private:
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = outTableInfos[i].Name;
             LoadTableStatInfo(outTablePaths.at(i), *statInfo);
-
             outStat.emplace_back(statInfo->Id, statInfo);
         }
         return outStat;
@@ -1429,8 +1447,8 @@ private:
 
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = name;
-            LoadTableStatInfo(Services_->GetTmpTablePath(name), *statInfo);
-
+            const TString touchPath = Services_->GetTmpTablePath(name);
+            LoadTableStatInfo(touchPath, *statInfo);
             outStat.emplace_back(statInfo->Id, statInfo);
         }
 
@@ -1496,14 +1514,21 @@ private:
     {
         auto outPath = Services_->GetTmpTablePath(outTableInfo.Name);
         session.DeleteAtFinalize(config, cluster, outPath);
+
+        ui64 rowCount = 0;
         if (binaryYson) {
             TMemoryInput in(binaryYson);
             TOFStream of(outPath);
             TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
-            NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
-            parser.Parse();
-        }
-        else {
+            if (Services_->GetWriteOutputRowCount()) {
+                auto counting = NFile::MakeRowCountingYsonConsumer(&writer, rowCount);
+                NYson::TYsonParser parser(counting.get(), &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            } else {
+                NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            }
+        } else {
             YQL_ENSURE(TFile(outPath, CreateAlways | WrOnly).IsOpen(), "Failed to create " << outPath.Quote() << " file");
         }
 
@@ -1520,6 +1545,9 @@ private:
             outTableInfo.RowSpec->FillCodecNode(rowSpecYson);
 
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility, optimizeForScan ? outTableInfo.GetColumnGroups() : NYT::TNode{}).ToNode();
+            if (Services_->GetWriteOutputRowCount()) {
+                attrs["row_count"] = static_cast<i64>(rowCount);
+            }
             TOFStream ofAttr(outPath + ".attr");
             NYson::TYsonWriter writer(&ofAttr, NYson::EYsonFormat::Pretty, ::NYson::EYsonType::Node);
             NYT::TNodeVisitor visitor(&writer);
@@ -1665,6 +1693,13 @@ private:
 
     NThreading::TFuture<IYtGateway::TDownloadTableResult> DownloadTable(TDownloadTableOptions&&) override {
         return MakeFuture<IYtGateway::TDownloadTableResult>();
+    }
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        TUploadFilesToCacheResult res;
+        res.SetSuccess();
+        res.Files = options.Files();
+        return MakeFuture(std::move(res));
     }
 
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {

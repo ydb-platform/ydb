@@ -15,7 +15,7 @@
 #include <boost/filesystem/config.hpp>
 #include <boost/filesystem/path.hpp>
 #include <cstdio>
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 #include <wchar.h>
 #include <cstddef>
 #include <cstring>
@@ -27,7 +27,7 @@
 namespace boost {
 namespace filesystem {
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 inline std::FILE* fopen(filesystem::path const& p, const char* mode)
 {
@@ -70,14 +70,14 @@ inline std::FILE* fopen(filesystem::path const& p, const char* mode)
 #endif
 }
 
-#else // defined(BOOST_WINDOWS_API)
+#else // defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 inline std::FILE* fopen(filesystem::path const& p, const char* mode)
 {
     return std::fopen(p.c_str(), mode);
 }
 
-#endif // defined(BOOST_WINDOWS_API)
+#endif // defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 } // namespace filesystem
 } // namespace boost

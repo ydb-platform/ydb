@@ -566,7 +566,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/gary-s-brown.LICENSE
     Files with this license:
-        Modules/binascii.c [636:637]
+        Modules/binascii.c [633:634]
 
 KEEP     Python-2.0           6a19cf8041a37669b2cd07b9cd3eace3
 BELONGS ya.make

@@ -1,8 +1,15 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
+#include <ydb/library/actors/interconnect/interconnect_counters.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/record.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <atomic>
 #include <cstring>
+#include <memory>
 #include <util/random/fast.h>
 #include <util/string/cast.h>
 #include <util/string/vector.h>
@@ -53,6 +60,61 @@ ui64 WaitForSessionCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringB
         }
     }
     UNIT_FAIL(TStringBuilder() << "failed to read session counter " << name << " from " << me << " to " << peer);
+    return 0;
+}
+
+ui64 GetPeerCounterValue(
+        const NMonitoring::TDynamicCounterPtr& counters,
+        TStringBuf peerLabel,
+        TStringBuf name) {
+    auto peerCounters = counters->FindSubgroup("peer", TString(peerLabel));
+    UNIT_ASSERT_C(peerCounters, TStringBuilder() << "peer=" << peerLabel << " counters were not created");
+    auto counter = peerCounters->FindCounter(TString(name));
+    UNIT_ASSERT_C(counter, TStringBuilder() << name << " counter was not created for peer=" << peerLabel);
+    return counter->Val();
+}
+
+void RunScopeClassCounterRebindTest(TScopeId peerScopeId, TStringBuf expectedPeerLabel) {
+    auto common = MakeIntrusive<TInterconnectProxyCommon>();
+    common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    common->LocalScopeId = TScopeId(1, 42);
+    common->Settings.MergePerScopeClassCounters = true;
+
+    auto counters = CreateInterconnectCounters(common);
+    counters->SetPeerInfo("peer-host:19001", "dc-1", "unknown");
+    counters->SetConnected(0);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Connected"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Disconnections"), 0);
+
+    counters->SetPeerScopeId(peerScopeId);
+    counters->SetConnected(1);
+    counters->IncDisconnections();
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, expectedPeerLabel, "Connected"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, expectedPeerLabel, "Disconnections"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Connected"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Disconnections"), 0);
+    UNIT_ASSERT_C(!common->MonCounters->FindSubgroup("peer", "peer-host:19001"),
+        "scope class aggregation must not publish counters under the original peer host label");
+}
+
+ui64 GetHistogramSamples(const NMonitoring::THistogramPtr& histogram) {
+    ui64 samples = 0;
+    auto snapshot = histogram->Snapshot();
+    for (ui32 i = 0; i < snapshot->Count(); ++i) {
+        samples += snapshot->Value(i);
+    }
+    return samples;
+}
+
+ui64 GetHistogramBucketSamples(const NMonitoring::THistogramPtr& histogram, NMonitoring::TBucketBound upperBound) {
+    auto snapshot = histogram->Snapshot();
+    for (ui32 i = 0; i < snapshot->Count(); ++i) {
+        if (snapshot->UpperBound(i) == upperBound) {
+            return snapshot->Value(i);
+        }
+    }
     return 0;
 }
 
@@ -113,6 +175,35 @@ private:
     const TActorId Recipient;
     const size_t Messages;
     const size_t PayloadSize;
+};
+
+struct THandshakeFailureLogCounters {
+    std::atomic<ui32> Notice = 0;
+    std::atomic<ui32> Debug = 0;
+};
+
+class TCountingLogBackend : public TLogBackend {
+public:
+    explicit TCountingLogBackend(std::shared_ptr<THandshakeFailureLogCounters> outgoingHandshakeFailures)
+        : OutgoingHandshakeFailures(std::move(outgoingHandshakeFailures))
+    {}
+
+    void WriteData(const TLogRecord& rec) override {
+        const TStringBuf line(rec.Data, rec.Len);
+        if (line.Contains("ICP25") && line.Contains("outgoing handshake failed")) {
+            if (rec.Priority == TLOG_NOTICE) {
+                OutgoingHandshakeFailures->Notice.fetch_add(1, std::memory_order_relaxed);
+            } else if (rec.Priority == TLOG_DEBUG) {
+                OutgoingHandshakeFailures->Debug.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    }
+
+    void ReopenLog() override {
+    }
+
+private:
+    std::shared_ptr<THandshakeFailureLogCounters> OutgoingHandshakeFailures;
 };
 
 } // namespace
@@ -446,12 +537,20 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
         settings.PingPeriod = TDuration::MilliSeconds(200);
     };
 
-    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, GetKernelLivenessFlags(withRdma),
+    TTestICCluster::TTrafficInterrupterSettings interrupterSettings{
+        .RejectingTrafficTimeout = TDuration::Zero(),
+        .BandWidth = 0.0,
+        .Disconnect = false,
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr, GetKernelLivenessFlags(withRdma),
         {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
 
     auto* recipientPtr = new TRecipientActor;
     const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
     cluster.RegisterActor(new TSenderActor(recipient), 2);
+    const TActorId dropRecipientOnNode1 = cluster.RegisterActor(new TDropRecipientActor, 1);
+    const TActorId dropRecipientOnNode2 = cluster.RegisterActor(new TDropRecipientActor, 2);
 
     WaitForCondition(TDuration::Seconds(10), [&] {
         return recipientPtr->GetReceived() >= 1;
@@ -467,16 +566,36 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
         }, description);
     };
 
-    auto reconnectFromNode2 = [&](TStringBuf description) {
-        const TString handshakeBefore = GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone");
+    auto sessionStaysAliveOnEof = [&](ui32 fromNode, ui32 toNode) {
+        const ui64 numEventsInQueue = GetSessionCounter(cluster, fromNode, toNode, "NumEventsInQueue");
+        const ui64 outputCounter = GetSessionCounter(cluster, fromNode, toNode, "OutputCounter");
+        const ui64 lastConfirmed = GetSessionCounter(cluster, fromNode, toNode, "LastConfirmed");
+        return numEventsInQueue > 0 || outputCounter != lastConfirmed;
+    };
+
+    auto sendPendingTraffic = [&] {
+        cluster.RegisterActor(new TBurstSenderActor(dropRecipientOnNode1, 4096, 4096), 2);
+        cluster.RegisterActor(new TBurstSenderActor(dropRecipientOnNode2, 4096, 4096), 1);
         WaitForCondition(TDuration::Seconds(10), [&] {
             try {
-                return GetSessionCounter(cluster, 2, 1, "NumEventsInQueue") > 0;
+                return sessionStaysAliveOnEof(2, 1) && sessionStaysAliveOnEof(1, 2);
             } catch (const TPatternNotFound&) {
                 return false;
             }
-        }, "session has pending output before forced reconnect");
+        }, "both sessions have pending traffic while proxy forwarding is frozen");
+    };
+
+    auto reconnectFromNode2 = [&](TStringBuf description) {
+        const TString handshakeBefore = GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone");
+        // TEvClosePeerSocket is meant to exercise same-session continuation. Freeze proxy forwarding before the
+        // close so the peer cannot observe EOF and destroy an idle session before node2 has requested reconnect.
+        // Pending traffic keeps both session instances alive; after unfreezing, continuation has a peer session to resume.
+        cluster.StartBlackhole(1);
+        cluster.StartBlackhole(2);
+        sendPendingTraffic();
         cluster.GetNode(2)->Send(cluster.InterconnectProxy(1, 2), new TEvInterconnect::TEvClosePeerSocket);
+        cluster.StopBlackhole(1);
+        cluster.StopBlackhole(2);
         WaitForCondition(TDuration::Seconds(20), [&] {
             try {
                 return GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone") != handshakeBefore &&
@@ -536,6 +655,12 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
 
 Y_UNIT_TEST_SUITE(Interconnect) {
 
+    Y_UNIT_TEST(ScopeClassCountersRebindPeerLabel) {
+        RunScopeClassCounterRebindTest(TScopeId(0, 1), "system");
+        RunScopeClassCounterRebindTest(TScopeId(1, 42), "same_tenant");
+        RunScopeClassCounterRebindTest(TScopeId(2, 42), "other_tenant");
+    }
+
     Y_UNIT_TEST(SessionContinuation) {
         TTestICCluster cluster(2);
         const TActorId recipient = cluster.RegisterActor(new TRecipientActor, 1);
@@ -572,6 +697,22 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
             Sleep(TDuration::MilliSeconds(RandomNumber<ui32>(500) + 100));
         }
+
+        auto handshakeHistogram1 = cluster.GetCounters()->GetSubgroup("nodeId", "1")->FindHistogram("HandshakeActorCreateUs");
+        auto handshakeHistogram2 = cluster.GetCounters()->GetSubgroup("nodeId", "2")->FindHistogram("HandshakeActorCreateUs");
+        UNIT_ASSERT_C(handshakeHistogram1 || handshakeHistogram2, "HandshakeActorCreateUs histogram was not created");
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return (handshakeHistogram1 ? GetHistogramSamples(handshakeHistogram1) : 0)
+                + (handshakeHistogram2 ? GetHistogramSamples(handshakeHistogram2) : 0) > 0;
+        }, "handshake actor create histogram has samples");
+
+        auto histogram = cluster.GetCounters()->FindHistogram("PollerSyncOperationTimeUs");
+        UNIT_ASSERT_C(histogram, "PollerSyncOperationTimeUs histogram was not created");
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return GetHistogramSamples(histogram) > 0;
+        }, "poller sync operation histogram has samples");
     }
 
     Y_UNIT_TEST(KernelLivenessMixedConfigFallback) {
@@ -628,6 +769,80 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
     Y_UNIT_TEST(KernelLivenessReconnectLocalFallbackNotAppliedRdma) {
         RunKernelLivenessReconnectLocalFallbackNotApplied(true);
+    }
+
+    Y_UNIT_TEST(NumEventsInQueueHistogram) {
+        constexpr size_t messages = 32;
+        constexpr size_t payloadSize = 64;
+
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA);
+
+        auto* recipientPtr = new TDropRecipientActor;
+        const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+        cluster.RegisterActor(new TBurstSenderActor(recipient, messages, payloadSize), 2);
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientPtr->GetReceived() >= messages;
+        }, "one-way delivery for NumEventsInQueue histogram");
+
+        auto nodeCounters = cluster.GetCounters()->FindSubgroup("nodeId", "2");
+        UNIT_ASSERT_C(nodeCounters, "nodeId=2 counters were not created");
+        auto peerCounters = nodeCounters->FindSubgroup("peer");
+        UNIT_ASSERT_C(peerCounters, "peer counters were not created");
+
+        auto histogram = peerCounters->FindHistogram("NumEventsInQueue");
+        UNIT_ASSERT_C(histogram, "NumEventsInQueue histogram was not created");
+        UNIT_ASSERT_GE(GetHistogramSamples(histogram), messages);
+        UNIT_ASSERT_GT(GetHistogramBucketSamples(histogram, 0), 0ULL);
+    }
+
+    Y_UNIT_TEST(UnavailableNodeOutgoingHandshakeLogCount) {
+        auto outgoingHandshakeFailures = std::make_shared<THandshakeFailureLogCounters>();
+        auto settingsCustomizer = [](ui32, TInterconnectSettings& settings) {
+            settings.Handshake = TDuration::Seconds(1);
+            settings.FirstErrorSleep = TDuration::MilliSeconds(10);
+            settings.MaxErrorSleep = TDuration::Seconds(1);
+            settings.ErrorSleepRetryMultiplier = 4.0;
+        };
+        auto loggerSettings = MakeIntrusive<NLog::TSettings>(
+            TActorId(0, "logger"),
+            static_cast<NLog::EComponent>(NActorsServices::LOGGER),
+            NLog::PRI_DEBUG,
+            NLog::PRI_DEBUG,
+            0U);
+        loggerSettings->Append(
+            NActorsServices::EServiceCommon_MIN,
+            NActorsServices::EServiceCommon_MAX,
+            NActorsServices::EServiceCommon_Name);
+        loggerSettings->SetAllowDrop(false);
+        loggerSettings->SetThrottleDelay(TDuration::Zero());
+        auto logBackendFactory = [outgoingHandshakeFailures] {
+            return TAutoPtr<TLogBackend>(new TCountingLogBackend(outgoingHandshakeFailures));
+        };
+
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, loggerSettings, TTestICCluster::DISABLE_RDMA,
+            {}, TDuration::Seconds(2), TNode::DefaultInflight(), settingsCustomizer, logBackendFactory);
+
+        auto* recipientPtr = new TRecipientActor;
+        const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+        cluster.RegisterActor(new TSenderActor(recipient), 2);
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientPtr->GetReceived() >= 1;
+        }, "initial interconnect message delivery");
+
+        outgoingHandshakeFailures->Notice.store(0, std::memory_order_relaxed);
+        outgoingHandshakeFailures->Debug.store(0, std::memory_order_relaxed);
+        cluster.StopNode(1);
+        Sleep(TDuration::Seconds(10));
+
+        const ui32 noticeLogCount = outgoingHandshakeFailures->Notice.load(std::memory_order_relaxed);
+        const ui32 debugLogCount = outgoingHandshakeFailures->Debug.load(std::memory_order_relaxed);
+        UNIT_ASSERT_C(noticeLogCount == 1 || noticeLogCount == 2,
+            TStringBuilder() << "expected one or two notice-level ICP25 outgoing handshake failure log records in 10 seconds, got "
+                << noticeLogCount);
+        UNIT_ASSERT_C(debugLogCount > 0,
+            "expected repeated ICP25 outgoing handshake failure log records to be demoted to debug");
     }
 
     Y_UNIT_TEST(SetupRdmaSession) {

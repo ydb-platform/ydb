@@ -13,6 +13,10 @@
 
 #include <util/generic/xrange.h>
 
+#include <util/datetime/base.h>
+
+#include <util/system/getpid.h>
+
 namespace NYT {
 
 using ::google::protobuf::Descriptor;
@@ -760,6 +764,21 @@ TString ToString(EValueType type)
             return "uuid";
     }
     ythrow yexception() << "Invalid value type " << static_cast<int>(type);
+}
+
+TMutationId GenerateMutationId()
+{
+    TGUID guid;
+
+    // Some users use `fork()' with yt wrapper
+    // (actually they use python + multiprocessing)
+    // and CreateGuid is not resistant to `fork()', so spice it a little bit.
+    //
+    // Check IGNIETFERRO-610
+    CreateGuid(&guid);
+    guid.dw[2] = GetPID() ^ MicroSeconds();
+
+    return guid;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

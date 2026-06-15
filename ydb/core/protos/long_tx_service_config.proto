@@ -8,12 +8,13 @@ message TLongTxServiceConfig {
         optional uint32 MaxDelayMs = 2;
     }
 
-    optional uint64 LocalSnapshotPromotionTimeSeconds = 1 [default = 120];
+    optional uint64 LocalSnapshotPromotionTimeSeconds = 1 [default = 30];
     optional uint64 UnavailableNodeSnapshotsExpirationTimeSeconds = 2 [default = 60];
     optional uint64 InsideDataCenterExchangeFanOut = 3 [default = 10];
     optional uint64 MaxRemoteSnapshots = 4 [default = 5000];
-    optional uint64 SnapshotsExchangeIntervalSeconds = 5 [default = 10];
-    optional uint64 SnapshotsRegistryUpdateIntervalSeconds = 6 [default = 30];
+    optional uint64 SnapshotsExchangeIntervalSeconds = 5 [default = 5];
+    optional uint64 SnapshotsRegistryUpdateIntervalSeconds = 6 [default = 5];
     optional TRetrySettings PublisherSettings = 7;
     optional TRetrySettings SubscriberSettings = 8;
+    optional uint64 PrefillTimeoutSeconds = 9 [default = 5];
 }

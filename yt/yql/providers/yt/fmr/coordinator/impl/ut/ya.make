@@ -6,6 +6,8 @@ SRCS(
     yql_yt_ordered_partitioner_ut.cpp
     yql_yt_fmr_partitioner_ut.cpp
     yql_yt_sorted_partitioner_ut.cpp
+    yql_yt_sorted_partitioner_base_ut.cpp
+    yql_yt_reduce_partitioner_ut.cpp
     yql_yt_fmr_boundary_keys_ut.cpp
 )
 

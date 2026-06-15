@@ -47,7 +47,7 @@ void FillKey(NKikimrSysView::TStoragePoolKey* key, const TBoxStoragePoolId& id) 
 }
 
 void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks,
-        TBlobStorageGroupType type) {
+        TBlobStorageGroupType type, ui32 groupSizeInUnits) {
     if (disks.empty()) {
         return;
     }
@@ -67,6 +67,7 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
             slotSize = pdiskMetrics.GetTotalSize() / disk.ExpectedSlotCount;
         }
 
+        slotSize *= TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits());
         if (slotSize) {
             totalSize = Min(totalSize ? totalSize : Max<ui64>(), slotSize);
         }
@@ -267,6 +268,10 @@ public:
             erasureGroup->GetCounter("CurrentAvailableSize")->Set(entry.GetCurrentAvailableSize());
             erasureGroup->GetCounter("AvailableGroupsToCreate")->Set(entry.GetAvailableGroupsToCreate());
             erasureGroup->GetCounter("AvailableSizeToCreate")->Set(entry.GetAvailableSizeToCreate());
+            erasureGroup->GetCounter("ImmediateGroupsToCreate")->Set(entry.HasImmediateGroupsToCreate()
+                    ? entry.GetImmediateGroupsToCreate() : 0);
+            erasureGroup->GetCounter("ImmediateSizeToCreate")->Set(entry.HasImmediateSizeToCreate()
+                    ? entry.GetImmediateSizeToCreate() : 0);
         }
 
         // remove no longer present entries
@@ -396,7 +401,7 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     for (const auto& vslot : groupInfo->VDisksInGroup) {
         disks.push_back({&vslot->PDisk->Metrics, &vslot->Metrics, vslot->PDisk->ExpectedSlotCount});
     }
-    CalculateGroupUsageStats(info, disks, TBlobStorageGroupType(groupInfo->ErasureSpecies));
+    CalculateGroupUsageStats(info, disks, TBlobStorageGroupType(groupInfo->ErasureSpecies), groupInfo->GroupSizeInUnits);
 
     info->SetSeenOperational(groupInfo->SeenOperational);
     const auto& latencyStats = groupInfo->LatencyStats;
@@ -607,7 +612,7 @@ void TBlobStorageController::UpdateSystemViews() {
                     }
                     pdiskIds.emplace_back(nodeId, pdiskId);
                 }
-                CalculateGroupUsageStats(pb, disks, info->Type.GetErasure());
+                CalculateGroupUsageStats(pb, disks, info->Type.GetErasure(), info->GroupSizeInUnits);
 
                 pb->SetLayoutCorrect(group.IsLayoutCorrect(staticFinder));
 

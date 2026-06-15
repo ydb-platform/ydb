@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/library/actors/core/event_local.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
@@ -37,7 +38,6 @@ struct TCloudEvent : public NActors::TEventLocal<TCloudEvent, static_cast<ui32>(
 };
 
 /** Serialized cloud event payload (protobuf wire format); name kept for API compatibility. */
-TString BuildTopicCloudEventJson(const TCloudEventInfo& info);
 TString GetCloudEventType(const TCloudEventInfo& info);
 
 NActors::IActor* CreateCloudEventActor();

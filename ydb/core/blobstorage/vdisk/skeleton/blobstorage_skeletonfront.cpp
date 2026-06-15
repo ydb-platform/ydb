@@ -1172,9 +1172,20 @@ namespace NKikimr {
                                IntQueueHugePutsBackground.get()}) {
                 light = Max(light, queue->GetCumulativeLight());
             }
+            NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E replicationStatus =
+                    NKikimrWhiteboard::TVDiskDetailedReplicationStatus::Replicated;
+            if (!replicated) {
+                if (!ReplMonGroup.ReplIsHoldingToken()) {
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::WaitingForToken;
+                } else if (!unreplicatedNonPhantoms && unreplicatedPhantoms) {
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
+                } else {
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::InProgress;
+                }
+            }
             // send a message to Whiteboard
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
-                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, unsyncedVDisks, light, HasUnreadableBlobs);
+                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light, HasUnreadableBlobs);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
                 const i64 a = ReplMonGroup.ReplWorkUnitsDone();
                 const i64 b = ReplMonGroup.ReplWorkUnitsRemaining();
@@ -1306,7 +1317,6 @@ namespace NKikimr {
                                   TIntQueueClass &intQueue) {
             CheckEvent(ev, msgName);
             const ui64 advancedCost = VCtx->CostTracker ? VCtx->CostTracker->GetCost(*ev->Get()) : 0;
-            const ui32 recByteSize = ev->Get()->GetCachedByteSize();
             auto &record = ev->Get()->Record;
             auto &msgQoS = *record.MutableMsgQoS();
 
@@ -1323,6 +1333,8 @@ namespace NKikimr {
             const ui64 internalMessageId = AllocateMessageId();
             msgQoS.SetInternalMessageId(internalMessageId);
             FillInCostSettingsAndTimestampIfRequired(&msgQoS, now);
+            ev->Get()->InvalidateCachedByteSize();
+            const ui32 recByteSize = ev->Get()->GetCachedByteSize();
 
             // check queue compatibility: it's a contract between BlobStorage Proxy and VDisk,
             // we don't work if queues are incompatible

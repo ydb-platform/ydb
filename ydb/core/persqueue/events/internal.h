@@ -7,6 +7,8 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/common/write_stats.h>
+#include <ydb/core/persqueue/common/partitioning_keys_manager.h>
 #include <ydb/core/persqueue/common/metering.h>
 #include <ydb/core/persqueue/common/sourceid_info.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
@@ -236,6 +238,7 @@ struct TEvPQ {
         EvMLPUpdateExternalLockedMessageGroupsId,
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
+        EvRewindCommitResult,
         EvEnd,
     };
 
@@ -274,6 +277,7 @@ struct TEvPQ {
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
+            std::optional<ui64> MaxSeqNo; // for batch msgs
             ui16 PartNo;
             ui16 TotalParts;
             ui32 TotalSize;
@@ -297,6 +301,9 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
+            ui32 MessageCount = 1;
+            NPQ::EMessageFormat MessageFormat = NPQ::EMessageFormat::STANDARD;
+            std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)
@@ -331,7 +338,7 @@ struct TEvPQ {
 
     struct TEvRead : public TEventLocal<TEvRead, EvRead> {
         TEvRead(const ui64 cookie, const ui64 offset, ui64 lastOffset, const ui16 partNo, const ui32 count,
-                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size,
+                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size, const bool readToBlobEnd,
                 const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC,
                 bool externalOperation, const TActorId& pipeClient, const TActorId& replyTo = {})
             : Cookie(cookie)
@@ -342,6 +349,7 @@ struct TEvPQ {
             , ClientId(clientId)
             , Timeout(timeout)
             , Size(size)
+            , ReadToBlobEnd(readToBlobEnd)
             , MaxTimeLagMs(maxTimeLagMs)
             , ReadTimestampMs(readTimestampMs)
             , ClientDC(clientDC)
@@ -359,6 +367,7 @@ struct TEvPQ {
         TString ClientId;
         ui32 Timeout;
         ui32 Size;
+        bool ReadToBlobEnd;
         ui32 MaxTimeLagMs;
         ui64 ReadTimestampMs;
         TString ClientDC;
@@ -1109,9 +1118,9 @@ struct TEvPQ {
     };
 
     struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {
-        TEvConsumed(ui64 consumedBytes, ui64 consumedDeduplicationIds, ui64 requestCookie, const TString& consumer)
+        TEvConsumed(ui64 consumedBytes, ui64 consumedMessages, ui64 requestCookie, const TString& consumer)
             : ConsumedBytes(consumedBytes)
-            , ConsumedDeduplicationIds(consumedDeduplicationIds)
+            , ConsumedMessages(consumedMessages)
             , RequestCookie(requestCookie)
             , Consumer(consumer)
         {}
@@ -1122,7 +1131,7 @@ struct TEvPQ {
         {}
 
         ui64 ConsumedBytes;
-        ui64 ConsumedDeduplicationIds;
+        ui64 ConsumedMessages;
         ui64 RequestCookie;
         TString Consumer;
         bool IsOverhead = false;
@@ -1250,8 +1259,8 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
-        // SourceId->WritenBytes
-        std::vector<std::pair<TString, ui64>> WrittenBytes;
+        // Tag -> (SourceId -> metric value) + Keys stats
+        NPQ::TWriteStats WriteStats;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;
@@ -1832,6 +1841,15 @@ struct TEvPQ {
         ui64 GetApproximateLockedMessageCount() const {
             return Record.GetApproximateLockedMessageCount();
         }
+    };
+
+    struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
+        explicit TEvRewindCommitResult(NYdb::TStatus status)
+            : Status(std::move(status))
+        {
+        }
+
+        NYdb::TStatus Status;
     };
 };
 

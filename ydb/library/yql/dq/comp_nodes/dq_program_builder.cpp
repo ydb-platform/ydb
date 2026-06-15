@@ -187,6 +187,35 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
+    TRuntimeNode input,
+    const TUnaryLambda& watermarkExtractor,
+    const TUnaryLambda& partitionIdExtractor,
+    TArrayRef<std::string_view> watermarkSettings
+) {
+    auto returnType = AS_TYPE(TStreamType, input);
+    auto itemType = returnType->GetItemType();
+
+    const auto itemArg = Arg(itemType);
+    const auto watermark = watermarkExtractor(itemArg);
+    const auto partitionId = partitionIdExtractor(itemArg);
+
+    TRuntimeNode::TList watermarkSettingItems;
+    for (const auto& setting : watermarkSettings) {
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(setting));
+    }
+    const auto watermarkSettingsNode = NewList(NewDataType(NUdf::EDataSlot::String), watermarkSettingItems);
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(input);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(watermark);
+    callableBuilder.Add(partitionId);
+    callableBuilder.Add(watermarkSettingsNode);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TType* TDqProgramBuilder::LastScalarIndexBlock() {
     return NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar);
 }

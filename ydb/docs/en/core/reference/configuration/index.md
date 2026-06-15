@@ -13,6 +13,7 @@ The following top-level configuration sections are available, listed in alphabet
 || **Section** | **Required** | **Description** ||
 || [{#T}](actor_system_config.md) | Yes | CPU resource allocation across actor system pools ||
 || [{#T}](auth_config.md) | No | Authentication and authorization settings ||
+|| [{#T}](aws_client_config.md) | No | AWS client default settings ||
 || [{#T}](blob_storage_config.md) | No | Static cluster group configuration for system tablets ||
 || [{#T}](bridge_config.md) | No | Cluster piles for bridge mode ||
 || [{#T}](client_certificate_authorization.md) | No | Client certificate authentication ||
@@ -51,4 +52,3 @@ While this documentation section focuses on complete reference documentation for
 ## Sample Cluster Configurations
 
 You can find model cluster configurations for deployment in the [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Check them out before deploying a cluster.
-

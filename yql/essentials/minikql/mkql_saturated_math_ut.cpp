@@ -19,12 +19,12 @@ Y_UNIT_TEST(IsBelongToInterval_RightDirection_Normal) {
 }
 
 Y_UNIT_TEST(IsBelongToInterval_RightDirection_Overflow) {
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<ui32>::max(), 1u, std::numeric_limits<ui32>::max()));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<ui32>::max(), 1u, 0u));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<ui32>::max(), 1u, 100u));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<ui32>::max(), 1U, std::numeric_limits<ui32>::max()));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<ui32>::max(), 1U, 0U));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<ui32>::max(), 1U, 100U));
 
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<ui32>::max(), 1u, std::numeric_limits<ui32>::max()));
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<ui32>::max(), 1u, 0u));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<ui32>::max(), 1U, std::numeric_limits<ui32>::max()));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<ui32>::max(), 1U, 0U));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_LeftDirection_Normal) {
@@ -40,11 +40,11 @@ Y_UNIT_TEST(IsBelongToInterval_LeftDirection_Normal) {
 }
 
 Y_UNIT_TEST(IsBelongToInterval_LeftDirection_Underflow_Unsigned) {
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 5u, 10u, 0u));
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 5u, 10u, 1u));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 5U, 10U, 0U));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 5U, 10U, 1U));
 
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 5u, 10u, 0u));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 5u, 10u, 100u));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 5U, 10U, 0U));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 5U, 10U, 100U));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_LeftDirection_Underflow_Signed) {
@@ -61,14 +61,14 @@ Y_UNIT_TEST(IsBelongToInterval_BoundaryValues_ui64) {
     UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<ui64>::max(), ui64(0), std::numeric_limits<ui64>::max()));
     UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<ui64>::max(), ui64(0), ui64(0)));
 
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 0ul, 0ul, 0ul));
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 0ul, 0ul, 1ul));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 0UL, 0UL, 0UL));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 0UL, 0UL, 1UL));
 
     UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<ui64>::max(), ui64(0), std::numeric_limits<ui64>::max()));
     UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<ui64>::max(), ui64(0), ui64(0)));
 
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 0ul, 0ul, 0ul));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 0ul, 0ul, 1ul));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 0UL, 0UL, 0UL));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 0UL, 0UL, 1UL));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_BoundaryValues_i64) {
@@ -88,21 +88,21 @@ Y_UNIT_TEST(IsBelongToInterval_BoundaryValues_i64) {
 }
 
 Y_UNIT_TEST(IsBelongToInterval_Float) {
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0f, 5.0f, 15.0f));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0f, 5.0f, 10.0f));
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0f, 5.0f, 15.1f));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0F, 5.0F, 15.0F));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0F, 5.0F, 10.0F));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0F, 5.0F, 15.1F));
 
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.0f, 5.0f, 5.0f));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.0f, 5.0f, 0.0f));
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.0f, 5.0f, 5.1f));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.0F, 5.0F, 5.0F));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.0F, 5.0F, 0.0F));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.0F, 5.0F, 5.1F));
 
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0f, 5.0f, 15.0f));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0f, 5.0f, 15.1f));
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0f, 5.0f, 14.9f));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0F, 5.0F, 15.0F));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0F, 5.0F, 15.1F));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0F, 5.0F, 14.9F));
 
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0f, 5.0f, 5.0f));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0f, 5.0f, 5.1f));
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0f, 5.0f, 4.9f));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0F, 5.0F, 5.0F));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0F, 5.0F, 5.1F));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0F, 5.0F, 4.9F));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_Double) {
@@ -124,16 +124,16 @@ Y_UNIT_TEST(IsBelongToInterval_Double) {
 }
 
 Y_UNIT_TEST(IsBelongToInterval_Float_BoundaryValues) {
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<float>::max(), 5.f, std::numeric_limits<float>::max()));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<float>::max(), 0.0f, 0.0f));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<float>::max(), 5.F, std::numeric_limits<float>::max()));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<float>::max(), 0.0F, 0.0F));
 
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, std::numeric_limits<float>::lowest(), 0.0f, std::numeric_limits<float>::lowest()));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, std::numeric_limits<float>::lowest(), 0.0F, std::numeric_limits<float>::lowest()));
 
     UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<float>::max(), 7.0, std::numeric_limits<float>::max()));
-    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<float>::max(), 0.0f, 0.0f));
+    UNIT_ASSERT(!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, std::numeric_limits<float>::max(), 0.0F, 0.0F));
 
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, std::numeric_limits<float>::lowest(), 0.0f, std::numeric_limits<float>::lowest()));
-    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, std::numeric_limits<float>::lowest(), 0.0f, 0.0f));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, std::numeric_limits<float>::lowest(), 0.0F, std::numeric_limits<float>::lowest()));
+    UNIT_ASSERT(IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, std::numeric_limits<float>::lowest(), 0.0F, 0.0F));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_Double_BoundaryValues) {
@@ -155,9 +155,9 @@ Y_UNIT_TEST(IsBelongToInterval_Double_BoundaryValues) {
 }
 
 Y_UNIT_TEST(IsBelongToInterval_MixedTypes_i64_ui32) {
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i64(1000000000000ll), ui32(500), i64(1000000000500ll))));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i64(1000000000000ll), ui32(500), i64(1000000000501ll))));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i64(1000000000000ll), ui32(500), i64(999999999500ll))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i64(1000000000000LL), ui32(500), i64(1000000000500LL))));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i64(1000000000000LL), ui32(500), i64(1000000000501LL))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i64(1000000000000LL), ui32(500), i64(999999999500LL))));
 
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i64(-100), ui32(50), i64(-50))));
     UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i64(-100), ui32(50), i64(-49))));
@@ -168,12 +168,12 @@ Y_UNIT_TEST(IsBelongToInterval_MixedTypes_i64_ui32) {
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i64(0), ui32(0), i64(0))));
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i64(0), ui32(0), i64(0))));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i64(1000000000000ll), ui32(500), i64(1000000000500ll))));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i64(1000000000000ll), ui32(500), i64(1000000000501ll))));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i64(1000000000000ll), ui32(500), i64(1000000000499ll))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i64(1000000000000LL), ui32(500), i64(1000000000500LL))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i64(1000000000000LL), ui32(500), i64(1000000000501LL))));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i64(1000000000000LL), ui32(500), i64(1000000000499LL))));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, i64(1000000000000ll), ui32(500), i64(999999999500ll))));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, i64(1000000000000ll), ui32(500), i64(999999999499ll))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, i64(1000000000000LL), ui32(500), i64(999999999500LL))));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, i64(1000000000000LL), ui32(500), i64(999999999499LL))));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_MixedTypes_i16_ui64) {
@@ -198,65 +198,65 @@ Y_UNIT_TEST(IsBelongToInterval_MixedTypes_i16_ui64) {
 }
 
 Y_UNIT_TEST(IsBelongToInterval_MixedTypes_float_i32) {
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.5f, i32(5), 15.5f)));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.5f, i32(5), 15.6f)));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.5f, i32(5), 5.5f)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.5F, i32(5), 15.5F)));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.5F, i32(5), 15.6F)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.5F, i32(5), 5.5F)));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, -10.5f, i32(5), -5.5f)));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, -10.5f, i32(5), -15.5f)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, -10.5F, i32(5), -5.5F)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, -10.5F, i32(5), -15.5F)));
 
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<float>::max(), std::numeric_limits<i32>::max(), std::numeric_limits<float>::max())));
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, std::numeric_limits<float>::lowest(), std::numeric_limits<i32>::max(), std::numeric_limits<float>::lowest())));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 0.0f, i32(0), 0.0f)));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 0.0f, i32(0), 0.0f)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 0.0F, i32(0), 0.0F)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 0.0F, i32(0), 0.0F)));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.5f, i32(5), 15.5f)));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.5f, i32(5), 15.6f)));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.5f, i32(5), 15.4f)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.5F, i32(5), 15.5F)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.5F, i32(5), 15.6F)));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.5F, i32(5), 15.4F)));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.5f, i32(5), 5.5f)));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.5f, i32(5), 5.4f)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.5F, i32(5), 5.5F)));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.5F, i32(5), 5.4F)));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_MixedTypes_i32_float) {
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i32(10), 5.5f, i32(15))));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i32(10), 5.5f, i32(16))));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i32(10), 5.5f, i32(5))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i32(10), 5.5F, i32(15))));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i32(10), 5.5F, i32(16))));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i32(10), 5.5F, i32(5))));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i32(-10), 5.5f, i32(-5))));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i32(-10), 5.5f, i32(-15))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i32(-10), 5.5F, i32(-5))));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i32(-10), 5.5F, i32(-15))));
 
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<i32>::max(), std::numeric_limits<float>::max(), std::numeric_limits<i32>::max())));
     UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, std::numeric_limits<i32>::min(), std::numeric_limits<float>::max(), std::numeric_limits<i32>::min())));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i32(0), 0.0f, i32(0))));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i32(0), 0.0f, i32(0))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, i32(0), 0.0F, i32(0))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, i32(0), 0.0F, i32(0))));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i32(10), 5.5f, i32(16))));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i32(10), 5.5f, i32(15))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i32(10), 5.5F, i32(16))));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, i32(10), 5.5F, i32(15))));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, i32(10), 5.5f, i32(5))));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, i32(10), 5.5f, i32(4))));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, i32(10), 5.5F, i32(5))));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, i32(10), 5.5F, i32(4))));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_MixedTypes_double_float) {
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0, 5.0f, 15.0)));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0, 5.0f, 15.1)));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.0, 5.0f, 5.0)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0, 5.0F, 15.0)));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 10.0, 5.0F, 15.1)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 10.0, 5.0F, 5.0)));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, -10.0, 5.0f, -5.0)));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, -10.0, 5.0f, -15.0)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, -10.0, 5.0F, -5.0)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, -10.0, 5.0F, -15.0)));
 
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, std::numeric_limits<double>::max(), std::numeric_limits<float>::max(), std::numeric_limits<double>::max())));
     UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, std::numeric_limits<double>::lowest(), std::numeric_limits<float>::max(), std::numeric_limits<double>::lowest())));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 0.0, 0.0f, 0.0)));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 0.0, 0.0f, 0.0)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Following, 0.0, 0.0F, 0.0)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Left, EDirection::Preceding, 0.0, 0.0F, 0.0)));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0, 5.0f, 15.0)));
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0, 5.0f, 15.1)));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0, 5.0f, 14.9)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0, 5.0F, 15.0)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0, 5.0F, 15.1)));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Following, 10.0, 5.0F, 14.9)));
 
-    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0, 5.0f, 5.0)));
-    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0, 5.0f, 4.9)));
+    UNIT_ASSERT((IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0, 5.0F, 5.0)));
+    UNIT_ASSERT((!IsBelongToInterval(EInfBoundary::Right, EDirection::Preceding, 10.0, 5.0F, 4.9)));
 }
 
 Y_UNIT_TEST(IsBelongToInterval_Decimal_NormalNumbers) {

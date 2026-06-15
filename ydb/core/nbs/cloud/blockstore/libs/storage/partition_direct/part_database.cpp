@@ -4,6 +4,71 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TVChunkConfigProto = PartitionDirect::NProto::TVChunkConfig;
+
+TVChunkConfigProto ToProto(const TVChunkConfig& cfg)
+{
+    TVChunkConfigProto proto;
+    proto.SetVChunkIndex(cfg.GetVChunkIndex());
+    const auto disabled = cfg.GetDisabledHosts();
+    for (THostIndex i = 0; i < cfg.GetHostCount(); ++i) {
+        proto.AddPBufferHostRoles(static_cast<ui32>(cfg.GetPBufferRole(i)));
+        proto.AddDDiskHostRoles(static_cast<ui32>(cfg.GetDDiskRole(i)));
+        if (!disabled.Get(i)) {
+            proto.AddEnabledHosts(i);
+        }
+
+        if (const auto watermark = cfg.GetWatermark(i)) {
+            auto* w = proto.AddWatermarks();
+            w->SetHostIndex(i);
+            w->SetValue(watermark.value());
+        }
+    }
+
+    return proto;
+}
+
+TVChunkConfig FromProto(const TVChunkConfigProto& proto)
+{
+    THostRoles pbufferHosts(proto.PBufferHostRolesSize());
+    THostRoles ddiskHosts(proto.DDiskHostRolesSize());
+    THostMask enabledHosts;
+    TVector<std::optional<ui64>> watermarks(proto.DDiskHostRolesSize());
+
+    for (THostIndex i = 0; i < proto.PBufferHostRolesSize(); ++i) {
+        pbufferHosts.SetRole(
+            i,
+            static_cast<EHostRole>(proto.GetPBufferHostRoles(i)));
+    }
+
+    for (THostIndex i = 0; i < proto.DDiskHostRolesSize(); ++i) {
+        ddiskHosts.SetRole(
+            i,
+            static_cast<EHostRole>(proto.GetDDiskHostRoles(i)));
+    }
+
+    for (THostIndex i = 0; i < proto.EnabledHostsSize(); ++i) {
+        enabledHosts.Set(static_cast<THostIndex>(proto.GetEnabledHosts(i)));
+    }
+
+    for (const auto& w: proto.GetWatermarks()) {
+        watermarks[w.GetHostIndex()] = w.GetValue();
+    }
+
+    return TVChunkConfig::Make(
+        proto.GetVChunkIndex(),
+        pbufferHosts,
+        ddiskHosts,
+        enabledHosts,
+        std::move(watermarks));
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TPartitionDatabase::InitSchema()
@@ -58,6 +123,28 @@ bool TPartitionDatabase::ReadDirectBlockGroupsConnections(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionDatabase::ReadAllVChunkConfigs(TVector<TVChunkConfig>& out)
+{
+    using TTable = TPartitionSchema::VChunkConfigs;
+
+    auto it = Table<TTable>().Range().Select<TTable::Config>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::Config>()) {
+            out.push_back(FromProto(it.GetValue<TTable::Config>()));
+        }
+        it.Next();
+    }
+
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TPartitionDatabase::StoreVolumeConfig(
     const NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
@@ -77,6 +164,17 @@ void TPartitionDatabase::StoreDirectBlockGroupsConnections(
     Table<TTable>().Key(1).Update(
         NKikimr::NIceDb::TUpdate<TTable::DirectBlockGroupsConnections>(
             directBlockGroupsConnections));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfig& cfg)
+{
+    using TTable = TPartitionSchema::VChunkConfigs;
+
+    Table<TTable>()
+        .Key(cfg.GetVChunkIndex())
+        .Update(NKikimr::NIceDb::TUpdate<TTable::Config>(ToProto(cfg)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -137,9 +137,6 @@ public:
                     if (pbTable.HasUniformPartitionsCount()) {
                         pbCommon.SetPartitions(pbTable.GetUniformPartitionsCount());
                     }
-                    if (pbTable.SplitBoundarySize() > 0) {
-                        pbCommon.SetPartitions(pbTable.SplitBoundarySize() + 1);
-                    }
                     if (pbTable.ColumnsSize() > 0) {
                         NKikimrViewer::TMetaTableInfo& pbMetaTable = *metaInfo.MutableTable();
                         for (const auto& column : pbTable.GetColumns()) {
@@ -157,6 +154,7 @@ public:
                 }
                 if (pbPathDescription.HasTableStats()) {
                     const auto& pbTableStats(pbPathDescription.GetTableStats());
+                    pbCommon.SetPartitions(pbTableStats.GetPartCount());
                     pbCommon.SetRowCount(pbTableStats.GetRowCount());
                     pbCommon.SetAccessTime(pbTableStats.GetLastAccessTime());
                     pbCommon.SetUpdateTime(pbTableStats.GetLastUpdateTime());

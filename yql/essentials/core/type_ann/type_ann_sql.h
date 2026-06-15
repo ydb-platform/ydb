@@ -6,6 +6,24 @@ namespace NYql::NTypeAnnImpl {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TInput {
+    enum EInputPriority {
+        External,
+        Current,
+        Projection
+    };
+
+    TString Alias;
+    const TStructExprType* Type = nullptr;
+    TMaybe<TColumnOrder> Order;
+    EInputPriority Priority = External;
+    TSet<TString> UsedExternalColumns;
+};
+
+using TInputs = TVector<TInput>;
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool IsPlainMemberOverArg(const TExprNode& expr, TStringBuf& memberName);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -51,5 +69,7 @@ IGraphTransformer::TStatus SqlGroupRefWrapper(const TExprNode::TPtr& input, TExp
 IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
 IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
+IGraphTransformer::TStatus SqlWindowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
 } // namespace NYql::NTypeAnnImpl

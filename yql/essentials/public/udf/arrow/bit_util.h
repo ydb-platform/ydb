@@ -24,25 +24,25 @@ inline ui8* DecompressToSparseBitmap(ui8* dstSparse, const ui8* src, size_t srcO
         src += offsetBytes;
         if (offsetTail != 0) {
             for (ui8 i = offsetTail; count > 0 && i < 8; i++, count--) {
-                *dstSparse++ = (*src >> i) & 1u;
+                *dstSparse++ = (*src >> i) & 1U;
             }
             src++;
         }
     }
     while (count >= 8) {
         ui8 slot = *src++;
-        *dstSparse++ = (slot >> 0) & 1u;
-        *dstSparse++ = (slot >> 1) & 1u;
-        *dstSparse++ = (slot >> 2) & 1u;
-        *dstSparse++ = (slot >> 3) & 1u;
-        *dstSparse++ = (slot >> 4) & 1u;
-        *dstSparse++ = (slot >> 5) & 1u;
-        *dstSparse++ = (slot >> 6) & 1u;
-        *dstSparse++ = (slot >> 7) & 1u;
+        *dstSparse++ = (slot >> 0) & 1U;
+        *dstSparse++ = (slot >> 1) & 1U;
+        *dstSparse++ = (slot >> 2) & 1U;
+        *dstSparse++ = (slot >> 3) & 1U;
+        *dstSparse++ = (slot >> 4) & 1U;
+        *dstSparse++ = (slot >> 5) & 1U;
+        *dstSparse++ = (slot >> 6) & 1U;
+        *dstSparse++ = (slot >> 7) & 1U;
         count -= 8;
     }
     for (ui8 i = 0; i < count; i++) {
-        *dstSparse++ = (*src >> i) & 1u;
+        *dstSparse++ = (*src >> i) & 1U;
     }
     return dstSparse;
 }
@@ -51,14 +51,14 @@ template <bool Negate>
 inline void CompressSparseImpl(ui8* dst, const ui8* srcSparse, size_t len) {
     while (len >= 8) {
         ui8 result = 0;
-        result |= (*srcSparse++ & 1u) << 0;
-        result |= (*srcSparse++ & 1u) << 1;
-        result |= (*srcSparse++ & 1u) << 2;
-        result |= (*srcSparse++ & 1u) << 3;
-        result |= (*srcSparse++ & 1u) << 4;
-        result |= (*srcSparse++ & 1u) << 5;
-        result |= (*srcSparse++ & 1u) << 6;
-        result |= (*srcSparse++ & 1u) << 7;
+        result |= (*srcSparse++ & 1U) << 0;
+        result |= (*srcSparse++ & 1U) << 1;
+        result |= (*srcSparse++ & 1U) << 2;
+        result |= (*srcSparse++ & 1U) << 3;
+        result |= (*srcSparse++ & 1U) << 4;
+        result |= (*srcSparse++ & 1U) << 5;
+        result |= (*srcSparse++ & 1U) << 6;
+        result |= (*srcSparse++ & 1U) << 7;
         if constexpr (Negate) {
             *dst++ = ~result;
         } else {
@@ -69,7 +69,7 @@ inline void CompressSparseImpl(ui8* dst, const ui8* srcSparse, size_t len) {
     if (len) {
         ui8 result = 0;
         for (ui8 i = 0; i < len; ++i) {
-            result |= (*srcSparse++ & 1u) << i;
+            result |= (*srcSparse++ & 1U) << i;
         }
         if constexpr (Negate) {
             *dst++ = ~result;
@@ -116,7 +116,7 @@ inline void CopyDenseBitmap(ui8* dst, const ui8* src, size_t srcOffset, size_t l
     } else {
         src += srcOffset >> 3;
         // Round up to 8
-        len = (len + 7u) & ~size_t(7u);
+        len = (len + 7U) & ~size_t(7U);
         memcpy(dst, src, len >> 3);
     }
 }

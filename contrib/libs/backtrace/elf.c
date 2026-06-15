@@ -1,5 +1,5 @@
 /* elf.c -- Get debug data from an ELF file for backtraces.
-   Copyright (C) 2012-2024 Free Software Foundation, Inc.
+   Copyright (C) 2012-2026 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -1166,7 +1166,7 @@ elf_fetch_bits (const unsigned char **ppin, const unsigned char *pinend,
   return 1;
 }
 
-/* This is like elf_fetch_bits, but it fetchs the bits backward, and ensures at
+/* This is like elf_fetch_bits, but it fetches the bits backward, and ensures at
    least 16 bits.  This is for zstd.  */
 
 static int
@@ -4338,15 +4338,17 @@ elf_zstd_unpack_seq_decode (int mode,
   return 1;
 }
 
-/* Decompress a zstd stream from PIN/SIN to POUT/SOUT.  Code based on RFC 8878.
+/* Decompress a single zstd frame from *PPIN, ending at PINEND, to *PPOUT/SOUT.
    Return 1 on success, 0 on error.  */
 
 static int
-elf_zstd_decompress (const unsigned char *pin, size_t sin,
-		     unsigned char *zdebug_table, unsigned char *pout,
-		     size_t sout)
+elf_zstd_decompress_frame (const unsigned char **ppin,
+			   const unsigned char *pinend,
+			   unsigned char *zdebug_table, unsigned char **ppout,
+			   size_t sout)
 {
-  const unsigned char *pinend;
+  const unsigned char *pin;
+  unsigned char *pout;
   unsigned char *poutstart;
   unsigned char *poutend;
   struct elf_zstd_seq_decode literal_decode;
@@ -4366,9 +4368,9 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
   uint64_t content_size;
   int last_block;
 
-  pinend = pin + sin;
+  pin = *ppin;
+  pout = *ppout;
   poutstart = pout;
-  poutend = pout + sout;
 
   literal_decode.table = NULL;
   literal_decode.table_bits = -1;
@@ -4394,7 +4396,7 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
   repeated_offset2 = 4;
   repeated_offset3 = 8;
 
-  if (unlikely (sin < 4))
+  if (unlikely (pinend - pin < 4))
     {
       elf_uncompress_failed ();
       return 0;
@@ -4492,11 +4494,13 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
     }
 
   if (unlikely (content_size != (size_t) content_size
-		|| (size_t) content_size != sout))
+		|| (size_t) content_size > sout))
     {
       elf_uncompress_failed ();
       return 0;
     }
+
+  poutend = pout + content_size;
 
   last_block = 0;
   while (!last_block)
@@ -4616,6 +4620,11 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
 		pin += 2;
 	      }
 
+	    pback = NULL;
+	    bits = 0;
+	    literal_state = 0;
+	    offset_state = 0;
+	    match_state = 0;
 	    if (seq_count > 0)
 	      {
 		int (*pfn)(const struct elf_zstd_fse_entry *,
@@ -4655,27 +4664,27 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
 						 match_fse_table, 9, pfn,
 						 &match_decode))
 		  return 0;
+
+		pback = pblockend - 1;
+		if (!elf_fetch_backward_init (&pback, pin, &val, &bits))
+		  return 0;
+
+		bits -= literal_decode.table_bits;
+		literal_state = ((val >> bits)
+				 & ((1U << literal_decode.table_bits) - 1));
+
+		if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+		  return 0;
+		bits -= offset_decode.table_bits;
+		offset_state = ((val >> bits)
+				& ((1U << offset_decode.table_bits) - 1));
+
+		if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+		  return 0;
+		bits -= match_decode.table_bits;
+		match_state = ((val >> bits)
+			       & ((1U << match_decode.table_bits) - 1));
 	      }
-
-	    pback = pblockend - 1;
-	    if (!elf_fetch_backward_init (&pback, pin, &val, &bits))
-	      return 0;
-
-	    bits -= literal_decode.table_bits;
-	    literal_state = ((val >> bits)
-			     & ((1U << literal_decode.table_bits) - 1));
-
-	    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-	      return 0;
-	    bits -= offset_decode.table_bits;
-	    offset_state = ((val >> bits)
-			    & ((1U << offset_decode.table_bits) - 1));
-
-	    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-	      return 0;
-	    bits -= match_decode.table_bits;
-	    match_state = ((val >> bits)
-			   & ((1U << match_decode.table_bits) - 1));
 
 	    seq = 0;
 	    while (1)
@@ -4696,6 +4705,40 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
 		uint32_t literal;
 		uint32_t need;
 		uint32_t add;
+
+		if (unlikely (seq >= seq_count))
+		  {
+		    /* Copy remaining literals.  */
+		    if (literal_count > 0 && plit != pout)
+		      {
+			if (unlikely ((size_t)(poutend - pout)
+				      < literal_count))
+			  {
+			    elf_uncompress_failed ();
+			    return 0;
+			  }
+
+			if ((size_t)(plit - pout) < literal_count)
+			  {
+			    uint32_t move;
+
+			    move = plit - pout;
+			    while (literal_count > move)
+			      {
+				memcpy (pout, plit, move);
+				pout += move;
+				plit += move;
+				literal_count -= move;
+			      }
+			  }
+
+			memcpy (pout, plit, literal_count);
+		      }
+
+		    pout += literal_count;
+
+		    break;
+		  }
 
 		pt = &offset_decode.table[offset_state];
 		offset_basebits = pt->basebits;
@@ -4934,40 +4977,6 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
 			  }
 		      }
 		  }
-
-		if (unlikely (seq >= seq_count))
-		  {
-		    /* Copy remaining literals.  */
-		    if (literal_count > 0 && plit != pout)
-		      {
-			if (unlikely ((size_t)(poutend - pout)
-				      < literal_count))
-			  {
-			    elf_uncompress_failed ();
-			    return 0;
-			  }
-
-			if ((size_t)(plit - pout) < literal_count)
-			  {
-			    uint32_t move;
-
-			    move = plit - pout;
-			    while (literal_count > move)
-			      {
-				memcpy (pout, plit, move);
-				pout += move;
-				plit += move;
-				literal_count -= move;
-			      }
-			  }
-
-			memcpy (pout, plit, literal_count);
-		      }
-
-		    pout += literal_count;
-
-		    break;
-		  }
 	      }
 
 	    pin = pblockend;
@@ -4996,7 +5005,42 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
       pin += 4;
     }
 
-  if (pin != pinend)
+  *ppin = pin;
+  *ppout = pout;
+
+  return 1;
+}
+
+/* Decompress a zstd stream from PIN/SIN to POUT/SOUT.  Code based on RFC 8878.
+   Return 1 on success, 0 on error.  */
+
+static int
+elf_zstd_decompress (const unsigned char *pin, size_t sin,
+		     unsigned char *zdebug_table, unsigned char *pout,
+		     size_t sout)
+{
+  const unsigned char *pinend;
+
+  pinend = pin + sin;
+
+  while (sin > 0)
+    {
+      const unsigned char *pin_frame;
+      unsigned char *pout_frame;
+
+      pin_frame = pin;
+      pout_frame = pout;
+      if (!elf_zstd_decompress_frame (&pin_frame, pinend, zdebug_table,
+				      &pout_frame, sout))
+	return 0;
+
+      sin -= pin_frame - pin;
+      pin = pin_frame;
+      sout -= pout_frame - pout;
+      pout = pout_frame;
+    }
+
+  if (sout > 0)
     {
       elf_uncompress_failed ();
       return 0;

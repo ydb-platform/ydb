@@ -715,6 +715,7 @@ public:
             }
 
             const auto& info = it->second;
+            // Streaming queries don't support DDL such as CREATE SECRET or ALTER USER, so we don't hide their texts.
             LOG_T("Described query: " << query.Path << ", state: " << query.State.ShortDebugString()
                 << ", text: " << info.QueryText
                 << ", run: " << info.Run

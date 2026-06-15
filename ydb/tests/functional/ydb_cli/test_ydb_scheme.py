@@ -1,26 +1,15 @@
 import json
-import os
 import pytest
 
 import yatest
 
-from ydb.tests.oss.canonical import set_canondata_root
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, set_ydb_cli_test_canondata_root
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_views", "enable_external_data_sources"],
     extra_grpc_services=["view"],
     query_service_config=dict(available_external_data_sources=["ObjectStorage"]),
 )
-
-
-def bin_from_env(var):
-    if os.getenv(var):
-        return yatest.common.binary_path(os.getenv(var))
-    raise RuntimeError(f"{var} environment variable is not specified")
-
-
-def ydb_bin():
-    return bin_from_env("YDB_CLI_BINARY")
 
 
 def canonical_result(output_result, tmp_path):
@@ -93,7 +82,27 @@ class TestSchemeDescribe:
     @pytest.fixture(autouse=True, scope="function")
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
-        set_canondata_root("ydb/tests/functional/ydb_cli/canondata")
+        set_ydb_cli_test_canondata_root()
+
+    def test_describe_external_data_source(self, ydb_cluster, ydb_database, ydb_client_session):
+        database_path = ydb_database
+        external_data_source = "external_data_source"
+        session_pool = ydb_client_session(database_path)
+        with session_pool.checkout() as session:
+            create_external_data_source(session, external_data_source)
+
+            output = execute_ydb_cli_command(
+                ydb_cluster.nodes[1],
+                database_path,
+                ["scheme", "describe", external_data_source],
+            )
+            # The pretty output is non-deterministic (it carries a creation timestamp),
+            # so assert on the rendered fields rather than comparing against canondata.
+            assert "<external-data-source> " + external_data_source in output
+            assert "Source type: ObjectStorage" in output
+            assert "Location: localhost:1" in output
+            assert "Auth method: NONE" in output
+            assert "Created:" in output
 
     def test_describe_external_table_references_json(self, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
@@ -278,7 +287,7 @@ class TestViewSchemeDescribe:
     @pytest.fixture(autouse=True, scope="function")
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
-        set_canondata_root("ydb/tests/functional/ydb_cli/canondata")
+        set_ydb_cli_test_canondata_root()
 
     def test_describe_view(self, ydb_cluster_configuration, ydb_cluster, ydb_database, ydb_client_session):
         session_pool = ydb_client_session(ydb_database)

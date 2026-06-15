@@ -8,6 +8,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/testlib/helpers.h>
 
+#include <utility>
+
 namespace NKikimr::NKqp::NScheduler {
 
 namespace {
@@ -19,13 +21,12 @@ namespace {
         .MaxRandomDelay = TDuration::MicroSeconds(100),
     };
 
-    constexpr TDuration kDefaultUpdateFairSharePeriod = TDuration::MilliSeconds(500);
-
-    std::vector<TSchedulableTaskPtr> CreateDemandTasks(NHdrf::NDynamic::TQueryPtr query, ui64 demand) {
+    std::vector<TSchedulableTaskPtr> CreateDemandTasks(const NHdrf::NDynamic::TQueryPtr& query, ui64 demand) {
         std::vector<TSchedulableTaskPtr> tasks;
 
         // Currently Demand for query snapshot is set as (Demand + ActualDemand) / 2.
         // ActualDemand is set to 0 after each snapshot take, so to avoid updating is every time this workaround was implemented
+        tasks.reserve(2 * demand);
         for (ui64 i = 0; i < 2 * demand; ++i) {
             tasks.emplace_back(std::make_shared<TSchedulableTask>(query));
         }
@@ -53,16 +54,16 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 2;
 
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TOptions options{
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         std::unique_ptr<TComputeScheduler> scheduler;
         if (DefaultFairShareMode) {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams);
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         } else {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            options.FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT;
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         }
         scheduler->SetTotalCpuLimit(kCpuLimit);
 
@@ -106,12 +107,12 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 5;
         constexpr ui64 kQueryDemand = 1;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
+            .FairShareMode = NHdrf::NSnapshot::ELeafFairShare::DEFAULT_FIFO,
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::DEFAULT_FIFO);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -158,12 +159,12 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 5;
         constexpr ui64 kQueryDemand = 1;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
+            .FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT,
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -206,12 +207,12 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 5;
         constexpr ui64 kQueryDemand = 1;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
+            .FairShareMode = NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT,
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -255,12 +256,11 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 4;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -286,15 +286,15 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         auto* poolSnapshot1 = queries[0].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot1);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->Demand, kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->CpuDemand.load(), kCpuLimit);
 
         auto* poolSnapshot2 = queries[1].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot2);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->Demand, kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->CpuDemand.load(), kCpuLimit);
 
         auto* databaseSnapshot = poolSnapshot1->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->Demand, kCpuLimit);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->CpuDemand.load(), kCpuLimit);
     }
 
     Y_UNIT_TEST_TWIN(LeftFairShareIsDistributed, DefaultFairShareMode) {
@@ -308,16 +308,16 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 4;
 
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TOptions options{
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         std::unique_ptr<TComputeScheduler> scheduler;
         if (DefaultFairShareMode) {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams);
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         } else {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            options.FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT;
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         }
         scheduler->SetTotalCpuLimit(kCpuLimit);
 
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler->UpdateFairShare();
 
-        const std::vector<ui64> fairShares = {kQueryDemand, kQueryDemand, kCpuLimit - 2 * kQueryDemand};
+        const std::vector<ui64> fairShares = {kQueryDemand, kQueryDemand, kCpuLimit - (2 * kQueryDemand)};
         for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto querySnapshot = queries[queryId]->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
@@ -362,16 +362,16 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kCpuLimit = 12;
         constexpr ui64 kWeightedFairShare = 4;
 
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TOptions options{
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         std::unique_ptr<TComputeScheduler> scheduler;
         if (DefaultFairShareMode) {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams);
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         } else {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            options.FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT;
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         }
         scheduler->SetTotalCpuLimit(kCpuLimit);
 
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler->UpdateFairShare();
 
         for (size_t i = 0; i < databaseIds.size(); ++i) {
-            auto query = queries[i];
+            const auto& query = queries[i];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, !DefaultFairShareMode
@@ -428,16 +428,16 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kWeightedFairShare = 4;
 
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TOptions options{
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         std::unique_ptr<TComputeScheduler> scheduler;
         if (DefaultFairShareMode) {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams);
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         } else {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            options.FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT;
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         }
         scheduler->SetTotalCpuLimit(kCpuLimit);
 
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler->UpdateFairShare();
 
         for (size_t queryId = 0; queryId < kNQueries; ++queryId) {
-            auto query = queries[queryId];
+            const auto& query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, !DefaultFairShareMode
@@ -546,16 +546,16 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     Y_UNIT_TEST_TWIN(MultipleDatabasesPoolsQueries, DefaultFairShareMode) {
         constexpr ui64 kCpuLimit = 20;
 
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TOptions options{
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         std::unique_ptr<TComputeScheduler> scheduler;
         if (DefaultFairShareMode) {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams);
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         } else {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            options.FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT;
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         }
         scheduler->SetTotalCpuLimit(kCpuLimit);
 
@@ -608,7 +608,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             fairShares = {4, 4, 2, 2, 5, 5, 1};
         }
         for (size_t i = 0; i < queries.size(); ++i) {
-            auto query = queries[i];
+            const auto& query = queries[i];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[i]);
@@ -635,7 +635,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             sumOfFairShares += fairshare;
         }
 
-        auto root = queries[0]->GetSnapshot()->GetParent()->GetParent()->GetParent();
+        auto* root = queries[0]->GetSnapshot()->GetParent()->GetParent()->GetParent();
         UNIT_ASSERT_VALUES_EQUAL(root->FairShare, sumOfFairShares);
     }
 
@@ -647,12 +647,11 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 12;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -678,7 +677,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT(databaseSnapshot);
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 0);
 
-        auto root = databaseSnapshot->GetParent();
+        auto* root = databaseSnapshot->GetParent();
         UNIT_ASSERT(root);
         UNIT_ASSERT_VALUES_EQUAL(root->FairShare, 0);
     }
@@ -694,19 +693,18 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 2;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
-        scheduler.AddOrUpdateDatabase(databaseId, {.Limit = kInternalLimit});
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuLimit = kInternalLimit});
 
         const TString poolId = "pool1";
-        scheduler.AddOrUpdatePool(databaseId, poolId, {.Limit = kInternalLimit});
+        scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kInternalLimit});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
@@ -744,16 +742,15 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 2;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
-        scheduler.AddOrUpdateDatabase(databaseId, {.Limit = kInternalLimit});
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuLimit = kInternalLimit});
 
         const TString poolId = "pool1";
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
@@ -767,8 +764,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler.UpdateFairShare();
 
-        for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto querySnapshot = queries[queryId]->GetSnapshot();
+        for (const auto& querie : queries) {
+            auto querySnapshot = querie->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot->FairShare, kInternalLimit, "With zero limit overlimit should be ignored");
         }
@@ -789,12 +786,11 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 10;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -821,17 +817,17 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 5;
 
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TOptions options{
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
 
         std::unique_ptr<TComputeScheduler> scheduler;
         if (DefaultFairShareMode) {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams);
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         } else {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            options.FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT;
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         }
         scheduler->SetTotalCpuLimit(kCpuLimit);
 
@@ -904,16 +900,16 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr size_t kNQueries = 3;
         constexpr ui64 kQueryDemand = 5;
 
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TOptions options{
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         std::unique_ptr<TComputeScheduler> scheduler;
         if (DefaultFairShareMode) {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams);
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         } else {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            options.FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT;
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         }
         scheduler->SetTotalCpuLimit(kCpuLimit);
 
@@ -939,7 +935,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             fairShares = {kCpuLimit, kCpuLimit, kCpuLimit};
         }
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto query = queries[queryId];
+            const auto& query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[queryId]);
@@ -986,17 +982,17 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         constexpr ui64 kQueryDemand = 3;
         constexpr ui64 kRoundedDemand = 2;
 
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TOptions options{
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
 
         std::unique_ptr<TComputeScheduler> scheduler;
         if (DefaultFairShareMode) {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams);
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         } else {
-            scheduler = std::make_unique<TComputeScheduler>(options.Counters, options.DelayParams, NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+            options.FairShareMode = NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT;
+            scheduler = std::make_unique<TComputeScheduler>(counters, options);
         }
         scheduler->SetTotalCpuLimit(kCpuLimit);
 
@@ -1004,8 +1000,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler->AddOrUpdateDatabase(databaseId, {});
 
         std::vector<TString> pools = {"pool1", "pool2", "pool3"};
-        for (size_t i = 0; i < pools.size(); ++i) {
-            scheduler->AddOrUpdatePool(databaseId, pools[i], {});
+        for (const auto& pool : pools) {
+            scheduler->AddOrUpdatePool(databaseId, pool, {});
         }
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
@@ -1017,8 +1013,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler->UpdateFairShare();
 
-        for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto query = queries[queryId];
+        for (const auto& query : queries) {
             auto querySnapshot = query->GetSnapshot();
 
             UNIT_ASSERT(querySnapshot);
@@ -1041,8 +1036,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler->UpdateFairShare();
 
-        for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto query = queries[queryId];
+        for (const auto& query : queries) {
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kRoundedDemand);
@@ -1062,7 +1056,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         const std::vector<ui64> poolsFairShares = {4, 2, 2, 2};
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto query = queries[queryId];
+            const auto& query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();
             auto* poolSnapshot = querySnapshot->GetParent();
 
@@ -1089,12 +1083,11 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         */
         constexpr ui64 kCpuLimit = 12;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -1118,12 +1111,12 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
     Y_UNIT_TEST(StressTest) {
         constexpr ui64 kCpuLimit = 100;
 
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
         };
 
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(counters, options);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -1134,14 +1127,15 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         std::atomic<NHdrf::TQueryId> queryId = 1;
         std::atomic<bool> shutdown = false;
 
-        auto updateFairShare = [&] {
+        auto updateFairShare = [&]() -> void {
             while(!shutdown) {
                 scheduler.UpdateFairShare();
             }
         };
 
         struct TSchedulableActorMock : public TSchedulableActorBase {
-            explicit TSchedulableActorMock(NHdrf::NDynamic::TQueryPtr query) : TSchedulableActorBase({query, true}) {}
+            explicit TSchedulableActorMock(NHdrf::NDynamic::TQueryPtr query)
+                : TSchedulableActorBase({.Query=std::move(query), .IsSchedulable=true}) {}
 
             void ExecuteAndPassAway(std::atomic<bool>& shutdown) {
                 std::thread([&shutdown, this] {

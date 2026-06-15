@@ -1,8 +1,10 @@
 #include "test_client.h"
 
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/feature_flags_service.h>
@@ -578,6 +580,7 @@ namespace Tests {
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
+            appData.AuditConfig = Settings->AppConfig->GetAuditConfig();
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
@@ -588,10 +591,13 @@ namespace Tests {
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
             appData.RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
+            TVector<TString> defaultUserSIDs(securityConfig.GetDefaultUserSIDs().begin(), securityConfig.GetDefaultUserSIDs().end());
+            appData.DefaultUserSIDs = std::move(defaultUserSIDs);
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
+            appData.DataShardExportFactory = Settings->DataShardExportFactory.get();
             if (appData.BridgeConfig.PilesSize() > 0) {
                 appData.BridgeModeEnabled = true;
             }
@@ -1436,25 +1442,26 @@ namespace Tests {
                 }
             }
 
+            if (federatedQuerySetupFactory) {
+                federatedQuerySetupFactory->SetScriptExecutionSettings({
+                    .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
+                    .LeaseCheckStartupTimeout = TDuration::Zero(),
+                });
+            }
+
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
+
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
                                                                   Settings->AppConfig->GetTliConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
-                                                                  nullptr, std::move(kqpProxySharedResources),
+                                                                  Settings->QueryReplayBackendFactory,
+                                                                  std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
-
-            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(
-                Settings->AppConfig->GetQueryServiceConfig(),
-                federatedQuerySetupFactory,
-                Settings->S3ActorsFactory,
-                Settings->EnableScriptExecutionBackgroundChecks,
-                TDuration::Zero()
-            );
-            TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
-            Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
         }
 
         {

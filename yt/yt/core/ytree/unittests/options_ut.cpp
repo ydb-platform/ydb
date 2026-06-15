@@ -9,7 +9,7 @@ namespace {
 
 struct TFirstOption
 {
-    TString Value;
+    std::string Value;
 };
 
 bool operator==(const TFirstOption& lhs, const TFirstOption& rhs)
@@ -30,10 +30,10 @@ bool operator==(const TSecondOption& lhs, const TSecondOption& rhs)
 struct TTestStruct
     : public TYsonStruct
 {
-    TString Nothing;
+    std::string Nothing;
     i64 First;
     double Second;
-    TString Both;
+    std::string Both;
 
     REGISTER_YSON_STRUCT(TTestStruct);
 

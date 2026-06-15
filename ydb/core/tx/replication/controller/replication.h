@@ -7,7 +7,6 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
 #include <memory>
@@ -31,7 +30,7 @@ public:
         Done,
         Removing,
         Paused,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     enum class ETargetKind: ui8 {
@@ -47,7 +46,7 @@ public:
         Done,
         Removing,
         Paused,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     enum class EStreamState: ui8 {
@@ -55,13 +54,14 @@ public:
         Ready,
         Removing,
         Removed,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     class ITargetStats {
     public:
-        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
         virtual ~ITargetStats() = default;
+
+        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
     };
 
     class ITarget {
@@ -107,9 +107,9 @@ public:
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
-        virtual const TMaybe<TDuration> GetLag() const = 0;
+        virtual const std::optional<TDuration> GetLag() const = 0;
 
-        virtual void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
+        virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
         virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
         virtual const ITargetStats* GetStats() = 0;
 
@@ -160,7 +160,7 @@ public:
     EState GetDesiredState() const;
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
-    const TMaybe<TDuration> GetLag() const;
+    const std::optional<TDuration> GetLag() const;
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);

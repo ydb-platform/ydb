@@ -96,10 +96,11 @@ public:
         auto httpClient = TKeepAliveHttpClient(Host_, Port_);
         TStringStream outputStream;
 
+        TString serializedRequest = protoSendHeartbeatRequest.SerializeAsString();
         auto sendHeartbeatRequestFunc = [&]() {
             auto statusCode = httpClient.DoPost(
                 sendHearbeatRequestUrl,
-                protoSendHeartbeatRequest.SerializeAsString(),
+                serializedRequest,
                 &outputStream,
                 GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false)
             );
@@ -260,6 +261,28 @@ public:
             return NThreading::MakeFuture(PrepareOperationResponseFromProto(protoResponse));
         };
         return *DoWithRetry<NThreading::TFuture<TPrepareOperationResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
+    }
+
+    NThreading::TFuture<TWaitForOperationsResponse> WaitForOperations(const TWaitForOperationsRequest& request) override {
+        NProto::TWaitForOperationsRequest protoRequest = WaitForOperationsRequestToProto(request);
+        TString url = "/wait_for_operations";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        auto func = [&]() {
+            auto statusCode = httpClient.DoPost(
+                url,
+                protoRequest.SerializeAsString(),
+                &outputStream,
+                GetFullHttpHeaders(Headers_, TvmClient_, DestinationTvmId_, false)
+            );
+            TString serializedResponse = outputStream.ReadAll();
+            HandleHttpError(statusCode, serializedResponse);
+            NProto::TWaitForOperationsResponse protoResponse;
+            YQL_ENSURE(protoResponse.ParseFromString(serializedResponse));
+            return NThreading::MakeFuture(WaitForOperationsResponseFromProto(protoResponse));
+        };
+        return *DoWithRetry<NThreading::TFuture<TWaitForOperationsResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
     }
 
 private:

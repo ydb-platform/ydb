@@ -214,6 +214,22 @@ struct TCollectCoverageResult
     TString CoverageMap;
 };
 
+struct TFreezeHydraPeerOptions
+    : public TTimeoutOptions
+{
+    int Term;
+};
+
+struct TTruncateChangelogOptions
+    : public TTimeoutOptions
+{
+    i64 LastSequenceNumber;
+};
+
+struct TScheduleRestartOptions
+    : public TTimeoutOptions
+{ };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IAdminClient
@@ -235,6 +251,21 @@ struct IAdminClient
 
     virtual TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options = {}) = 0;
+
+    virtual TFuture<void> FreezeHydraPeer(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TFreezeHydraPeerOptions& options = {}) = 0;
+
+    virtual TFuture<void> TruncateChangelog(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TTruncateChangelogOptions& options = {}) = 0;
+
+    virtual TFuture<void> ScheduleRestart(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TScheduleRestartOptions& options = {}) = 0;
 
     virtual TFuture<void> ResetDynamicallyPropagatedMasterCells(
         const TResetDynamicallyPropagatedMasterCellsOptions& options = {}) = 0;
@@ -259,7 +290,7 @@ struct IAdminClient
         const std::string& address,
         const TKillProcessOptions& options = {}) = 0;
 
-    virtual TFuture<TString> WriteCoreDump(
+    virtual TFuture<std::string> WriteCoreDump(
         const std::string& address,
         const TWriteCoreDumpOptions& options = {}) = 0;
 
@@ -267,7 +298,7 @@ struct IAdminClient
         const std::string& address,
         const TWriteLogBarrierOptions& options) = 0;
 
-    virtual TFuture<TString> WriteOperationControllerCoreDump(
+    virtual TFuture<std::string> WriteOperationControllerCoreDump(
         NJobTrackerClient::TOperationId operationId,
         const TWriteOperationControllerCoreDumpOptions& options = {}) = 0;
 
@@ -307,7 +338,7 @@ struct IAdminClient
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options = {}) = 0;
 
     virtual TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(

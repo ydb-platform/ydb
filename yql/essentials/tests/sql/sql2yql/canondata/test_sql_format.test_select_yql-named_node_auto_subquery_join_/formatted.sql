@@ -15,21 +15,22 @@ $data = (
     )
 );
 
-SELECT DISTINCT
+SELECT
     x.a AS a,
     b,
-    c
+    d
 FROM
     $data AS x
 JOIN (
     VALUES
-        (1, 111),
-        (2, 222),
-        (3, 333)
+        (1, [111]),
+        (2, [222]),
+        (3, [333])
 ) AS y (
     a,
     c
 )
+    FLATTEN LIST BY c AS d
 ON
     x.a == y.a
 ;

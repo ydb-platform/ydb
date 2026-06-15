@@ -13,6 +13,7 @@
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/system/exit.h>
+#include <library/cpp/yt/system/thread_id.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
@@ -79,12 +80,12 @@ public:
             }
 
             ShutdownStarted_.store(true);
-            ShutdownThreadId_.store(GetCurrentThreadId());
+            ShutdownThreadId_.store(GetSystemThreadId());
 
             if (auto* logFile = TryGetShutdownLogFile()) {
                 ::fprintf(logFile, "%s\t*** Shutdown started (ThreadId: %" PRISZT ")\n",
                     GetInstant().ToString().c_str(),
-                    GetCurrentThreadId());
+                    GetSystemThreadId());
             }
 
             for (auto* registeredCallback : RegisteredCallbacks_) {
@@ -192,7 +193,7 @@ public:
 private:
     std::atomic<FILE*> ShutdownLogFile_ = IsShutdownLoggingEnabledImpl() ? stderr : nullptr;
 
-    NThreading::TForkAwareSpinLock Lock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
 
     struct TRegisteredCallback
     {

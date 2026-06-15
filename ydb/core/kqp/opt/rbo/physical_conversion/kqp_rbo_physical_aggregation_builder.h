@@ -8,7 +8,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 // This class represents a physical builder for OpAggregate, it emits a physical aggreation based on a given OpAggregate.
-class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
+class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilderWithMemLimit {
     // Internal representation of physical aggregation traits.
     struct TPhysicalAggregationTraits {
         TPhysicalAggregationTraits(const TString& aggFieldName, const TString stateFieldName, const TString& aggFunc, const TTypeAnnotationNode* inputItemType,
@@ -25,6 +25,7 @@ class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
         TString AggFunc;
         const TTypeAnnotationNode* InputItemType;
         const TTypeAnnotationNode* OutputItemType;
+        std::optional<TString> InputAggFunc{std::nullopt};
     };
 
     // Internal representation of the decimal type.
@@ -35,11 +36,11 @@ class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
 
 public:
     TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+        : TPhysicalUnaryOpBuilderWithMemLimit(ctx, pos)
         , Aggregate(aggregate) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) override;
 
 private:
     // Following functions creates a 4 lambdas for physical aggregation:
@@ -50,54 +51,67 @@ private:
                                            const TVector<TPhysicalAggregationTraits>& aggTraitsList);
     // 3) Performs an aggregation.
     TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
-                                             const TVector<TPhysicalAggregationTraits>& aggTraitsList);
+                                             const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool isDistinct);
     // 4) Returns result after aggregation.
-    TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool distinctAll);
-    // Build a map to extend input from narrow to wide for aggregation.
-    TExprNode::TPtr BuildExpandMapForPhysicalAggregationInput(TExprNode::TPtr input, const TVector<TString>& inputColumns);
+    TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool isDistinct);
     // Build a map to fuse output from wide to narrow for aggregation.
     TExprNode::TPtr BuildNarrowMapForPhysicalAggregationOutput(TExprNode::TPtr input, const TVector<TString>& keyFields,
                                                                const TVector<TPhysicalAggregationTraits>& aggTraitsList,
-                                                               const THashMap<TString, TString>& projectionMap, bool distinctAll);
+                                                               const THashMap<TString, TString>& projectionMap, bool distinctAll, EOpPhase aggregationPhase);
     // Init state.
-    TExprNode::TPtr BuildCountAggregationInitialStateForOptionalType(TExprNode::TPtr lambdaArg);
-    TExprNode::TPtr BuildCountAggregationInitialState();
     TExprNode::TPtr BuildAvgAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode);
     TExprNode::TPtr BuildAvgAggregationInitialStateForOptionalType(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildCountAggregationInitialState();
+    TExprNode::TPtr BuildCountAggregationInitialStateForOptionalType(TExprNode::TPtr lambdaArg);
     TExprNode::TPtr BuildSumAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildVarianceAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildVarianceAggregationInitialStateOptionalType(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode);
 
     // Update state.
-    TExprNode::TPtr BuildSumAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* itemType);
-    TExprNode::TPtr BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField);
-    TExprNode::TPtr BuildCountAggregationUpdateState(TExprNode::TPtr lambdaArgState);
-    TExprNode::TPtr BuildAvgAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* typeNode);
     TExprNode::TPtr BuildAvgAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaFieldState, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildAvgAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildCountAggregationUpdateState(TExprNode::TPtr lambdaArgState);
+    TExprNode::TPtr BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField);
+    TExprNode::TPtr BuildSumAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* itemType);
+    TExprNode::TPtr BuildVarianceAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* itemType);
+    TExprNode::TPtr BuildVarianceAggregationUpdateStateOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* itemType);
 
     // Finish state.
-    TExprNode::TPtr BuildAvgAggregationFinishStateForOptionalType(TExprNode::TPtr lambdaArgState, const TTypeAnnotationNode* typeNode);
     TExprNode::TPtr BuildAvgAggregationFinishState(TExprNode::TPtr lambdaArgState, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildAvgAggregationFinishStateForOptionalType(TExprNode::TPtr lambdaArgState, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildVarianceAggregationFinishState(TExprNode::TPtr lambdaArgState, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildVarianceAggregationFinishStateOptionalType(TExprNode::TPtr lambdaArgState, const TTypeAnnotationNode* typeNode);
 
     // Scalar aggregation wrapper.
     TExprNode::TPtr BuildCondenseForAggregationOutputWithEmptyKeys(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
-                                                                   const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type);
-    // Helpers.
+                                                                   const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type,
+                                                                   EOpPhase aggregationPhase);
+    // Compute helpers.
+    TExprNode::TPtr BuildVarianceUpdateComputeIntermediate(TExprNode::TPtr lambdaArgField, TExprNode::TPtr prevCounter, TExprNode::TPtr mean,
+                                                           TExprNode::TPtr aggState, const TTypeAnnotationNode* typeNode);
+    TExprNode::TPtr BuildVarianceUpdateComputeFinal(TExprNode::TPtr fieldMean, TExprNode::TPtr fieldPrevCounter, TExprNode::TPtr fieldAggState,
+                                                    TExprNode::TPtr stateMean, TExprNode::TPtr statePrevCounter, TExprNode::TPtr stateAggState);
+    TExprNode::TPtr BuildVarianceFinishCompute(TExprNode::TPtr counter, TExprNode::TPtr aggState);
+
+    // Heplers.
+    TExprNode::TPtr GetNth(TExprNode::TPtr input, TString&& offset);
     TExprNode::TPtr GetDataTypeForSumAggregation(const TTypeAnnotationNode* itemType) const;
-    TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregationTraitsList, const TVector<TInfoUnit>& keyColumns) const;
-    void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyColumns,
-                                        const TVector<TOpAggregationTraits>& aggregationTraitsList, TVector<TString>& inputFields,
-                                        TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& projectionMap,
+    TVector<TString> GetInputColumns() const;
+    void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyFields, TVector<TString>& inputFields,
+                                        TVector<TPhysicalAggregationTraits>& phyAggTraitsList, THashMap<TString, TString>& projectionMap,
                                         const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType);
-    TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns) const;
+    TVector<TString> GetKeyFields() const;
 
     // Helpers for scalar aggregation.
     TExprNode::TPtr CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType);
-    TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
-                                      const THashMap<TString, TString>& projectionMap);
+    TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits, const THashMap<TString, TString>& projectionMap,
+                                      EOpPhase aggregationPhase);
 
     TExprNode::TPtr GetDataTypeForAccumulator(const TTypeAnnotationNode* typeNode, bool keepOriginalPrecision = false) const;
     bool IsDecimalType(const TTypeAnnotationNode* typeNode) const;
     TDecimalType GetDecimalType(const TTypeAnnotationNode* typeNode) const;
     TExprNode::TPtr GetDecimalDataType(const TTypeAnnotationNode* typeNode, bool keepOriginalPrecision = false) const;
+    bool IsScalarAggregation() const;
 
     // Holds an aggregate operator.
     TIntrusivePtr<TOpAggregate> Aggregate;

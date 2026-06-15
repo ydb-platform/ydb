@@ -7,6 +7,7 @@
 #include <ydb/library/actors/interconnect/logging/logging.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/interconnect/retro_tracing/spans.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/rope.h>
@@ -354,7 +355,7 @@ namespace NActors {
         void ApplyXdcCatchStream();
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
-        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma);
+        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma);
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 
@@ -693,7 +694,7 @@ namespace NActors {
 
         struct TDelayedEvent {
             TAutoPtr<IEventHandle> Event;
-            NWilson::TSpan Span;
+            TDelayedEventSpan::TUniversal Span;
         };
         std::deque<TDelayedEvent> DelayedEvents;
 

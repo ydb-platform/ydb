@@ -83,15 +83,15 @@ class TMergeIterator : public TGenericNWayForwardIterator<TKey, TMergeBufferIter
     using TBase::PQueue;
     using TBase::Iters;
 
-    std::unordered_map<TVDiskID, std::shared_ptr<TIterContType>, THash<TVDiskID>> Buffers;
-    std::unordered_map<TVDiskID, TIterPtr, THash<TVDiskID>> ExhaustedIterators;
+    std::unordered_map<TVDiskID, TIterContType*> Buffers;
+    std::unordered_map<TVDiskID, TIterPtr> ExhaustedIterators;
 
 public:
     TMergeIterator(const THullCtxPtr& hullCtx, const TVector<TIterContType*>& elements)
         : TBase(hullCtx, elements)
     {
         for (const auto& element : elements) {
-            Buffers[element->VDiskId].reset(element);
+            Buffers[element->VDiskId] = element;
         }
         for (const auto& it : Iters) {
             ExhaustedIterators.emplace(it->GetVDiskId(), it);
@@ -158,6 +158,8 @@ template <class TKey, class TMemRec>
 class TIndexMerger {
     using TEvAddFullSyncSsts = TEvAddFullSyncSsts<TKey, TMemRec>;
 
+    TVDiskContextPtr VCtx;
+
     TIndexRecordMerger<TKey, TMemRec> RecordMerger;
     TIndexSstWriter<TKey, TMemRec> SstWriter;
 
@@ -179,15 +181,16 @@ public:
     TIndexMerger(
             TVDiskContextPtr vCtx,
             TPDiskCtxPtr pDiskCtx,
-            const std::unordered_set<TVDiskID>& vDiskIds,
+            const std::unordered_map<TVDiskID, TPeerSyncState>& syncStates,
             TIntrusivePtr<TLevelIndex<TKey, TMemRec>> levelIndex,
             TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue)
-        : RecordMerger(vCtx->Top->GType)
-        , SstWriter(vCtx, pDiskCtx, std::move(levelIndex), msgQueue)
+        : VCtx(vCtx)
+        , RecordMerger(VCtx->Top->GType)
+        , SstWriter(vCtx, pDiskCtx, levelIndex, msgQueue)
     {
         TVector<TMergeBuffer<TKey, TMemRec>*> buffers;
-        buffers.reserve(vDiskIds.size());
-        for (auto& vDiskId : vDiskIds) {
+        buffers.reserve(syncStates.size());
+        for (const auto& [vDiskId, _] : syncStates) {
             auto buffer = std::make_shared<TMergeBuffer<TKey, TMemRec>>(vDiskId);
             Buffers.push_back(buffer);
             buffers.push_back(buffer.get());
@@ -254,24 +257,27 @@ public:
     }
 };
 
-class TIndexMergerActor : public TActor<TIndexMergerActor> {
+class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
     using TSyncStatusVal = NKikimrVDiskData::TSyncerVDiskEntry;
     using ESyncStatus = TSyncStatusVal::ESyncStatus;
 
     TSyncerContextPtr SyncerCtx;
     TVDiskContextPtr VCtx;
     TPDiskCtxPtr PDiskCtx;
+    TActorId SchedulerActorId;
     TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
     TVDiskID SelfVDiskId;
 
     struct TSync {
         TActorId ActorId;
+        NSyncer::TPeerSyncState Initial;
         NSyncer::TPeerSyncState Current;
         std::unique_ptr<TSyncerJobTask::TFullRecoverInfo> FullRecoverInfo;
         bool EndOfStream = false;
+        bool Cancelled = false;
     };
-    std::unordered_map<TVDiskID, TSync, THash<TVDiskID>> Syncs;
-    std::unordered_set<TVDiskID, THash<TVDiskID>> VSyncFullInFlight;
+    std::unordered_map<TVDiskID, TSync> Syncs;
+    std::unordered_set<TVDiskID> VSyncFullInFlight;
 
     ui64 BytesReceived = 0;
 
@@ -349,6 +355,10 @@ class TIndexMergerActor : public TActor<TIndexMergerActor> {
         SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
         ++SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
 
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS30, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexMergerActor: Send TEvVSyncFull"),
+            (VDiskId, vDiskId));
+
         Send(sync.ActorId, msg.release());
     }
 
@@ -358,9 +368,6 @@ class TIndexMergerActor : public TActor<TIndexMergerActor> {
         auto commit = [this]<class TMerger>(TMerger& merger) {
             auto msg = merger.GenerateCommitMessage(SelfId());
             if (msg) {
-                STLOG(PRI_DEBUG, BS_SYNCER, BSFS05, VDISKP(VCtx->VDiskLogPrefix,
-                    "TIndexMergerActor: Send commit"));
-
                 Send(merger.GetLevelIndexActorId(), msg.release());
                 ++CommitsInFlight;
             }
@@ -375,7 +382,7 @@ class TIndexMergerActor : public TActor<TIndexMergerActor> {
             (CommitsInFlight, CommitsInFlight));
 
         if (CommitsInFlight == 0) {
-            PassAway();
+            NotifySchedulerAndDie();
         }
     }
 
@@ -408,8 +415,10 @@ class TIndexMergerActor : public TActor<TIndexMergerActor> {
             ProcessWrites();
             return;
         }
-        progress(BarrierMerger, EWriterType::BARRIERS);
-        ProcessWrites();
+        if (progress(BarrierMerger, EWriterType::BARRIERS)) {
+            ProcessWrites();
+            return;
+        }
     }
 
     void SyncError(const TVDiskID& vdiskId, TSyncerJobTask::ESyncStatus status) {
@@ -419,15 +428,37 @@ class TIndexMergerActor : public TActor<TIndexMergerActor> {
         auto now = TAppData::TimeProvider->Now();
         sync.Current.LastSyncStatus = status;
         sync.Current.LastTry = now;
-        if (NSyncer::TPeerSyncState::Good(status)) {
-            sync.Current.LastGood = now;
-        }
+        sync.Current.SyncState = sync.Initial.SyncState;
+        sync.Cancelled = true;
 
         STLOG(PRI_DEBUG, BS_SYNCER, BSFS27, VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: SyncError"),
             (VDiskId, vdiskId), (Status, status));
 
-        // TODO: invalidate iterator for this vdisk
+        LogoBlobMerger.EndOfStream(vdiskId);
+        BlockMerger.EndOfStream(vdiskId);
+        BarrierMerger.EndOfStream(vdiskId);
+
+        auto msg = std::make_unique<TEvSyncerFullSyncDiskCancelled>(vdiskId, sync.Current);
+        Send(SchedulerActorId, msg.release());
+
+        Progress();
+    }
+
+    void NotifySchedulerAndDie() {
+        auto msg = std::make_unique<TEvSyncerFullSyncFinished>();
+        for (const auto& [vDiskId, sync] : Syncs) {
+            if (sync.Cancelled) {
+                continue;
+            }
+            msg->PeerSyncStates[vDiskId] = sync.Current;
+        }
+
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS28, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexMergerActor: NotifySchedulerAndDie"));
+
+        Send(SchedulerActorId, msg.release());
+        PassAway();
     }
 
     bool CheckFragmentFormat(const TString& data) {
@@ -482,20 +513,43 @@ class TIndexMergerActor : public TActor<TIndexMergerActor> {
 
             if (msg->Extracted.LogoBlobs && !msg->Extracted.LogoBlobs->Empty()) {
                 auto data = std::move(msg->Extracted.LogoBlobs->Extract());
-                LogoBlobMerger.PushData(vDiskId, std::move(data));
+                if (sync.FullRecoverInfo->Stage == NKikimrBlobStorage::PhantomFlags) {
+                    // TODO: handle PhantomFlags
+                    STLOG(PRI_DEBUG, BS_SYNCER, BSFS29, VDISKP(VCtx->VDiskLogPrefix,
+                        "TIndexMergerActor: TODO: handle PhantomFlags"));
+                } else {
+                    LogoBlobMerger.PushData(vDiskId, std::move(data));
+                }
             }
 
             if (msg->Extracted.Blocks && !msg->Extracted.Blocks->Empty()) {
                 auto data = std::move(msg->Extracted.Blocks->Extract());
                 BlockMerger.PushData(vDiskId, std::move(data));
-                LogoBlobMerger.EndOfStream(vDiskId);
             }
 
             if (msg->Extracted.Barriers && !msg->Extracted.Barriers->Empty()) {
                 auto data = std::move(msg->Extracted.Barriers->Extract());
                 BarrierMerger.PushData(vDiskId, std::move(data));
-                LogoBlobMerger.EndOfStream(vDiskId);
-                BlockMerger.EndOfStream(vDiskId);
+            }
+
+            switch (sync.FullRecoverInfo->Stage) {
+                case NKikimrBlobStorage::LogoBlobs:
+                    break;
+                case NKikimrBlobStorage::Blocks:
+                    LogoBlobMerger.EndOfStream(vDiskId);
+                    break;
+                case NKikimrBlobStorage::Barriers:
+                    LogoBlobMerger.EndOfStream(vDiskId);
+                    BlockMerger.EndOfStream(vDiskId);
+                    break;
+                case NKikimrBlobStorage::PhantomFlags:
+                    LogoBlobMerger.EndOfStream(vDiskId);
+                    BlockMerger.EndOfStream(vDiskId);
+                    BarrierMerger.EndOfStream(vDiskId);
+                    break;
+                default:
+                    Y_VERIFY_S(false, VCtx->VDiskLogPrefix
+                        << "Invalid full sync stage: " << (ui64)sync.FullRecoverInfo->Stage);
             }
 
             if (sync.EndOfStream) {
@@ -617,7 +671,7 @@ class TIndexMergerActor : public TActor<TIndexMergerActor> {
 
         Y_VERIFY_S(CommitsInFlight, VCtx->VDiskLogPrefix);
         if (--CommitsInFlight == 0) {
-            PassAway();
+            NotifySchedulerAndDie();
         }
     }
 
@@ -642,37 +696,47 @@ public:
 
     TIndexMergerActor(
             TSyncerContextPtr syncerCtx,
-            const std::unordered_set<TVDiskID>& vdiskIds,
+            const TActorId& schedulerActorId,
+            const std::unordered_map<TVDiskID, TPeerSyncState>& syncStates,
             const TIntrusivePtr<TBlobStorageGroupInfo>& info)
-        : TActor(&TThis::MainFunc)
-        , SyncerCtx(std::move(syncerCtx))
+        : SyncerCtx(std::move(syncerCtx))
         , VCtx(SyncerCtx->VCtx)
         , PDiskCtx(SyncerCtx->PDiskCtx)
+        , SchedulerActorId(schedulerActorId)
         , GInfo(info)
         , SelfVDiskId(GInfo->GetVDiskId(VCtx->ShortSelfVDisk))
-        , LogoBlobMerger(VCtx, PDiskCtx, vdiskIds, SyncerCtx->LevelIndexLogoBlob, MsgQueue)
-        , BlockMerger(VCtx, PDiskCtx, vdiskIds, SyncerCtx->LevelIndexBlock, MsgQueue)
-        , BarrierMerger(VCtx, PDiskCtx, vdiskIds, SyncerCtx->LevelIndexBarrier, MsgQueue)
+        , LogoBlobMerger(VCtx, PDiskCtx, syncStates, SyncerCtx->LevelIndexLogoBlob, MsgQueue)
+        , BlockMerger(VCtx, PDiskCtx, syncStates, SyncerCtx->LevelIndexBlock, MsgQueue)
+        , BarrierMerger(VCtx, PDiskCtx, syncStates, SyncerCtx->LevelIndexBarrier, MsgQueue)
     {
-        for (auto& vdiskId : vdiskIds) {
+        for (const auto& [vdiskId, syncState] : syncStates) {
             auto& sync = Syncs[vdiskId];
             sync.ActorId = GInfo->GetActorId(vdiskId);
+            sync.Initial = syncState;
+            sync.Current = syncState;
             sync.Current.LastSyncStatus = TSyncStatusVal::FullRecover;
             sync.FullRecoverInfo = std::make_unique<TSyncerJobTask::TFullRecoverInfo>(
-                NKikimrBlobStorage::EFullSyncProtocol::UnorderedData);
+                NKikimrBlobStorage::EFullSyncProtocol::Legacy);
             sync.EndOfStream = false;
         }
+    }
+
+    void Bootstrap() {
+        Become(&TIndexMergerActor::MainFunc);
+        Progress();
     }
 };
 
 IActor* CreateIndexMergerActor(
         TSyncerContextPtr syncerCtx,
-        const std::unordered_set<TVDiskID>& vdiskIds,
+        const TActorId& schedulerActorId,
+        const std::unordered_map<TVDiskID, TPeerSyncState>& syncStates,
         const TIntrusivePtr<TBlobStorageGroupInfo>& info)
 {
     return new TIndexMergerActor(
         std::move(syncerCtx),
-        vdiskIds,
+        schedulerActorId,
+        syncStates,
         info);
 }
 

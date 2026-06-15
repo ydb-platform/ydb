@@ -1581,6 +1581,15 @@
             "Match": {"Type": "Callable", "Name": "WinOnGroups"}
         },
         {
+            "Name": "TCoWinFilter",
+            "Base": "TCoWinOnBase",
+            "Match": {"Type": "Callable", "Name": "WinFilter"},
+            "Children": [
+                {"Index": 1, "Name": "ItemType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Predicate", "Type": "TCoLambda"}
+            ]
+        },
+        {
             "Name": "TCoCalcOverWindowBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
@@ -2770,6 +2779,20 @@
                 {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
                 {"Index": 1, "Name": "AssumeAs", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TCoWatermarkGenerator",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "WatermarkGenerator"},
+            "Children": [
+                {"Index": 0, "Name": "Input",                "Type": "TExprBase"},
+                {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoTableSource",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "TableSource"}
         }
     ]
 }

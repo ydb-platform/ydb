@@ -1,3 +1,12 @@
+$input = AsList(
+    <|value:"fdsa"|>,
+    <|value:"aswedfg"|>,
+    <|value:"asdadsaasd"|>,
+    <|value:"gdsfsassas"|>,
+    <|value:""|>,
+    <|value:"`Привет, мир!`"|>
+);
+
 SELECT
     value,
     String::AsciiContainsIgnoreCase(value, "AS") AS iccontains,
@@ -5,4 +14,4 @@ SELECT
     String::AsciiStartsWithIgnoreCase(value, "AS") AS icstarts,
     String::AsciiEndsWithIgnoreCase(value, "AS") AS icends,
     String::AsciiEqualsIgnoreCase(value, "FDSA") AS icequals,
-FROM Input;
+FROM AS_TABLE($input);

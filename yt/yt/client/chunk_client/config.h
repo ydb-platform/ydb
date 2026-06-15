@@ -241,6 +241,10 @@ struct TReplicationReaderConfig
     //! Unless null, reader will simulate failure of accessing chunk meta cache with such probability.
     std::optional<double> ChunkMetaCacheFailureProbability;
 
+    //! For testing purposes.
+    //! If true, reader will throw when node descriptor lookup fails for a replica node id.
+    bool FailOnUnresolvedNodeId;
+
     //! Use chunk prober to reduce the number of probing requests.
     bool UseChunkProber;
 

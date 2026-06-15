@@ -99,6 +99,7 @@ enum class EYtSettingType: ui64 {
     WeakFields               /* "weakFields" */,
     Sharded                  /* "sharded" */,
     CombineChunks            /* "combineChunks" */,
+    ReplaceParentCache       /* "replaceParentCache" */,
     JobCount                 /* "jobCount" */,                 // hybrid supported
     JoinReduce               /* "joinReduce" */,               // hybrid supported
     FirstAsPrimary           /* "firstAsPrimary" */,           // hybrid supported
@@ -109,7 +110,6 @@ enum class EYtSettingType: ui64 {
     BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
     BlockOutputReady         /* "blockOutputReady" */,         // hybrid supported
     BlockOutputApplied       /* "blockOutputApplied" */,       // hybrid supported
-    QLFilter                 /* "qlFilter" */,
     // Out tables
     UniqueBy                 /* "uniqueBy" */,
     OpHash                   /* "opHash" */,

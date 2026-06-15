@@ -90,6 +90,7 @@ struct btrfs_qgroup_limit {
  * struct btrfs_qgroup_inherit.flags
  */
 #define BTRFS_QGROUP_INHERIT_SET_LIMITS	(1ULL << 0)
+#define BTRFS_QGROUP_INHERIT_FLAGS_SUPP (BTRFS_QGROUP_INHERIT_SET_LIMITS)
 
 struct btrfs_qgroup_inherit {
 	__u64	flags;
@@ -331,6 +332,8 @@ struct btrfs_ioctl_fs_info_args {
 #define BTRFS_FEATURE_INCOMPAT_RAID1C34		(1ULL << 11)
 #define BTRFS_FEATURE_INCOMPAT_ZONED		(1ULL << 12)
 #define BTRFS_FEATURE_INCOMPAT_EXTENT_TREE_V2	(1ULL << 13)
+#define BTRFS_FEATURE_INCOMPAT_RAID_STRIPE_TREE	(1ULL << 14)
+#define BTRFS_FEATURE_INCOMPAT_SIMPLE_QUOTA	(1ULL << 16)
 
 struct btrfs_ioctl_feature_flags {
 	__u64 compat_flags;
@@ -610,6 +613,11 @@ struct btrfs_ioctl_clone_range_args {
  */
 #define BTRFS_DEFRAG_RANGE_COMPRESS 1
 #define BTRFS_DEFRAG_RANGE_START_IO 2
+#define BTRFS_DEFRAG_RANGE_COMPRESS_LEVEL 4
+#define BTRFS_DEFRAG_RANGE_FLAGS_SUPP	(BTRFS_DEFRAG_RANGE_COMPRESS |		\
+					 BTRFS_DEFRAG_RANGE_COMPRESS_LEVEL |	\
+					 BTRFS_DEFRAG_RANGE_START_IO)
+
 struct btrfs_ioctl_defrag_range_args {
 	/* start of the defrag operation */
 	__u64 start;
@@ -632,10 +640,18 @@ struct btrfs_ioctl_defrag_range_args {
 
 	/*
 	 * which compression method to use if turning on compression
-	 * for this defrag operation.  If unspecified, zlib will
-	 * be used
+	 * for this defrag operation. If unspecified, zlib will be
+	 * used. If compression level is also being specified, set the
+	 * BTRFS_DEFRAG_RANGE_COMPRESS_LEVEL flag and fill the compress
+	 * member structure instead of the compress_type field.
 	 */
-	__u32 compress_type;
+	union {
+		__u32 compress_type;
+		struct {
+			__u8 type;
+			__s8 level;
+		} compress;
+	};
 
 	/* spare for later */
 	__u32 unused[4];
@@ -751,6 +767,7 @@ struct btrfs_ioctl_get_dev_stats {
 #define BTRFS_QUOTA_CTL_ENABLE	1
 #define BTRFS_QUOTA_CTL_DISABLE	2
 #define BTRFS_QUOTA_CTL_RESCAN__NOTUSED	3
+#define BTRFS_QUOTA_CTL_ENABLE_SIMPLE_QUOTA 4
 struct btrfs_ioctl_quota_ctl_args {
 	__u64 cmd;
 	__u64 status;
@@ -1040,6 +1057,29 @@ struct btrfs_ioctl_encoded_io_args {
 #define BTRFS_ENCODED_IO_ENCRYPTION_NONE 0
 #define BTRFS_ENCODED_IO_ENCRYPTION_TYPES 1
 
+/*
+ * Wait for subvolume cleaning process. This queries the kernel queue and it
+ * can change between the calls.
+ *
+ * - FOR_ONE	- specify the subvolid
+ * - FOR_QUEUED - wait for all currently queued
+ * - COUNT	- count number of queued
+ * - PEEK_FIRST - read which is the first in the queue (to be cleaned or being
+ * 		  cleaned already), or 0 if the queue is empty
+ * - PEEK_LAST  - read the last subvolid in the queue, or 0 if the queue is empty
+ */
+struct btrfs_ioctl_subvol_wait {
+	__u64 subvolid;
+	__u32 mode;
+	__u32 count;
+};
+
+#define BTRFS_SUBVOL_SYNC_WAIT_FOR_ONE		(0)
+#define BTRFS_SUBVOL_SYNC_WAIT_FOR_QUEUED	(1)
+#define BTRFS_SUBVOL_SYNC_COUNT			(2)
+#define BTRFS_SUBVOL_SYNC_PEEK_FIRST		(3)
+#define BTRFS_SUBVOL_SYNC_PEEK_LAST		(4)
+
 /* Error codes as returned by the kernel */
 enum btrfs_err_code {
 	BTRFS_ERROR_DEV_RAID1_MIN_NOT_MET = 1,
@@ -1172,6 +1212,8 @@ enum btrfs_err_code {
 				    struct btrfs_ioctl_encoded_io_args)
 #define BTRFS_IOC_ENCODED_WRITE _IOW(BTRFS_IOCTL_MAGIC, 64, \
 				     struct btrfs_ioctl_encoded_io_args)
+#define BTRFS_IOC_SUBVOL_SYNC_WAIT _IOW(BTRFS_IOCTL_MAGIC, 65, \
+					struct btrfs_ioctl_subvol_wait)
 
 #ifdef __cplusplus
 }

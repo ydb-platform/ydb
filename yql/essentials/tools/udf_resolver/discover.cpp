@@ -60,6 +60,7 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
         },
         static_cast<NUdf::ELogLevel>(inMsg.GetRuntimeLogLevel()));
 
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings();
     for (const auto& module : functionRegistry.GetAllModuleNames()) {
         const auto& functions = functionRegistry.GetModuleFunctions(module);
         for (auto& f : functions) {
@@ -70,7 +71,7 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
 
             TFunctionTypeInfo funcInfo;
             if (!f.second.IsTypeAwareness) {
-                auto status = functionRegistry.FindFunctionTypeInfo(NYql::UnknownLangVersion, env, typeInfoHelper,
+                auto status = functionRegistry.FindFunctionTypeInfo(NYql::UnknownLangVersion, *runtimeSettings, env, typeInfoHelper,
                                                                     nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
 
                 if (!status.IsOk()) {
@@ -140,7 +141,8 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
                         mkqlUserType = pgmBuilder.NewTupleType(topElements);
                     }
 
-                    auto status = functionRegistry.FindFunctionTypeInfo(resolvedInput->LangVer, env, typeInfoHelper,
+                    auto runtimeSettings = NYql::MakeRuntimeSettings();
+                    auto status = functionRegistry.FindFunctionTypeInfo(resolvedInput->LangVer, *runtimeSettings, env, typeInfoHelper,
                                                                         nullptr, funcName, mkqlUserType, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
 
                     if (!status.IsOk()) {

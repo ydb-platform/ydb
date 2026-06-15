@@ -2,6 +2,8 @@
 #include "datashard_common_upload.h"
 #include "datashard_user_db.h"
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NDataShard {
 
 template <typename TEvRequest, typename TEvResponse>
@@ -121,7 +123,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             valueCells.GetCells().size() != valueCols.size())
         {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Cell count doesn't match row scheme"
-                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size() 
+                    << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size()
                     << "; expected keys " << tableInfo.KeyColumnTypes.size() << ", values " << valueCols.size());
             return true;
         }

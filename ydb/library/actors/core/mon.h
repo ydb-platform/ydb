@@ -103,6 +103,7 @@ namespace NActors {
 
             TString PathInfo() const;
             TCgiParameters Cgi() const;
+            TString GetUserToken() const;
             HTTP_METHOD GetMethod() const;
             TString GetHeader(TStringBuf name) const;
             TString GetCookie(TStringBuf name) const;

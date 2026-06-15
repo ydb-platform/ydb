@@ -1590,23 +1590,21 @@ TTypeBuilder TTableClient::GetTypeBuilder() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TAsyncStatus TTableClient::RetryOperation(TOperationFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(operation), settings));
-    return ctx->Execute();
+    return TRetryContextAsync::TPtr(
+        new NRetry::Async::TRetryWithSession(*this, std::move(operation), settings))->Execute();
 }
 
 TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithoutSession(*this, std::move(operation), settings));
-    return ctx->Execute();
+    return TRetryContextAsync::TPtr(
+        new NRetry::Async::TRetryWithoutSession(*this, std::move(operation), settings))->Execute();
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, const TRetryOperationSettings& settings) {
-    NRetry::Sync::TRetryWithoutSession ctx(*this, operation, settings);
-    return ctx.Execute();
+    return NRetry::Sync::TRetryWithoutSession(*this, operation, settings).Execute();
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationSyncFunc& operation, const TRetryOperationSettings& settings) {
-    NRetry::Sync::TRetryWithSession ctx(*this, operation, settings);
-    return ctx.Execute();
+    return NRetry::Sync::TRetryWithSession(*this, operation, settings).Execute();
 }
 
 NThreading::TFuture<void> TTableClient::Stop() {
@@ -2462,7 +2460,7 @@ TIndexDescription::TIndexDescription(
     const std::vector<std::string>& indexColumns,
     const std::vector<std::string>& dataColumns,
     const std::vector<TGlobalIndexSettings>& globalIndexSettings,
-    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& specializedIndexSettings
+    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& specializedIndexSettings
 )   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
@@ -2503,12 +2501,16 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& TIndexDescription::GetIndexSettings() const {
+const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings>& TIndexDescription::GetIndexSettings() const {
     return SpecializedIndexSettings_;
 }
 
 uint64_t TIndexDescription::GetSizeBytes() const {
     return SizeBytes_;
+}
+
+void TIndexDescription::SetParallel(uint32_t parallel) {
+    Parallel_ = parallel;
 }
 
 TIndexDescription TIndexDescription::CreateGlobalIndex(
@@ -2808,6 +2810,46 @@ void TVectorIndexSettings::Out(IOutputStream& o) const {
     o << *this;
 }
 
+TLocalBloomFilterSettings TLocalBloomFilterSettings::FromProto(const Ydb::Table::LocalBloomFilterIndex& proto) {
+    TLocalBloomFilterSettings settings;
+    if (proto.has_false_positive_probability()) {
+        settings.FalsePositiveProbability = proto.false_positive_probability();
+    }
+    return settings;
+}
+
+void TLocalBloomFilterSettings::SerializeTo(Ydb::Table::LocalBloomFilterIndex& proto) const {
+    if (FalsePositiveProbability) {
+        proto.set_false_positive_probability(*FalsePositiveProbability);
+    }
+}
+
+TLocalBloomNgramFilterSettings TLocalBloomNgramFilterSettings::FromProto(const Ydb::Table::LocalBloomNgramFilterIndex& proto) {
+    TLocalBloomNgramFilterSettings settings;
+    if (proto.ngram_size() != 0) {
+        settings.NgramSize = proto.ngram_size();
+    }
+    if (proto.has_case_sensitive()) {
+        settings.CaseSensitive = proto.case_sensitive();
+    }
+    if (proto.has_false_positive_probability()) {
+        settings.FalsePositiveProbability = proto.false_positive_probability();
+    }
+    return settings;
+}
+
+void TLocalBloomNgramFilterSettings::SerializeTo(Ydb::Table::LocalBloomNgramFilterIndex& proto) const {
+    if (NgramSize) {
+        proto.set_ngram_size(*NgramSize);
+    }
+    if (CaseSensitive) {
+        proto.set_case_sensitive(*CaseSensitive);
+    }
+    if (FalsePositiveProbability) {
+        proto.set_false_positive_probability(*FalsePositiveProbability);
+    }
+}
+
 TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeSettings& proto) {
     return {
         .Settings = TVectorIndexSettings::FromProto(proto.settings()),
@@ -2985,7 +3027,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     std::vector<std::string> indexColumns;
     std::vector<std::string> dataColumns;
     std::vector<TGlobalIndexSettings> globalIndexSettings;
-    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> specializedIndexSettings = std::monostate{};
+    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings, TLocalBloomFilterSettings, TLocalBloomNgramFilterSettings> specializedIndexSettings = std::monostate{};
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -3045,7 +3087,19 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         type = EIndexType::GlobalJson;
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_json_index().settings()));
         break;
-    default: // fallback to global sync
+    case TProto::kLocalBloomFilterIndex:
+        type = EIndexType::LocalBloomFilter;
+        specializedIndexSettings = TLocalBloomFilterSettings::FromProto(proto.local_bloom_filter_index());
+        break;
+    case TProto::kLocalBloomNgramFilterIndex:
+        type = EIndexType::LocalBloomNgramFilter;
+        specializedIndexSettings = TLocalBloomNgramFilterSettings::FromProto(proto.local_bloom_ngram_filter_index());
+        break;
+    case TProto::kLocalMinMaxIndex:
+        type = EIndexType::LocalMinMax;
+        specializedIndexSettings = std::monostate{};
+        break;
+    case TProto::TYPE_NOT_SET:
         type = EIndexType::GlobalSync;
         globalIndexSettings.resize(1);
         break;
@@ -3054,6 +3108,9 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings, specializedIndexSettings);
     if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
         result.SizeBytes_ = proto.size_bytes();
+    }
+    if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndex>) {
+        result.Parallel_ = proto.parallel();
     }
 
     return result;
@@ -3066,6 +3123,8 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     }
 
     *proto.mutable_data_columns() = {DataColumns_.begin(), DataColumns_.end()};
+
+    proto.set_parallel(Parallel_);
 
     switch (IndexType_) {
     case EIndexType::GlobalSync: {
@@ -3142,6 +3201,24 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
+    case EIndexType::LocalBloomFilter: {
+        auto* indexProto = proto.mutable_local_bloom_filter_index();
+        if (const auto* settings = std::get_if<TLocalBloomFilterSettings>(&SpecializedIndexSettings_)) {
+            settings->SerializeTo(*indexProto);
+        }
+        break;
+    }
+    case EIndexType::LocalBloomNgramFilter: {
+        auto* indexProto = proto.mutable_local_bloom_ngram_filter_index();
+        if (const auto* settings = std::get_if<TLocalBloomNgramFilterSettings>(&SpecializedIndexSettings_)) {
+            settings->SerializeTo(*indexProto);
+        }
+        break;
+    }
+    case EIndexType::LocalMinMax: {
+        proto.mutable_local_min_max_index();
+        break;
+    }
     case EIndexType::Unknown:
         break;
     }
@@ -3168,6 +3245,9 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::GlobalAsync:
     case EIndexType::GlobalUnique:
     case EIndexType::GlobalJson:
+    case EIndexType::LocalBloomFilter:
+    case EIndexType::LocalBloomNgramFilter:
+    case EIndexType::LocalMinMax:
     case EIndexType::Unknown:
         break;
     case EIndexType::GlobalVectorKMeansTree:

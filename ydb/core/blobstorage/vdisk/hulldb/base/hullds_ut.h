@@ -27,7 +27,6 @@ namespace NKikimr {
                         true,
                         1,      // HullSstSizeInChunksFresh
                         1,      // HullSstSizeInChunksLevel
-                        2.0,
                         0.5,
                         TDuration::Minutes(5),
                         TDuration::Seconds(1),

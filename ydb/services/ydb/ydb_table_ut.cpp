@@ -14,7 +14,7 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -783,7 +783,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             };
             auto status = client.RetryOperationSync(call);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
         }
 
 
@@ -798,7 +798,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             };
             auto status = client.RetryOperationSync(call);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
         }
 
         { // no connect right (for the ordinary user)

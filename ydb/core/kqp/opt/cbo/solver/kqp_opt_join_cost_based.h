@@ -11,7 +11,7 @@ namespace NKikimr::NKqp {
 using TProviderCollectFunction =
     std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const NYql::TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>;
 
-bool DqCollectJoinRelationsWithStats(
+bool KqpCollectJoinRelationsWithStats(
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     TKqpStatsStore& kqpStats,
     const NYql::NNodes::TCoEquiJoin& equiJoin,
@@ -26,7 +26,7 @@ bool DqCollectJoinRelationsWithStats(
  *
  * Then it optimizes the join tree.
 */
-NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
+NYql::NNodes::TExprBase KqpOptimizeEquiJoinWithCosts(
     const NYql::NNodes::TExprBase& node,
     NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typesCtx,
@@ -36,10 +36,11 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const TProviderCollectFunction& providerCollect,
     const TOptimizerHints& hints = {},
     bool enableShuffleElimination = false,
-    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
+    TCBOOptimizerStats* cboStats = nullptr
 );
 
-NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
+NYql::NNodes::TExprBase KqpOptimizeEquiJoinWithCosts(
     const NYql::NNodes::TExprBase& node,
     NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typesCtx,
@@ -50,7 +51,8 @@ NYql::NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     int& equiJoinCounter,
     const TOptimizerHints& hints = {},
     bool enableShuffleElimination = false,
-    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr
+    TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
+    TCBOOptimizerStats* cboStats = nullptr
 );
 
 void CollectInterestingOrderingsFromJoinTree(

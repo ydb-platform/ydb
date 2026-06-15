@@ -8,6 +8,7 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/datetime/base.h>
+#include <util/string/join.h>
 
 #include <concepts>
 #include <utility>
@@ -62,16 +63,91 @@ extern const char TM64ResourceName[] = "DateTime2.TM64";
 
 namespace {
 
+void AddBoundaryResourcePolyArgs(bool first, TStringBuilder& sb, TStringBuf argResourceName, TStringBuf intervalType) {
+    if (!first) {
+        sb << ';';
+    }
+
+    sb << "[{cmd=or;value=[";
+    sb << "    {arg=T0;cmd=type;value=[ResourceType;" << argResourceName << "]};";
+    sb << "    {arg=T0;cmd=type;value=[OptionalType;[ResourceType;" << argResourceName << "]]}";
+    sb << "]};{args=[[ResourceType;" << argResourceName << "]";
+    if (intervalType) {
+        sb << ";[DataType;" << intervalType << "]";
+    }
+    sb << "]}]";
+}
+
+void AddBoundaryDatePolyArgs(bool last, TStringBuilder& sb, TStringBuf dateType, TStringBuf intervalType) {
+    sb << ';';
+
+    if (last) {
+        sb << "[[];";
+    } else {
+        sb << "[{cmd=or;value=[";
+        sb << "    {arg=T0;cmd=type;value=[DataType;" << dateType << "]};";
+        sb << "    {arg=T0;cmd=type;value=[OptionalType;[DataType;" << dateType << "]]}";
+        sb << "]};";
+    }
+
+    sb << "{args=[[DataType;" << dateType << "]";
+    if (intervalType) {
+        sb << ";[DataType;" << intervalType << "]";
+    }
+    sb << "]}]";
+}
+
+enum class ESecondPolyArg {
+    None,
+    Interval,
+    Shift
+};
+
+TStringBuf GetSecondPolyArgType(ESecondPolyArg secondArg, bool wide) {
+    switch (secondArg) {
+        case ESecondPolyArg::None:
+            return {};
+        case ESecondPolyArg::Interval:
+            return wide ? "Interval64" : "Interval";
+        case ESecondPolyArg::Shift:
+            return "Int32";
+    }
+}
+
+TString BuildBoundaryPolyArgs(ESecondPolyArg secondArg = ESecondPolyArg::None) {
+    TStringBuilder sb;
+    sb << "[";
+    AddBoundaryResourcePolyArgs(true, sb, TMResourceName, GetSecondPolyArgType(secondArg, false));
+    AddBoundaryResourcePolyArgs(false, sb, TM64ResourceName, GetSecondPolyArgType(secondArg, true));
+    TVector<std::pair<TStringBuf, TStringBuf>> plainDates;
+    for (ui32 i = 0; i < DataSlotCount; ++i) { // NOLINT(modernize-loop-convert)
+        if (DataTypeInfos[i].Features & NUdf::ExtDateType) {
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, true)));
+        }
+
+        if (DataTypeInfos[i].Features & (NUdf::DateType | NUdf::TzDateType)) {
+            plainDates.emplace_back(std::make_pair(DataTypeInfos[i].Name, GetSecondPolyArgType(secondArg, false)));
+        }
+    }
+
+    for (ui32 i = 0; i < plainDates.size(); ++i) {
+        AddBoundaryDatePolyArgs(i == plainDates.size() - 1, sb, plainDates[i].first, plainDates[i].second);
+    }
+
+    sb << "]";
+    return sb;
+}
+
 template <typename Type>
-static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
+void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
+                           ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
 {
     TTypePrinter(*typeInfoHelper, builder.SimpleType<Type>()).Out(strBuilder.Out);
 }
 
 template <typename Type, typename Head, typename... Tail>
-static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
+void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
+                           ITypeInfoHelper::TPtr typeInfoHelper, TStringBuilder& strBuilder)
 {
     PrintTypeAlternatives<Type>(builder, typeInfoHelper, strBuilder);
     strBuilder << " or ";
@@ -79,8 +155,8 @@ static void PrintTypeAlternatives(NUdf::IFunctionTypeInfoBuilder& builder,
 }
 
 template <typename... Types>
-static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
+                         ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     ::TStringBuilder sb;
     sb << "Invalid argument type: got ";
@@ -91,34 +167,34 @@ static void SetInvalidTypeError(NUdf::IFunctionTypeInfoBuilder& builder,
     builder.SetError(sb);
 }
 
-static void SetResourceExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                     ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetResourceExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
+                              ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     SetInvalidTypeError<
         TResource<TMResourceName>,
         TResource<TM64ResourceName>>(builder, typeInfoHelper, argType);
 }
 
-static void SetIntervalExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                     ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
+void SetIntervalExpectedError(NUdf::IFunctionTypeInfoBuilder& builder,
+                              ITypeInfoHelper::TPtr typeInfoHelper, const TType* argType)
 {
     SetInvalidTypeError<TInterval, TInterval64>(builder, typeInfoHelper, argType);
 }
 
 template <const char* TResourceName>
-static void PrintTagAlternatives(TStringBuilder& strBuilder) {
+void PrintTagAlternatives(TStringBuilder& strBuilder) {
     strBuilder << "'" << TResourceName << "'";
 }
 
 template <const char* TResourceName, const char* Head, const char*... Tail>
-static void PrintTagAlternatives(TStringBuilder& strBuilder) {
+void PrintTagAlternatives(TStringBuilder& strBuilder) {
     PrintTagAlternatives<TResourceName>(strBuilder);
     strBuilder << " or ";
     PrintTagAlternatives<Head, Tail...>(strBuilder);
 }
 
-static void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
-                                  TStringRef tag)
+void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
+                           TStringRef tag)
 {
     ::TStringBuilder sb;
     sb << "Unexpected Resource tag: got '" << tag << "', but ";
@@ -129,11 +205,11 @@ static void SetUnexpectedTagError(NUdf::IFunctionTypeInfoBuilder& builder,
 
 } // namespace
 
-const auto UsecondsInDay = 86400000000ll;
-const auto UsecondsInHour = 3600000000ll;
-const auto UsecondsInMinute = 60000000ll;
-const auto UsecondsInSecond = 1000000ll;
-const auto UsecondsInMilliseconds = 1000ll;
+const auto UsecondsInDay = 86400000000LL;
+const auto UsecondsInHour = 3600000000LL;
+const auto UsecondsInMinute = 60000000LL;
+const auto UsecondsInSecond = 1000000LL;
+const auto UsecondsInMilliseconds = 1000LL;
 
 template <
     const char* TFuncName,
@@ -180,24 +256,76 @@ public:
     }
 
     static TResult TimestampCore(ui64 value) {
-        return TResult(value / (1000000u / ScaleAfterSeconds));
+        return TResult(value / (1000000U / ScaleAfterSeconds));
     }
 
     static TWResult Timestamp64Core(i64 value) {
-        return TWResult(value / (1000000u / ScaleAfterSeconds));
+        return TWResult(value / (1000000U / ScaleAfterSeconds));
     }
 
     static TSignedResult IntervalCore(i64 value) {
-        return TSignedResult(value / (1000000u / ScaleAfterSeconds));
+        return TSignedResult(value / (1000000U / ScaleAfterSeconds));
     }
 
     static TWResult Interval64Core(i64 value) {
-        return TWResult(value / (1000000u / ScaleAfterSeconds));
+        return TWResult(value / (1000000U / ScaleAfterSeconds));
     }
 
     static const TStringRef& Name() {
         static auto Name = TStringRef(TFuncName, std::strlen(TFuncName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildPolyArgsWithVersion(NYql::UnknownLangVersion, true);
+    }
+
+    static TString BuildPolyArgsWithVersion(NYql::TLangVersion langver, bool full = false) {
+        TStringBuilder sb;
+        if (full) {
+            sb << "[";
+        }
+
+        TVector<TStringBuf> plainTypes;
+        for (ui32 i = 0; i < DataSlotCount; ++i) { // NOLINT(modernize-loop-convert)
+            if (DataTypeInfos[i].Features & (NUdf::ExtDateType | NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType)) {
+                plainTypes.emplace_back(DataTypeInfos[i].Name);
+            }
+        }
+
+        TString langverStr = langver ? *NYql::FormatLangVersion(langver) : TString();
+        TString langverPredicate = langver ? "{cmd=ver;value=\"" + langverStr + "\"};" : TString();
+        TString langverAction = langver ? "ver=\"" + langverStr + "\";" : TString();
+
+        for (auto type : plainTypes) {
+            AddPolyArgs(sb, type, langverPredicate, langverAction);
+        }
+
+        sb << "[";
+        if (langverPredicate) {
+            sb << "[" << langverPredicate;
+        }
+
+        sb << "{cmd=error;message=\"Expected types: ";
+        sb << JoinSeq(", ", plainTypes);
+        sb << "\"}";
+        if (langverPredicate) {
+            sb << "]";
+        }
+
+        sb << ";{}]";
+        if (full) {
+            sb << "]";
+        }
+
+        return sb;
+    }
+
+    static void AddPolyArgs(TStringBuilder& sb, TStringBuf dataType, const TString& langverPredicate, const TString& langverAction) {
+        sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[DataType;" << dataType << "]}];{" << langverAction << "args=[[DataType;" << dataType << "]]}];";
+        sb << "[[" << langverPredicate << "{arg=T0;cmd=type;value=[OptionalType;[DataType;" << dataType << "]]}];";
+        sb << "{" << langverAction << "args=[[OptionalType;[DataType;" << dataType << "]]]}]";
+        sb << ';';
     }
 
     template <typename TTzDate, typename TOutput>
@@ -391,6 +519,10 @@ struct TGetTimeComponent {
         return Name;
     }
 
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
+    }
+
     static bool DeclareSignature(
         const TStringRef& name,
         TType* userType,
@@ -542,7 +674,7 @@ private:
             if constexpr (Fractional) {
                 return (val / Scale) % Limit;
             } else {
-                return (val / 1000000u / Scale) % Limit;
+                return (val / 1000000U / Scale) % Limit;
             }
         } else {
             if constexpr (Fractional) {
@@ -602,7 +734,7 @@ TUnboxedValuePod DoAddMonths(const TUnboxedValuePod& date, i64 months, const NUd
 
 template <const char* TResourceName>
 TUnboxedValuePod DoAddQuarters(const TUnboxedValuePod& date, i64 quarters, const NUdf::IDateBuilder& builder) {
-    return DoAddMonths<TResourceName>(date, quarters * 3ll, builder);
+    return DoAddMonths<TResourceName>(date, quarters * 3LL, builder);
 }
 
 template <const char* TResourceName>
@@ -1291,6 +1423,10 @@ public:
         return Name;
     }
 
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
+    }
+
     static bool DeclareSignature(
         const ::NYql::NUdf::TStringRef& name,
         ::NYql::NUdf::TType* userType,
@@ -1400,6 +1536,10 @@ public:
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1624,6 +1764,10 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Update");
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -1861,6 +2005,19 @@ public:
         return Name;
     }
 
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([
+               [{cmd=or;value=[
+                   {cmd=type;arg=T0;value=[DataType;Interval64]};
+                   {cmd=type;arg=T0;value=[OptionalType;[DataType;Interval64]]}
+                ]};{args=[[DataType;Interval64]]}];
+               [[];{args=[[DataType;Interval]]}]
+            ])");
+
+        return Config;
+    }
+
     static bool DeclareSignature(
         const TStringRef& name,
         TType* userType,
@@ -2063,6 +2220,10 @@ public:
         return true;
     }
 
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
+    }
+
 private:
     template <auto Func>
     class TImpl: public TBoxedValue {
@@ -2172,7 +2333,7 @@ TMaybe<TStorage> EndOfMonth(TStorage storage, const IValueBuilder& valueBuilder)
 
 template <typename TStorage>
 TMaybe<TStorage> StartOfWeek(TStorage storage, const IValueBuilder& valueBuilder) {
-    const ui32 shift = 86400u * (storage.DayOfWeek - 1u);
+    const ui32 shift = 86400U * (storage.DayOfWeek - 1U);
     if constexpr (std::is_same_v<TStorage, TTMStorage>) {
         if (shift > storage.ToDatetime(valueBuilder.GetDateBuilder())) {
             return {};
@@ -2193,7 +2354,7 @@ TMaybe<TStorage> StartOfWeek(TStorage storage, const IValueBuilder& valueBuilder
 
 template <typename TStorage>
 TMaybe<TStorage> EndOfWeek(TStorage storage, const IValueBuilder& valueBuilder) {
-    const ui32 shift = 86400u * (7u - storage.DayOfWeek);
+    const ui32 shift = 86400U * (7U - storage.DayOfWeek);
     if constexpr (std::is_same_v<TStorage, TTMStorage>) {
         auto dt = storage.ToDatetime(valueBuilder.GetDateBuilder());
         if (NUdf::MAX_DATETIME - shift <= dt) {
@@ -2236,7 +2397,7 @@ TMaybe<TStorage> EndOfDay(TStorage storage, const IValueBuilder& valueBuilder) {
 
 template <typename TStorage>
 TMaybe<TStorage> StartOf(TStorage storage, ui64 interval, const IValueBuilder& valueBuilder) {
-    if (interval >= 86400000000ull) {
+    if (interval >= 86400000000ULL) {
         // treat as StartOfDay
         SetStartOfDay(storage);
     } else {
@@ -2254,7 +2415,7 @@ TMaybe<TStorage> StartOf(TStorage storage, ui64 interval, const IValueBuilder& v
 
 template <typename TStorage>
 TMaybe<TStorage> EndOf(TStorage storage, ui64 interval, const IValueBuilder& valueBuilder) {
-    if (interval >= 86400000000ull) {
+    if (interval >= 86400000000ULL) {
         // treat as EndOfDay
         SetEndOfDay(storage);
     } else {
@@ -2347,7 +2508,7 @@ public:
         TTupleTypeInspector argsTuple(*typeInfoHelper, tuple.GetElementType(0));
         Y_ENSURE(argsTuple, "Tuple with args expected");
         if (argsTuple.GetElementsCount() != 2) {
-            builder.SetError("Single argument expected");
+            builder.SetError("Two arguments expected");
             return true;
         }
 
@@ -2393,6 +2554,10 @@ public:
         return true;
     }
 
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs(ESecondPolyArg::Interval);
+    }
+
 private:
     template <auto Func>
     class TImpl: public TBoxedValue {
@@ -2436,6 +2601,10 @@ public:
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = TStringRef::Of("TimeOfDay");
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs();
     }
 
     static bool DeclareSignature(
@@ -2563,6 +2732,10 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef(TUdfName, std::strlen(TUdfName));
         return Name;
+    }
+
+    static TString BuildPolyArgs() {
+        return BuildBoundaryPolyArgs(ESecondPolyArg::Shift);
     }
 
     static bool DeclareSignature(
@@ -2700,11 +2873,11 @@ struct PrintNDigits {
 
 // Format
 
-static constexpr size_t OSize = sizeof("+0000") - 1;
-static constexpr size_t CSize = sizeof("+00:00") - 1;
+constexpr size_t OSize = sizeof("+0000") - 1;
+constexpr size_t CSize = sizeof("+00:00") - 1;
 
 template <bool WriteOffsetWithColon>
-static size_t PrintUTCOffset(char* out) {
+size_t PrintUTCOffset(char* out) {
     if constexpr (WriteOffsetWithColon) {
         std::memcpy(out, "+00:00", CSize);
         return CSize;
@@ -2715,7 +2888,7 @@ static size_t PrintUTCOffset(char* out) {
 }
 
 template <bool WriteOffsetWithColon>
-static size_t PrintTzOffset(char* out, i32 offset) {
+size_t PrintTzOffset(char* out, i32 offset) {
     Y_ENSURE(offset != 0);
     *out++ = offset > 0 ? '+' : '-';
     offset = std::abs(offset);
@@ -2744,6 +2917,16 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Format");
         return Name;
+    }
+
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([
+               [{cmd=ver;value="2025.05"};{ver="2025.05"}];
+               [[];{}]
+            ])");
+
+        return Config;
     }
 
     static bool DeclareSignature(
@@ -3066,10 +3249,7 @@ struct ParseNDigits {
             // to be parsed (see the class specialization
             // above) or there are given less than N digits
             // to be parsed.
-            if constexpr (Variable) {
-                return true;
-            }
-            return false;
+            return Variable;
         }
         out *= 10U;
         out += d - '0';
@@ -3538,11 +3718,11 @@ SIMPLE_MODULE(TDateTime2Module,
               TGetDateComponent<GetDayOfMonthUDF, ui8, GetDay<TMResourceName>, ui8, GetDay<TM64ResourceName>>,
               TGetDateComponent<GetDayOfWeekUDF, ui8, GetDayOfWeek<TMResourceName>, ui8, GetDayOfWeek<TM64ResourceName>>,
               TGetDateComponentName<GetDayOfWeekNameUDF, GetDayOfWeekName<TMResourceName>, GetDayOfWeekName<TM64ResourceName>>,
-              TGetTimeComponent<GetHourUDF, ui8, GetHour<TMResourceName>, GetHour<TM64ResourceName>, 1u, 3600u, 24u, false>,
-              TGetTimeComponent<GetMinuteUDF, ui8, GetMinute<TMResourceName>, GetMinute<TM64ResourceName>, 1u, 60u, 60u, false>,
-              TGetTimeComponent<GetSecondUDF, ui8, GetSecond<TMResourceName>, GetSecond<TM64ResourceName>, 1u, 1u, 60u, false>,
-              TGetTimeComponent<GetMillisecondOfSecondUDF, ui32, GetMicrosecond<TMResourceName>, GetMicrosecond<TM64ResourceName>, 1000u, 1000u, 1000u, true>,
-              TGetTimeComponent<GetMicrosecondOfSecondUDF, ui32, GetMicrosecond<TMResourceName>, GetMicrosecond<TM64ResourceName>, 1u, 1u, 1000000u, true>,
+              TGetTimeComponent<GetHourUDF, ui8, GetHour<TMResourceName>, GetHour<TM64ResourceName>, 1U, 3600U, 24U, false>,
+              TGetTimeComponent<GetMinuteUDF, ui8, GetMinute<TMResourceName>, GetMinute<TM64ResourceName>, 1U, 60U, 60U, false>,
+              TGetTimeComponent<GetSecondUDF, ui8, GetSecond<TMResourceName>, GetSecond<TM64ResourceName>, 1U, 1U, 60U, false>,
+              TGetTimeComponent<GetMillisecondOfSecondUDF, ui32, GetMicrosecond<TMResourceName>, GetMicrosecond<TM64ResourceName>, 1000U, 1000U, 1000U, true>,
+              TGetTimeComponent<GetMicrosecondOfSecondUDF, ui32, GetMicrosecond<TMResourceName>, GetMicrosecond<TM64ResourceName>, 1U, 1U, 1000000U, true>,
               TGetDateComponent<GetTimezoneIdUDF, ui16, GetTimezoneId<TMResourceName>, ui16, GetTimezoneId<TM64ResourceName>>,
               TGetDateComponentName<GetTimezoneNameUDF, GetTimezoneName<TMResourceName>, GetTimezoneName<TM64ResourceName>>,
 
@@ -3563,8 +3743,7 @@ SIMPLE_MODULE(TDateTime2Module,
               TLangVerForked<
                   NYql::MakeLangVersion(2025, 03),
                   NLegacy::TIntervalFromSeconds,
-                  NActual::TIntervalFromSeconds,
-                  /*SupportsPolyArgs=*/true>,
+                  NActual::TIntervalFromSeconds>,
 
               TIntervalFromMilliseconds,
               TIntervalFromMicroseconds,

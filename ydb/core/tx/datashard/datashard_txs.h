@@ -4,6 +4,7 @@
 #include "datashard_impl.h"
 #include "execution_unit_kind.h"
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr::NDataShard {
@@ -74,7 +75,7 @@ public:
                               TInstant receivedAt, ui64 tieBreakerIndex,
                               bool delayed,
                               NWilson::TSpan &&datashardTransactionSpan,
-                              NACLib::TUserContext::TPtr userCtx);
+                              TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
                  const TActorContext &ctx) override;
@@ -99,7 +100,7 @@ protected:
     bool Rescheduled = false;
     bool WaitComplete = false;
     NWilson::TSpan DatashardTransactionSpan;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
 class TDataShard::TTxWrite: public NTabletFlatExecutor::TTransactionBase<TDataShard> {

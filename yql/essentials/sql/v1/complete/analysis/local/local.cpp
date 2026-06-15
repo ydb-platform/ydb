@@ -124,7 +124,7 @@ public:
     }
 
 private:
-    IC3Engine::TConfig ComputeC3Config(
+    [[nodiscard]] IC3Engine::TConfig ComputeC3Config(
         const THashSet<TString>& ignoredRules,
         const THashMap<TString, THashSet<TString>>& disabledPreviousByToken,
         const THashMap<TString, THashSet<TString>>& forcedPreviousByToken) const {
@@ -137,7 +137,7 @@ private:
         };
     }
 
-    std::unordered_set<TTokenId> ComputeIgnoredTokens() const {
+    [[nodiscard]] std::unordered_set<TTokenId> ComputeIgnoredTokens() const {
         auto ignoredTokens = Grammar_->GetAllTokens();
         for (auto keywordToken : Grammar_->GetKeywordTokens()) {
             ignoredTokens.erase(keywordToken);
@@ -148,11 +148,11 @@ private:
         return ignoredTokens;
     }
 
-    std::unordered_set<TRuleId> ComputePreferredRules() const {
+    [[nodiscard]] std::unordered_set<TRuleId> ComputePreferredRules() const {
         return GetC3PreferredRules();
     }
 
-    std::unordered_set<TRuleId> ComputeIgnoredRules(const THashSet<TString>& IgnoredRules) const {
+    [[nodiscard]] std::unordered_set<TRuleId> ComputeIgnoredRules(const THashSet<TString>& IgnoredRules) const {
         std::unordered_set<TRuleId> ignored;
         ignored.reserve(IgnoredRules.size());
         for (const auto& ruleName : IgnoredRules) {
@@ -161,7 +161,7 @@ private:
         return ignored;
     }
 
-    std::unordered_map<TTokenId, std::unordered_set<TTokenId>>
+    [[nodiscard]] std::unordered_map<TTokenId, std::unordered_set<TTokenId>>
     Resolved(const THashMap<TString, THashSet<TString>>& tokens) const {
         std::unordered_map<TTokenId, std::unordered_set<TTokenId>> resolved;
         for (const auto& [name, set] : tokens) {
@@ -170,7 +170,7 @@ private:
         return resolved;
     }
 
-    std::unordered_set<TTokenId> Resolved(const THashSet<TString>& tokens) const {
+    [[nodiscard]] std::unordered_set<TTokenId> Resolved(const THashSet<TString>& tokens) const {
         std::unordered_set<TTokenId> resolved;
         for (const TString& name : tokens) {
             resolved.emplace(Grammar_->GetTokenId(name));
@@ -195,7 +195,7 @@ private:
         return C3_.Complete(text, caretTokenIndex);
     }
 
-    TLocalSyntaxContext::TKeywords SiftedKeywords(const TC3Candidates& candidates) const {
+    [[nodiscard]] TLocalSyntaxContext::TKeywords SiftedKeywords(const TC3Candidates& candidates) const {
         const auto& vocabulary = Grammar_->GetVocabulary();
         const auto& keywordTokens = Grammar_->GetKeywordTokens();
 
@@ -211,7 +211,7 @@ private:
         return keywords;
     }
 
-    TMaybe<TLocalSyntaxContext::TPragma> PragmaMatch(
+    [[nodiscard]] TMaybe<TLocalSyntaxContext::TPragma> PragmaMatch(
         const TCursorTokenContext& context, const TC3Candidates& candidates) const {
         if (!AnyOf(candidates.Rules, RuleAdapted(IsLikelyPragmaStack))) {
             return Nothing();
@@ -227,11 +227,11 @@ private:
         return pragma;
     }
 
-    bool TypeMatch(const TC3Candidates& candidates) const {
+    [[nodiscard]] bool TypeMatch(const TC3Candidates& candidates) const {
         return AnyOf(candidates.Rules, RuleAdapted(IsLikelyTypeStack));
     }
 
-    TMaybe<TLocalSyntaxContext::TFunction> FunctionMatch(
+    [[nodiscard]] TMaybe<TLocalSyntaxContext::TFunction> FunctionMatch(
         const TCursorTokenContext& context, const TC3Candidates& candidates) const {
         const bool isAnyFunction = AnyOf(candidates.Rules, RuleAdapted(IsLikelyFunctionStack));
         const bool isTableFunction = AnyOf(candidates.Rules, RuleAdapted(IsLikelyTableFunctionStack));
@@ -255,7 +255,7 @@ private:
         return function;
     }
 
-    TMaybe<TLocalSyntaxContext::THint> HintMatch(const TC3Candidates& candidates) const {
+    [[nodiscard]] TMaybe<TLocalSyntaxContext::THint> HintMatch(const TC3Candidates& candidates) const {
         // TODO(YQL-19747): detect local contexts with a single iteration through the candidates.Rules
         auto rule = FindIf(candidates.Rules, RuleAdapted(IsLikelyHintStack));
         if (rule == std::end(candidates.Rules)) {
@@ -272,7 +272,7 @@ private:
         };
     }
 
-    TMaybe<TLocalSyntaxContext::TObject> ObjectMatch(
+    [[nodiscard]] TMaybe<TLocalSyntaxContext::TObject> ObjectMatch(
         const TCursorTokenContext& context, const TC3Candidates& candidates) const {
         TLocalSyntaxContext::TObject object;
 
@@ -309,7 +309,7 @@ private:
         return object;
     }
 
-    TMaybe<TString> ObjectPath(const TCursorTokenContext& context) const {
+    [[nodiscard]] TMaybe<TString> ObjectPath(const TCursorTokenContext& context) const {
         if (auto enclosing = context.Enclosing()) {
             TString path = enclosing->Base->Content;
             if (enclosing->Base->Name == "ID_QUOTED") {
@@ -322,7 +322,7 @@ private:
         return Nothing();
     }
 
-    TMaybe<TLocalSyntaxContext::TCluster> ClusterMatch(
+    [[nodiscard]] TMaybe<TLocalSyntaxContext::TCluster> ClusterMatch(
         const TCursorTokenContext& context, const TC3Candidates& candidates) const {
         if (!AnyOf(candidates.Rules, RuleAdapted(IsLikelyClusterStack))) {
             return Nothing();
@@ -337,7 +337,7 @@ private:
         return cluster;
     }
 
-    TMaybe<TLocalSyntaxContext::TColumn> ColumnMatch(
+    [[nodiscard]] TMaybe<TLocalSyntaxContext::TColumn> ColumnMatch(
         const TCursorTokenContext& context, const TC3Candidates& candidates) const {
         if (!AnyOf(candidates.Rules, RuleAdapted(IsLikelyColumnStack))) {
             return Nothing();
@@ -356,11 +356,11 @@ private:
         return column;
     }
 
-    bool BindingMatch(const TC3Candidates& candidates) const {
+    [[nodiscard]] bool BindingMatch(const TC3Candidates& candidates) const {
         return AnyOf(candidates.Rules, RuleAdapted(IsLikelyBindingStack));
     }
 
-    TLocalSyntaxContext::TQuotation Quotation(TCompletionInput input, const TCursorTokenContext& context) const {
+    [[nodiscard]] TLocalSyntaxContext::TQuotation Quotation(TCompletionInput input, const TCursorTokenContext& context) const {
         TLocalSyntaxContext::TQuotation isQuoted;
         if (auto enclosing = context.Enclosing();
             enclosing.Defined() && enclosing->Base->Name == "ID_QUOTED") {
@@ -370,7 +370,7 @@ private:
         return isQuoted;
     }
 
-    TEditRange EditRange(const TCursorTokenContext& context, ERangeKind kind) const {
+    [[nodiscard]] TEditRange EditRange(const TCursorTokenContext& context, ERangeKind kind) const {
         if (TMaybe<TRichParsedToken> begin;
             kind == ERangeKind::Replace &&
             ((begin = context.MatchCursorPrefix({"DOLLAR"})) ||
@@ -391,7 +391,7 @@ private:
         };
     }
 
-    TEditRange EditRange(const TRichParsedToken& token, const TCursor& cursor) const {
+    [[nodiscard]] TEditRange EditRange(const TRichParsedToken& token, const TCursor& cursor) const {
         size_t begin = token.Position;
         if (token.Base->Name == "NOT_EQUALS2" ||
             token.Base->Name == "ID_QUOTED") {

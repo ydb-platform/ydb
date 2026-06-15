@@ -1,8 +1,11 @@
 #pragma once
 
+#include "schema_match.h"
+
 #include <library/cpp/skiff/skiff_schema.h>
 
 #include <yt/yt/core/concurrency/coroutine.h>
+
 #include <yt/yt/core/misc/coro_pipe.h>
 
 #include <util/generic/buffer.h>

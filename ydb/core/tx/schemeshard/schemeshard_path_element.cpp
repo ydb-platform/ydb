@@ -35,6 +35,13 @@ bool CheckSpaceChanged(const TSpaceLimits& limits, ui64 newValue, ui64 oldValue,
     }
 
     const ui64 diff = newValue - oldValue;
+    if (limits.Allocated > Max<ui64>() - diff) {
+        errStr = TStringBuilder()
+            << "New " << tabletType << " space overflows allocated counter" << suffix
+            << ": " << limits.Allocated << " + " << diff << " > " << Max<ui64>();
+        return false;
+    }
+
     const ui64 newAllocated = limits.Allocated + diff;
     if (newAllocated <= limits.Limit) {
         return true;

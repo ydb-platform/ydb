@@ -815,8 +815,10 @@ void TReadSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& 
                             << (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : ""));
 
     if (ev->Get()->HasError()) {
-        CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
-        return;
+        if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+            CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
+            return;
+        }
     }
     Token = ev->Get()->Token;
     CreateInitAndAuthActor(ctx);
@@ -2697,6 +2699,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     if (req.GetMaxSize()) {
         read->SetBytes(req.GetMaxSize());
     }
+    read->SetReadToBlobEnd(true);
     if (req.GetMaxTimeLagMs()) {
         read->SetMaxTimeLagMs(req.GetMaxTimeLagMs());
     }

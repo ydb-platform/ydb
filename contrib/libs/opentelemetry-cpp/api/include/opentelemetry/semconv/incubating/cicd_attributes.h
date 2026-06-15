@@ -59,6 +59,11 @@ static constexpr const char *kCicdPipelineTaskName = "cicd.pipeline.task.name";
 
 /**
   The unique identifier of a task run within a pipeline.
+  <p>
+  For a given pipeline run and task, the @code cicd.pipeline.task.run.id @endcode MUST be unique
+  within that run. For the same task across different runs of the same pipeline, the @code
+  cicd.pipeline.task.run.id @endcode MAY remain the same, enabling correlation of @code
+  cicd.pipeline.task.run.result @endcode values across multiple pipeline runs.
  */
 static constexpr const char *kCicdPipelineTaskRunId = "cicd.pipeline.task.run.id";
 

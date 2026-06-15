@@ -406,7 +406,7 @@ public:
                 }
 
                 if (pragma == "pooltrees" && node.ChildrenSize() >= 5) {
-                    auto pools = NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
+                    auto pools = NCommon::NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
                     for (const auto& pool : pools) {
                         if (!POOL_TREES_WHITELIST.contains(pool)) {
                             AddInfo(ctx, TStringBuilder() << "unsupported pool tree: " << pool, skipIssues);

@@ -1,0 +1,1 @@
+SELECT id, customer_id, amount FROM orders WHERE id = 1

@@ -6,6 +6,7 @@ import logging
 import os
 import pytest
 import re
+import time
 import yaml
 from yaml.loader import SafeLoader
 
@@ -103,7 +104,19 @@ class TestHttpApi(TestBase):
 
             assert client.get_query_status(query_id) in ["STARTING", "RUNNING", "COMPLETED", "COMPLETING"]
 
-            response = client.stop_query(query_id)
+            # `select 1` after restart may be in the transient COMPLETING state, which
+            # rejects stop_query until the query reaches a terminal status.
+            for _ in range(10):
+                try:
+                    response = client.stop_query(query_id)
+                    break
+                except YQHttpClientException as e:
+                    if e.details and "COMPLETING" in str(e.details):
+                        time.sleep(0.1)
+                        continue
+                    raise
+            else:
+                pytest.fail("stop_query did not succeed after 10 retries while query remained in COMPLETING state")
             assert response.status_code == 204
 
     def test_empty_query(self):
@@ -119,7 +132,7 @@ class TestHttpApi(TestBase):
 
     def test_warning(self):
         with self.create_client() as client:
-            query_id = client.create_query(query_text="select 10000000000000000000+1")
+            query_id = client.create_query(query_text="select 10000000000000000000+-1")
 
             wait_for_query_status(client, query_id, ["COMPLETED"])
             query_json = client.get_query(query_id)
@@ -127,7 +140,7 @@ class TestHttpApi(TestBase):
                 "id": "xxxxxxxxxxxxxxxxxxxx",
                 "name": "",
                 "description": "",
-                "text": "select 10000000000000000000+1",
+                "text": "select 10000000000000000000+-1",
                 "type": "ANALYTICS",
                 "status": "COMPLETED",
                 "issues": {

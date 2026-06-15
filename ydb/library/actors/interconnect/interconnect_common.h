@@ -41,6 +41,7 @@ namespace NActors {
         bool MergePerPeerCounters = false;
         bool MergePerHostCounters = false;
         bool MergePerDataCenterCounters = false;
+        bool MergePerScopeClassCounters = false;
         ui32 TCPSocketBufferSize = 0;
         TDuration PingPeriod = TDuration::Seconds(3);
         TDuration ForceConfirmPeriod = TDuration::Seconds(1);
@@ -150,10 +151,13 @@ namespace NActors {
         std::atomic_uint64_t CyclesWithNonzeroSessions = 0;
         std::atomic_uint64_t CyclesWithZeroSessions = 0;
 
+        std::atomic_uint64_t ErrorStateLogLastMicroSeconds = 0;
+        std::atomic_uint64_t ErrorStateLogSuppressed = 0;
+
         double CalculateNetworkUtilization();
         void AddSessionWithDataInQueue();
         void RemoveSessionWithDataInQueue();
-        TActorId HostMetricsAggregatorId;
+        TActorId MetricsAggregatorId;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

@@ -2,6 +2,7 @@
 #include "yql_job_stats_writer.h"
 #include "yql_job_factory.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
@@ -269,7 +270,7 @@ void TYqlJobBase::Init() {
         FunctionRegistry->SupportsSizedAllocators()));
     Env.Reset(new TTypeEnvironment(*Alloc));
     CodecCtx.Reset(new NCommon::TCodecContext(*Env, *FunctionRegistry));
-    if (!GetEnv(TString("YQL_SUPPRESS_JOB_STATISTIC"))) {
+    if (NeedWriteStats() && !GetEnv(TString("YQL_SUPPRESS_JOB_STATISTIC"))) {
         JobStats = CreateDefaultStatsRegistry();
     }
     SecureParamsProvider.Reset(new TEnvSecureParamsProvider("YT_SECURE_VAULT"));
@@ -293,11 +294,13 @@ void TYqlJobBase::Save(IOutputStream& s) const {
         OptLLVM,
         TableNames,
         RuntimeLogLevel,
-        LangVer
+        LangVer,
+        NYql::SerializeRuntimeSettingsToString(*RuntimeSettings)
     );
 }
 
 void TYqlJobBase::Load(IInputStream& s) {
+    TString serializedRuntimeSettings;
     ::LoadMany(&s,
         UdfModules,
         FileAliases,
@@ -305,8 +308,10 @@ void TYqlJobBase::Load(IInputStream& s) {
         OptLLVM,
         TableNames,
         RuntimeLogLevel,
-        LangVer
+        LangVer,
+        serializedRuntimeSettings
     );
+    RuntimeSettings = NYql::CreateRuntimeSettingsFromString(serializedRuntimeSettings);
 }
 
 TCallableVisitFuncProvider TYqlJobBase::MakeTransformProvider(THashMap<TString, TRuntimeNode>* extraArgs) const {

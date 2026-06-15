@@ -197,6 +197,35 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
         return TPathElement::EPathSubType::EPathSubTypeEmpty;
     }
 
+    // Local indexes have no impl tables, so resolve their subtype early.
+    // Global indexes fall through to the logic below that inspects impl table children.
+    if (path.Base()->IsTableIndex()) {
+        const auto& pathId = path.Base()->PathId;
+        if (auto it = Self->Indexes.find(pathId); it != Self->Indexes.end()) {
+            auto indexInfo = it->second;
+            switch (indexInfo->Type) {
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalBloomFilterIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalMinMaxIndex;
+                case NKikimrSchemeOp::EIndexTypeInvalid:
+                case NKikimrSchemeOp::EIndexTypeGlobal:
+                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                    break;
+            }
+        }
+    }
+
     if (path.IsCommonSensePath()) {
         return TPathElement::EPathSubType::EPathSubTypeEmpty;
     }
@@ -219,8 +248,11 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                 return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                 return TPathElement::EPathSubType::EPathSubTypeJsonIndexImplTable;
             default:
                 Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
@@ -280,6 +312,19 @@ void TPathDescriber::DescribeChildren(const TPath& path) {
             if (childEl->Dropped() || childEl->IsMigrated()) {
                 continue;
             }
+            if (pathEl->IsColumnTable() && childEl->IsSystemDirectory()) {
+                // .sys directory is not included in the children listing
+                continue;
+            }
+            // Filter out local index children when EnableLocalIndexAsSchemeObject is disabled
+            if (pathEl->IsColumnTable() && childEl->IsTableIndex()) {
+                const auto* indexInfo = Self->Indexes.FindPtr(childId);
+                if (indexInfo && *indexInfo &&
+                    TTableIndexInfo::IsLocalIndex((*indexInfo)->Type) &&
+                    !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                    continue;
+                }
+            }
             auto entry = pathDescription->AddChildren();
 
             if (pathEl->IsTableIndex()) {
@@ -317,8 +362,8 @@ void FillTableBoundaries(
     // Number of split boundaries equals to number of partitions - 1
     result->Reserve(tableInfo.GetPartitions().size() - 1);
     for (ui32 pi = 0; pi < tableInfo.GetPartitions().size() - 1; ++pi) {
-        const auto& p = tableInfo.GetPartitions()[pi];
-        TSerializedCellVec endKey(p.EndOfRange);
+        const auto* p = tableInfo.GetPartitions()[pi];
+        TSerializedCellVec endKey(p->EndOfRange);
         auto boundary = result->Add()->MutableKeyPrefix();
         for (ui32 ki = 0;  ki < endKey.GetCells().size(); ++ki){
             const auto& c = endKey.GetCells()[ki];
@@ -336,9 +381,9 @@ void FillTablePartitions(
     bool includeKeys
 ) {
     result->Reserve(tableInfo.GetPartitions().size());
-    for (auto& p : tableInfo.GetPartitions()) {
-        const auto& tabletId = ui64(shardInfos.at(p.ShardIdx).TabletID);
-        const auto& key = p.EndOfRange;
+    for (const auto* p : tableInfo.GetPartitions()) {
+        const auto& tabletId = ui64(shardInfos.at(p->ShardIdx).TabletID);
+        const auto& key = p->EndOfRange;
 
         auto part = result->Add();
         part->SetDatashardId(tabletId);
@@ -426,8 +471,8 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     if (returnPartitionStats) {
         NKikimrSchemeOp::TPathDescription& pathDescription = *Result->Record.MutablePathDescription();
         pathDescription.MutableTablePartitionStats()->Reserve(tableInfo.GetPartitions().size());
-        for (auto& p : tableInfo.GetPartitions()) {
-            const auto* stats = tableInfo.GetStats().PartitionStats.FindPtr(p.ShardIdx);
+        for (const auto* p : tableInfo.GetPartitions()) {
+            const auto* stats = tableInfo.GetStats().PartitionStats.FindPtr(p->ShardIdx);
             Y_ABORT_UNLESS(stats);
             auto pbStats = pathDescription.AddTablePartitionStats();
             FillTableStats(pbStats, *stats);
@@ -612,6 +657,8 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     }
 
     description->SetIsRestore(tableInfo->IsRestore);
+
+    DescribeChildren(TPath::Init(pathId, Self));
 }
 
 void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl) {
@@ -906,6 +953,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     entry->SetShardsLimit(subDomainInfo->GetSchemeLimits().MaxShards);
     entry->SetPQPartitionsInside(subDomainInfo->GetPQPartitionsInside());
     entry->SetPQPartitionsLimit(subDomainInfo->GetSchemeLimits().MaxPQPartitions);
+    entry->SetPQGroupsInside(subDomainInfo->GetPQGroupsInside());
     *entry->MutableSchemeLimits() = subDomainInfo->GetSchemeLimits().AsProto();
 
     NKikimrSubDomains::TDomainKey *resourcesKey = entry->MutableResourcesDomainKey();
@@ -1414,6 +1462,11 @@ void TSchemeShard::DescribeTable(
         entry->MutableTTLSettings()->CopyFrom(tableInfo.TTLSettings());
     }
 
+    if (tableInfo.HasDetailedMetricsSettings()) {
+        entry->MutableDetailedMetricsSettings()->MutableConfigured()
+            ->CopyFrom(tableInfo.GetDetailedMetricsSettings());
+    }
+
     if (tableInfo.HasReplicationConfig()) {
         entry->MutableReplicationConfig()->CopyFrom(tableInfo.ReplicationConfig());
     }
@@ -1491,6 +1544,8 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             break;
@@ -1499,10 +1554,17 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             *entry.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
-        default:
-            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            *entry.MutableBloomFilterDescription() = std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+            *entry.MutableBloomNGrammFilterDescription() = std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeInvalid:
             break;
     }
 }

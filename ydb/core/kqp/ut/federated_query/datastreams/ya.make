@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(50)
+SPLIT_FACTOR(100)
 
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
@@ -12,7 +12,11 @@ ELSE()
 ENDIF()
 
 SRCS(
+    common.cpp
     datastreams_ut.cpp
+    datastreams_table_mode_ut.cpp
+    streaming_ddl_ut.cpp
+    streaming_sys_view_ut.cpp
 )
 
 PEERDIR(
@@ -32,6 +36,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    yql/essentials/udfs/common/yson2
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

@@ -7,6 +7,7 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/core/base
     ydb/core/kqp/ut/common
     ydb/core/tx/schemeshard/ut_helpers
     yql/essentials/sql/pg

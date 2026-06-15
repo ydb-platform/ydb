@@ -64,6 +64,7 @@
 #include "mkql_length.h"
 #include "mkql_linear.h"
 #include "mkql_listfromrange.h"
+#include "mkql_list_join.h"
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
 #include "mkql_map.h"
@@ -77,6 +78,7 @@
 #include "mkql_nop.h"
 #include "mkql_now.h"
 #include "mkql_null.h"
+#include "mkql_runtime_feature.h"
 #include "mkql_pickle.h"
 #include "mkql_prepend.h"
 #include "mkql_queue.h"
@@ -245,6 +247,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"GraceSelfJoinWithSpilling", &WrapGraceSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
+        {"ListJoinCore", &WrapListJoinCore},
         {"CombineCore", &WrapCombineCore},
         {"GroupingCore", &WrapGroupingCore},
         {"HoppingCore", &WrapHoppingCore},
@@ -256,6 +259,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"RandomNumber", &WrapRandom<ERandom::Number>},
         {"RandomUuid", &WrapRandom<ERandom::Uuid>},
         {"Now", &WrapNow},
+        {"HostRuntimeSetting", &WrapHostRuntimeSetting},
+        {"UdfRuntimeSetting", &WrapUdfRuntimeSetting},
         {"Pickle", &WrapPickle},
         {"StablePickle", &WrapStablePickle},
         {"Unpickle", &WrapUnpickle},
@@ -358,6 +363,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideTop", &WrapWideTop},
         {"WideTopSort", &WrapWideTopSort},
         {"WideSort", &WrapWideSort},
+        {"WideSortWithSpilling", &WrapWideSort},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
         {"RangeCreate", &WrapRangeCreate},

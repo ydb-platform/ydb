@@ -14,8 +14,7 @@ class TestStress(MixedClusterFixture):
     def setup(self):
         yield from self.setup_cluster(
             # uncomment for 64 datetime in tpc-h/tpc-ds
-            # extra_feature_flags={"enable_table_datetime64": True},
-
+            # extra_feature_flags=["enable_table_datetime64"],
             column_shard_config={
                 'disabled_on_scheme_shard': False,
             },
@@ -42,7 +41,7 @@ class TestStress(MixedClusterFixture):
 
         upload_commands = [
             # bulk upsert workload
-            self.get_command_prefix_log(subcmds=["run", "bulk_upsert"], path=store_type)
+            self.get_command_prefix_log(subcmds=["run", "bulk-upsert"], path=store_type)
             + ["--seconds", str(timeout_scale), "--threads", "10", "--rows", "2000"],
             # upsert workload
             self.get_command_prefix_log(subcmds=["run", "upsert"], path=store_type)

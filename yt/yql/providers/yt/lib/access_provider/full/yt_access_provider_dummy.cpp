@@ -4,7 +4,7 @@
 
 namespace NYql {
 
-Y_WEAK IYtAccessProvider::TPtr CreateYtAccessProvider(const ITvmClient::TPtr& /*tvmClient*/, const TYtGatewayConfig& /*ytGatewayConfig*/) {
+Y_WEAK IYtAccessProvider::TPtr CreateYtAccessProvider(const ITvmClient::TPtr& /*tvmClient*/, const TYtAccessProviderConfig& /*config*/) {
     return CreateYtDummyAccessProvider();
 }
 

@@ -1,6 +1,8 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -63,7 +65,10 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     for (const auto& [tableNode, indexDesc] : indexes) {
         if (useStreamIndex
                 && (indexDesc->Type == TIndexDescription::EType::GlobalSync
-                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact)) {
             continue;
         }
         THashSet<TStringBuf> indexTableColumnsSet;
@@ -84,6 +89,9 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
 
         switch (indexDesc->Type) {
             case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::GlobalFulltextCompact:
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            case TIndexDescription::EType::GlobalJsonCompact:
                 AFL_ENSURE(false);
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {
@@ -138,6 +146,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             }
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
+            case TIndexDescription::EType::LocalMinMax:
                 break;
         }
 
@@ -155,7 +164,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         .Done();
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlDeleteRowsIndex>()) {
@@ -169,15 +178,47 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx);
     YQL_ENSURE(indexes);
 
+    auto idxNeedsKqpEffect = [](const std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
+        switch (x.second->Type) {
+            case TIndexDescription::EType::GlobalSync:
+            case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::GlobalSyncUnique:
+            case TIndexDescription::EType::GlobalFulltextCompact:
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            case TIndexDescription::EType::GlobalJsonCompact:
+                return false;
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalFulltextPlain:
+            case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::GlobalJson:
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+            case TIndexDescription::EType::LocalMinMax:
+                return true;
+        }
+        Y_UNREACHABLE();
+        return false;
+    };
+    const bool needsKqpEffect = std::any_of(indexes.begin(), indexes.end(), idxNeedsKqpEffect);
+
+    const bool isSink = NeedSinks(table, kqpCtx);
+
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+
     // Skip lookup means that the input already has all required columns and we only need to project them
     auto settings = TKqpDeleteRowsIndexSettings::Parse(del);
 
-    if (settings.SkipLookup) {
-        auto lookupKeys = ProjectColumns(del.Input(), pk, ctx);
+    if (settings.SkipLookup || (useStreamIndex && !needsKqpEffect)) {
+        // Stream Index with DELETE WHERE can avoid lookup in this case.
+        TExprBase lookupKeys = (settings.SkipLookup && useStreamIndex)
+            ? del.Input()
+            : ProjectColumns(del.Input(), pk, ctx);
         return BuildDeleteIndexStagesImpl(table, indexes, del, lookupKeys, [&](const TVector<TStringBuf>& indexTableColumns) {
             return ProjectColumns(del.Input(), indexTableColumns, ctx);
         }, ctx, kqpCtx);
     }
+
+    AFL_ENSURE(!useStreamIndex || needsKqpEffect);
 
     auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
         .Args({"stub"})

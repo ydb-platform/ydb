@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/write_request.h>
+#include "write_request.h"
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -12,14 +12,10 @@ class TWriteWithDirectReplicationRequestExecutor
 public:
     TWriteWithDirectReplicationRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlockRange64 vChunkRange,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay);
+        std::shared_ptr<TWriteRequestBundle> bundle);
 
     ~TWriteWithDirectReplicationRequestExecutor() override = default;
 
@@ -27,6 +23,8 @@ public:
 
 private:
     void SendWriteRequestsToHandoffPBuffers();
+
+    void ScheduleHedging() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

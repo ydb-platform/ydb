@@ -6,6 +6,7 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
+#include <ydb/core/persqueue/public/schema/common.h>
 
 
 
@@ -64,7 +65,6 @@ public:
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
         Y_UNUSED(selfInfo);
-        const auto& pqConfig = appData->PQConfig;
         auto partitionConfig = groupConfig.MutablePQTabletConfig()->MutablePartitionConfig();
 
         if (RetentionMs.has_value()) {
@@ -88,15 +88,15 @@ public:
                 appData->PQConfig
             );
         } else if (!pqGroupDescription.GetPQTabletConfig().GetEnableCompactification() && groupConfig.GetPQTabletConfig().GetEnableCompactification()) {
-            Ydb::PersQueue::V1::TopicSettings::ReadRule compConsumer;
-            compConsumer.set_consumer_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
+            Ydb::Topic::Consumer compConsumer;
+            compConsumer.set_name(NKikimr::NPQ::CLIENTID_COMPACTION_CONSUMER);
             compConsumer.set_important(true);
-            compConsumer.set_starting_message_timestamp_ms(0);
-            NKikimr::NGRpcProxy::V1::AddReadRuleToConfig(
+            compConsumer.mutable_read_from()->set_seconds(0);
+            NKikimr::NPQ::NSchema::AddConsumer(
                 groupConfig.MutablePQTabletConfig(),
                 compConsumer,
-                NKikimr::NGRpcProxy::V1::GetSupportedClientServiceTypes(pqConfig),
-                pqConfig,
+                NKikimr::NPQ::NSchema::GetSupportedClientServiceTypes(),
+                false, // checkServiceType
                 nullptr);
         }
     }

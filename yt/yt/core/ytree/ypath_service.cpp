@@ -96,7 +96,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void CheckProducedNonEmptyData(const TString& data)
+void CheckProducedNonEmptyData(const std::string& data)
 {
     if (data.empty()) {
         THROW_ERROR_EXCEPTION(

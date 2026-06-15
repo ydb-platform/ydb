@@ -1,0 +1,130 @@
+--- a/include/boost/xpressive/detail/core/icase.hpp	(index)
++++ b/include/boost/xpressive/detail/core/icase.hpp	(working tree)
+@@ -26,1 +26,1 @@
+-BOOST_INLINE_CONSTEXPR detail::modifier_op<detail::icase_modifier> icase = {{}, regex_constants::icase_};
++detail::modifier_op<detail::icase_modifier> const icase = {{}, regex_constants::icase_};
+--- a/include/boost/xpressive/detail/utility/sequence_stack.hpp	(index)
++++ b/include/boost/xpressive/detail/utility/sequence_stack.hpp	(working tree)
+@@ -25,1 +25,1 @@
+-BOOST_INLINE_CONSTEXPR struct fill_t {} fill = {};
++struct fill_t {} const fill = {};
+--- a/include/boost/xpressive/regex_primitives.hpp	(index)
++++ b/include/boost/xpressive/regex_primitives.hpp	(working tree)
+@@ -232,1 +232,1 @@
+-BOOST_INLINE_CONSTEXPR unsigned int repeat_max = UINT_MAX-1;
++unsigned int const repeat_max = UINT_MAX-1;
+@@ -240,1 +240,1 @@
+-BOOST_INLINE_CONSTEXPR unsigned int inf = UINT_MAX-1;
++unsigned int const inf = UINT_MAX-1;
+@@ -243,1 +243,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::epsilon_matcher>::type epsilon = {{}};
++proto::terminal<detail::epsilon_matcher>::type const epsilon = {{}};
+@@ -250,1 +250,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::epsilon_matcher>::type nil = {{}};
++proto::terminal<detail::epsilon_matcher>::type const nil = {{}};
+@@ -260,1 +260,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type alnum = {{"alnum", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const alnum = {{"alnum", false}};
+@@ -270,1 +270,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type alpha = {{"alpha", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const alpha = {{"alpha", false}};
+@@ -280,1 +280,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type blank = {{"blank", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const blank = {{"blank", false}};
+@@ -290,1 +290,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type cntrl = {{"cntrl", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const cntrl = {{"cntrl", false}};
+@@ -300,1 +300,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type digit = {{"digit", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const digit = {{"digit", false}};
+@@ -310,1 +310,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type graph = {{"graph", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const graph = {{"graph", false}};
+@@ -320,1 +320,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type lower = {{"lower", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const lower = {{"lower", false}};
+@@ -330,1 +330,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type print = {{"print", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const print = {{"print", false}};
+@@ -340,1 +340,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type punct = {{"punct", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const punct = {{"punct", false}};
+@@ -350,1 +350,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type space = {{"space", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const space = {{"space", false}};
+@@ -360,1 +360,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type upper = {{"upper", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const upper = {{"upper", false}};
+@@ -370,1 +370,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type xdigit = {{"xdigit", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const xdigit = {{"xdigit", false}};
+@@ -377,1 +377,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_bos_matcher>::type bos = {{}};
++proto::terminal<detail::assert_bos_matcher>::type const bos = {{}};
+@@ -388,1 +388,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_eos_matcher>::type eos = {{}};
++proto::terminal<detail::assert_eos_matcher>::type const eos = {{}};
+@@ -396,1 +396,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_bol_placeholder>::type bol = {{}};
++proto::terminal<detail::assert_bol_placeholder>::type const bol = {{}};
+@@ -404,1 +404,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_eol_placeholder>::type eol = {{}};
++proto::terminal<detail::assert_eol_placeholder>::type const eol = {{}};
+@@ -412,1 +412,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_word_begin>::type bow = {{}};
++proto::terminal<detail::assert_word_begin>::type const bow = {{}};
+@@ -420,1 +420,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_word_end>::type eow = {{}};
++proto::terminal<detail::assert_word_end>::type const eow = {{}};
+@@ -430,1 +430,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::assert_word_boundary>::type _b = {{}};
++proto::terminal<detail::assert_word_boundary>::type const _b = {{}};
+@@ -440,1 +440,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type _w = {{"w", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const _w = {{"w", false}};
+@@ -450,1 +450,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type _d = {{"d", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const _d = {{"d", false}};
+@@ -460,1 +460,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::posix_charset_placeholder>::type _s = {{"s", false}};
++proto::terminal<detail::posix_charset_placeholder>::type const _s = {{"s", false}};
+@@ -469,1 +469,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<char>::type _n = {'\n'};
++proto::terminal<char>::type const _n = {'\n'};
+@@ -478,1 +478,1 @@
+-BOOST_INLINE_CONSTEXPR detail::logical_newline_xpression _ln = {{}};
++detail::logical_newline_xpression const _ln = {{}};
+@@ -487,1 +487,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::any_matcher>::type _ = {{}};
++proto::terminal<detail::any_matcher>::type const _ = {{}};
+@@ -496,1 +496,1 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::self_placeholder>::type self = {{}};
++proto::terminal<detail::self_placeholder>::type const self = {{}};
+@@ -513,1 +513,1 @@
+-BOOST_INLINE_CONSTEXPR detail::set_initializer_type set = {{}};
++detail::set_initializer_type const set = {{}};
+@@ -578,1 +578,1 @@
+-    BOOST_INLINE_CONSTEXPR boost::xpressive::mark_tag::proto_base_expr NAME = {{VALUE}}          \
++    boost::xpressive::mark_tag::proto_base_expr const NAME = {{VALUE}} \
+@@ -635,1 +635,1 @@
+-BOOST_INLINE_CONSTEXPR proto::functional::as_expr<> as_xpr = {};
++proto::functional::as_expr<> const as_xpr = {};
+@@ -826,9 +826,9 @@
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<1> > >::type a1 = {{}};
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<2> > >::type a2 = {{}};
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<3> > >::type a3 = {{}};
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<4> > >::type a4 = {{}};
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<5> > >::type a5 = {{}};
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<6> > >::type a6 = {{}};
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<7> > >::type a7 = {{}};
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<8> > >::type a8 = {{}};
+-BOOST_INLINE_CONSTEXPR proto::terminal<detail::attribute_placeholder<mpl::int_<9> > >::type a9 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<1> > >::type const a1 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<2> > >::type const a2 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<3> > >::type const a3 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<4> > >::type const a4 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<5> > >::type const a5 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<6> > >::type const a6 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<7> > >::type const a7 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<8> > >::type const a8 = {{}};
++proto::terminal<detail::attribute_placeholder<mpl::int_<9> > >::type const a9 = {{}};

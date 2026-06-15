@@ -98,8 +98,9 @@ public:
 
                 auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(clusterName));
                 auto credentialsProvider = providerFactory->CreateProvider();
+                auto readConfig = NSo::ParseSolomonReadActorConfig(source.settings());
 
-                auto solomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
+                auto solomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider, readConfig);
                 auto labelNamesFuture = solomonClient->GetLabelNames(selectors, from, to);
                 auto listMetricsLabelsFuture = solomonClient->ListMetricsLabels(selectors, from, to);
 

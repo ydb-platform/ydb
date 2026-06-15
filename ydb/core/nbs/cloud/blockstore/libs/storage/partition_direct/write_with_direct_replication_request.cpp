@@ -1,6 +1,13 @@
 #include "write_with_direct_replication_request.h"
 
+#include "direct_block_group.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <utility>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -9,71 +16,70 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TWriteWithDirectReplicationRequestExecutor::
     TWriteWithDirectReplicationRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlockRange64 vChunkRange,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay)
+        std::shared_ptr<TWriteRequestBundle> bundle)
     : TBaseWriteRequestExecutor(
           actorSystem,
+          std::move(logTitle),
           vChunkConfig,
           std::move(directBlockGroup),
-          std::move(vChunkRange),
-          std::move(callContext),
-          std::move(request),
-          lsn,
-          std::move(traceId),
-          hedgingDelay)
+          std::move(bundle))
 {}
 
 void TWriteWithDirectReplicationRequestExecutor::Run()
 {
-    SendWriteRequest(ELocation::PBuffer0);
-    SendWriteRequest(ELocation::PBuffer1);
-    SendWriteRequest(ELocation::PBuffer2);
+    Bundle->GetSpan().Event("Run");
+    ScheduleRequestTimeoutCallback();
+    ScheduleHedging();
 
-    if (HedgingDelay) {
-        DirectBlockGroup->Schedule(
-            HedgingDelay,
-            [weakSelf = weak_from_this()]()
-            {
-                if (auto self = weakSelf.lock()) {
-                    std::static_pointer_cast<
-                        TWriteWithDirectReplicationRequestExecutor>(self)
-                        ->SendWriteRequestsToHandoffPBuffers();
-                }
-            });
+    for (auto host: VChunkConfig.GetDesiredPBuffers()) {
+        SendWriteRequest(host);
     }
+}
+
+void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
+{
+    if (!HedgingDelay) {
+        return;
+    }
+
+    DirectBlockGroup->Schedule(
+        HedgingDelay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = std::static_pointer_cast<
+                    TWriteWithDirectReplicationRequestExecutor>(
+                    weakSelf.lock()))
+            {
+                if (!self->IsAlreadyReplied()) {
+                    self->SendWriteRequestsToHandoffPBuffers();
+                }
+            }
+        });
 }
 
 void TWriteWithDirectReplicationRequestExecutor::
     SendWriteRequestsToHandoffPBuffers()
 {
-    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 1) {
+    const auto availableHandOffHosts = GetAvailableHandOffHosts();
+    const size_t neededHedgingRequestsCount = std::min(
+        QuorumDirectBlockGroupHostCount - CompletedWrites.Count(),
+        availableHandOffHosts.size());
+
+    for (size_t i = 0; i < neededHedgingRequestsCount; ++i) {
+        const auto host = availableHandOffHosts[i];
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteWithDirectReplicationRequestExecutor. Send write request to "
-            "HOPBuffer0 since we "
-            "have %lu completed writes",
+            "%s Send write request to handoff %s since we have %lu completed "
+            "writes",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostIndex(host).c_str(),
             CompletedWrites.Count());
 
-        SendWriteRequest(ELocation::HOPBuffer0);
-    }
-
-    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 2) {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TWriteWithDirectReplicationRequestExecutor. Send write request to "
-            "HOPBuffer1 since we "
-            "have %lu completed writes",
-            CompletedWrites.Count());
-
-        SendWriteRequest(ELocation::HOPBuffer1);
+        SendWriteRequest(host);
     }
 }
 

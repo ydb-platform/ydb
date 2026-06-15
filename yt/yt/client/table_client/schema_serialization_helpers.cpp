@@ -309,9 +309,9 @@ void Deserialize(TTableSchema& schema, TColumnNameToConstraintMap& columnNameToC
 
     EnsureYsonToken("table schema", *cursor, EYsonItemType::BeginList);
 
-    auto constraintedColumns = ExtractTo<std::vector<TConstrainedColumnSchema>>(cursor);
+    auto constrainedColumns = ExtractTo<std::vector<TConstrainedColumnSchema>>(cursor);
     std::vector<TColumnSchema> columns;
-    for (auto& constrainedColumn : constraintedColumns) {
+    for (auto& constrainedColumn : constrainedColumns) {
         if (constrainedColumn.Constraint()) {
             auto [it, emplaced] = columnNameToConstraint.emplace(constrainedColumn.Name(), *constrainedColumn.Constraint());
             if (!emplaced) {

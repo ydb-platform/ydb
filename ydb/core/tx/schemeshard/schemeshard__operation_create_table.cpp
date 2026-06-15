@@ -324,7 +324,7 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
 
             const auto now = context.Ctx.Now();
-            for (auto& shard : table->GetPartitions()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
@@ -333,6 +333,12 @@ public:
             }
         }
         context.SS->PersistTableCreated(db, pathId);
+
+        if (table->PartitionsInShardIdxFormat) {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+        } else {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
+        }
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         if (parentDir->IsDirectory() || parentDir->IsDomainRoot()) {
@@ -546,6 +552,32 @@ public:
             return result;
         }
 
+        if (schema.HasDetailedMetricsSettings()) {
+            // Do not allow changing detailed metrics settings without the feature flag
+            if (!AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "The detailed metrics settings are specified in the request, "
+                    "but the detailed metrics feature is disabled by the corresponding "
+                    "feature flag (EnableDataShardDetailedMetrics)"
+                );
+
+                return result;
+            }
+
+            TString errorString;
+
+            // Make sure the detailed metrics settings are valid (correct metrics level etc)
+            if (!ValidateTableDetailedMetricsSettings(
+                true /* forCreate */,
+                schema.GetDetailedMetricsSettings(),
+                errorString
+            )) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errorString);
+                return result;
+            }
+        }
+
         if (parentPath.Base()->IsTableIndex()) {
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "Creating private table for table index"
@@ -603,6 +635,7 @@ public:
             .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
             .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
             .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
+            .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,
@@ -621,6 +654,10 @@ public:
 
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
+
+        if (AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx() && AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdxByDefault()) {
+            tableInfo->PartitionsInShardIdxFormat = true;
+        }
 
         TVector<TTableShardInfo> partitions;
 
@@ -692,7 +729,7 @@ public:
 
         ApplyPartitioning(OperationId.GetTxId(), newTable->PathId, tableInfo, txState, channelsBinding, context.SS, partitions);
 
-        Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
+        Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
         if (tableInfo->IsAsyncReplica()) {
             newTable->SetAsyncReplica(true);
@@ -726,16 +763,16 @@ public:
         context.SS->PersistUpdateNextPathId(db);
         context.SS->PersistUpdateNextShardIdx(db);
         // Persist new shards info
-        for (const auto& shard : tableInfo->GetPartitions()) {
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
-            auto tabletType = context.SS->ShardInfos[shard.ShardIdx].TabletType;
-            const auto& bindedChannels = context.SS->ShardInfos[shard.ShardIdx].BindedChannels;
-            context.SS->PersistShardMapping(db, shard.ShardIdx, InvalidTabletId, newTable->PathId, OperationId.GetTxId(), tabletType);
-            context.SS->PersistChannelsBinding(db, shard.ShardIdx, bindedChannels);
+        for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx), "shard info is set before");
+            auto tabletType = context.SS->ShardInfos[shardIdx].TabletType;
+            const auto& bindedChannels = context.SS->ShardInfos[shardIdx].BindedChannels;
+            context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, newTable->PathId, OperationId.GetTxId(), tabletType);
+            context.SS->PersistChannelsBinding(db, shardIdx, bindedChannels);
 
             if (storePerShardConfig) {
-                tableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
-                context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig);
+                tableInfo->PerShardPartitionConfig[shardIdx].CopyFrom(perShardConfig);
+                context.SS->PersistAddTableShardPartitionConfig(db, shardIdx, perShardConfig);
             }
         }
 

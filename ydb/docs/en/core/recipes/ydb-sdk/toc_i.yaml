@@ -41,8 +41,6 @@ items:
   href: bulk-upsert.md
 - name: Setting up the transaction execution mode
   href: tx-control.md
-- name: Vector search
-  href: vector-search.md
 - name: Configuring time to live (TTL)
   href: ttl.md
 - name: Vector search
@@ -63,9 +61,11 @@ items:
     href: debug.md
   - name: Enable logging
     href: debug-logs.md
+  - name: Export logs to OpenTelemetry
+    href: debug-logs-otel.md
   - name: Enable metrics in Prometheus
     href: debug-prometheus.md
-  - name: Enable tracing in Jaeger
-    href: debug-jaeger.md
   - name: Enable tracing in OpenTelemetry
     href: debug-otel.md
+  - name: Enable tracing in Jaeger
+    href: debug-jaeger.md

@@ -78,6 +78,16 @@ bool TYaMRTableReader::IsRawReaderExhausted() const
     return TLenvalTableReader::IsRawReaderExhausted();
 }
 
+void TYaMRTableReader::Abort()
+{
+    Input_.Abort();
+}
+
+bool TYaMRTableReader::IsAborted() const
+{
+    return Input_.IsAborted();
+}
+
 void TYaMRTableReader::ReadField(TString* result, i32 length)
 {
     result->resize(length);

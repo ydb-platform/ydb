@@ -154,23 +154,23 @@ public:
 
     void Bootstrap() {
         switch (DesiredState) {
-            case TReplication::EState::Done:
-                if (!DstPathId) {
-                    return Success();
-                } else {
-                    switch (Kind) {
-                        case TReplication::ETargetKind::Table:
-                        case TReplication::ETargetKind::IndexTable:
-                            return AllocateTxId();
-                        case TReplication::ETargetKind::Transfer:
-                            return Success();
-                    }
-                }
-            case TReplication::EState::Paused:
-            case TReplication::EState::Ready:
-            case TReplication::EState::Error:
-            case TReplication::EState::Removing:
+        case TReplication::EState::Done:
+            if (!DstPathId) {
                 return Success();
+            } else {
+                switch (Kind) {
+                case TReplication::ETargetKind::Table:
+                case TReplication::ETargetKind::IndexTable:
+                    return AllocateTxId();
+                case TReplication::ETargetKind::Transfer:
+                    return Success();
+                }
+            }
+        case TReplication::EState::Paused:
+        case TReplication::EState::Ready:
+        case TReplication::EState::Error:
+        case TReplication::EState::Removing:
+            return Success();
         }
     }
 

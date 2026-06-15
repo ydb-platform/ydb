@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/kqp/runtime
     ydb/core/kqp/ut/common
     ydb/core/testlib/default
     ydb/core/tx
@@ -29,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     datashard_ut_read_iterator.cpp
     datashard_ut_read_iterator_ext_blobs.cpp
+    datashard_ut_read_iterator_scheduler.cpp
 )
 
 END()

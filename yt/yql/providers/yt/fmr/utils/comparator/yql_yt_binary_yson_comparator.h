@@ -14,6 +14,9 @@ struct TSortingColumns {
     std::vector<TString> Columns;
     std::vector<ESortOrder> SortOrders;
     bool operator==(const TSortingColumns&) const = default;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
 };
 
 struct TFmrTableKeysBoundary {

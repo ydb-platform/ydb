@@ -201,9 +201,14 @@ public:
                 break;
 
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                    ? NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED
-                    : NKqpProto::ISOLATION_LEVEL_READ_COMMITTED;
+                if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
+                    EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                    IsSnapshotROConvertedFromOnlineRO = true;
+                } else {
+                    EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
+                        ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
+                        : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                }
                 Readonly = true;
                 break;
 
@@ -219,6 +224,11 @@ public:
 
             case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
                 EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
+                Readonly = false;
+                break;
+
+            case Ydb::Table::TransactionSettings::kReadCommittedReadWrite:
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
                 Readonly = false;
                 break;
 
@@ -268,7 +278,8 @@ public:
     void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
         NeedUncommittedChangesFlush = (DeferredEffects.Size() > kMaxDeferredEffects)
             || phyQuery.GetForceImmediateEffectsExecution()
-            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
+            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit)
+            || EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
         if (NeedUncommittedChangesFlush) {
             ModifiedTablesSinceLastFlush.clear();
         }
@@ -304,6 +315,7 @@ public:
     bool HasOltpTable = false;
     bool HasTableWrite = false;
     bool HasTableRead = false;
+    bool IsSnapshotROConvertedFromOnlineRO = false;
 
     std::optional<bool> EnableOlapSink;
     std::optional<bool> EnableHtapTx;

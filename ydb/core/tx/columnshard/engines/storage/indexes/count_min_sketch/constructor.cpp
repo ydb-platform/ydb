@@ -5,7 +5,8 @@
 
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
-std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(
+    const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     std::set<ui32> columnIds;
     if (ColumnNames.empty()) {
         for (const auto& [id, _] : currentSchema.GetColumns().GetColumns()) {
@@ -35,13 +36,13 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(con
     }
     for (auto&& i : *columnNamesArray) {
         if (!i.IsString()) {
-            return TConclusionStatus::Fail("column_names have to be in count min sketch features as array of strings ['column_name_1', ... , 'column_name_N']");
+            return TConclusionStatus::Fail(
+                "column_names have to be in count min sketch features as array of strings ['column_name_1', ... , 'column_name_N']");
         }
         ColumnNames.emplace(i.GetString());
     }
     if (ColumnNames.size() > 1) {
-        return TConclusionStatus::Fail(
-            "column_names elements count have to be equal to 1 temporary");
+        return TConclusionStatus::Fail("column_names elements count have to be equal to 1 temporary");
     }
     return TConclusionStatus::Success();
 }
@@ -66,4 +67,4 @@ void TCountMinSketchConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexR
     }
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

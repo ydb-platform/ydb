@@ -176,6 +176,7 @@ def validate_cfg(result):
             "os",
             "param",
             "langver",
+            "gateway_cfg_patch",
             ), "Unknown command in .cfg: %s" % (r[0])
 
 

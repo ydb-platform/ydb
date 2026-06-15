@@ -41,27 +41,158 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TTestVhostQueue;
+using TTestVhostQueuePtr = std::shared_ptr<TTestVhostQueue>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Test queue enqueues pending requests in a lock-free queue and dequeues them
+// when the server executor polls it.
+class TTestVhostQueue final
+    : public ITestVhostQueue
+    , public IVhostQueue
+{
+private:
+    TManualEvent& FailedEvent;
+
+    enum EState
+    {
+        Undefined = 0,
+        Running = 1,
+        Stopped = 2,
+        Broken = 3,
+    };
+
+    std::atomic<EState> State = Undefined;
+
+    TLockFreeQueue<TVhostRequest*> Requests;
+
+    TMutex Lock;
+    // Devices that registered this queue during CreateDevice().
+    TVector<std::weak_ptr<ITestVhostDevice>> Devices;
+
+public:
+    explicit TTestVhostQueue(TManualEvent& failedEvent)
+        : FailedEvent(failedEvent)
+    {}
+
+    ~TTestVhostQueue() override
+    {
+        TVhostRequest* req = nullptr;
+        while (Requests.Dequeue(&req)) {
+            delete req;
+        }
+    }
+
+    int Run() override
+    {
+        EState expected = Undefined;
+        State.compare_exchange_strong(expected, Running);
+
+        switch (State.load()) {
+            case Running:
+                return -EAGAIN;
+            case Stopped:
+                return 0;
+            case Broken:
+                FailedEvent.Signal();
+                return -1;
+            default:
+                Y_ABORT();
+        }
+    }
+
+    void Stop() override
+    {
+        EState expected = Running;
+        bool wasRun = State.compare_exchange_strong(expected, Stopped);
+        Y_ABORT_UNLESS(wasRun || State.load() == Broken);
+    }
+
+    TVhostRequestPtr DequeueRequest() override
+    {
+        if (State.load() != Running) {
+            return nullptr;
+        }
+
+        TVhostRequest* request = nullptr;
+        if (Requests.Dequeue(&request)) {
+            return std::unique_ptr<TVhostRequest>(request);
+        }
+        return nullptr;
+    }
+
+    bool IsRun() override
+    {
+        return State.load() == Running;
+    }
+
+    TVector<std::shared_ptr<ITestVhostDevice>> GetDevices() override
+    {
+        TVector<std::shared_ptr<ITestVhostDevice>> res;
+        with_lock (Lock) {
+            for (auto& device: Devices) {
+                if (auto ptr = device.lock()) {
+                    res.push_back(ptr);
+                }
+            }
+        }
+        return res;
+    }
+
+    void Break() override
+    {
+        State.store(Broken);
+    }
+
+    // Called by the test device when a request needs to be enqueued to this
+    // queue for later processing by the executor thread.
+    void EnqueueRequest(TVhostRequest* request)
+    {
+        Requests.Enqueue(request);
+    }
+
+    void RegisterDevice(std::shared_ptr<ITestVhostDevice> device)
+    {
+        with_lock (Lock) {
+            Devices.push_back(device);
+        }
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Test device is backed by multiple TTestVhostQueue's. SendTestRequest picks
+// a queue (explicitly or round-robin) and enqueues the request there with
+// the device's single cookie. This mirrors the real vhost path where the
+// caller-side identifier is per-device (libvhost provides per-request
+// device routing via vhd_request.vdev).
 class TTestVhostDevice final
     : public ITestVhostDevice
     , public IVhostDevice
 {
 private:
     const TString SocketPath;
+    TVector<TTestVhostQueuePtr> Queues;
     void* const Cookie;
     const ui32 OptimalIoSize;
 
-    TLockFreeQueue<TVhostRequest*> Requests;
+    std::atomic<ui64> Counter = 0;
 
     TMutex Lock;
     TVector<TFuture<TVhostRequest::EResult>> Futures;
 
     std::atomic_flag Stopped = false;
-
     TPromise<void> Autostop;
 
 public:
-    TTestVhostDevice(TString socketPath, void* cookie, ui32 optimalIoSize)
+    TTestVhostDevice(
+        TString socketPath,
+        TVector<TTestVhostQueuePtr> queues,
+        void* cookie,
+        ui32 optimalIoSize)
         : SocketPath(std::move(socketPath))
+        , Queues(std::move(queues))
         , Cookie(cookie)
         , OptimalIoSize(optimalIoSize)
     {
@@ -114,6 +245,25 @@ public:
         ui64 length,
         TSgList sgList) override
     {
+        ui32 queueIndex =
+            static_cast<ui32>(Counter.fetch_add(1) % Queues.size());
+        return SendTestRequest(
+            queueIndex,
+            type,
+            from,
+            length,
+            std::move(sgList));
+    }
+
+    TFuture<TVhostRequest::EResult> SendTestRequest(
+        ui32 queueIndex,
+        EBlockStoreRequest type,
+        ui64 from,
+        ui64 length,
+        TSgList sgList) override
+    {
+        Y_ABORT_UNLESS(queueIndex < Queues.size());
+
         auto promise = NewPromise<TVhostRequest::EResult>();
         auto future = promise.GetFuture();
 
@@ -132,144 +282,18 @@ public:
             length,
             std::move(sgList),
             Cookie);
-        Requests.Enqueue(request.release());
+        Queues[queueIndex]->EnqueueRequest(request.release());
         return future;
-    }
-
-    TVhostRequestPtr DequeueRequest()
-    {
-        TVhostRequest* request = nullptr;
-        if (Requests.Dequeue(&request)) {
-            return std::unique_ptr<TVhostRequest>(request);
-        }
-        return nullptr;
     }
 
     ui32 GetOptimalIoSize() const override
     {
         return OptimalIoSize;
     }
-};
 
-////////////////////////////////////////////////////////////////////////////////
-
-class TTestVhostQueue final
-    : public ITestVhostQueue
-    , public IVhostQueue
-{
-private:
-    TManualEvent& FailedEvent;
-
-    enum EState
+    ui32 GetQueuesCount() const override
     {
-        Undefined = 0,
-        Running = 1,
-        Stopped = 2,
-        Broken = 3,
-    };
-
-    std::atomic<EState> State = Undefined;
-
-    TMutex Lock;
-    TVector<std::weak_ptr<TTestVhostDevice>> Devices;
-
-public:
-    explicit TTestVhostQueue(TManualEvent& failedEvent)
-        : FailedEvent(failedEvent)
-    {}
-
-    int Run() override
-    {
-        EState expected = Undefined;
-        State.compare_exchange_strong(expected, Running);
-
-        switch (State.load()) {
-            case Running:
-                return -EAGAIN;
-            case Stopped:
-                return 0;
-            case Broken:
-                FailedEvent.Signal();
-                return -1;
-            default:
-                Y_ABORT();
-        }
-    }
-
-    void Stop() override
-    {
-        EState expected = Running;
-        bool wasRun = State.compare_exchange_strong(expected, Stopped);
-        Y_ABORT_UNLESS(wasRun || State.load() == Broken);
-    }
-
-    IVhostDevicePtr CreateDevice(
-        TString socketPath,
-        TString deviceName,
-        ui32 blockSize,
-        ui64 blocksCount,
-        ui32 queuesCount,
-        bool discardEnabled,
-        ui32 optimalIoSize,
-        void* cookie,
-        const TVhostCallbacks& callbacks) override
-    {
-        Y_UNUSED(deviceName);
-        Y_UNUSED(blockSize);
-        Y_UNUSED(blocksCount);
-        Y_UNUSED(queuesCount);
-        Y_UNUSED(discardEnabled);
-        Y_UNUSED(callbacks);
-
-        auto vhostDevice = std::make_shared<TTestVhostDevice>(
-            std::move(socketPath),
-            cookie,
-            optimalIoSize);
-
-        with_lock (Lock) {
-            Devices.push_back(vhostDevice);
-        }
-        return vhostDevice;
-    }
-
-    TVhostRequestPtr DequeueRequest() override
-    {
-        if (State.load() == Running) {
-            with_lock (Lock) {
-                for (auto& device: Devices) {
-                    if (auto ptr = device.lock()) {
-                        auto request = ptr->DequeueRequest();
-                        if (request) {
-                            return request;
-                        }
-                    }
-                }
-            }
-        }
-        return nullptr;
-    }
-
-    bool IsRun() override
-    {
-        return State.load() == Running;
-    }
-
-    TVector<std::shared_ptr<ITestVhostDevice>> GetDevices() override
-    {
-        TVector<std::shared_ptr<ITestVhostDevice>> res;
-        with_lock (Lock) {
-            for (auto& device: Devices) {
-                if (auto ptr = device.lock()) {
-                    res.push_back(ptr);
-                }
-            }
-        }
-        return res;
-    }
-
-    void Break() override
-    {
-        State.store(Broken);
+        return static_cast<ui32>(Queues.size());
     }
 };
 
@@ -282,6 +306,45 @@ IVhostQueuePtr TTestVhostQueueFactory::CreateQueue()
     auto queue = std::make_shared<TTestVhostQueue>(FailedEvent);
     Queues.push_back(queue);
     return queue;
+}
+
+IVhostDevicePtr TTestVhostQueueFactory::CreateDevice(
+    TString socketPath,
+    TString deviceName,
+    ui32 blockSize,
+    ui64 blocksCount,
+    bool discardEnabled,
+    ui32 optimalIoSize,
+    TVector<IVhostQueuePtr> queues,
+    void* cookie,
+    const TVhostCallbacks& callbacks)
+{
+    Y_UNUSED(deviceName);
+    Y_UNUSED(blockSize);
+    Y_UNUSED(blocksCount);
+    Y_UNUSED(discardEnabled);
+    Y_UNUSED(callbacks);
+
+    Y_ABORT_UNLESS(!queues.empty());
+
+    TVector<TTestVhostQueuePtr> testQueues;
+    testQueues.reserve(queues.size());
+    for (auto& queue: queues) {
+        auto typed = std::dynamic_pointer_cast<TTestVhostQueue>(queue);
+        Y_ABORT_UNLESS(typed);
+        testQueues.push_back(std::move(typed));
+    }
+
+    auto device = std::make_shared<TTestVhostDevice>(
+        std::move(socketPath),
+        testQueues,
+        cookie,
+        optimalIoSize);
+
+    for (auto& queue: testQueues) {
+        queue->RegisterDevice(device);
+    }
+    return device;
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NVhost

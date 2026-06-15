@@ -30,7 +30,7 @@ runs:
   using: 'composite'
   steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         token: ${{ inputs.token }}
         fetch-depth: 0
@@ -76,7 +76,7 @@ runs:
         echo "${{ steps.create-pr.outputs.pr-url }}" > pr_url.txt
         echo "Created pr_url.txt with PR URL: ${{ steps.create-pr.outputs.pr-url }}"
     - name: Upload PR URL artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: pr-url
         path: pr_url.txt

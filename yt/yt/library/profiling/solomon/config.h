@@ -87,7 +87,7 @@ struct TSolomonExporterConfig
 
     ELabelSanitizationPolicy LabelSanitizationPolicy;
 
-    TShardConfigPtr MatchShard(const std::string& sensorName);
+    TShardConfigPtr MatchShard(TStringBuf sensorName);
 
     ESummaryPolicy GetSummaryPolicy() const;
 

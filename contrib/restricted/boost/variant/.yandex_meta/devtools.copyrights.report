@@ -73,29 +73,44 @@ BELONGS ya.make
         include/boost/variant/static_visitor.hpp [6:7]
         include/boost/variant/visitor_ptr.hpp [6:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 47bfd2446c209bfe60d674bf3a2f35cb
+KEEP     COPYRIGHT_SERVICE_LABEL 485f549a9e10995fa7dcec3f61be853b
 BELONGS ya.make
     License text:
-        // Copyright (c) 2018-2025 Antony Polukhin
+        // Copyright (c) 2011-2026 Antony Polukhin
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/variant/detail/std_hash.hpp [6:6]
+        include/boost/variant/detail/hash_variant.hpp [6:6]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 5322ab3ae537102796ad52e9d226f36f
+KEEP     COPYRIGHT_SERVICE_LABEL 5ead5055d10404f1b07bb5954f24f77d
 BELONGS ya.make
     License text:
-        // Copyright (c) 2002 Eric Friedman, Itay Maman
-        // Copyright (c) 2016-2025 Antony Polukhin
+        // Copyright (c) 2003 Eric Friedman
+        // Copyright (c) 2015-2026 Antony Polukhin
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/variant/detail/config.hpp [6:7]
-        include/boost/variant/recursive_wrapper_fwd.hpp [6:7]
+        include/boost/variant/detail/forced_return.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77face8aac3d8de0cff68e1c8b56753a
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2003 Eric Friedman, Itay Maman
+        // Copyright (c) 2014-2026 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/variant/detail/apply_visitor_binary.hpp [6:7]
+        include/boost/variant/detail/apply_visitor_unary.hpp [6:7]
+        include/boost/variant/detail/element_index.hpp [6:6]
+        include/boost/variant/detail/has_result_type.hpp [6:6]
+        include/boost/variant/get.hpp [6:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7b5b76a48b60990aebae4bceee943dc7
 BELONGS ya.make
@@ -111,18 +126,6 @@ BELONGS ya.make
         include/boost/variant/detail/make_variant_list.hpp [6:7]
         include/boost/variant/detail/variant_io.hpp [6:7]
         include/boost/variant/recursive_wrapper.hpp [6:7]
-        include/boost/variant/variant.hpp [6:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 8446ee46547e6c3aeec3593423a6d5ae
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2002-2003 Eric Friedman, Itay Maman
-        // Copyright (c) 2012-2025 Antony Polukhin
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
         include/boost/variant/variant.hpp [6:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 84c2f237d9b27185e5ee0a17bf920901
@@ -153,7 +156,7 @@ BELONGS ya.make
     License text:
         //  Copyright (c) 2002-2003 Eric Friedman
         //  Copyright (c) 2002 by Andrei Alexandrescu
-        //  Copyright (c) 2013-2025 Antony Polukhin
+        //  Copyright (c) 2013-2026 Antony Polukhin
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -191,7 +194,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 9b0d133607a0597027f2dd9d6a130cfe
 BELONGS ya.make
     License text:
         // Copyright (c) 2002 Eric Friedman, Itay Maman
-        // Copyright (c) 2016-2025 Antony Polukhin
+        // Copyright (c) 2016-2026 Antony Polukhin
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -199,10 +202,35 @@ BELONGS ya.make
     Files with this license:
         include/boost/variant/recursive_wrapper_fwd.hpp [6:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL ce67e82b88209c483964667f10e3efc6
+KEEP     COPYRIGHT_SERVICE_LABEL a137fe7368741babbfa5b88116a1153a
 BELONGS ya.make
     License text:
-        //  Copyright (c) 2013-2025 Antony Polukhin.
+        // Copyright (c) 2002-2003 Eric Friedman, Itay Maman
+        // Copyright (c) 2012-2026 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/variant/variant.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7ae115d56e2d0325ab49e52053d8f48
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2002 Eric Friedman, Itay Maman
+        // Copyright (c) 2016-2026 Antony Polukhin
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/variant/detail/config.hpp [6:7]
+        include/boost/variant/recursive_wrapper_fwd.hpp [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b655ea8ad68c322eee87b61ac3b0ea23
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2013-2026 Antony Polukhin.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -215,41 +243,13 @@ BELONGS ya.make
         include/boost/variant/recursive_variant.hpp [6:7]
         include/boost/variant/variant_fwd.hpp [6:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL d16845dc8b5ced78ab2673ccd486e513
+KEEP     COPYRIGHT_SERVICE_LABEL f2150e0dee5f235143b6f9580522121d
 BELONGS ya.make
     License text:
-        // Copyright (c) 2011-2025 Antony Polukhin
+        // Copyright (c) 2018-2026 Antony Polukhin
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/variant/detail/hash_variant.hpp [6:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL d631dc5076bc48ad108abf51ccfccb12
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2003 Eric Friedman
-        // Copyright (c) 2015-2025 Antony Polukhin
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/variant/detail/forced_return.hpp [6:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ff04aeb8fc521e6c7139713d5d7c0897
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2003 Eric Friedman, Itay Maman
-        // Copyright (c) 2014-2025 Antony Polukhin
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/variant/detail/apply_visitor_binary.hpp [6:7]
-        include/boost/variant/detail/apply_visitor_unary.hpp [6:7]
-        include/boost/variant/detail/element_index.hpp [6:6]
-        include/boost/variant/detail/has_result_type.hpp [6:6]
-        include/boost/variant/get.hpp [6:7]
+        include/boost/variant/detail/std_hash.hpp [6:6]

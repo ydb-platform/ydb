@@ -1,31 +1,35 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
-#include <ydb/core/base/json_index.h>
+#include <ydb/library/json_index/json_index.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
-#include <ydb/library/yql/utils/plan/plan_utils.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/utf8.h>
 
-#include <ydb/public/lib/ydb_cli/common/format.h>
-
-#include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/queue.h>
@@ -36,10 +40,7 @@
 #include <unordered_map>
 #include <regex>
 
-#include <yql/essentials/utils/log/log.h>
-
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -802,7 +803,9 @@ private:
                 auto literal = TString(query.Cast<TCoDataCtor>().Literal());
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance);
 
                 auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
                 for(const auto& column: readColumns) {
@@ -843,12 +846,24 @@ private:
 
         std::vector<TString> tokens;
         if (settings.Tokens) {
-            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson ||
+                indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact);
+
             for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
-                tokens.push_back(HexEncode(token.Cast<TCoString>().Literal()));
+                auto pair = token.Cast<TExprList>();
+                YQL_ENSURE(pair.Size() == 2, "Expected 2 items in token pair, got: " << pair.Size());
+
+                auto pathToken = TString(pair.Item(0).Cast<TCoString>().Literal().Value());
+                auto paramName = TString(pair.Item(1).Cast<TCoString>().Literal().Value());
+
+                tokens.push_back(NJsonIndex::FormatJsonIndexToken(pathToken, paramName));
             }
 
-            op.Properties["Tokens"] = JoinSeq(", ", tokens);
+            auto& tokensJson = op.Properties["Tokens"];
+            tokensJson.SetType(NJson::JSON_ARRAY);
+            for (const auto& t : tokens) {
+                tokensJson.AppendValue(t);
+            }
         }
 
         NTableIndex::NFulltext::EDefaultOperator defaultOperator = NTableIndex::NFulltext::EDefaultOperator::Invalid;
@@ -1019,7 +1034,7 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& stagePlanNode) {
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
@@ -1038,27 +1053,42 @@ private:
         if (dataSinkCategory == NYql::KqpTableSinkName) {
             auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
 
+            NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
+            {
+                AFL_ENSURE(stagePlanNode.StageProto);
+                bool found = false;
+                for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
+                    if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
+                            && protoSink.HasInternalSink()
+                            && protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
+                                found = true;
+                                break;
+                    }
+                }
+                AFL_ENSURE(found);
+            }
+
             TString tablePath;
             TTableWrite writeInfo;
-            if (settings.Mode().StringValue() == "replace") {
+            if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE) {
                 op.Properties["Name"] = "Replace";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert" || settings.Mode().StringValue() == "update_conditional" || settings.Mode().StringValue().empty()) {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT) {
                 op.Properties["Name"] = "Upsert";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsert;
-            } else if (settings.Mode().StringValue() == "insert") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                 op.Properties["Name"] = "Insert";
                 writeInfo.Type = EPlanTableWriteType::MultiInsert;
-            } else if (settings.Mode().StringValue() == "delete") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
                 op.Properties["Name"] = "Delete";
                 writeInfo.Type = EPlanTableWriteType::MultiErase;
-            } else if (settings.Mode().StringValue() == "update") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
                 op.Properties["Name"] = "Update";
                 writeInfo.Type = EPlanTableWriteType::MultiUpdate;
-            } else if (settings.Mode().StringValue() == "fill_table") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                 op.Properties["Name"] = "FillTable";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert_increment") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT) {
                 op.Properties["Name"] = "UpsertIncrement";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsertIncrement;
             } else {
@@ -1099,7 +1129,79 @@ private:
             }
 
             SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-            stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+
+            if (tableSinkSettings.GetNeedLookup()) {
+                TTableRead readInfo;
+                readInfo.Type = EPlanTableReadType::Lookup;
+
+                NJson::TJsonValue lookupColumns;
+                lookupColumns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& col : tableSinkSettings.GetKeyColumns()) {
+                    readInfo.Columns.push_back(col.GetName());
+                }
+                for (const auto& col : tableSinkSettings.GetLookupColumns()) {
+                    lookupColumns.AppendValue(col.GetName());
+                    readInfo.Columns.push_back(col.GetName());
+                }
+
+                op.Properties["Lookup"] = lookupColumns;
+                SerializerCtx.Tables[tablePath].Reads.push_back(readInfo);
+            }
+
+            if (!tableSinkSettings.GetIndexes().empty()) {
+                NJson::TJsonValue updateIndexes;
+                updateIndexes.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& index : tableSinkSettings.GetIndexes()) {
+                    NJson::TJsonValue indexInfo;
+                    indexInfo["Name"] = index.GetIndexName();
+                    indexInfo["Path"] = index.GetTable().GetPath();
+
+                    TTableWrite indexWriteInfo;
+                    if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiUpdate;
+                    } else if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiErase;
+                    } else if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiUpsert;
+                    } else {
+                        YQL_ENSURE(false, "Unexpected operation type for index");
+                    }
+
+                    NJson::TJsonValue columns;
+                    columns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                    for (const auto& col : index.GetColumns()) {
+                        columns.AppendValue(col.GetName());
+                        indexWriteInfo.Columns.push_back(col.GetName());
+                    }
+                    indexInfo["Columns"] = columns;
+                    SerializerCtx.Tables[index.GetTable().GetPath()].Writes.push_back(indexWriteInfo);
+
+                    if (index.GetIsUniq()) {
+                        indexInfo["CheckUnique"] = true;
+
+                        TTableRead readInfo;
+                        readInfo.Type = EPlanTableReadType::Lookup;
+                        for (const auto& col : index.GetKeyColumns()) {
+                            readInfo.Columns.push_back(col.GetName());
+                        }
+                        SerializerCtx.Tables[index.GetTable().GetPath()].Reads.push_back(readInfo);
+                    }
+
+                    if (index.GetNeedDeleteOldRows()) {
+                        TTableWrite indexDeleteInfo;
+                        indexDeleteInfo.Type = EPlanTableWriteType::MultiErase;
+                        for (const auto& col : index.GetKeyColumns()) {
+                            indexDeleteInfo.Columns.push_back(col.GetName());
+                        }
+                        SerializerCtx.Tables[index.GetTable().GetPath()].Writes.push_back(indexDeleteInfo);
+                    }
+
+                    updateIndexes.AppendValue(indexInfo);
+                }
+                op.Properties["UpdateIndexes"] = updateIndexes;
+            }
+
+            planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         } else if (auto cluster = TryGetCluster(dataSink)) {
             TString dataSource = RemovePathPrefix(std::move(*cluster));
             op.Properties["ExternalDataSource"] = dataSource;
@@ -1112,7 +1214,7 @@ private:
             dqIntegration->FillSinkPlanProperties(sink, op.Properties);
         }
 
-        AddOperator(stagePlanNode, "Sink", op);
+        AddOperator(planNode, "Sink", op);
     }
 
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
@@ -1185,7 +1287,7 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
                     }
                 }
             }
@@ -1212,6 +1314,15 @@ private:
             operatorId = Visit(maybeReadRanges.Cast(), planNode);
         } else if (auto maybeLookup = TMaybeNode<TKqlLookupTableBase>(node)) {
             operatorId = Visit(maybeLookup.Cast(), planNode);
+        } else if (node->IsCallable({"Map", "FlatMap", "OrderedMap", "OrderedFlatMap"}) && node->ChildrenSize() >= 2
+            && FindNode(node->ChildPtr(1), [](const TExprNode::TPtr& n) {
+                   auto udf = TMaybeNode<TCoUdf>(n);
+                   return udf && udf.Cast().MethodName().Value().StartsWith("HybridSearch.");
+               })) {
+            // The Reciprocal Rank Fusion step uniquely identifies a hybrid-search (HybridRank) query.
+            TOperator op;
+            op.Properties["Name"] = "HybridSearch";
+            operatorId = AddOperator(planNode, "HybridSearch", std::move(op));
         } else if (auto maybeFilter = TMaybeNode<TCoFilterBase>(node)) {
             operatorId = Visit(maybeFilter.Cast(), planNode);
         } else if (auto maybeMapJoin = TMaybeNode<TCoMapJoinCore>(node)) {
@@ -1343,6 +1454,23 @@ private:
                     operatorId = currentOperatorId;
                 }
 
+                auto distinctPred = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeDistinct = TMaybeNode<TKqpOlapDistinct>(n)) { return true; } return false;
+                };
+
+                if (auto maybeKqpOlapDistinct = FindNode(olapTable.Process().Body().Ptr(), distinctPred)) {
+                    auto kqpOlapDistinct = TExprBase(maybeKqpOlapDistinct).Cast<TKqpOlapDistinct>();
+
+                    TOperator op;
+                    op.Properties["Name"] = "Distinct";
+                    op.Properties["Pushdown"] = "True";
+                    op.Properties["Blocks"] = "True";
+
+                    AddOptimizerEstimates(op, kqpOlapDistinct);
+                    currentOperatorId = AddOperator(planNode, "Distinct", std::move(op));
+                    operatorId = currentOperatorId;
+                }
+
                 auto pred = [](const TExprNode::TPtr& n) -> bool {
                     if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };
@@ -1352,7 +1480,7 @@ private:
 
                     TOperator op;
                     op.Properties["Name"] = "Filter";
-                    op.Properties["Predicate"] = OlapFilterStr(kqpOlapFilter);
+                    op.Properties["Predicate"] = NOpt::FormatOlapFilter(kqpOlapFilter);
                     op.Properties["Pushdown"] = "True";
                     op.Properties["Blocks"] = "True";
 
@@ -1398,81 +1526,6 @@ private:
         }
 
         return inputIds;
-    }
-
-    TString OlapFilterExpr(const TExprNode::TPtr& node) {
-        TVector<TString> s;
-        if (TMaybeNode<TKqpOlapNot>(node)) {
-            s.emplace_back("NOT");
-        } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
-            auto listPtr = maybeList.Cast().Ptr();
-            size_t listSize = listPtr->Children().size();
-            if (listSize == 3 || listSize == 4 /*OpType optional field*/) {
-                THashMap<TString, TString> strComp = {
-                    {"eq", " == "},
-                    {"neq", " != "},
-                    {"lt", " < "},
-                    {"lte", " <= "},
-                    {"gt", " > "},
-                    {"gte", " >= "}
-                };
-                THashMap<TString, TString> strRegexp = {
-                    {"string_contains", "%s LIKE \"%%%s%%\""},
-                    {"starts_with", "%s LIKE \"%s%%\""},
-                    {"ends_with", "%s LIKE \"%%%s\""}
-                };
-                TString compSign = TString(listPtr->Child(0)->Content());
-                if (strComp.contains(compSign)) {
-                    TString attr = TString(listPtr->Child(1)->Content());
-                    TString value;
-                    if (listPtr->Child(2)->ChildrenSize() >= 1) {
-                        value = TString(listPtr->Child(2)->Child(0)->Content());
-                        if (TString(listPtr->Child(2)->Content()) == "String") {
-                            value = TStringBuilder() << '"' << value << '"';
-                        }
-                    } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
-                        value = TString(listPtr->Child(2)->Content());
-                    }
-
-                    return TStringBuilder() << attr << strComp[compSign] << value;
-                } else if (strRegexp.contains(compSign)) {
-                    TString attr = TString(listPtr->Child(1)->Content());
-                    TString value;
-                    if (listPtr->Child(2)->ChildrenSize() >= 1) {
-                        value = TString(listPtr->Child(2)->Child(0)->Content());
-                    } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
-                        value = TString(listPtr->Child(2)->Content());
-                    }
-
-                    return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
-                }
-            }
-        } else if (auto olapApply = TMaybeNode<TKqpOlapApply>(node)) {
-            return NPlanUtils::ExtractPredicate(olapApply.Cast().Lambda()).Body;
-        }
-
-        for (const auto& child: node->Children()) {
-            auto childStr = OlapFilterExpr(child);
-            if (!childStr.empty()) {
-                s.push_back(std::move(childStr));
-            }
-        }
-
-        TString delim = " ";
-        if (TMaybeNode<TKqpOlapAnd>(node)) {
-            delim = " AND ";
-        } else if (TMaybeNode<TKqpOlapOr>(node)) {
-            delim = " OR ";
-        }
-        return JoinStrings(s, delim);
-    }
-
-    TString OlapFilterStr(const TKqpOlapFilter& filter) {
-        auto result = OlapFilterExpr(filter.Condition().Ptr());
-        if (auto maybeInnerFilter = TMaybeNode<TKqpOlapFilter>(filter.Input().Ptr())) {
-            return TStringBuilder() << '(' << OlapFilterStr(maybeInnerFilter.Cast()) << ") AND (" << result << ')';
-        }
-        return result;
     }
 
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoMap& map, TQueryPlanNode& planNode) {
@@ -1973,8 +2026,12 @@ private:
     std::variant<ui32, TArgContext> Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Filter";
-        auto pred = NPlanUtils::ExtractPredicate(filter.Lambda());
-        op.Properties["Predicate"] = pred.Body;
+        try {
+            auto pred = NPlanUtils::ExtractPredicate(filter.Lambda());
+            op.Properties["Predicate"] = pred.Body;
+        } catch (...) {
+            op.Properties["Predicate"] = "";
+        }
 
         AddOptimizerEstimates(op, filter);
 
@@ -2759,7 +2816,7 @@ private:
                 // top level rows/size have to match stage output
                 if (!operatorRows && stats.contains("OutputRows")) {
                     auto outputRows = stats.at("OutputRows");
-                    int aRows = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetIntegerSafe() : outputRows.GetIntegerSafe();
+                    i64 aRows = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetIntegerSafe() : outputRows.GetIntegerSafe();
                     if (fromBroadcast && parentTaskCount && (aRows % parentTaskCount == 0)) {
                         aRows /= parentTaskCount;
                     }
@@ -2767,7 +2824,11 @@ private:
                 }
                 if (!operatorSize && stats.contains("OutputBytes")) {
                     auto outputBytes = stats.at("OutputBytes");
-                    op["A-Size"] = outputBytes.IsMap() ? outputBytes.GetMapSafe().at("Sum").GetDouble() : outputBytes.GetDouble();
+                    double aSize = outputBytes.IsMap() ? outputBytes.GetMapSafe().at("Sum").GetDouble() : outputBytes.GetDouble();
+                    if (fromBroadcast && parentTaskCount) {
+                        aSize /= parentTaskCount;
+                    }
+                    op["A-Size"] = aSize;
                 }
 
                 // cpu usage available for stage only, so assign it to top level operator
@@ -2880,7 +2941,18 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
     return plan;
 }
 
-TString AddSimplifiedPlan(const TString& planText, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, bool analyzeMode) {
+NJson::TJsonValue MakeOptimizerStats(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& optCtx) {
+    const auto& cboStats = optCtx->CBOStats;
+
+    NJson::TJsonValue optimizerStats(NJson::EJsonValueType::JSON_MAP);
+    optimizerStats["JoinsCount"] = static_cast<ui64>(optCtx->JoinsCount);
+    optimizerStats["EquiJoinsCount"] = static_cast<ui64>(optCtx->EquiJoinsCount);
+    optimizerStats["CBOTreesTotal"] = cboStats.TreesTotal;
+    optimizerStats["CBOTreesOptimized"] = cboStats.TreesOptimized;
+    return optimizerStats;
+}
+
+TString AddSimplifiedPlan(const TString& planText, bool analyzeMode, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx = nullptr) {
     Y_UNUSED(analyzeMode);
     NJson::TJsonValue planJson;
     NJson::ReadJsonTree(planText, &planJson, true);
@@ -2893,17 +2965,20 @@ TString AddSimplifiedPlan(const TString& planText, TIntrusivePtr<NOpt::TKqpOptim
 
     auto simplifiedPlan = SimplifyQueryPlan(planCopy.GetMapSafe().at("Plan"));
     if (optCtx) {
-        NJson::TJsonValue optimizerStats;
-        optimizerStats["JoinsCount"] = optCtx->JoinsCount;
-        optimizerStats["EquiJoinsCount"] = optCtx->EquiJoinsCount;
-        simplifiedPlan["OptimizerStats"] = optimizerStats;
+        simplifiedPlan["OptimizerStats"] = MakeOptimizerStats(optCtx);
     }
     planJson["SimplifiedPlan"] = simplifiedPlan;
 
     return planJson.GetStringRobust();
 }
 
-TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx, const TString commonPlanInfo = "", const TString& queryStats = "") {
+TString SerializeTxPlans(
+    const TVector<const TString>& txPlans,
+    const TString commonPlanInfo = "",
+    const TString& queryStats = "",
+    TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx = nullptr)
+{
+    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: SerializeTxPlans";
     NJsonWriter::TBuf writer;
     writer.SetIndentSpaces(2);
 
@@ -2964,10 +3039,10 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
     writer.EndObject();
 
     auto resultPlan =  writer.Str();
-    return AddSimplifiedPlan(resultPlan, optCtx, false);
+    return AddSimplifiedPlan(resultPlan, false, optCtx);
 }
 
-} // namespace
+} // anonymous namespace
 
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
@@ -2977,6 +3052,8 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
 {
+
+    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: PhyQuerySetTxPlans";
     TSerializerCtx serializerCtx(ctx, database, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
 
     /* bindingName -> stage */
@@ -3050,7 +3127,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     writer.SetIndentSpaces(2);
     WriteCommonTablesInfo(writer, serializerCtx.Tables);
 
-    queryProto.SetQueryPlan(SerializeTxPlans(txPlans, optCtx, writer.Str(), queryStats));
+    queryProto.SetQueryPlan(SerializeTxPlans(txPlans, writer.Str(), queryStats, optCtx));
 }
 
 void FillAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqStatsAggr& aggr, const TString& name) {
@@ -3134,10 +3211,12 @@ void FillAsyncAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqAsyncSt
     }
 }
 
-TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx) {
+TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats, bool newRboEnabled) {
     if (txPlanJson.empty()) {
         return {};
     }
+
+    YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "JSON_PLAN: AddExecStatsToTxPlan";
 
     THashMap<TProtoStringType, const NYql::NDqProto::TDqStageStats*> stages;
     THashMap<ui32, TString> stageIdToGuid;
@@ -3380,10 +3459,14 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if (!(*stat)->GetInput().empty()) {
                     auto& inputStats = stats.InsertValue("Input", NJson::JSON_ARRAY);
                     for (auto input : (*stat)->GetInput()) {
-                        auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
                         auto stageGuid = stageIdToGuid.at(input.first);
-                        AFL_ENSURE(guidToPlaneId.contains(stageGuid));
-                        auto planNodeId = guidToPlaneId.at(stageGuid);
+                        auto planNodeIdIt = guidToPlaneId.find(stageGuid);
+                        if (planNodeIdIt == guidToPlaneId.end()) {
+                            AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                            continue;
+                        }
+                        auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
+                        auto planNodeId = planNodeIdIt->second;
                         inputInfo["Name"] = ToString(planNodeId);
                         if (input.second.HasPush()) {
                             FillAsyncAggrStat(inputInfo.InsertValue("Push", NJson::JSON_MAP), input.second.GetPush());
@@ -3399,15 +3482,21 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if (!(*stat)->GetOutput().empty()) {
                     auto& outputStats = stats.InsertValue("Output", NJson::JSON_ARRAY);
                     for (auto output : (*stat)->GetOutput()) {
-                        auto& outputInfo = outputStats.AppendValue(NJson::JSON_MAP);
+                        TString outputName;
                         if (output.first == 0) {
-                            outputInfo["Name"] = "RESULT";
+                            outputName = "RESULT";
                         } else {
                             auto stageGuid = stageIdToGuid.at(output.first);
-                            AFL_ENSURE(guidToPlaneId.contains(stageGuid));
-                            auto planNodeId = guidToPlaneId.at(stageGuid);
-                            outputInfo["Name"] = ToString(planNodeId);
+                            auto planNodeIdIt = guidToPlaneId.find(stageGuid);
+                            if (planNodeIdIt == guidToPlaneId.end()) {
+                                AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                                continue;
+                            }
+                            auto planNodeId = planNodeIdIt->second;
+                            outputName = ToString(planNodeId);
                         }
+                        auto& outputInfo = outputStats.AppendValue(NJson::JSON_MAP);
+                        outputInfo["Name"] = outputName;
                         if (output.second.HasPush()) {
                             FillAsyncAggrStat(outputInfo.InsertValue("Push", NJson::JSON_MAP), output.second.GetPush());
                         }
@@ -3598,20 +3687,25 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     NJsonWriter::TBuf txWriter;
     txWriter.WriteJsonValue(&root, true, PREC_NDIGITS, 17);
     auto resultPlan = txWriter.Str();
-    return AddSimplifiedPlan(resultPlan, optCtx, true);
+    if (!newRboEnabled) {
+        return AddSimplifiedPlan(resultPlan, true);
+    } else {
+        return resultPlan;
+    }
 }
 
-TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TDqExecutionStats& stats) {
-    return AddExecStatsToTxPlan(txPlanJson, stats, TIntrusivePtr<NOpt::TKqpOptimizeContext>());
-}
-
-TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId) {
+TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool newRboEnabled, const TString& poolId) {
     TVector<const TString> txPlans;
     for (const auto& execStats: queryStats.GetExecutions()) {
         for (const auto& txPlan: execStats.GetTxPlansWithStats()) {
             txPlans.push_back(txPlan);
         }
     }
+
+    if (newRboEnabled) {
+        return SerializeRBOAnalyzePlan(txPlans, queryStats, poolId);
+    }
+
     NJsonWriter::TBuf writer;
     writer.BeginObject();
 
@@ -3634,7 +3728,7 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const 
     }
     writer.EndObject();
 
-    return SerializeTxPlans(txPlans, TIntrusivePtr<NOpt::TKqpOptimizeContext>(), "", writer.Str());
+    return SerializeTxPlans(txPlans, "", writer.Str());
 }
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
@@ -3681,5 +3775,4 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
     return writer.Str();
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

@@ -6,7 +6,6 @@
 
 #include "grpc_pq_read.h"
 #include "grpc_pq_write.h"
-#include "grpc_pq_schema.h"
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -18,7 +17,6 @@ static const ui32 TopicReadSessionsMaxCount = 100000;
 void ServicesInitializer::Execute() {
     InitWriteService();
     InitReadService();
-    InitSchemaService();
 }
 
 bool ServicesInitializer::RequiresServiceRegistration(const TActorId serviceId) {
@@ -54,16 +52,6 @@ void ServicesInitializer::InitReadService() {
         auto service = NGRpcProxy::V1::CreatePQReadService(SchemeCache, NewSchemeCache, Counters, TopicReadSessionsMaxCount);
         RegisterService(serviceId, service);
     }
-}
-
-void ServicesInitializer::InitSchemaService() {
-    auto serviceId = NGRpcProxy::V1::GetPQSchemaServiceActorID();
-    static NGRpcProxy::V1::IClustersCfgProvider* providerService; 
-    if (RequiresServiceRegistration(serviceId)) {
-        auto service = NGRpcProxy::V1::CreatePQSchemaService(&providerService);
-        RegisterService(serviceId, service);
-    }
-    *ClusterCfgProvider = providerService;
 }
 
 } // namespace V1

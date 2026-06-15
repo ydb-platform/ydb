@@ -603,7 +603,7 @@ inline path temp_directory_path(system::error_code& ec)
 }
 
 inline path unique_path(path const& p =
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
     L"%%%%-%%%%-%%%%-%%%%"
 #else
     "%%%%-%%%%-%%%%-%%%%"
@@ -617,7 +617,7 @@ inline path unique_path(system::error_code& ec)
 {
     return detail::unique_path
     (
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
         L"%%%%-%%%%-%%%%-%%%%",
 #else
         "%%%%-%%%%-%%%%-%%%%",

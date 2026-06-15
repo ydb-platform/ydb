@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/string/guid.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -537,6 +537,6 @@ IPacketTranscoderFactory* GetYTPacketTranscoderFactory()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp
 
-Y_DECLARE_PODTYPE(NYT::NBus::TPacketHeader);
+Y_DECLARE_PODTYPE(NYT::NBus::NTcp::TPacketHeader);

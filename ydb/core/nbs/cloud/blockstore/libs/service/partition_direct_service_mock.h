@@ -31,6 +31,19 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         Y_UNUSED(delay);
         executor->ExecuteSimple(std::move(callback));
     }
+
+    void UpdateVChunkConfig(
+        const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
+    {
+        Y_UNUSED(cfg);
+    }
+
+    ui64 LsnGenerator = 0;
+
+    ui64 GenerateLsn() override
+    {
+        return ++LsnGenerator;
+    }
 };
 
 using TPartitionDirectServiceMockPtr =

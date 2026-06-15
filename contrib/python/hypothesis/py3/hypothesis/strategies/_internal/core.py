@@ -18,7 +18,14 @@ import string
 import sys
 import typing
 import warnings
-from collections.abc import Callable, Collection, Hashable, Iterable, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Hashable,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 from contextvars import ContextVar
 from decimal import Context, Decimal, localcontext
 from fractions import Fraction
@@ -364,7 +371,7 @@ def lists(
             and (elements.end - elements.start) <= 255
         ):
             elements = SampledFromStrategy(
-                sorted(range(elements.start, elements.end + 1), key=abs)  # type: ignore
+                sorted(range(elements.start, elements.end + 1), key=abs)
                 if elements.end < 0 or elements.start > 0
                 else (
                     list(range(elements.end + 1))
@@ -455,6 +462,14 @@ class PrettyIter:
     def __repr__(self) -> str:
         return f"iter({self._values!r})"
 
+    def _repr_pretty_(self, printer, cycle):
+        if cycle:
+            printer.text("iter(...)")
+        else:
+            printer.text("iter(")
+            printer.pretty(self._values)
+            printer.text(")")
+
 
 @defines_strategy()
 def iterables(
@@ -493,7 +508,7 @@ def iterables(
 #         {"a": st.integers(), "b": st.booleans()}
 #     )
 # * the arguments may be of any dict-compatible type, in which case the return
-#  value will be of that type instead of dit
+#   value will be of that type instead of dict
 #
 # Overloads may help here, but I doubt we'll be able to satisfy all these
 # constraints.
@@ -877,7 +892,7 @@ def from_regex(
     regex: str | Pattern[str],
     *,
     fullmatch: bool = False,
-    alphabet: str | SearchStrategy[str] = characters(codec="utf-8"),
+    alphabet: str | SearchStrategy[str] | None = characters(codec="utf-8"),
 ) -> SearchStrategy[str]:  # pragma: no cover
     ...
 
@@ -1394,6 +1409,11 @@ def _from_type(thing: type[Ex]) -> SearchStrategy[Ex]:
     if not types.is_a_type(thing):
         if isinstance(thing, str):
             # See https://github.com/HypothesisWorks/hypothesis/issues/3016
+            # String forward references like "LinkedList" can be converted to
+            # ForwardRef objects if they are valid Python identifiers.
+            # See https://github.com/HypothesisWorks/hypothesis/issues/4542
+            if thing.isidentifier():
+                return deferred(lambda thing=thing: from_type(typing.ForwardRef(thing)))
             raise InvalidArgument(
                 f"Got {thing!r} as a type annotation, but the forward-reference "
                 "could not be resolved from a string to a type.  Consider using "
@@ -1572,9 +1592,9 @@ def _from_type(thing: type[Ex]) -> SearchStrategy[Ex]:
             )
         try:
             hints = get_type_hints(thing)
-            params = get_signature(thing).parameters
+            params: Mapping[str, Parameter] = get_signature(thing).parameters
         except Exception:
-            params = {}  # type: ignore
+            params = {}
 
         posonly_args = []
         kwargs = {}

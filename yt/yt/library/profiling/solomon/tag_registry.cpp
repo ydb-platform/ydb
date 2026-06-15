@@ -133,7 +133,7 @@ bool TTagRegistry::IsAllowedMonitoringTagValueChar(unsigned char c) const
     }
 }
 
-TTagRegistry::TSanitizeParameters TTagRegistry::ScanForSanitize(const std::string& value) const
+TTagRegistry::TSanitizeParameters TTagRegistry::ScanForSanitize(TStringBuf value) const
 {
     YT_VERIFY(LabelSanitizationPolicy_ != ELabelSanitizationPolicy::None);
 
@@ -148,7 +148,7 @@ TTagRegistry::TSanitizeParameters TTagRegistry::ScanForSanitize(const std::strin
     };
 }
 
-std::string TTagRegistry::SanitizeMonitoringTagValue(const std::string& value, int resultingLength) const
+std::string TTagRegistry::SanitizeMonitoringTagValue(TStringBuf value, int resultingLength) const
 {
     static constexpr int HalfMaxSolomonLabelSize = MaxSolomonLabelSize / 2;
 

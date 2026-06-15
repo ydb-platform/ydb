@@ -65,8 +65,10 @@ public:
 
     template <class T>
     TStepAction(std::shared_ptr<T>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId, const bool changeSyncSection)
-        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId, changeSyncSection) {
+        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId, changeSyncSection)
+    {
     }
+
     TStepAction(std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
         const bool changeSyncSection);
 };
@@ -77,14 +79,16 @@ private:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const;
+    void ReportTracing(
+        const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
         : TBase("PROGRAM_EXECUTION")
-        , Program(program) {
+        , Program(program)
+    {
         for (auto&& i : Program->GetNodes()) {
             Signals.emplace(i.first, TFetchingStepsSignalsCollection::GetSignals(i.second->GetSignalCategoryName()));
         }

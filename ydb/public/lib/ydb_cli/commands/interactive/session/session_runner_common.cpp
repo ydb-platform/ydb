@@ -20,13 +20,13 @@ void TSessionRunnerBase::PrintCommonHotKeys(std::vector<ftxui::Element>& element
     using namespace ftxui;
 
     elements.emplace_back(CreateListItem(hbox({
-        CreateEntityName("Up and Down arrow keys"), text(": navigate through query history.")
+        CreateEntityName("Arrows ↑ and ↓"), text(": navigate through query history.")
     })));
     elements.emplace_back(CreateListItem(hbox({
         CreateEntityName("Ctrl+R"), text(": search for a query in history containing a specified substring.")
     })));
     elements.emplace_back(CreateListItem(hbox({
-        CreateEntityName("Ctrl+J"), text(": insert new line.")
+        CreateEntityName("Ctrl+Enter or Ctrl+J"), text(": insert new line.")
     })));
     elements.emplace_back(CreateListItem(hbox({
         CreateEntityName("Ctrl+D"), text(": exit interactive mode.")

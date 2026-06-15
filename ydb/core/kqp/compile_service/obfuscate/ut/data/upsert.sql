@@ -1,0 +1,1 @@
+UPSERT INTO orders (id, customer_id, amount) VALUES (1, 2, 100)

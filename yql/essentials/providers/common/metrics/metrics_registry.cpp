@@ -168,7 +168,7 @@ public:
 
     bool TakeSnapshot(NProto::TMetricsRegistrySnapshot* snapshot) const override {
         bool hasRootGroupBefore = snapshot->HasRootGroup();
-        TCountersPhotographer photographer(snapshot->MutableRootGroup(), snapshot->GetDontIncrement() == false);
+        TCountersPhotographer photographer(snapshot->MutableRootGroup(), !snapshot->GetDontIncrement());
         Sensors_->Accept(TString(), TString(), photographer);
         if (!photographer.HasAnyCounters() && !hasRootGroupBefore) {
             // remove prematurely allocated group

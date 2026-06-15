@@ -2,8 +2,8 @@
 #include "source.h"
 
 #include <ydb/core/formats/arrow/common/container.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -13,25 +13,25 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
-void TColumnBlobsFetchingStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 blobBytes, const ui64 rawBytes) const {
-    LWTRACK(ColumnBlobsFetching, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), source->GetAndResetWaitDuration(), executionDurationMs, Columns.GetColumnsCount(), blobBytes, rawBytes, source->GetRecordsCount(), source->GetReservedMemory());
+void TColumnBlobsFetchingStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step,
+    const TDuration executionDurationMs, const ui64 blobBytes, const ui64 rawBytes) const {
+    LWTRACK(ColumnBlobsFetching, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), source->GetAndResetWaitDuration(), executionDurationMs,
+        Columns.GetColumnsCount(), blobBytes, rawBytes, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    
     const TMonotonic start = TMonotonic::Now();
     auto result = !source->StartFetchingColumns(source, step, Columns);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     source->AddExecutionDuration(executionDurationMs);
-    
+
     ui64 blobBytes = source->GetColumnBlobBytes(Columns.GetColumnIds());
     ui64 rawBytes = source->GetColumnRawBytes(Columns.GetColumnIds());
     source->AddBytesRead(blobBytes);
     ReportTracing(source, step, executionDurationMs, blobBytes, rawBytes);
-    
+
     return result;
 }
 
@@ -39,11 +39,12 @@ ui64 TColumnBlobsFetchingStep::GetProcessingDataSize(const std::shared_ptr<IData
     return source->GetColumnBlobBytes(Columns.GetColumnIds());
 }
 
-void TAssemblerStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 bytesAssembled) const {
+void TAssemblerStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step,
+    const TDuration executionDurationMs, const ui64 bytesAssembled) const {
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
-    LWTRACK(AssemblerStep, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), finishDurationMs, executionDurationMs, Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount(), source->GetReservedMemory());
+    LWTRACK(AssemblerStep, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), finishDurationMs, executionDurationMs,
+        Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
@@ -51,10 +52,10 @@ TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSo
     source->AssembleColumns(Columns);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     source->AddExecutionDuration(executionDurationMs);
-    
+
     ui64 bytesAssembled = source->GetColumnRawBytes(Columns->GetColumnIds());
     ReportTracing(source, step, executionDurationMs, bytesAssembled);
-    
+
     return true;
 }
 
@@ -83,7 +84,7 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         return false;
     }
     if (StageIndex == NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors) {
-//        data->SetAccessorsGuard( std::move(guard));
+        //        data->SetAccessorsGuard( std::move(guard));
     } else {
         data->RegisterAllocationGuard(std::move(guard));
     }
@@ -104,7 +105,8 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std:
     , Step(step)
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , StageIndex(stageIndex)
-    , NeedNextStep(needNextStep) {
+    , NeedNextStep(needNextStep)
+{
 }
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
@@ -117,10 +119,11 @@ void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(cons
     }
 }
 
-void TAllocateMemoryStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 size) const {
-    LWTRACK(MemoryAllocation, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), source->GetAndResetWaitDuration(), executionDurationMs, size, true, source->GetReservedMemory());
+void TAllocateMemoryStep::ReportTracing(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 size) const {
+    LWTRACK(MemoryAllocation, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
+        source->GetDeprecatedPortionId(), step.GetStepIndex(), step.GetTracingName(), source->GetAndResetWaitDuration(), executionDurationMs,
+        size, true, source->GetReservedMemory());
 }
 
 TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {

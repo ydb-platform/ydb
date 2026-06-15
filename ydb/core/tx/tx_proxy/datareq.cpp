@@ -14,6 +14,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
@@ -369,7 +370,7 @@ private:
     void ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
 
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->DataReqInFly;
@@ -464,7 +465,7 @@ public:
 
     TDataReq(const TTxProxyServices &services, ui64 txid, const TIntrusivePtr<TTxProxyMon> mon,
              const TRequestControls& requestControls,
-             NACLib::TUserContext::TPtr userCtx)
+             TIntrusivePtr<NACLib::TUserContext> userCtx)
         : TActor(&TThis::StateWaitInit)
         , Services(services)
         , TxId(txid)
@@ -3065,7 +3066,7 @@ bool TDataReq::IsReadOnlyRequest() const {
 }
 
 IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<NKikimr::NTxProxy::TTxProxyMon>& mon,
-                             const TRequestControls& requestControls, NACLib::TUserContext::TPtr userCtx) {
+                             const TRequestControls& requestControls, TIntrusivePtr<NACLib::TUserContext> userCtx) {
     return new NTxProxy::TDataReq(services, txid, mon, requestControls, userCtx);
 }
 

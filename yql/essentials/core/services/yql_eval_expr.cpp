@@ -449,7 +449,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     TTransformationPipeline pipeline(&types, typeAnnCallableFactory);
     pipeline.AddServiceTransformers();
     pipeline.AddPreTypeAnnotation();
-    pipeline.AddExpressionEvaluation(functionRegistry);
+    pipeline.AddExpressionEvaluation(functionRegistry, calcTransfomer);
     pipeline.AddIOAnnotation();
     pipeline.AddTypeAnnotationTransformer();
     auto topLevelTypeCheck = [&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
@@ -584,7 +584,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     settings.VisitChanges = true;
     settings.TrackFrames = true;
     static const char ReuseLambdaFlag[] = "EvalReuseLambda";
-    settings.ReuseLambda = IsOptimizerEnabled<ReuseLambdaFlag>(types) && !IsOptimizerDisabled<ReuseLambdaFlag>(types);
+    settings.ReuseLambda = !IsOptimizerDisabled<ReuseLambdaFlag>(types);
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->IsCallable("EvaluateIf!")) {
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
@@ -806,7 +806,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                         return nullptr;
                     }
 
-                    dirItems.push_back(direction);
+                    dirItems.emplace_back(direction);
                     // clang-format off
                     extractorItems.push_back(ctx.Builder(k->Pos())
                         .Callable("Member")

@@ -26,9 +26,7 @@ private:
     {
         // If Data is empty it means close was requested.
         TSharedRef Data;
-        TPromise<void> WriteComplete;
-
-        TItem(TSharedRef sharedRef, TPromise<void> writeComplete);
+        TPromise<void> WriteCompletePromise;
     };
 
     TNonblockingQueue<TItem> Queue_;

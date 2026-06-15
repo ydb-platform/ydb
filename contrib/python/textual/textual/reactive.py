@@ -56,6 +56,29 @@ class TooManyComputesError(ReactiveError):
     """Raised when an attribute has public and private compute methods."""
 
 
+class Initialize(Generic[ReactiveType]):
+    """Initialize a reactive by calling a method parent object.
+
+    Example:
+        ```python
+            class InitializeApp(App):
+
+                def get_names(self) -> list[str]:
+                    return ["foo", "bar", "baz"]
+
+                # The `names` property will call `get_names` to get its default when first referenced.
+                names = reactive(Initialize(get_names))
+        ```
+
+    """
+
+    def __init__(self, callback: Callable[[ReactableType], ReactiveType]) -> None:
+        self.callback = callback
+
+    def __call__(self, obj: ReactableType) -> ReactiveType:
+        return self.callback(obj)
+
+
 async def await_watcher(obj: Reactable, awaitable: Awaitable[object]) -> None:
     """Coroutine to await an awaitable returned from a watcher"""
     _rich_traceback_omit = True
@@ -111,13 +134,14 @@ class Reactive(Generic[ReactiveType]):
         compute: Run compute methods when attribute is changed.
         recompose: Compose the widget again when the attribute changes.
         bindings: Refresh bindings when the reactive changes.
+        toggle_class: An optional TCSS classname(s) to toggle based on the truthiness of the value.
     """
 
     _reactives: ClassVar[dict[str, object]] = {}
 
     def __init__(
         self,
-        default: ReactiveType | Callable[[], ReactiveType],
+        default: ReactiveType | Callable[[], ReactiveType] | Initialize[ReactiveType],
         *,
         layout: bool = False,
         repaint: bool = True,
@@ -126,6 +150,7 @@ class Reactive(Generic[ReactiveType]):
         compute: bool = True,
         recompose: bool = False,
         bindings: bool = False,
+        toggle_class: str | None = None,
     ) -> None:
         self._default = default
         self._layout = layout
@@ -135,6 +160,7 @@ class Reactive(Generic[ReactiveType]):
         self._run_compute = compute
         self._recompose = recompose
         self._bindings = bindings
+        self._toggle_class = toggle_class
         self._owner: Type[MessageTarget] | None = None
         self.name: str
 
@@ -175,6 +201,7 @@ class Reactive(Generic[ReactiveType]):
             name: Name of attribute.
         """
         _rich_traceback_omit = True
+
         internal_name = f"_reactive_{name}"
         if hasattr(obj, internal_name):
             # Attribute already has a value
@@ -186,11 +213,17 @@ class Reactive(Generic[ReactiveType]):
         else:
             default_or_callable = self._default
             default = (
-                default_or_callable()
+                (
+                    default_or_callable(obj)
+                    if isinstance(default_or_callable, Initialize)
+                    else default_or_callable()
+                )
                 if callable(default_or_callable)
                 else default_or_callable
             )
         setattr(obj, internal_name, default)
+        if (toggle_class := self._toggle_class) is not None:
+            obj.set_class(bool(default), *toggle_class.split())
         if self._init:
             self._check_watchers(obj, name, default)
 
@@ -308,6 +341,11 @@ class Reactive(Generic[ReactiveType]):
         public_validate_function = getattr(obj, f"validate_{name}", None)
         if callable(public_validate_function):
             value = public_validate_function(value)
+
+        # Toggle the classes using the value's truthiness
+        if (toggle_class := self._toggle_class) is not None:
+            obj.set_class(bool(value), *toggle_class.split())
+
         # If the value has changed, or this is the first time setting the value
         if always or self._always_update or current_value != value:
             # Store the internal value
@@ -405,12 +443,14 @@ class reactive(Reactive[ReactiveType]):
         repaint: Perform a repaint on change.
         init: Call watchers on initialize (post mount).
         always_update: Call watchers even when the new value equals the old value.
+        recompose: Compose the widget again when the attribute changes.
         bindings: Refresh bindings when the reactive changes.
+        toggle_class: An optional TCSS classname(s) to toggle based on the truthiness of the value.
     """
 
     def __init__(
         self,
-        default: ReactiveType | Callable[[], ReactiveType],
+        default: ReactiveType | Callable[[], ReactiveType] | Initialize[ReactiveType],
         *,
         layout: bool = False,
         repaint: bool = True,
@@ -418,6 +458,7 @@ class reactive(Reactive[ReactiveType]):
         always_update: bool = False,
         recompose: bool = False,
         bindings: bool = False,
+        toggle_class: str | None = None,
     ) -> None:
         super().__init__(
             default,
@@ -427,6 +468,7 @@ class reactive(Reactive[ReactiveType]):
             always_update=always_update,
             recompose=recompose,
             bindings=bindings,
+            toggle_class=toggle_class,
         )
 
 
@@ -438,14 +480,16 @@ class var(Reactive[ReactiveType]):
         init: Call watchers on initialize (post mount).
         always_update: Call watchers even when the new value equals the old value.
         bindings: Refresh bindings when the reactive changes.
+        toggle_class: An optional TCSS classname(s) to toggle based on the truthiness of the value.
     """
 
     def __init__(
         self,
-        default: ReactiveType | Callable[[], ReactiveType],
+        default: ReactiveType | Callable[[], ReactiveType] | Initialize[ReactiveType],
         init: bool = True,
         always_update: bool = False,
         bindings: bool = False,
+        toggle_class: str | None = None,
     ) -> None:
         super().__init__(
             default,
@@ -454,6 +498,7 @@ class var(Reactive[ReactiveType]):
             init=init,
             always_update=always_update,
             bindings=bindings,
+            toggle_class=toggle_class,
         )
 
 

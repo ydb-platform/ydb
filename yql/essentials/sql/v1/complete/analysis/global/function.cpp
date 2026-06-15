@@ -12,7 +12,7 @@ namespace {
 
 class TVisitor: public TSQLv1NarrowingVisitor {
 public:
-    TVisitor(const TParsedInput& input, const TNamedNodes* nodes)
+    TVisitor(const TParsedInput& input, const INamedNodes* nodes)
         : TSQLv1NarrowingVisitor(input)
         , Nodes_(nodes)
     {
@@ -57,10 +57,10 @@ private:
         return Nothing();
     }
 
-    const TNamedNodes* Nodes_;
+    const INamedNodes* Nodes_;
 };
 
-TMaybe<TString> GetArgument(size_t index, SQLv1::Table_refContext* ctx, const TNamedNodes& nodes) {
+TMaybe<TString> GetArgument(size_t index, SQLv1::Table_refContext* ctx, const INamedNodes& nodes) {
     auto* table_arg = ctx->table_arg(index);
     if (!table_arg) {
         return Nothing();
@@ -74,7 +74,7 @@ TMaybe<TString> GetArgument(size_t index, SQLv1::Table_refContext* ctx, const TN
     return ToObjectRef(PartiallyEvaluate(named_expr, nodes));
 }
 
-TMaybe<TClusterContext> GetCluster(SQLv1::Table_refContext* ctx, const TNamedNodes& nodes) {
+TMaybe<TClusterContext> GetCluster(SQLv1::Table_refContext* ctx, const INamedNodes& nodes) {
     auto* cluster_expr = ctx->cluster_expr();
     if (!cluster_expr) {
         return Nothing();
@@ -85,7 +85,7 @@ TMaybe<TClusterContext> GetCluster(SQLv1::Table_refContext* ctx, const TNamedNod
 
 } // namespace
 
-TMaybe<TFunctionContext> EnclosingFunction(TParsedInput input, const TNamedNodes& nodes) {
+TMaybe<TFunctionContext> EnclosingFunction(TParsedInput input, const INamedNodes& nodes) {
     std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
     if (!result.has_value()) {
         return Nothing();
@@ -93,7 +93,7 @@ TMaybe<TFunctionContext> EnclosingFunction(TParsedInput input, const TNamedNodes
     return std::any_cast<TFunctionContext>(result);
 }
 
-TMaybe<TFunctionContext> GetFunction(SQLv1::Table_refContext* ctx, const TNamedNodes& nodes) {
+TMaybe<TFunctionContext> GetFunction(SQLv1::Table_refContext* ctx, const INamedNodes& nodes) {
     auto* function = ctx->an_id_expr();
     auto* lparen = ctx->TOKEN_LPAREN();
     if (function == nullptr || lparen == nullptr) {

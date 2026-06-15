@@ -1,6 +1,5 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
-#include "datashard_integrity_trails.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
@@ -11,6 +10,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -109,7 +109,8 @@ struct TReadIteratorVectorTop {
 
 namespace {
 
-constexpr ui64 MinRowsPerCheck = 1000;
+constexpr ui64 MinRowsPerCheck  = 1000;
+constexpr ui64 MinBytesPerCheck = 1_MB;
 
 TMaybe<ui64> ResolveVictimQuerySpanId(TMaybe<ui64> lockVictimQuerySpanId, ui64 currentQuerySpanId) {
     if (lockVictimQuerySpanId) {
@@ -410,7 +411,8 @@ class TReader {
 
     ui64 RowsRead = 0;
     ui64 RowsProcessed = 0;
-    ui64 RowsSinceLastCheck = 0;
+    ui64 RowsSinceLastCheck  = 0;
+    ui64 BytesSinceLastCheck = 0;
 
     ui64 BytesInResult = 0;
 
@@ -577,6 +579,8 @@ public:
         // TODO: looks kind of ugly: we assume that cells in rowState are stored in array
         TDbTupleRef value(ColumnTypes.data(), (*rowState).data(), ColumnTypes.size());
 
+        BytesSinceLastCheck += EstimateSize(value.Cells());
+
         // note that if user requests key columns then they will be in
         // rowValues and we don't have to add rowKey columns
         if (State.VectorTopK) {
@@ -589,7 +593,7 @@ public:
         return EReadStatus::Done;
     }
 
-    bool PrechargeKey(
+    NTable::TPrechargeResult PrechargeKey(
         TTransactionContext& txc,
         const TSerializedCellVec& keyCells)
     {
@@ -597,10 +601,10 @@ public:
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
             auto minKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
             auto maxKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, false);
-            return Precharge(txc.DB, minKey, maxKey, State.Reverse).Ready;
+            return Precharge(txc.DB, minKey, maxKey, State.Reverse);
         } else {
             auto key = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
-            return Precharge(txc.DB, key, key, State.Reverse).Ready;
+            return Precharge(txc.DB, key, key, State.Reverse);
         }
     }
 
@@ -638,7 +642,9 @@ public:
                 if (txc.Env.MissingReferencesSize()) {
                     ready = false;
 
-                    prechargedRowsSize += EstimateSize(*rowState);
+                    const ui64 rowSize = EstimateSize(*rowState);
+                    prechargedRowsSize  += rowSize;
+                    BytesSinceLastCheck += rowSize;
                 }
 
                 prechargedCount++;
@@ -667,10 +673,17 @@ public:
             if (!(queryIndex < State.Request->Keys.size())) {
                 break;
             }
-            if (!PrechargeKey(txc, State.Request->Keys[queryIndex])) {
+            auto result = PrechargeKey(txc, State.Request->Keys[queryIndex]);
+            if (!result.Ready) {
                 ready = false;
             }
             --rowsLeft;
+
+            ++RowsSinceLastCheck;
+            BytesSinceLastCheck += result.BytesPrecharged;
+            if (ShouldStop()) {
+                break;
+            }
         }
         return ready;
     }
@@ -830,10 +843,12 @@ public:
     }
 
     bool ShouldStopByElapsedTime() {
-        // TODO: should we also check bytes for the case
-        // when rows are very heavy?
-        if (RowsSinceLastCheck >= MinRowsPerCheck) {
-            RowsSinceLastCheck = 0;
+        // Fire when either enough rows or enough bytes have been accumulated since
+        // the last check.  The byte threshold catches heavy rows (e.g. 1 MB blobs)
+        // that would otherwise let the time budget slip through the row-count gate.
+        if (RowsSinceLastCheck >= MinRowsPerCheck || BytesSinceLastCheck >= MinBytesPerCheck) {
+            RowsSinceLastCheck  = 0;
+            BytesSinceLastCheck = 0;
             UpdateCycles();
 
             return ElapsedCycles() >= MaxCyclesPerIteration;
@@ -1138,7 +1153,8 @@ private:
 
             keyAccessSampler->AddSample(TableId, rowKey.Cells());
             const ui64 processedRecords = 1 + ResetRowSkips(iter->Stats);
-            RowsSinceLastCheck += processedRecords;
+            RowsSinceLastCheck  += processedRecords;
+            BytesSinceLastCheck += EstimateSize(rowValues.Cells());
             RowsProcessed += processedRecords;
 
             // note that if user requests key columns then they will be in
@@ -1206,6 +1222,8 @@ private:
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             const ui64 processedRecords = ResetRowSkips(iter->Stats);
             RowsSinceLastCheck += processedRecords;
+            // Skipped rows have no user-visible bytes; BytesSinceLastCheck is not
+            // updated here — the row-count gate above remains the trigger for skips.
             RowsProcessed += processedRecords;
         }
 
@@ -1385,8 +1403,11 @@ std::unique_ptr<TEvDataShard::TEvReadResult> MakeEvReadResult(ui32 nodeId) {
 }
 
 
+const TDuration MaxTimePerIteration = TDuration::MilliSeconds(10);
+
 const NHPTimer::STime TReader::MaxCyclesPerIteration =
-    /* 10ms */ (NHPTimer::GetCyclesPerSecond() + 99) / 100;
+    ((NHPTimer::GetCyclesPerSecond() * MaxTimePerIteration.MicroSeconds()) + TDuration::Seconds(1).MicroSeconds() - 1)
+    / TDuration::Seconds(1).MicroSeconds();
 
 } // namespace
 
@@ -1741,6 +1762,10 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     size_t ExecuteCount = 0;
     bool ResultSent = false;
 
+    // Set when the read quota was exhausted in Execute(): instead of replying
+    // with an error, the iterator is kept and a delayed continue is scheduled.
+    TMaybe<TDuration> ThrottleDelay;
+
     std::unique_ptr<TEvDataShard::TEvReadResult> Result;
 
     std::unique_ptr<IBlockBuilder> BlockBuilder;
@@ -2078,9 +2103,26 @@ public:
             }
         }
 
+        const auto& schedulableRead = state.SchedulableRead;
+        if (schedulableRead && !schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
+            // Read quota for the resource pool is exhausted - keep the iterator alive
+            // and resume it via the cheaper TTxReadContinue path after a delay.
+            // The reschedule itself is done in Complete().
+            ThrottleDelay = schedulableRead->EstimateQuotaDelay(MaxTimePerIteration);
+            return EExecutionStatus::DelayComplete;
+        }
+
         LWTRACK(ReadExecute, state.Request->Orbit);
-        if (!Read(txc, ctx, state))
+        bool readResult = Read(txc, ctx, state);
+
+        if (schedulableRead) {
+            Reader->UpdateCycles();
+            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+        }
+
+        if (!readResult) {
             return EExecutionStatus::Restart;
+        }
 
         // Check if successful result depends on unresolved volatile transactions
         if (Result && !Result->Record.HasStatus() && !Reader->GetVolatileReadDependencies().empty()) {
@@ -2202,13 +2244,14 @@ public:
         switch (state.LockMode) {
             case NKikimrDataEvents::OPTIMISTIC:
             case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            case NKikimrDataEvents::PESSIMISTIC_NONE:
                 break;
 
             default:
                 SetStatusError(
                     Result->Record,
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented"
+                    TStringBuilder() << "Only OPTIMISTIC, OPTIMISTIC_SNAPSHOT_ISOLATION and PESSIMISTIC_NONE lock modes are currently implemented"
                         << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << ")");
                 return;
         }
@@ -2339,7 +2382,8 @@ public:
                     error = "CreateClusters failed";
                 }
                 if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {
-                    error = "Target vector has invalid format";
+                    error = TStringBuilder() << "Target vector has invalid format: "
+                        << topState->KMeans->FormatError(topK.GetTargetVector());
                 }
             }
             for (auto& colIdx: topK.GetDistinctColumns()) {
@@ -2458,6 +2502,17 @@ public:
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Complete read# " << state.ReadId
             << " after executionsCount# " << ExecuteCount);
+
+        if (ThrottleDelay) {
+            // Read quota was exhausted in Execute(): keep the iterator and resume
+            // it via TTxReadContinue after the delay. No result is sent here.
+            // ReadContinuePending prevents ReadAck from scheduling a duplicate.
+            state.ReadContinuePending = true;
+            ctx.Schedule(*ThrottleDelay, new TEvDataShard::TEvReadContinue(LocalReadId));
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
+                << " throttled, rescheduling continue after " << *ThrottleDelay);
+            return;
+        }
 
         SendResult(ctx);
 
@@ -2822,6 +2877,7 @@ private:
             break;
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             if (Reader->HadInconsistentResult()) {
                 HandleDeferredLockBreak(state, sysLocks, ctx);
                 handledDeferredBreak = true;
@@ -3367,16 +3423,38 @@ public:
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QuerySpanId, *Self, &locksDb);
 
-        Reader.reset(new TReader(
+        Reader = std::make_unique<TReader>(
             state,
             *BlockBuilder,
             TableInfo,
             AppData()->MonotonicTimeProvider->Now(),
-            Self));
+            Self);
 
         LWTRACK(ReadExecute, state.Request->Orbit);
 
+        // Try to consume schedulable read quota before reading
+        const auto& schedulableRead = state.SchedulableRead;
+        if (schedulableRead) {
+            if (!schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
+                // KQP read quota exhausted, reschedule with delay.
+                // Keep ReadContinuePending=true so that ReadAck doesn't schedule a duplicate TEvReadContinue while we wait.
+                state.ReadContinuePending = true;
+                Reader.reset();
+                Result.reset();
+                ctx.Schedule(
+                    schedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
+                    new TEvDataShard::TEvReadContinue(LocalReadId));
+                return true;
+            }
+        }
+
         if (Reader->Read(txc)) {
+            // Call before sending result, because `schedulableRead` gets deleted
+            if (schedulableRead) {
+                Reader->UpdateCycles();
+                schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+            }
+
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
                 state.ReadContinuePending = true;
@@ -3400,6 +3478,11 @@ public:
             }
             return true;
         }
+
+        if (schedulableRead) {
+            Reader->UpdateCycles();
+            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+        }
         return false;
     }
 
@@ -3421,6 +3504,7 @@ public:
             return Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult();
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             return Reader->HadInconsistentResult();
 
         default:
@@ -3561,6 +3645,7 @@ public:
             Reader->UpdateState(state, useful);
             if (!state.IsExhausted()) {
                 state.ReadContinuePending = true;
+
                 ctx.Send(
                     Self->SelfId(),
                     new TEvDataShard::TEvReadContinue(LocalReadId));
@@ -3721,6 +3806,17 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         isHeadRead = false;
     }
 
+    NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
+    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory) {
+        schedulableRead = SchedulableReadFactory->Get(record.GetDatabaseId(), record.GetPoolId());
+        if (schedulableRead && !schedulableRead->IsValid()) {
+            replyWithError(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                << "Request " << readId.ReadId << " rejected, resource pool " << record.GetPoolId() << " has zero CPU quota"
+                << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
+            return;
+        }
+    }
+
     TActorId sessionId;
     if (readId.Sender.NodeId() != SelfId().NodeId()) {
         Y_DEBUG_ABORT_UNLESS(ev->InterconnectSession);
@@ -3745,8 +3841,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         std::forward_as_tuple(readId),
         std::forward_as_tuple(
             readId, localReadId, TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()),
-            sessionId, readVersion, isHeadRead,
-            AppData()->MonotonicTimeProvider->Now()));
+            sessionId, readVersion, isHeadRead, AppData()->MonotonicTimeProvider->Now(), schedulableRead));
     Y_ENSURE(pr.second);
 
     auto& state = pr.first->second;
@@ -3769,7 +3864,22 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
         return;
     }
 
-    Executor()->Execute(new TTxReadContinue(this, localReadId, it->second->Request->ReadSpan.GetTraceId()), ctx);
+    auto& state = *it->second;
+
+    // If the resource-pool read quota is exhausted, avoid opening a no-op read
+    // transaction (which still pays tablet executor / redo-confirm overhead) and
+    // just reschedule the continue after the estimated delay.
+    // Explicitly set ReadContinuePending so ReadAck won't schedule a duplicate
+    // continue regardless of what may have cleared the flag before this point.
+    if (state.SchedulableRead && !state.SchedulableRead->HasAvailableQuota()) {
+        state.ReadContinuePending = true;
+        ctx.Schedule(
+            state.SchedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
+            new TEvDataShard::TEvReadContinue(localReadId));
+        return;
+    }
+
+    Executor()->Execute(new TTxReadContinue(this, localReadId, state.Request->ReadSpan.GetTraceId()), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx) {
@@ -3997,6 +4107,7 @@ void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
     if (state.EnqueuedLocalTxId) {
         Executor()->CancelTransaction(state.EnqueuedLocalTxId);
     }
+
     ReadIteratorsByLocalReadId.erase(state.LocalReadId);
     ReadIterators.erase(it);
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());

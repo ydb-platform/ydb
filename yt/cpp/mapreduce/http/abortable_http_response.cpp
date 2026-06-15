@@ -52,8 +52,8 @@ public:
         auto g = Guard(Lock_);
         int result = 0;
         for (auto& response : ResponseList_) {
-            if (!response.IsAborted() && response.GetUrl().find(urlPattern) != TString::npos) {
-                response.Abort();
+            if (!response.IsResponseAborted() && response.GetUrl().find(urlPattern) != TString::npos) {
+                response.AbortResponse();
                 ++result;
             }
         }
@@ -112,7 +112,7 @@ TAbortableHttpResponseBase::~TAbortableHttpResponseBase()
     TAbortableHttpResponseRegistry::Get().Remove(this);
 }
 
-void TAbortableHttpResponseBase::Abort()
+void TAbortableHttpResponseBase::AbortResponse()
 {
     Aborted_ = true;
 }
@@ -121,7 +121,7 @@ void TAbortableHttpResponseBase::SetLengthLimit(size_t limit)
 {
     LengthLimit_ = limit;
     if (LengthLimit_ == 0) {
-        Abort();
+        AbortResponse();
     }
 }
 
@@ -130,7 +130,7 @@ const TString& TAbortableHttpResponseBase::GetUrl() const
     return Url_;
 }
 
-bool TAbortableHttpResponseBase::IsAborted() const
+bool TAbortableHttpResponseBase::IsResponseAborted() const
 {
     return Aborted_;
 }
@@ -155,7 +155,7 @@ size_t TAbortableHttpResponse::DoRead(void* buf, size_t len)
     auto read = THttpResponse::DoRead(buf, len);
     LengthLimit_ -= read;
     if (LengthLimit_ == 0) {
-        Abort();
+        AbortResponse();
     }
     return read;
 }
@@ -188,7 +188,7 @@ TAbortableHttpResponse::TOutage TAbortableHttpResponse::StartOutage(
 }
 
 TAbortableCoreHttpResponse::TAbortableCoreHttpResponse(
-    std::unique_ptr<IInputStream> stream,
+    std::unique_ptr<IAbortableInputStream> stream,
     const TString& url)
     : TAbortableHttpResponseBase(url)
     , Stream_(std::move(stream))
@@ -204,7 +204,7 @@ size_t TAbortableCoreHttpResponse::DoRead(void* buf, size_t len)
     auto read = Stream_->Read(buf, len);
     LengthLimit_ -= read;
     if (LengthLimit_ == 0) {
-        Abort();
+        AbortResponse();
     }
 
     return read;
@@ -216,6 +216,17 @@ size_t TAbortableCoreHttpResponse::DoSkip(size_t len)
         ythrow TAbortedForTestPurpose() << "response was aborted";
     }
     return Stream_->Skip(len);
+}
+
+// IAbortableInputStream
+void TAbortableCoreHttpResponse::Abort()
+{
+    Stream_->Abort();
+}
+
+bool TAbortableCoreHttpResponse::IsAborted() const
+{
+    return Stream_->IsAborted();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

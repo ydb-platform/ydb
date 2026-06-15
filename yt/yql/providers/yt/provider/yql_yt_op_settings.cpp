@@ -463,6 +463,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::WarnNonExisting:
         case EYtSettingType::ForceTransform:
         case EYtSettingType::CombineChunks:
+        case EYtSettingType::ReplaceParentCache:
         case EYtSettingType::WithQB:
         case EYtSettingType::Inline:
         case EYtSettingType::WeakFields:
@@ -971,12 +972,6 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             if (!TryFromString(setting->Child(1)->Content(), mode)) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
                     << "Unsupported block output mode value " << TString{setting->Child(1)->Content()}.Quote()));
-                return false;
-            }
-            break;
-        }
-        case EYtSettingType::QLFilter: {
-            if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }
             break;

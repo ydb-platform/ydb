@@ -190,7 +190,7 @@ Y_UNIT_TEST(FromTimestamp) {
 }
 
 Y_UNIT_TEST(FromInterval) {
-    FromPyTest<i64, NUdf::TInterval64>(9223339708799999999ll);
+    FromPyTest<i64, NUdf::TInterval64>(9223339708799999999LL);
 }
 
 Y_UNIT_TEST(ToDate) {

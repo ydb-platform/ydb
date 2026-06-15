@@ -1,17 +1,21 @@
 #pragma once
 
 #include "common_data.h"
-#include <ydb/library/signals/owner.h>
-#include <ydb/library/signals/histogram.h>
+
 #include <ydb/core/tx/columnshard/common/portion.h>
+
+#include <ydb/library/signals/histogram.h>
+#include <ydb/library/signals/owner.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/string/builder.h>
+
 #include <set>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
 class TColumnEngineForLogs;
-}
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NColumnShard {
 
@@ -22,31 +26,31 @@ protected:
     i64 PortionsCount = 0;
     i64 RecordsCount = 0;
     i64 MetadataMemoryPortionsSize = 0;
+
 public:
     i64 GetColumnPortionsSize() const {
         return ColumnPortionsSize;
     }
+
     i64 GetTotalPortionsSize() const {
         return TotalPortionsSize;
     }
+
     i64 GetRecordsCount() const {
         return RecordsCount;
     }
+
     i64 GetPortionsCount() const {
         return PortionsCount;
     }
+
     i64 GetMetadataMemoryPortionsSize() const {
         return MetadataMemoryPortionsSize;
     }
 
     TString DebugString() const {
-        return TStringBuilder() <<
-            "columns_size:" << ColumnPortionsSize <<
-            ";total_size:" << TotalPortionsSize <<
-            ";count:" << PortionsCount <<
-            ";metadata_portions_size:" << MetadataMemoryPortionsSize <<
-            ";records_count:" << RecordsCount <<
-            ";";
+        return TStringBuilder() << "columns_size:" << ColumnPortionsSize << ";total_size:" << TotalPortionsSize << ";count:" << PortionsCount
+                                << ";metadata_portions_size:" << MetadataMemoryPortionsSize << ";records_count:" << RecordsCount << ";";
     }
 
     TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const;
@@ -56,12 +60,13 @@ class TDataClassCounters {
 private:
     std::shared_ptr<TValueAggregationClient> PortionsSize;
     std::shared_ptr<TValueAggregationClient> PortionsCount;
+
 public:
-    TDataClassCounters(const std::shared_ptr<TValueAggregationClient>& portionsSize, const std::shared_ptr<TValueAggregationClient>& portionsCount)
+    TDataClassCounters(
+        const std::shared_ptr<TValueAggregationClient>& portionsSize, const std::shared_ptr<TValueAggregationClient>& portionsCount)
         : PortionsSize(portionsSize)
         , PortionsCount(portionsCount)
     {
-
     }
 
     void OnPortionsInfo(const TBaseGranuleDataClassSummary& dataInfo) const {
@@ -75,6 +80,7 @@ private:
     using TBase = TCommonCountersOwner;
     std::shared_ptr<TValueAggregationAgent> PortionsSize;
     std::shared_ptr<TValueAggregationAgent> PortionsCount;
+
 public:
     TAgentDataClassCounters(const TString& baseName, const TString& signalId)
         : TBase(baseName)
@@ -91,10 +97,10 @@ public:
 class TIntervalMemoryCounters {
 public:
     const std::shared_ptr<TValueAggregationClient> MinReadBytes;
+
     TIntervalMemoryCounters(const std::shared_ptr<TValueAggregationClient>& minReadBytes)
         : MinReadBytes(minReadBytes)
     {
-
     }
 };
 
@@ -102,9 +108,11 @@ class TPortionsIndexCounters {
 public:
     const TIntervalMemoryCounters RawBytes;
     const TIntervalMemoryCounters BlobBytes;
+
     TPortionsIndexCounters(TIntervalMemoryCounters&& rawBytes, TIntervalMemoryCounters&& blobBytes)
         : RawBytes(std::move(rawBytes))
-        , BlobBytes(std::move(blobBytes)) {
+        , BlobBytes(std::move(blobBytes))
+    {
     }
 };
 
@@ -125,7 +133,8 @@ public:
         : InsertedData(insertedData)
         , CompactedData(compactedData)
         , FullData(fullData)
-        , PortionsIndexCounters(std::move(portionsIndexCounters)) {
+        , PortionsIndexCounters(std::move(portionsIndexCounters))
+    {
     }
 
     void OnPortionsDataRefresh(const TBaseGranuleDataClassSummary& inserted, const TBaseGranuleDataClassSummary& compacted) const {
@@ -139,10 +148,12 @@ class TIntervalMemoryAgentCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
     const std::shared_ptr<TValueAggregationAgent> ReadBytes;
+
 public:
     TIntervalMemoryAgentCounters(const TCommonCountersOwner& base, const TString& memoryType)
         : TBase(base, "memory", memoryType)
-        , ReadBytes(TBase::GetValueAutoAggregations("Bytes")) {
+        , ReadBytes(TBase::GetValueAutoAggregations("Bytes"))
+    {
     }
 
     TIntervalMemoryCounters GetClient() const {
@@ -157,7 +168,6 @@ private:
     TIntervalMemoryAgentCounters ReadBlobBytes;
 
 public:
-
     TPortionsIndexAgentsCounters(const TString& baseName)
         : TBase(baseName)
         , ReadRawBytes(TBase::CreateSubGroup("control", "read_memory"), "raw")
@@ -252,8 +262,8 @@ public:
         TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrBlobs,
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrRecordsCount,
-            NMonitoring::TDynamicCounters::TCounterPtr badPortionsCount) :
-            BadPortionsCount(badPortionsCount)
+            NMonitoring::TDynamicCounters::TCounterPtr badPortionsCount)
+            : BadPortionsCount(badPortionsCount)
         {
             for (auto&& i : distrBlobs) {
                 BlobGuards.emplace_back(i->BuildGuard());
@@ -266,10 +276,8 @@ public:
             }
         }
 
-
         void OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
         void OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
-
     };
 
     void OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const;
@@ -359,4 +367,4 @@ public:
     TEngineLogsCounters();
 };
 
-}
+}   // namespace NKikimr::NColumnShard

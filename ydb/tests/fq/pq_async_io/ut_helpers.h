@@ -24,7 +24,8 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     TString topic,
     TMaybe<TDuration> watermarksPeriod = Nothing(),
     TDuration lateArrivalDelay = TDuration::Seconds(2),
-    bool idlePartitionsEnabled = false);
+    bool idlePartitionsEnabled = false,
+    bool streamingMode = true);
 
 NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic);
 
@@ -115,6 +116,10 @@ void PQCreateStream(
 void AddReadRule(
     NYdb::TDriver& driver,
     const TString& streamName);
+
+void ChangePartitionCount(
+    const TString& streamName,
+    ui32 partitionCount);
 
 std::vector<TMessage> UVPairParser(const NUdf::TUnboxedValue& item);
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item);

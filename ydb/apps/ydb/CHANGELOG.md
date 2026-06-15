@@ -1,4 +1,13 @@
-* Added the `--no-producer-id-track` option to `ydb workload topic run write|full` to disable ProducerId tracking in transactions when using `--use-tx`.
+* `ydb scheme describe` now prints a human-readable description for external data sources (source type, location, auth method, database, properties and creation time) instead of empty output.
+* Added `--partition-max-inflight-bytes` option to `ydb topic workload`
+* Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
+* Added CPU Time statistics to benchmarks run commands.
+* `ydb sql`: add `--resource-pool` option
+* `ydb` interactive mode add `SET resource_pool` command
+* Added `ydb workload fulltext` command to make load testing and measure quality of fulltext indexes.
+
+## 2.31.0 ##
+
 * Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).
 
 ## 2.30.0 ##

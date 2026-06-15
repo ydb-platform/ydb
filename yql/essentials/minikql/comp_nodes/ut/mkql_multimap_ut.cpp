@@ -1,8 +1,11 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
+
+using namespace NTest;
 
 Y_UNIT_TEST_SUITE(TMiniKQLMultiMapTest) {
 Y_UNIT_TEST_LLVM(TestOverList) {
@@ -11,37 +14,14 @@ Y_UNIT_TEST_LLVM(TestOverList) {
 
     const auto data1 = pb.NewDataLiteral<ui32>(1);
     const auto data2 = pb.NewDataLiteral<ui32>(2);
-    const auto data3 = pb.NewDataLiteral<ui32>(3);
-    const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-    const auto list = pb.NewList(dataType, {data1, data2, data3});
+    const auto list = ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
     const auto pgmReturn = pb.MultiMap(list,
                                        [&](TRuntimeNode item) {
                                            return TRuntimeNode::TList{pb.Add(item, data1), item, pb.Mul(item, data2)};
                                        });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 6);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
 }
 
 Y_UNIT_TEST_LLVM(TestOverLazyList) {
@@ -50,37 +30,14 @@ Y_UNIT_TEST_LLVM(TestOverLazyList) {
 
     const auto data1 = pb.NewDataLiteral<ui32>(1);
     const auto data2 = pb.NewDataLiteral<ui32>(2);
-    const auto data3 = pb.NewDataLiteral<ui32>(3);
-    const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-    const auto list = pb.NewList(dataType, {data1, data2, data3});
+    const auto list = ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
     const auto pgmReturn = pb.MultiMap(pb.LazyList(list),
                                        [&](TRuntimeNode item) {
                                            return TRuntimeNode::TList{pb.Add(item, data1), item, pb.Mul(item, data2)};
                                        });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 6);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
 }
 
 Y_UNIT_TEST_LLVM(TestOverFlow) {
@@ -89,81 +46,35 @@ Y_UNIT_TEST_LLVM(TestOverFlow) {
 
     const auto data1 = pb.NewDataLiteral<ui32>(1);
     const auto data2 = pb.NewDataLiteral<ui32>(2);
-    const auto data3 = pb.NewDataLiteral<ui32>(3);
-    const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-    const auto list = pb.NewList(dataType, {data1, data2, data3});
+    const auto list = ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
     const auto pgmReturn = pb.Collect(pb.MultiMap(pb.ToFlow(list),
                                                   [&](TRuntimeNode item) {
                                                       return TRuntimeNode::TList{pb.Add(item, data1), item, pb.Mul(item, data2)};
                                                   }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 6);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
 }
 
 Y_UNIT_TEST_LLVM(TestFlattenByNarrow) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-1))});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(2)), pb.NewOptional(pb.NewDataLiteral<i32>(-2))});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-3))});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3});
+    using TRow = std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>;
+    const auto list = ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                        {TMaybe<i32>{1}, TMaybe<i32>{}, TMaybe<i32>{-1}},
+                                                        {TMaybe<i32>{}, TMaybe<i32>{2}, TMaybe<i32>{-2}},
+                                                        {TMaybe<i32>{3}, TMaybe<i32>{}, TMaybe<i32>{-3}},
+                                                    });
 
     const auto pgmReturn = pb.Collect(pb.NarrowMultiMap(pb.ExpandMap(pb.ToFlow(list),
                                                                      [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                         [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[2U], items[1U], items[0U]}; }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), -1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), -2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), -3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 3);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               TVector<TMaybe<i32>>{-1, {}, 1, -2, 2, {}, -3, {}, 3});
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLMultiMapTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

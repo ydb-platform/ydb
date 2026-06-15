@@ -39,7 +39,7 @@ TRequestMetrics::TRequestMetrics(NSdkStats::TStatCollector::TClientOperationStat
         return;
     }
     try {
-        Collector_->IncRequestCount(requestName);
+        Collector_->IncRequestCount(RequestName_);
         StartTime_ = std::chrono::steady_clock::now();
     } catch (...) {
         SafeLogRequestMetricsError(Log_, "failed to initialize metrics", std::current_exception());

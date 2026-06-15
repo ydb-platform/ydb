@@ -20,6 +20,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/pb.h>
 
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -1129,6 +1130,35 @@ namespace NSchemeShardUT_Private {
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
 
+    // external table
+    void AsyncCreateExternalTableOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme) {
+        auto* ev = CreateExternalTableRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+    }
+
+    void TestCreateExternalTableOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateExternalTableRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    // external data source
+    void AsyncCreateExternalDataSourceOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme) {
+        auto* ev = CreateExternalDataSourceRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+    }
+
+    void TestCreateExternalDataSourceOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateExternalDataSourceRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    // streaming query
     void TestCreateStreamingQueryOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
         auto* ev = CreateStreamingQueryRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
         ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
@@ -1726,7 +1756,7 @@ namespace NSchemeShardUT_Private {
                 // Check if full-key bloom is enabled
                 // Full-key bloom is represented as a prefix entry with length = key column count
                 for (ui32 j = 0; j < d.ByKeyFilterPrefixesSize(); ++j) {
-                    if (d.GetByKeyFilterPrefixes(j) == keyColumnCount && keyColumnCount > 0) {
+                    if (d.GetByKeyFilterPrefixes(j).GetPrefixLength() == keyColumnCount && keyColumnCount > 0) {
                         return true;
                     }
                 }
@@ -2341,16 +2371,17 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight) {
         NKikimrForcedCompaction::TForcedCompactionSettings settings;
         settings.set_source_path(tablePath);
+        settings.set_cascade(cascade);
         settings.set_max_shards_in_flight(maxShardsInFlight);
         auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
-        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight);
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight) {
+        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, cascade, maxShardsInFlight);
     }
 
     void TestCompact(
@@ -2359,18 +2390,19 @@ namespace NSchemeShardUT_Private {
         ui64 id,
         const TString& dbName,
         const TString& tablePath,
+        bool cascade,
         ui32 maxShardsInFlight,
         Ydb::StatusIds::StatusCode expectedStatus)
     {
-        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, maxShardsInFlight);
+        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, cascade, maxShardsInFlight);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCreateResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
     }
 
-    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
-        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight, expectedStatus);
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
+        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, cascade, maxShardsInFlight, expectedStatus);
     }
 
     NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
@@ -3234,7 +3266,7 @@ namespace NSchemeShardUT_Private {
             NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
             NYql::IDataProvider::TFillSettings fillSettings;
             bool truncated;
-            KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
+            NYql::KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
             UNIT_ASSERT(!truncated);
             shardRows.push_back(ysonStream.Str());
         }

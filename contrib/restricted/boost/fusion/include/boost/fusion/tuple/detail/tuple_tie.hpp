@@ -5,7 +5,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 #ifndef BOOST_PP_IS_ITERATING
-#if !defined(FUSION_TUPLE_TIE_10032005_0846)
+#ifndef FUSION_TUPLE_TIE_10032005_0846
 #define FUSION_TUPLE_TIE_10032005_0846
 
 #include <boost/preprocessor/iterate.hpp>

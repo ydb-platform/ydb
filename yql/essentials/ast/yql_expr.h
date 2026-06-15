@@ -13,12 +13,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/checked_deref_ptr.h>
 
-// #define YQL_USE_CHECKED_DEREF_PTR_FOR_TYPE_ANN
-#ifdef YQL_USE_CHECKED_DEREF_PTR_FOR_TYPE_ANN
-    #define YQL_TYPE_ANN_PTR NYql::TCheckedDerefPtr<const TTypeAnnotationNode>
-#else
-    #define YQL_TYPE_ANN_PTR const TTypeAnnotationNode*
-#endif
+#define YQL_TYPE_ANN_PTR NYql::TCheckedDerefPtr<const TTypeAnnotationNode>
 
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -2844,10 +2839,10 @@ class TExprCycleDetector {
 public:
     explicit TExprCycleDetector(ui64 maxQueueSize);
     void Reset();
-    void AddNode(const TExprNode& node);
+    void AddNode(const TExprNode& node, ui64 repeatTransformCount);
 
 private:
-    THashSet<TString> Set_;
+    THashMap<TString, ui64> Map_;
     TQueue<TString> Queue_;
     const ui64 MaxQueueSize_;
 };
@@ -3119,7 +3114,7 @@ struct TExprContext: private TNonCopyable {
 
     void CheckCycle(const TExprNode& node) {
         if (CycleDetector) {
-            CycleDetector->AddNode(node);
+            CycleDetector->AddNode(node, RepeatTransformCounter);
         }
     }
 
@@ -3256,7 +3251,7 @@ const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type);
 
 template <>
 inline void Out<NYql::TTypeAnnotationNode>(
-    IOutputStream& out, const NYql::TTypeAnnotationNode& type)
+    IOutputStream& out, const NYql::TTypeAnnotationNode& value)
 {
-    type.Out(out);
+    value.Out(out);
 }

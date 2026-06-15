@@ -3,12 +3,15 @@
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
+#include <yql/essentials/public/udf/arrow/dense_union_scalar.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 
 #include <util/string/builder.h>
 
 #include <arrow/array/validate.h>
+#include <arrow/scalar.h>
 #include <arrow/util/config.h>
+#include <arrow/util/checked_cast.h>
 
 namespace NKikimr::NMiniKQL {
 namespace {
@@ -56,10 +59,8 @@ namespace {
 std::shared_ptr<arrow::ArrayData> ConvertYqlOffsetsToArrowStandard(
     const arrow::ArrayData& arrayData) {
     auto result = arrayData.Copy();
-    if (result->type->id() == arrow::Type::STRUCT ||
-        result->type->id() == arrow::Type::DENSE_UNION ||
-        result->type->id() == arrow::Type::SPARSE_UNION) {
-        if (result->buffers[0]) {
+    if (result->type->id() == arrow::Type::STRUCT) {
+        if (!result->buffers.empty() && result->buffers[0]) {
             auto actualSize = arrow::BitUtil::BytesForBits(result->length + result->offset);
             MKQL_ENSURE(result->buffers[0]->size() >= actualSize, "Bitmask is invalid.");
         }
@@ -103,7 +104,13 @@ private:
 
 class TUnimplementedValidator: public TDatumValidatorBase {
 public:
-    using TDatumValidatorBase::TDatumValidatorBase;
+    template <typename... TArgs>
+    explicit TUnimplementedValidator(TArgs&&... args)
+        : TDatumValidatorBase(nullptr)
+    {
+        Y_UNUSED(args...);
+    }
+
     void Validate(arrow::Datum datum) const override {
         Y_UNUSED(datum);
     }
@@ -115,26 +122,24 @@ public:
     using TDatumValidatorBase::TDatumValidatorBase;
 
     void Validate(arrow::Datum datum) const override {
-        ValidateNullCount(datum);
-        ValidateEmptyNullBuffer(datum);
+        ValidateSingular(datum);
     }
 
 private:
-    void ValidateNullCount(arrow::Datum datum) const {
+    void ValidateSingular(arrow::Datum datum) const {
         if (datum.is_scalar()) {
             MKQL_ENSURE(datum.scalar()->is_valid == !IsNull, "Singular type invariant violation.");
         } else {
             auto expectedNullCount = IsNull ? datum.array()->length : 0;
+            ValidateEmptyNullBuffer(*datum.array());
+            // For singular types it is OK to call GetNullCount directly since buffer is always empty.
             MKQL_ENSURE(datum.array()->GetNullCount() == expectedNullCount,
                         TStringBuilder() << "Singular type invariant null count violation. Expected: " << expectedNullCount << ", Got: " << datum.array()->GetNullCount());
         }
     }
 
-    void ValidateEmptyNullBuffer(arrow::Datum datum) const {
-        if (datum.is_scalar()) {
-            return;
-        }
-        MKQL_ENSURE(datum.array()->buffers[0] == nullptr, "Must be empty buffer.");
+    void ValidateEmptyNullBuffer(const arrow::ArrayData& arrayData) const {
+        MKQL_ENSURE(arrayData.buffers[0] == nullptr, "Must be empty buffer.");
     }
 };
 
@@ -156,8 +161,10 @@ public:
                 }
             }
         } else {
+            auto array = datum.array();
             for (size_t i = 0; i < Children_.size(); ++i) {
-                Children_[i]->Validate(*datum.array()->child_data[i]);
+                Children_[i]->Validate(*array->child_data[i]);
+                MKQL_ENSURE(array->child_data[i]->length == array->length, "A tuple's child array must have the same size as the tuple itself.");
             }
         }
     }
@@ -188,8 +195,36 @@ protected:
     TDatumValidatorBase::TPtr Base_;
 };
 
+class TVariantValidator: public TDatumValidatorBase {
+public:
+    TVariantValidator(TVector<TDatumValidatorBase::TPtr>&& children, const NYql::NUdf::TType* type)
+        : TDatumValidatorBase(type)
+        , Children_(std::move(children))
+    {
+    }
+
+    void Validate(arrow::Datum datum) const override {
+        if (datum.is_scalar()) {
+            MKQL_ENSURE(datum.scalar()->is_valid, "Variant type invariant violation.");
+            const auto* variantScalar = arrow::internal::checked_cast<const NYql::NUdf::TDenseUnionScalar*>(datum.scalar().get());
+            MKQL_ENSURE(variantScalar, "Variant scalar expected.");
+            MKQL_ENSURE(variantScalar->Index < Children_.size(), "Variant type code out of range.");
+            Children_[variantScalar->Index]->Validate(arrow::Datum(variantScalar->value));
+        } else {
+            auto array = datum.array();
+            for (size_t i = 0; i < Children_.size(); ++i) {
+                Children_[i]->Validate(*array->child_data[i]);
+            }
+        }
+    }
+
+private:
+    TVector<TDatumValidatorBase::TPtr> Children_;
+};
+
 struct TValidatorTraits {
     using TResult = TDatumValidatorBase;
+    using TVariant = TVariantValidator;
 
     template <bool Nullable>
     using TTuple = TTupleValidator<Nullable>;
@@ -243,12 +278,12 @@ std::unique_ptr<TValidatorTraits::TResult> MakeBlockValidator(const NYql::NUdf::
 }
 
 arrow::Status ValidateArrayCheap(arrow::Datum datum, const TType* type) {
+    auto array = ConvertYqlOffsetsToArrowStandard(*datum.array());
+    ARROW_RETURN_NOT_OK(arrow::internal::ValidateArray(*array));
     if (type) {
         MakeBlockValidator(TTypeInfoHelper(), type)->Validate(datum);
     }
-    auto array = ConvertYqlOffsetsToArrowStandard(*datum.array());
-    arrow::Status status = arrow::internal::ValidateArray(*array);
-    return status;
+    return arrow::Status::OK();
 }
 
 arrow::Status ValidateArrayExpensive(arrow::Datum datum, const TType* type) {
@@ -257,21 +292,21 @@ arrow::Status ValidateArrayExpensive(arrow::Datum datum, const TType* type) {
     return arrow::internal::ValidateArrayFull(*array);
 }
 
-arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
+arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::EDatumValidationMode validateMode) {
     if (datum.is_arraylike()) {
         NYql::NUdf::TArgsDechunker dechunker({datum});
         std::vector<arrow::Datum> chunk;
         while (dechunker.Next(chunk)) {
-            Y_ENSURE(chunk[0].is_array());
+            Y_ENSURE(chunk[0].is_array(), "Chunk expected to be array. Got: " << chunk[0].ToString());
             switch (validateMode) {
-                case NYql::NUdf::EValidateDatumMode::None:
+                case NYql::EDatumValidationMode::None:
                     break;
-                case NYql::NUdf::EValidateDatumMode::Cheap:
+                case NYql::EDatumValidationMode::Cheap:
                     if (auto status = ValidateArrayCheap(chunk[0], type); !status.ok()) {
                         return status;
                     }
                     break;
-                case NYql::NUdf::EValidateDatumMode::Expensive:
+                case NYql::EDatumValidationMode::Expensive:
                     if (auto status = ValidateArrayExpensive(chunk[0], type); !status.ok()) {
                         return status;
                     }
@@ -287,16 +322,22 @@ arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::E
         // NOLINTNEXTLINE(misc-redundant-expression)
         static_assert(ARROW_VERSION_MAJOR == 5, "If you see this message please notify owners about update and remove this assert.");
     } else {
-        // Must be either arraylike or scalar.
-        Y_UNREACHABLE();
+        // Must be either arraylike, scalar, or collection.
+        ythrow yexception() << "Invalid datum type. Expected only: arraylike, scalar, or collection. Got: " << datum.ToString();
     }
     return arrow::Status::OK();
 }
 
 } // namespace
 
-void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
-    if (validateMode == NYql::NUdf::EValidateDatumMode::None) {
+void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type, NYql::EDatumValidationMode validateMode) {
+    if (validateMode == NYql::EDatumValidationMode::None) {
+        return;
+    }
+    if (datum.is_collection()) {
+        for (const auto& item : datum.collection()) {
+            ValidateDatum(item, expectedDescription, type, validateMode);
+        }
         return;
     }
     if (expectedDescription) {

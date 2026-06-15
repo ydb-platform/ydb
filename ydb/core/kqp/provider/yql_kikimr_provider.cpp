@@ -1,16 +1,20 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-
-#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
-#include <yql/essentials/providers/result/provider/yql_result_provider.h>
-#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/core/protos/pqconfig.pb.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
 
 namespace NYql {
 
@@ -158,7 +162,33 @@ struct TKikimrData {
     }
 };
 
-} // namespace
+} // anonymous namespace
+
+TKikimrQueryContext::TKikimrQueryContext(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
+    : QueryData(std::make_shared<NKikimr::NKqp::TQueryData>(functionRegistry, timeProvider, randomProvider))
+{}
+
+void TKikimrQueryContext::Reset() {
+    PrepareOnly = false;
+    SuppressDdlChecks = false;
+    StatsMode = EKikimrStatsMode::None;
+    Type = EKikimrQueryType::Unspecified;
+    Deadlines = {};
+    Limits = {};
+
+    PreparingQuery.reset();
+    PreparedQuery.reset();
+    QueryData->Clear();
+
+    Results.clear();
+    InProgress.clear();
+    ExecutionOrder.clear();
+
+    RlPath.Clear();
+    RpcCtx.reset();
+    TranslationSettings = NSQLTranslation::TTranslationSettings();
+}
 
 const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,
     const TString& table, TPositionHandle pos, TExprContext& ctx) const
@@ -213,8 +243,6 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
     return Tables[std::make_pair(cluster, tablePath)];
 }
 
-
-
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
     auto tablePath = table;
     if (TempTablesState) {
@@ -265,6 +293,13 @@ const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf
     YQL_ENSURE(desc->DoesExist());
 
     return *desc;
+}
+
+void TKikimrTablesData::AddIndexImplTableToMainTableMapping(const TString& mainTable, const TString& indexTable) {
+    auto [it, success] = IndexTableToMainTable.emplace(indexTable, mainTable);
+    if (!success) {
+        YQL_ENSURE(it->second == mainTable);
+    }
 }
 
 std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& table) const {
@@ -642,7 +677,6 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     return protoOps;
 }
 
-
 void FillLiteralProto(const NNodes::TCoPgConst& pgLiteral, Ydb::TypedValue& proto) {
     auto type = pgLiteral.Ref().GetTypeAnn();
     auto actualPgType = type->Cast<TPgExprType>();
@@ -892,6 +926,43 @@ const TYdbOperations& KikimrReadOps() {
     return Singleton<TKikimrData>()->ReadOps;
 }
 
+TKikimrSessionContext::TKikimrSessionContext(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    TIntrusivePtr<TKikimrConfiguration> config,
+    TIntrusivePtr<ITimeProvider> timeProvider,
+    TIntrusivePtr<IRandomProvider> randomProvider,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    TIntrusivePtr<TKikimrTransactionContextBase> txCtx,
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext)
+    : Configuration(config)
+    , TablesData(MakeIntrusive<TKikimrTablesData>())
+    , QueryCtx(MakeIntrusive<TKikimrQueryContext>(functionRegistry, timeProvider, randomProvider))
+    , TxCtx(txCtx)
+    , UserToken(userToken)
+    , UserRequestContext(userRequestContext)
+{}
+
+TIntrusivePtr<TKikimrConfiguration> TKikimrSessionContext::ConfigPtr() {
+    return Configuration;
+}
+
+TIntrusiveConstPtr<TKikimrConfiguration> TKikimrSessionContext::ConfigConstPtr() {
+    return Configuration;
+}
+
+void TKikimrSessionContext::SetInternalTypeAnnTransformer(THolder<TVisitorTransformerBase>&& transformer) {
+    InternalTypeAnnTransformer = std::move(transformer);
+}
+
+void TKikimrSessionContext::Reset(bool keepConfigChanges) {
+    TablesData->Reset();
+    QueryCtx->Reset();
+    ClearTx();
+
+    if (!keepConfigChanges) {
+        Configuration->Restore();
+    }
+}
+
 const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
     return Singleton<TKikimrData>()->SystemColumns;
 }
@@ -998,4 +1069,4 @@ void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, T
     settings.Flags.insert(serializedSettings.GetPragmas().begin(), serializedSettings.GetPragmas().end());
 }
 
-}
+} // namespace NSQLTranslation

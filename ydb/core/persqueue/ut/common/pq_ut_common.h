@@ -89,6 +89,7 @@ struct TTestContext {
     THolder<TTestActorRuntime> Runtime;
     TActorId Edge;
     THashMap<ui32, ui32> MsgSeqNoMap;
+    THashMap<ui32, TString> OwnerCookieMap;
     bool EnableDetailedPQLog = ENABLE_DETAILED_PQ_LOG;
 
     TTestContext() {
@@ -494,6 +495,7 @@ struct TPQCmdSettings : public TPQCmdSettingsBase {
 struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui32 Count = 0;
     ui32 Size = 0;
+    bool ReadToBlobEnd = true;
     ui32 ResCount = 0;
     bool Timeout = false;
     TVector<i32> Offsets;
@@ -577,6 +579,15 @@ void CmdRead(
     const ui64 readTimestampMs = 0,
     const TString user = "user",
     ui64* sizeLag = nullptr);
+
+void CmdReadWithoutReadToBlobEnd(
+    const ui32 partition,
+    const ui64 offset,
+    const ui32 count,
+    const ui32 size,
+    const ui32 resCount,
+    bool timeouted,
+    TTestContext& tc);
 
 void CmdRead(
     const TPQCmdReadSettings& settings,
@@ -664,6 +675,40 @@ struct TCmdWriteOptions {
     bool DisableDeduplication = false;
 };
 void CmdWrite(const TCmdWriteOptions&);
+
+struct TBatchedMessageSpec {
+    ui64 SeqNo = 0;
+    ui64 MessageCount = 0;
+    ui64 Offset = Max<ui64>();
+    char Fill = 'a';
+};
+
+void AssertBatchedReadResults(
+    const NKikimrClient::TCmdReadResult& readResult,
+    const TVector<TBatchedMessageSpec>& expected,
+    size_t dataSize);
+
+void CmdReadAndAssertBatched(
+    TPQCmdReadSettings settings,
+    TTestContext& tc,
+    const TVector<TBatchedMessageSpec>& expected,
+    size_t dataSize);
+
+NKikimrClient::TCmdReadResult CmdReadAndGetResult(
+    const TPQCmdReadSettings& settings,
+    TTestContext& tc);
+
+void CmdWriteBatched(
+    const ui32 partition,
+    const TString& sourceId,
+    ui64 seqNo,
+    const TString& data,
+    ui64 totalBatchMessages,
+    TTestContext& tc,
+    i64 offset = -1,
+    bool disableDeduplication = false,
+    std::optional<ui64> maxSeqNo = std::nullopt,
+    NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK);
 
 void CmdRunCompaction(TTestActorRuntime& runtime,
                       ui64 tabletId,

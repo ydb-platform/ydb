@@ -1,14 +1,14 @@
 #pragma once
 
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/pqdata_transaction.pb.h>
-#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
-#include <util/system/types.h>
 #include <util/digest/multi.h>
 #include <util/stream/fwd.h>
+#include <util/system/types.h>
 
 namespace NKikimr::NPQ {
 
@@ -72,7 +72,7 @@ void SetWriteId(NKikimrClient::TPersQueuePartitionRequest& m, const TWriteId& wr
 TWriteId GetWriteId(const NKikimrKqp::TTopicOperationsResponse& m);
 void SetWriteId(NKikimrKqp::TTopicOperationsResponse& m, const TWriteId& writeId);
 
-}
+} // namespace NKikimr::NPQ
 
 template <>
 struct THash<NKikimr::NPQ::TWriteId> {

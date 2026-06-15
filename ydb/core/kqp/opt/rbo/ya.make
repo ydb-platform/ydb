@@ -1,18 +1,23 @@
 LIBRARY()
 
 SRCS(
-    kqp_rbo_transformer.cpp
-    kqp_operator.cpp
     kqp_expression.cpp
-    kqp_stage_graph.cpp
+    kqp_operator.cpp
+    kqp_plan_conversion_utils.cpp
+    kqp_plan_to_json.cpp
+    kqp_rbo_compute_statistics.cpp
+    kqp_rbo_context.cpp
+    kqp_rbo_statistics.cpp
+    kqp_rbo_transformer.cpp
+    kqp_rbo_type_ann.cpp
     kqp_rbo_utils.cpp
     kqp_rbo.cpp
-    kqp_plan_conversion_utils.cpp
-    kqp_rbo_type_ann.cpp
     kqp_rewrite_select.cpp
-    kqp_rbo_compute_statistics.cpp
-    kqp_rbo_statistics.cpp
-    kqp_plan_to_json.cpp
+    kqp_stage_graph.cpp
+    analysis/logical_aliases.cpp
+    analysis/logical_liveness.cpp
+    analysis/logical_name_constraints.cpp
+    logical_renames.cpp
 )
 
 PEERDIR(

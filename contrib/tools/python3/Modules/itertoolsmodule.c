@@ -531,9 +531,19 @@ groupby_next(groupbyobject *gbo)
         else if (gbo->tgtkey == NULL)
             break;
         else {
-            int rcmp;
+            /* A user-defined __eq__ can re-enter groupby and advance the iterator,
+               mutating gbo->tgtkey / gbo->currkey while we are comparing them.
+               Take local snapshots and hold strong references so INCREF/DECREF
+               apply to the same objects even under re-entrancy. */
+            PyObject *tgtkey = gbo->tgtkey;
+            PyObject *currkey = gbo->currkey;
 
-            rcmp = PyObject_RichCompareBool(gbo->tgtkey, gbo->currkey, Py_EQ);
+            Py_INCREF(tgtkey);
+            Py_INCREF(currkey);
+            int rcmp = PyObject_RichCompareBool(tgtkey, currkey, Py_EQ);
+            Py_DECREF(tgtkey);
+            Py_DECREF(currkey);
+
             if (rcmp == -1)
                 return NULL;
             else if (rcmp == 0)
@@ -702,7 +712,16 @@ _grouper_next(_grouperobject *igo)
     }
 
     assert(gbo->currkey != NULL);
-    rcmp = PyObject_RichCompareBool(igo->tgtkey, gbo->currkey, Py_EQ);
+    /* A user-defined __eq__ can re-enter the grouper and advance the iterator,
+       mutating gbo->currkey while we are comparing them.
+       Take local snapshots and hold strong references so INCREF/DECREF
+       apply to the same objects even under re-entrancy. */
+    PyObject *tgtkey = Py_NewRef(igo->tgtkey);
+    PyObject *currkey = Py_NewRef(gbo->currkey);
+    rcmp = PyObject_RichCompareBool(tgtkey, currkey, Py_EQ);
+    Py_DECREF(tgtkey);
+    Py_DECREF(currkey);
+
     if (rcmp <= 0)
         /* got any error or current group is end */
         return NULL;

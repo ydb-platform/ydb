@@ -213,6 +213,7 @@ public:
     TFuture<void> Close() override;
 
     TFuture<void> WriteBody(const TSharedRef& smallBody) override;
+    TFuture<void> WriteBody(TRange<TSharedRef> bodyParts) override;
 
     void AddConnectionCloseHeader() override;
 

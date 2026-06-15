@@ -16,7 +16,8 @@ class TChunksNormalizer::TNormalizerResult: public INormalizerChanges {
 
 public:
     TNormalizerResult(std::vector<TChunksNormalizer::TChunkInfo>&& chunks)
-        : Chunks(std::move(chunks)) {
+        : Chunks(std::move(chunks))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
@@ -80,7 +81,8 @@ public:
         std::vector<TChunksNormalizer::TChunkInfo>&& chunks, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>)
         : Blobs(std::move(blobs))
         , Chunks(std::move(chunks))
-        , NormContext(nCtx) {
+        , NormContext(nCtx)
+    {
     }
 
     virtual TString GetTaskClassIdentifier() const override {

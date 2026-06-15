@@ -15,13 +15,12 @@ namespace NKikimr::NSqsTopic::V1 {
     std::expected<TQueueAttributes, std::string> ParseQueueAttributes(
         const google::protobuf::Map<TString, TString>& attributes,
         const TString& queueName,
-        const TString& consumerName,
+        const TString& /*consumerName*/,
         const TString& database,
         EConsumerAttributeUsageTarget usageTarget
     ) {
         TQueueAttributes result;
 
-        auto& config = result.Consumer;
         bool fifoQueueByName = queueName.EndsWith(".fifo");
         TMaybe<bool> fifoQueueByAttr;
 
@@ -33,20 +32,19 @@ namespace NKikimr::NSqsTopic::V1 {
                 if (!timeout) {
                     return std::unexpected(std::format("Invalid VisibilityTimeout"));
                 }
-                config.SetDefaultProcessingTimeoutSeconds(*timeout);
+                result.DefaultProcessingTimeout = TDuration::Seconds(*timeout);
             } else if (key == "DelaySeconds") {
                 TMaybe<ui32> delay = TryFromString<ui32>(value);
                 if (!delay) {
                     return std::unexpected(std::format("Invalid DelaySeconds"));
                 }
                 result.ReceiveMessageDelay = TDuration::Seconds(*delay);
-                config.SetDefaultDelayMessageTimeMs(static_cast<ui64>(*delay) * 1000);
             } else if (key == "ReceiveMessageWaitTimeSeconds") {
                 TMaybe<ui32> waitTime = TryFromString<ui32>(value);
                 if (!waitTime) {
                     return std::unexpected(std::format("Invalid ReceiveMessageWaitTimeSeconds"));
                 }
-                config.SetDefaultReceiveMessageWaitTimeMs(*waitTime * 1000);
+                result.ReceiveMessageWaitTime = TDuration::Seconds(*waitTime);
             } else if (key == "FifoQueue") {
                 fifoQueueByAttr = IsTrue(value);
             } else if (key == "ContentBasedDeduplication") {
@@ -66,9 +64,7 @@ namespace NKikimr::NSqsTopic::V1 {
                     }
                     {
                         ui32 maxAttempts = json["maxReceiveCount"].GetUIntegerRobust();
-                        config.SetMaxProcessingAttempts(maxAttempts);
-                        config.SetDeadLetterPolicyEnabled(true);
-                        config.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+                        result.MaxReceiveCount = maxAttempts;
                     }
                     {
                         TString arn = json["deadLetterTargetArn"].GetStringRobust();
@@ -80,7 +76,7 @@ namespace NKikimr::NSqsTopic::V1 {
                         if (dlqUrl->Database != database) {
                             return std::unexpected(TString::Join("DLQ database '", dlqUrl->Database, "' does not match queue database '", database, "'"));
                         }
-                        config.SetDeadLetterQueue(dlqUrl->TopicPath);
+                        result.DeadLetterQueue = dlqUrl->TopicPath;
                     }
                 } catch (...) {
                     return std::unexpected("Failed to parse RedrivePolicy");
@@ -91,7 +87,6 @@ namespace NKikimr::NSqsTopic::V1 {
                     return std::unexpected(std::format("Invalid MessageRetentionPeriod"));
                 }
                 result.MessageRetentionPeriod = TDuration::Seconds(*period);
-                config.SetAvailabilityPeriodMs(TDuration::Seconds(*period).MilliSeconds());
             } else if (key == "MaximumMessageSize") {
                 TMaybe<ui32> size = TryFromString<ui32>(value);
                 if (!size) {
@@ -119,11 +114,8 @@ namespace NKikimr::NSqsTopic::V1 {
                 return std::unexpected("Fifo queue with an '.fifo' suffix should have the FifoQueue attribute");
             }
         }
-        const bool fifoQueue = fifoQueueByName || fifoQueueByAttr.GetOrElse(false);
 
-        config.SetName(consumerName);
-        config.SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
-        config.SetKeepMessageOrder(fifoQueue);
+        result.FifoQueue = fifoQueueByName || fifoQueueByAttr.GetOrElse(false);
 
         return result;
     }
@@ -133,13 +125,11 @@ namespace NKikimr::NSqsTopic::V1 {
         const NKikimrPQ::TPQTabletConfig::TConsumer& existingConsumer,
         const TQueueAttributes& newConfig
     ) {
-        const auto& newConsumer = newConfig.Consumer;
-
-        if (newConsumer.HasDefaultProcessingTimeoutSeconds() &&
-            existingConsumer.GetDefaultProcessingTimeoutSeconds() != newConsumer.GetDefaultProcessingTimeoutSeconds()) {
+        if (newConfig.DefaultProcessingTimeout.Defined() &&
+            existingConsumer.GetDefaultProcessingTimeoutSeconds() != newConfig.DefaultProcessingTimeout->Seconds()) {
             return std::unexpected(std::format(
                 "VisibilityTimeout mismatch: new value is {} seconds, existing value is {} seconds",
-                newConsumer.GetDefaultProcessingTimeoutSeconds(),
+                newConfig.DefaultProcessingTimeout->Seconds(),
                 existingConsumer.GetDefaultProcessingTimeoutSeconds()
             ));
         }
@@ -155,20 +145,19 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
-        if (newConsumer.HasDefaultReceiveMessageWaitTimeMs() &&
-            existingConsumer.GetDefaultReceiveMessageWaitTimeMs() != newConsumer.GetDefaultReceiveMessageWaitTimeMs()) {
+        if (newConfig.ReceiveMessageWaitTime.Defined() &&
+            existingConsumer.GetDefaultReceiveMessageWaitTimeMs() != newConfig.ReceiveMessageWaitTime->Seconds() * 1000) {
             return std::unexpected(std::format(
                 "ReceiveMessageWaitTimeSeconds mismatch: new value is {} ms, existing value is {} ms",
-                newConsumer.GetDefaultReceiveMessageWaitTimeMs(),
+                newConfig.ReceiveMessageWaitTime->Seconds() * 1000,
                 existingConsumer.GetDefaultReceiveMessageWaitTimeMs()
             ));
         }
 
-        if (newConsumer.HasKeepMessageOrder() &&
-            existingConsumer.GetKeepMessageOrder() != newConsumer.GetKeepMessageOrder()) {
+        if (existingConsumer.GetKeepMessageOrder() != newConfig.FifoQueue) {
             return std::unexpected(std::format(
                 "FifoQueue mismatch: new value is {}, existing value is {}",
-                newConsumer.GetKeepMessageOrder(),
+                newConfig.FifoQueue,
                 existingConsumer.GetKeepMessageOrder()
             ));
         }
@@ -184,37 +173,19 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
-        if (newConsumer.HasMaxProcessingAttempts() &&
-            existingConsumer.GetMaxProcessingAttempts() != newConsumer.GetMaxProcessingAttempts()) {
+        if (newConfig.MaxReceiveCount.Defined() &&
+            existingConsumer.GetMaxProcessingAttempts() != *newConfig.MaxReceiveCount) {
             return std::unexpected(std::format(
                 "MaxReceiveCount mismatch: new value is {}, existing value is {}",
-                newConsumer.GetMaxProcessingAttempts(),
+                *newConfig.MaxReceiveCount,
                 existingConsumer.GetMaxProcessingAttempts()
             ));
         }
 
-        if (newConsumer.HasDeadLetterPolicyEnabled() &&
-            existingConsumer.GetDeadLetterPolicyEnabled() != newConsumer.GetDeadLetterPolicyEnabled()) {
-            return std::unexpected(std::format(
-                "DeadLetterPolicyEnabled mismatch: new value is {}, existing value is {}",
-                newConsumer.GetDeadLetterPolicyEnabled(),
-                existingConsumer.GetDeadLetterPolicyEnabled()
-            ));
-        }
-
-        if (newConsumer.HasDeadLetterPolicy() &&
-            existingConsumer.GetDeadLetterPolicy() != newConsumer.GetDeadLetterPolicy()) {
-            return std::unexpected(std::format(
-                "DeadLetterPolicy mismatch: new value is {}, existing value is {}",
-                static_cast<int>(newConsumer.GetDeadLetterPolicy()),
-                static_cast<int>(existingConsumer.GetDeadLetterPolicy())
-            ));
-        }
-
-        if (newConsumer.HasDeadLetterQueue() &&
-            existingConsumer.GetDeadLetterQueue() != newConsumer.GetDeadLetterQueue()) {
+        if (newConfig.DeadLetterQueue.Defined() &&
+            existingConsumer.GetDeadLetterQueue() != *newConfig.DeadLetterQueue) {
             return std::unexpected(TStringBuilder()
-                << "DeadLetterQueue mismatch: new value is '" << newConsumer.GetDeadLetterQueue()
+                << "DeadLetterQueue mismatch: new value is '" << *newConfig.DeadLetterQueue
                 << "', existing value is '" << existingConsumer.GetDeadLetterQueue() << "'");
         }
 
@@ -234,10 +205,8 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     std::expected<void, std::string> ValidateLimits(const TQueueAttributes& config) {
-        const auto& consumer = config.Consumer;
-
-        if (consumer.HasDefaultProcessingTimeoutSeconds()) {
-            if (consumer.GetDefaultProcessingTimeoutSeconds() > NSQS::TLimits::MaxVisibilityTimeout.Seconds()) {
+        if (config.DefaultProcessingTimeout.Defined()) {
+            if (config.DefaultProcessingTimeout->Seconds() > NSQS::TLimits::MaxVisibilityTimeout.Seconds()) {
                 return std::unexpected(std::format(
                     "VisibilityTimeout exceeds maximum of {} seconds",
                     NSQS::TLimits::MaxVisibilityTimeout.Seconds()
@@ -254,8 +223,8 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
-        if (consumer.HasMaxProcessingAttempts()) {
-            ui32 attempts = consumer.GetMaxProcessingAttempts();
+        if (config.MaxReceiveCount.Defined()) {
+            ui32 attempts = *config.MaxReceiveCount;
             if (attempts < NSQS::TLimits::MinMaxReceiveCount ||
                 attempts > NSQS::TLimits::MaxMaxReceiveCount) {
                 return std::unexpected(std::format(

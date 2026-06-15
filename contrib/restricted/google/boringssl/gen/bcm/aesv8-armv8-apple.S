@@ -4,10 +4,9 @@
 #include <contrib/restricted/google/boringssl/include/openssl/asm_base.h>
 
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
-#include <contrib/restricted/google/boringssl/include/openssl/arm_arch.h>
-
 #if __ARM_MAX_ARCH__>=7
 .text
+.arch_extension crypto
 
 .section	__TEXT,__const
 .align	5
@@ -28,11 +27,6 @@ Lenc_key:
 	AARCH64_VALID_CALL_TARGET
 	stp	x29,x30,[sp,#-16]!
 	add	x29,sp,#0
-	mov	x3,#-1
-	cmp	x0,#0
-	b.eq	Lenc_key_abort
-	cmp	x2,#0
-	b.eq	Lenc_key_abort
 	mov	x3,#-2
 	cmp	w1,#128
 	b.lt	Lenc_key_abort

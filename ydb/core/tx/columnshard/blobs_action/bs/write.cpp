@@ -1,4 +1,5 @@
 #include "write.h"
+
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
@@ -31,4 +32,4 @@ void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlo
     return BlobBatch.SendWriteBlobRequest(data, blobId, TInstant::Max(), TActorContext::AsActorContext());
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

@@ -79,7 +79,7 @@ public:
         size_t RetryAttempt = 0;
         size_t SuccessBatches = 0;
 
-        TMaybe<ui32> NodeId = {};
+        TMaybe<ui32> NodeId;
         bool IsFirst = false;
         bool IsFake = false;
 
@@ -414,6 +414,7 @@ public:
                 hFunc(TEvRetryShard, HandleRetry);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
+                cFunc(TEvents::TEvPoison::EventType, PassAway);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -738,12 +739,12 @@ public:
         }
     }
 
-    bool CheckTotalRetriesExeeded() {
+    bool CheckTotalRetriesExceeded() {
         const auto limit = MaxTotalRetries();
         return limit && TotalRetries + 1 > *limit;
     }
 
-    bool CheckShardRetriesExeeded(ui64 id) {
+    bool CheckShardRetriesExceeded(ui64 id) {
         if (!Reads[id] || Reads[id].Finished) {
             return false;
         }
@@ -752,26 +753,31 @@ public:
         return state->RetryAttempt + 1 > MaxShardRetries();
     }
 
-    void RetryRead(ui64 id, bool allowInstantRetry = true) {
+    void RetryRead(ui64 id, bool allowInstantRetry = true, std::optional<TDuration> throttleDelay = std::nullopt) {
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
 
-        auto state = Reads[id].Shard;
+        auto* state = Reads[id].Shard;
 
-        if (CheckTotalRetriesExeeded()) {
-            return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
-                NDqProto::StatusIds::UNAVAILABLE);
+        TDuration delay;
+        if (!throttleDelay) {
+            if (CheckTotalRetriesExceeded()) {
+                return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
+                    NDqProto::StatusIds::UNAVAILABLE);
+            }
+            ++TotalRetries;
+
+            if (CheckShardRetriesExceeded(id)) {
+                ResetRead(id);
+                return ResolveShard(state);
+            }
+            ++state->RetryAttempt;
+            delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
-        ++TotalRetries;
 
-        if (CheckShardRetriesExeeded(id)) {
-            ResetRead(id);
-            return ResolveShard(state);
-        }
-        ++state->RetryAttempt;
-
-        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             return DoRetryRead(id);
         }
@@ -892,6 +898,11 @@ public:
             *record.MutableVectorTopK() = Settings->GetVectorTopK();
         }
 
+        if (Settings->HasPoolId()) {
+            record.SetDatabaseId(Settings->GetDatabase());
+            record.SetPoolId(Settings->GetPoolId());
+        }
+
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
             << ", limit: " << limit
@@ -925,7 +936,7 @@ public:
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    TString DebugPrintContionuationToken(TString s) {
+    TString DebugPrintContinuationToken(TString s) {
         NKikimrTxDataShard::TReadContinuationToken token;
         Y_ABORT_UNLESS(token.ParseFromString(s));
         TString lastKey = "(empty)";
@@ -1024,15 +1035,18 @@ public:
                 break;
             }
             case Ydb::StatusIds::OVERLOADED: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!throttleDelay && (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id))) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
                 }
-                return RetryRead(id, false);
+                return RetryRead(id, false, throttleDelay);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                if (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id)) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -1040,7 +1054,7 @@ public:
                 return RetryRead(id);
             }
             case Ydb::StatusIds::NOT_FOUND: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                if (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id)) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::UNAVAILABLE);
@@ -1099,7 +1113,7 @@ public:
         CA_LOG_D(TStringBuilder() << "new data for read #" << id
             << " seqno = " << seqNo
             << " finished = " << record.GetFinished());
-        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(&msg) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
+        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(&msg) << " continuation token " << DebugPrintContinuationToken(record.GetContinuationToken()));
 
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();

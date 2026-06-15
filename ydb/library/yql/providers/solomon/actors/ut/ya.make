@@ -16,7 +16,6 @@ SRCS(
 PEERDIR(
     library/cpp/http/simple
     library/cpp/retry
-    ydb/core/testlib/basics
     ydb/library/testlib/solomon_helpers
     ydb/library/yql/providers/common/ut_helpers
     yql/essentials/minikql/computation/llvm16

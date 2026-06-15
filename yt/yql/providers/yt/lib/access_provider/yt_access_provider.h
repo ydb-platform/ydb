@@ -3,7 +3,6 @@
 #include <yt/yql/providers/yt/lib/tvm_client/tvm_client.h>
 
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <util/generic/ptr.h>
 

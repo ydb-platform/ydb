@@ -9,10 +9,58 @@ from hamcrest import assert_that, is_, not_
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common import types
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 logger = logging.getLogger(__name__)
+
+
+def wait_until_discovery_includes_all_slot_ports(
+    cluster,
+    resolver,
+    timeout_seconds=30,
+    step_seconds=0.5,
+    message=None,
+):
+    """Wait until ListEndpoints returns every tenant slot gRPC port (handles board publish lag)."""
+    required = {slot.grpc_port for slot in cluster.slots.values()}
+    last_observed = {"ports": None, "debug_details": None}
+
+    def capture_debug_details():
+        debug_details_getter = getattr(resolver, "debug_details", None)
+        if not callable(debug_details_getter):
+            return
+        try:
+            last_observed["debug_details"] = debug_details_getter()
+        except Exception as e:
+            last_observed["debug_details"] = "debug_details() failed: %r" % (e,)
+
+    def predicate():
+        try:
+            resolved = resolver.resolve()
+            if resolved is None:
+                last_observed["ports"] = None
+                return False
+
+            ports = sorted(endpoint.port for endpoint in resolved.endpoints)
+            last_observed["ports"] = ports
+            return required <= set(ports)
+        finally:
+            # Capture debug_details after resolve() so the failure message
+            # reflects the most recent attempt (resolve() itself appends details).
+            capture_debug_details()
+
+    assert_that(
+        wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=step_seconds),
+        is_(True),
+        message
+        or (
+            "ListEndpoints should include every tenant slot port; "
+            "expected %s, last resolved %s, resolver details %r"
+            % (sorted(required), last_observed["ports"], last_observed["debug_details"])
+        ),
+    )
 
 
 class TestDiscoveryExtEndpoint(object):
@@ -51,6 +99,12 @@ class TestDiscoveryExtEndpoint(object):
         resolver = ydb.DiscoveryEndpointsResolver(driver_config)
         driver = ydb.Driver(driver_config)
         driver.wait(timeout=10)
+
+        wait_until_discovery_includes_all_slot_ports(
+            self.cluster,
+            resolver,
+            message="ListEndpoints via default gRPC should include every tenant slot port; missing after wait",
+        )
 
         endpoint_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
         # Discovery has been performed using default endpoint
@@ -149,6 +203,12 @@ class AbstractTestDiscoveryFaultInjection(object):
         driver = ydb.Driver(driver_config)
         driver.wait(timeout=10)
 
+        wait_until_discovery_includes_all_slot_ports(
+            self.cluster,
+            resolver,
+            message="ListEndpoints should include every tenant slot before fault injection",
+        )
+
         initial_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
         initial_ports = initial_ports[:1]
 
@@ -189,14 +249,41 @@ class AbstractTestDiscoveryFaultInjection(object):
                 self.extract_fault(slot)
                 self.logger.info("Extracted fault, slot with gRPC port: %s" % slot.grpc_port)
 
-        # monkey waiting until gRPC machinery will complete recovery
-        time.sleep(3)
+        last_recovery_error = {"exception": None}
 
-        # ensure zero errors by internal error
-        for _ in range(10):
+        def prepare_select_one_succeeds():
+            session = None
+            try:
+                session = driver.table_client.session().create()
+                session.prepare('select 1')
+                return True
+            except Exception as e:
+                last_recovery_error["exception"] = e
+                return False
+            finally:
+                if session is not None:
+                    try:
+                        session.delete()
+                    except Exception:
+                        pass
+
+        assert_that(
+            wait_for(prepare_select_one_succeeds, timeout_seconds=120, step_seconds=1.0),
+            is_(True),
+            "Database did not recover after fault extraction (prepare select 1); last error: %r"
+            % (last_recovery_error["exception"],),
+        )
+
+        # ensure zero errors once healthy
+        for _ in range(9):
             session = driver.table_client.session().create()
-            session.prepare(
-                'select 1')
+            try:
+                session.prepare('select 1')
+            finally:
+                try:
+                    session.delete()
+                except Exception:
+                    pass
 
 
 class TestDiscoveryFaultInjectionSlotStop(AbstractTestDiscoveryFaultInjection):

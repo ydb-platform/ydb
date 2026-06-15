@@ -11,7 +11,7 @@ from textual._loop import loop_last
 from textual.binding import Binding, BindingType
 from textual.cache import LRUCache
 from textual.css.styles import RulesMap
-from textual.geometry import Region, Size, clamp
+from textual.geometry import Region, Size, Spacing, clamp
 from textual.message import Message
 from textual.reactive import reactive
 from textual.scroll_view import ScrollView
@@ -139,6 +139,13 @@ class OptionList(ScrollView, can_focus=True):
         border: tall $border-blurred;
         padding: 0 1;
         background: $surface;
+        &.-textual-compact {
+            border: none !important;
+            padding: 0;
+            & > .option-list--option {
+                padding: 0;
+            }
+        }
         & > .option-list--option-highlighted {
             color: $block-cursor-blurred-foreground;
             background: $block-cursor-blurred-background;
@@ -165,7 +172,7 @@ class OptionList(ScrollView, can_focus=True):
         }
         & > .option-list--option-hover {
             background: $block-hover-background;
-        }        
+        }
     }
     """
 
@@ -191,6 +198,9 @@ class OptionList(ScrollView, can_focus=True):
 
     _mouse_hovering_over: reactive[int | None] = reactive(None)
     """The index of the option under the mouse or `None`."""
+
+    compact: reactive[bool] = reactive(False, toggle_class="-textual-compact")
+    """Enable compact display?"""
 
     class OptionMessage(Message):
         """Base class for all option messages."""
@@ -252,6 +262,7 @@ class OptionList(ScrollView, can_focus=True):
         classes: str | None = None,
         disabled: bool = False,
         markup: bool = True,
+        compact: bool = False,
     ):
         """Initialize an OptionList.
 
@@ -261,18 +272,20 @@ class OptionList(ScrollView, can_focus=True):
             id: The ID of the OptionList in the DOM.
             classes: Initial CSS classes.
             disabled: Disable the widget?
-            markup: Strips should be rendered as Textual markup if `True`, or plain text if `False`.
+            markup: Strips should be rendered as content markup if `True`, or plain text if `False`.
+            compact: Enable compact style?
         """
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
         self._markup = markup
+        self.compact = compact
         self._options: list[Option] = []
         """List of options."""
         self._id_to_option: dict[str, Option] = {}
         """Maps an Options's ID on to the option itself."""
         self._option_to_index: dict[Option, int] = {}
-        """Maps an Option to it's index in self._options."""
+        """Maps an Option to its index in self._options."""
 
-        self._option_render_cache: LRUCache[tuple[Option, Style], list[Strip]]
+        self._option_render_cache: LRUCache[tuple[Option, Style, Spacing], list[Strip]]
         self._option_render_cache = LRUCache(maxsize=1024 * 2)
         """Caches rendered options."""
 
@@ -298,6 +311,18 @@ class OptionList(ScrollView, can_focus=True):
         """The number of options."""
         return len(self._options)
 
+    @property
+    def highlighted_option(self) -> Option | None:
+        """The currently highlighted option, or `None` if no option is highlighted.
+
+        Returns:
+            An Option, or `None`.
+        """
+        if self.highlighted is not None:
+            return self.options[self.highlighted]
+        else:
+            return None
+
     def clear_options(self) -> Self:
         """Clear the content of the option list.
 
@@ -311,6 +336,27 @@ class OptionList(ScrollView, can_focus=True):
         self._option_to_index.clear()
         self.highlighted = None
         self.refresh()
+        self.scroll_y = 0
+        self._update_lines()
+        return self
+
+    def set_options(self, options: Iterable[OptionListContent]) -> Self:
+        """Set options, potentially clearing existing options.
+
+        Args:
+            options: Options to set.
+
+        Returns:
+            The `OptionList` instance.
+        """
+        self._options.clear()
+        self._line_cache.clear()
+        self._option_render_cache.clear()
+        self._id_to_option.clear()
+        self._option_to_index.clear()
+        self.highlighted = None
+        self.scroll_y = 0
+        self.add_options(options)
         return self
 
     def add_options(self, new_options: Iterable[OptionListContent]) -> Self:
@@ -318,6 +364,9 @@ class OptionList(ScrollView, can_focus=True):
 
         Args:
             new_options: Content of new options.
+
+        Returns:
+            The `OptionList` instance.
         """
 
         new_options = list(new_options)
@@ -358,6 +407,7 @@ class OptionList(ScrollView, can_focus=True):
                 self._id_to_option[option._id] = option
             add_option(option)
         if self.is_mounted:
+            self.refresh(layout=self.styles.auto_dimensions)
             self._update_lines()
         return self
 
@@ -534,7 +584,7 @@ class OptionList(ScrollView, can_focus=True):
             del self._id_to_option[option._id]
         del self._option_to_index[option]
         self.highlighted = self.highlighted
-        self.refresh()
+        self._clear_caches()
         return self
 
     def _pre_remove_option(self, option: Option, index: int) -> None:
@@ -656,7 +706,7 @@ class OptionList(ScrollView, can_focus=True):
         self.refresh()
 
     def notify_style_update(self) -> None:
-        self._clear_caches()
+        self.refresh()
         super().notify_style_update()
 
     def _on_resize(self):
@@ -730,8 +780,8 @@ class OptionList(ScrollView, can_focus=True):
         """Get rendered option with a given style.
 
         Args:
+            option: An option.
             style: Style of render.
-            index: Index of the option.
 
         Returns:
             A list of strips.
@@ -739,7 +789,7 @@ class OptionList(ScrollView, can_focus=True):
         padding = self.get_component_styles("option-list--option").padding
         render_width = self.scrollable_content_region.width
         width = render_width - self._get_left_gutter_width()
-        cache_key = (option, style)
+        cache_key = (option, style, padding)
         if (strips := self._option_render_cache.get(cache_key)) is None:
             visual = self._get_visual(option)
             if padding:
@@ -759,8 +809,7 @@ class OptionList(ScrollView, can_focus=True):
 
     def _update_lines(self) -> None:
         """Update internal structures when new lines are added."""
-        if not self.options or not self.scrollable_content_region:
-            # No options -- nothing to
+        if not self.scrollable_content_region:
             return
 
         line_cache = self._line_cache
@@ -783,8 +832,10 @@ class OptionList(ScrollView, can_focus=True):
                 )
 
         last_divider = self.options and self.options[-1]._divider
-        self.virtual_size = Size(width, len(lines) - (1 if last_divider else 0))
-        self._scroll_update(self.virtual_size)
+        virtual_size = Size(width, len(lines) - (1 if last_divider else 0))
+        if virtual_size != self.virtual_size:
+            self.virtual_size = virtual_size
+            self._scroll_update(virtual_size)
 
     def get_content_width(self, container: Size, viewport: Size) -> int:
         """Get maximum width of options."""
@@ -836,7 +887,10 @@ class OptionList(ScrollView, can_focus=True):
             option_index, line_offset = self._lines[line_number]
             option = self.options[option_index]
         except IndexError:
-            return Strip.blank(self.scrollable_content_region.width)
+            return Strip.blank(
+                self.scrollable_content_region.width,
+                self.get_visual_style("option-list--option").rich_style,
+            )
 
         mouse_over = self._mouse_hovering_over == option_index
         component_class = ""
@@ -856,7 +910,10 @@ class OptionList(ScrollView, can_focus=True):
         try:
             strip = strips[line_offset]
         except IndexError:
-            return Strip.blank(self.scrollable_content_region.width)
+            return Strip.blank(
+                self.scrollable_content_region.width,
+                self.get_visual_style("option-list--option").rich_style,
+            )
         return strip
 
     def validate_highlighted(self, highlighted: int | None) -> int | None:

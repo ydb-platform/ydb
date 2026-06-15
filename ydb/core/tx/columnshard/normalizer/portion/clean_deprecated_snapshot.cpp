@@ -37,8 +37,10 @@ private:
 
 public:
     TChanges(std::vector<TColumnChunkLoadContext>&& chunks)
-        : Chunks(std::move(chunks)) {
+        : Chunks(std::move(chunks))
+    {
     }
+
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -73,7 +75,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TCleanDeprecatedSnapshotNormaliz
     if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
         return std::vector<INormalizerTask::TPtr>();
     }
-    
+
     auto batchesToDelete = GetChunksToRewrite(txc, DsGroupSelector);
     if (!batchesToDelete) {
         return TConclusionStatus::Fail("Not ready");

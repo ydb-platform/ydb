@@ -1,7 +1,8 @@
 #pragma once
 
-#include "task.h"
 #include "events.h"
+#include "task.h"
+
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 
@@ -13,6 +14,7 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 class TActor: public TActorBootstrapped<TActor> {
 private:
     std::shared_ptr<ITask> Task;
+
 public:
     static TAtomicCounter WaitingBlobsCount;
     TActor(const std::shared_ptr<ITask>& task);
@@ -33,4 +35,4 @@ public:
     ~TActor();
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NRead

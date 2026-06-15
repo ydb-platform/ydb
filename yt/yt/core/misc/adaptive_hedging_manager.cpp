@@ -20,12 +20,17 @@ struct THedgingRequest final
 {
     THedgingRequest(
         TFuture<void> primaryRequestFuture,
+        int hedgingPrice,
         TClosure startSecondaryRequest)
         : PrimaryRequestFuture(std::move(primaryRequestFuture))
+        , HedgingPrice(hedgingPrice)
         , StartSecondaryRequest(std::move(startSecondaryRequest))
-    { }
+    {
+        YT_VERIFY(HedgingPrice > 0);
+    }
 
-    TFuture<void> PrimaryRequestFuture;
+    const TFuture<void> PrimaryRequestFuture;
+    const int HedgingPrice;
     TClosure StartSecondaryRequest;
 };
 
@@ -53,43 +58,47 @@ public:
     {
         YT_VERIFY(Config_->SecondaryRequestRatio);
 
-        HedgingDelay_.store(Config_->MaxHedgingDelay, std::memory_order::release);
+        HedgingDelay_.store(Config_->MaxHedgingDelay.MicroSeconds(), std::memory_order::release);
         TokenCount_.store(Config_->MaxTokenCount, std::memory_order::release);
     }
 
     void RegisterRequest(
         TFuture<void> requestFuture,
+        int hedgingPrice,
         TClosure startSecondaryRequest) override
     {
+        hedgingPrice = std::min(hedgingPrice, Config_->MaxTokenCount);
+
         PrimaryRequestCount_.fetch_add(1, std::memory_order::relaxed);
 
         auto hedgingRequest = New<THedgingRequest>(
             std::move(requestFuture),
+            hedgingPrice,
             std::move(startSecondaryRequest));
 
-        auto hedgingDelay = HedgingDelay_.load(std::memory_order::relaxed);
+        auto hedgingDelay = TDuration::MicroSeconds(HedgingDelay_.load(std::memory_order::relaxed));
 
         TDelayedExecutor::Submit(
             BIND([request = std::move(hedgingRequest), this, this_ = MakeStrong(this)] () mutable {
                 if (request->PrimaryRequestFuture.IsSet()) {
-                    AdjustHedgingDelay(/*isRequestHedged*/ false);
+                    AdjustHedgingDelay(/*isRequestHedged*/ false, request->HedgingPrice);
                     return;
                 }
 
-                AdjustHedgingDelay(/*isRequestHedged*/ true);
+                AdjustHedgingDelay(/*isRequestHedged*/ true, request->HedgingPrice);
                 TryRunSecondaryRequest(std::move(request));
             }),
             hedgingDelay,
             GetCurrentInvoker());
 
         auto tokenCount = IncreaseToken();
+        // Fast path.
         if (tokenCount < 1.) {
             return;
         }
 
-        auto isQueueEmpty = IsQueueEmpty();
-
-        while (!isQueueEmpty && tokenCount >= 1.) {
+        auto maybeNextRequestPrice = PeekNextRequestPrice();
+        while (maybeNextRequestPrice && tokenCount >= maybeNextRequestPrice) {
             std::vector<TClosure> secondaryRequestGenerators;
             // Will be destroyed at the end of cycle.
             std::vector<THedgingRequestPtr> requestsForRemoval;
@@ -97,7 +106,7 @@ public:
             DequeueRequests(
                 &secondaryRequestGenerators,
                 &requestsForRemoval,
-                &isQueueEmpty,
+                &maybeNextRequestPrice,
                 &tokenCount);
 
             for (const auto& requestGenerator : secondaryRequestGenerators) {
@@ -115,14 +124,14 @@ public:
             .SecondaryRequestCount = SecondaryRequestCount_.exchange(0, std::memory_order::relaxed),
             .QueuedRequestCount = QueuedRequestCount_.exchange(0, std::memory_order::relaxed),
             .MaxQueueSize = MaxQueueSize_.exchange(0, std::memory_order::relaxed),
-            .HedgingDelay = HedgingDelay_.load(std::memory_order::relaxed),
+            .HedgingDelay = TDuration::MicroSeconds(HedgingDelay_.load(std::memory_order::relaxed)),
         };
     }
 
 private:
     const TAdaptiveHedgingManagerConfigPtr Config_;
 
-    std::atomic<TDuration> HedgingDelay_;
+    std::atomic<double> HedgingDelay_;
     std::atomic<double> TokenCount_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DequeLock_);
@@ -136,7 +145,8 @@ private:
 
     void TryRunSecondaryRequest(THedgingRequestPtr request)
     {
-        if (IsQueueEmpty() && TryDeductToken() >= 1.) {
+        bool isQueueEmpty = !PeekNextRequestPrice().has_value();
+        if (isQueueEmpty && TryDeductTokens(request->HedgingPrice)) {
             SecondaryRequestCount_.fetch_add(1, std::memory_order::relaxed);
             // NB: We don't need this request object anymore.
             request->StartSecondaryRequest.Run();
@@ -145,31 +155,37 @@ private:
         }
     }
 
-    void AdjustHedgingDelay(bool isRequestHedged)
+    void AdjustHedgingDelay(bool isRequestHedged, int hedgingPrice)
     {
         auto hedgingDelay = HedgingDelay_.load(std::memory_order::relaxed);
         if (Config_->HedgingDelayTuneFactor != 1) {
             if (*Config_->SecondaryRequestRatio == 1) {
-                hedgingDelay = TDuration::Zero();
+                hedgingDelay = 0.0;
             } else if (isRequestHedged) {
-                hedgingDelay *= std::pow(Config_->HedgingDelayTuneFactor, 1. / *Config_->SecondaryRequestRatio - 1.);
+                hedgingDelay *= std::pow(Config_->HedgingDelayTuneFactor, hedgingPrice / *Config_->SecondaryRequestRatio - 1.);
             } else {
                 hedgingDelay /= Config_->HedgingDelayTuneFactor;
             }
         }
 
-        hedgingDelay = std::max(Config_->MinHedgingDelay, std::min(Config_->MaxHedgingDelay, hedgingDelay));
+        double minHedgingDelay = Config_->MinHedgingDelay.MicroSeconds();
+        double maxHedgingDelay = Config_->MaxHedgingDelay.MicroSeconds();
+        hedgingDelay = std::max(minHedgingDelay, std::min(maxHedgingDelay, hedgingDelay));
 
         HedgingDelay_.store(hedgingDelay, std::memory_order::relaxed);
     }
 
-    double TryDeductToken()
+    std::optional<double> TryDeductTokens(int hedgingPrice)
     {
         auto tokenCount = TokenCount_.load(std::memory_order::relaxed);
-        while (tokenCount >= 1. && !TokenCount_.compare_exchange_weak(tokenCount, tokenCount - 1.))
+        while (
+            tokenCount >= hedgingPrice &&
+            !TokenCount_.compare_exchange_weak(tokenCount, tokenCount - hedgingPrice))
         { }
 
-        return tokenCount;
+        return tokenCount >= hedgingPrice
+            ? std::make_optional(tokenCount - hedgingPrice)
+            : std::nullopt;
     }
 
     double IncreaseToken()
@@ -187,10 +203,12 @@ private:
         return newTokenCount;
     }
 
-    bool IsQueueEmpty()
+    std::optional<int> PeekNextRequestPrice()
     {
         auto readerGuard = ReaderGuard(DequeLock_);
-        return RequestDeque_.empty();
+        return RequestDeque_.empty()
+            ? std::nullopt
+            : std::make_optional(RequestDeque_.front()->HedgingPrice);
     }
 
     void EnqueueRequest(THedgingRequestPtr request)
@@ -213,7 +231,7 @@ private:
     void DequeueRequests(
         std::vector<TClosure>* secondaryRequestGenerators,
         std::vector<THedgingRequestPtr>* requestsForRemoval,
-        bool* isQueueEmpty,
+        std::optional<int>* nextRequestPrice,
         double* tokenCount)
     {
         secondaryRequestGenerators->reserve(MaxSimultaneouslyProcessedRequestCount);
@@ -230,8 +248,10 @@ private:
             if (currentRequest->PrimaryRequestFuture.IsSet()) {
                 requestsForRemoval->push_back(std::move(currentRequest));
             } else {
-                *tokenCount = TryDeductToken();
-                if (*tokenCount < 1.) {
+                if (auto maybeLeftTokens = TryDeductTokens(currentRequest->HedgingPrice)) {
+                    *tokenCount = *maybeLeftTokens;
+                } else {
+                    *tokenCount = 0;
                     break;
                 }
 
@@ -241,7 +261,9 @@ private:
             RequestDeque_.pop_front();
         }
 
-        *isQueueEmpty = RequestDeque_.empty();
+        *nextRequestPrice = RequestDeque_.empty()
+            ? std::nullopt
+            : std::make_optional(RequestDeque_.front()->HedgingPrice);
     }
 };
 

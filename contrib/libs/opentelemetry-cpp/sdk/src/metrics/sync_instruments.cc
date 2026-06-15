@@ -41,7 +41,7 @@ void LongCounter::Add(uint64_t value,
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(value, attributes, context);
+  return storage_->RecordLong(static_cast<int64_t>(value), attributes, context);
 }
 
 void LongCounter::Add(uint64_t value,
@@ -54,7 +54,7 @@ void LongCounter::Add(uint64_t value,
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(value, attributes, context);
+  return storage_->RecordLong(static_cast<int64_t>(value), attributes, context);
 }
 
 void LongCounter::Add(uint64_t value) noexcept
@@ -66,7 +66,7 @@ void LongCounter::Add(uint64_t value) noexcept
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(value, context);
+  return storage_->RecordLong(static_cast<int64_t>(value), context);
 }
 
 void LongCounter::Add(uint64_t value, const opentelemetry::context::Context &context) noexcept
@@ -77,7 +77,7 @@ void LongCounter::Add(uint64_t value, const opentelemetry::context::Context &con
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(value, context);
+  return storage_->RecordLong(static_cast<int64_t>(value), context);
 }
 
 DoubleCounter::DoubleCounter(const InstrumentDescriptor &instrument_descriptor,
@@ -435,7 +435,7 @@ void LongHistogram::Record(uint64_t value,
         << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(value, attributes, context);
+  return storage_->RecordLong(static_cast<int64_t>(value), attributes, context);
 }
 
 void LongHistogram::Record(uint64_t value, const opentelemetry::context::Context &context) noexcept
@@ -446,7 +446,7 @@ void LongHistogram::Record(uint64_t value, const opentelemetry::context::Context
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(value, context);
+  return storage_->RecordLong(static_cast<int64_t>(value), context);
 }
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
@@ -460,7 +460,7 @@ void LongHistogram::Record(uint64_t value,
     return;
   }
   auto context = opentelemetry::context::Context{};
-  return storage_->RecordLong(value, attributes, context);
+  return storage_->RecordLong(static_cast<int64_t>(value), attributes, context);
 }
 
 void LongHistogram::Record(uint64_t value) noexcept
@@ -472,7 +472,7 @@ void LongHistogram::Record(uint64_t value) noexcept
     return;
   }
   auto context = opentelemetry::context::Context{};
-  return storage_->RecordLong(value, context);
+  return storage_->RecordLong(static_cast<int64_t>(value), context);
 }
 #endif
 

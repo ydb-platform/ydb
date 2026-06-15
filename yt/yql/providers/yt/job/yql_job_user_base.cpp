@@ -154,7 +154,7 @@ void TYqlUserJobBase::DoImpl() {
 
     TLambdaBuilder builder(FunctionRegistry.Get(), *Alloc,
         Env.Get(), RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), &JobCountersProvider,
-        SecureParamsProvider.Get(), LogProvider.Get(), LangVer);
+        SecureParamsProvider.Get(), LogProvider.Get(), LangVer, RuntimeSettings);
 
     TType* itemType = nullptr;
     if (InputType) {
@@ -176,6 +176,7 @@ void TYqlUserJobBase::DoImpl() {
     if (UseBlockInput) {
         MkqlIOSpecs->SetUseBlockInput();
         MkqlIOSpecs->SetInputBlockRepresentation(TMkqlIOSpecs::EBlockRepresentation::WideBlock);
+        MkqlIOSpecs->SetDatumValidationMode(RuntimeSettings->DatumValidation.Get());
     }
     if (UseBlockOutput) {
         MkqlIOSpecs->SetUseBlockOutput();

@@ -4,6 +4,7 @@
 #include "size_printer.h"
 #include "stream_helper.h"
 #include "token_field_printer.h"
+
 #include <ydb/library/protobuf_printer/ut/test_proto.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>

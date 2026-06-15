@@ -33,7 +33,6 @@ private:
     NActors::TActorId SchemeCache;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    NKikimr::NGRpcProxy::V1::IClustersCfgProvider* ClustersCfgProvider = nullptr;
 };
 
 } // namespace NKikimr::NGRpcService::V1

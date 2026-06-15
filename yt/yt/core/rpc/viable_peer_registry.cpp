@@ -257,7 +257,7 @@ public:
 
         if (peerPriorityCounts.size() == 1) {
             // Fast path: all peers have the same priority.
-            const auto& priorityPeers = PriorityToActivePeers_.find(peerPriorityCounts.begin()->first)->second;
+            const auto& priorityPeers = GetOrCrash(PriorityToActivePeers_, peerPriorityCounts.begin()->first);
             for (const auto& index : GetRandomIndexes(priorityPeers.Size(), peerCount)) {
                 peers.push_back(priorityPeers[index]);
             }
@@ -267,7 +267,7 @@ public:
 
         // Slow path.
         for (const auto& [priority, count] : peerPriorityCounts) {
-            const auto& priorityPeers = PriorityToActivePeers_.find(priority)->second;
+            const auto& priorityPeers = GetOrCrash(PriorityToActivePeers_, priority);
             for (const auto& index : GetRandomIndexes(priorityPeers.Size(), count)) {
                 peers.push_back(priorityPeers[index]);
             }

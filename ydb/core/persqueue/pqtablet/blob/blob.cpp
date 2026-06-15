@@ -5,11 +5,16 @@
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
 namespace NPQ {
 
 namespace {
+
+bool CanWriteOffsetDeltaInKeys() {
+    return HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
+}
 
 }
 
@@ -39,7 +44,7 @@ TClientBlob::TClientBlob()
 
 TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp, const ui64 uncompressedSize,
-        TString&& partitionKey, TString&& explicitHashKey)
+        TString&& partitionKey, TString&& explicitHashKey, ui32 messageCount, EMessageFormat messageFormat)
         : SourceId(std::move(sourceId))
         , SeqNo(seqNo)
         , Data(std::move(data))
@@ -48,8 +53,12 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , CreateTimestamp(createTimestamp)
         , UncompressedSize(uncompressedSize)
         , PartitionKey(std::move(partitionKey))
-        , ExplicitHashKey(std::move(explicitHashKey)) {
+        , ExplicitHashKey(std::move(explicitHashKey))
+        , MessageCount(messageCount)
+        , MessageFormat(messageFormat) {
     Y_ENSURE(PartitionKey.size() <= 256);
+    Y_ENSURE(MessageCount >= 1 && MessageCount <= MAX_MESSAGE_COUNT);
+    Y_ENSURE(static_cast<ui32>(MessageFormat) < (1u << MESSAGE_FORMAT_BITS));
 }
 
 
@@ -82,7 +91,9 @@ TString TClientBlob::DebugString() const {
         << ", CreateTimestamp=" << CreateTimestamp
         << ", UncompressedSize=" << UncompressedSize
         << ", PartitionKey='" << PartitionKey << "'"
-        << ", ExplicitHashKey='" << ExplicitHashKey << "'";
+        << ", ExplicitHashKey='" << ExplicitHashKey << "'"
+        << ", MessageCount=" << MessageCount
+        << ", MessageFormat=" << static_cast<ui32>(MessageFormat);
 
     if (PartData) {
         sb << ", PartNo=" << PartData->PartNo
@@ -134,19 +145,42 @@ TBatch TBatch::FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
 
 void TBatch::AddBlob(const TClientBlob &b) {
     ui32 count = GetCount();
+    ui64 offsetDelta = GetOffsetDelta();
+    if (!Header.HasOffsetDelta() && !Blobs.empty()) {
+        offsetDelta = GetCount();
+        if (!Blobs.back().IsLastPart()) {
+            ++offsetDelta;
+        }
+    }
+
     ui32 unpackedSize = GetUnpackedSize();
     ui32 i = Blobs.size();
+
+    if (!b.PartData || b.PartData->PartNo == 0 || Blobs.empty()) {
+        offsetDelta += b.MessageCount;
+    }
+
     Blobs.push_back(b);
     unpackedSize += b.GetSerializedSize();
-    if (b.IsLastPart())
-        ++count;
-    else {
+    if (b.IsLastPart()) {
+        count += b.MessageCount;
+    } else {
         InternalPartsPos.push_back(i);
     }
 
+    if (Header.HasOffsetDelta() || b.MessageCount > 1) {
+        Header.SetOffsetDelta(offsetDelta);
+    } else {
+        Header.ClearOffsetDelta();
+    }
     Header.SetUnpackedSize(unpackedSize);
     Header.SetCount(count);
     Header.SetInternalPartsCount(InternalPartsPos.size());
+    if (Blobs.size() != Header.GetCount() + Header.GetInternalPartsCount()) {
+        Header.SetClientBlobCount(Blobs.size());
+    } else {
+        Header.ClearClientBlobCount();
+    }
 
     EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
 }
@@ -171,6 +205,22 @@ ui16 TBatch::GetInternalPartsCount() const {
     return Header.GetInternalPartsCount();
 }
 
+ui64 TBatch::GetOffsetDelta() const {
+    return Header.HasOffsetDelta() ? Header.GetOffsetDelta() : 0;
+}
+
+bool TBatch::HasOffsetDelta() const {
+    return Header.HasOffsetDelta();
+}
+
+void TBatch::SetOffsetDelta(ui64 offsetDelta) {
+    Header.SetOffsetDelta(offsetDelta);
+}
+
+void TBatch::ClearOffsetDelta() {
+    Header.ClearOffsetDelta();
+}
+
 bool TBatch::IsGreaterThan(ui64 offset, ui16 partNo) const {
     return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
 }
@@ -188,20 +238,53 @@ ui32 TBatch::GetPackedSize() const {
     return sizeof(ui16) + PackedData.size() + Header.ByteSize();
 }
 
-ui32 TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
+TPosition TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
     AFL_ENSURE(!Packed);
-    if (offset < GetOffset() || offset == GetOffset() && partNo < GetPartNo())
-        return Max<ui32>();
-    if (offset == GetOffset()) {
-        ui32 pos = partNo - GetPartNo();
-        return pos < Blobs.size() ? pos : Max<ui32>();
+    if (offset < GetOffset() || (offset == GetOffset() && partNo < GetPartNo())) {
+        return TPosition{Max<ui32>(), 0, 0};
     }
-    ui32 pos = offset - GetOffset();
-    for (ui32 i = 0; i < InternalPartsPos.size() && InternalPartsPos[i] < pos; ++i)
-        ++pos;
-    //now pos is position of first client blob from offset
-    pos += partNo;
-    return  pos < Blobs.size() ? pos : Max<ui32>();
+
+    if (!HasOffsetDelta()) {
+        ui32 pos = 0;
+        if (offset == GetOffset()) {
+            pos = partNo - GetPartNo();
+        } else {
+            pos = offset - GetOffset();
+            for (ui32 i = 0; i < InternalPartsPos.size() && InternalPartsPos[i] < pos; ++i) {
+                ++pos;
+            }
+            pos += partNo;
+        }
+
+        if (pos >= Blobs.size()) {
+            return TPosition{Max<ui32>(), 0, 0};
+        }
+
+        if (!Blobs[pos].PartData && partNo == 0) {
+            return TPosition{pos, offset, partNo};
+        } else if (!Blobs[pos].PartData) {
+            return TPosition{Max<ui32>(), 0, 0};
+        }
+
+        return partNo == Blobs[pos].GetPartNo() ?
+            TPosition{pos, offset, partNo} :
+            TPosition{Max<ui32>(), 0, 0};
+    }
+
+    ui64 curOffset = GetOffset();
+    ui16 curPartNo = GetPartNo();
+    for (size_t i = 0; i < Blobs.size(); ++i) {
+        if (curOffset <= offset && curOffset + Blobs[i].MessageCount > offset && curPartNo == partNo) {
+            return TPosition{static_cast<ui32>(i), curOffset, curPartNo};
+        }
+        if (Blobs[i].IsLastPart()) {
+            curOffset += Blobs[i].MessageCount;
+            curPartNo = 0;
+        } else {
+            ++curPartNo;
+        }
+    }
+    return TPosition{Max<ui32>(), 0, 0};
 }
 
 
@@ -305,6 +388,24 @@ ui32 THead::GetCount() const
         ("offset", Offset);
 
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
+}
+
+ui64 THead::GetOffsetDelta() const
+{
+    if (Batches.empty())
+        return 0;
+
+    if (Batches.back().HasOffsetDelta()) {
+        return Batches.back().GetOffset() - Offset + Batches.back().GetOffsetDelta();
+    }
+
+    ui64 lastBatchOffsetDelta = 0;
+    if (!Batches.back().Blobs.empty()) {
+        const auto& lastBlob = Batches.back().Blobs.back();
+        lastBatchOffsetDelta = Batches.back().GetCount() + (!lastBlob.IsLastPart() ? 1 : 0);
+    }
+
+    return Batches.back().GetOffset() - Offset + lastBatchOffsetDelta;
 }
 
 
@@ -494,6 +595,46 @@ TPartitionedBlob::TCompactHeadResult TPartitionedBlob::CompactHead(bool glueHead
     return {std::move(valueD), endWriteTimestamp};
 }
 
+ui64 TPartitionedBlob::GetOffsetDelta() const {
+    bool newHeadIncluded = GlueNewHead && NewHead.Batches.size() > 0;
+    bool headIncluded = GlueHead && Head.Batches.size() > 0;
+
+    // check the invariant that there is not holes in the glued content
+    if (headIncluded && newHeadIncluded) {
+        AFL_ENSURE(NewHead.Offset == Head.GetNextOffset())
+            ("Head.Offset", Head.Offset)
+            ("Head.GetNextOffset()", Head.GetNextOffset())
+            ("NewHead.Offset", NewHead.Offset);
+    }
+
+    // check the invariant that the offset is the end of the glued content
+    if (!Blobs.empty() && (headIncluded || newHeadIncluded)) {
+        const ui64 gluedContentEnd = newHeadIncluded ? NewHead.GetNextOffset() : Head.GetNextOffset();
+        AFL_ENSURE(Offset == gluedContentEnd)
+            ("Offset", Offset)
+            ("gluedContentEnd", gluedContentEnd)
+            ("GlueHead", GlueHead)
+            ("GlueNewHead", GlueNewHead);
+    }
+
+    ui64 offsetDelta = 0;
+    if (headIncluded) {
+        offsetDelta += Head.GetOffsetDelta();
+    }
+    if (newHeadIncluded) {
+        offsetDelta += NewHead.GetOffsetDelta();
+    }
+
+    if (!Blobs.empty()) {
+        for (const auto& blob : Blobs) {
+            if (!blob.PartData || blob.PartData->PartNo == 0) {
+                offsetDelta += blob.MessageCount;
+            }
+        }
+    }
+    return offsetDelta;
+}
+
 auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optional<TFormedBlobInfo>
 {
     HeadPartNo = NextPartNo;
@@ -503,14 +644,48 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
     AFL_ENSURE(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
 
-    TKey tmpKey, dataKey;
+    const ui64 offsetDelta = CanWriteOffsetDeltaInKeys() ? GetOffsetDelta() : 0;
+    TMaybe<ui32> keyOffsetDelta;
+    if (offsetDelta > 0) {
+        AFL_ENSURE(offsetDelta <= Max<ui32>());
+        keyOffsetDelta = static_cast<ui32>(offsetDelta);
+    }
 
+    TKey tmpKey, dataKey;
     if (FastWrite) {
-        tmpKey = TKey::ForFastWrite(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
-        dataKey = TKey::ForFastWrite(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+        tmpKey = TKey::ForFastWrite(
+            TKeyPrefix::TypeTmpData,
+            Partition,
+            StartOffset,
+            StartPartNo,
+            count,
+            InternalPartsCount,
+            keyOffsetDelta);
+        dataKey = TKey::ForFastWrite(
+            TKeyPrefix::TypeData,
+            Partition,
+            StartOffset,
+            StartPartNo,
+            count,
+            InternalPartsCount,
+            keyOffsetDelta);
     } else {
-        tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
-        dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+        tmpKey = TKey::ForBody(
+            TKeyPrefix::TypeTmpData,
+            Partition,
+            StartOffset,
+            StartPartNo,
+            count,
+            InternalPartsCount,
+            keyOffsetDelta);
+        dataKey = TKey::ForBody(
+            TKeyPrefix::TypeData,
+            Partition,
+            StartOffset,
+            StartPartNo,
+            count,
+            InternalPartsCount,
+            keyOffsetDelta);
     }
 
     StartOffset = Offset;

@@ -540,10 +540,13 @@ struct Schema : NIceDb::Schema {
         struct CurrentAvailableSize    : Column<6, NScheme::NTypeIds::Uint64> {};
         struct AvailableGroupsToCreate : Column<7, NScheme::NTypeIds::Uint32> {};
         struct AvailableSizeToCreate   : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct ImmediateGroupsToCreate : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct ImmediateSizeToCreate   : Column<10, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PDiskFilter, ErasureSpecies>;
         using TColumns = TableColumns<PDiskFilter, ErasureSpecies, CurrentGroupsCreated, CurrentAllocatedSize,
-                                      CurrentAvailableSize, AvailableGroupsToCreate, AvailableSizeToCreate>;
+                                      CurrentAvailableSize, AvailableGroupsToCreate, AvailableSizeToCreate,
+                                      ImmediateGroupsToCreate, ImmediateSizeToCreate>;
     };
 
     struct TopPartitions : Table<12> {
@@ -816,6 +819,7 @@ struct Schema : NIceDb::Schema {
         struct TotalCpuLimitPercentPerNode    : Column<6, NScheme::NTypeIds::Double> {};
         struct QueryCpuLimitPercentPerNode    : Column<7, NScheme::NTypeIds::Double> {};
         struct QueryMemoryLimitPercentPerNode : Column<8, NScheme::NTypeIds::Double> {};
+        struct TotalMemoryLimitPercentPerNode : Column<9, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -826,7 +830,8 @@ struct Schema : NIceDb::Schema {
             ResourceWeight,
             TotalCpuLimitPercentPerNode,
             QueryCpuLimitPercentPerNode,
-            QueryMemoryLimitPercentPerNode>;
+            QueryMemoryLimitPercentPerNode,
+            TotalMemoryLimitPercentPerNode>;
     };
 
     struct TopPartitionsTli : Table<23> {

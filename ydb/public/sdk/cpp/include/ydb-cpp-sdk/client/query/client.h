@@ -57,6 +57,11 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSessionPoolSettings = TSessionPoolSettings;
     using TSelf = TClientSettings;
     FLUENT_SETTING(TSessionPoolSettings, SessionPoolSettings);
+
+    // Optional pool name surfaced through the OTel tag
+    // ydb.query.session.pool.name. When empty the default
+    // "<database>@<endpoint>" is used.
+    FLUENT_SETTING(std::string, PoolName);
 };
 
 class TQueryClient {

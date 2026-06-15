@@ -203,8 +203,18 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
                 "NearNumericLimits",
             });
 
-        UNIT_ASSERT(!responses.at(0).Success);
         UNIT_ASSERT(!responses.at(1).Success);
+
+        {
+            // Basic column
+            const auto& resp = responses.at(0);
+            UNIT_ASSERT(resp.Success);
+            const auto& histogram = resp.EqWidthHistogram.Data;
+            UNIT_ASSERT(histogram);
+            UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Uint64);
+            auto estimator = TEqWidthHistogramEstimator(histogram);
+            UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<ui64>(5), 1);
+        }
 
         {
             // LowCardinalityInt column

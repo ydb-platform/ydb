@@ -1655,6 +1655,7 @@ TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
             if (ready != NTable::EReady::Gone) {
                 res.RowVersion = iter->GetRowVersion();
                 res.RowTxId = iter->GetDeltaTxId();
+                res.RowOp = iter->Row().GetRowState();
             }
             return res;
         }
@@ -1664,6 +1665,7 @@ TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
             res.Ready = NTable::EReady::Data;
             res.RowVersion = iter->GetRowVersion();
             res.RowTxId = iter->GetDeltaTxId();
+            res.RowOp = iter->Row().GetRowState();
         }
     }
     if (ready == NTable::EReady::Page) {

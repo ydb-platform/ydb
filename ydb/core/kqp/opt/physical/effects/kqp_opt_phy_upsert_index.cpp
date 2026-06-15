@@ -2,6 +2,8 @@
 #include "kqp_opt_phy_effects_impl.h"
 #include "kqp_opt_phy_uniq_helper.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -611,7 +613,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
     }
 }
 
-} // namespace
+} // anonymous namespace
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
     const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults,
@@ -741,7 +743,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     for (const auto& [tableNode, indexDesc] : indexes) {
         if (useStreamIndex
                 && (indexDesc->Type == TIndexDescription::EType::GlobalSync
-                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact)) {
             continue;
         }
         bool indexKeyColumnsUpdated = false;
@@ -1022,8 +1027,13 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    Y_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
+                case TIndexDescription::EType::LocalMinMax:
                     break;
             }
 
@@ -1097,8 +1107,13 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     }
                     break;
                 }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    Y_ENSURE(false, "Not implemented");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
+                case TIndexDescription::EType::LocalMinMax:
                     break;
             }
 

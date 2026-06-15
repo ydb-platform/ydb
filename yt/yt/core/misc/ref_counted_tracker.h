@@ -30,7 +30,7 @@ struct TRefCountedTrackerStatistics final
     struct TNamedSlotStatistics
         : public TStatistics
     {
-        TString FullName;
+        std::string FullName;
     };
 
     std::vector<TNamedSlotStatistics> NamedStatistics;
@@ -76,7 +76,7 @@ public:
     static void AllocateSpace(TRefCountedTypeCookie cookie, size_t size);
     static void FreeSpace(TRefCountedTypeCookie cookie, size_t size);
 
-    TString GetDebugInfo(int sortByColumn = -1) const;
+    std::string GetDebugInfo(int sortByColumn = -1) const;
     TRefCountedTrackerStatistics GetStatistics() const;
 
     size_t GetObjectsAllocated(TRefCountedTypeKey typeKey) const;
@@ -100,7 +100,7 @@ private:
         bool operator==(const TKey& other) const;
     };
 
-    mutable NThreading::TForkAwareSpinLock SpinLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
     std::map<TKey, TRefCountedTypeCookie> KeyToCookie_;
     std::map<TRefCountedTypeKey, size_t> TypeKeyToObjectSize_;
     std::vector<TKey> CookieToKey_;

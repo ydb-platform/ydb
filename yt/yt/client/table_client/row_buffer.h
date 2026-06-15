@@ -26,17 +26,10 @@ class TRowBuffer
 public:
     template <class TTag = TDefaultRowBufferPoolTag>
     explicit TRowBuffer(
-        TTag /*tag*/ = TDefaultRowBufferPoolTag(),
+        TTag tag = TDefaultRowBufferPoolTag(),
         size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
         IMemoryUsageTrackerPtr tracker = nullptr,
-        bool allowMemoryOvercommit = false)
-        : Pool_(
-            GetRefCountedTypeCookie<TTag>(),
-            GetTrackedMemoryChunkProvider(std::move(tracker), allowMemoryOvercommit),
-            startChunkSize)
-    {
-        static_assert(IsEmptyClass<TTag>());
-    }
+        bool allowMemoryOvercommit = false);
 
     TRowBuffer(
         TRefCountedTypeCookie tagCookie,
@@ -45,14 +38,8 @@ public:
 
     template <class TTag>
     TRowBuffer(
-        TTag /*tag*/,
-        IMemoryChunkProviderPtr chunkProvider)
-        : Pool_(
-            GetRefCountedTypeCookie<TTag>(),
-            std::move(chunkProvider))
-    {
-        static_assert(IsEmptyClass<TTag>());
-    }
+        TTag tag,
+        IMemoryChunkProviderPtr chunkProvider);
 
     TChunkedMemoryPool* GetPool();
 
@@ -119,3 +106,7 @@ DEFINE_REFCOUNTED_TYPE(TRowBuffer)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient
+
+#define ROW_BUFFER_INL_H_
+#include "row_buffer-inl.h"
+#undef ROW_BUFFER_INL_H_

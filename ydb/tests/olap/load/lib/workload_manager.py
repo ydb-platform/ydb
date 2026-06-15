@@ -348,8 +348,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         metrics_request = {}
         for pool in cls.get_resource_pools():
             metrics_request.update({
-                f'{pool.name} satisfaction': {'scheduler/pool': pool.name, 'sensor': 'Satisfaction'},
-                f'{pool.name} adjusted satisfaction d': {'scheduler/pool': pool.name, 'sensor': 'AdjustedSatisfaction'},
+                f'{pool.name} satisfaction': {'schedulerPool': pool.name, 'sensor': 'Satisfaction'},
+                f'{pool.name} adjusted satisfaction d': {'schedulerPool': pool.name, 'sensor': 'AdjustedSatisfaction'},
             })
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics=metrics_request)
         sum = {}
@@ -484,11 +484,12 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
-        return [
+        super_mes = super().get_key_measurements()
+        return super_mes[0] + [
             LoadSuiteBase.KeyMeasurement('tpcc_efficiency', 'TPC-C Efficiency', [
                 LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
             ], 'Efficiency of TPC-C')
-        ], ''
+        ], super_mes[1]
 
 
 class TestWorkloadManagerOltp100(WorkloadManagerOltp):

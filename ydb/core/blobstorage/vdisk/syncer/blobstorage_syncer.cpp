@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/base/html.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 
@@ -174,6 +175,7 @@ namespace NKikimr {
         TActorId GuidRecoveryId;
         TActorId RecoverLostDataId;
         TVector<TActorId> PropagatorIds;
+        bool StartupDataSyncTokenRequested = false;
         EPhase Phase = TPhaseVal::PhaseNone;
         TActiveActors ActiveActors;
         std::unique_ptr<NSyncer::TOutcome> GuidRecovOutcome;
@@ -190,6 +192,38 @@ namespace NKikimr {
             ActiveActors.Insert(CommitterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             // Sync VDisk Guid
             SyncGuid(ctx);
+        }
+
+        TActorId GetVDiskServiceId() const {
+            return MakeBlobStorageVDiskID(
+                SyncerCtx->VCtx->NodeId,
+                SyncerCtx->Config->BaseInfo.PDiskId,
+                SyncerCtx->Config->BaseInfo.VDiskSlotId);
+        }
+
+        void QueryStartupDataSyncToken(const TActorContext& ctx) {
+            Y_ABORT_UNLESS(!StartupDataSyncTokenRequested);
+            ctx.Send(MakeBlobStorageStartupDataSyncBrokerID(),
+                new TEvAcquireVDiskOperationToken(GetVDiskServiceId(), SyncerCtx->Config->BaseInfo.PDiskId),
+                IEventHandle::FlagTrackDelivery);
+            StartupDataSyncTokenRequested = true;
+        }
+
+        void ReleaseStartupDataSyncToken(const TActorContext& ctx) {
+            if (StartupDataSyncTokenRequested) {
+                ctx.Send(MakeBlobStorageStartupDataSyncBrokerID(),
+                    new TEvReleaseVDiskOperationToken(GetVDiskServiceId(), SyncerCtx->Config->BaseInfo.PDiskId));
+                StartupDataSyncTokenRequested = false;
+            }
+        }
+
+        void StartScheduler(const TActorContext& ctx) {
+            Y_ABORT_UNLESS(!SchedulerId);
+            LOG_DEBUG(ctx, BS_SYNCER,
+                VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                    "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
+            SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId, SelfId()));
+            ActiveActors.Insert(SchedulerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -347,24 +381,57 @@ namespace NKikimr {
             ctx.Send(SyncerData->NotifyId,
                      new TEvSyncGuidRecoveryDone(NKikimrProto::OK, LocalSyncerState.DbBirthLsn));
             SyncerData->Neighbors->DbBirthLsn = LocalSyncerState.DbBirthLsn;
-            Become(&TThis::StandardModeStateFunc);
+            Phase = TPhaseVal::PhaseStandardMode;
             if (!SyncerCtx->Config->BaseInfo.ReadOnly) {
-                LOG_DEBUG(ctx, BS_SYNCER,
-                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
-                SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId));
-                ActiveActors.Insert(SchedulerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+                Become(&TThis::AwaitStartupDataSyncTokenStateFunc);
+                QueryStartupDataSyncToken(ctx);
             } else {
+                Become(&TThis::StandardModeStateFunc);
                 LOG_WARN(ctx, BS_SYNCER,
                     VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "%s: Skipping scheduler start due to read-only", __PRETTY_FUNCTION__));
             }
-            Phase = TPhaseVal::PhaseStandardMode;
         }
+
+        void Handle(TEvVDiskOperationToken::TPtr&, const TActorContext& ctx) {
+            Y_ABORT_UNLESS(StartupDataSyncTokenRequested);
+            Become(&TThis::StandardModeStateFunc);
+            StartScheduler(ctx);
+        }
+
+        void HandleStartupDataSyncBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
+                // No startup data sync broker service. Continue without it.
+                LOG_WARN(ctx, BS_SYNCER,
+                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "Startup data sync broker is not available, continuing without it"));
+                StartupDataSyncTokenRequested = false;
+                Become(&TThis::StandardModeStateFunc);
+                StartScheduler(ctx);
+            }
+        }
+
+        void Handle(TEvStartupDataSyncDone::TPtr&, const TActorContext& ctx) {
+            ReleaseStartupDataSyncToken(ctx);
+        }
+
+        STRICT_STFUNC(AwaitStartupDataSyncTokenStateFunc,
+            HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
+            HFunc(TEvSyncerCommitDone, Handle)
+            HFunc(TEvVDiskOperationToken, Handle)
+            HFunc(TEvents::TEvUndelivered, HandleStartupDataSyncBrokerUndelivered)
+            HFunc(NMon::TEvHttpInfo, Handle)
+            HFunc(TEvLocalStatus, Handle)
+            HFunc(NPDisk::TEvCutLog, Handle)
+            HFunc(TEvents::TEvGone, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvSublogLine, Handle)
+            HFunc(TEvVGenerationChange, ReadyModeHandle)
+        )
 
         STRICT_STFUNC(StandardModeStateFunc,
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
+            HFunc(TEvStartupDataSyncDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
@@ -516,13 +583,18 @@ namespace NKikimr {
 
         // This handler is called when TSyncerHttpInfoActor is finished
         void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
+            if (ev->Sender == SchedulerId) {
+                SchedulerId = TActorId();
+                // If scheduler is gone, we should release startup data sync token to avoid being stuck.
+                ReleaseStartupDataSyncToken(ctx);
+            }
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
+            ReleaseStartupDataSyncToken(ctx);
             Die(ctx);
         }
 

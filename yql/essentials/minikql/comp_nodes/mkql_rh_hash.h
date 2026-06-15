@@ -268,7 +268,7 @@ private:
 
     Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacityShift) {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
-        ui64 bucket = ((SelfHash_ ^ hash) * 11400714819323198485llu) >> capacityShift;
+        ui64 bucket = ((SelfHash_ ^ hash) * 11400714819323198485LLU) >> capacityShift;
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         return ptr;
     }
@@ -483,7 +483,7 @@ public:
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = int;
 
-    explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, THash(), TEqual())
         , CellSize_(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
         , PayloadSize_(payloadSize)
@@ -493,7 +493,7 @@ public:
         TBase::Init();
     }
 
-    explicit TRobinHoodHashMap(ui32 payloadSize, const THash& hash, const TEqual& equal, ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashMap(ui32 payloadSize, const THash& hash, const TEqual& equal, ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, hash, equal)
         , CellSize_(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
         , PayloadSize_(payloadSize)
@@ -554,13 +554,13 @@ public:
 
     static_assert(NYql::IsPod<TPayload>, "Expected POD value type");
 
-    explicit TRobinHoodHashFixedMap(ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashFixedMap(ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, THash(), TEqual())
     {
         TBase::Init();
     }
 
-    explicit TRobinHoodHashFixedMap(const THash& hash, const TEqual& equal, ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashFixedMap(const THash& hash, const TEqual& equal, ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, hash, equal)
     {
         TBase::Init();
@@ -606,13 +606,13 @@ public:
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = int;
 
-    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, hash, equal)
     {
         TBase::Init();
     }
 
-    explicit TRobinHoodHashSet(ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashSet(ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, THash(), TEqual())
     {
         TBase::Init();

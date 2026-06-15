@@ -3,6 +3,8 @@
 #include "events.h"
 #include "http_req.h"
 
+#include <numeric>
+
 namespace NKikimr::NHttpProxy {
 
 using namespace Ydb::DataStreams::V1;
@@ -16,7 +18,7 @@ void FillOutputCustomMetrics(const TProtoResult& result, const THttpRequestConte
         Y_UNUSED(result, httpContext, ctx);
 }
 
-TVector<std::pair<TString, TString>> BuildLabels(const TString& method, const THttpRequestContext& httpContext, const TString& name, bool setStreamPrefix = false) {
+inline TVector<std::pair<TString, TString>> BuildLabels(const TString& method, const THttpRequestContext& httpContext, const TString& name, bool setStreamPrefix = false) {
     if (setStreamPrefix) {
         if (method.empty()) {
             return {{"cloud", httpContext.CloudId}, {"folder", httpContext.FolderId},
@@ -41,7 +43,7 @@ TVector<std::pair<TString, TString>> BuildLabels(const TString& method, const TH
 static const bool setStreamPrefix{true};
 
 template <>
-void FillInputCustomMetrics<PutRecordsRequest>(const PutRecordsRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
+inline void FillInputCustomMetrics<PutRecordsRequest>(const PutRecordsRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
     i64 bytes = 0;
     for (auto& rec : request.records()) {
         bytes += rec.data().size() +  rec.partition_key().size() + rec.explicit_hash_key().size();
@@ -59,7 +61,7 @@ void FillInputCustomMetrics<PutRecordsRequest>(const PutRecordsRequest& request,
 }
 
 template <>
-void FillInputCustomMetrics<PutRecordRequest>(const PutRecordRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
+inline void FillInputCustomMetrics<PutRecordRequest>(const PutRecordRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
     /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
              new TEvServerlessProxy::TEvCounter{1, true, true,
                  BuildLabels("", httpContext, "stream.put_record.records_per_second", setStreamPrefix)
@@ -83,7 +85,7 @@ void FillInputCustomMetrics<PutRecordRequest>(const PutRecordRequest& request, c
 
 
 template <>
-void FillOutputCustomMetrics<PutRecordResult>(const PutRecordResult& result, const THttpRequestContext& httpContext, const TActorContext& ctx) {
+inline void FillOutputCustomMetrics<PutRecordResult>(const PutRecordResult& result, const THttpRequestContext& httpContext, const TActorContext& ctx) {
     Y_UNUSED(result);
     /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
              new TEvServerlessProxy::TEvCounter{1, true, true,
@@ -93,7 +95,7 @@ void FillOutputCustomMetrics<PutRecordResult>(const PutRecordResult& result, con
 
 
 template <>
-void FillOutputCustomMetrics<PutRecordsResult>(const PutRecordsResult& result, const THttpRequestContext& httpContext, const TActorContext& ctx) {
+inline void FillOutputCustomMetrics<PutRecordsResult>(const PutRecordsResult& result, const THttpRequestContext& httpContext, const TActorContext& ctx) {
     i64 failed = result.failed_record_count();
     i64 success = result.records_size() - failed;
     if (success > 0) {
@@ -132,7 +134,7 @@ void FillOutputCustomMetrics<PutRecordsResult>(const PutRecordsResult& result, c
 }
 
 template <>
-void FillOutputCustomMetrics<GetRecordsResult>(const GetRecordsResult& result, const THttpRequestContext& httpContext, const TActorContext& ctx) {
+inline void FillOutputCustomMetrics<GetRecordsResult>(const GetRecordsResult& result, const THttpRequestContext& httpContext, const TActorContext& ctx) {
     auto records_n = result.records().size();
     auto bytes = std::accumulate(result.records().begin(), result.records().end(), 0l,
                                  [](i64 sum, decltype(*result.records().begin()) &r) {

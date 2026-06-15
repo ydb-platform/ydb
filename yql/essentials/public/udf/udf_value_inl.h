@@ -92,9 +92,9 @@ inline void IBoxedValue1::UnlockRef(i32 prev) noexcept {
 // TBoxedValueAccessor
 //////////////////////////////////////////////////////////////////////////////
 
-inline bool TBoxedValueAccessor::CheckPodSafety(const TUnboxedValuePod& original, const TUnboxedValuePod& current) {
-    bool isEq = std::memcmp(&current, &original, sizeof(TUnboxedValuePod)) == 0;
-    bool isNotComplex = !current.IsBoxed() && !current.IsString();
+inline bool TBoxedValueAccessor::CheckPodSafety(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    bool isEq = std::memcmp(&rhs, &lhs, sizeof(TUnboxedValuePod)) == 0;
+    bool isNotComplex = !rhs.IsBoxed() && !rhs.IsString();
     return isEq || isNotComplex;
 }
 
@@ -771,8 +771,8 @@ inline bool TUnboxedValuePod::Get<bool>() const {
 }
 
 template <>
-inline bool TUnboxedValuePod::GetOrDefault<bool>(bool def) const {
-    return EMarkers::Empty == Raw.GetMarkers() ? def : bool(Raw.Simple.ui8_);
+inline bool TUnboxedValuePod::GetOrDefault<bool>(bool ifEmpty) const {
+    return EMarkers::Empty == Raw.GetMarkers() ? ifEmpty : bool(Raw.Simple.ui8_);
 }
 
 template <>
@@ -898,6 +898,7 @@ inline bool TUnboxedValuePod::IsSpecial() const {
 inline TStringRef TUnboxedValuePod::AsStringRef() const& {
     switch (Raw.GetMarkers()) {
         case EMarkers::Embedded:
+            Y_DEBUG_ABORT_UNLESS(Raw.Embedded.Size <= TUnboxedValuePod::InternalBufferSize);
             return {Raw.Embedded.Buffer, Raw.Embedded.Size};
         case EMarkers::String:
             return {Raw.String.Value->Data() + (Raw.String.Offset & 0xFFFFFF), Raw.String.Size};

@@ -106,10 +106,12 @@ protected:
 
         auto extractor = [promise]
             (Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
-                TStatus st(std::move(status));
                 if (!operation) {
-                    promise.SetValue(TOp(std::move(st)));
+                    promise.SetValue(TOp(TStatus(std::move(status))));
                 } else {
+                    NYdb::NIssue::TIssues opIssues;
+                    NYdb::NIssue::IssuesFromMessage(operation->issues(), opIssues);
+                    TStatus st(static_cast<EStatus>(operation->status()), std::move(opIssues));
                     promise.SetValue(TOp(std::move(st), std::move(*operation)));
                 }
             };

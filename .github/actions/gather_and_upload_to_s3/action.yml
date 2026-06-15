@@ -58,31 +58,31 @@ runs:
       run: mkdir -p ${{ inputs.version }}/windows/amd64/unsigned
     - name: Copy linux-amd binary
       if: ${{ inputs.build-linux-amd == 'true' }}
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: linux-amd-binary
         path: ${{ inputs.version }}/linux/amd64/
     - name: Copy linux-arm binary
       if: ${{ inputs.build-linux-arm == 'true' }}
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: linux-arm-binary
         path: ${{ inputs.version }}/linux/arm64/
     - name: Copy darwin amd64 binary
       if: ${{ inputs.build-darwin-amd == 'true' }}
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: darwin-amd-binary
         path: ${{ inputs.version }}/darwin/amd64/
     - name: Copy darwin arm64 binary
       if: ${{ inputs.build-darwin-arm == 'true' }}
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: darwin-arm-binary
         path: ${{ inputs.version }}/darwin/arm64/
     - name: Copy windows-amd binary (unsigned)
       if: ${{ inputs.build-windows-amd == 'true' }}
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: windows-amd-binary
         path: ${{ inputs.version }}/windows/amd64/unsigned/

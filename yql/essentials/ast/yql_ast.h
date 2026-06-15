@@ -27,6 +27,18 @@ struct TNodeFlags {
     static constexpr ui32 FlagsMask = 0x07; // all flags should fit here
 };
 
+struct TAstNodeFlags {
+    enum : ui16 {
+        Default = 0,
+        ArbitraryContent = 0x01,
+        BinaryContent = 0x02,
+        MultilineContent = 0x04,
+        IgnoredContent = 0x08, // e.g. for AST with __query_text equality
+    };
+
+    static constexpr ui32 FlagsMask = 0x0F; // all flags should fit here
+};
+
 struct TAstNode {
     // clang-format off
 #define YQL_AST_NODE_TYPE_MAP(xx) \
@@ -356,4 +368,4 @@ TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool = null
 } // namespace NYql
 
 template <>
-void Out<NYql::TAstNode::EType>(class IOutputStream& o, NYql::TAstNode::EType x);
+void Out<NYql::TAstNode::EType>(IOutputStream& out, NYql::TAstNode::EType value);

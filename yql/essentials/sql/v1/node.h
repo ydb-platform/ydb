@@ -89,8 +89,8 @@ enum class ETableType {
 };
 
 class TContext;
-class ITableKeys;
 class ISource;
+class ITableKeys;
 class IAggregation;
 class TObjectOperatorContext;
 using TAggregationPtr = TIntrusivePtr<IAggregation>;
@@ -201,6 +201,7 @@ public:
     virtual TPtr WindowSpecFunc(const TPtr& type) const;
     virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
     virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
+    virtual bool SetYqlSelectWindowName(TContext& ctx, TString name);
     void UseAsInner();
     void DisableSort();
     virtual bool UsedSubquery() const;
@@ -388,6 +389,45 @@ private:
 protected:
     const TNodePtr Inner_;
 };
+
+class TLangVerProxyNode: public IProxyNode {
+public:
+    TLangVerProxyNode(
+        TPosition pos,
+        TNodePtr parent,
+        TString feature,
+        NYql::TLangVersion minLangVer,
+        NYql::TLangVersion maxLangVer)
+        : IProxyNode(pos, std::move(parent))
+        , Feature_(std::move(feature))
+        , MinLangVer_(minLangVer)
+        , MaxLangVer_(maxLangVer)
+    {
+    }
+
+protected:
+    bool DoInit(TContext& ctx, ISource* src) override;
+    TAstNode* Translate(TContext& ctx) const override;
+    TPtr DoClone() const override;
+
+private:
+    TString Feature_;
+    NYql::TLangVersion MinLangVer_;
+    NYql::TLangVersion MaxLangVer_;
+};
+
+inline TNodeResult WrapWithLangVerProxy(
+    TPosition pos,
+    TNodeResult node,
+    const TString& feature,
+    NYql::TLangVersion minLangVer,
+    NYql::TLangVersion maxLangVer)
+{
+    if (node && (minLangVer != NYql::UnknownLangVersion || maxLangVer != NYql::UnknownLangVersion)) {
+        return TNonNull(TNodePtr(new TLangVerProxyNode(pos, *node, feature, minLangVer, maxLangVer)));
+    }
+    return node;
+}
 
 using TTableHints = TMap<TString, TVector<TNodePtr>>;
 void MergeHints(TTableHints& base, const TTableHints& overrides);
@@ -701,7 +741,7 @@ enum class ESampleMode {
 class TDeferredAtom {
 public:
     TDeferredAtom();
-    TDeferredAtom(TPosition pos, const TString& str);
+    TDeferredAtom(TPosition pos, const TString& str, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent);
     TDeferredAtom(TNodePtr node, TContext& ctx);
     const TString* GetLiteral() const;
     bool GetLiteral(TString& value, TContext& ctx) const;
@@ -1067,7 +1107,13 @@ private:
 protected:
     IAggregation(TPosition pos, TString name, TString func, EAggregateMode mode);
     TAstNode* Translate(TContext& ctx) const override;
+
+    TStringBuf GetGroupByPhase(ISource* src) const;
+    bool IsOverStatePhase(ISource* src) const;
+    bool IsManyPhase(ISource* src) const;
+    bool IsFinalizingPhase(ISource* src) const;
     TNodePtr WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const;
+
     TNodePtr GetExtractor(bool many, TContext& ctx) const;
 
     // `YqlSelect` aggregation needs a lambda without a `row` parameter
@@ -1189,7 +1235,7 @@ struct TStringContent {
     TString Content;
     NYql::NUdf::EDataSlot Type = NYql::NUdf::EDataSlot::String;
     TMaybe<TString> PgType;
-    ui32 Flags = NYql::TNodeFlags::Default;
+    ui32 Flags = NYql::TAstNodeFlags::Default;
 };
 
 TMaybe<TStringContent> StringContent(TContext& ctx, TPosition pos, const TString& input);
@@ -1268,7 +1314,8 @@ struct TIndexDescription {
         GlobalFulltextRelevance,
         LocalBloomFilter,
         LocalBloomNgramFilter,
-        GlobalJson
+        GlobalJson,
+        LocalMinMax
     };
 
     struct TIndexSetting {
@@ -1356,7 +1403,7 @@ struct TAnalyzeParams {
 
 struct TCompactEntry {
     TNodePtr Cascade;
-    TNodePtr MaxShardsInFlight;
+    TNodePtr Parallel;
 };
 
 struct TAlterTableParameters {
@@ -1568,9 +1615,9 @@ TString TypeByAlias(const TString& alias, bool normalize = true);
 
 TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes = {});
 TNodePtr BuildQuote(TPosition pos, TNodePtr expr);
-TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent,
+TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent,
                    bool isOptionalArg = false);
-TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent);
+TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent);
 
 TNodePtr BuildLiteralNull(TPosition pos);
 TNodePtr BuildLiteralVoid(TPosition pos);
@@ -1678,13 +1725,13 @@ TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferred
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped);
 TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
-TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
-TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
-TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildAlterObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                    bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
-TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildDropObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                   bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
                                      std::vector<std::pair<TString, TString>>&& targets,

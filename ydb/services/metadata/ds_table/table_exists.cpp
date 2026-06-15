@@ -51,12 +51,12 @@ void TTableExistsActor::OnBootstrap() {
 }
 
 void TTableExistsActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& /*ev*/) {
-    AFL_WARN(NKikimrServices::METADATA_PROVIDER)("actor", "TTableExistsActor")("event", "undelivered")("self_id", SelfId())("send_to", MakeSchemeCacheID());
+    AFL_DEBUG(NKikimrServices::METADATA_PROVIDER)("actor", "TTableExistsActor")("event", "undelivered")("self_id", SelfId())("send_to", MakeSchemeCacheID());
     OutputController->OnPathExistsCheckFailed("scheme_cache_undelivered_message", Path);
 }
 
 void TTableExistsActor::OnTimeout() {
-    AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("actor", "TTableExistsActor")("event", "timeout")("self_id", SelfId())("send_to", MakeSchemeCacheID());
+    AFL_DEBUG(NKikimrServices::METADATA_PROVIDER)("actor", "TTableExistsActor")("event", "timeout")("self_id", SelfId())("send_to", MakeSchemeCacheID());
     OutputController->OnPathExistsCheckFailed("timeout", Path);
 }
 

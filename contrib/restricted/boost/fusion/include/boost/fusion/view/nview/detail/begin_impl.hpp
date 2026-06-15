@@ -5,7 +5,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 
-#if !defined(BOOST_FUSION_NVIEW_BEGIN_IMPL_SEP_23_2009_1036PM)
+#ifndef BOOST_FUSION_NVIEW_BEGIN_IMPL_SEP_23_2009_1036PM
 #define BOOST_FUSION_NVIEW_BEGIN_IMPL_SEP_23_2009_1036PM
 
 #include <boost/fusion/support/config.hpp>

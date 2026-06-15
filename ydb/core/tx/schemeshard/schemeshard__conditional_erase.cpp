@@ -479,10 +479,8 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
                 continue;
             }
 
-            const auto& shardToPartition = tableInfo->GetShard2PartitionIdx();
-            Y_ABORT_UNLESS(shardToPartition.contains(shardIdx));
-            const ui64 partitionIdx = shardToPartition.at(shardIdx);
-            Y_ABORT_UNLESS(partitionIdx < tableInfo->GetPartitions().size());
+            const TTableShardInfo* partition = tableInfo->GetPartitionStore().FindPtr(shardIdx);
+            Y_ABORT_UNLESS(partition);
 
             TDuration next = ProcessCondEraseResponse(ctx, tablePathId, tableInfo, shardIdx, record, now);
 
@@ -493,7 +491,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
                 });
                 it->second.AffectedShards.emplace_back(TCondEraseAffectedShard{
                     .ShardIdx = shardIdx,
-                    .PartitionIdx = partitionIdx,
+                    .Partition = partition,
                     .TabletId = tabletId,
                     .Next = next,
                 });
@@ -505,7 +503,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
             const auto& tableInfo = item.TableInfo;
             for (const auto& i : item.AffectedShards) {
                 {
-                    const auto& lag = tableInfo->GetPartitions().at(i.PartitionIdx).LastCondEraseLag;
+                    const auto& lag = i.Partition->LastCondEraseLag;
                     if (lag) {
                         Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
                     } else {
@@ -517,7 +515,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
                 tableInfo->UpdateNextCondErase(i.ShardIdx, now, i.Next);
 
                 {
-                    const auto& lag = tableInfo->GetPartitions().at(i.PartitionIdx).LastCondEraseLag;
+                    const auto& lag = i.Partition->LastCondEraseLag;
                     Y_ABORT_UNLESS(lag.Defined());
                     Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
                 }
@@ -530,7 +528,9 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
             const auto& tableInfo = item.TableInfo;
             const auto& affectedShards = item.AffectedShards;
             for (const auto& i : affectedShards) {
-                Self->PersistTablePartitionCondErase(db, tablePathId, i.PartitionIdx, tableInfo);
+                Self->PersistTablePartitionCondErase(db, tablePathId, i.Partition, tableInfo);
+                //NOTE: i.Partition TTableShardInfo pointer is used (and should be used)
+                // only within Execute(), this is the last reference
             }
         }
 

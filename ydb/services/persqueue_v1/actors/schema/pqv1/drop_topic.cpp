@@ -25,30 +25,26 @@ public:
     void DoAction() {
         Become(&TDropTopicActor::StateWork);
 
-        Ydb::Topic::DropTopicRequest request;
-        request.set_path(GetProtoRequest()->path());
-
         Register(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
-            .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
+            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
             .PeerName = Request_->GetPeerName(),
-            .Request = request,
+            .Path = GetProtoRequest()->path(),
             .UserToken = GetUserToken()
         }));
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvDropTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
+            ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
-            Ydb::Topic::DropTopicResponse result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result);
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::PersQueue::V1::DropTopicResponse());
         }
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvDropTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

@@ -2550,8 +2550,8 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
     }
     if ((*cursor)->GetType() != EYsonItemType::BeginMap) {
         THROW_ERROR_EXCEPTION("Error parsing logical type: expected %Qlv or %Qlv, actual %Qlv",
+            EYsonItemType::StringValue,
             EYsonItemType::BeginMap,
-            EYsonItemType::BeginList,
             (*cursor)->GetType());
     }
 

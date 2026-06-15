@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             os->set_path_pattern("/");
             (*os->mutable_format_setting())["csv_delimiter"] = "AA";
             const auto[result, issues] = bootstrap.CreateBinding(req);
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: csv_delimiter should contain only one character, code: 400010");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: csv_delimiter must be single character, code: 400010");
         }
 
         {
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(TYdbControlPlaneStorageCreateBinding) {
             os->set_format("parquet");
             (*os->mutable_format_setting())["csv_delimiter"] = ";";
             const auto[result, issues] = bootstrap.CreateBinding(req);
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: csv_delimiter should be used only with format csv_with_names, code: 400010");
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "<main>: Error: csv_delimiter can only be used with csv_with_names or csv format, code: 400010");
         }
 
         {

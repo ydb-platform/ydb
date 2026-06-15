@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    block_range_algorithms.cpp
     block_range_map.cpp
     block_range.cpp
     thread_checker.cpp

@@ -1,15 +1,14 @@
 LIBRARY()
 
 SRCS(
-    borders_flow_controller.cpp
-    common.cpp
-    context.cpp
-    events.cpp
-    executor.cpp
-    filters.cpp
     manager.cpp
+    events.cpp
     merge.cpp
+    common.cpp
     private_events.cpp
+    splitter.cpp
+    context.cpp
+    executor.cpp
 )
 
 PEERDIR(
@@ -17,7 +16,3 @@ PEERDIR(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

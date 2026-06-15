@@ -1,4 +1,6 @@
-#include <ydb/core/blobstorage/ddisk/ut/ddisk_actor_pdisk_ut.inl>
+#include <ydb/core/blobstorage/ddisk/ut/ddisk_actor_pdisk_common_ut.h>
+
+namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TDDiskActorPDiskLargeTest) {
     Y_UNIT_TEST(Batch10K_SeqWrite_SeqRead_Uring) {

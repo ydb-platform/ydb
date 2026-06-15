@@ -811,12 +811,9 @@ public:
                             ? (&TRowAndRangeIndexWriter::WriteRowIndex<ERowRangeIndexMode::Incremental>)
                             : (&TRowAndRangeIndexWriter::WriteRowIndex<ERowRangeIndexMode::IncrementalWithError>);
 
-                        converter = std::bind(
+                        converter = std::bind_front(
                             method,
-                            &RowAndRangeIndexWriter_,
-                            std::placeholders::_1,
-                            std::placeholders::_2,
-                            std::placeholders::_3);
+                            &RowAndRangeIndexWriter_);
                     } else if (denseField.Name() == RangeIndexColumnName) {
                         writerTableDescription.RangeIndexFieldIndex = nextDenseIndex;
                         knownFields[id] = TSkiffEncodingInfo::RangeIndex(nextDenseIndex);
@@ -826,12 +823,9 @@ public:
                             ? (&TRowAndRangeIndexWriter::WriteRangeIndex<ERowRangeIndexMode::Incremental>)
                             : (&TRowAndRangeIndexWriter::WriteRangeIndex<ERowRangeIndexMode::IncrementalWithError>);
 
-                        converter = std::bind(
+                        converter = std::bind_front(
                             method,
-                            &RowAndRangeIndexWriter_,
-                            std::placeholders::_1,
-                            std::placeholders::_2,
-                            std::placeholders::_3);
+                            &RowAndRangeIndexWriter_);
                     } else {
                         if (denseField.Name() == KeySwitchColumnName) {
                             writerTableDescription.KeySwitchFieldIndex = nextDenseIndex;

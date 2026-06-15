@@ -33,17 +33,20 @@ pattern requires lifting some variable declarations.
 
 Comments should be `// C99-style` for consistency with C++.
 
-When declaring pointer types, `*` should be placed next to the variable name,
-not the type. So
+When declaring pointer or reference types, `*` or `&` should be placed next to
+the variable name, not the type. So
 
     uint8_t *ptr;
+    const auto &blah;
 
 not
 
     uint8_t* ptr;
+    const auto& blah;
 
 Rather than `malloc()` and `free()`, use the wrappers `OPENSSL_malloc()`
-and `OPENSSL_free()`. Use the standard C `assert()` function freely.
+and `OPENSSL_free()`. Similarly, rather than `new` and `delete`, use the
+wrappers `New` and `Delete`. Use the standard C `assert()` function freely.
 
 Use the following wrappers, found in `crypto/internal.h` instead of the
 corresponding C standard library functions. They behave the same but avoid
@@ -133,7 +136,7 @@ functions must do nothing on `NULL` input.
 
 If a variable is the length of a pointer value, it has the suffix
 `_len`. An output parameter is named `out` or has an `out_` prefix. For
-instance, For instance:
+instance:
 
     uint8_t *out,
     size_t *out_len,
@@ -143,7 +146,7 @@ instance, For instance:
 Name public headers like `include/openssl/evp.h` with header guards like
 `OPENSSL_HEADER_EVP_H`. Name internal headers like
 `crypto/ec/internal.h` with header guards like
-`OPENSSL_HEADER_EC_INTERNAL_H`.
+`OPENSSL_HEADER_CRYPTO_EC_INTERNAL_H`.
 
 Name enums like `enum unix_hacker_t`. For instance:
 

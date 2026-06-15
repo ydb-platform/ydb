@@ -54,7 +54,7 @@ namespace boost { namespace property_tree { namespace ini_parser
     };
 
     /**
-     * Read INI from a the given stream and translate it to a property tree.
+     * Read INI from the given stream and translate it to a property tree.
      * @note Clears existing contents of property tree. In case of error
      *       the property tree is not modified.
      * @throw ini_parser_error If a format violation is found.
@@ -146,9 +146,9 @@ namespace boost { namespace property_tree { namespace ini_parser
     }
 
     /**
-     * Read INI from a the given file and translate it to a property tree.
+     * Read INI from the given file and translate it to a property tree.
      * @note Clears existing contents of property tree.  In case of error the
-     *       property tree unmodified.
+     *       property tree is not modified.
      * @throw ini_parser_error In case of error deserializing the property tree.
      * @param filename Name of file from which to read in the property tree.
      * @param[out] pt The property tree to populate.
@@ -250,7 +250,7 @@ namespace boost { namespace property_tree { namespace ini_parser
     }
 
     /**
-     * Translates the property tree to INI and writes it the given output
+     * Translates the property tree to INI and writes it to the given output
      * stream.
      * @pre @e pt cannot have data in its root.
      * @pre @e pt cannot have keys both data and children.
@@ -260,7 +260,7 @@ namespace boost { namespace property_tree { namespace ini_parser
      *                         INI or writing to the output stream.
      * @param stream The stream to which to write the INI representation of the 
      *               property tree.
-     * @param pt The property tree to tranlsate to INI and output.
+     * @param pt The property tree to translate to INI and output.
      * @param flags The flags to use when writing the INI file.
      *              No flags are currently supported.
      */
@@ -284,7 +284,7 @@ namespace boost { namespace property_tree { namespace ini_parser
     }
 
     /**
-     * Translates the property tree to INI and writes it the given file.
+     * Translates the property tree to INI and writes it to the given file.
      * @pre @e pt cannot have data in its root.
      * @pre @e pt cannot have keys both data and children.
      * @pre @e pt cannot be deeper than two levels.
@@ -293,7 +293,7 @@ namespace boost { namespace property_tree { namespace ini_parser
      *                          to INI or writing to the file.
      * @param filename The name of the file to which to write the INI
      *                 representation of the property tree.
-     * @param pt The property tree to tranlsate to INI and output.
+     * @param pt The property tree to translate to INI and output.
      * @param flags The flags to use when writing the INI file.
      *              The following flags are supported:
      * @li @c skip_ini_validity_check -- Skip check if ptree is a valid ini. The

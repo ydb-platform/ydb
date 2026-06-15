@@ -104,6 +104,7 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings->SetEnableSecureScriptExecutions(secureScriptExecutions);
         ServerSettings->SetGrpcPort(GrpcPort);
         ServerSettings->SetAppConfig(appConfig);
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
 
@@ -454,6 +455,102 @@ struct TScriptExecutionsYdbSetup {
         }
     }
 
+    void SetAtomicUploadFinalizationInProgress(const TString& executionId, i64 leaseGeneration = 1) {
+        const TString sql = R"(
+            DECLARE $database AS Utf8;
+            DECLARE $execution_id AS Utf8;
+            DECLARE $operation_status AS Int32;
+            DECLARE $execution_status AS Int32;
+            DECLARE $finalization_status AS Int32;
+            DECLARE $customer_supplied_id AS Utf8;
+            DECLARE $script_sinks AS JsonDocument;
+            DECLARE $lease_deadline AS Timestamp;
+            DECLARE $lease_state AS Int32;
+            DECLARE $lease_generation AS Int64;
+
+            UPDATE `.metadata/script_executions`
+            SET
+                operation_status = $operation_status,
+                execution_status = $execution_status,
+                finalization_status = $finalization_status,
+                customer_supplied_id = $customer_supplied_id,
+                script_sinks = $script_sinks,
+                end_ts = CurrentUtcTimestamp()
+            WHERE database = $database AND execution_id = $execution_id;
+
+            UPSERT INTO `.metadata/script_execution_leases` (
+                database, execution_id, lease_deadline, lease_generation, lease_state
+            ) VALUES (
+                $database, $execution_id, $lease_deadline, $lease_generation, $lease_state
+            );
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(TestDatabase)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(executionId)
+                .Build()
+            .AddParam("$operation_status")
+                .Int32(Ydb::StatusIds::SUCCESS)
+                .Build()
+            .AddParam("$execution_status")
+                .Int32(Ydb::Query::EXEC_STATUS_COMPLETED)
+                .Build()
+            .AddParam("$finalization_status")
+                .Int32(static_cast<i32>(EFinalizationStatus::FS_COMMIT))
+                .Build()
+            .AddParam("$customer_supplied_id")
+                .Utf8("test_job_id")
+                .Build()
+            .AddParam("$script_sinks")
+                .JsonDocument("[]")
+                .Build()
+            .AddParam("$lease_deadline")
+                .Timestamp(TInstant::Now() + TestLeaseDuration)
+                .Build()
+            .AddParam("$lease_state")
+                .Int32(static_cast<i32>(NPrivate::ELeaseState::ScriptFinalizing))
+                .Build()
+            .AddParam("$lease_generation")
+                .Int64(leaseGeneration)
+                .Build();
+
+        const auto result = TableClientSession->ExecuteDataQuery(
+            sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    std::optional<i32> GetFinalizationStatus(const TString& executionId) {
+        const TString sql = R"(
+            DECLARE $database AS Utf8;
+            DECLARE $execution_id AS Utf8;
+
+            SELECT finalization_status
+            FROM `.metadata/script_executions`
+            WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(TestDatabase)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(executionId)
+                .Build();
+
+        const auto result = TableClientSession->ExecuteDataQuery(
+            sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        return parser.ColumnParser("finalization_status").GetOptionalInt32();
+    }
+
 private:
     NKikimrKqp::TEvQueryRequest GetQueryRequest(const TString& query) {
         NKikimrKqp::TEvQueryRequest queryProto;
@@ -660,6 +757,48 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);
     }
 
+    Y_UNIT_TEST(GetOperationDuringAtomicUploadFinalization) {
+        TScriptExecutionsYdbSetup ydb;
+
+        const TString executionId = ydb.CreateQueryInDb();
+        ydb.SetAtomicUploadFinalizationInProgress(executionId);
+        UNIT_ASSERT(ydb.GetFinalizationStatus(executionId));
+
+        for (size_t i = 0; i < 3; ++i) {
+            const auto response = ydb.GetScriptExecutionOperation(executionId);
+            const auto& ev = *response->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(ev.Status, Ydb::StatusIds::SUCCESS, ev.Issues.ToString());
+            UNIT_ASSERT(!ev.Ready);
+            UNIT_ASSERT(ev.Metadata);
+
+            Ydb::Query::ExecuteScriptMetadata metadata;
+            ev.Metadata->UnpackTo(&metadata);
+            UNIT_ASSERT_C(
+                metadata.exec_status() == Ydb::Query::EXEC_STATUS_RUNNING,
+                Ydb::Query::ExecStatus_Name(metadata.exec_status()));
+            UNIT_ASSERT_STRING_CONTAINS(ev.Issues.ToString(), "wait finalization");
+            UNIT_ASSERT_STRING_CONTAINS(ev.Issues.ToString(), "Info:");
+            UNIT_ASSERT_C(
+                !ev.Issues.ToString().Contains("Finalization is not complete"),
+                ev.Issues.ToString());
+        }
+
+        UNIT_ASSERT(ydb.GetFinalizationStatus(executionId));
+
+        const auto leaseCheck = ydb.CheckLeaseStatus(executionId);
+        UNIT_ASSERT_VALUES_EQUAL(leaseCheck->Get()->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(leaseCheck->Get()->WaitFinalizationOrRetry);
+        UNIT_ASSERT(leaseCheck->Get()->OperationStatus);
+        UNIT_ASSERT_VALUES_EQUAL(*leaseCheck->Get()->OperationStatus, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(leaseCheck->Get()->ExecutionStatus);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<i32>(*leaseCheck->Get()->ExecutionStatus),
+            static_cast<i32>(Ydb::Query::EXEC_STATUS_COMPLETED));
+
+        UNIT_ASSERT(ydb.GetFinalizationStatus(executionId));
+    }
+
     Y_UNIT_TEST(BackgroundChecksStartAfterRestart) {
         TScriptExecutionsYdbSetup ydb(/* enableScriptExecutionBackgroundChecks */ false);
 
@@ -670,7 +809,9 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         // Wait background finalization
         Sleep(TestLeaseDuration);
-        ydb.GetRuntime()->Register(CreateKqpFinalizeScriptService({}, nullptr, nullptr, true, TDuration::Zero()));
+        TKqpFederatedQuerySetup setup;
+        setup.ScriptExecutionSettings = {.EnableBackgroundLeaseChecks = true, .LeaseCheckStartupTimeout = TDuration::Zero()};
+        ydb.GetRuntime()->Register(CreateKqpFinalizeScriptService({}, setup, nullptr));
         ydb.WaitOperationStatus(executionId, Ydb::StatusIds::UNAVAILABLE);
 
         ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);

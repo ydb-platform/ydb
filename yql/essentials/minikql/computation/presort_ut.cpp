@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TPresortCodecTest) {
 Y_UNIT_TEST(SimpleTypes) {
     TPresortTest test;
 
-    TSimpleTypes values = {.Bool = false, .Uint8 = 1u, .Uint16 = 2u, .Uint32 = 3u, .Uint64 = 4u, .Int8 = 5, .Int16 = 6, .Int32 = 7, .Int64 = 8, .Float = 9.f, .Double = 10.0};
+    TSimpleTypes values = {.Bool = false, .Uint8 = 1U, .Uint16 = 2U, .Uint32 = 3U, .Uint64 = 4U, .Int8 = 5, .Int16 = 6, .Int32 = 7, .Int64 = 8, .Float = 9.F, .Double = 10.0};
 
     auto validateSimpleTypes = [&](bool isOptional, bool isDesc) {
         TPresortEncoder encoder;
@@ -227,9 +227,9 @@ Y_UNIT_TEST(Int8) {
 
 Y_UNIT_TEST(Uint8) {
     const TVector<std::tuple<ui8, TString, TString>> values = {
-        {0u, "00", "FF"},
-        {0x80u, "80", "7F"},
-        {0xFFu, "FF", "00"},
+        {0U, "00", "FF"},
+        {0x80U, "80", "7F"},
+        {0xFFU, "FF", "00"},
     };
     TPresortTest().ValidateEncoding(values);
 }
@@ -247,8 +247,8 @@ Y_UNIT_TEST(Int16) {
 Y_UNIT_TEST(Uint16) {
     const TVector<std::tuple<ui16, TString, TString>> values = {
         {0, "0000", "FFFF"},
-        {0x8000u, "8000", "7FFF"},
-        {0xFFFFu, "FFFF", "0000"},
+        {0x8000U, "8000", "7FFF"},
+        {0xFFFFU, "FFFF", "0000"},
     };
     TPresortTest().ValidateEncoding(values);
 }
@@ -265,9 +265,9 @@ Y_UNIT_TEST(Int32) {
 
 Y_UNIT_TEST(Uint32) {
     const TVector<std::tuple<ui32, TString, TString>> values = {
-        {0u, "00000000", "FFFFFFFF"},
-        {0x80000000u, "80000000", "7FFFFFFF"},
-        {0xFFFFFFFFu, "FFFFFFFF", "00000000"},
+        {0U, "00000000", "FFFFFFFF"},
+        {0x80000000U, "80000000", "7FFFFFFF"},
+        {0xFFFFFFFFU, "FFFFFFFF", "00000000"},
     };
     TPresortTest().ValidateEncoding(values);
 }
@@ -284,9 +284,9 @@ Y_UNIT_TEST(Int64) {
 
 Y_UNIT_TEST(Uint64) {
     const TVector<std::tuple<ui64, TString, TString>> values = {
-        {0u, "0000000000000000", "FFFFFFFFFFFFFFFF"},
-        {0x8000000000000000u, "8000000000000000", "7FFFFFFFFFFFFFFF"},
-        {0xFFFFFFFFFFFFFFFFu, "FFFFFFFFFFFFFFFF", "0000000000000000"}};
+        {0U, "0000000000000000", "FFFFFFFFFFFFFFFF"},
+        {0x8000000000000000U, "8000000000000000", "7FFFFFFFFFFFFFFF"},
+        {0xFFFFFFFFFFFFFFFFU, "FFFFFFFFFFFFFFFF", "0000000000000000"}};
     TPresortTest().ValidateEncoding(values);
 }
 
@@ -296,13 +296,13 @@ Y_UNIT_TEST(Float) {
     const TVector<std::tuple<float, TString, TString>> values = {
         {-TLimits::infinity(), "00", "FF"},
         {-TLimits::max(), "0100800000", "FEFF7FFFFF"},
-        {-1.f, "01407FFFFF", "FEBF800000"},
+        {-1.F, "01407FFFFF", "FEBF800000"},
         {-TLimits::min(), "017F7FFFFF", "FE80800000"},
-        {-TLimits::min() / 8.f, "017FEFFFFF", "FE80100000"},
-        {0.f, "02", "FD"},
-        {TLimits::min() / 8.f, "0300100000", "FCFFEFFFFF"},
+        {-TLimits::min() / 8.F, "017FEFFFFF", "FE80100000"},
+        {0.F, "02", "FD"},
+        {TLimits::min() / 8.F, "0300100000", "FCFFEFFFFF"},
         {TLimits::min(), "0300800000", "FCFF7FFFFF"},
-        {1.f, "033F800000", "FCC07FFFFF"},
+        {1.F, "033F800000", "FCC07FFFFF"},
         {TLimits::max(), "037F7FFFFF", "FC80800000"},
         {TLimits::infinity(), "04", "FB"},
     };
@@ -370,63 +370,63 @@ Y_UNIT_TEST(Uuid) {
 
 Y_UNIT_TEST(TzDate) {
     const TVector<std::tuple<std::pair<ui16, ui16>, TString, TString>> values = {
-        {{0u, 0u}, "00000000", "FFFFFFFF"},
-        {{0u, 1u}, "00000001", "FFFFFFFE"},
-        {{1u, 0u}, "00010000", "FFFEFFFF"},
-        {{NUdf::MAX_DATE, 0u}, "C2090000", "3DF6FFFF"},
+        {{0U, 0U}, "00000000", "FFFFFFFF"},
+        {{0U, 1U}, "00000001", "FFFFFFFE"},
+        {{1U, 0U}, "00010000", "FFFEFFFF"},
+        {{NUdf::MAX_DATE, 0U}, "C2090000", "3DF6FFFF"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::TzDate>(values);
 }
 
 Y_UNIT_TEST(TzDatetime) {
     const TVector<std::tuple<std::pair<ui32, ui16>, TString, TString>> values = {
-        {{0u, 0u}, "000000000000", "FFFFFFFFFFFF"},
-        {{0u, 1u}, "000000000001", "FFFFFFFFFFFE"},
-        {{1u, 0u}, "000000010000", "FFFFFFFEFFFF"},
-        {{NUdf::MAX_DATETIME, 0u}, "FFCEDD800000", "0031227FFFFF"},
+        {{0U, 0U}, "000000000000", "FFFFFFFFFFFF"},
+        {{0U, 1U}, "000000000001", "FFFFFFFFFFFE"},
+        {{1U, 0U}, "000000010000", "FFFFFFFEFFFF"},
+        {{NUdf::MAX_DATETIME, 0U}, "FFCEDD800000", "0031227FFFFF"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::TzDatetime>(values);
 }
 
 Y_UNIT_TEST(TzTimestamp) {
     const TVector<std::tuple<std::pair<ui64, ui16>, TString, TString>> values = {
-        {{0u, 0u}, "00000000000000000000", "FFFFFFFFFFFFFFFFFFFF"},
-        {{0u, 1u}, "00000000000000000001", "FFFFFFFFFFFFFFFFFFFE"},
-        {{1u, 0u}, "00000000000000010000", "FFFFFFFFFFFFFFFEFFFF"},
-        {{NUdf::MAX_TIMESTAMP, 0u}, "000F3F52435260000000", "FFF0C0ADBCAD9FFFFFFF"},
+        {{0U, 0U}, "00000000000000000000", "FFFFFFFFFFFFFFFFFFFF"},
+        {{0U, 1U}, "00000000000000000001", "FFFFFFFFFFFFFFFFFFFE"},
+        {{1U, 0U}, "00000000000000010000", "FFFFFFFFFFFFFFFEFFFF"},
+        {{NUdf::MAX_TIMESTAMP, 0U}, "000F3F52435260000000", "FFF0C0ADBCAD9FFFFFFF"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::TzTimestamp>(values);
 }
 
 Y_UNIT_TEST(TzDate32) {
     const TVector<std::tuple<std::pair<i32, ui16>, TString, TString>> values = {
-        {{0, 0u}, "800000000000", "7FFFFFFFFFFF"},
-        {{0, 1u}, "800000000001", "7FFFFFFFFFFE"},
-        {{1, 0u}, "800000010000", "7FFFFFFEFFFF"},
-        {{NUdf::MIN_DATE32, 0u}, "7CD18CBF0000", "832E7340FFFF"},
-        {{NUdf::MAX_DATE32, 0u}, "832E733F0000", "7CD18CC0FFFF"},
+        {{0, 0U}, "800000000000", "7FFFFFFFFFFF"},
+        {{0, 1U}, "800000000001", "7FFFFFFFFFFE"},
+        {{1, 0U}, "800000010000", "7FFFFFFEFFFF"},
+        {{NUdf::MIN_DATE32, 0U}, "7CD18CBF0000", "832E7340FFFF"},
+        {{NUdf::MAX_DATE32, 0U}, "832E733F0000", "7CD18CC0FFFF"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::TzDate32>(values);
 }
 
 Y_UNIT_TEST(TzDatetime64) {
     const TVector<std::tuple<std::pair<i64, ui16>, TString, TString>> values = {
-        {{0, 0u}, "80000000000000000000", "7FFFFFFFFFFFFFFFFFFF"},
-        {{0, 1u}, "80000000000000000001", "7FFFFFFFFFFFFFFFFFFE"},
-        {{1, 0u}, "80000000000000010000", "7FFFFFFFFFFFFFFEFFFF"},
-        {{NUdf::MIN_DATETIME64, 0u}, "7FFFFBCE430DCE800000", "80000431BCF2317FFFFF"},
-        {{NUdf::MAX_DATETIME64, 0u}, "80000431BCF0DFFF0000", "7FFFFBCE430F2000FFFF"},
+        {{0, 0U}, "80000000000000000000", "7FFFFFFFFFFFFFFFFFFF"},
+        {{0, 1U}, "80000000000000000001", "7FFFFFFFFFFFFFFFFFFE"},
+        {{1, 0U}, "80000000000000010000", "7FFFFFFFFFFFFFFEFFFF"},
+        {{NUdf::MIN_DATETIME64, 0U}, "7FFFFBCE430DCE800000", "80000431BCF2317FFFFF"},
+        {{NUdf::MAX_DATETIME64, 0U}, "80000431BCF0DFFF0000", "7FFFFBCE430F2000FFFF"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::TzDatetime64>(values);
 }
 
 Y_UNIT_TEST(TzTimestamp64) {
     const TVector<std::tuple<std::pair<i64, ui16>, TString, TString>> values = {
-        {{0, 0u}, "80000000000000000000", "7FFFFFFFFFFFFFFFFFFF"},
-        {{0, 1u}, "80000000000000000001", "7FFFFFFFFFFFFFFFFFFE"},
-        {{1, 0u}, "80000000000000010000", "7FFFFFFFFFFFFFFEFFFF"},
-        {{NUdf::MIN_TIMESTAMP64, 0u}, "40000EA96C30A0000000", "BFFFF15693CF5FFFFFFF"},
-        {{NUdf::MAX_TIMESTAMP64, 0u}, "BFFFF14275F7FFFF0000", "40000EBD8A080000FFFF"},
+        {{0, 0U}, "80000000000000000000", "7FFFFFFFFFFFFFFFFFFF"},
+        {{0, 1U}, "80000000000000000001", "7FFFFFFFFFFFFFFFFFFE"},
+        {{1, 0U}, "80000000000000010000", "7FFFFFFFFFFFFFFEFFFF"},
+        {{NUdf::MIN_TIMESTAMP64, 0U}, "40000EA96C30A0000000", "BFFFF15693CF5FFFFFFF"},
+        {{NUdf::MAX_TIMESTAMP64, 0U}, "BFFFF14275F7FFFF0000", "40000EBD8A080000FFFF"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::TzTimestamp64>(values);
 }

@@ -482,8 +482,8 @@ extern const NConcurrency::TThroughputThrottlerConfigPtr InfiniteRequestThrottle
 TRequestQueuePtr CreateRequestQueue(
     std::string name,
     std::any tag,
-    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler,
-    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler);
+    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler);
 
 TRequestQueuePtr CreateRequestQueue(
     std::string name,

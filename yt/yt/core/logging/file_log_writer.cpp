@@ -16,6 +16,8 @@
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/fs.h>
 
+#include <library/cpp/yt/system/process_id.h>
+
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NLogging {
@@ -49,9 +51,9 @@ TString FormatFileName(const TString& fileNamePattern)
 {
     TPatternFormatter formatter;
     formatter
-        .SetProperty("process_id", ToString(GetCurrentProcessId()))
+        .SetProperty("process_id", ToString(GetProcessId()))
         .SetProperty("process_name", SanitizeFileName(GetCurrentProcessName()))
-        .SetProperty("process_command_line", SanitizeFileName(GetCurrentProcessName()));
+        .SetProperty("process_command_line", SanitizeFileName(GetCurrentProcessCommandLine()));
     return formatter.Format(fileNamePattern);
 }
 
@@ -127,11 +129,16 @@ public:
                 }
             } else {
                 if (Disabled_.load(std::memory_order::acquire)) {
-                    Reload(); // Reinitialize all descriptors.
-
-                    YT_LOG_INFO("Log file enabled: space check passed (FileName: %v)",
-                        BaseFileName_);
-                    Disabled_ = false;
+                    try {
+                        // Reinitialize all descriptors.
+                        Reload();
+                        YT_LOG_INFO("Log file enabled: space check passed (FileName: %v)",
+                            BaseFileName_);
+                        Disabled_ = false;
+                    } catch (const std::exception& ex) {
+                        YT_LOG_ERROR(ex, "Log file disabled: reload failed (FileName: %v)",
+                            BaseFileName_);
+                    }
                 }
             }
         } catch (const std::exception& ex) {

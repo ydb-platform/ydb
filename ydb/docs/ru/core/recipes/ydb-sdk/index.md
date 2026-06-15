@@ -36,9 +36,9 @@
 - [Диагностика проблем](debug.md)
 
   - [Включить логирование](debug-logs.md)
+  - [Экспорт логов в OpenTelemetry](debug-logs-otel.md)
   - [Подключить метрики в Prometheus](debug-prometheus.md)
-  - [Подключить трассировку в Jaeger](debug-jaeger.md)
-  - [Подключить трассировку в OpenTelemetry](debug-otel.md)
+  - [Трассировка с OpenTelemetry](debug-otel-tracing.md)
 
 Смотрите также:
 

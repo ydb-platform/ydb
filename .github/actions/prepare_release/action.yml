@@ -20,6 +20,10 @@ inputs:
   version-artifact-name:
     description: 'Name for the version artifact (e.g., cli-version)'
     required: true
+  version-artifact-file:
+    description: 'File name inside the version artifact (e.g., cli_version.txt)'
+    required: false
+    default: 'version.txt'
 outputs:
   branch-name:
     description: 'Name of the created release branch'
@@ -104,13 +108,13 @@ runs:
       shell: bash
       run: |
         NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
-        echo "$NEW_VERSION" > version_release.txt
-        echo "Created version_release.txt with version: $NEW_VERSION"
+        echo "$NEW_VERSION" > ${{ inputs.version-artifact-file }}
+        echo "Created ${{ inputs.version-artifact-file }} with version: $NEW_VERSION"
     - name: Upload version artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.version-artifact-name }}
-        path: version_release.txt
+        path: ${{ inputs.version-artifact-file }}
         if-no-files-found: error
         retention-days: 1
     - name: Commit changes

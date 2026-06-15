@@ -109,7 +109,7 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
         TSensorOptions options;
         options.Sparse = cube.sparse();
         options.Global = cube.global();
-        options.DisableSensorsRename = cube.disable_sensors_rename();
+        options.DisableSensorsRename = YT_OPTIONAL_FROM_PROTO(cube, disable_sensors_rename);
         options.DisableDefault = cube.disable_default();
         options.SummaryPolicy = NYT::FromProto<ESummaryPolicy>(cube.summary_policy());
 

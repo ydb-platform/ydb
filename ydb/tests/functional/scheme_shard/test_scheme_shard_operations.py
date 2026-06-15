@@ -37,7 +37,7 @@ class TestSchemeShardSimpleOps(object):
             callee,
             raises(
                 ydb.SchemeError,
-                "Path does not exist"
+                "Path `/Root/test_delete_table_that_doesnt_exist_failure` does not exist"
             )
         )
 
@@ -312,6 +312,6 @@ class TestSchemeShardSimpleOps(object):
             callee,
             raises(
                 ydb.SchemeError,
-                "Path does not exist"
+                "Path `/Root/test_ydb_remove_directory_that_does_not_exist_failure` does not exist"
             )
         )

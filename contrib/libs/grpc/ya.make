@@ -23,6 +23,7 @@ PEERDIR(
     contrib/libs/re2
     contrib/libs/xxhash
     contrib/libs/zlib
+    contrib/libs/zstd
     contrib/restricted/abseil-cpp-tstring
     library/cpp/resource
 )
@@ -36,6 +37,7 @@ ADDINCL(
     contrib/libs/grpc/third_party/address_sorting/include
     contrib/libs/grpc/third_party/upb
     contrib/libs/xxhash
+    contrib/libs/zstd/include
 )
 
 NO_COMPILER_WARNINGS()
@@ -953,10 +955,6 @@ RECURSE(
     src/compiler/grpc_cpp_plugin
     src/compiler/grpc_plugin_support
     src/compiler/grpc_python_plugin
-    src/proto/grpc/channelz
-    src/proto/grpc/health/v1
-    src/proto/grpc/reflection/v1
-    src/proto/grpc/reflection/v1alpha
     third_party/address_sorting
     third_party/upb
 )

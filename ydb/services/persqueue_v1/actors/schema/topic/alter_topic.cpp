@@ -26,7 +26,7 @@ public:
         Become(&TAlterTopicActor::StateWork);
 
         Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
-            .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
+            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
             .PeerName = Request_->GetPeerName(),
             .Request = *GetProtoRequest(),
             .UserToken = GetUserToken()
@@ -34,18 +34,17 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            ReplyWithError(ev->Get()->Status, ev->Get()->Status, ev->Get()->ErrorMessage);
+            ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
-            Ydb::Topic::AlterTopicResponse result;
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, result);
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Topic::AlterTopicResponse());
         }
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

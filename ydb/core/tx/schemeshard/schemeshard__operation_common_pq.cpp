@@ -466,21 +466,21 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         const auto& partitions = table->GetPartitions();
 
         for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto& cur = partitions.at(i);
+            const auto* cur = partitions.at(i);
 
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(cur.ShardIdx));
-            const auto& shard = context.SS->ShardInfos.at(cur.ShardIdx);
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(cur->ShardIdx));
+            const auto& shard = context.SS->ShardInfos.at(cur->ShardIdx);
 
             auto& mg = *bootstrapConfig->AddExplicitMessageGroups();
             mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shard.TabletID)));
 
             if (i != partitions.size() - 1) {
-                mg.MutableKeyRange()->SetToBound(cur.EndOfRange);
+                mg.MutableKeyRange()->SetToBound(cur->EndOfRange);
             }
 
             if (i) {
-                const auto& prev = partitions.at(i - 1);
-                mg.MutableKeyRange()->SetFromBound(prev.EndOfRange);
+                const auto* prev = partitions.at(i - 1);
+                mg.MutableKeyRange()->SetFromBound(prev->EndOfRange);
             }
         }
     }

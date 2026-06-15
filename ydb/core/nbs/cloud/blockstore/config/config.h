@@ -29,13 +29,19 @@ public:
     [[nodiscard]] TDuration GetTraceSamplePeriod() const;
     [[nodiscard]] ui32 GetSyncRequestsBatchSize() const;
     [[nodiscard]] ui64 GetStripeSize() const;
-    [[nodiscard]] TDuration GetWriteHandoffDelay() const;
+    [[nodiscard]] TDuration GetWriteHedgingDelay() const;
+    [[nodiscard]] TDuration GetWriteRequestTimeout() const;
     [[nodiscard]] TString GetDDiskPoolName() const;
     [[nodiscard]] TString GetPersistentBufferDDiskPoolName() const;
     [[nodiscard]] NProto::EWriteMode GetWriteMode() const;
     [[nodiscard]] TDuration GetPBufferReplyTimeout() const;
     [[nodiscard]] ui64 GetVChunkSize() const;
     [[nodiscard]] ui32 GetThreadPoolSize() const;
+    [[nodiscard]] NProto::TOracleConfig GetOracleConfig() const;
+    [[nodiscard]] TDuration GetDirtyMapDebugPrintInterval() const;
+    [[nodiscard]] ui32 GetVhostThreadsCount() const;
+    [[nodiscard]] ui32 GetVhostQueuesCount() const;
+    [[nodiscard]] ui64 GetPBufferCleanupLsnStep() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;

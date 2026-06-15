@@ -3,6 +3,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/util/proto_duration.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NKqp {
 
 TEvKqp::TEvQueryRequest::TEvQueryRequest(
@@ -58,7 +60,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     UserCtx = builder.Build();
 }
 
-TEvKqp::TEvQueryRequest::TEvQueryRequest(NACLib::TUserContext::TPtr userCtx) : TEvQueryRequest()
+TEvKqp::TEvQueryRequest::TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> userCtx) : TEvQueryRequest()
 {
     UserCtx = userCtx;
     if (userCtx != nullptr) {
@@ -69,7 +71,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(NACLib::TUserContext::TPtr userCtx) : T
     }
 }
 
-NACLib::TUserContext::TPtr TEvKqp::TEvQueryRequest::GetUserCtx()
+TIntrusivePtr<NACLib::TUserContext> TEvKqp::TEvQueryRequest::GetUserCtx()
 {
     if (UserCtx != nullptr) {
         return UserCtx;

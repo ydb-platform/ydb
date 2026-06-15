@@ -21,7 +21,8 @@ public:
     IEngineTxReader(const TString& name, TColumnEngineForLogs* self, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector)
         : TBase(name)
         , DsGroupSelector(dsGroupSelector)
-        , Self(self) {
+        , Self(self)
+    {
     }
 };
 
@@ -50,6 +51,7 @@ private:
     using TBase = ITxReader;
     TColumnEngineForLogs* Self = nullptr;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }
@@ -57,7 +59,8 @@ private:
 public:
     TEngineLoadingFinish(const TString& name, TColumnEngineForLogs* self)
         : TBase(name)
-        , Self(self) {
+        , Self(self)
+    {
     }
 };
 

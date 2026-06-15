@@ -1,0 +1,61 @@
+--- contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/options.h	(index)
++++ contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/options.h	(working tree)
+@@ -167,6 +167,15 @@ struct ARROW_EXPORT IpcReadOptions {
+   /// The lazy property will always be reset to true to deliver the expected behavior
+   io::CacheOptions pre_buffer_cache_options = io::CacheOptions::LazyDefaults();
+
++  /// \brief Maximum number of variadic buffers per BinaryView/LargeStringView column.
++  ///
++  /// A crafted IPC stream can declare an enormous variadic_buffer_count, causing a huge
++  /// std::vector<shared_ptr<Buffer>> allocation via operator new (not the memory pool).
++  /// Set to a small value (e.g. 1<<20) in fuzz tests or untrusted-input contexts to
++  /// convert this into a catchable IOError instead of an OOM kill.
++  /// The default (INT32_MAX) preserves the original Arrow behavior.
++  int64_t max_variadic_buffer_count = std::numeric_limits<int32_t>::max();
++
+   static IpcReadOptions Defaults();
+ };
+
+--- contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.cc	(index)
++++ contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.cc	(working tree)
+@@ -171,7 +171,8 @@ class ArrayLoader {
+         metadata_version_(metadata_version),
+         file_(file),
+         file_offset_(0),
+-        max_recursion_depth_(options.max_recursion_depth) {}
++        max_recursion_depth_(options.max_recursion_depth),
++        max_variadic_buffer_count_(options.max_variadic_buffer_count) {}
+
+   explicit ArrayLoader(const flatbuf::RecordBatch* metadata,
+                        MetadataVersion metadata_version, const IpcReadOptions& options,
+@@ -180,7 +181,8 @@ class ArrayLoader {
+         metadata_version_(metadata_version),
+         file_(nullptr),
+         file_offset_(file_offset),
+-        max_recursion_depth_(options.max_recursion_depth) {}
++        max_recursion_depth_(options.max_recursion_depth),
++        max_variadic_buffer_count_(options.max_variadic_buffer_count) {}
+
+   Status ReadBuffer(int64_t offset, int64_t length, std::shared_ptr<Buffer>* out) {
+     if (skip_io_) {
+@@ -255,9 +257,9 @@ class ArrayLoader {
+       return Status::IOError("variadic_count_index out of range.");
+     }
+     int64_t count = variadic_counts->Get(i);
+-    if (count < 0 || count > std::numeric_limits<int32_t>::max()) {
+-      return Status::IOError(
+-          "variadic_count must be representable as a positive int32_t, got ", count, ".");
++    if (count < 0 || count > max_variadic_buffer_count_) {
++      return Status::IOError("variadic_count ", count,
++                             " exceeds limit of ", max_variadic_buffer_count_, ".");
+     }
+     return static_cast<size_t>(count);
+   }
+@@ -496,6 +498,7 @@ class ArrayLoader {
+   io::RandomAccessFile* file_;
+   int64_t file_offset_;
+   int max_recursion_depth_;
++  int64_t max_variadic_buffer_count_;
+   int buffer_index_ = 0;
+   int field_index_ = 0;
+   bool skip_io_ = false;

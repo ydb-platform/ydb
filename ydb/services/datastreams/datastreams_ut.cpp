@@ -184,6 +184,14 @@ void GrantConnect(const TDriver& driver, const TString& user) {
     UNIT_ASSERT(result.IsSuccess());
 }
 
+void GrantReadWriteAccess(const TDriver& driver, const TString& user, const TString& path) {
+    NYdb::NScheme::TSchemeClient schemeClient(driver);
+    NYdb::NScheme::TPermissions permissions(user, {"ydb.generic.read", "ydb.generic.write"});
+    auto result = schemeClient.ModifyPermissions(path,
+        NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)).ExtractValueSync();
+    UNIT_ASSERT(result.IsSuccess());
+}
+
 #define Y_UNIT_TEST_NAME this->Name_;
 
 
@@ -1407,6 +1415,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
 
         GrantConnect(*driver, "user2@builtin");
+        GrantReadWriteAccess(*driver, "user2@builtin", "/Root/" + streamName);
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 
@@ -1476,6 +1485,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
 
         GrantConnect(*driver, "user2@builtin");
+        GrantReadWriteAccess(*driver, "user2@builtin", "/Root/" + streamName);
 
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
@@ -1692,6 +1702,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
 
         GrantConnect(*driver, "user2@builtin");
+        GrantReadWriteAccess(*driver, "user2@builtin", "/Root/" + streamName);
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 

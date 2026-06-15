@@ -3,7 +3,7 @@
 #include "parse_double.h"
 
 #include <yql/essentials/minikql/defs.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/minikql/jsonpath/rewrapper/proto/serialization.pb.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
 

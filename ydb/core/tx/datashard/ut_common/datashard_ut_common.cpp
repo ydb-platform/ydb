@@ -17,6 +17,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -1110,7 +1111,7 @@ bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, T
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml,
-                                                      NACLib::TUserContext::TPtr userCtx /*= nullptr*/)
+                                                      TIntrusivePtr<NACLib::TUserContext> userCtx /*= nullptr*/)
 {
     auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(userCtx);
     if (dml) {
@@ -1611,6 +1612,25 @@ ui64 AsyncSplitTable(
     desc.SetTablePath(path);
     desc.AddSourceTabletId(sourceTablet);
     *desc.AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional() = std::move(splitKey);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
+ui64 AsyncSplitTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& path,
+        ui64 sourceTablet,
+        TVector<NKikimrMiniKQL::TValue>&& splitKey)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableSplitMergeTablePartitions();
+    desc.SetTablePath(path);
+    desc.AddSourceTabletId(sourceTablet);
+    auto& keyPrefix = *desc.AddSplitBoundary()->MutableKeyPrefix();
+    for (auto& keyPart: splitKey) {
+        *keyPrefix.AddTuple()->MutableOptional() = std::move(keyPart);
+    }
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
 }
@@ -2122,7 +2142,7 @@ void ExecSQL(Tests::TServer::TPtr server,
              bool dml,
              Ydb::StatusIds::StatusCode code,
              NYdb::NUt::TTestContext testCtx,
-             NACLib::TUserContext::TPtr userCtx)
+             TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto &runtime = *server->GetRuntime();
     auto request = MakeSQLRequest(sql, dml, userCtx);
@@ -2145,7 +2165,7 @@ void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml,
-             NACLib::TUserContext::TPtr userCtx)
+             TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     ExecSQL(server, sender, sql, dml, Ydb::StatusIds::SUCCESS, NYdb::NUt::TTestContext(), userCtx);
 }
@@ -2644,6 +2664,8 @@ namespace {
             switch (parser.GetPrimitiveType()) {
             PRINT_PRIMITIVE(Uint32);
             PRINT_PRIMITIVE(Uint64);
+            PRINT_PRIMITIVE(Int32);
+            PRINT_PRIMITIVE(Int64);
             PRINT_PRIMITIVE(Date);
             PRINT_PRIMITIVE(Datetime);
             PRINT_PRIMITIVE(Timestamp);
@@ -2931,6 +2953,26 @@ ui64 AsyncTruncateTable(
     op->SetTableName(tableName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
+}
+
+TString FormatIntReadResult(const TEvDataShard::TEvReadResult* msg) {
+    TStringBuilder sb;
+    if (msg->Record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
+        size_t count = msg->GetRowsCount();
+        for (size_t i = 0; i < count; ++i) {
+            auto cells = msg->GetCells(i);
+            for (size_t j = 0; j < cells.size(); ++j) {
+                if (j != 0) {
+                    sb << ", ";
+                }
+                sb << cells[j].AsValue<i32>();
+            }
+            sb << "\n";
+        }
+    } else {
+        sb << "ERROR: " << msg->Record.GetStatus().GetCode();
+    }
+    return sb;
 }
 
 }

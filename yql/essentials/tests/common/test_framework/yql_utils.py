@@ -40,11 +40,20 @@ UNDEFINED_SANITIZER_IGNORE_STRINGS = [
 ]
 
 FEATURES = json.loads(resource.find('yql/essentials/data/language/features.json'))
+LANGVER = json.loads(resource.find('yql/essentials/data/language/langver.json'))
 
 
 def get_param(name, default=None):
     name = 'YQL_' + name.upper()
     return yatest.common.get_param(name, os.environ.get(name) or default)
+
+
+def get_secure_params(cfg):
+    return {
+        item[1]: item[2]
+        for item in cfg
+        if len(item) == 3 and item[0] == 'secure_param'
+    }
 
 
 def do_custom_query_check(res, sql_query):
@@ -90,6 +99,15 @@ def get_gateway_cfg_filename():
         return 'gateways.conf'
     else:
         return 'gateways-' + suffix + '.conf'
+
+
+def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
+    """Merge gateway config patch from a file path, if it exists."""
+    if not patch_cfg_file:
+        return
+    if os.path.exists(patch_cfg_file):
+        with open(patch_cfg_file) as f:
+            text_format.Merge(f.read(), gateway_config)
 
 
 def merge_default_gateway_cfg(cfg_dir, gateway_config):
@@ -528,15 +546,22 @@ def is_xfail(cfg, filename=''):
 
 
 def get_langver(cfg):
+    def decode(langver):
+        if langver == 'max':
+            return LANGVER['max']
+        if langver == 'unknown':
+            return None
+        return langver
+
     def resolve(alias):
         if alias in FEATURES:
-            return FEATURES[alias]["since_langver"]
+            return FEATURES[alias]["min_langver"]
         if alias[0].isdigit():
             return alias
         raise ValueError('Bad alias ' + alias)
 
     return next((
-        resolve(item[1])
+        decode(resolve(item[1]))
         for item in cfg
         if item[0] == 'langver'
     ), None)
@@ -548,6 +573,10 @@ def get_envs(cfg):
         if item[0] == 'env':
             envs[item[1]] = item[2]
     return envs
+
+
+def is_forceblocks(cfg):
+    return any(item[0] == 'forceblocks' for item in cfg)
 
 
 def is_skip_forceblocks(cfg):
@@ -583,6 +612,13 @@ def is_canonize_yt(cfg):
         if item[0] == 'canonize_yt':
             return True
     return False
+
+
+def get_gateway_cfg_patch(cfg):
+    for item in cfg:
+        if item[0] == 'gateway_cfg_patch':
+            return item[1]
+    return None
 
 
 def is_with_final_result_issues(cfg):

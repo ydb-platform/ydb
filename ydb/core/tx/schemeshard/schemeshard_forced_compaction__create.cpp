@@ -76,6 +76,10 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
             }
         }
 
+        if (settings.max_shards_in_flight() == 0) {
+            return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "max_shards_in_flight must be greater than 0");
+        }
+
         auto info = MakeIntrusive<TForcedCompactionInfo>();
         info->Id = id;
         info->State = TForcedCompactionInfo::EState::InProgress;
@@ -88,12 +92,6 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
             info->UserSID = request.GetUserSID();
         }
 
-        if (info->Cascade) {
-            return Reply(
-                std::move(response),
-                Ydb::StatusIds::BAD_REQUEST,
-                "'cascade = true' is not supported yet");
-        }
         if (Self->InProgressForcedCompactionsByTable.contains(info->TablePathId)) {
             return Reply(
                 std::move(response),
@@ -101,19 +99,58 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 TStringBuilder() << "Forced compaction already in progress for table " << tablePath.PathString());
         }
 
-        auto tableInfo = Self->Tables.at(info->TablePathId);
-        if (tableInfo->GetPartitions().empty()) {
+        info->TablesToCompact.insert(info->TablePathId);
+        if (info->Cascade) {
+            for (const auto& [_, childPathId] : tablePath.Base()->GetChildren()) {
+                auto childPath = Self->PathsById.at(childPathId);
+                if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex || childPath->Dropped()) {
+                    continue;
+                }
+
+                auto indexPath = TPath::Init(childPathId, Self);
+                for (const auto& [_, implTablePathId]: indexPath.Base()->GetChildren()) {
+                    auto indexImplPath = TPath::Init(implTablePathId, Self);
+                    const auto checks = indexImplPath.Check();
+                    checks
+                        .IsAtLocalSchemeShard()
+                        .IsResolved()
+                        .NotDeleted()
+                        .NotUnderDeleting()
+                        .IsTable()
+                        .IsInsideTableIndexPath()
+                        .IsTheSameDomain(subdomainPath);
+                    if (!checks) {
+                        continue;
+                    }
+
+                    if (Self->InProgressForcedCompactionsByTable.contains(implTablePathId)) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::PRECONDITION_FAILED,
+                            TStringBuilder() << "Forced compaction already in progress for table " << indexImplPath.PathString());
+                    }
+
+                    info->TablesToCompact.insert(implTablePathId);
+                }
+            }
+        }
+
+        TVector<std::pair<TShardIdx, TPathId>> shardsToCompact;
+
+        for (const auto& tablePathId : info->TablesToCompact) {
+            auto tableInfo = Self->Tables.at(tablePathId);
+            for (const auto* shardInfo : tableInfo->GetPartitions()) {
+                shardsToCompact.emplace_back(shardInfo->ShardIdx, tablePathId);
+            }
+        }
+
+        if (shardsToCompact.empty()) {
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                "The table has no shards");
+                "There are no shards to compact");
         }
 
-        TVector<TShardIdx> shardsToCompact;
-        shardsToCompact.reserve(tableInfo->GetPartitions().size());
-        for (const auto& shardInfo : tableInfo->GetPartitions()) {
-            shardsToCompact.push_back(shardInfo.ShardIdx);
-        }
         info->TotalShardCount = shardsToCompact.size();
 
         NIceDb::TNiceDb db(txc.DB);
@@ -121,8 +158,8 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         Self->PersistForcedCompactionShards(db, *info, shardsToCompact);
 
         Self->AddForcedCompaction(info);
-        for (const auto& shardIdx : shardsToCompact) {
-            Self->AddForcedCompactionShard(shardIdx, info);
+        for (const auto& [shardIdx, pathId] : shardsToCompact) {
+            Self->AddForcedCompactionShard(shardIdx, pathId, info);
         }
         Self->FromForcedCompactionInfo(*response->Record.MutableForcedCompaction(), *info);
 
@@ -133,7 +170,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
     void DoComplete(const TActorContext &ctx) override {
         LOG_N("TForcedCompaction::TTxCreate DoComplete " << Request->Get()->Record.ShortDebugString());
-        Self->ProcessForcedCompactionQueues();
+        Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
@@ -149,7 +186,6 @@ private:
             auto& issue = *record.MutableIssues()->Add();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
             issue.set_message(errorMessage);
-
         }
 
         SideEffects.Send(Request->Sender, std::move(response), 0, Request->Cookie);

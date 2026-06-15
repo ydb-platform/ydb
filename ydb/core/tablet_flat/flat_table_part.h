@@ -147,11 +147,13 @@ namespace NTable {
 
         bool MightHaveKeyPrefix(const NBloom::TPrefix& prefix) const
         {
-            // ByKeyPrefixes are sorted by prefixLen; pick the longest (most selective) filter
+            // Check from the longest (most selective) prefix first
             for (auto it = ByKeyPrefixes.rbegin(); it != ByKeyPrefixes.rend(); ++it) {
                 const auto& [prefixLen, bloom] = *it;
                 if (bloom && prefixLen > 0) {
-                    return bloom->MightHave(prefix.Get(prefixLen));
+                    if (!bloom->MightHave(prefix.Get(prefixLen))) {
+                        return false;
+                    }
                 }
             }
             return true;

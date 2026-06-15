@@ -3,8 +3,8 @@
 #include "propose_tx.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/transactions/transactions/tx_add_sharding_info.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/transactions/transactions/tx_add_sharding_info.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -42,10 +42,13 @@ private:
 
     virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) override;
+
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
     }
+
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
+
     virtual TString DoGetOpType() const override {
         switch (SchemaTxBody.TxBody_case()) {
             case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
@@ -66,9 +69,11 @@ private:
                 return "Scheme:TXBODY_NOT_SET";
         }
     }
+
     virtual bool DoIsAsync() const override {
         return !!WaitOnPropose;
     }
+
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {
             return false;
@@ -79,8 +84,9 @@ private:
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot parse incoming tx message");
                 return false;
             }
-            TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(
-                owner, TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetGranuleShardingInfo()), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
+            TxAddSharding =
+                owner.TablesManager.CreateAddShardingInfoTx(owner, TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetGranuleShardingInfo()),
+                    SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
         }
         return true;
     }
@@ -118,6 +124,7 @@ public:
     virtual bool ExecuteOnAbort(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
         return true;
     }
+
     virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
         return true;
     }
@@ -137,6 +144,7 @@ private:
         }
         return ValidateTableSchema(preset.GetSchema());
     }
+
     virtual TString DoDebugString() const override {
         return "SCHEME:" + SchemaTxBody.DebugString();
     }

@@ -8,6 +8,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/small/completer.h>
+#include <library/cpp/resource/resource.h>
+#include <util/string/strip.h>
+#include <util/system/env.h>
 
 #include <filesystem>
 
@@ -113,6 +116,22 @@ int NewYdbClient(int argc, char** argv) {
     settings.MentionUserAccount = false;
     settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";
     settings.YdbDir = "ydb";
+
+    settings.BuildInfoProvider = []() -> NYdb::NConsoleClient::TYdbCliBuildInfo {
+        TString version;
+        try {
+            version = StripString(NResource::Find("version.txt"));
+        } catch (...) {
+        }
+        if (version.empty()) {
+            version = "0.0.0";
+        }
+        return {"ydb-cli", version};
+    };
+
+    if (TryGetEnv("YDB_CLI_AI_ENABLE").Defined()) {
+        settings.EnableAiInteractive = true;
+    }
 
     auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");

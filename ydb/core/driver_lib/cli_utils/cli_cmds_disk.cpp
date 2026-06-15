@@ -235,7 +235,7 @@ public:
 
     void Prepare(TConfig& config) override {
         config.ArgsSettings = TConfig::TArgSettings();
-        Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);
+        Opts.SetHelpCommandVerbosityLevel(config.HelpCommandVerbosityLevel);
         config.Opts = &Opts;
         Config(config);
         SetCustomUsage(config);

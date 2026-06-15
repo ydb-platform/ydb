@@ -76,8 +76,7 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
     } else {
         DoInitNewExternalOperator(std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
                                       NWrappers::NExternalStorage::TUnavailableExternalStorageOperator(
-                                          "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId())),
-            std::nullopt);
+                                          "tier_unavailable", TStringBuilder() << "Tier is not configured: " << GetStorageId())), std::nullopt);
     }
 }
 
@@ -103,7 +102,8 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
     , ErrorCollector(shard.Counters.GetEvictionCounters().TieringErrors)
     , TabletActorId(shard.SelfId())
     , Generation(shard.Executor()->Generation())
-    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {
+    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>())
+{
     InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
 }
 
@@ -116,7 +116,8 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,
     , TabletActorId(shardActorId)
     , Generation(generation)
     , InitializationConfig(storageConfig)
-    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {
+    , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>())
+{
     InitNewExternalOperator();
 }
 

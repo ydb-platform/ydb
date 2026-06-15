@@ -23,6 +23,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto
+    yql/essentials/minikql/runtime_settings
     yql/essentials/providers/common/schema/expr
 )
 

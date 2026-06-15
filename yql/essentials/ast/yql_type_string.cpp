@@ -1693,6 +1693,7 @@ TAstNode* ParseType(TStringBuf str, TMemoryPool& pool, TIssues& issues,
 
 TString FormatType(const TTypeAnnotationNode* typeNode)
 {
+    YQL_ENSURE(typeNode);
     TStringStream ss;
     TTypePrinter printer(ss);
     typeNode->Accept(printer);

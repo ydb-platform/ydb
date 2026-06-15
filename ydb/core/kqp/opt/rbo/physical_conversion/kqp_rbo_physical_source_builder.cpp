@@ -1,8 +1,32 @@
 #include "kqp_rbo_physical_source_builder.h"
+
+#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
+
+namespace {
+
+THashMap<TString, TString> BuildOutputToPhysicalColumnMap(const TOpRead& read) {
+    THashMap<TString, TString> renameMap;
+    Y_ENSURE(read.Columns.size() == read.OutputIUs.size());
+    for (ui32 i = 0; i < read.Columns.size(); ++i) {
+        const auto& physicalColumn = read.Columns[i];
+        const auto& outputIU = read.OutputIUs[i];
+        if (outputIU.GetFullName() != physicalColumn) {
+            renameMap[outputIU.GetFullName()] = physicalColumn;
+        }
+        if (outputIU.GetColumnName() != physicalColumn) {
+            renameMap[outputIU.GetColumnName()] = physicalColumn;
+        }
+    }
+    return renameMap;
+}
+
+} // anonymous namespace
 
 TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
@@ -29,6 +53,30 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 .Build()
             .Done().Ptr();
             // clang-format on
+
+            const auto& columns = Read->Columns;
+            const auto& outputs = Read->OutputIUs;
+            Y_ENSURE(columns.size() == outputs.size());
+
+            TVector<std::pair<TString, TString>> renames;
+            for (ui32 i = 0; i < columns.size(); ++i) {
+                renames.emplace_back(columns[i], outputs[i].GetFullName());
+            }
+
+            const auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
+            const auto renameMap = NPhysicalConvertionUtils::BuildRenameMap(programArg, renames, Ctx);
+            // clang-format off
+            source = Build<TDqPhyStage>(Ctx, Pos)
+                .Inputs()
+                    .Add({source})
+                .Build()
+                .Program()
+                    .Args({programArg})
+                    .Body(renameMap)
+                .Build()
+                .Settings().Build()
+            .Done().Ptr();
+            // clang-format on
             break;
         }
         case NYql::EStorageType::ColumnStorage: {
@@ -41,6 +89,10 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
             if (Read->OlapFilterLambda) {
                 processLambda = Read->OlapFilterLambda;
+                const auto renameMap = BuildOutputToPhysicalColumnMap(*Read);
+                if (!renameMap.empty()) {
+                    processLambda = NOpt::TOlapFilterInspector::RenameColumns(processLambda, renameMap, Ctx);
+                }
             }
 
             TKqpReadTableSettings settings;
@@ -77,18 +129,13 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
-            auto narrowMap = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(flowNonBlockRead, Read->Columns, Ctx);
+            auto narrowMap = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(flowNonBlockRead, Read->OutputIUs, Ctx);
 
             // clang-format off
             source = Build<TCoFromFlow>(Ctx, Pos)
                 .Input(narrowMap)
             .Done().Ptr();
             // clang-format on
-
-            if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(Read)) {
-                source =
-                    NPhysicalConvertionUtils::BuildMultiConsumerHandler(source, Read->Props.NumOfConsumers.value(), Ctx, Pos);
-            }
             break;
         }
         default:

@@ -85,7 +85,7 @@ def get_unit_list_variable(unit, name):
 
 def get_values_list(unit, key):
     res = map(str.strip, (unit.get_subst(key) or '').strip().split())
-    return [r for r in res if r and r not in ['""', "''"]]
+    return [r.replace('${"$"}', '$') for r in res if r and r not in ['""', "''"]]
 
 
 def _get_test_tags(unit, spec_args=None):
@@ -681,7 +681,9 @@ class LintConfigs:
 
         # default config
         linter_name = spec_args['NAME'][0]
-        default_configs_path = spec_args.get('DEFAULT_CONFIGS')[0]
+        if not (default_configs_path := spec_args.get('DEFAULT_CONFIGS')):
+            return
+        default_configs_path = default_configs_path[0]
         assert_file_exists(unit, default_configs_path)
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:
@@ -714,11 +716,17 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
-    # HACK: Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'alice/agents/booking', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
+    # HACK: YA-3039 Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.
-    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = ('fintech/uservices', 'taxi', 'electro', 'maps/tariffs')
+    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = (
+        'electro',
+        'fintech/uservices',
+        'maps/tariffs',
+        'market/media_adv/madv-inspector',
+        'taxi',
+    )
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):
@@ -1204,6 +1212,14 @@ class TsCheckType:
         return spec_args.get("TS_CHECK_TYPE", None)
 
 
+class TsCheckHasCoverage:
+    KEY = 'TS-CHECK-HAS-COVERAGE'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return spec_args.get("TS_CHECK_HAS_COVERAGE", "no")
+
+
 class TestedProjectFilename:
     KEY = 'TESTED-PROJECT-FILENAME'
 
@@ -1254,42 +1270,6 @@ class TestedProjectName:
 
 class TestFiles:
     KEY = 'TEST-FILES'
-
-    # XXX: this is a workaround to support very specific linting settings.
-    # Do not use it as a general mechanism!
-    _MAPS_RENDERER_PREFIX = 'maps/renderer'
-    _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
-        'maps/renderer/cartograph',
-        'maps/renderer/denormalization',
-        'maps/renderer/libs/api',
-        'maps/renderer/libs/data_sets/geojson_data_set',
-        'maps/renderer/libs/data_sets/yt_data_set',
-        'maps/renderer/libs/design',
-        'maps/renderer/libs/geosx',
-        'maps/renderer/libs/geojson_to_yt',
-        'maps/renderer/libs/gltf',
-        'maps/renderer/libs/golden',
-        'maps/renderer/libs/hd3d',
-        'maps/renderer/libs/icongen',
-        'maps/renderer/libs/image',
-        'maps/renderer/libs/kv_storage',
-        'maps/renderer/libs/mapreduce',
-        'maps/renderer/libs/marking',
-        'maps/renderer/libs/mesh',
-        'maps/renderer/libs/serializers',
-        'maps/renderer/libs/style2',
-        'maps/renderer/libs/style2_layer_bundle',
-        'maps/renderer/libs/terrain',
-        'maps/renderer/libs/threading',
-        'maps/renderer/libs/vec',
-        'maps/renderer/libs/yql',
-        'maps/renderer/libs/yt',
-        'maps/renderer/tilemill',
-        'maps/renderer/tools/fontograph',
-        'maps/renderer/tools/terrain_cli',
-        'maps/renderer/tools/mapcheck2/lib',
-        'maps/renderer/tools/mapcheck2/tests',
-    )
 
     # XXX: this is a workaround to support very specific linting settings.
     # Do not use it as a general mechanism!
@@ -1413,13 +1393,6 @@ class TestFiles:
     @classmethod
     def cpp_linter_files(cls, unit, flat_args, spec_args):
         upath = unit.path()[3:]
-
-        if upath.startswith(cls._MAPS_RENDERER_PREFIX):
-            for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
-                if os.path.commonpath([upath, path]) == path:
-                    break
-            else:
-                raise HaltDartConstruction()
 
         if upath.startswith(cls._MAPS_B2BGEO_PREFIX):
             for path in cls._MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS:
@@ -1553,6 +1526,23 @@ class TestRecipes:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return prepare_recipes(unit.get_subst("TEST_RECIPES_VALUE"))
+
+
+class TestPersistentRecipes:
+    KEY = 'TEST-PERSISTENT-RECIPES'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        data = unit.get_subst("TEST_PERSISTENT_RECIPES_VALUE")
+        if not data or not data.strip():
+            return None
+        # Replace delimiter token with newline — same pattern as USE_RECIPE/format_recipes.
+        # Each USE_PERSISTENT_RECIPE call becomes one line; paths within a call are
+        # space-separated on that line.
+        formatted = data.replace('"USE_PERSISTENT_RECIPE_DELIM"', "\n")
+        if not formatted.strip():
+            return None
+        return base64.b64encode(formatted.encode('utf-8'))
 
 
 class TestRunnerBin:

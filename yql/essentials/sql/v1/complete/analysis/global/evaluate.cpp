@@ -13,7 +13,7 @@ namespace {
 
 class TVisitor: public SQLv1Antlr4BaseVisitor {
 public:
-    explicit TVisitor(const TNamedNodes* nodes)
+    explicit TVisitor(const INamedNodes* nodes)
         : Nodes_(nodes)
     {
     }
@@ -125,12 +125,12 @@ public:
     }
 
     std::any visitBind_parameter(SQLv1::Bind_parameterContext* ctx) override {
-        TMaybe<std::string> id = GetName(ctx);
-        if (id.Empty()) {
+        TMaybe<TNamedNodeRef> ref = GetNamedNodeRef(ctx);
+        if (!ref) {
             return defaultResult();
         }
 
-        return EvaluateNode(std::move(*id));
+        return EvaluateNode(*ref);
     }
 
 protected:
@@ -139,8 +139,8 @@ protected:
     }
 
 private:
-    TPartialValue EvaluateNode(std::string name) {
-        const TNamedNode* node = Nodes_->FindPtr(name);
+    TPartialValue EvaluateNode(const TNamedNodeRef& ref) {
+        const TNamedNode* node = Nodes_->Resolve(ref);
         if (!node) {
             return std::monostate();
         }
@@ -150,13 +150,13 @@ private:
         }
 
         if (std::holds_alternative<SQLv1::ExprContext*>(*node)) {
-            if (Resolving_.contains(name)) {
+            if (Resolving_.contains(ref)) {
                 return std::monostate();
             }
 
-            Resolving_.emplace(name);
+            Resolving_.emplace(ref);
             Y_DEFER {
-                Resolving_.erase(name);
+                Resolving_.erase(ref);
             };
 
             std::any any = visit(std::get<SQLv1::ExprContext*>(*node));
@@ -207,11 +207,11 @@ private:
         return content;
     }
 
-    THashSet<std::string> Resolving_;
-    const TNamedNodes* Nodes_;
+    THashSet<TNamedNodeRef> Resolving_;
+    const INamedNodes* Nodes_;
 };
 
-TPartialValue EvaluateG(antlr4::ParserRuleContext* ctx, const TNamedNodes& nodes) {
+TPartialValue EvaluateG(antlr4::ParserRuleContext* ctx, const INamedNodes& nodes) {
     return std::any_cast<TPartialValue>(TVisitor(&nodes).visit(ctx));
 }
 
@@ -240,7 +240,7 @@ TMaybe<TString> ToObjectRef(const TPartialValue& value) {
     }, value);
 }
 
-NYT::TNode Evaluate(SQLv1::Bind_parameterContext* ctx, const TNamedNodes& nodes) {
+NYT::TNode Evaluate(SQLv1::Bind_parameterContext* ctx, const INamedNodes& nodes) {
     TPartialValue value = EvaluateG(ctx, nodes);
     if (std::holds_alternative<NYT::TNode>(value)) {
         return std::get<NYT::TNode>(value);
@@ -248,7 +248,7 @@ NYT::TNode Evaluate(SQLv1::Bind_parameterContext* ctx, const TNamedNodes& nodes)
     return NYT::TNode();
 }
 
-TPartialValue PartiallyEvaluate(antlr4::ParserRuleContext* ctx, const TNamedNodes& nodes) {
+TPartialValue PartiallyEvaluate(antlr4::ParserRuleContext* ctx, const INamedNodes& nodes) {
     return EvaluateG(ctx, nodes);
 }
 

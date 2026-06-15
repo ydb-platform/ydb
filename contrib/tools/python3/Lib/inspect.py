@@ -160,6 +160,7 @@ import builtins
 from keyword import iskeyword
 from operator import attrgetter
 from collections import namedtuple, OrderedDict
+from typing import _rewrite_star_unpack
 from weakref import ref as make_weakref
 
 # Create constants for the compiler flags in Include/code.h
@@ -288,8 +289,9 @@ def get_annotations(obj, *, globals=None, locals=None, eval_str=False):
     if type_params := getattr(obj, "__type_params__", ()):
         locals = {param.__name__: param for param in type_params} | locals
 
-    return_value = {key:
-        value if not isinstance(value, str) else eval(value, globals, locals)
+    return_value = {
+        key: value if not isinstance(value, str)
+        else eval(_rewrite_star_unpack(value), globals, locals)
         for key, value in ann.items() }
     return return_value
 
@@ -978,7 +980,7 @@ def getsourcefile(object):
     # return a filename found in the linecache even if it doesn't exist on disk
     if filename in linecache.cache:
         return filename
-    if os.path.exists(filename):
+    if os.path.isabs(filename) and os.path.exists(filename):
         return filename
     # only return a non-existent filename if the module has a PEP 302 loader
     module = getmodule(object, filename)
@@ -1025,10 +1027,10 @@ def getmodule(object, _filename=None):
                 # Have already mapped this module, so skip it
                 continue
             _filesbymodname[modname] = f
-            f = getabsfile(module)
-            # Always map to the name the module knows itself by
-            modulesbyfile[f] = modulesbyfile[
-                os.path.realpath(f)] = module.__name__
+            absfile = getabsfile(module)
+            modulesbyfile[absfile] = module.__name__
+            if os.path.isabs(f):
+                modulesbyfile[os.path.realpath(absfile)] = module.__name__
     if file in modulesbyfile:
         return sys.modules.get(modulesbyfile[file])
     # Check the main module
@@ -2745,11 +2747,12 @@ class Parameter:
         The annotation for the parameter if specified.  If the
         parameter has no annotation, this attribute is set to
         `Parameter.empty`.
-    * kind : str
+    * kind
         Describes how argument values are bound to the parameter.
         Possible values: `Parameter.POSITIONAL_ONLY`,
         `Parameter.POSITIONAL_OR_KEYWORD`, `Parameter.VAR_POSITIONAL`,
         `Parameter.KEYWORD_ONLY`, `Parameter.VAR_KEYWORD`.
+        Every value has a `description` attribute describing meaning.
     """
 
     __slots__ = ('_name', '_kind', '_default', '_annotation')

@@ -14,6 +14,7 @@ import argparse
 import re
 import tempfile
 import shutil
+import json
 from typing import List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from github import Github, GithubException, Auth
@@ -591,6 +592,7 @@ def main():
     token = os.environ["TOKEN"]
     workflow_triggerer = os.environ.get('GITHUB_ACTOR', 'unknown')
     summary_path = os.getenv('GITHUB_STEP_SUMMARY')
+    results_path = os.getenv('RESULTS_PATH')
     
     # Initialize GitHub
     gh = Github(auth=Auth.Token(token))
@@ -762,7 +764,7 @@ def main():
         )
         
         # Process each target branch
-        results = []
+        results: list[BackportResult] = []
         skipped_branches = []
         # Add invalid branches from validation
         for invalid_branch in invalid_branches:
@@ -804,6 +806,9 @@ def main():
         if summary_path:
             with open(summary_path, 'a') as f:
                 f.write("All cherry-pick operations completed successfully\n\n")
+        if results_path:
+            with open(results_path, 'w') as f:
+                json.dump([{'pr_id': r.pr.id, 'pr_number': r.pr.number, 'branch': r.target_branch} for r in results if r.pr], f, indent=2)
     finally:
         if os.path.exists(repo_dir):
             shutil.rmtree(repo_dir)

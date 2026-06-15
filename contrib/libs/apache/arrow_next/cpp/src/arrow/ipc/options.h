@@ -167,6 +167,15 @@ struct ARROW_EXPORT IpcReadOptions {
   /// The lazy property will always be reset to true to deliver the expected behavior
   io::CacheOptions pre_buffer_cache_options = io::CacheOptions::LazyDefaults();
 
+  /// \brief Maximum number of variadic buffers per BinaryView/LargeStringView column.
+  ///
+  /// A crafted IPC stream can declare an enormous variadic_buffer_count, causing a huge
+  /// std::vector<shared_ptr<Buffer>> allocation via operator new (not the memory pool).
+  /// Set to a small value (e.g. 1<<20) in fuzz tests or untrusted-input contexts to
+  /// convert this into a catchable IOError instead of an OOM kill.
+  /// The default (INT32_MAX) preserves the original Arrow behavior.
+  int64_t max_variadic_buffer_count = std::numeric_limits<int32_t>::max();
+
   static IpcReadOptions Defaults();
 };
 

@@ -785,8 +785,11 @@ namespace NKikimr {
             return ToString(Record);
         }
 
-        void UpdateStatus(const NKikimrProto::EReplyStatus status) {
+        void UpdateStatus(const NKikimrProto::EReplyStatus status, std::optional<TString> errorReason = std::nullopt) {
             Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
         }
 
         static TString ToString(const NKikimrBlobStorage::TEvVPutResult &record) {

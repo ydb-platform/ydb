@@ -32,7 +32,7 @@ Specialized script for parsing GitHub issues and sending team-specific notificat
 **Documentation:** [README_parse_and_send.md](README_parse_and_send.md)
 
 ### 🚨 `alert_queued_jobs.py`
-Monitors the GitHub Actions queue and sends Telegram alerts when jobs are stuck (PR-check, Postcommit, etc.). Runs on a schedule and manually.
+Monitors the GitHub Actions queue and sends Telegram alerts when jobs are stuck (PR-check, Postcommit, etc.). Runs in **`.github/workflows/telegram_scheduled_notifications.yml`** (job **CI queue Telegram alerts**; same file also runs **Mute digest to Telegram** via `send_digest.py`).
 
 **Documentation:** [README_alert_queued_jobs.md](README_alert_queued_jobs.md) — vars/secrets, thresholds, local testing (dry-run), CLI.
 
@@ -49,7 +49,7 @@ See [team_leads_example.json](team_leads_example.json) for example configuration
 
 ### 1. Secrets (Settings → Secrets and variables → Actions → Secrets)
 - `TELEGRAM_BOT_TOKEN` - your bot token
-- `TELEGRAM_YDBOT_TOKEN` - YDB bot token (used in workflow)
+- `YDBOT_TELEGRAM_BOT_TOKEN` - YDB bot token (used in workflow)
 
 ### 2. Variables (Settings → Secrets and variables → Actions → Variables)
 - `TELEGRAM_MUTE_CHAT_ID` - channel ID in format "chat_id/thread_id" (e.g., "2018419243/1")

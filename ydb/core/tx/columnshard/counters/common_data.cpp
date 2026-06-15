@@ -36,4 +36,4 @@ void TLoadTimeSignals::TLoadTimer::AddLoadingFail() {
     }
 }
 
-}
+}   // namespace NKikimr::NColumnShard

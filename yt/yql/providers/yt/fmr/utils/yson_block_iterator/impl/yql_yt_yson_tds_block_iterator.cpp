@@ -18,6 +18,7 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     std::vector<TString> neededColumns,
     TString serializedColumnGroupsSpec,
     TMaybe<bool> isFirstRowKeysInclusive,
+    TMaybe<bool> isLastRowKeysInclusive,
     TMaybe<TString> firstRowKeys,
     TMaybe<TString> lastRowKeys,
     ui64 readAheadChunks
@@ -45,6 +46,8 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     }
     if (lastRowKeys) {
         LastBoundary_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
+        Y_ENSURE(isLastRowKeysInclusive.Defined(), "isLastRowKeysInclusive must be defined for Last Boundary");
+        IsLastBoundInclusive_ = *isLastRowKeysInclusive;
     }
 
     if (SerializedColumnGroupsSpec_.empty()) {
@@ -151,6 +154,8 @@ bool TTableDataServiceBlockIterator::RowInKeyBounds(const TString& blob, const T
             SortOrders_
         );
         if (c > 0) { // if row > last boundary
+            return false;
+        } else if (!IsLastBoundInclusive_ && c == 0) {
             return false;
         }
     }

@@ -339,6 +339,10 @@ private:
                         continue;
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                        auto implTablePath = childPath.Child(implTableName);
+                        if (implTablePath.IsDeleted()) {
+                            continue;
+                        }
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
                         indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }
@@ -1201,9 +1205,11 @@ private:
                     }
 
                     if (exportInfo->State == EState::CopyTables && isMultipleMods) {
+                        bool sourcePathMissing = false;
                         for (const auto& item : exportInfo->Items) {
                             if (!Self->PathsById.contains(item.SourcePathId)) {
                                 exportInfo->DependencyTxIds.clear();
+                                sourcePathMissing = true;
                                 break;
                             }
 
@@ -1219,6 +1225,10 @@ private:
 
                         if (!exportInfo->DependencyTxIds.empty()) {
                             return;
+                        }
+
+                        if (!sourcePathMissing) {
+                            return AllocateTxId(*exportInfo);
                         }
                     }
 

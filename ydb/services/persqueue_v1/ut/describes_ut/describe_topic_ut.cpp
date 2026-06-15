@@ -4,7 +4,6 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
-#include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 

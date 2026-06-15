@@ -37,7 +37,8 @@ private:
 
 public:
     TChunkMeta(TSimpleChunkMeta&& baseMeta)
-        : TBase(baseMeta) {
+        : TBase(baseMeta)
+    {
     }
 
     [[nodiscard]] static TConclusion<TChunkMeta> BuildFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto) {
@@ -54,9 +55,11 @@ public:
     const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& GetAdditionalAccessorData() const {
         return AdditionalAccessorData;
     }
+
     void SetAdditionalAccessorData(std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> value) {
         AdditionalAccessorData = std::move(value);
     }
+
     bool HasAdditionalAccessorData() const {
         return AdditionalAccessorData != nullptr;
     }
@@ -79,8 +82,10 @@ public:
 class TColumnRecord {
 private:
     TChunkMeta Meta;
+
     TColumnRecord(TChunkMeta&& meta)
-        : Meta(std::move(meta)) {
+        : Meta(std::move(meta))
+    {
     }
 
     TColumnRecord() = default;
@@ -112,7 +117,8 @@ public:
         : Meta(std::move(meta))
         , ColumnId(address.GetColumnId())
         , Chunk(address.GetChunk())
-        , BlobRange(range) {
+        , BlobRange(range)
+    {
     }
 
     class TTestInstanceBuilder {
@@ -130,9 +136,11 @@ public:
     ui32 GetColumnId() const {
         return ColumnId;
     }
+
     ui16 GetChunkIdx() const {
         return Chunk;
     }
+
     const TBlobRangeLink16& GetBlobRange() const {
         return BlobRange;
     }
@@ -145,7 +153,9 @@ public:
         *result.MutableBlobRangeLink() = BlobRange.SerializeToProto();
         return result;
     }
+
     NKikimrColumnShardDataSharingProto::TColumnRecord SerializeToProto() const;
+
     static TConclusion<TColumnRecord> BuildFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto) {
         TColumnRecord result;
         auto parse = result.DeserializeFromProto(proto);

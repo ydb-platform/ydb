@@ -4,6 +4,8 @@
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <util/generic/scope.h>
+
 namespace NYql {
 
 namespace {
@@ -282,6 +284,10 @@ TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
 IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx) {
     try {
         ctx.ResetCycleDetector();
+        Y_DEFER {
+            ctx.ResetCycleDetector();
+        };
+
         for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
             auto status = transformer.Transform(root, newRoot, ctx);
@@ -408,6 +414,10 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
 
 IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart) {
     ctx.ResetCycleDetector();
+    Y_DEFER {
+        ctx.ResetCycleDetector();
+    };
+
     IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, false, breakOnRestart, "InstantTransform");
     if (status.Level == IGraphTransformer::TStatus::Async) {
         ctx.AddError(TIssue(ctx.GetPosition(root->Pos()), "Instant transform can not be delayed"));
@@ -449,16 +459,16 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
 }
 
 template<>
-void Out<NYql::IGraphTransformer::TStatus::ELevel>(class IOutputStream &o, NYql::IGraphTransformer::TStatus::ELevel x) {
+void Out<NYql::IGraphTransformer::TStatus::ELevel>(class IOutputStream &out, NYql::IGraphTransformer::TStatus::ELevel value) {
 #define YQL_GT_STATUS_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::IGraphTransformer::TStatus::name: \
-        o << #name; \
+        out << #name; \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_GT_STATUS_MAP(YQL_GT_STATUS_MAP_TO_STRING_IMPL)
     default:
-        o << static_cast<int>(x);
+        out << static_cast<int>(value);
         return;
     }
 }

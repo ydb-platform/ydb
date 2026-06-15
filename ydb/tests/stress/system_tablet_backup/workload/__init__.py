@@ -310,7 +310,7 @@ class BackupValidator:
 
     def _start_restore(self, hostname, tablet_id, backup_path):
         url = (f"{self._node_mon_url(hostname)}/tablets/app?TabletID={tablet_id}&restoreBackup={quote(backup_path, safe='')}")
-        response = requests.get(url, timeout=30)
+        response = requests.post(url, timeout=30)
         response.raise_for_status()
         return response.text
 

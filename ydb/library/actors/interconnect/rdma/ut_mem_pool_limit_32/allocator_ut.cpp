@@ -6,7 +6,9 @@
 
 #include <util/random/fast.h>
 #include <util/random/random.h>
+#include <util/system/info.h>
 
+#include <cstdint>
 #include <thread>
 
 namespace NMonitoring {
@@ -27,6 +29,52 @@ protected:
         }
     }
 };
+
+TEST_F(TAllocatorSuite32, SmallPageAlignedAllocationsReturnToPageAlignedChain) {
+    using namespace NInterconnect::NRdma;
+
+    const TMemPoolSettings settings {
+        .SizeLimitMb = 32
+    };
+    static auto pool = CreateSlotMemPool(nullptr, settings);
+
+    constexpr ui32 batchSize = 32 * 1024 * 1024;
+    constexpr ui32 smallSize = 1;
+    constexpr ui32 smallSlotSize = 512;
+    const ui32 pageSize = NSystemInfo::GetPageSize();
+
+    ASSERT_GT(pageSize, smallSlotSize) << "test assumes page-aligned allocations use a larger slot class";
+    ASSERT_EQ(batchSize % pageSize, 0u);
+
+    const ui32 pageSlots = batchSize / pageSize;
+
+    {
+        std::vector<TMemRegionPtr> pageAlignedRegions;
+        pageAlignedRegions.reserve(pageSlots);
+
+        for (ui32 i = 0; i < pageSlots; ++i) {
+            auto reg = pool->Alloc(smallSize, IMemPool::PAGE_ALIGNED);
+            ASSERT_TRUE(reg) << "small page-aligned allocation failed at index " << i;
+            ASSERT_EQ(reg->GetSize(), smallSize);
+            ASSERT_EQ(reinterpret_cast<uintptr_t>(reg->GetAddr()) % pageSize, 0u);
+            pageAlignedRegions.push_back(std::move(reg));
+        }
+
+        ASSERT_FALSE(pool->Alloc(smallSize, IMemPool::PAGE_ALIGNED))
+            << "single 32MB pool must be exhausted by page-sized slots";
+    }
+
+    std::vector<TMemRegionPtr> smallRegions;
+    smallRegions.reserve(pageSlots + 1);
+
+    for (ui32 i = 0; i < pageSlots + 1; ++i) {
+        auto reg = pool->Alloc(smallSlotSize, IMemPool::EMPTY);
+        ASSERT_TRUE(reg) << "small allocation failed at index " << i
+            << "; freed page-aligned slots were likely returned to the 512-byte chain";
+        ASSERT_EQ(reg->GetSize(), smallSlotSize);
+        smallRegions.push_back(std::move(reg));
+    }
+}
 
 TEST_F(TAllocatorSuite32, SlotPoolLimit) {
     const NInterconnect::NRdma::TMemPoolSettings settings {
@@ -49,6 +97,13 @@ TEST_F(TAllocatorSuite32, SlotPoolLimit) {
         regions.push_back(reg);
     }
 
+    // Expected behavior check: even with exhausted RDMA pool, clone falls back
+    // to regular memory and preserves size.
+    auto cloned = regions.front()->Clone();
+    ASSERT_TRUE(cloned) << "clone failed";
+    ASSERT_TRUE(cloned->GetData().data()) << "invalid cloned address";
+    ASSERT_TRUE(cloned->GetData().size() == regions.front()->GetSize()) << "invalid cloned size";
+
     regions.erase(regions.begin()); // free one region
 
     {
@@ -59,6 +114,34 @@ TEST_F(TAllocatorSuite32, SlotPoolLimit) {
     }
 
     regions.clear();
+
+    {
+        static const ui64 pageAlignMask = NSystemInfo::GetPageSize() - 1;
+        std::vector<NInterconnect::NRdma::TMemRegionPtr> pageAlignedRegions;
+        pageAlignedRegions.reserve(8);
+        size_t j = 0;
+        for (;; ++j) {
+            auto reg = pool->Alloc(sz, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED);
+            if (!reg) {
+                UNIT_ASSERT(j == 8); // 32 / 4
+                break;
+            }
+            ASSERT_TRUE(reg->GetAddr()) << "invalid address";
+            ASSERT_TRUE(reg->GetSize() == sz) << "invalid size of allocated chunk";
+            ASSERT_TRUE((reinterpret_cast<ui64>(reg->GetAddr()) & pageAlignMask) == 0ull) << "source is not page aligned";
+            pageAlignedRegions.push_back(reg);
+        }
+
+        // One more fallback-triggered scope: exhausted pool + page-aligned source clone.
+        auto clonedAligned = pageAlignedRegions.front()->Clone();
+        ASSERT_TRUE(clonedAligned) << "clone failed";
+        ASSERT_TRUE(clonedAligned->GetData().data()) << "invalid cloned address";
+        ASSERT_TRUE(clonedAligned->GetData().size() == pageAlignedRegions.front()->GetSize()) << "invalid cloned size";
+        ASSERT_TRUE((reinterpret_cast<ui64>(clonedAligned->GetData().data()) & pageAlignMask) == 0ull)
+            << "cloned region is not page aligned";
+
+        pageAlignedRegions.clear();
+    }
 }
 
 TEST_F(TAllocatorSuite32, SlotPoolHugeAlloc) {
@@ -423,5 +506,51 @@ TEST_F(TAllocatorSuite32, AllocationWithReclaimThreeThreads) {
         s1 = s1 / float(numAlloc1);
         s2 = s2 / float(numAlloc2);
         Cerr << "Average time per allocation t0: " << s0 << " us, t1: " << s1 << " us, t2: " << s2 << " us" << Endl;
+    }
+}
+
+TEST_F(TAllocatorSuite32, AllocationStaleSlotsAfterReclaimStress) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 32
+    };
+
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    auto allocFn = [&](size_t sz, size_t num, bool hold) {
+        std::vector<NInterconnect::NRdma::TMemRegionPtr> regs;
+        if (hold) {
+            regs.reserve(num);
+        }
+
+        for (size_t i = 0; i < num;) {
+            auto r = pool->Alloc(sz, 0);
+            if (!r) {
+                continue;
+            }
+            ASSERT_TRUE(r->GetAddr());
+            if (hold) {
+                regs.push_back(r);
+            }
+            ++i;
+        }
+    };
+
+    for (size_t round = 0; round < 200; ++round) {
+        // Build 512-byte cached slots in short-lived threads.
+        std::thread a(allocFn, 512, 10000, true);
+        std::thread b(allocFn, 512, 10000, true);
+        std::thread c(allocFn, 512, 10000, true);
+        a.join(); b.join(); c.join();
+
+        // Force generation changes through other slot sizes.
+        std::thread d(allocFn, 4096, 10000, false);
+        std::thread e(allocFn, 32768, 10000, false);
+        d.join(); e.join();
+
+        // Consume 512-byte cache again from fresh threads.
+        std::thread f(allocFn, 512, 10000, true);
+        std::thread g(allocFn, 512, 10000, true);
+        std::thread h(allocFn, 512, 10000, true);
+        f.join(); g.join(); h.join();
     }
 }

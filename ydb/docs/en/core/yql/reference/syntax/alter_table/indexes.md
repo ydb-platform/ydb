@@ -18,9 +18,22 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
+Parameters for all index types:
+
+* `parallel` - maximum number of parallel [partition](../../../../concepts/glossary.md#partition)-based workers used during index build (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
+  - If not specified, currently defaults to `32` or `MaxBuildIndexShardsInFlight` if it's lower. Default `MaxBuildIndexShardsInFlight` is `1000`. Default parallelism selection logic may be changed in future versions.
+  - You may set a smaller limit to reduce the impact of index build on the DB performance.
+  - You may also set a larger limit to speed up the index build if you have enough hardware resources.
+
 Parameters specific to vector indexes:
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
+
+{% note info %}
+
+For vector indexes, the vector_type and vector_dimension parameters can be omitted if the table is not empty — they are determined automatically based on the row contents. The levels and clusters parameters are also determined automatically, and the table may be empty for them, but this is highly unrecommended because the default values in that case are levels=1, clusters=2. It is far better to create the index on a table that already has data loaded, so that the values can be determined correctly.
+
+{% endnote %}
 
 Parameters specific to fulltext indexes:
 
@@ -51,12 +64,7 @@ ALTER TABLE `series`
   ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
-    distance="cosine",
-    vector_type="float",
-    vector_dimension=512,
-    clusters=128,
-    levels=2,
-    overlap_clusters=3
+    distance="cosine", vector_type="float", vector_dimension=512
   );
 ```
 

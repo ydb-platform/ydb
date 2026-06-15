@@ -7,8 +7,6 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 
-#include <ydb/core/testlib/basics/runtime.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>

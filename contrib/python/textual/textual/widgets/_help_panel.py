@@ -79,7 +79,10 @@ class HelpPanel(Widget):
     DEFAULT_CLASSES = "-textual-system"
 
     def on_mount(self):
-        self.watch(self.screen, "focused", self.update_help)
+        def update_help(focused_widget: Widget | None):
+            self.update_help(focused_widget)
+
+        self.watch(self.screen, "focused", update_help)
 
     def update_help(self, focused_widget: Widget | None) -> None:
         """Update the help for the focused widget.
@@ -93,7 +96,11 @@ class HelpPanel(Widget):
             return
         self.set_class(focused_widget is not None, "-show-help")
         if focused_widget is not None:
-            help = focused_widget.HELP or ""
+            help: str = ""
+            for node in focused_widget.ancestors_with_self:
+                if isinstance(node, Widget) and node.HELP:
+                    help = node.HELP
+                    break
             if not help:
                 self.remove_class("-show-help")
             try:

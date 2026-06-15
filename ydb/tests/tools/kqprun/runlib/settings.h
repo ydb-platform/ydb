@@ -3,6 +3,7 @@
 #include <util/generic/string.h>
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/datashard/export_iface.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -41,6 +42,7 @@ struct TServerSettings {
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     TIntrusivePtr<NYql::IYtGateway> YtGateway;
+    std::shared_ptr<NKikimr::NDataShard::IExportFactory> DataShardExportFactory;
 };
 
 enum class EResultOutputFormat {

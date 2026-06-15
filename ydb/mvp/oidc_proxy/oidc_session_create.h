@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/mvp/core/mvp_log.h>
+
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -11,7 +13,12 @@
 
 namespace NMVP::NOIDC {
 
-class THandlerSessionCreate : public NActors::TActorBootstrapped<THandlerSessionCreate> {
+struct TCheckStateResult;
+struct TRestoreOidcContextResult;
+
+class THandlerSessionCreate
+    : public NActors::TActorBootstrapped<THandlerSessionCreate>
+    , protected TMvpLogContextProvider {
 private:
     using TBase = NActors::TActorBootstrapped<THandlerSessionCreate>;
 
@@ -42,6 +49,7 @@ protected:
     void ReplyBadRequestAndPassAway(TString errorMessage);
 
 private:
+    TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TCheckStateResult& checkStateResult);
     void SendUnknownErrorResponseAndDie();
 };
 

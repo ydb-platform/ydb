@@ -23,7 +23,6 @@ RECURSE(
     logs
     metrics
     mock
-    pretty_printers
     private_client
     quota_manager
     rate_limiter

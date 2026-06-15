@@ -26,6 +26,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/core/protos
     yql/essentials/sql/pg_dummy
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
@@ -33,6 +34,7 @@ PEERDIR(
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
+    ydb/library/aws_init
     ydb/public/sdk/cpp/src/client/operation
 )
 
@@ -47,4 +49,5 @@ RECURSE_FOR_TESTS(
     statistics
     storage
     reading
+    pushdown
 )

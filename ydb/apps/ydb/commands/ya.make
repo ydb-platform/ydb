@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/resource
     ydb/public/sdk/cpp/src/client/iam
     ydb/public/lib/ydb_cli/commands
 )

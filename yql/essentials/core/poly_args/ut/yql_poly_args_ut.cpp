@@ -19,12 +19,28 @@ Y_UNIT_TEST(BadNonPairs) {
     UNIT_ASSERT_EXCEPTION(ParsePolyArgs(NYT::NodeFromYsonString(yson)), TConfigException);
 }
 
-Y_UNIT_TEST(FinalPredicateMustBeEmptyList) {
+Y_UNIT_TEST(FinalPredicateCanBeEmptyList) {
     TString yson = R"([
         [[];{}]
     ])";
     auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
     UNIT_ASSERT_VALUES_EQUAL(poly->GetPredicatesCount(), 1);
+}
+
+Y_UNIT_TEST(FinalPredicateCanBeError) {
+    TString yson = R"([
+        [{cmd=error;message="Expected Date type"};{}]
+    ])";
+    auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    UNIT_ASSERT_VALUES_EQUAL(poly->GetPredicatesCount(), 1);
+    UNIT_ASSERT(!poly->GetUnresolvedInput(0).Defined());
+}
+
+Y_UNIT_TEST(BadFinalPredicate) {
+    TString yson = R"([
+        [{cmd=type;arg=T0;value=[DataType;Uint64]};{}];
+    ])";
+    UNIT_ASSERT_EXCEPTION(ParsePolyArgs(NYT::NodeFromYsonString(yson)), TConfigException);
 }
 
 Y_UNIT_TEST(TypePredicate) {
@@ -92,6 +108,24 @@ Y_UNIT_TEST(ActionArgsType) {
     ])";
     auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
     UNIT_ASSERT(!poly->GetUnresolvedInput(0).Defined());
+    auto result = poly->Match({}, MinLangVersion);
+    UNIT_ASSERT(result.CallableType.Defined());
+    UNIT_ASSERT(!result.RunConfigType.Defined());
+}
+
+Y_UNIT_TEST(ActionRunConfigWithType) {
+    TString yson = R"([
+        [[];{type=[CallableType;[];[[Universal]];[[DataType;String]]];runConfig=[DataType;String]}]
+    ])";
+    auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    UNIT_ASSERT(!poly->GetUnresolvedInput(0).Defined());
+}
+
+Y_UNIT_TEST(ActionRunConfigWithoutTypeFails) {
+    TString yson = R"([
+        [[];{runConfig=[DataType;String]}]
+    ])";
+    UNIT_ASSERT_EXCEPTION(ParsePolyArgs(NYT::NodeFromYsonString(yson)), TConfigException);
 }
 
 } // Y_UNIT_TEST_SUITE(PolyArgsParser)
@@ -141,6 +175,17 @@ Y_UNIT_TEST(MatchEmpty) {
     ])";
     auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
     UNIT_ASSERT_VALUES_EQUAL(poly->Match({}, MinLangVersion).Index, 0);
+}
+
+Y_UNIT_TEST(MatchError) {
+    TString yson = R"([
+        [{cmd=error;message="Foo"};{}]
+    ])";
+    auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    auto res = poly->Match({}, MinLangVersion);
+    UNIT_ASSERT_VALUES_EQUAL(res.Index, 0);
+    UNIT_ASSERT(res.Error.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*res.Error, "Foo");
 }
 
 Y_UNIT_TEST(MatchVerOk) {
@@ -279,6 +324,17 @@ Y_UNIT_TEST(MatchOrFail) {
         {"T0", NYT::NodeFromYsonString("[DataType;String]")},
         {"T2", NYT::NodeFromYsonString("[DataType;String]")}};
     UNIT_ASSERT_VALUES_EQUAL(poly->Match(args, MinLangVersion).Index, 1);
+}
+
+Y_UNIT_TEST(MatchRunConfigPresent) {
+    TString yson = R"([
+        [[];{type=[CallableType;[];[[Universal]];[[DataType;String]]];runConfig=[DataType;String]}]
+    ])";
+    auto poly = ParsePolyArgs(NYT::NodeFromYsonString(yson));
+    auto result = poly->Match({}, MinLangVersion);
+    UNIT_ASSERT(result.CallableType.Defined());
+    UNIT_ASSERT(result.RunConfigType.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToYsonString(*result.RunConfigType), "[\"DataType\";\"String\"]");
 }
 
 } // Y_UNIT_TEST_SUITE(PolyArgsMatch)

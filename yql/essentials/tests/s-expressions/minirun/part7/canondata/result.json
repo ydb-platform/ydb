@@ -225,9 +225,9 @@
     ],
     "test.test[InMem-QueueSimpleStrings-default.txt-Debug]": [
         {
-            "checksum": "075baaf1bbeaa7b4e5f115cd6e2306cc",
-            "size": 514,
-            "uri": "https://{canondata_backend}/1936842/b41d65940489e73fa69690fbff2e1446347ef1ab/resource.tar.gz#test.test_InMem-QueueSimpleStrings-default.txt-Debug_/opt.yql"
+            "checksum": "3368d569dfaca4660ee9366b12bf07e3",
+            "size": 588,
+            "uri": "https://{canondata_backend}/937458/06e7bfb22cac612137d43a7abfb6f2ee92dca8c5/resource.tar.gz#test.test_InMem-QueueSimpleStrings-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[InMem-QueueSimpleStrings-default.txt-Results]": [

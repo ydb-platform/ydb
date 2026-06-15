@@ -141,6 +141,10 @@ struct TTranslationSettings {
     bool EmitReadsForExists = true;
     bool AlwaysAllowExports = false;
     bool IsReplay = false;
+    bool AllowTablesFunction = false;
+
+    bool ValidateViewStatement = true;
+    bool MarkQueryTextAtomWithIgnoredContent = false;
 };
 
 struct TParsedSettings {

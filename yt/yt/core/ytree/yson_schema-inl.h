@@ -166,7 +166,7 @@ void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOpt
 template <CProtobufMessageAsString T>
 void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
-    return WriteSchema<TString>(consumer, options);
+    return WriteSchema<std::string>(consumer, options);
 }
 
 template <CYsonStructDerived T>

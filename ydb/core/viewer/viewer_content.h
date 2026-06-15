@@ -41,6 +41,17 @@ public:
         if (!Event->Get()->UserToken.empty()) {
             ContentRequestContext.UserToken = Event->Get()->UserToken;
         }
+        ContentRequestContext.Path = Strip(ContentRequestContext.Path);
+        if (ContentRequestContext.Path.empty()) {
+            ctx.Send(
+                Initiator,
+                new NMon::TEvHttpInfoRes(
+                    Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'path' is required"),
+                    0,
+                    NMon::IEvHttpInfoRes::EContentType::Custom));
+            Die(ctx);
+            return;
+        }
         BrowseStarted = ctx.Now();
         ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, ContentRequestContext.Path, Event->Get()->UserToken));
 

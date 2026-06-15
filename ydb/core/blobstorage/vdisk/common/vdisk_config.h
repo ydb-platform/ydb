@@ -127,7 +127,7 @@ namespace NKikimr {
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
-        double HullCompFreeSpaceThreshold;
+        TControlWrapper HullCompFreeSpaceThresholdPerMille;
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
@@ -171,7 +171,7 @@ namespace NKikimr {
         TControlWrapper EnableLocalSyncLogDataCutting;
         TControlWrapper EnableSyncLogChunkCompression;
         TControlWrapper MaxSyncLogChunksInFlight;
-        ui32 MaxSyncLogChunkSize;
+        ui32 MaxSyncDataCutterChunkSize;
 
         ///////////// REPL SETTINGS /////////////////////////
         TDuration ReplTimeInterval;
@@ -278,6 +278,7 @@ namespace NKikimr {
         ///////////// SYNC SETTINGS //////////////////
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
+        bool EnablePersistentPhantomFlagStorage = false;
         TControlWrapper PhantomFlagStorageLimit;
 
         ///////////// CHUNK Keeper //////////////////

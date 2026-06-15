@@ -140,9 +140,12 @@ Yson::IsInt64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 Yson::IsBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 Yson::IsList(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 Yson::IsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
+Yson::IsUtf8(Resource<'Yson2.Node'>{Flags:AutoMap}) -> bool
 ```
 
 Checking that the current node has the appropriate type. The Entity is `#`.
+
+The `Yson::IsUtf8` function is available starting with version [2026.01](../../changelog/2026.01.md#yson-module). It returns success only on nodes obtained after `Yson::ParseJson`/`Yson::ParseJsonDecodeUtf8` or if the string node was constructed using `Yson::From` from the `Utf8` type.
 
 ## Yson::GetLength
 
@@ -458,6 +461,7 @@ Yson::AsInt64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Int64
 Yson::AsBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Bool
 Yson::AsList(Resource<'Yson2.Node'>{Flags:AutoMap}) -> List<Resource<'Yson2.Node'>>
 Yson::AsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String, Resource<'Yson2.Node'>>
+Yson::AsUtf8(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Utf8
 
 Yson::TryAsString(Resource<'Yson2.Node'>{Flags:AutoMap}) -> String?
 Yson::TryAsDouble(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Double?
@@ -466,12 +470,16 @@ Yson::TryAsInt64(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Int64?
 Yson::TryAsBool(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Bool?
 Yson::TryAsList(Resource<'Yson2.Node'>{Flags:AutoMap}) -> List<Resource<'Yson2.Node'>>?
 Yson::TryAsDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String, Resource<'Yson2.Node'>>?
+Yson::TryAsUtf8(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Utf8?
 ```
 
 Available since version [2025.05](../../changelog/2025.05.md#yson-module).
 Casts a Yson node to the specified type.
 The `TryAs*` functions return `NULL` if the Yson node type is invalid, while the `As*` functions will result in a query error.
 To process a node with the `Entity` ('#') type, use the [`IsEntity`](#ysonis) function.
+
+The `Yson::AsUtf8` and `Yson::TryAsUtf8` functions are available since version [2026.01](../../changelog/2026.01.md#yson-module).
+See the description of the [`Yson::IsUtf8`](#ysonis) function for information on when a node can be cast to this type.
 
 ## In-place modifications to Yson nodes {#yson-modify}
 

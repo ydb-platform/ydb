@@ -149,14 +149,14 @@ class AllureListener:
         self.__apply_default_suites(item, test_result)
         test_result.labels.append(Label(name=LabelType.HOST, value=self._host))
         test_result.labels.append(Label(name=LabelType.THREAD, value=self._thread))
-        test_result.labels.append(Label(name=LabelType.FRAMEWORK, value='pytest'))
+        test_result.labels.append(Label(name=LabelType.FRAMEWORK, value="pytest"))
         test_result.labels.append(Label(name=LabelType.LANGUAGE, value=platform_label()))
-        test_result.labels.append(Label(name='package', value=allure_package(item)))
+        test_result.labels.append(Label(name="package", value=allure_package(item)))
         test_result.links.extend([Link(link_type, url, name) for link_type, url, name in allure_links(item)])
 
     @pytest.hookimpl(hookwrapper=True)
     def pytest_fixture_setup(self, fixturedef, request):
-        fixture_name = getattr(fixturedef.func, '__allure_display_name__', fixturedef.argname)
+        fixture_name = getattr(fixturedef.func, "__allure_display_name__", fixturedef.argname)
 
         container_uuid = self._cache.get(fixturedef)
 
@@ -178,16 +178,16 @@ class AllureListener:
                                                status=get_outcome_status(outcome),
                                                statusDetails=get_outcome_status_details(outcome))
 
-        finalizers = getattr(fixturedef, '_finalizers', [])
+        finalizers = getattr(fixturedef, "_finalizers", [])
         for index, finalizer in enumerate(finalizers):
             finalizer_name = getattr(finalizer, "__name__", index)
-            name = f'{fixture_name}::{finalizer_name}'
+            name = f"{fixture_name}::{finalizer_name}"
             finalizers[index] = allure_commons.fixture(finalizer, parent_uuid=container_uuid, name=name)
 
     @pytest.hookimpl(hookwrapper=True)
     def pytest_fixture_post_finalizer(self, fixturedef):
         yield
-        if hasattr(fixturedef, 'cached_result') and self._cache.get(fixturedef):
+        if hasattr(fixturedef, "cached_result") and self._cache.get(fixturedef):
             container_uuid = self._cache.pop(fixturedef)
             self.allure_logger.stop_group(container_uuid, stop=now())
 
@@ -203,9 +203,9 @@ class AllureListener:
 
         if call.excinfo:
             message = call.excinfo.exconly()
-            if hasattr(report, 'wasxfail'):
+            if hasattr(report, "wasxfail"):
                 reason = report.wasxfail
-                message = (f'XFAIL {reason}' if reason else 'XFAIL') + '\n\n' + message
+                message = (f"XFAIL {reason}" if reason else "XFAIL") + "\n\n" + message
             trace = report.longreprtext
             status_details = StatusDetails(
                 message=message,
@@ -215,21 +215,21 @@ class AllureListener:
             if (status != Status.SKIPPED and _exception_brokes_test(exception)):
                 status = Status.BROKEN
 
-        if status == Status.PASSED and hasattr(report, 'wasxfail'):
+        if status == Status.PASSED and hasattr(report, "wasxfail"):
             reason = report.wasxfail
-            message = f'XPASS {reason}' if reason else 'XPASS'
+            message = f"XPASS {reason}" if reason else "XPASS"
             status_details = StatusDetails(message=message)
 
-        if report.when == 'setup':
+        if report.when == "setup":
             test_result.status = status
             test_result.statusDetails = status_details
 
-        if report.when == 'call':
+        if report.when == "call":
             if test_result.status == Status.PASSED:
                 test_result.status = status
                 test_result.statusDetails = status_details
 
-        if report.when == 'teardown':
+        if report.when == "teardown":
             if status in (Status.FAILED, Status.BROKEN) and test_result.status == Status.PASSED:
                 test_result.status = status
                 test_result.statusDetails = status_details
@@ -256,6 +256,30 @@ class AllureListener:
     @allure_commons.hookimpl
     def attach_file(self, source, name, attachment_type, extension):
         self.allure_logger.attach_file(uuid4(), source, name=name, attachment_type=attachment_type, extension=extension)
+
+    @allure_commons.hookimpl
+    def global_attach_data(self, body, name, attachment_type, extension):
+        self.allure_logger.global_attach_data(
+            uuid4(),
+            body,
+            name=name,
+            attachment_type=attachment_type,
+            extension=extension,
+        )
+
+    @allure_commons.hookimpl
+    def global_attach_file(self, source, name, attachment_type, extension):
+        self.allure_logger.global_attach_file(
+            uuid4(),
+            source,
+            name=name,
+            attachment_type=attachment_type,
+            extension=extension,
+        )
+
+    @allure_commons.hookimpl
+    def global_error(self, message, trace):
+        self.allure_logger.global_error(message=message, trace=trace)
 
     @allure_commons.hookimpl
     def add_title(self, test_title):
@@ -310,11 +334,11 @@ class AllureListener:
 
     @staticmethod
     def __get_pytest_params(item):
-        return item.callspec.params if hasattr(item, 'callspec') else {}
+        return item.callspec.params if hasattr(item, "callspec") else {}
 
     @staticmethod
     def __get_pytest_param_id(item):
-        return item.callspec.id if hasattr(item, 'callspec') else None
+        return item.callspec.id if hasattr(item, "callspec") else None
 
     def __apply_default_suites(self, item, test_result):
         default_suites = allure_suite_labels(item)

@@ -22,7 +22,7 @@ using NYT::ToProto;
 void SyncYPathMultisetAttributes(
     const IYPathServicePtr& service,
     const TYPath& path,
-    const std::vector<std::pair<TString, TYsonString>>& requests)
+    const std::vector<std::pair<std::string, TYsonString>>& requests)
 {
     auto multisetAttributesRequest = TYPathProxy::MultisetAttributes(path);
     for (const auto& request : requests) {
@@ -36,13 +36,13 @@ void SyncYPathMultisetAttributes(
 
 TEST(TYTreeTest, TestMultisetAttributes)
 {
-    std::vector<std::pair<TString, TYsonString>> attributes1 = {
+    std::vector<std::pair<std::string, TYsonString>> attributes1 = {
         {"k1", TYsonString(TStringBuf("v1"))},
         {"k2", TYsonString(TStringBuf("v2"))},
         {"k3", TYsonString(TStringBuf("v3"))}
     };
 
-    std::vector<std::pair<TString, TYsonString>> attributes2 = {
+    std::vector<std::pair<std::string, TYsonString>> attributes2 = {
         {"k2", TYsonString(TStringBuf("v4"))},
         {"k3", TYsonString(TStringBuf("v5"))},
         {"k4", TYsonString(TStringBuf("v6"))}
@@ -68,12 +68,12 @@ TEST(TYTreeTest, TestMultisetAttributes)
 
 TEST(TYTreeTest, TestMultisetInvalidAttributes)
 {
-    std::vector<std::pair<TString, TYsonString>> validAttributes = {
+    std::vector<std::pair<std::string, TYsonString>> validAttributes = {
         {"k1", TYsonString(TStringBuf("v1"))},
         {"k2", TYsonString(TStringBuf("v2"))},
         {"k3", TYsonString(TStringBuf("v3"))}
     };
-    std::vector<std::pair<TString, TYsonString>> invalidAttributes = {
+    std::vector<std::pair<std::string, TYsonString>> invalidAttributes = {
         {"k1", TYsonString(TStringBuf("v1"))},
         {"",   TYsonString(TStringBuf("v2"))}, // Empty attributes are not allowed.
         {"k3", TYsonString(TStringBuf("v3"))}
@@ -89,14 +89,14 @@ TEST(TYTreeTest, TestMultisetInvalidAttributes)
 
 TEST(TYTreeTest, TestMultisetAttributesByPath)
 {
-    std::vector<std::pair<TString, TYsonString>> attributes1 = {
+    std::vector<std::pair<std::string, TYsonString>> attributes1 = {
         {"a", TYsonString(TStringBuf("{}"))},
     };
-    std::vector<std::pair<TString, TYsonString>> attributes2 = {
+    std::vector<std::pair<std::string, TYsonString>> attributes2 = {
         {"a/b", TYsonString(TStringBuf("v1"))},
         {"a/c", TYsonString(TStringBuf("v2"))},
     };
-    std::vector<std::pair<TString, TYsonString>> attributes3 = {
+    std::vector<std::pair<std::string, TYsonString>> attributes3 = {
         {"b", TYsonString(TStringBuf("v3"))},
         {"c", TYsonString(TStringBuf("v4"))},
     };

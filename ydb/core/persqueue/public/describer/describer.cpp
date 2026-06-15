@@ -23,6 +23,8 @@ public:
 
     void Bootstrap() {
         Become(&TDescribeActor::StateWork);
+        RetryWithSyncVersion = Settings.ForceSyncVersion;
+        UsedSyncVersion = Settings.ForceSyncVersion;
         DoRequest(TopicPaths);
     }
 

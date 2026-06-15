@@ -327,6 +327,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
     UniqueIndexKeySize = descr.GetUniqueIndexKeySize();
+    if (descr.HasIndexImplType()) {
+        IndexImplType = descr.GetIndexImplType();
+    }
 
     CheckSpecialColumns();
 
@@ -484,18 +487,24 @@ void TUserTable::DoApplyCreate(
     }
 
     {
+        using TPrefix = NTable::TScheme::TTableInfo::TByKeyFilterPrefix;
         // Unify EnableFilterByKey and ByKeyFilterPrefixes into a single prefix list
-        TVector<ui32> prefixes;
-        for (auto p : partConfig.GetByKeyFilterPrefixes()) {
-            if (p > 0) {
-                prefixes.push_back(p);
+        TMap<ui32, double> prefixMap;
+        for (const auto& p : partConfig.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
+                prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
         if (partConfig.HasEnableFilterByKey() && partConfig.GetEnableFilterByKey()) {
-            prefixes.push_back(KeyColumnIds.size());
+            prefixMap.emplace(KeyColumnIds.size(), NTable::DefaultBloomFilterFpp);
         }
-        SortUnique(prefixes);
-        if (!prefixes.empty()) {
+        if (!prefixMap.empty()) {
+            TVector<TPrefix> prefixes;
+            for (const auto& [len, fpp] : prefixMap) {
+                prefixes.push_back(TPrefix{len, fpp});
+            }
             alter.SetByKeyFilterPrefixes(tid, prefixes);
         }
     }
@@ -583,7 +592,8 @@ void TUserTable::ApplyAlter(
         ui32 colId = col.first;
         const TUserColumn& column = col.second;
 
-        if (!oldTable.Columns.contains(colId)) {
+        auto it = oldTable.Columns.find(colId);
+        if (it == oldTable.Columns.end() || it->second.NotNull != column.NotNull) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
                 alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
@@ -629,47 +639,42 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    if (configDelta.HasEnableFilterByKey() || configDelta.ByKeyFilterPrefixesSize() > 0) {
-        // Rebuild unified prefix list from current config + delta
-        TVector<ui32> prefixes;
-        // Start with existing prefixes from current config
-        for (auto p : config.GetByKeyFilterPrefixes()) {
-            if (p > 0) {
-                prefixes.push_back(p);
-            }
-        }
-        ui32 keyCount = KeyColumnIds.size();
+    // Rebuild the prefix bloom set from the full authoritative config the schemeshard sends. The
+    // last disjunct also fires when the table had prefixes but the delta clears them all (DROP of
+    // the last prefix bloom, or KEY_BLOOM_FILTER = DISABLED), which carries no explicit bloom field.
+    if (configDelta.HasEnableFilterByKey() || configDelta.ByKeyFilterPrefixesSize() > 0 || config.ByKeyFilterPrefixesSize() > 0) {
+        using TPrefix = NTable::TScheme::TTableInfo::TByKeyFilterPrefix;
+        const ui32 keyCount = KeyColumnIds.size();
 
+        // Full-key filter is governed by EnableFilterByKey; the delta may toggle it or leave it.
+        bool enableFullKey = config.GetEnableFilterByKey();
         if (configDelta.HasEnableFilterByKey()) {
-            config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
-            if (configDelta.GetEnableFilterByKey()) {
-                prefixes.push_back(keyCount);
-            } else {
-                // Remove full-key entry
-                prefixes.erase(std::remove(prefixes.begin(), prefixes.end(), keyCount), prefixes.end());
-            }
+            enableFullKey = configDelta.GetEnableFilterByKey();
+            config.SetEnableFilterByKey(enableFullKey);
         }
 
-        if (configDelta.ByKeyFilterPrefixesSize() > 0) {
-            // Delta replaces the explicit prefix list
-            prefixes.clear();
-            for (auto p : configDelta.GetByKeyFilterPrefixes()) {
-                if (p > 0) {
-                    prefixes.push_back(p);
-                }
-            }
-            // Re-add full-key entry if EnableFilterByKey is enabled
-            if (config.GetEnableFilterByKey()) {
-                prefixes.push_back(keyCount);
+        TMap<ui32, double> prefixMap;
+        for (const auto& p : configDelta.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
+                prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
-
-        SortUnique(prefixes);
+        // Re-add full-key entry if EnableFilterByKey is enabled.
+        if (enableFullKey) {
+            prefixMap.emplace(keyCount, NTable::DefaultBloomFilterFpp);
+        }
 
         config.ClearByKeyFilterPrefixes();
-        for (auto p : prefixes) {
-            config.AddByKeyFilterPrefixes(p);
+        TVector<TPrefix> prefixes;
+        for (const auto& [len, fpp] : prefixMap) {
+            auto* entry = config.AddByKeyFilterPrefixes();
+            entry->SetPrefixLength(len);
+            entry->SetFalsePositiveProbability(fpp);
+            prefixes.push_back(TPrefix{len, fpp});
         }
+        // An empty list emits a clear sentinel, so the engine drops any previously-set filter.
         for (ui32 tid : tids) {
             alter.SetByKeyFilterPrefixes(tid, prefixes);
         }

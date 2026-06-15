@@ -54,7 +54,7 @@ jobs:
       release-commit-sha: ${{ steps.do-prepare-release.outputs.release-commit-sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ inputs.commit_sha }}
@@ -71,6 +71,7 @@ jobs:
           branch-prefix: "cli-release/"
           product-name: "YDB CLI"
           version-artifact-name: "cli-version"
+          version-artifact-file: "cli_version.txt"
 
   build:
     name: Build binaries
@@ -92,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare-release.outputs.branch-name }}
       - name: Print YDB CLI version ${{ needs.prepare-release.outputs.new-version }}
@@ -115,8 +116,13 @@ jobs:
     needs: [prepare-release, gather-and-push-to-s3]
     runs-on: ubuntu-latest
     if: success()
+    outputs:
+      pr_url: ${{ steps.do_finalize.outputs['pr-url'] }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
       - name: Finalize release
+        id: do_finalize
         uses: ./.github/actions/finalize_release
         with:
           version: ${{ needs.prepare-release.outputs.new-version }}
@@ -128,12 +134,19 @@ jobs:
 
   cleanup-on-failure:
     name: Cleanup release branch on failure
-    needs: [prepare-release, gather-and-push-to-s3]
+    needs: [prepare-release, gather-and-push-to-s3, finalize-release]
     runs-on: ubuntu-latest
-    if: failure() && needs.prepare-release.result == 'success'
+    if: >-
+      always() &&
+      needs.prepare-release.result == 'success' &&
+      (
+        needs.gather-and-push-to-s3.result == 'failure' ||
+        needs.gather-and-push-to-s3.result == 'skipped' ||
+        (needs['finalize-release'].result == 'failure' && needs['finalize-release'].outputs.pr_url == '')
+      )
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0

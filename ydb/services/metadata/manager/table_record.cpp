@@ -8,6 +8,15 @@
 #include <util/string/join.h>
 
 namespace NKikimr::NMetadata::NInternal {
+namespace {
+
+Ydb::Table::ExecuteDataQueryRequest CreateDataQueryRequestWithDefaults(bool keepInCache = true) {
+    Ydb::Table::ExecuteDataQueryRequest result;
+    result.mutable_query_cache_policy()->set_keep_in_cache(keepInCache);
+    return result;
+}
+
+} // anonymous namespace
 
 bool TTableRecord::CompareColumns(const TTableRecord& item, const std::vector<TString>& columnIds) const {
     for (auto&& i : columnIds) {
@@ -193,7 +202,7 @@ std::vector<TString> TTableRecords::GetColumnIds() const {
 }
 
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpsertQuery(const TString& tablePath) const {
-    Ydb::Table::ExecuteDataQueryRequest result;
+    Ydb::Table::ExecuteDataQueryRequest result = CreateDataQueryRequestWithDefaults();
     TStringBuilder sb;
     sb << "--!syntax_v1\n";
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;
@@ -206,7 +215,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpsertQuery(const TStrin
 }
 
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildInsertQuery(const TString& tablePath) const {
-    Ydb::Table::ExecuteDataQueryRequest result;
+    Ydb::Table::ExecuteDataQueryRequest result = CreateDataQueryRequestWithDefaults();
     TStringBuilder sb;
     sb << "--!syntax_v1\n";
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;
@@ -219,7 +228,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildInsertQuery(const TStrin
 }
 
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildSelectQuery(const TString& tablePath) const {
-    Ydb::Table::ExecuteDataQueryRequest result;
+    Ydb::Table::ExecuteDataQueryRequest result = CreateDataQueryRequestWithDefaults();
     TStringBuilder sb;
     sb << "--!syntax_v1\n";
     sb << "/*UI-QUERY-EXCLUDE*/" << Endl;
@@ -237,7 +246,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildSelectQuery(const TStrin
 }
 
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildDeleteQuery(const TString& tablePath) const {
-    Ydb::Table::ExecuteDataQueryRequest result;
+    Ydb::Table::ExecuteDataQueryRequest result = CreateDataQueryRequestWithDefaults();
     TStringBuilder sb;
     sb << "--!syntax_v1\n";
     sb << "DECLARE $ids AS List<" << BuildColumnsSchemaTuple() << ">;" << Endl;
@@ -250,7 +259,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildDeleteQuery(const TStrin
 }
 
 Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildUpdateQuery(const TString& tablePath) const {
-    Ydb::Table::ExecuteDataQueryRequest result;
+    Ydb::Table::ExecuteDataQueryRequest result = CreateDataQueryRequestWithDefaults();
     TStringBuilder sb;
     sb << "--!syntax_v1\n";
     sb << "DECLARE $objects AS List<" << BuildColumnsSchemaStruct() << ">;" << Endl;

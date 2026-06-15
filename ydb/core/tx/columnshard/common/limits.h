@@ -16,4 +16,4 @@ public:
 
     static constexpr ui64 AveragePortionSizeLimit = 2 << 10;
 };
-}
+}   // namespace NKikimr::NOlap

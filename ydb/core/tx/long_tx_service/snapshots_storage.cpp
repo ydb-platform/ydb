@@ -44,6 +44,16 @@ TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View() const {
         now - TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds())};
 }
 
+void TRemoteSnapshotsStorage::Init(const TVector<TRemoteSnapshotInfo>& snapshots) {
+    AFL_ENSURE(NodeIdToState.empty());
+    for (const auto& snapshot : snapshots) {
+        const auto nodeId = snapshot.SessionActorId.NodeId();
+        NodeIdToState[nodeId].RemoteSnapshots.push_back(snapshot);
+    }
+    Ready = true;
+}
+
+
 void TRemoteSnapshotsStorage::UpdateAndCleanExpired(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& updatedNodeIdToCollectionTime) {
     const auto now = AppData()->TimeProvider->Now();
 

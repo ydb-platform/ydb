@@ -4,8 +4,8 @@
 #include "data_accessor.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -28,7 +28,8 @@ public:
 
     public:
         TBlobInfo(const std::shared_ptr<IBlobsStorageOperator>& bOperator)
-            : Operator(bOperator) {
+            : Operator(bOperator)
+        {
         }
 
         class TBuilder {
@@ -39,8 +40,10 @@ public:
         public:
             TBuilder(TBlobInfo& blob, TWritePortionInfoWithBlobsConstructor& portion)
                 : OwnerBlob(&blob)
-                , OwnerPortion(&portion) {
+                , OwnerPortion(&portion)
+            {
             }
+
             ui64 GetSize() const {
                 return OwnerBlob->GetSize();
             }
@@ -77,7 +80,8 @@ private:
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
     explicit TWritePortionInfoWithBlobsConstructor(TPortionAccessorConstructor&& portionConstructor)
-        : PortionConstructor(std::move(portionConstructor)) {
+        : PortionConstructor(std::move(portionConstructor))
+    {
         AFL_VERIFY(!PortionConstructor->HaveBlobsData());
     }
 
@@ -135,7 +139,8 @@ public:
         TBlobInfo(const TString& blobData, TBlobChunks&& chunks, const std::shared_ptr<IBlobsStorageOperator>& stOperator)
             : Chunks(std::move(chunks))
             , ResultBlob(blobData)
-            , Operator(stOperator) {
+            , Operator(stOperator)
+        {
         }
 
         const TString& GetResultBlob() const {
@@ -152,7 +157,7 @@ private:
 
     TString GetBlobByAddressVerified(const ui32 entityId, const ui32 chunkIdx) const {
         for (auto&& i : Blobs) {
-            for (auto&& b: i.GetChunks()) {
+            for (auto&& b : i.GetChunks()) {
                 if (b.GetEntityId() == entityId && b.GetChunkIdx() == chunkIdx) {
                     auto* recordInfo = GetPortionResult().GetRecordPointer(TChunkAddress(entityId, chunkIdx));
                     AFL_VERIFY(recordInfo);
@@ -182,7 +187,8 @@ public:
     }
 
     TWritePortionInfoWithBlobsResult(TWritePortionInfoWithBlobsConstructor&& constructor)
-        : PortionConstructor(std::move(constructor.PortionConstructor)) {
+        : PortionConstructor(std::move(constructor.PortionConstructor))
+    {
         for (auto&& i : constructor.Blobs) {
             Blobs.emplace_back(i.ExtractBlob(), i.ExtractChunks(), i.GetOperator());
         }
@@ -199,7 +205,6 @@ public:
         for (auto&& i : Blobs) {
             i.RegisterBlobId(*this, TUnifiedBlobId(1, 1, 1, ++idx, 1, 1, i.GetSize()));
         }
-
     }
 
     void FinalizePortionConstructor(const TSnapshot& finalizationSnapshot) {

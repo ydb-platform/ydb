@@ -261,7 +261,6 @@ uint64_t ngtcp2_cbrt(uint64_t n) {
   y <<= 1;
   b = 3 * y * (y + 1) + 1;
   if (n >= b) {
-    n -= b;
     y++;
   }
 

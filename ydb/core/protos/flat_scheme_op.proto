@@ -209,7 +209,13 @@ message TPartitionConfig {
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
-    repeated uint32 ByKeyFilterPrefixes = 26; // Build per-part bloom filters on PK prefixes of these lengths (number of leading key columns)
+    reserved 26; // deprecated -> ByKeyFilterPrefixes
+    repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
+}
+
+message TByKeyFilterPrefix {
+    optional uint32 PrefixLength = 1;           // Number of leading key columns
+    optional double FalsePositiveProbability = 2; // Bloom filter FPP (default 0.0001 when absent)
 }
 
 message TSplitBoundary {
@@ -269,6 +275,69 @@ message TTTLSettings {
     }
 
     reserved 3;
+}
+
+/**
+ * The parameters for the detailed metrics for the given table.
+ */
+message TTableDetailedMetricsSettings {
+    /**
+     * The level at which detailed metrics are aggregated and reported.
+     */
+    enum EMetricsLevel {
+        /**
+         * The detailed metrics level is not specified.
+         */
+        MetricsLevelUnspecified = 0;
+
+        /**
+         * All detailed metrics are disabled for the given table.
+         */
+        MetricsLevelDisabled = 1;
+
+        /**
+         * Detailed metrics are aggregated and reported for the entire table.
+         */
+        MetricsLevelTable = 2;
+
+        /**
+         * Detailed metrics are aggregated and reported for individual partitions.
+         */
+        MetricsLevelPartition = 3;
+    }
+
+    /**
+     * The container for the detailed metrics settings, which are explicitly configured.
+     */
+    message TConfigured {
+        /**
+         * The level at which detailed metrics are aggregated and reported.
+         */
+        optional EMetricsLevel MetricsLevel = 1;
+    }
+
+    /**
+     * The container for the detailed metrics settings, which are explicitly removed.
+     */
+    message TNotConfigured {
+    }
+
+    oneof Status {
+        /**
+         * Set, if the detailed metrics settings are explicitly configured.
+         */
+        TConfigured Configured = 1;
+
+        /**
+         * Set, if the detailed metrics settings are explicitly removed.
+         *
+         * @note This is used in ALTER TABLE requests to remove the detailed metrics settings,
+         *       which are currently configured for the given table. If the detailed metrics
+         *       settings are not configured, the corresponding DetailedMetricsSettings field
+         *       in the table description will not be set.
+         */
+        TNotConfigured NotConfigured = 2;
+    }
 }
 
 message TTableReplicationConfig {
@@ -363,6 +432,35 @@ message TTableDescription {
 
     // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
     optional uint32 UniqueIndexKeySize = 50;
+
+    /**
+     * The detailed metrics settings for the given table.
+     *
+     * @note When returning the description for an existing table, this field
+     *       will be populated, if the detailed metrics settings are explicitly configured
+     *       for the given table. If the detailed metrics settings are not configured,
+     *       this field will not be populated in the table description.
+     *
+     * @note When used for ALTER TABLE requests, this field should be left unset
+     *       to keep the current detailed metrics settings for the given table.
+     *       To configure/change the detailed metrics settings, this field should be populated
+     *       with the TTableDetailedMetricsSettings.Configured field set to the desired settings.
+     *       To remove the current detailed metrics settings, this field should be populated
+     *       with the TTableDetailedMetricsSettings.NotConfigured field set.
+     *
+     * @note If the detailed metrics settings are not configured for a table,
+     *       the default metrics settings from the parent database are used instead
+     *       (by default, no detailed metrics settings are configured at the database
+     *       level). Setting the detailed metrics level to TABLE/PARTITION for a table,
+     *       enables detailed metrics for the given table regardless of the detailed
+     *       metrics settings at the database level. Setting the detailed metrics
+     *       level to DISABLED for a table, disables detailed metrics for the given table
+     *       regardless of the detailed metrics settings at the database level.
+     */
+    optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
+
+    // For fulltext indexes - to determine if the table is an impl table of an index
+    optional EIndexType IndexImplType = 52;
 }
 
 message TCompressionOptions {
@@ -1188,17 +1286,38 @@ message TIncrementalRestoreFinalize {
     repeated string BackupTablePaths = 4;
 }
 
-message TIncrementalRestoreOperationId {
+message TIncrementalRestoreSubOpId {
     optional uint64 TxId = 1;
     optional uint32 SubTxId = 2;
 }
 
+message TIncrementalRestoreSubOpState {
+    optional TIncrementalRestoreSubOpId Id = 1;
+
+    // Per-shard dispatch tracking for reboot recovery.
+    // TShardIdx.LocalId (ui64) is wire-stable; OwnerId is implicit (this SS).
+    repeated uint64 ExpectedShardLocalIds = 2;
+    repeated uint64 CompletedShardLocalIds = 3;
+    repeated uint64 FailedShardLocalIds = 4;
+    optional bool HasNonRetriableFailure = 5;
+    // Src/dst paths for re-dispatching failed shards after SS reboot.
+    optional uint64 SrcPathLocalId = 6;
+    optional uint64 DstPathLocalId = 7;
+}
+
 message TIncrementalRestoreOperationsList {
-    repeated TIncrementalRestoreOperationId Operations = 1;
+    repeated TIncrementalRestoreSubOpState SubOps = 1;
 }
 
 message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
+}
+
+// Control op for a BackupCollection full backup (runs first in the CCT decomposition).
+message TCreateFullBackupOp {
+    // Total CopyTable sub-ops expected (base tables + index impl tables).
+    // Used to detect when the control op is fully terminal.
+    optional uint32 ExpectedItemCount = 1;
 }
 
 message TTruncateTable {
@@ -1214,6 +1333,12 @@ enum EIndexType {
     EIndexTypeGlobalFulltextPlain = 5;
     EIndexTypeGlobalFulltextRelevance = 6;
     EIndexTypeGlobalJson = 7;
+    EIndexTypeLocalBloomFilter = 8;
+    EIndexTypeLocalBloomNgramFilter = 9;
+    EIndexTypeLocalMinMax = 10;
+    EIndexTypeGlobalFulltextCompact = 11;
+    EIndexTypeGlobalFulltextCompactRelevance = 12;
+    EIndexTypeGlobalJsonCompact = 13;
 }
 
 enum EIndexState {
@@ -1229,6 +1354,10 @@ message TVectorIndexKmeansTreeDescription {
 
 message TFulltextIndexDescription {
     optional Ydb.Table.FulltextIndexSettings Settings = 1;
+    // When true, the fulltext index uses the __ydb_row_id Uint64 column of the main table as doc_id
+    // instead of the main table PK. A unique secondary index on __ydb_row_id is required and is used
+    // at read time to resolve __ydb_row_id back to the main table PK.
+    optional bool UseRowIdAsDocId = 2;
 }
 
 message TIndexDescription {
@@ -1253,6 +1382,8 @@ message TIndexDescription {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
         TFulltextIndexDescription FulltextIndexDescription = 12;
+        TBloomFilter BloomFilterDescription = 13;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 14;
     }
 }
 
@@ -1266,6 +1397,8 @@ message TIndexCreationConfig {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
         TFulltextIndexDescription FulltextIndexDescription = 8;
+        TBloomFilter BloomFilterDescription = 9;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 10;
     }
 }
 
@@ -1283,6 +1416,13 @@ message TGenericTxInFlyExtraData {
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
+    repeated string KeyColumnNames = 4;
+    optional EIndexType Type = 5;
+    oneof SpecializedIndexDescription {
+        TBloomFilter BloomFilterDescription = 8;
+        TBloomNGrammFilter BloomNGrammFilterDescription = 9;
+    }
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
 }
 
 message TIndexedTableCreationConfig {
@@ -1761,6 +1901,7 @@ message TIndexBuildControl {
     optional string IndexName = 2;
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 5;
 }
 
 message TLockConfig {
@@ -1950,6 +2091,8 @@ message TModifyScheme {
 
     optional TChangePathState ChangePathState = 82;
 
+    optional TIncrementalRestoreLockTargets IncrementalRestoreLockTargets = 94;
+
     optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
@@ -1969,6 +2112,8 @@ message TModifyScheme {
     optional TTruncateTable TruncateTable = 92;
 
     optional TPrepareIndexValidation PrepareIndexValidation = 93;
+
+    optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -2052,6 +2197,9 @@ enum EPathSubType {
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
     EPathSubTypeFulltextIndexImplTable = 5;
     EPathSubTypeJsonIndexImplTable = 6;
+    EPathSubTypeLocalBloomFilterIndex = 7;
+    EPathSubTypeLocalBloomNgramFilterIndex = 8;
+    EPathSubTypeLocalMinMaxIndex = 9;
 }
 
 enum EPathState {
@@ -2435,12 +2583,21 @@ message TLongIncrementalRestoreOp {
     repeated string TablePathList = 4;
     optional string FullBackupTrimmedName = 5;
     repeated string IncrementalBackupTrimmedNames = 6;
-    repeated uint64 InvolvedShards = 7;
+    reserved 7;
 }
 
 message TChangePathState {
     optional string Path = 1;
     optional EPathState TargetState = 2;
+}
+
+// Payload for ESchemeOpIncrementalRestoreLockTargets / UnlockTargets.
+// Dst paths transition to EPathStateIncomingIncrementalRestore; src paths to
+// EPathStateOutgoingIncrementalRestore (unlock reverses both to EPathStateNoChanges).
+message TIncrementalRestoreLockTargets {
+    repeated string DstPaths = 1;
+    repeated string SrcPaths = 2;
+    optional uint64 RestoreOpId = 3;
 }
 
 message TSecretDescription {

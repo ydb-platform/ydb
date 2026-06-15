@@ -15,7 +15,7 @@ class TMLPStorageWAL;
 class TStatusResponse;
 class TStatusResponse_TPartResult;
 
-};
+} // namespace NKikimrPQ
 
 namespace NKikimr {
 
@@ -27,6 +27,6 @@ bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& config, bool isLocalDC);
 bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config);
 const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions(const NKikimrPQ::TPQTabletConfig& config Y_LIFETIME_BOUND, const ui32 partitionId) noexcept;
 
-}
+} // namespace NPQ
 
-} // NKikimr
+} // namespace NKikimr

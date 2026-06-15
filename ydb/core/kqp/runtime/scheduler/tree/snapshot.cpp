@@ -1,6 +1,6 @@
 #include "snapshot.h"
 
-#include "dynamic.h"
+#include "dynamic.h" // IWYU pragma: keep
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
@@ -20,35 +20,37 @@ void TTreeElement::AccountSnapshotDuration(const TDuration& period) {
 
 void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
     TotalLimit = totalLimit;
-    Limit = Min<ui64>(GetLimit(), TotalLimit);
+    CpuLimit = Min<ui64>(GetCpuLimit(), TotalLimit);
 
     if (IsPool()) {
-        Demand = 0;
-        Usage = 0;
-        BurstUsage = 0;
-        BurstThrottle = 0;
+        CpuDemand = 0;
+        CpuUsage = 0;
+        CpuBurstUsage = 0;
+        CpuBurstThrottle = 0;
+        ReadBurstUsage = 0;
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
             child->UpdateBottomUp(totalLimit);
-            Demand += child->Demand;
-            Usage += child->Usage;
-            BurstUsage += child->BurstUsage;
-            BurstThrottle += child->BurstThrottle;
+            CpuDemand += child->CpuDemand;
+            CpuUsage += child->CpuUsage;
+            CpuBurstUsage += child->CpuBurstUsage;
+            CpuBurstThrottle += child->CpuBurstThrottle;
+            ReadBurstUsage += child->ReadBurstUsage;
         });
     }
 
-    Demand = Min<ui64>(Demand, GetLimit());
-    Guarantee = Min<ui64>(GetGuarantee(), Demand);
+    CpuDemand = Min<ui64>(CpuDemand, GetCpuLimit());
+    CpuGuarantee = Min<ui64>(GetCpuGuarantee(), CpuDemand);
 }
 
 void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
     if (IsRoot()) {
-        FairShare = Demand;
+        FairShare = CpuDemand;
     }
 
     // At this moment we know own fair-share. Need to calibrate children.
 
     if (FairShare) {
-        Satisfaction = Usage / float(FairShare);
+        Satisfaction = CpuUsage / float(FairShare);
     }
 
     if (!IsPool()) {
@@ -62,7 +64,7 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
 
         weightedDemand.resize(ChildrenSize());
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t i) {
-            weightedDemand.at(i) = child->GetWeight() * child->Demand;
+            weightedDemand.at(i) = child->GetWeight() * child->CpuDemand;
             totalWeightedDemand += weightedDemand.at(i);
         });
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t i) {
@@ -80,7 +82,7 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
     // TODO: it's workaround mode - should not be used in the future.
     else if (fairShareMode == ELeafFairShare::EQUAL_TO_PARENT) {
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
-            if (query->Demand > 0) {
+            if (query->CpuDemand > 0) {
                 query->FairShare = FairShare;
             }
 
@@ -102,7 +104,7 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
                 return true;
             }
 
-            if (child->Demand > 0) {
+            if (child->CpuDemand > 0) {
                 child->FairShare = 1;
                 if (!allowFairShareOverlimit || leftFairShare > 0) {
                     --leftFairShare;
@@ -112,7 +114,7 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
             return false;
         });
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
-            auto demand = query->Demand > 0 ? query->Demand - 1 : 0;
+            auto demand = query->CpuDemand > 0 ? query->CpuDemand - 1 : 0;
             query->FairShare += Min(leftFairShare, demand);
             leftFairShare = leftFairShare <= demand ? 0 : leftFairShare - demand;
 
@@ -127,7 +129,7 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, NDynamic::TQueryPtr query)
+TQuery::TQuery(const TQueryId& id, const NDynamic::TQueryPtr& query)
     : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id, *query)
     , TTreeElement(id, *query)
     , NHdrf::TQuery<ETreeType::SNAPSHOT>(id, *query)
@@ -166,8 +168,8 @@ void TPool::AccountSnapshotDuration(const TDuration& period) {
             Counters->Satisfaction->Set(-1);
         }
 
-        if (auto adjustedFairShare = std::min(fairShare, BurstUsage + BurstThrottle)) {
-            float adjustedSatisfaction = BurstUsage / (float)adjustedFairShare;
+        if (auto adjustedFairShare = std::min(fairShare, CpuBurstUsage + CpuBurstThrottle)) {
+            float adjustedSatisfaction = CpuBurstUsage / (float)adjustedFairShare;
             Counters->AdjustedSatisfaction->Add(adjustedSatisfaction * period.MicroSeconds());
         } else {
             // by default adjusted satisfaction is always 1.0 - no matter what
@@ -180,7 +182,7 @@ void TPool::AccountSnapshotDuration(const TDuration& period) {
 void TPool::UpdateBottomUp(ui64 totalLimit) {
     TTreeElement::UpdateBottomUp(totalLimit);
     if (Counters) {
-        Counters->Demand->Set(Demand * 1'000'000);
+        Counters->Demand->Set(CpuDemand * 1'000'000);
     }
 }
 

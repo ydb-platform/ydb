@@ -18,7 +18,7 @@ NCache::IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
     const NCache::TClientsCacheConfigPtr& clientsCacheConfig,
     const NYT::NApi::TClientOptions& options,
-    TString clusterSeparator = "+");
+    std::string clusterSeparator = "+");
 
 //! Creates clients cache for generic and federated clients.
 //! Federated clients created with federatedConfig, and generic clients created with config.
@@ -29,7 +29,7 @@ NCache::IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
     const NApi::NRpcProxy::TConnectionConfigPtr& cacheConfig,
     const NYT::NApi::TClientOptions& options,
-    TString clusterSeparator = "+");
+    std::string clusterSeparator = "+");
 
 ////////////////////////////////////////////////////////////////////////////////
 

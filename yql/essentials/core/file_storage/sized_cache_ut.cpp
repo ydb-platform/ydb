@@ -32,9 +32,9 @@ struct TTestCacheObj: public TSizedCache::ICacheObj {
 Y_UNIT_TEST_SUITE(TSizedCacheTests) {
 Y_UNIT_TEST(Count) {
     TSizedCache cache(100, 100);
-    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
-    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
-    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ull);
+    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ULL);
+    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
+    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 0);
     cache.Put(o1, false);
@@ -51,9 +51,9 @@ Y_UNIT_TEST(Count) {
 
 Y_UNIT_TEST(GetOccupiedSize) {
     TSizedCache cache(100, 100);
-    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
-    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
-    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ull);
+    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ULL);
+    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
+    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 0);
     cache.Put(o1, false);
@@ -70,9 +70,9 @@ Y_UNIT_TEST(GetOccupiedSize) {
 
 Y_UNIT_TEST(DisplaceByCount) {
     TSizedCache cache(2, 100);
-    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
-    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
-    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ull);
+    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ULL);
+    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
+    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     cache.Put(o1, false);
     cache.Put(o2, false);
@@ -86,9 +86,9 @@ Y_UNIT_TEST(DisplaceByCount) {
 
 Y_UNIT_TEST(DisplaceBySize) {
     TSizedCache cache(100, 35);
-    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
-    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
-    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ull);
+    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ULL);
+    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
+    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     cache.Put(o1, false);
     cache.Put(o2, false);
@@ -102,9 +102,9 @@ Y_UNIT_TEST(DisplaceBySize) {
 
 Y_UNIT_TEST(Lock) {
     TSizedCache cache(2, 30);
-    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
-    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
-    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ull);
+    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ULL);
+    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
+    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     UNIT_ASSERT(cache.GetLocks("o1").Empty());
     cache.Put(o1, true);
@@ -126,9 +126,9 @@ Y_UNIT_TEST(Lock) {
 
 Y_UNIT_TEST(MultiLock) {
     TSizedCache cache(2, 30);
-    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
-    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
-    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ull);
+    TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ULL);
+    TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ULL);
+    TIntrusivePtr<TTestCacheObj> o3 = MakeIntrusive<TTestCacheObj>("o3", 15ULL);
 
     cache.Put(o1, true);
     UNIT_ASSERT_VALUES_EQUAL(*cache.GetLocks("o1"), 1);

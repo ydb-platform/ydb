@@ -295,6 +295,13 @@ void TQueryBase::ReadNextStreamPart() {
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev) {
+    if (Finished) {
+        // Next TEvStreamQueryResultPart can be already in the mailbox (added by
+        // the StreamQueryProcessor callback) after we called Finish() to cancel the query.
+        // In this case we are not interested in processing it anymore.
+        return;
+    }
+
     Y_ABORT_UNLESS(RunningQuery);
     Y_ABORT_UNLESS(StreamQueryProcessor);
     NumberRequests++;
@@ -305,6 +312,10 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     if (ev->Get()->Status != StatusIds::SUCCESS) {
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
         return;
+    }
+
+    if (ForwardStreamIssuesOnSuccess && !ev->Get()->Issues.Empty()) {
+        AccumulatedStreamIssues.AddIssues(ev->Get()->Issues);
     }
 
     if (ev->Get()->ResultSet.rows_size()) {
@@ -354,7 +365,11 @@ void TQueryBase::FinishStreamRequest() {
 //// TQueryBase finish operations
 
 void TQueryBase::Finish() {
-    Finish(StatusIds::SUCCESS, TIssues());
+    if (ForwardStreamIssuesOnSuccess) {
+        Finish(StatusIds::SUCCESS, std::move(AccumulatedStreamIssues));
+    } else {
+        Finish(StatusIds::SUCCESS, TIssues());
+    }
 }
 
 void TQueryBase::Finish(StatusIds::StatusCode status, const TString& message, bool rollbackOnError) {

@@ -1402,6 +1402,8 @@ namespace NDetail {
 // TODO: we should use default GENERATE_ENUM_SERIALIZATION
 TString ToString(EValueType type);
 
+TMutationId GenerateMutationId();
+
 } // namespace NDetail
 /// @endcond
 

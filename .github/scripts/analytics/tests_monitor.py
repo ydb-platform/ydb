@@ -351,11 +351,20 @@ def main():
                 AND branch = '{branch}'
                 AND date_window = Date('{date_str}')
             """
-            try:
-                results = ydb_wrapper.execute_scan_query(query, query_name=f"get_monitor_data_for_date_{branch}")
-            except Exception as e:
-                print(f"Error fetching monitor data for {date_str}: {e}")
-                return None
+            _max_retries = 5
+            _retry_delay = 10  # seconds
+            for _attempt in range(1, _max_retries + 1):
+                try:
+                    results = ydb_wrapper.execute_scan_query(query, query_name=f"get_monitor_data_for_date_{branch}")
+                    break
+                except Exception as e:
+                    print(f"Attempt {_attempt}/{_max_retries}: error fetching monitor data for {date_str}: {e}")
+                    if _attempt == _max_retries:
+                        raise RuntimeError(
+                            f"Failed to fetch monitor baseline for {date_str} after {_max_retries} attempts. "
+                            "Aborting to avoid state recalculation from a missing previous day."
+                        ) from e
+                    time.sleep(_retry_delay)
 
             if not results:
                 return None
@@ -423,12 +432,22 @@ def main():
             AND branch = '{branch}'
         """
         
-        try:
-            results = ydb_wrapper.execute_scan_query(query_last_exist_day, query_name=f"get_max_monitor_date_{branch}")
-            last_exist_day = results[0]['last_exist_day'] if results else None
-        except Exception as e:
-            print(f"Error during fetching last existing day: {e}")
-            last_exist_day = None
+        last_exist_day = None
+        _max_retries = 5
+        _retry_delay = 10  # seconds
+        for _attempt in range(1, _max_retries + 1):
+            try:
+                results = ydb_wrapper.execute_scan_query(query_last_exist_day, query_name=f"get_max_monitor_date_{branch}")
+                last_exist_day = results[0]['last_exist_day'] if results else None
+                break
+            except Exception as e:
+                print(f"Attempt {_attempt}/{_max_retries}: error fetching last existing day: {e}")
+                if _attempt == _max_retries:
+                    raise RuntimeError(
+                        f"Failed to fetch last existing monitor date after {_max_retries} attempts. "
+                        "Aborting to avoid cold-start backfill overwriting historical data."
+                    ) from e
+                time.sleep(_retry_delay)
 
         last_exist_df = None
 
@@ -562,18 +581,21 @@ def main():
                         suite_folder,
                         owners,
                         is_muted,
-                        date
+                        date,
+                        build_type
                     FROM 
                         `{all_tests_table}`
                     WHERE 
                         branch = '{branch}'
+                        AND build_type = '{build_type}'
                         AND date = Date('{date}')
                         AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
                 ) AS owners_t
                 ON 
                     hist.test_name = owners_t.test_name
                     AND hist.suite_folder = owners_t.suite_folder
-                    AND hist.date_window = owners_t.date;
+                    AND hist.date_window = owners_t.date
+                    AND hist.build_type = owners_t.build_type;
             """
             results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
 

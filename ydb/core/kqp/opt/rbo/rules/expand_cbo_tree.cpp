@@ -62,6 +62,10 @@ TIntrusivePtr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const TIntrusiv
 
     if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
+        if (!join->JoinFilters.empty()) {
+            return input;
+        }
+
         auto leftInput = join->GetLeftInput();
         auto rightInput = join->GetRightInput();
 
@@ -102,12 +106,18 @@ TIntrusivePtr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const TIntrusiv
         auto otherSide = leftSideCBOTree ? join->GetRightInput() : join->GetLeftInput();
         TIntrusivePtr<TOpCBOTree> otherSideCBOTree;
 
-        if (otherSide->Kind == EOperator::Filter &&
+        if (otherSide->Kind == EOperator::CBOTree) {
+            otherSideCBOTree = CastOperator<TOpCBOTree>(otherSide);
+        } else if (otherSide->Kind == EOperator::Filter &&
                 CastOperator<TOpFilter>(otherSide)->GetInput()->Kind == EOperator::CBOTree &&
                 join->JoinKind == "Inner") {
 
             maybeAnotherFilter = CastOperator<TOpFilter>(otherSide);
             otherSideCBOTree = CastOperator<TOpCBOTree>(maybeAnotherFilter->GetInput());
+        }
+
+        if (maybeFilter) {
+            join->ReplaceChild(maybeFilter, maybeFilter->GetInput());
         }
 
         if (otherSideCBOTree) {

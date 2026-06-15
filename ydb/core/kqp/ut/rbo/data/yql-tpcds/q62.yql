@@ -3,6 +3,7 @@
 /* custom error: YqlSelect unsupported: GROUP BY aliases */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
+PRAGMA YqlSelectAllowUnnamedGroupByExpr;
 
 SELECT
     Substring(w_warehouse_name, 1, 20),

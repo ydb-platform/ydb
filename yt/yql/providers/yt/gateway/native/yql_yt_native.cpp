@@ -202,6 +202,7 @@ inline TType OptionFromNode(const NYT::TNode& value) {
 }
 
 void PopulatePathStatResult(IYtGateway::TPathStatResult& out, int index, NYT::TTableColumnarStatistics& extendedStat) {
+    out.DataSize[index] += extendedStat.LegacyChunksDataWeight;
     for (const auto& entry : extendedStat.ColumnDataWeight) {
         out.DataSize[index] += entry.second;
     }
@@ -803,7 +804,7 @@ public:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     Services_.FunctionRegistry->SupportsSizedAllocators());
                 alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer());
+                TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings());
                 TVector<TRuntimeNode> tupleNodes;
                 for (auto& node: nodes) {
                     tupleNodes.push_back(builder.BuildLambda(*MkqlCompiler_, node, ctx));
@@ -1920,6 +1921,7 @@ private:
         }
 
         if (ensureParentsTmp) {
+            execCtx->PrepareSecureTmpFolder();
             CreateParents(ensureParentsTmp, entry->CacheTx);
         }
         if (ensureParents) {
@@ -2165,7 +2167,7 @@ private:
                     TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                         execCtx->FunctionRegistry_->SupportsSizedAllocators());
                     alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                    TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
+                    TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
 
                     TRuntimeNode root = DeserializeRuntimeNode(filterLambda, builder.GetTypeEnvironment());
@@ -3497,7 +3499,7 @@ private:
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 Services_.FunctionRegistry->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer());
+            TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings());
             auto rootNode = builder.BuildLambda(*MkqlCompiler_, result.Input().Ptr(), ctx);
             hasListResult = rootNode.GetStaticType()->IsList();
             lambda = SerializeRuntimeNode(rootNode, builder.GetTypeEnvironment());
@@ -3736,9 +3738,10 @@ private:
         }
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
+        bool checkOutputStats = CanReplaceParentOutputHash(merge.Ref());
 
-        return execCtx->Session_->Async([forceTransform, combineChunks, limit, execCtx]() {
-            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {
+        return execCtx->Session_->Async([forceTransform, combineChunks, limit, checkOutputStats, execCtx]() {
+            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, checkOutputStats, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 execCtx->SetNodeExecProgress("Preparing");
                 auto entry = execCtx->GetEntry();
@@ -3789,8 +3792,25 @@ private:
 
                 CheckSpecForSecrets(spec, execCtx);
 
-                return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
+                auto opFuture = execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
+                });
+
+                if (!checkOutputStats) {
+                    return opFuture;
+                }
+
+                // Ensure YtMerge with ReplaceParentCache won't change it's input.
+                return opFuture.Apply([entry, execCtx, outYPath = outYPaths.front()](const TFuture<void>& f) {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                    f.GetValue();
+                    YQL_ENSURE(execCtx->InputTables_.size() == 1);
+                    const auto inputRowCount = entry->Tx->Get(execCtx->InputTables_.front().Path.Path_ + "/@row_count").AsInt64();
+                    const auto outputRowCount = entry->Tx->Get(outYPath.Path_ + "/@row_count").AsInt64();
+                    YQL_ENSURE(inputRowCount == outputRowCount, "YtMerge with ReplaceParentCache produced row_count mismatch: " << "input=" << inputRowCount << " output=" << outputRowCount);
+                    const auto inputDataWeight = entry->Tx->Get(execCtx->InputTables_.front().Path.Path_ + "/@data_weight").AsInt64();
+                    const auto outputDataWeight = entry->Tx->Get(outYPath.Path_ + "/@data_weight").AsInt64();
+                    YQL_ENSURE(inputDataWeight == outputDataWeight, "YtMerge with ReplaceParentCache produced data_weight mismatch: " << "input=" << inputDataWeight << " output=" << outputDataWeight);
                 });
             });
         });
@@ -3824,6 +3844,7 @@ private:
                 bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -3864,7 +3885,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -3997,6 +4018,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4067,7 +4089,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4189,6 +4211,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4309,7 +4332,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4322,6 +4345,7 @@ private:
                 mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 mapJob->SetLangVer(execCtx->Options_.LangVer());
+                mapJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
                 transform.ApplyJobProps(*mapJob);
                 transform.ApplyUserJobSpec(mapUserJobSpec, testRun);
 
@@ -4340,7 +4364,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4353,6 +4377,7 @@ private:
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 reduceJob->SetLangVer(execCtx->Options_.LangVer());
+                reduceJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4442,6 +4467,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4497,7 +4523,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
@@ -4510,6 +4536,7 @@ private:
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
                 reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 reduceJob->SetLangVer(execCtx->Options_.LangVer());
+                reduceJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4637,7 +4664,7 @@ private:
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer());
+            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
             mapLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx);
             mapInputType = NCommon::WriteTypeToYson(GetSequenceItemType(mapReduce.Input().Size() == 1U ?
                 TExprBase(mapReduce.Input().Item(0)) : TExprBase(mapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0)), true));
@@ -4656,7 +4683,7 @@ private:
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer());
+            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
             reduceLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Reducer(), ctx);
         }
         TExpressionResorceUsage reduceExtraUsage = execCtx->ScanExtraResourceUsage(mapReduce.Reducer().Body().Ref(), false);
@@ -4786,6 +4813,7 @@ private:
                 bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4801,7 +4829,7 @@ private:
                 (execCtx->Config_->HasExecuteUdfLocallyIfPossible()
                     ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false);
             bool hasLayerPaths = false;
-            if constexpr (NPrivate::THasLayersPaths<TRunOptions>::value) {
+            if constexpr (::NYql::NPrivate::THasLayersPaths<TRunOptions>::value) {
                 hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
                 localRun &= execCtx->Options_.LayersPaths().empty();
             }
@@ -4810,7 +4838,7 @@ private:
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                     execCtx->FunctionRegistry_->SupportsSizedAllocators());
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
+                TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
                 auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 transform.SetTwoPhaseTransform();
@@ -4860,8 +4888,10 @@ private:
             job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
             job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
             job->SetLangVer(execCtx->Options_.LangVer());
+
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
             job->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+            job->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
             job->SetUseSkiff(useSkiff, 0);
 
             mapOpSpec.AddInput(tmpTable);
@@ -4924,7 +4954,7 @@ private:
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
                 Services_.FunctionRegistry->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer());
+            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
             lambda = builder.BuildLambdaWithIO(*MkqlCompiler_, fill.Content(), ctx);
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(fill.Content().Ref(), false);
@@ -5126,15 +5156,14 @@ private:
                     TMaybe<NYT::TTableColumnarStatistics> cachedExtendedStat;
                     if (!extended && (cachedStat = entry->GetColumnarStat(ytPath))) {
                         res.DataSize[i] += *cachedStat;
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (from cache, extended: false)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (from cache, extended: " << extended << ")";
                     } else if (extended && (cachedExtendedStat = entry->GetExtendedColumnarStat(ytPath))) {
                         PopulatePathStatResult(res, i, *cachedExtendedStat);
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (from cache, extended: true)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (from cache, extended: " << extended << ")";
                     } else if (onlyCached) {
                         YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " is missing in cache - sync path stat failed (extended: " << extended << ")";
                         return res;
-                    } else if (NYT::EOptimizeForAttr::OF_SCAN_ATTR != tmpOptimizeFor && !extended) {
-
+                    } else if (NYT::EOptimizeForAttr::OF_SCAN_ATTR != tmpOptimizeFor) {
                         // Use entire table size for lookup tables (YQL-7257)
                         if (attrs.IsUndefined()) {
                             attrs = tx->Get(ytPath.Path_ + "/@", NYT::TGetOptions().AttributeFilter(
@@ -5145,8 +5174,9 @@ private:
                         }
                         auto size = CalcDataSize(ytPath, attrs);
                         res.DataSize[i] += size;
-                        entry->UpdateColumnarStat(ytPath, size);
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i] << " (uncompressed_data_size for lookup, extended: false)";
+                        entry->UpdateColumnarStat(ytPath, size, extended);
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << ": " << res.DataSize[i]
+                            << " (uncompressed_data_size for lookup / missing columns in schema, extended: " << extended << ")";
                     } else {
                         ytPaths.push_back(ytPath);
                         pathMap.push_back(i);
@@ -5191,10 +5221,10 @@ private:
                     TMaybe<NYT::TTableColumnarStatistics> cachedExtendedStat;
                     if (!extended && (cachedStat = entry->GetColumnarStat(ytPath))) {
                         res.DataSize[i] += *cachedStat;
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (from cache, extended: false)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (from cache, extended: " << extended << ")";
                     } else if (extended && (cachedExtendedStat = entry->GetExtendedColumnarStat(ytPath))) {
                         PopulatePathStatResult(res, i, *cachedExtendedStat);
-                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (from cache, extended: true)";
+                        YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (from cache, extended: " << extended << ")";
                     } else if (onlyCached) {
                         YQL_CLOG(INFO, ProviderYt)
                             << "Stat for " << DebugPath(req.Path())
@@ -5208,8 +5238,8 @@ private:
                                 NYT::TGetOptions().AttributeFilter(attributeFilter));
                         }
 
-                        if (cacheSchemaBySchemaId && attrs.HasKey("schema_id") && attrs["schema_id"].IsString()
-                            && !extended && attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan") {
+                        const bool isScan = attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan";
+                        if (isScan && cacheSchemaBySchemaId && attrs.HasKey("schema_id") && attrs["schema_id"].IsString()) {
                             auto schema_id = attrs["schema_id"].AsString();
 
                             with_lock (entry->Lock_) {
@@ -5226,19 +5256,18 @@ private:
                             }
                         }
 
-                        if (extended ||
-                            (attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan" &&
-                            AllPathColumnsAreInSchema(req.Path(), attrs)))
+                        if (isScan && AllPathColumnsAreInSchema(req.Path(), attrs))
                         {
                             pathMap.push_back(i);
                             ytPaths.push_back(ytPath);
-                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << ") add for request with path " << ytPath.Path_ << " (extended: " << extended << ")";
+                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << ") add for request (extended: " << extended << ")";
                         } else {
                             // Use entire table size for lookup tables (YQL-7257)
                             auto size = CalcDataSize(ytPath, attrs);
                             res.DataSize[i] += size;
-                            entry->UpdateColumnarStat(ytPath, size);
-                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): " << res.DataSize[i] << " (uncompressed_data_size for lookup)";
+                            entry->UpdateColumnarStat(ytPath, size, extended);
+                            YQL_CLOG(INFO, ProviderYt) << "Stat for " << DebugPath(req.Path()) << " (epoch=" << req.Epoch() << "): "
+                                << res.DataSize[i] << " (uncompressed_data_size for lookup / missing columns in schema, extended: " << extended << ")";
                         }
                     }
                 }
@@ -5511,7 +5540,7 @@ private:
         auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
         bool hasLayerPaths = false;
-        if constexpr (NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
+        if constexpr (::NYql::NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
             hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
             localRun &= execCtx->Options_.LayersPaths().empty();
         }
@@ -5522,7 +5551,7 @@ private:
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(execCtx->Options_.SecureParams());
-            TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, secureParamsProvider.get(), execCtx->Options_.LangVer());
+            TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, secureParamsProvider.get(), execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings());
             THolder<TCodecContext> codecCtx;
             TString pathPrefix;
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -5610,6 +5639,7 @@ private:
         job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
         job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
         job->SetLangVer(execCtx->Options_.LangVer());
+        job->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
 
         mapOpSpec.AddInput(tmpTable);
         mapOpSpec.AddOutput(tmpTable);
@@ -5632,6 +5662,7 @@ private:
         return future
             .Apply([execCtx, entry, mapOpSpec = std::move(mapOpSpec), job, tmpTable, lambda, extraUsage, tmpFiles] (const TFuture<bool>& f) {
                 if (f.GetValue()) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -6195,6 +6226,61 @@ private:
                 return MakeFuture(ResultFromCurrentException<TDownloadTableResult>());
             }
         });
+    }
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+            const auto cluster = options.Cluster();
+            const auto files = options.Files();
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_);
+            auto dstPath = NYql::TransformPath(tmpFolder, "tmp/", true, session->UserName_);
+
+            auto ytServer = Clusters_->TryGetServer(cluster);
+            YQL_ENSURE(ytServer);
+            auto execCtx = MakeExecCtx(std::move(options), session, options.Cluster(), nullptr, nullptr);
+            auto entry = execCtx->GetOrCreateEntry();
+
+            return session->Async([entry, cluster, dstPath, files, logCtx]() {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                try {
+                    TUploadFilesToCacheResult res;
+                    auto client = entry->Client;
+                    for (auto file : files) {
+                        TString remotePath = NYT::AddPathPrefix(TFsPath(dstPath) / file.Md5, NYT::TConfig::Get()->Prefix);
+                        CreateParents({remotePath}, client);
+                        if (!client->Exists(remotePath)) {
+                            YQL_CLOG(INFO, ProviderYt) << "Start uploading " << file.Path << " to " << remotePath;
+                            auto uploadTx = client->StartTransaction({});
+                            try {
+                                auto out = uploadTx->CreateFileWriter(NYT::TRichYPath(remotePath), NYT::TFileWriterOptions().CreateTransaction(false));
+                                TIFStream in(file.Path);
+                                TransferData(&in, out.Get());
+                                out->Finish();
+                                uploadTx->Commit();
+                                YQL_CLOG(INFO, ProviderYt) << "Complete uploading " << file.Path << " to " << remotePath;
+                            } catch (...) {
+                                uploadTx->Abort();
+                                throw;
+                            }
+                        }
+
+                        file.RemotePath = remotePath;
+                        res.Files.push_back(std::move(file));
+                    }
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return ResultFromCurrentException<TUploadFilesToCacheResult>();
+                }
+            });
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            return MakeFuture(ResultFromCurrentException<TUploadFilesToCacheResult>());
+        }
     }
 
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {

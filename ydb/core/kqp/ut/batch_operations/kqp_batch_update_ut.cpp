@@ -1136,7 +1136,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     v2 String,
                     v3 String,
                     PRIMARY KEY (k),
-                    INDEX idx GLOBAL USING json ON (v1) COVER (v2)
+                    INDEX idx GLOBAL USING json ON (v1)
                 );
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

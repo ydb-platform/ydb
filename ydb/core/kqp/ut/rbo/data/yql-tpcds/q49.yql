@@ -4,6 +4,10 @@
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
+$zero = CAST(0 as Decimal(7,2));
+$one = CAST(1 as Decimal(7,2));
+$const_10000 = CAST(10000 as Decimal(7,2));
+
 SELECT
     channel,
     item,
@@ -38,8 +42,8 @@ FROM (
                     / CAST(Sum(Coalesce(ws.ws_quantity, 0)) AS Decimal (15, 4))
                 ) AS return_ratio,
                 (
-                    CAST(Sum(Coalesce(wr.wr_return_amt, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(ws.ws_net_paid, 0)) AS Decimal (15, 4))
+                    CAST(Sum(Coalesce(wr.wr_return_amt, $zero)) AS Decimal (15, 4))
+                    / CAST(Sum(Coalesce(ws.ws_net_paid, $zero)) AS Decimal (15, 4))
                 ) AS currency_ratio
             FROM
                 `/Root/test/ds/web_sales` AS ws
@@ -53,10 +57,10 @@ FROM (
             ,
                 `/Root/test/ds/date_dim`
             WHERE
-                wr.wr_return_amt > 10000
-                AND ws.ws_net_profit > 1
-                AND ws.ws_net_paid > 0
-                AND ws.ws_quantity > 0
+                wr.wr_return_amt > $const_10000
+                AND ws.ws_net_profit > $one
+                AND ws.ws_net_paid > $zero
+                AND ws.ws_quantity > $zero
                 AND ws_sold_date_sk == d_date_sk
                 AND d_year == 2000
                 AND d_moy == 12
@@ -98,8 +102,8 @@ FROM (
                     / CAST(Sum(Coalesce(cs.cs_quantity, 0)) AS Decimal (15, 4))
                 ) AS return_ratio,
                 (
-                    CAST(Sum(Coalesce(cr.cr_return_amount, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(cs.cs_net_paid, 0)) AS Decimal (15, 4))
+                    CAST(Sum(Coalesce(cr.cr_return_amount, $zero)) AS Decimal (15, 4))
+                    / CAST(Sum(Coalesce(cs.cs_net_paid, $zero)) AS Decimal (15, 4))
                 ) AS currency_ratio
             FROM
                 `/Root/test/ds/catalog_sales` AS cs
@@ -113,10 +117,10 @@ FROM (
             ,
                 `/Root/test/ds/date_dim`
             WHERE
-                cr.cr_return_amount > 10000
-                AND cs.cs_net_profit > 1
-                AND cs.cs_net_paid > 0
-                AND cs.cs_quantity > 0
+                cr.cr_return_amount > $const_10000
+                AND cs.cs_net_profit > $one
+                AND cs.cs_net_paid > $zero
+                AND cs.cs_quantity > $zero
                 AND cs_sold_date_sk == d_date_sk
                 AND d_year == 2000
                 AND d_moy == 12
@@ -158,8 +162,8 @@ FROM (
                     / CAST(Sum(Coalesce(sts.ss_quantity, 0)) AS Decimal (15, 4))
                 ) AS return_ratio,
                 (
-                    CAST(Sum(Coalesce(sr.sr_return_amt, 0)) AS Decimal (15, 4))
-                    / CAST(Sum(Coalesce(sts.ss_net_paid, 0)) AS Decimal (15, 4))
+                    CAST(Sum(Coalesce(sr.sr_return_amt, $zero)) AS Decimal (15, 4))
+                    / CAST(Sum(Coalesce(sts.ss_net_paid, $zero)) AS Decimal (15, 4))
                 ) AS currency_ratio
             FROM
                 `/Root/test/ds/store_sales` AS sts
@@ -170,10 +174,10 @@ FROM (
             ,
                 `/Root/test/ds/date_dim`
             WHERE
-                sr.sr_return_amt > 10000
-                AND sts.ss_net_profit > 1
-                AND sts.ss_net_paid > 0
-                AND sts.ss_quantity > 0
+                sr.sr_return_amt > $const_10000
+                AND sts.ss_net_profit > $one
+                AND sts.ss_net_paid > $zero
+                AND sts.ss_quantity > $zero
                 AND ss_sold_date_sk == d_date_sk
                 AND d_year == 2000
                 AND d_moy == 12

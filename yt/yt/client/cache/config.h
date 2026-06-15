@@ -31,16 +31,16 @@ DEFINE_REFCOUNTED_TYPE(TClientsCacheConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TClientsCacheAuthentificationOptions final
+struct TClientsCacheAuthenticationOptions final
 {
     // Get options with `DefaultOptions` filled from env.
-    static TClientsCacheAuthentificationOptionsPtr GetFromEnvStatic();
+    static TClientsCacheAuthenticationOptionsPtr GetFromEnvStatic();
 
     NApi::TClientOptions DefaultOptions;
     THashMap<std::string, NApi::TClientOptions, THash<std::string>, TEqualTo<>> ClusterOptions;
 };
 
-DEFINE_REFCOUNTED_TYPE(TClientsCacheAuthentificationOptions)
+DEFINE_REFCOUNTED_TYPE(TClientsCacheAuthenticationOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 

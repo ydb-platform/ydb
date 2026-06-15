@@ -65,19 +65,21 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         Self->PersistForcedCompactionState(db, forcedCompactionInfo);
 
         // clean waiting shards
-        auto* shardsQueue = Self->ForcedCompactionShardsByTable.FindPtr(forcedCompactionInfo.TablePathId);
-        if (shardsQueue) {
-            while (!shardsQueue->Empty()) {
-                auto shardId = shardsQueue->Front();
-                Self->InProgressForcedCompactionsByShard.erase(shardId);
-                Self->PersistForcedCompactionDoneShard(db, shardId);
-                shardsQueue->PopFront();
-                --Self->ForcedCompactionTotalInQueues;
+        for (const auto& tablePathId : forcedCompactionInfo.TablesToCompact) {
+            auto* shardsQueue = Self->ForcedCompactionShardsByTable.FindPtr(tablePathId);
+            if (shardsQueue) {
+                while (!shardsQueue->Empty()) {
+                    auto shardId = shardsQueue->Front();
+                    Self->InProgressForcedCompactionsByShard.erase(shardId);
+                    Self->PersistForcedCompactionDoneShard(db, shardId);
+                    shardsQueue->PopFront();
+                    --Self->ForcedCompactionTotalInQueues;
+                }
             }
-            Self->ForcedCompactionShardsByTable.erase(forcedCompactionInfo.TablePathId);
-            Self->ForcedCompactionTablesQueue.Remove(forcedCompactionInfo.TablePathId);
+            Self->ForcedCompactionShardsByTable.erase(tablePathId);
+            Self->ForcedCompactionTablesQueue.Remove(tablePathId);
+            Self->InProgressForcedCompactionsByTable.erase(tablePathId);
         }
-        Self->InProgressForcedCompactionsByTable.erase(forcedCompactionInfo.TablePathId);
 
         // clean waiting in flight shards
         for (auto shardId : forcedCompactionInfo.ShardsInFlight) {
@@ -90,15 +92,15 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         forcedCompactionInfo.ShardsInFlight.clear();
 
         Self->CancellingForcedCompactions.emplace_back(*forcedCompactionInfoPtr, Request->Sender, request.GetTxId(), Request->Cookie);
+        Self->ForcedCompactionNeedsImmediatePersist = true;
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
 
     void DoComplete(const TActorContext &ctx) override {
         LOG_N("TForcedCompaction::TTxCancel DoComplete " << Request->Get()->Record.ShortDebugString());
+        Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
-        Self->ForcedCompactionProgressStartTime = ctx.Now();
-        Self->Execute(Self->CreateTxProgressForcedCompaction());
     }
 
 private:
@@ -113,7 +115,6 @@ private:
             auto& issue = *record.MutableIssues()->Add();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
             issue.set_message(errorMessage);
-
         }
 
         SideEffects.Send(Request->Sender, std::move(response), 0, Request->Cookie);

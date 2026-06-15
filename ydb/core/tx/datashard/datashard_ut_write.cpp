@@ -675,6 +675,76 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(UpsertIncrementPrecharge) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint64", true, false},           // key (id=1)
+                {"uint32_val", "Uint32", false, false},   // id=2
+                {"uint64_val", "Uint64", false, false}    // id=3
+            });
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        ui64 txId = 100;
+
+        Cout << "========= Upsert 1000 rows =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3}; // key and numeric columns
+            TVector<TCell> increments;
+            for (ui64 id = 1; id <= 1000; id++) {
+                increments.push_back(TCell::Make(id));
+                increments.push_back(TCell::Make(ui32(1)));
+                increments.push_back(TCell::Make(ui64(1)));
+            }
+            auto result = UpsertIncrement(runtime, sender, shard, tableId, txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        Cout << "========= Compact and reboot to clear cache =========\n";
+        CompactTable(runtime, shard, tableId, false);
+        RebootTablet(runtime, shard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto getTabletNotReadyCount = [&]() -> ui64 {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvTablet::TEvGetCounters(),
+                0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge);
+            UNIT_ASSERT(ev);
+            for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+                if (counter.GetName() == "DataShard/TxTabletNotReady") {
+                    return counter.GetValue();
+                }
+            }
+            return 0;
+        };
+
+        ui64 notReadyBefore = getTabletNotReadyCount();
+
+        Cout << "========= UPSERT_INCREMENT on rows 1, 500, 1000 =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3};
+            TVector<TCell> increments = {
+                TCell::Make(ui64(1)), TCell::Make(ui32(10)), TCell::Make(ui64(100)),
+                TCell::Make(ui64(500)), TCell::Make(ui32(10)), TCell::Make(ui64(100)),
+                TCell::Make(ui64(1000)), TCell::Make(ui32(10)), TCell::Make(ui64(100)),
+            };
+
+            auto result = UpsertIncrement(runtime, sender, shard, tableId, txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        ui64 notReadyAfter = getTabletNotReadyCount();
+
+        // Should have at most 1 TabletNotReady
+        Cout << "TabletNotReady count after UPSERT_INCREMENT: " << (notReadyAfter - notReadyBefore) << "\n";
+        UNIT_ASSERT_C(notReadyAfter - notReadyBefore <= 1, "Too many page faults: " << (notReadyAfter - notReadyBefore));
+    }
+
     Y_UNIT_TEST_TWIN(ExecSQLUpsertPrepared, Volatile) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -4172,6 +4242,102 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 UNIT_ASSERT_C(txId > 1000000, "unexpected open tx " << txId << " at shard " << shards.at(0));
             }
         }
+    }
+
+    Y_UNIT_TEST(TxCompleteLagForEvWrite) {
+        // Verifies that a planned-but-not-completed TEvWrite transaction
+        // contributes to the TxCompleteLag metric.
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+        const TActorId shardActor = ResolveTablet(runtime, shard);
+
+        auto getDataTxCompleteLag = [&]() -> ui64 {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvDataShard::TEvGetInfoRequest(),
+                0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto* resp = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+            UNIT_ASSERT(resp);
+            return resp->Record.GetActivities().GetDataTxCompleteLag();
+        };
+
+        auto getTxCompleteLagCounter = [&]() -> ui64 {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvTablet::TEvGetCounters(),
+                0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge);
+            UNIT_ASSERT(ev);
+            for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                if (counter.GetName() == "DataShard/TxCompleteLag") {
+                    return counter.GetValue();
+                }
+            }
+            UNIT_ASSERT_C(false, "DataShard/TxCompleteLag counter not found");
+            return 0;
+        };
+
+        Cout << "========= Baseline: no pending tx, lag must be 0 =========\n";
+        UNIT_ASSERT_VALUES_EQUAL(getDataTxCompleteLag(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
+
+        Cout << "========= Prepare a distributed write =========\n";
+        const ui64 txId = 100;
+        const ui32 rowCount = 1;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount,
+                txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        // Block TEvPrivate::TEvProgressTransaction so the write stays in the plan
+        // queue after the plan step is processed. This keeps the oldest-planned
+        // WriteTx pinned at its plan step while mediator time keeps advancing.
+        TBlockEvents<IEventHandle> blockedProgress(runtime,
+            [shardActor](const TAutoPtr<IEventHandle>& ev) {
+                return ev->GetRecipientRewrite() == shardActor &&
+                    ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0;
+            });
+
+        Cout << "========= Send propose to coordinator =========\n";
+        SendProposeToCoordinator(runtime, sender, shards, {
+            .TxId = txId,
+            .Coordinator = coordinator,
+            .MinStep = minStep,
+            .MaxStep = maxStep,
+        });
+
+        runtime.WaitFor("blocked progress transaction",
+            [&]{ return blockedProgress.size() >= 1; });
+
+        // Sleep long enough for mediator time to advance past the plan step and
+        // for at least one periodic tablet wakeup (5s) to refresh the counter.
+        Cout << "========= Let mediator time advance past the plan step =========\n";
+        runtime.SimulateSleep(TDuration::Seconds(6));
+
+        const ui64 lag = getDataTxCompleteLag();
+        Cout << "========= Observed DataTxCompleteLag = " << lag << " ms =========\n";
+        UNIT_ASSERT_C(lag > 0,
+            "Expected non-zero DataTxCompleteLag for a pending WriteTx, got " << lag);
+
+        const ui64 counterLag = getTxCompleteLagCounter();
+        Cout << "========= Observed TxCompleteLag counter = " << counterLag << " ms =========\n";
+        UNIT_ASSERT_C(counterLag > 0,
+            "Expected non-zero TxCompleteLag counter for a pending WriteTx, got " << counterLag);
+
+        // Unblock and let the write finish so the lag returns to 0.
+        blockedProgress.Stop().Unblock();
+        WaitForWriteCompleted(runtime, sender);
+
+        // Another periodic wakeup is needed for the counter to be refreshed.
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(getDataTxCompleteLag(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardWrite)

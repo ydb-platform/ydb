@@ -61,14 +61,16 @@ struct TTransactionCommitOptions
     //! Cell ids of additional 2PC participants.
     //! Used to implement cross-cluster commit via RPC proxy.
     std::vector<NObjectClient::TCellId> AdditionalParticipantCellIds;
+    std::vector<NTransactionClient::TTransactionSignature> ExpectedPrepareSignatures;
 
     //! If |true| then any participant (including alien cells) can become a coordinator.
     //! If |false| then coordinator will be chosen on the primary cell of the cluster
     //! that has been specified when starting transaction.
     bool AllowAlienCoordinator = false;
 
-    //! All strongly ordered transactions are ordered by commit timestamp.
-    bool StronglyOrdered = false;
+    //! Transactions that have intersecting ordering tags are committed in the order of
+    //! their commit timestamps.
+    TStrongOrderingTagsMap StrongOrderingTags = {};
 };
 
 struct TTransactionCommitResult
@@ -90,6 +92,7 @@ struct TTransactionAbortOptions
 struct TTransactionFlushResult
 {
     std::vector<NElection::TCellId> ParticipantCellIds;
+    std::vector<NTransactionClient::TTransactionSignature> ExpectedPrepareSignatures;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

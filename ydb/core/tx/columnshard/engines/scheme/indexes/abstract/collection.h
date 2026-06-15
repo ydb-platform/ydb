@@ -17,7 +17,8 @@ private:
 public:
     TChunkIndexData(const std::shared_ptr<IIndexHeader>& header, const ui32 recordsCount)
         : Header(header)
-        , RecordsCount(recordsCount) {
+        , RecordsCount(recordsCount)
+    {
         AFL_VERIFY(RecordsCount);
         AFL_VERIFY(Header);
     }
@@ -74,7 +75,8 @@ private:
 
 public:
     TIndexColumnChunked(const std::shared_ptr<IIndexMeta>& meta)
-        : IndexMeta(meta) {
+        : IndexMeta(meta)
+    {
     }
 
     ui32 GetChunksCount() const {

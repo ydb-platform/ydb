@@ -90,6 +90,27 @@ void TestHistogramAggregate(ui32 numBuckets, std::pair<TRange, TRange> range, st
     }
 }
 
+template <typename TRange, typename TDomain>
+void TestHistogramCardinality(EHistogramValueType valueType, std::pair<ui64, ui64> resultCounts, ui64 resultCardinality,
+                              ui32 numBuckets, std::pair<TRange, TRange> range, std::pair<TDomain, TDomain> domainRange,
+                              ui32 otherNumBuckets, std::pair<TRange, TRange> otherRange, std::pair<TDomain, TDomain> otherDomainRange) {
+    auto histogram = CreateHistogram<TDomain>(numBuckets, domainRange.first, domainRange.second, valueType);
+    UNIT_ASSERT(histogram);
+    PopulateHistogram<TRange>(histogram, range, valueType);
+    TEqWidthHistogramEstimator estimator(histogram);
+    auto otherHistogram = CreateHistogram<TDomain>(otherNumBuckets, otherDomainRange.first, otherDomainRange.second, valueType);
+    UNIT_ASSERT(otherHistogram);
+    PopulateHistogram<TRange>(otherHistogram, otherRange, valueType);
+    TEqWidthHistogramEstimator otherEstimator(otherHistogram);
+
+    UNIT_ASSERT(estimator.GetNumElements() == resultCounts.first);
+    UNIT_ASSERT(otherEstimator.GetNumElements() == resultCounts.second);
+
+    auto cardinality = estimator.GetOverlappingCardinality(otherEstimator);
+    UNIT_ASSERT(cardinality);
+    UNIT_ASSERT(cardinality.GetRef() == resultCardinality);
+}
+
 Y_UNIT_TEST_SUITE(EqWidthHistogram) {
 
 Y_UNIT_TEST(Basic) {
@@ -167,6 +188,16 @@ Y_UNIT_TEST(AggregateHistogram) {
     TestHistogramAggregate<double, double>(10, /*values range=*/{-0.1, 1.5},
                                            /*column range=*/{1.0, 1.0 + 30 * std::numeric_limits<double>::epsilon()},
                                            EHistogramValueType::Double, 9, resultCountFloat);
+}
+
+Y_UNIT_TEST(OverlappingCardinality) {
+    TestHistogramCardinality<ui32, ui32>(EHistogramValueType::Uint32, /*result counts=*/{21, 21}, /*cardinality=*/21,
+                                         10, /*values range=*/{0, 25}, /*column range=*/{0, 20},
+                                         10, /*values range=*/{0, 25}, /*column range=*/{0, 20});
+
+    TestHistogramCardinality<ui32, ui32>(EHistogramValueType::Uint32, /*result counts=*/{25, 16}, /*cardinality=*/21,
+                                         10, /*values range=*/{0, 25}, /*column range=*/{0, 25},
+                                         10, /*values range=*/{0, 25}, /*column range=*/{5, 20});
 }
 
 } // Y_UNIT_TEST_SUITE(EqWidthHistogram)

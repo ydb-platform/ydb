@@ -9,7 +9,8 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters,
+    std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
     std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const std::optional<ui64>& nodePortionsCountLimit)
     : TBase(pathId, nodePortionsCountLimit)
     , Counters(counters)
@@ -17,7 +18,8 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
     , Selectors(std::move(selectors))
     , Levels(std::move(levels))
     , StoragesManager(storagesManager)
-    , PrimaryKeysSchema(primaryKeysSchema) {
+    , PrimaryKeysSchema(primaryKeysSchema)
+{
     RefreshWeights();
 }
 
@@ -31,12 +33,12 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
     const auto mayUsePortion = [&](const TPortionInfo::TConstPtr& p) {
         return !locksManager->IsLocked(p, NDataLocks::ELockCategory::Compaction);
     };
-    for (const auto& [weight, level]: LevelsByWeight) {
+    for (const auto& [weight, level] : LevelsByWeight) {
         if (weight == 0) {
             break;
         }
         auto tasks = level->GetOptimizationTasks(mayUsePortion);
-        for (auto& data: tasks) {
+        for (auto& data : tasks) {
             if (data.IsEmpty()) {
                 continue;
             }
@@ -45,7 +47,8 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
                 return results;
             }
 
-            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
+            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
+                granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
             result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
             result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
             auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);

@@ -13,45 +13,40 @@ class TAlterTopicInternalActor: public NPQ::TBaseActor<TAlterTopicInternalActor>
 
 public:
     TAlterTopicInternalActor(
-        NThreading::TPromise<TAlterTopicResponse>&& promise,
+        NThreading::TPromise<TSchemaResponse>&& promise,
         TAlterTopicSettings&& settings
     )
-        : NPQ::TBaseActor<TAlterTopicInternalActor>(NKikimrServices::PQ_ALTER_TOPIC)
+        : NPQ::TBaseActor<TAlterTopicInternalActor>(NKikimrServices::PQ_SCHEMA)
         , Promise(std::move(promise))
         , Settings(std::move(settings))
+        , Path(Settings.Request.path())
     {
     }
 
     void Bootstrap() {
         Become(&TAlterTopicInternalActor::StateWork);
 
-        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
-            .Database = Settings.Database,
-            .Request = Settings.Request,
-            .UserToken = std::move(Settings.UserToken),
-            .IfExists = Settings.IfExists
-        }));
+        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), std::move(Settings)));
     }
 
     void OnException(const std::exception& exc) override {
         LOG_E("OnException: " << exc.what());
 
-        TEvAlterTopicResponse response;
-        response.Status = Ydb::StatusIds::INTERNAL_ERROR;
-        response.ErrorMessage = exc.what();
-        
+        TEvSchemaResponse response(Path, Ydb::StatusIds::INTERNAL_ERROR, exc.what());
+
         Promise.SetValue(std::move(response));
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << SelfId() << "[" << Settings.Database << "][" << Settings.Request.path() << "] ";
+        return TStringBuilder() << "[" << Path << "] ";
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
-        LOG_E("Handle TEvAlterTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
+        LOG_D("Handle TEvSchemaResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
 
         Promise.SetValue({
+            .Path = Path,
             .Status = ev->Get()->Status,
             .ErrorMessage = std::move(ev->Get()->ErrorMessage),
             .ModifyScheme = std::move(ev->Get()->ModifyScheme)
@@ -62,19 +57,20 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
         }
     }
 
 private:
-    NThreading::TPromise<TAlterTopicResponse> Promise;
+    NThreading::TPromise<TSchemaResponse> Promise;
     TAlterTopicSettings Settings;
+    const TString Path;
 };
 
 } // namespace
-    
+
 NActors::IActor* CreateAlterTopicActor(
-    NThreading::TPromise<TAlterTopicResponse>&& promise,
+    NThreading::TPromise<TSchemaResponse>&& promise,
     TAlterTopicSettings&& settings
 ) {
     return new TAlterTopicInternalActor(std::move(promise), std::move(settings));

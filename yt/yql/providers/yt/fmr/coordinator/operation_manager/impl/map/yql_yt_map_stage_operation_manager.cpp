@@ -24,13 +24,14 @@ public:
         const auto& partIdStats = context.PartIdStats;
         auto ytCoordinatorService = context.YtCoordinatorService;
 
-        if (operationParams.IsOrdered) {
+        TPartitionResult result;
+        if (operationParams.MapJobType == EFmrJobType::OrderedMap) {
             // Ordered map -> ordered partition
             auto orderedPartitionerSettings = GetOrderedPartitionerSettings(fmrOperationSpec);
             auto orderedPartitioner = TOrderedPartitioner(partIdsForTables, partIdStats, orderedPartitionerSettings);
 
             std::vector<TOperationTableRef> inputTables = operationParams.Input;
-            return PartitionInputTablesIntoTasksOrdered(inputTables, orderedPartitioner, ytCoordinatorService, clusterConnections);
+            result = PartitionInputTablesIntoTasksOrdered(inputTables, orderedPartitioner, ytCoordinatorService, clusterConnections);
         } else {
             // Unordered map -> unordered partition
             auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
@@ -47,8 +48,21 @@ public:
                 }
             }
 
-            return PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, ytCoordinatorService, clusterConnections, ytPartitionerSettings);
+            result = PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, ytCoordinatorService, clusterConnections, ytPartitionerSettings);
         }
+
+        if (operationParams.ForceSingleTask && !result.Error && result.TaskInputs.size() > 1) {
+            // JobCount=1 in Map spec — collapse all partitions into a single task.
+            TTaskTableInputRef merged;
+            for (auto& taskInput: result.TaskInputs) {
+                for (auto& input: taskInput.Inputs) {
+                    merged.Inputs.emplace_back(std::move(input));
+                }
+            }
+            result.TaskInputs = {std::move(merged)};
+            YQL_CLOG(INFO, FastMapReduce) << "Map: ForceSingleTask collapsed partitions into 1 task";
+        }
+        return result;
     }
 
     TGenerateTasksResult GenerateTasksImpl(
@@ -56,7 +70,7 @@ public:
     ) override {
         const auto& mapOperationParams = std::get<TMapOperationParams>(context.OperationParams);
 
-        if (mapOperationParams.IsOrdered) {
+        if (mapOperationParams.MapJobType == EFmrJobType::OrderedMap) {
             YQL_CLOG(INFO, FastMapReduce) << "Starting Ordered Map operation";
         } else {
             YQL_CLOG(INFO, FastMapReduce) << "Starting Map operation";
@@ -80,7 +94,7 @@ public:
 
             mapTaskParams.Output = fmrTableOutputRefs;
             mapTaskParams.SerializedMapJobState = mapOperationParams.SerializedMapJobState;
-            mapTaskParams.IsOrdered = mapOperationParams.IsOrdered;
+            mapTaskParams.MapJobType = mapOperationParams.MapJobType;
 
             generatedTasks.push_back(TGeneratedTaskInfo{
                 .TaskType = ETaskType::Map,

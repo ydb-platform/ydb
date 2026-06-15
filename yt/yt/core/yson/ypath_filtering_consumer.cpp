@@ -168,7 +168,7 @@ protected:
     }
 
 private:
-    NYson::IYsonConsumer* Forward_;
+    NYson::IYsonConsumer* Forward_ = nullptr;
     bool PendingRollback_ = false;
     std::vector<int> ListIndexes_;
 };

@@ -415,6 +415,7 @@ public:
     const TKqpTasksGraph* const TasksGraph = nullptr;
     NYql::NDqProto::TDqExecutionStats* const Result;
     std::optional<ui32> DeadlockedStageId;
+    ui64 DeadlockTimeoutUs;
 
     // common stats
     ui64 StorageCpuTimeUs = 0;
@@ -448,10 +449,11 @@ public:
     bool CollectStatsByLongTasks = false;
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
-        NYql::NDqProto::TDqExecutionStats* const result)
+        NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)
         : StatsMode(statsMode)
         , TasksGraph(tasksGraph)
         , Result(result)
+        , DeadlockTimeoutUs(deadlockTimeoutMs * 1000)
     {
         HistorySampleCount = 32;
     }

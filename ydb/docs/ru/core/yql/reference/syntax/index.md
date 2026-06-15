@@ -24,6 +24,12 @@
 * [INSERT](insert_into.md)
 * [SHOW CREATE](show_create.md)
 
+{% if backend_name == "YDB" %}
+
+* [ANALYZE](analyze.md)
+
+{% endif %}
+
 {% if feature_map_tables %}
 
 * [ALTER TABLE](alter_table/index.md)
@@ -121,6 +127,15 @@
 * [CREATE ASYNC REPLICATION](create-async-replication.md)
 * [ALTER ASYNC REPLICATION](alter-async-replication.md)
 * [DROP ASYNC REPLICATION](drop-async-replication.md)
+
+{% endif %}
+
+{% if feature_backup_collections %}
+
+* [CREATE BACKUP COLLECTION](create-backup-collection.md)
+* [BACKUP](backup.md)
+* [RESTORE](restore-backup-collection.md)
+* [DROP BACKUP COLLECTION](drop-backup-collection.md)
 
 {% endif %}
 

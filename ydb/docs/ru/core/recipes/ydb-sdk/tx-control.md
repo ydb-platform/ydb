@@ -10,6 +10,31 @@
 
 {% list tabs group=lang %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void ImplicitTxExample(NYdb::NQuery::TSession session) {
+      auto result = session.ExecuteQuery(
+          "SELECT 1",
+          NYdb::NQuery::TTxControl::NoTx()
+      ).GetValueSync();
+
+      // ...
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -119,11 +144,30 @@
 
   - JDBC
 
-    На стороне JDBC неявный режим связан с авто-коммитом (`Connection.setAutoCommit(true)` по умолчанию): каждый отдельный запрос оформляется как отдельная транзакция и фиксируется автоматически. При `setAutoCommit(false)` границы задаются явными `commit`/`rollback`.
+    JDBC-драйвер не позволяет явно указать режим `ImplicitTx` для выполнения транзакций. Он самостоятельно использует этот режим для выполнения тех запросов, для которых он необходим:
+    * DDL-инструкции, такие как [CREATE TABLE](../../yql/reference/syntax/create_table/index.md), [DROP TABLE](../../yql/reference/syntax/drop_table.md) и т.д.
+    * Операции [BATCH UPDATE](../../yql/reference/syntax/batch-update.md) и [BATCH DELETE](../../yql/reference/syntax/batch-delete.md)
 
-    В **текущей реализации** {{ ydb-short-name }} JDBC-драйвера для **одиночных** вызовов при **чтении** режим **snapshot** включается, если на `Connection` вызван **`setReadOnly(true)`**. Для запросов **с записью** применяется **Serializable Read/Write** (на соединении не должен быть включён режим только чтения).
+    {% note info %}
 
-    В **Spring** атрибут **`@Transactional(readOnly = true)`** при старте транзакции приводит к вызову `Connection.setReadOnly(true)` на соединении, поэтому для read-only-сценариев snapshot выбирается автоматически. Hibernate, JOOQ и другие обёртки над JDBC используют то же соединение — флаг read-only нужно выставлять так же явно (или через транзакционные настройки фреймворка, если они прокидывают его в `Connection`).
+    Так как данные операции не транзакционные и не могут быть отменены через `rollback()` драйвер не позволяет выполнять их в рамках открытой транзакции. Их следует выполнять либо в режиме автокоммита либо до выполнения каких либо других запросов к базе.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            try (Statement statement = connection.createStatement()) {
+                // Запрос автоматические будет выполнен в режиме ImplicitTx
+                statement.execute("CREATE TABLE test (id Int32, value Text, PRIMARY KEY (id))");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
 
   {% endlist %}
 
@@ -162,66 +206,48 @@
 
   {% endlist %}
 
-- C++
+- C#
 
-  ```cpp
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::NoTx()
-  ).GetValueSync();
-  ```
+  {% list tabs %}
 
-- C# (.NET)
+  - ADO.NET
 
-  {% cut "ADO.NET" %}
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  ```csharp
-  using Ydb.Sdk.Ado;
+    await using var connection = await dataSource.OpenRetryableConnectionAsync();
+    // Выполнение без явной транзакции (авто-коммит)
+    await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+    await command.ExecuteNonQueryAsync();
+    ```
 
-  await using var connection = await dataSource.OpenRetryableConnectionAsync();
-  // Выполнение без явной транзакции (авто-коммит)
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
-  await command.ExecuteNonQueryAsync();
-  ```
+  - Entity Framework
 
-  {% endcut %}
+    ```csharp
+    using Microsoft.EntityFrameworkCore;
 
-  {% cut "Entity Framework" %}
+    await using var context = await dbContextFactory.CreateDbContextAsync();
+    // Режим авто-коммита Entity Framework (без явной транзакции)
+    var result = await context.SomeEntities.FirstOrDefaultAsync();
+    ```
 
-  ```csharp
-  using Microsoft.EntityFrameworkCore;
+  - linq2db
 
-  await using var context = await dbContextFactory.CreateDbContextAsync();
-  // Режим авто-коммита Entity Framework (без явной транзакции)
-  var result = await context.SomeEntities.FirstOrDefaultAsync();
-  ```
+    ```csharp
+    using LinqToDB;
+    using LinqToDB.Data;
 
-  {% endcut %}
+    using var db = new DataConnection(
+        new DataOptions().UseConnectionString(
+            "YDB",
+            "Host=localhost;Port=2136;Database=/local;UseTls=false"
+        )
+    );
+    // Режим авто-коммита linq2db (без явной транзакции)
+    var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
+    ```
 
-  {% cut "linq2db" %}
-
-  ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
-
-  using var db = new DataConnection(
-      new DataOptions().UseConnectionString(
-          "YDB",
-          "Host=localhost;Port=2136;Database=/local;UseTls=false"
-      )
-  );
-  // Режим авто-коммита linq2db (без явной транзакции)
-  var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
-  ```
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  // ImplicitTx - один запрос без явной транзакции
-  var response = await queryClient.Exec("SELECT 1");
-  ```
+  {% endlist %}
 
 - JavaScript
 
@@ -258,6 +284,42 @@
 ## Serializable {#serializable}
 
 {% list tabs group=lang %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SerializableExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SerializableExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSerializableRW},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -381,7 +443,33 @@
 
   - JDBC
 
-    Для **одиночных** вызовов через JDBC в текущей реализации драйвера используется **Serializable Read/Write** — в том числе при работе из Spring Boot, ORM и других обёрток над JDBC. Режим **snapshot** для чтений задаётся через **`setReadOnly(true)`** (см. [ImplicitTx](#implicittx)). Семантика авто-коммита и явных транзакций описана там же.
+    JDBC-драйвер использует режим `Serializable` по умолчанию для выполнения всех не read-only запросов.
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(false);
+            connection.setReadOnly(false);
+            connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+            try (PreparedStatement ps = connection.prepareStatement("UPSERT INTO test (id, value) VALUES (?, ?)")) {
+                ps.setInt(1, 1);
+                ps.setString(2, "value-1");
+                ps.executeUpdate();
+
+                ps.setInt(1, 2);
+                ps.setString(2, "value-2");
+                ps.executeUpdate();
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
 
   {% endlist %}
 
@@ -432,110 +520,91 @@
 
   {% endlist %}
 
-- C++
+- C#
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  {% list tabs %}
 
-- C# (.NET)
+  - ADO.NET
 
-  {% cut "ADO.NET" %}
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  ```csharp
-  using Ydb.Sdk.Ado;
-
-  // Режим Serializable используется по умолчанию
-  await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
-      {
-          var ydbCommand = ydbConnection.CreateCommand();
-          ydbCommand.CommandText = """
-                                   UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
-                                   VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
-                                   """;
-          await ydbCommand.ExecuteNonQueryAsync();
-          ydbCommand.CommandText = """
-                                   INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
-                                   VALUES
-                                       (2, 5, 21, "Test 21", Date("2018-08-27")),
-                                       (2, 5, 22, "Test 22", Date("2018-08-27"))
-                                   """;
-          await ydbCommand.ExecuteNonQueryAsync();
-      }
-  );
-  ```
-
-  {% endcut %}
-
-  {% cut "Entity Framework" %}
-
-  ```csharp
-  var strategy = db.Database.CreateExecutionStrategy();
-
-  // Entity Framework использует режим Serializable по умолчанию
-  strategy.ExecuteInTransaction(
-      db,
-      ctx =>
-      {
-          ctx.Users.AddRange(
-              new User { Name = "Alex", Email = "alex@example.com" },
-              new User { Name = "Kirill", Email = "kirill@example.com" }
-          );
-
-          ctx.SaveChanges();
-
-          var users = ctx.Users.OrderBy(u => u.Id).ToList();
-          Console.WriteLine("Users in database:");
-          foreach (var user in users)
-              Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
-      },
-      ctx => ctx.Users.Any(u => u.Email == "alex@example.com")
-          && ctx.Users.Any(u => u.Email == "kirill@example.com")
+    // Режим Serializable используется по умолчанию
+    await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+        {
+            var ydbCommand = ydbConnection.CreateCommand();
+            ydbCommand.CommandText = """
+                                     UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
+                                     VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
+                                     """;
+            await ydbCommand.ExecuteNonQueryAsync();
+            ydbCommand.CommandText = """
+                                     INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
+                                     VALUES
+                                         (2, 5, 21, "Test 21", Date("2018-08-27")),
+                                         (2, 5, 22, "Test 22", Date("2018-08-27"))
+                                     """;
+            await ydbCommand.ExecuteNonQueryAsync();
+        }
     );
-  ```
+    ```
 
-  {% endcut %}
+  - Entity Framework
 
-  {% cut "linq2db" %}
+    ```csharp
+    var strategy = db.Database.CreateExecutionStrategy();
 
-  ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
+    // Entity Framework использует режим Serializable по умолчанию
+    strategy.ExecuteInTransaction(
+        db,
+        ctx =>
+        {
+            ctx.Users.AddRange(
+                new User { Name = "Alex", Email = "alex@example.com" },
+                new User { Name = "Kirill", Email = "kirill@example.com" }
+            );
 
-  // linq2db использует режим Serializable по умолчанию
-  using var db = new DataConnection(
-      new DataOptions().UseConnectionString(
-          "YDB",
-          "Host=localhost;Port=2136;Database=/local;UseTls=false"
-      )
-  );
+            ctx.SaveChanges();
 
-  await using var tr = await db.BeginTransactionAsync();
+            var users = ctx.Users.OrderBy(u => u.Id).ToList();
+            Console.WriteLine("Users in database:");
+            foreach (var user in users)
+                Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
+        },
+        ctx => ctx.Users.Any(u => u.Email == "alex@example.com")
+            && ctx.Users.Any(u => u.Email == "kirill@example.com")
+      );
+    ```
 
-  await db.InsertAsync(new Episode
-  {
-      SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
-  });
-  await db.InsertAsync(new Episode
-      { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
-  await db.InsertAsync(new Episode
-      { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
+  - linq2db
 
-  await tr.CommitAsync();
-  ```
+    ```csharp
+    using LinqToDB;
+    using LinqToDB.Data;
 
-  {% endcut %}
+    // linq2db использует режим Serializable по умолчанию
+    using var db = new DataConnection(
+        new DataOptions().UseConnectionString(
+            "YDB",
+            "Host=localhost;Port=2136;Database=/local;UseTls=false"
+        )
+    );
 
-  ```csharp
-  using Ydb.Sdk.Services.Query;
+    await using var tr = await db.BeginTransactionAsync();
 
-  // Режим Serializable Read-Write используется по умолчанию
-  var response = await queryClient.Exec("SELECT 1");
-  ```
+    await db.InsertAsync(new Episode
+    {
+        SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
+    });
+    await db.InsertAsync(new Episode
+        { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
+    await db.InsertAsync(new Episode
+        { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
+
+    await tr.CommitAsync();
+    ```
+
+  {% endlist %}
 
 - JavaScript
 
@@ -597,6 +666,42 @@
 ## Online Read-Only {#online-read-only}
 
 {% list tabs group=lang %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void OnlineReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void OnlineReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::OnlineRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -719,7 +824,34 @@
 
   - JDBC
 
-    Режим Online Read-Only из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**. Для чтения в **snapshot** вызовите **`Connection.setReadOnly(true)`** (в Spring — `@Transactional(readOnly = true)`). Запись — см. [ImplicitTx](#implicittx).
+    JDBC стандарт не поддерживает уровни транзакций кроме [стандартных](https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Connection.TRANSACTION_NONE). Однако JDBC драйвер позволяет задать этот режим с помощью задания [нестандартной константы 16](https://github.com/ydb-platform/ydb-jdbc-driver/blob/v2.3.25/jdbc/src/main/java/tech/ydb/jdbc/YdbConst.java#L130).
+
+    {% note warning %}
+
+    Данный режим не поддерживает интерактивные транзакции.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
+            connection.setReadOnly(true);
+            connection.setTransactionIsolation(16); // 16 - нестандартное значение драйвера YDB для ONLINE_RO
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
+
 
   {% endlist %}
 
@@ -770,52 +902,43 @@
 
   {% endlist %}
 
-- C++
+- C#
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  {% list tabs %}
 
-- C# (.NET)
+  - ADO.NET
 
-  {% cut "ADO.NET" %}
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  ```csharp
-  using Ydb.Sdk.Ado;
+    // OnlineRo — данные максимально актуальны на момент каждой операции чтения;
+    // данные в рамках одной транзакции согласованы
+    await using var connection = await dataSource.OpenConnectionAsync();
+    await using var transaction = await connection.BeginTransactionAsync(TransactionMode.OnlineRo);
+    await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+    await using var reader = await command.ExecuteReaderAsync();
+    await transaction.CommitAsync();
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.OnlineRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
-  await using var reader = await command.ExecuteReaderAsync();
-  await transaction.CommitAsync();
-  ```
+    // OnlineInconsistentRo — максимальная производительность, минимальная согласованность:
+    // данные могут быть несогласованы даже в рамках одной операции чтения
+    await using var connection2 = await dataSource.OpenConnectionAsync();
+    await using var transaction2 = await connection2.BeginTransactionAsync(TransactionMode.OnlineInconsistentRo);
+    await using var command2 = new YdbCommand(connection2) { CommandText = "SELECT 1" };
+    await using var reader2 = await command2.ExecuteReaderAsync();
+    await transaction2.CommitAsync();
+    ```
 
-  {% endcut %}
+  - Entity Framework
 
-  {% cut "Entity Framework" %}
+    Entity Framework не поддерживает режим OnlineRo напрямую.
+    Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
 
-  Entity Framework не поддерживает режим OnlineRo напрямую.
-  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+  - linq2db
 
-  {% endcut %}
+    linq2db не поддерживает режим OnlineRo напрямую.
+    Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
 
-  {% cut "linq2db" %}
-
-  linq2db не поддерживает режим OnlineRo напрямую.
-  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.OnlineRo);
-  ```
+  {% endlist %}
 
 - JavaScript
 
@@ -866,6 +989,42 @@
 ## Stale Read-Only {#stale-read-only}
 
 {% list tabs group=lang %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void StaleReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::StaleRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void StaleReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kStaleRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -986,7 +1145,33 @@
 
   - JDBC
 
-    Режим Stale Read-Only из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**. Для чтения в **snapshot** вызовите **`Connection.setReadOnly(true)`** (в Spring — `@Transactional(readOnly = true)`). Запись — см. [ImplicitTx](#implicittx).
+    JDBC стандарт не поддерживает уровни транзакций кроме [стандартных](https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Connection.TRANSACTION_NONE). Однако JDBC драйвер позволяет задать этот режим с помощью задания [нестандартной константы 32](https://github.com/ydb-platform/ydb-jdbc-driver/blob/v2.3.25/jdbc/src/main/java/tech/ydb/jdbc/YdbConst.java#L142).
+
+    {% note warning %}
+
+    Данный режим не поддерживает интерактивные транзакции.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
+            connection.setReadOnly(true);
+            connection.setTransactionIsolation(32); // 32 - нестандартное значение драйвера YDB для STALE_RO
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
 
   {% endlist %}
 
@@ -1037,53 +1222,35 @@
 
   {% endlist %}
 
-- C++
+- C#
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::StaleRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  {% list tabs %}
 
-- C# (.NET)
+  - ADO.NET
 
-  {% cut "ADO.NET" %}
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
+    // StaleRo — данные могут быть незначительно устаревшими относительно актуального состояния;
+    // обеспечивает максимальную скорость чтения за счёт ослабленной согласованности
+    await using var connection = await dataSource.OpenConnectionAsync();
+    await using var transaction = await connection.BeginTransactionAsync(TransactionMode.StaleRo);
+    await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+    await using var reader = await command.ExecuteReaderAsync();
+    await transaction.CommitAsync();
+    ```
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.StaleRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
-  await using var reader = await command.ExecuteReaderAsync();
-  await transaction.CommitAsync();
-  ```
+  - Entity Framework
 
-  {% endcut %}
+    Entity Framework не поддерживает режим StaleRo напрямую.
+    Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
 
-  {% cut "Entity Framework" %}
+  - linq2db
 
-  Entity Framework не поддерживает режим StaleRo напрямую.
-  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+    linq2db не поддерживает режим StaleRo напрямую.
+    Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
 
-  {% endcut %}
-
-  {% cut "linq2db" %}
-
-  linq2db не поддерживает режим StaleRo напрямую.
-  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.StaleRo);
-  ```
+  {% endlist %}
 
 - JavaScript
 
@@ -1125,6 +1292,42 @@
 ## Snapshot Read-Only {#snapshot-read-only}
 
 {% list tabs group=lang %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SnapshotReadOnlyExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SnapshotReadOnlyExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSnapshotRO},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -1243,7 +1446,29 @@
 
   - JDBC
 
-    Для **одиночных** вызовов **только на чтение** через JDBC режим **snapshot** включается, когда на соединении выставлен **`Connection.setReadOnly(true)`** (в Spring — **`@Transactional(readOnly = true)`** прокидывает это в драйвер при открытии транзакции). Подробнее — в разделе [ImplicitTx](#implicittx).
+    JDBC-драйвер использует режим `Snapshot Read-Only` для выполнения всех read-only запросов, при условии что используются стандартные режимы транзакций (TRANSACTION_SERIALIZABLE или REPEATABLE_READ).
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(false); 
+            connection.setReadOnly(true); // Будет использован  Snapshot Read-Only
+            connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
 
   {% endlist %}
 
@@ -1294,52 +1519,33 @@
 
   {% endlist %}
 
-- C++
+- C#
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  {% list tabs %}
 
-- C# (.NET)
+  - ADO.NET
 
-  {% cut "ADO.NET" %}
+    ```csharp
+    using Ydb.Sdk.Ado;
 
-  ```csharp
-  using Ydb.Sdk.Ado;
+    await using var connection = await dataSource.OpenConnectionAsync();
+    await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRo);
+    await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+    await using var reader = await command.ExecuteReaderAsync();
+    await transaction.CommitAsync();
+    ```
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
-  await using var reader = await command.ExecuteReaderAsync();
-  await transaction.CommitAsync();
-  ```
+  - Entity Framework
 
-  {% endcut %}
+    Entity Framework не поддерживает режим Snapshot Read-Only напрямую.
+    Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
 
-  {% cut "Entity Framework" %}
+  - linq2db
 
-  Entity Framework не поддерживает режим Snapshot Read-Only напрямую.
-  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+    linq2db не поддерживает режим Snapshot Read-Only напрямую.
+    Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
 
-  {% endcut %}
-
-  {% cut "linq2db" %}
-
-  linq2db не поддерживает режим Snapshot Read-Only напрямую.
-  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRo);
-  ```
+  {% endlist %}
 
 - JavaScript
 
@@ -1384,6 +1590,42 @@
 ## Snapshot Read-Write {#snapshot-read-write}
 
 {% list tabs group=lang %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void SnapshotReadWriteExample(NYdb::NQuery::TSession session) {
+        auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
+        auto result = session.ExecuteQuery(
+            "SELECT 1",
+            NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+        ).GetValueSync();
+
+        // ...
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/table.hpp>
+
+    void SnapshotReadWriteExample(ydb::TableClient& client) {
+        auto result = client.ExecuteQuery(
+            ydb::OperationSettings{.tx_mode = ydb::TransactionMode::kSnapshotRW},
+            ydb::Query{"SELECT 1;"}
+        );
+        // ...
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -1503,7 +1745,41 @@
 
   - JDBC
 
-    Режим Snapshot Read-Write из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**; для запросов с записью в текущей реализации драйвера используется **Serializable Read/Write** (см. [ImplicitTx](#implicittx) и [Serializable](#serializable)).
+    Для установки режима `Snapshot Read-Write` следует использовать стандартный режим REPEATABLE_READ.
+
+    {% note info %}
+
+    Данный режим поддерживается начиная с версии JDBC-драйвера 2.3.24 и требует явного включения через опцию `repeatableReadEnabled`.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+        Properties props = new Properties();
+        props.setProperty("repeatableReadEnabled", "true"); // Режим REPEATABLE_READ не доступен по умолчанию
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl, props)) {
+            connection.setAutoCommit(false); 
+            connection.setReadOnly(false);
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+
+            try (PreparedStatement ps = connection.prepareStatement("UPSERT INTO test (id, value) VALUES (?, ?)")) {
+                ps.setInt(1, 1);
+                ps.setString(2, "value-1");
+                ps.executeUpdate();
+
+                ps.setInt(1, 2);
+                ps.setString(2, "value-2");
+                ps.executeUpdate();
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
 
   {% endlist %}
 
@@ -1554,95 +1830,76 @@
 
   {% endlist %}
 
-- C++
+- C#
 
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
+  {% list tabs %}
 
-- C# (.NET)
+  - ADO.NET
 
-  {% cut "ADO.NET" %}
+    ```csharp
+    await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+        {
+            var ydbCommand = ydbConnection.CreateCommand();
+            ydbCommand.CommandText = """
+                                     UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
+                                     VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
+                                     """;
+            await ydbCommand.ExecuteNonQueryAsync();
+            ydbCommand.CommandText = """
+                                     INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
+                                     VALUES
+                                         (2, 5, 21, "Test 21", Date("2018-08-27")),
+                                         (2, 5, 22, "Test 22", Date("2018-08-27"))
+                                     """;
+            await ydbCommand.ExecuteNonQueryAsync();
+        }, TransactionMode.SnapshotRw
+    );
+    ```
 
-  ```csharp
-  await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
-      {
-          var ydbCommand = ydbConnection.CreateCommand();
-          ydbCommand.CommandText = """
-                                   UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
-                                   VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
-                                   """;
-          await ydbCommand.ExecuteNonQueryAsync();
-          ydbCommand.CommandText = """
-                                   INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
-                                   VALUES
-                                       (2, 5, 21, "Test 21", Date("2018-08-27")),
-                                       (2, 5, 22, "Test 22", Date("2018-08-27"))
-                                   """;
-          await ydbCommand.ExecuteNonQueryAsync();
-      }, TransactionMode.SnapshotRw
-  );
-  ```
+  - Entity Framework
 
-  {% endcut %}
+    ```csharp
+    var strategy = db.Database.CreateExecutionStrategy();
 
-  {% cut "EF" %}
+    strategy.Execute(() =>
+        {
+            using var ctx = new AppDbContext(options);
+            using var tr = ctx.Database.BeginTransaction(IsolationLevel.Snapshot);
 
-  ```csharp
-  var strategy = db.Database.CreateExecutionStrategy();
+            ctx.Users.AddRange(
+                new User { Name = "Alex", Email = "alex@example.com" },
+                new User { Name = "Kirill", Email = "kirill@example.com" }
+            );
 
-  strategy.Execute(() =>
-      {
-          using var ctx = new AppDbContext(options);
-          using var tr = ctx.Database.BeginTransaction(IsolationLevel.Snapshot);
+            ctx.SaveChanges();
 
-          ctx.Users.AddRange(
-              new User { Name = "Alex", Email = "alex@example.com" },
-              new User { Name = "Kirill", Email = "kirill@example.com" }
-          );
+            var users = ctx.Users.OrderBy(u => u.Id).ToList();
+            Console.WriteLine("Users in database:");
+            foreach (var user in users)
+                Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
+          }
+    );
+    ```
 
-          ctx.SaveChanges();
+  - linq2db
 
-          var users = ctx.Users.OrderBy(u => u.Id).ToList();
-          Console.WriteLine("Users in database:");
-          foreach (var user in users)
-              Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
-        }
-  );
-  ```
+    ```csharp
+    await using var db = new MyYdb(BuildOptions());
+    await using var tr = await db.BeginTransactionAsync(IsolationLevel.Snapshot);
 
-  {% endcut %}
+    await db.InsertAsync(new Episode
+    {
+        SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
+    });
+    await db.InsertAsync(new Episode
+        { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
+    await db.InsertAsync(new Episode
+        { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
 
-  {% cut "linq2db" %}
+    await tr.CommitAsync();
+    ```
 
-  ```csharp
-  await using var db = new MyYdb(BuildOptions());
-  await using var tr = await db.BeginTransactionAsync(IsolationLevel.Snapshot);
-
-  await db.InsertAsync(new Episode
-  {
-      SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
-  });
-  await db.InsertAsync(new Episode
-      { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
-  await db.InsertAsync(new Episode
-      { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
-
-  await tr.CommitAsync();
-  ```
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRw);
-  ```
+  {% endlist %}
 
 - JavaScript
 

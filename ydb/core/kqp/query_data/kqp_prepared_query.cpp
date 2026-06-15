@@ -10,6 +10,7 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/services/services.pb.h>
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
 

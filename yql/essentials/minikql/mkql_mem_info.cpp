@@ -9,7 +9,7 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 #if !defined(NDEBUG)
-static constexpr char COLLECT_STACK_TRACE_KEY[] = "YQL_MKQL_COLLECT_STACKTRACES_FOR_ALLOCATIONS";
+constexpr char COLLECT_STACK_TRACE_KEY[] = "YQL_MKQL_COLLECT_STACKTRACES_FOR_ALLOCATIONS";
 
 bool ShouldCollectStackTracesForAllocations() {
     static bool Result = []() {

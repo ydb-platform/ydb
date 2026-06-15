@@ -183,9 +183,9 @@
     ],
     "test.test[InMem-Fold1MapOverUnboundedPreservedStream-default.txt-Debug]": [
         {
-            "checksum": "6a566125116e8d4f6e939bad14562313",
-            "size": 1381,
-            "uri": "https://{canondata_backend}/1936842/97e0ab044a6a521639a649b6b781407443c8c0f8/resource.tar.gz#test.test_InMem-Fold1MapOverUnboundedPreservedStream-default.txt-Debug_/opt.yql"
+            "checksum": "522a53311030cbeae2afe9a0aea454b1",
+            "size": 1460,
+            "uri": "https://{canondata_backend}/1031349/81408fe839ca3ca4bc2f92d058d0d8f2c1b6a0da/resource.tar.gz#test.test_InMem-Fold1MapOverUnboundedPreservedStream-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[InMem-Fold1MapOverUnboundedPreservedStream-default.txt-Results]": [

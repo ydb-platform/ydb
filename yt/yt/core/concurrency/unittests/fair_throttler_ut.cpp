@@ -294,7 +294,7 @@ protected:
     {
         std::string testName = ::testing::UnitTest::GetInstance()->current_test_info()->name();
 
-        Config_->IpcPath = TString(GetOutputPath() / (testName + ".throttler"));
+        Config_->IpcPath = (GetOutputPath() / (testName + ".throttler")).GetPath();
         Config_->TotalLimit = 100;
 
         auto logger = Logger().WithTag("Test: %v", testName);

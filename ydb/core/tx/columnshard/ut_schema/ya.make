@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
+    ydb/library/testlib/s3_recipe_helper
     ydb/services/metadata
     ydb/core/tx
     ydb/core/util
@@ -28,10 +29,13 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
+
 SRCS(
     ut_columnshard_schema.cpp
     ut_columnshard_move_table.cpp
     ut_columnshard_copy_table.cpp
+    ut_columnshard_backup.cpp
 )
 
 END()

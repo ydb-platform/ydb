@@ -3,17 +3,18 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <util/generic/scope.h>
+#include <util/generic/size_literals.h>
 #include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -23,6 +24,16 @@ namespace {
 class TQueryRunner final : public TExecuteGenericQuery {
     using TBase = TExecuteGenericQuery;
 
+    static constexpr ui64 MAX_RESULT_ROWS = 1000;
+    static constexpr ui64 MAX_RESULT_SIZE = 100_KB;
+
+    struct TResultSetInfo {
+        bool Truncated = false;
+        ui64 RowCount = 0;
+        ui64 ByteCount = 0;
+        NJson::TJsonValue ResultSet;
+    };
+
 public:
     explicit TQueryRunner(const TDriver& driver)
         : TBase(driver)
@@ -30,16 +41,26 @@ public:
 
     NJson::TJsonValue ExtractResults() {
         NJson::TJsonValue result;
-        std::swap(result, ResultSets);
-        InittedResultSets.clear();
+        for (auto& [resultSetIndex, resultSetInfo] : ResultSets) {
+            result[resultSetIndex] = std::move(resultSetInfo.ResultSet);
+            result[resultSetIndex]["truncated"] = resultSetInfo.Truncated;
+            result[resultSetIndex]["row_count"] = resultSetInfo.RowCount;
+            result[resultSetIndex]["byte_count"] = resultSetInfo.ByteCount;
+
+            if (resultSetInfo.Truncated) {
+                result[resultSetIndex]["truncatedMessage"] = TStringBuilder() << "Result set #" << resultSetIndex << " was truncated because it has more than " << MAX_RESULT_ROWS << " rows or " << MAX_RESULT_SIZE << " bytes, try to reformulate query to get less rows or bytes";
+            }
+        }
+        ResultSets.clear();
         return result;
     }
 
 protected:
     void OnResultPart(ui64 resultSetIndex, const TResultSet& resultSet) final {
-        auto& result = ResultSets[resultSetIndex];
+        const auto [it, inserted] = ResultSets.emplace(resultSetIndex, TResultSetInfo());
+        auto& result = it->second.ResultSet;
 
-        if (InittedResultSets.emplace(resultSetIndex).second) {
+        if (inserted) {
             const auto& columnMeta = resultSet.GetColumnsMeta();
             auto& columns = result["columns"].SetType(NJson::JSON_ARRAY).GetArraySafe();
             for (const auto& column : columnMeta) {
@@ -50,12 +71,30 @@ protected:
         }
 
         auto& rows = result["rows"].SetType(NJson::JSON_ARRAY).GetArraySafe();
+        auto& rowCount = it->second.RowCount;
+        auto& byteCount = it->second.ByteCount;
+        auto& truncated = it->second.Truncated;
         TResultSetParser parser(resultSet);
         while (parser.TryNextRow()) {
+            rowCount++;
+            if (!truncated && rowCount > MAX_RESULT_ROWS) {
+                truncated = true;
+                YDB_CLI_LOG(Info, "Result set #" << resultSetIndex << " was truncated because it has more than " << MAX_RESULT_ROWS << " rows");
+            }
+
             try {
-                TJsonParser row;
-                Y_VALIDATE(row.Parse(FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode)), "Invalid serialized JSON row value");
-                rows.emplace_back(row.GetValue());
+                const auto& rowString = FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode);
+                byteCount += rowString.size();
+                if (!truncated && byteCount > MAX_RESULT_SIZE) {
+                    truncated = true;
+                    YDB_CLI_LOG(Info, "Result set #" << resultSetIndex << " was truncated because it has more than " << MAX_RESULT_SIZE << " bytes");
+                }
+
+                if (!truncated) {
+                    TJsonParser row;
+                    Y_VALIDATE(row.Parse(rowString), "Invalid serialized JSON row value");
+                    rows.emplace_back(row.GetValue());
+                }
             } catch (const std::exception& e) {
                 YDB_CLI_LOG(Warning, "Error parsing result #" << resultSetIndex << " row #" << rows.size() << ": " << e.what());
                 rows.emplace_back(TStringBuilder() << "Row conversion to JSON format failed: " << e.what() << ". Try to simplify result column types");
@@ -64,35 +103,59 @@ protected:
     }
 
 private:
-    NJson::TJsonValue ResultSets;
-    std::unordered_set<ui64> InittedResultSets;
+    std::unordered_map<ui64, TResultSetInfo> ResultSets;
 };
 
 class TExecQueryTool final : public TToolBase, public TInterruptableCommand {
     using TBase = TToolBase;
 
     static constexpr char DESCRIPTION[] = R"(
-Execute query in Yandex Data Base (YDB) on YQL (SQL dialect). Use cases:
+Execute a YQL (SQL dialect) query in Yandex Data Base (YDB). EVERY call shows the query to the user and prompts for approval, so each `exec_query` call has a real interaction cost — minimize failed attempts.
+
+>>> MANDATORY PREFLIGHT — READ FIRST <<<
+Before calling `exec_query`, you MUST have eliminated every reasonable doubt about the query's validity:
+1. If unsure about ANY YQL syntax, built-in function, type, recipe, or YDB-specific feature in the query — call `docs_search` FIRST. The documentation is authoritative; your prior knowledge of YDB/YQL may be outdated or wrong.
+2. If unsure the resulting query is syntactically and semantically valid YQL (unfamiliar built-in, unusual cast/JOIN/window, complex multi-statement script, first use of an idiom in this session, anything you only "think" works) — call `explain_query` with the SAME query FIRST. `explain_query` does NOT execute the query, does NOT modify data, and does NOT prompt the user, so you can iterate on errors silently until the query is correct. Only call `exec_query` after `explain_query` succeeds.
+Failure mode to avoid: blindly running `exec_query` -> error -> the user is forced to approve another broken attempt -> error -> ... — this is a bad experience and easily preventable by using `explain_query` first.
+
+Use cases:
 - Execute data query to fetch or modify data in database tables
-- Execute DDL query to create new scheme entities e. g. tablas, topics e. t. c.
+- Execute DDL query to create new scheme entities e. g. tables, topics e. t. c.
 
 IMPORTANT:
 - NEVER guess column names, types or keys. If you do not know the exact schema of a table, use the `describe` tool FIRST.
 - NEVER guess data values for filtering. Do not assume specific values exist in the table.
   Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
-- If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks.
+- ALWAYS wrap any scheme object paths inside folders in backticks. If a scheme path contains `-`, `/`, `@`, or `.` (generally non [a-zA-Z0-9] symbol or when path starts from number), also wrap it in backticks, for example: `path/to/table`.
+  - Examples of table paths correctly wrapped in backticks:
+    - SELECT * FROM `national_league/goals`
+    - SELECT * FROM `ships/crew/legacy`
+    - SELECT * FROM `ships.crew.legacy`
+    - SELECT * FROM `ships@crew@legacy`
+- If your query contains a non-simple string literal (e.g. if it contains ' or "), wrap it in @@ instead of escaping it:
+  - SELECT * FROM `national_league/goals` WHERE Name = @@John'Doe@@;
+  - SELECT * FROM `national_league/goals` WHERE Name = @@John "Doe" doesn't@@;
+- Some YQL string functions differ from SQL:
+  - Use String::AsciiToLower instead of LOWER (there is no such built-in function in YQL), for example: SELECT String::AsciiToLower(Name) FROM `mars_rover/photos` WHERE Name LIKE @@%mao'play%@@;
+
+In simple cases, you can avoid backticks and '@', for example (this is the preferred way to write queries when possible):
+
+SELECT * FROM my_table WHERE Data = "simple_data";
 
 Returns list of result sets for query, each contains list of rows and column metadata.
 For example if there exists table 'my_table' with string column 'Data' and we execute query:
 ```
-$filtered = SELECT * FROM my_table WHERE Data IS NOT NULL;
+$filtered = SELECT * FROM `folder/my_table` WHERE Data = @@Some 'my 'data' of "this" type@@;
 SELECT Data || "-first" FROM $filtered;
 SELECT Data || "-second" FROM $filtered;
 ```
 Tool will return:
 [
     {
+        "truncated": false,
+        "row_count": 2,
+        "byte_count": 100,
         "rows": [
             {"Data": "A-first"},
             {"Data": "B-first"}
@@ -102,6 +165,9 @@ Tool will return:
         ]
     },
     {
+        "truncated": false,
+        "row_count": 2,
+        "byte_count": 100,
         "rows": [
             {"Data": "A-second"},
             {"Data": "B-second"}
@@ -116,7 +182,6 @@ Tool will return:
 
     enum class EAction {
         Approve,
-        Reject,
         Edit,
         Abort,
     };
@@ -125,7 +190,6 @@ Tool will return:
         std::vector<TString> options = {
             "Approve execution",
             "Edit query",
-            "Skip query (don't execute, let agent retry)",
             "Abort operation",
         };
 
@@ -135,11 +199,13 @@ Tool will return:
         }
 
         switch (*result) {
-            case 0: return EAction::Approve;
-            case 1: return EAction::Edit;
-            case 2: return EAction::Reject;
-            case 3: return EAction::Abort;
-            default: return EAction::Abort;
+            case 0:
+                return EAction::Approve;
+            case 1:
+                return EAction::Edit;
+            case 2:
+            default:
+                return EAction::Abort;
         }
     }
 
@@ -149,19 +215,17 @@ public:
         , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
         , Prompt(settings.Prompt)
         , Database(settings.Database)
-        , Driver(settings.Driver)
-        , ExecuteRunner(settings.Driver)
-    {}
+        , LazyDriver(settings.LazyDriver)
+    {
+        Y_VALIDATE(LazyDriver, "TExecQueryTool requires a non-null LazyDriver");
+    }
 
 protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
         TJsonParser parser(parameters);
         Query = Strip(parser.GetKey(QUERY_PROPERTY).GetString());
         UserMessage = "";
-        IsSkipped = false;
-    }
 
-    bool AskPermissions() final {
         TColors colors;
         try {
             colors.resize(Query.size(), replxx::Replxx::Color::DEFAULT);
@@ -171,15 +235,14 @@ protected:
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
-        YDB_CLI_LOG(Notice, "Agent wnt to execute query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
-
+        YDB_CLI_LOG(Notice, "Agent wants to execute query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
         PrintFtxuiMessage(PrintYqlHighlightFtxuiColors(Query, colors), "Agent wants to execute query", ftxui::Color::Green);
-        Cout << Endl;
+    }
 
+    bool AskPermissions() final {
         const auto action = RunFtxuiActionDialog();
-
         if (action == EAction::Abort) {
-            Cout << "<Interrupted by user>" << Endl;
+            Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             throw yexception() << "Interrupted by user";
         }
 
@@ -187,58 +250,44 @@ protected:
             if (RequestQueryText()) {
                 return true;
             }
-            IsSkipped = true;
-            return true;
+            throw yexception() << "Interrupted by user";
         }
 
-        if (action == EAction::Approve) {
-            return true;
-        }
-
-        Cout << Endl;
-
-        IsSkipped = true;
         return true;
     }
 
     TResponse DoExecute() final {
-        if (IsSkipped) {
-            NJson::TJsonValue jsonResult;
-            jsonResult["status"] = "skipped";
-            return TResponse::Success(jsonResult, "User explicitly skipped execution of this query. The query was NOT executed. (Please continue in the primary language of the conversation)");
-        }
-
         Y_DEFER { ResetInterrupted(); };
 
+        TQueryRunner executeRunner(LazyDriver->Get());
         try {
-            if (ExecuteRunner.Execute(Query, {.AddIndent = true}) != EXIT_SUCCESS) {
+            if (executeRunner.Execute(Query, {.AddIndent = true}) != EXIT_SUCCESS) {
                 YDB_CLI_LOG(Notice, "Query execution was interrupted by user");
-                return TResponse::Error(TStringBuilder() << "Query execution was interrupted by user", UserMessage);
+                return TResponse::Error("Query execution was interrupted by user", UserMessage);
             }
         } catch (const std::exception& e) {
-            Cout << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Endl;
+            Cout << Endl << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Flush;
             return TResponse::Error(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
-        return TResponse::Success(ExecuteRunner.ExtractResults(), UserMessage);
+        return TResponse::Success(executeRunner.ExtractResults(), UserMessage);
     }
 
 private:
     bool RequestQueryText() {
-        Cout << Endl;
-
         const auto lineReader = CreateLineReader({
-            .Driver = Driver,
+            .LazyDriver = LazyDriver,
             .Database = Database,
             .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "YQL" << Colors.OldColor() << "> ",
             .EnableSwitchMode = false,
             .ContinueAfterCancel = false,
         });
 
+        Cout << Endl;
         auto response = lineReader->ReadLine(Query);
         lineReader->Finish(false);
         if (!response) {
-            Cout << Endl << "<Interrupted by user>" << Endl << Endl;
+            Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             return false;
         }
 
@@ -254,7 +303,6 @@ private:
 
     static NJson::TJsonValue CreateParametersSchema() {
         return TJsonSchemaBuilder()
-            .Type(TJsonSchemaBuilder::EType::Object)
             .Property(QUERY_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
                 .Description("Query to execute on YQL (SQL dialect), for example 'SELECT * FROM my_table'")
@@ -266,12 +314,10 @@ private:
     const IYQLHighlighter::TPtr YQLHighlighter;
     const TString Prompt;
     const TString Database;
-    const TDriver Driver;
-    TQueryRunner ExecuteRunner;
+    const TLazyDriver::TPtr LazyDriver;
 
     TString Query;
     TString UserMessage;
-    bool IsSkipped = false;
 };
 
 } // anonymous namespace

@@ -126,7 +126,9 @@ TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const 
 }
 
 
-TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets) {
+TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId,
+                                            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets,
+                                            std::optional<i32> generationId) {
     Cerr << ">>>>> TOffsetCommitRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
@@ -146,6 +148,9 @@ TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString gr
             topic.Partitions.push_back(partition);
         }
         request.Topics.push_back(topic);
+    }
+    if (generationId.has_value()) {
+        request.GenerationId = *generationId;
     }
 
     return WriteAndRead<TOffsetCommitResponseData>(header, request);
@@ -291,7 +296,7 @@ TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TStr
 
     TKafkaVersion version = 3;
 
-    TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+    TKafkaWriteBuffer buf( subscribtion.Size(version) + sizeof(version));
     TKafkaWritable writable(buf);
     writable << version;
     subscribtion.Write(writable, version);
@@ -469,7 +474,7 @@ std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> TKafkaTe
         }
 
         {
-            TWritableBuf buf(nullptr, consumerAssignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+            TKafkaWriteBuffer buf( consumerAssignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
             TKafkaWritable writable(buf);
 
             writable << ASSIGNMENT_VERSION;
@@ -985,7 +990,7 @@ TMessagePtr<T> TKafkaTestClient::WriteAndRead(TRequestHeaderData& header, TApiMe
 }
 
 void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent) {
-    TWritableBuf sb(nullptr, request->Size(version) + 1000);
+    TKafkaWriteBuffer sb( request->Size(version) + 1000);
     TKafkaWritable writable(sb);
     request->Write(writable, version);
     so.Write(sb.GetFrontBuffer().data(), sb.GetFrontBuffer().size());

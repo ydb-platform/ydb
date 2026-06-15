@@ -39,7 +39,7 @@ Y_UNIT_TEST(MapScalars) {
     node["b"] = NYT::TNode::CreateEntity();
     node["c"] = NYT::TNode(true);
     node["d"] = NYT::TNode(1);
-    node["e"] = NYT::TNode(1u);
+    node["e"] = NYT::TNode(1U);
     node["f"] = NYT::TNode(1.25);
 
     RunTest(node,

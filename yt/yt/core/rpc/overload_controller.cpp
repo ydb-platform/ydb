@@ -454,7 +454,7 @@ public:
     }
 
 private:
-    using TMethodIndex = std::pair<TString, TString>;
+    using TMethodIndex = std::pair<std::string, std::string>;
     using TMethodsCongestionControllers = THashMap<TMethodIndex, TCongestionControllerPtr>;
 
     struct TState final
@@ -463,7 +463,7 @@ private:
 
         TOverloadControllerConfigPtr Config;
         TMethodsCongestionControllers CongestionControllers;
-        THashMap<TString, TOverloadTrackerPtr> Trackers;
+        THashMap<std::string, TOverloadTrackerPtr> Trackers;
     };
 
     using TSpinLockGuard = TGuard<NThreading::TSpinLock>;
@@ -475,7 +475,7 @@ private:
 
     TAtomicPtr<TState, /*EnableAcquireHazard*/ true> StateSnapshot_;
 
-    NThreading::TSpinLock SpinLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     TState State_;
 
     void Adjust()

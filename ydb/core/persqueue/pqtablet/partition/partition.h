@@ -101,6 +101,15 @@ struct TTransaction {
         return {};
     }
 
+    TMaybe<ui64> GetStep() const {
+        if (Tx) {
+            return Tx->Step;
+        } else if (ProposeConfig) {
+            return ProposeConfig->Step;
+        }
+        return {};
+    }
+
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
     TActorId SupportivePartitionActor;
@@ -189,6 +198,7 @@ private:
     bool CanEnqueue() const;
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
+    void SendInfoToAutopartitioningManager(const TWriteMsg& p);
 
     TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});
@@ -316,7 +326,7 @@ private:
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
     bool RequestBlobQuota();
-    void RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaSize);
+    void RequestBlobQuota(size_t quotaSize, size_t messagesQuotaSize);
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
 
@@ -887,6 +897,7 @@ private:
     void ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
     void ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     bool ExecRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
+    bool ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg& msg);
 
     [[nodiscard]] EProcessResult BeginTransactionData(TTransaction& t,
                                                       TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
@@ -942,6 +953,20 @@ private:
 
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;
     THashMap<TActorId, TSimpleSharedPtr<TTransaction>> WriteInfosToTx;
+
+    // stable-25-4 -> stable-26-1: tablet may replay TEvTxCommit while partition PlanStep/TxId is already ahead.
+    // Persist SerializedTx (and optional config sub-writes) to KV before TEvTxDone so tablet recovery sees partition tx meta.
+    struct TStaleTxMetaEntry {
+        ui64 Step = 0;
+        ui64 TxId = 0;
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
+    };
+
+    THashMap<ui64, TStaleTxMetaEntry> StaleTxMetaPending;
+    THashMap<ui64, TStaleTxMetaEntry> StaleTxMetaInFlight;
 
     size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
@@ -1028,6 +1053,7 @@ private:
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadBytes;
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgQuotaBytes;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgQuotaMessages;
 
     std::unique_ptr<IAutopartitioningManager> AutopartitioningManager;
     TInstant LastScaleRequestTime = TInstant::Zero();
@@ -1080,11 +1106,12 @@ private:
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;
-    ui64 DeduplicationIdQuotaSize = 0;
+    ui64 MessagesQuotaSize = 0;
     bool NeedDeletePartition = false;
 
     // Wait topic quota metrics
     ui64 TotalPartitionWriteSpeed = 0;
+    ui64 TotalPartitionWriteSpeedInMessages = 0;
     THolder<TPercentileCounter> TopicWriteQuotaWaitCounter;
     TInstant WriteStartTime;
     TDuration TopicQuotaWaitTimeForCurrentBlob;
@@ -1173,6 +1200,7 @@ private:
     void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
+    size_t WriteNewMessagesFromSupportivePartitions = 0;
 
     bool TryAddDeleteHeadKeysToPersistRequest();
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request) const;
@@ -1301,6 +1329,11 @@ private:
     bool IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPAction) const;
 
     void TryAddCmdWriteForTransaction(const TTransaction& tx);
+
+    void EnqueueStaleTxMetaPersist(std::unique_ptr<TEvPQ::TEvTxCommit> ev, const TActorContext& ctx);
+    void TryAppendStaleTxMetaWrites();
+    void FlushStaleTxMetaDone(const TActorContext& ctx);
+    void AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

@@ -204,6 +204,21 @@ message TAddBulkSstRecoveryLogRec {
 ////////////////////////////////////////////////////////////////////////////////
 // TSyncLogEntryPoint -- entry point for SyncLog
 ////////////////////////////////////////////////////////////////////////////////
+message TPhantomFlagStorageData {
+    message TPhantomFlagStorageChunk {
+        optional uint32 ChunkIdx = 1;
+        optional uint32 DataSize = 2;
+    };
+
+    repeated TPhantomFlagStorageChunk Chunks = 1;
+    optional uint32 ChunkSize = 2;
+};
+
+message TSyncLogChunkPendingExtraction {
+    optional uint32 ChunkIdx = 1;
+    optional uint32 UsedPagesNum = 2;
+};
+
 message TSyncLogEntryPoint {
     // HEADER
     // PDisk guid for additional check
@@ -223,6 +238,10 @@ message TSyncLogEntryPoint {
     repeated uint32 ChunksToDeleteDelayed = 20;
     // opaque DiskRecLog serialized bytes
     optional bytes DiskRecLogSerialized = 21;
+
+    optional TPhantomFlagStorageData PhantomFlagStorageData = 22;
+    // SyncLog chunks pending DoNotKeep flag extraction; owned by SyncLogKeeper.
+    repeated TSyncLogChunkPendingExtraction ChunksToExtract = 23;
 };
 
 message TScrubState {

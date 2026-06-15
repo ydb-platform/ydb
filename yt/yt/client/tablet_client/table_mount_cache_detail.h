@@ -15,6 +15,10 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern const std::vector<TErrorCode> TableMountCacheRetryableCodes;
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TTabletInfoOwnerCache
 {
 public:
@@ -85,8 +89,7 @@ private:
         const TError& error);
 
     std::optional<TInvalidationResult> TryHandleServantNotActiveError(
-        const TSmoothMovementRedirectionHint& smoothMovementHint,
-        const TTabletInfoPtr& tabletInfo);
+        std::vector<std::pair<TSmoothMovementRedirectionHint, TTabletInfoPtr>> hints);
 
     std::optional<TInvalidationResult> TryHandleTabletReshardedError(
         const TReshardRedirectionHintPtr& reshardHint,

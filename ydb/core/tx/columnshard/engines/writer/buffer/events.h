@@ -23,7 +23,8 @@ public:
         const NArrow::TContainerWithIndexes<arrow::RecordBatch>& recordBatch, const std::shared_ptr<NOlap::TWritingContext>& context)
         : WriteData(writeData)
         , RecordBatch(recordBatch)
-        , Context(context) {
+        , Context(context)
+    {
         AFL_VERIFY(!!WriteData);
         AFL_VERIFY(!!RecordBatch);
         AFL_VERIFY(!!Context);

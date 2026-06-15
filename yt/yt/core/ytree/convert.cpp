@@ -27,39 +27,55 @@ TYsonString ConvertToYsonStringNestingLimited(const TYsonString& value, int nest
 
 } // namespace NYT::NYson
 
-namespace NYT::NYTree {
+namespace NYT::NYTree::NDetail {
 
 using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TToken& SkipAttributes(TTokenizer* tokenizer)
+double ConvertYsonStringBufToDouble(const NYson::TYsonStringBuf& yson)
 {
-    int depth = 0;
-    while (true) {
-        tokenizer->ParseNext();
-        const auto& token = tokenizer->CurrentToken();
-        switch (token.GetType()) {
-            case ETokenType::LeftBrace:
-            case ETokenType::LeftAngle:
-                ++depth;
-                break;
+    using namespace NYT::NYTree;
 
-            case ETokenType::RightBrace:
-            case ETokenType::RightAngle:
-                --depth;
-                break;
+    NYson::TTokenizer tokenizer(yson.AsStringBuf());
+    tokenizer.SkipAttributes();
+    const auto& token = tokenizer.CurrentToken();
+    switch (token.GetType()) {
+        case NYson::ETokenType::Int64:
+            return token.GetInt64Value();
+        case NYson::ETokenType::Double:
+            return token.GetDoubleValue();
+        case NYson::ETokenType::Boolean:
+            return token.GetBooleanValue();
+        default:
+            THROW_ERROR_EXCEPTION("Cannot parse \"double\" from %Qlv",
+                token.GetType())
+                << TErrorAttribute("data", yson.AsStringBuf());
+    }
+}
 
-            default:
-                if (depth == 0) {
-                    return token;
-                }
-                break;
+TString ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson)
+{
+    using namespace NYT::NYTree;
+
+    NYson::TTokenizer tokenizer(yson.AsStringBuf());
+    tokenizer.SkipAttributes();
+    const auto& token = tokenizer.CurrentToken();
+    switch (token.GetType()) {
+        case NYson::ETokenType::String: {
+            TString result(token.GetStringValue());
+            tokenizer.ParseNext();
+            tokenizer.CurrentToken().ExpectType(NYson::ETokenType::EndOfStream);
+            return result;
         }
+        default:
+            THROW_ERROR_EXCEPTION("Cannot parse \"string\" from %Qlv",
+                token.GetType())
+                << TErrorAttribute("data", yson.AsStringBuf());
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTree
+} // namespace NYT::NYTree::NDetail
 

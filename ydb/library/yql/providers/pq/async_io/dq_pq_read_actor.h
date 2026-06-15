@@ -14,11 +14,15 @@
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
+namespace NKikimr::NMiniKQL {
+class TTypeEnvironment;
+}
 
 namespace NYql::NDq {
 class TDqAsyncIoFactory;
 
-const i64 PQReadDefaultFreeSpace = 16_MB;
+constexpr i64 PQReadDefaultFreeSpace = 16_MB;
+constexpr TDuration PqDefaultCheckPartitionCountPeriod = TDuration::Seconds(60);
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
@@ -32,13 +36,15 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqStaticGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
     i64 bufferSize = PQReadDefaultFreeSpace,
-    NActors::TActorId infoAggregator = {}
+    NActors::TActorId infoAggregator = {},
+    TDuration CheckPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod
 );
 
 void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), const TString& reconnectPeriod = {}, bool enableStreamingQueriesCounters = true);

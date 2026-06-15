@@ -31,6 +31,8 @@ TScanCounters::TScanCounters(const TString& module)
     , RecordsAcceptedByHeader(TBase::GetDeriviative("Headers/Accepted/Records"))
     , RecordsDeniedByHeader(TBase::GetDeriviative("Headers/Denied/Records"))
     , DictionaryOnlyOptimizationCount(TBase::GetDeriviative("Dictionary/OnlyOptimization/Count"))
+    , DistinctLimitSyncPointInvocations(TBase::GetDeriviative("DistinctLimit/SyncPoint/Invocations"))
+    , PredicateFilterInvocations(TBase::GetDeriviative("PredicateFilter/Invocations"))
     , HangingRequests(TBase::GetDeriviative("HangingRequests"))
 
     , HistogramReadMetadataDurationMs(TBase::GetHistogram("Portions/ReadMetadataDurationMs", NMonitoring::ExponentialHistogram(15, 2, 8)))
@@ -78,6 +80,7 @@ TScanCounters::TScanCounters(const TString& module)
 {
     SubColumnCounters = std::make_shared<TSubColumnCounters>(CreateSubGroup("Speciality", "SubColumns"));
     DuplicateFilteringCounters = std::make_shared<TDuplicateFilteringCounters>();
+    SimpleDuplicateFilteringCounters = std::make_shared<TSimpleDuplicateFilteringCounters>();
 
     HistogramIntervalMemoryRequiredOnFail = TBase::GetHistogram("IntervalMemory/RequiredOnFail/Gb", NMonitoring::LinearHistogram(10, 1, 1));
     HistogramIntervalMemoryReduceSize = TBase::GetHistogram("IntervalMemory/Reduce/Gb", NMonitoring::ExponentialHistogram(8, 2, 1));
@@ -185,12 +188,12 @@ TString TConcreteScanCounters::StepsCountersDebugString() const {
 }
 
 TConcreteScanCounters::TPerStepAtomicCounters TConcreteScanCounters::CountersForStep(TStringBuf stepName) const {
-    auto* counterIfExists = [&] {
+    {
         auto lock = AtomicStepCounters.ReadGuard();
-        return lock.Value.FindPtr(stepName);
-    }();
-    if (counterIfExists) [[likely]] {
-        return *counterIfExists;
+        auto* counterIfExists = lock.Value.FindPtr(stepName);
+        if (counterIfExists) [[likely]] {
+            return *counterIfExists;   // Copy made while lock is held
+        }
     }
     auto lock = AtomicStepCounters.WriteGuard();
     auto [it, ok] = lock.Value.emplace(stepName, TPerStepAtomicCounters{});

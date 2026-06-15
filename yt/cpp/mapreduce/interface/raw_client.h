@@ -4,6 +4,8 @@
 #include "client_method_options.h"
 #include "operation.h"
 
+#include <yt/cpp/mapreduce/interface/abortable_stream.h>
+
 #include <yt/cpp/mapreduce/http/context.h>
 
 namespace NYT {
@@ -141,7 +143,8 @@ public:
 
     virtual void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) = 0;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) = 0;
 
     // Operations
 
@@ -213,7 +216,7 @@ public:
 
     // Files
 
-    virtual std::unique_ptr<IInputStream> ReadFile(
+    virtual std::unique_ptr<IAbortableInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) = 0;
@@ -299,18 +302,18 @@ public:
         const TMaybe<TFormat>& format,
         const TTableWriterOptions& options = {}) = 0;
 
-    virtual std::unique_ptr<IInputStream> ReadTable(
+    virtual std::unique_ptr<IAbortableInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFormat& format,
         const TTableReaderOptions& options = {}) = 0;
 
-    virtual std::unique_ptr<IInputStream> ReadTablePartition(
+    virtual std::unique_ptr<IAbortableInputStream> ReadTablePartition(
         const TString& cookie,
         const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) = 0;
 
-    virtual std::unique_ptr<IInputStream> ReadBlobTable(
+    virtual std::unique_ptr<IAbortableInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TKey& key,

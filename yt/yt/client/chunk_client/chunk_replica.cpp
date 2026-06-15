@@ -66,6 +66,26 @@ void TChunkIdWithIndexes::Load(TStreamLoadContext& context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TChunkIdWithIndexAndState::Save(TStreamSaveContext& context) const
+{
+    using NYT::Save;
+
+    Save(context, Id);
+    Save(context, ReplicaIndex);
+    Save(context, State);
+}
+
+void TChunkIdWithIndexAndState::Load(TStreamLoadContext& context)
+{
+    using NYT::Load;
+
+    Load(context, Id);
+    Load(context, ReplicaIndex);
+    Load(context, State);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica)
 {
     using NYT::ToProto;
@@ -140,6 +160,17 @@ void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexes& id, TSt
         builder->AppendString("@all");
     } else if (id.MediumIndex != GenericMediumIndex) {
         builder->AppendFormat("@%v", id.MediumIndex);
+    }
+}
+
+void FormatValue(TStringBuilderBase* builder, const TChunkIdWithIndexAndState& id, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("%v", id.Id);
+    if (id.ReplicaIndex != GenericChunkReplicaIndex) {
+        builder->AppendFormat("/%v", id.ReplicaIndex);
+    }
+    if (id.State != EChunkReplicaState::Generic) {
+        builder->AppendFormat(":%v", id.State);
     }
 }
 

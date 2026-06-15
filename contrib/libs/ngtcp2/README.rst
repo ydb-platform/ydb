@@ -30,9 +30,9 @@ Requirements
 ------------
 
 The libngtcp2 C library itself does not depend on any external
-libraries.  The example client, and server are written in C++20, and
-should compile with the modern C++ compilers (e.g., clang >= 11.0, or
-gcc >= 11.0).
+libraries.  The example client, and server are written in C++23, and
+should compile with the modern C++ compilers (e.g., clang >= 19, or
+gcc >= 15).
 
 The following packages are required to configure the build system:
 
@@ -60,10 +60,11 @@ directory require at least one of the following TLS backends:
 
 - `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
+  (deprecated)
 - GnuTLS >= 3.7.5
-- BoringSSL (commit db1a8456167249f95b854a1cd24c6b553d0f1567);
+- BoringSSL (commit 664a985707470a62f436cca862ccec9524c561ca);
   or aws-lc >= 1.39.0
-- Picotls (commit 4e443c11eb48949e597911b1b772a9d2588b4769)
+- Picotls (commit b84869f41414b6d0148db7728f1cf12f5b544874)
 - wolfSSL >= 5.5.0
 - LibreSSL >= v3.9.2
 - OpenSSL >= 3.5.0 (experimental)
@@ -82,7 +83,7 @@ Build with wolfSSL
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v5.8.2-stable https://github.com/wolfSSL/wolfssl
+   $ git clone --depth 1 -b v5.9.0-stable https://github.com/wolfSSL/wolfssl
    $ cd wolfssl
    $ autoreconf -i
    $ # For wolfSSL < v5.6.6, append --enable-quic.
@@ -115,7 +116,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout db1a8456167249f95b854a1cd24c6b553d0f1567
+   $ git checkout 664a985707470a62f436cca862ccec9524c561ca
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -142,7 +143,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.62.0 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.71.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -170,7 +171,7 @@ Build with libressl
 
 .. code-block:: shell
 
-   $ LIBRESSL_VERSION=v4.2.0
+   $ LIBRESSL_VERSION=v4.2.1
    $ git clone --depth 1 -b $LIBRESSL_VERSION https://github.com/libressl/portable.git libressl
    $ cd libressl
    $ # Workaround autogen.sh failure
@@ -273,7 +274,7 @@ The header file exists under crypto/includes/ngtcp2 directory.
 Each library file is built for a particular TLS backend.  The
 available crypto helper libraries are:
 
-- libngtcp2_crypto_quictls: Use quictls as TLS backend
+- libngtcp2_crypto_quictls: Use quictls as TLS backend (deprecated)
 - libngtcp2_crypto_libressl: Use libressl as TLS backend
 - libngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
 - libngtcp2_crypto_boringssl: Use BoringSSL and aws-lc as TLS backend

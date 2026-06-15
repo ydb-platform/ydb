@@ -8,6 +8,13 @@ option go_package = "a.yandex-team.ru/yt/go/proto/client/chunk_client";
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Describes the replica of the chunk.
+message TChunkReplicaSpec
+{
+    // See TChunkReplicaWithMedium.
+    required fixed64 encoded_chunk_replica_with_medium = 1;
+}
+
 // Describes a portion of table chunk.
 message TChunkSpec
 {
@@ -85,6 +92,8 @@ message TChunkSpec
 
     // COMPAT(apollo1321): Remove in 26.1.
     optional bool use_new_override_semantics = 29;
+
+    repeated TChunkReplicaSpec replica_specs = 30;
 
     reserved 4, 5, 6, 8;
 }

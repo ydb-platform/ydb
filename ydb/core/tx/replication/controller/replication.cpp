@@ -504,7 +504,7 @@ void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
     Impl->UpdateLag(targetId, lag);
 }
 
-const TMaybe<TDuration> TReplication::GetLag() const {
+const std::optional<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
 }
 

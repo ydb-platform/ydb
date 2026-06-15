@@ -25,6 +25,11 @@ Distributed under the
 
 
 ====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
 // Distributed under the Boost Software License, Version 1.0.
 
 
@@ -83,7 +88,7 @@ Distributed under the
 
 
 ====================COPYRIGHT====================
-// Copyright 2017, 2021, 2022 Peter Dimov.
+// Copyright 2017, 2021-2025 Peter Dimov.
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
@@ -124,6 +129,12 @@ Distributed under the
 // Copyright 2023 Peter Dimov
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// Copyright 2026 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
 
 
 ====================COPYRIGHT====================

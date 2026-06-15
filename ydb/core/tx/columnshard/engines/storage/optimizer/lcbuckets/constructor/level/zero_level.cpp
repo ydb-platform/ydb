@@ -48,7 +48,7 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         PortionsSizeLimit = jsonValue.GetUInteger();
     }
-    
+
     if (json.Has("concurrency")) {
         const auto& jsonValue = json["concurrency"];
         if (!jsonValue.IsUInteger() || jsonValue.GetUInteger() == 0) {
@@ -56,7 +56,7 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         Concurrency = jsonValue.GetUInteger();
     }
-    
+
     if (json.Has("compaction_task_memory_limit")) {
         const auto& jsonValue = json["compaction_task_memory_limit"];
         if (!jsonValue.IsUInteger() || jsonValue.GetUInteger() == 0) {
@@ -64,7 +64,7 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         CompactionTaskMemoryLimit = jsonValue.GetUInteger();
     }
-    
+
     if (json.Has("compaction_task_portions_count_limit")) {
         const auto& jsonValue = json["compaction_task_portions_count_limit"];
         if (!jsonValue.IsUInteger() || jsonValue.GetUInteger() == 0) {

@@ -375,6 +375,10 @@ class TPermissionResponseProcessor
 protected:
     using TBase = TPermissionResponseProcessor<TDerived, TEvRequest>;
 
+    // Soft warnings collected during request processing that should be returned
+    // to the client alongside the successful response.
+    TVector<TString> Warnings;
+
 public:
     using TAdapterActor<TDerived, TEvRequest, TEvCms::TEvMaintenanceTaskResponse>::TAdapterActor;
 
@@ -451,6 +455,12 @@ public:
             for (const auto& action : request.Request.GetActions()) {
                 ConvertAction(action, *GetActionGroupState(result)->add_action_states());
             }
+        }
+
+        for (const auto& warning : Warnings) {
+            auto& issue = *response->Record.AddIssues();
+            issue.set_severity(NYql::TSeverityIds::S_WARNING);
+            issue.set_message(warning);
         }
 
         this->Reply(std::move(response));
@@ -530,18 +540,20 @@ class TCreateMaintenanceTask
             return false;
         }
 
+        const ui32 actionGroupCount = request.action_groups().size();
         for (const auto& group : request.action_groups()) {
-            if (group.actions().size() < 1) {
+            const ui32 actionCount = group.actions().size();
+            if (actionCount < 1) {
                 Reply(Ydb::StatusIds::BAD_REQUEST, "Empty actions");
                 return false;
             }
 
-            if (!GetCmsState()->EnableSingleCompositeActionGroup && group.actions().size() > 1) {
+            if (!GetCmsState()->EnableSingleCompositeActionGroup && actionCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableSingleCompositeActionGroup is off");
                 return false;
             }
 
-            if (request.action_groups().size() > 1 && group.actions().size() > 1) {
+            if (actionGroupCount > 1 && actionCount > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
                     << "A task can have either a single composite action group or many action groups"
                     << " with only one action");
@@ -552,6 +564,23 @@ class TCreateMaintenanceTask
                 if (!ValidateAction(action)) {
                     return false;
                 }
+            }
+        }
+
+        const ui32 maxInflightActions = request.task_options().max_inflight_actions();
+        if (maxInflightActions > 0) {
+            const bool hasSingleCompositeActionGroup = actionGroupCount == 1
+                && request.action_groups(0).actions().size() > 1;
+            if (hasSingleCompositeActionGroup) {
+                Warnings.emplace_back(
+                    "max_inflight_actions is not applicable to a single composite action group:"
+                    " actions within one group are granted atomically");
+            }
+            if (actionGroupCount < maxInflightActions) {
+                Warnings.emplace_back(
+                    TStringBuilder()
+                    << "max_inflight_actions is greater than the number of action groups: "
+                    << maxInflightActions << " > " << actionGroupCount);
             }
         }
 
@@ -634,6 +663,10 @@ class TCreateMaintenanceTask
         HasSingleCompositeActionGroup = request.action_groups().size() == 1 
                                         && request.action_groups(0).actions().size() > 1;
         cmsRequest.SetPartialPermissionAllowed(!HasSingleCompositeActionGroup);
+
+        if (opts.max_inflight_actions() > 0) {
+            cmsRequest.SetMaxPermissionCount(opts.max_inflight_actions());
+        }
 
         for (const auto& group : request.action_groups()) {
             Y_ABORT_UNLESS(HasSingleCompositeActionGroup || group.actions().size() == 1);
@@ -1052,13 +1085,24 @@ class TDropMaintenanceTask
         ++Requests;
     }
 
-    void DropPermissions(const TTaskInfo& task) {
-        auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
-        cmsRequest->Record.SetUser(task.Owner);
-        cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
+    void MaybeDropPermissionsInCms() {
+        if (Requests > 0) {
+            return;
+        }
 
-        for (const auto& id : task.Permissions) {
-            cmsRequest->Record.AddPermissions(id);
+        auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
+        cmsRequest->Record.SetUser(User);
+        cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
+        cmsRequest->Record.MutablePermissions()->Assign(Permissions.begin(), Permissions.end());
+
+        Send(CmsActorId, std::move(cmsRequest));
+        ++Requests;
+    }
+
+    void DropPermissions(const TTaskInfo& task) {
+        Permissions.assign(task.Permissions.begin(), task.Permissions.end());
+
+        for (const auto& id : Permissions) {
             const auto& permission = GetCmsState()->Permissions.at(id);
             if (permission.Action.GetType() == NKikimrCms::TAction::DRAIN_NODE ||
                 permission.Action.GetType() == NKikimrCms::TAction::CORDON_NODE) 
@@ -1069,8 +1113,7 @@ class TDropMaintenanceTask
             }
         }
 
-        Send(CmsActorId, std::move(cmsRequest));
-        ++Requests;
+        MaybeDropPermissionsInCms();
     }
 
 public:
@@ -1089,6 +1132,7 @@ public:
         }
 
         const auto& task = it->second;
+        User = task.Owner;
         if (cmsState->ScheduledRequests.contains(task.RequestId)) {
             DropRequest(task);
         } else {
@@ -1113,6 +1157,7 @@ public:
     }
 
     void HandleDropRequest(TEvCms::TEvManageRequestResponse::TPtr& ev) {
+        --Requests;
         auto cmsState = GetCmsState();
         if (cmsState->MaintenanceTasks.contains(GetTaskUid())) {
             DropPermissions(cmsState->MaintenanceTasks.at(GetTaskUid()));
@@ -1149,8 +1194,9 @@ public:
     }
 
     void Handle(TEvHive::TEvSetDownReply::TPtr &ev) {
+        --Requests;
         if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
-            return MaybeReply();
+            MaybeDropPermissionsInCms();
         } else {
             return Reply(Ydb::StatusIds::GENERIC_ERROR, "Node not found");
         }
@@ -1169,6 +1215,8 @@ public:
 
 private:
     i64 Requests = 0;
+    std::vector<TString> Permissions;
+    TString User;
 
 }; // TDropMaintenanceTask
 

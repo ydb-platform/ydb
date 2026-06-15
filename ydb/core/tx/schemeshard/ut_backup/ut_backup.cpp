@@ -1,12 +1,13 @@
 #include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <library/cpp/testing/hook/hook.h>
 
+#include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 
@@ -81,6 +82,172 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         env.TestWaitNotification(runtime, txId);
 
         return std::make_pair(partsUploaded, objectsPut);
+    }
+
+    Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldSucceedOnStandaloneColumnTableWithLocalBloomIndexes, EnableLocalIndexAsSchemeObject) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(EnableLocalIndexAsSchemeObject);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapBloomTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_bloom"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        FalsePositiveProbability: 0.01
+                        ColumnIds: 2
+                    }
+                }
+                Indexes {
+                    Id: 2
+                    Name: "idx_ngram"
+                    ClassName: "BLOOM_NGRAMM_FILTER"
+                    BloomNGrammFilter {
+                        NGrammSize: 3
+                        FalsePositiveProbability: 0.01
+                        CaseSensitive: true
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tableDesc = DescribePrivatePath(runtime, "/MyRoot/OlapBloomTable", true, true);
+        TString pathSchema;
+        UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(tableDesc.GetPathDescription(), &pathSchema));
+
+        TestBackup(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "OlapBloomTable"
+            Table {
+                %s
+            }
+            S3Settings {
+                Endpoint: "localhost:%d"
+                Scheme: HTTP
+                Limits {
+                    MinWriteBatchSize: 0
+                }
+            }
+            ScanSettings {
+                RowsBatchSize: 128
+            }
+            Compression {
+                Codec: "%s"
+            }
+        )", pathSchema.c_str(), port, ToString(Codec).c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto d = DescribePrivatePath(runtime, "/MyRoot/OlapBloomTable", true, true);
+        UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(),
+            "expected column table after backup");
+        const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
+        THashSet<TString> found;
+        for (const auto& ix : schema.GetIndexes()) {
+            found.insert(ix.GetName());
+        }
+
+        const THashSet<TString> expected{"idx_bloom", "idx_ngram"};
+        UNIT_ASSERT_VALUES_EQUAL(found, expected);
+    }
+
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnStandaloneColumnTableWithLocalMinMaxIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapMinMaxTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+                Indexes {
+                    Id: 1
+                    Name: "idx_minmax"
+                    ClassName: "MIN_MAX"
+                    MinMaxIndex {
+                        ColumnId: 2
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tableDesc = DescribePrivatePath(runtime, "/MyRoot/OlapMinMaxTable", true, true);
+        TString pathSchema;
+        UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(tableDesc.GetPathDescription(), &pathSchema));
+
+        TestBackup(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "OlapMinMaxTable"
+            Table {
+                %s
+            }
+            S3Settings {
+                Endpoint: "localhost:%d"
+                Scheme: HTTP
+                Limits {
+                    MinWriteBatchSize: 0
+                }
+            }
+            ScanSettings {
+                RowsBatchSize: 128
+            }
+            Compression {
+                Codec: "%s"
+            }
+        )", pathSchema.c_str(), port, ToString(Codec).c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto d = DescribePrivatePath(runtime, "/MyRoot/OlapMinMaxTable", true, true);
+        UNIT_ASSERT_C(d.GetPathDescription().HasColumnTableDescription(),
+            "expected column table after backup");
+        const auto& schema = d.GetPathDescription().GetColumnTableDescription().GetSchema();
+        THashSet<TString> found;
+        for (const auto& ix : schema.GetIndexes()) {
+            found.insert(ix.GetName());
+        }
+
+        const THashSet<TString> expected{"idx_minmax"};
+        UNIT_ASSERT_VALUES_EQUAL(found, expected);
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnSingleShardTable) {

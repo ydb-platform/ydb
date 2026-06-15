@@ -1496,7 +1496,7 @@ endDiskTypeCheck:   ;
             return;
         }
 
-        if (relaxed && (!ephemeralConfig.HasSystemTablets() || !ephemeralConfig.HasStaticErasure())) {
+        if (relaxed && !ephemeralConfig.HasSystemTablets()) {
             return;
         }
 

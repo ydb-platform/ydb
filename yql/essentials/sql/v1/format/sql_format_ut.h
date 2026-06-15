@@ -1,6 +1,16 @@
 // NOLINTBEGIN(misc-definitions-in-headers)
 #pragma once
 
+Y_UNIT_TEST(Syntax) {
+    TCases cases = {
+        {"--!syntax_v0\nselect 1", "--!syntax_v0\nselect 1"},
+        {"--!syntax_v1\nselect 1", "--!syntax_v1\nSELECT\n\t1\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Pragma) {
     TCases cases = {
         {"pragma user = user;", "PRAGMA user = user;\n"},
@@ -519,6 +529,28 @@ Y_UNIT_TEST(TypeSelection) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(NullAsType) {
+    TCases cases = {
+        {"select cast(x as null)",
+         "SELECT\n\tCAST(x AS null)\n;\n"},
+        {"select cast(x as NULL)",
+         "SELECT\n\tCAST(x AS NULL)\n;\n"},
+        {"select cast(x as null?)",
+         "SELECT\n\tCAST(x AS null?)\n;\n"},
+        {"select list<null>",
+         "SELECT\n\tlist<null>\n;\n"},
+        {"select Optional<NULL>",
+         "SELECT\n\tOptional<NULL>\n;\n"},
+        {"select NULL",
+         "SELECT\n\tNULL\n;\n"},
+        {"select null",
+         "SELECT\n\tNULL\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(AlterTable) {
     TCases cases = {
         {"alter table user add user int32",
@@ -607,8 +639,8 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tCOMPACT\n;\n"},
         {"alter table user compact with(cascade=FaLsE)",
          "ALTER TABLE user\n\tCOMPACT WITH (cascade = FALSE)\n;\n"},
-        {"alter table user compact with(cascade=TruE,max_shards_in_flight=3)",
-         "ALTER TABLE user\n\tCOMPACT WITH (cascade = TRUE, max_shards_in_flight = 3)\n;\n"},
+        {"alter table user compact with(cascade=TruE,parallel=3)",
+         "ALTER TABLE user\n\tCOMPACT WITH (cascade = TRUE, parallel = 3)\n;\n"},
         {"alter table t alter column c set default 42",
          "ALTER TABLE t\n\tALTER COLUMN c SET DEFAULT 42\n;\n"},
         {"alter table t alter column c drop default",
@@ -945,6 +977,36 @@ Y_UNIT_TEST(Reduce) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Combine) {
+    TCases cases = {
+        {"combine leftInput with rightInput "
+         "on leftInput.key=rightInput.key using $f((value),(value))",
+         "COMBINE leftInput\nWITH rightInput\n"
+         "ON\n\tleftInput.key == rightInput.key\nUSING $f((value), (value));\n"},
+        {"combine leftInput presort key with rightInput presort key "
+         "on leftInput.key=rightInput.key using $f((value),(value))",
+         "COMBINE leftInput\n\tPRESORT\n\t\tkey\nWITH rightInput\n\tPRESORT\n\t\tkey\n"
+         "ON\n\tleftInput.key == rightInput.key\nUSING $f((value), (value));\n"},
+        {"combine leftInput presort key,subkey with rightInput presort key,subkey "
+         "on leftInput.key=rightInput.key AND leftInput.subkey=rightInput.subkey "
+         "using $f((value,extra),(value,extra))",
+         "COMBINE leftInput\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "WITH rightInput\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "ON\n\tleftInput.key == rightInput.key AND leftInput.subkey == rightInput.subkey\n"
+         "USING $f((value, extra), (value, extra));\n"},
+        {"combine leftInput as L presort key,subkey with rightInput as R presort key,subkey "
+         "on L.key=R.key AND L.subkey=R.subkey "
+         "using $f((value,extra),(value,extra))",
+         "COMBINE leftInput AS L\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "WITH rightInput AS R\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "ON\n\tL.key == R.key AND L.subkey == R.subkey\n"
+         "USING $f((value, extra), (value, extra));\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Select) {
     TCases cases = {
         {"select 1",
@@ -1199,6 +1261,44 @@ Y_UNIT_TEST(TableHints) {
          "SELECT\n\t*\nFROM\n\tplato.T WITH (\n\t\tfoo = bar,\n\t\tx = $y,\n\t\ta = (a, b, c),\n\t\tu = 'aaa',\n\t\tSCHEMA (foo int32, bar list<string>)\n\t)\n;\n"},
         {"select * from plato.T with schema struct<\nfoo:int32,\nbar:double\n> as a",
          "SELECT\n\t*\nFROM\n\tplato.T WITH SCHEMA struct<\n\t\tfoo: int32,\n\t\tbar: double\n\t> AS a\n;\n"},
+        {R"sql($input=select * from plato.T; select * from $input with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            $input = (
+                SELECT
+                    *
+                FROM
+                    plato.T
+            );
+
+            SELECT
+                *
+            FROM
+                $input WITH WATERMARK = ts - Interval('PT1S')
+            ;
+
+        )sql")},
+        {R"sql(select * from (select * from plato.T) with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            SELECT
+                *
+            FROM (
+                SELECT
+                    *
+                FROM
+                    plato.T
+            ) WITH WATERMARK = ts - Interval('PT1S');
+
+        )sql")},
+        {R"sql(select * from (values(1)) with watermark=ts-Interval("PT1S"))sql",
+         TrimIndent(R"sql(
+            SELECT
+                *
+            FROM (
+                VALUES
+                    (1)
+            ) WITH WATERMARK = ts - Interval('PT1S');
+
+        )sql")},
     };
 
     TSetup setup;

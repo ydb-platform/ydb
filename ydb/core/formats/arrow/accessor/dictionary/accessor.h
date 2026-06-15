@@ -29,6 +29,9 @@ protected:
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
+        if (ArrayPositions->IsNull(index)) {
+            return arrow::MakeNullScalar(ArrayDictionary->type());
+        }
         return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(GetIndexImpl(index)));
     }
     virtual TMinMax DoGetMinMaxScalars() const override;
@@ -69,9 +72,9 @@ public:
     }
 
     TDictionaryArray(const std::shared_ptr<arrow::Array>& dictionary, const std::shared_ptr<arrow::Array>& positions)
-        : TBase(TValidator::CheckNotNull(positions)->length(), EType::Dictionary, dictionary->type())
-        , ArrayDictionary(dictionary)
-        , ArrayPositions(positions)
+        : TBase(TValidator::CheckNotNull(positions)->length(), EType::Dictionary, TValidator::CheckNotNull(dictionary)->type())
+        , ArrayDictionary(TValidator::CheckNotNull(dictionary))
+        , ArrayPositions(TValidator::CheckNotNull(positions))
     {
     }
 };

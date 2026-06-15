@@ -29,7 +29,10 @@ View the description of the YQL query command:
 Acceptable values:
 
 * `data`: A YQL query that includes [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations; it can be used both to update data in the database and fetch several selections limited to 1,000 rows per selection.
+<<<<<<< HEAD
 * `scan`: A [scan](../../concepts/scan_query.md) YQL query; it allows read-only access to the database and can return only one result set, but without a limit on the number of rows in it. The server-side execution algorithm for `scan` queries is more complex than for `data`, so if you do not need to return more than 1,000 rows, it is more efficient to use the `data` query type.
+=======
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 * `scheme`: A YQL query that includes [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) operations.
     The default value is `data`. ||
 || `--stats` | Statistics mode.

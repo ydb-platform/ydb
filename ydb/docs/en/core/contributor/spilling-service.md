@@ -80,7 +80,7 @@ Detailed information about configuring the Spilling Service is available in the 
 
 ## See Also
 
-- [Spilling Concept](../concepts/spilling.md)
+- [Spilling Concept](../concepts/query_execution/spilling.md)
 - [Spilling configuration](../reference/configuration/table_service_config.md)
 - [{{ ydb-short-name }} monitoring](../devops/observability/monitoring.md)
 - [Performance diagnostics](../troubleshooting/performance/index.md)

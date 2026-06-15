@@ -12,6 +12,7 @@ items:
     mode: link
 - name: Cluster topology
   href: topology.md
+<<<<<<< HEAD
 - name: Transactions
   href: transactions.md
 - name: Optimizer
@@ -22,26 +23,36 @@ items:
   href: vector_search.md
 - name: Spilling
   href: spilling.md
+=======
+- name: Bridge mode
+  href: bridge.md
+- name: Query execution
+  href: query_execution/index.md
+  include:
+    path: query_execution/toc_p.yaml
+    mode: link
+- name: Transactions
+  href: transactions.md
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
 - name: Time to live and eviction
   href: ttl.md
-- name: Scan queries
-  href: scan_query.md
 - name: Database limits
   href: limits-ydb.md
-- name: Multi-Version Concurrency Control (MVCC)
-  href: mvcc.md
 - name: Asynchronous replication
   href: async-replication.md
   when: feature_async_replication
 - name: Data transfer
   href: transfer.md
   when: feature_transfer
+<<<<<<< HEAD
 - name: Streaming queries
   href: streaming-query.md
 - name: Federated query
   include:
     path: federated_query/toc_p.yaml
     mode: link  
+=======
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))

@@ -78,7 +78,11 @@ Administration, monitoring, security, and optimization.
 
 ### Performance Management
 
+<<<<<<< HEAD
   - [Query Plan Analysis (EXPLAIN)](../../dev/query-execution-optimization/query-plans-optimization.md): How to understand query execution plans and identify bottlenecks.
+=======
+  - [Query Plan Analysis (EXPLAIN)](../../dev/query-plans-optimization.md): How to understand query execution plans and identify bottlenecks.
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
   - [Cost-Based Optimizer](../query_execution/optimizer.md): Overview of how the query planner works.
 
 ### Monitoring and Diagnostics

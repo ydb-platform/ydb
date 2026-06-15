@@ -146,6 +146,8 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 LogTitle.GetWithTime().c_str(),
                 PrintHostIndex(host).c_str(),
                 FormatError(pbufferResponse.Error).c_str());
+
+            FailedWrites.Set(host);
             // The error will be set and replied below.
         }
     }
@@ -190,6 +192,10 @@ void TWriteRequestExecutor::SendAdditionalDirectWrites()
         return;
     }
 
+    // We will try to get the required number of successful responses by sending
+    // direct writes to handoffs and hosts to which requests were sent
+    // indirectly.
+
     // Additional direct writes for handoffs.
     SendDirectWriteRequestsToHandoffs(
         GetQuorumDeficit() - GetRunningDirectWrites().Count());
@@ -207,6 +213,8 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToDesired(size_t count)
 
     const auto hosts = VChunkConfig.GetDesiredPBuffers()
                            .Exclude(RequestedDirectWrites)
+                           .Exclude(CompletedWrites)
+                           .Exclude(FailedWrites)
                            .Exclude(IndirectCoordinator);
 
     for (THostIndex host: hosts) {
@@ -225,6 +233,8 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
 
     const auto hosts = VChunkConfig.GetSecondaryPBuffers()
                            .Exclude(RequestedDirectWrites)
+                           .Exclude(CompletedWrites)
+                           .Exclude(FailedWrites)
                            .Exclude(IndirectCoordinator);
 
     for (THostIndex host: hosts) {
@@ -398,7 +408,7 @@ void TWriteRequestExecutor::ScheduleHedging()
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s ScheduleHedging %s",
+        "%s Schedule OnHedgingTimeout() %s",
         LogTitle.GetWithTime().c_str(),
         FormatDuration(HedgingDelay).c_str());
 
@@ -421,9 +431,9 @@ void TWriteRequestExecutor::ScheduleRequestTimeout()
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s ScheduleRequestTimeoutCallback %s",
+        "%s Schedule OnRequestTimeout() %s",
         LogTitle.GetWithTime().c_str(),
-        FormatDuration(HedgingDelay).c_str());
+        FormatDuration(RequestTimeout).c_str());
 
     DirectBlockGroup->Schedule(
         RequestTimeout,

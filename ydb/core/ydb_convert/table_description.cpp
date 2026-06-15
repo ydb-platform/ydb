@@ -578,6 +578,12 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
             return false;
         }
 
+        for (auto& col : *desc->MutableColumns()) {
+            if (col.HasDefaultFromSequence() && !IsStartWithSlash(col.GetDefaultFromSequence())) {
+                col.SetDefaultFromSequence(JoinPath({workingDir, col.GetDefaultFromSequence()}));
+            }
+        }
+
         for (const auto &alter : req->alter_columns()) {
             auto column = desc->AddColumns();
             column->SetName(alter.name());
@@ -604,7 +610,9 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
                 case Ydb::Table::ColumnMeta::kFromSequence: {
                     auto fromSequence = column->MutableDefaultFromSequence();
                     TString sequenceName = alter.from_sequence().name();
-                    if (!IsStartWithSlash(sequenceName)) {
+                    if (IsStartWithSlash(sequenceName)) {
+                        *fromSequence = sequenceName;
+                    } else {
                         *fromSequence = JoinPath({workingDir, sequenceName});
                     }
                     break;

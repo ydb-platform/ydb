@@ -10,6 +10,26 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
+bool FulltextUsesRowIdAsDocId(const TIndexDescription* indexDesc) {
+    auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+    return ft && ft->GetUseRowIdAsDocId();
+}
+
+template <class F>
+void ForEachFulltextDocIdColumn(const NYql::TKikimrTableMetadata& table, const TIndexDescription* indexDesc, F&& f) {
+    if (FulltextUsesRowIdAsDocId(indexDesc)) {
+        f(TStringBuf(NTableIndex::NFulltext::RowIdColumn));
+    } else {
+        for (const auto& column : table.KeyColumnNames) {
+            f(TStringBuf(column));
+        }
+    }
+}
+
+}
+
 TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExprBase& inputRow,
     const TIndexDescription* indexDesc, TPositionHandle pos, NYql::TExprContext& ctx)
 {
@@ -142,10 +162,10 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
         .Done();
     tokenRowTuples.emplace_back(tokenTuple);
 
-    // Add primary key columns
-    for (const auto& column : table.Metadata->KeyColumnNames) {
+    // Add document-id columns (main-table PK, or __ydb_row_id when UseRowIdAsDocId is set)
+    ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
         addIndexColumn(column);
-    }
+    });
 
     // Add data columns (covered columns)
     if (!forDelete && !withRelevance) {
@@ -226,10 +246,10 @@ TExprBase BuildFulltextDocsRows(const TKikimrTableDescription& table, const TInd
 
     // During delete, we only care about total document length and that's all
     if (!forDelete) {
-        // Add primary key columns
-        for (const auto& column : table.Metadata->KeyColumnNames) {
+        // Add document-id columns (main-table PK, or __ydb_row_id when UseRowIdAsDocId is set)
+        ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
             addIndexColumn(column);
-        }
+        });
         // Add data columns (covered columns)
         for (const auto& column : indexDesc->DataColumns) {
             addIndexColumn(column);

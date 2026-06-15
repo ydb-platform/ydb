@@ -121,6 +121,20 @@ namespace NFulltext {
     inline constexpr const char* FreqColumn = "__ydb_freq";
     inline constexpr const char* IdColumn = "__ydb_id";
 
+    // Synthetic doc_id column on the main table. When present together with a unique
+    // secondary index over [RowIdColumn], the fulltext index uses this column as doc_id
+    // instead of the main-table PK. At read time the unique index resolves __ydb_row_id -> PK.
+    // The user may pre-create it, or the schemeshard auto-provisions it (column + unique
+    // index, named RowIdUniqueIndexName, backed by RowIdSequenceName) when a fulltext index
+    // is built on a table with a non-single-integer ("custom") primary key.
+    inline constexpr const char* RowIdColumn = "__ydb_row_id";
+
+    // Deterministic names of the auto-provisioned unique secondary index over [__ydb_row_id] and
+    // of the sequence that generates __ydb_row_id values. Deterministic so a second fulltext index
+    // on the same table reuses the same infrastructure instead of creating duplicates.
+    inline constexpr const char* RowIdUniqueIndexName = "uniq__ydb_row_id";
+    inline constexpr const char* RowIdSequenceName = "_seq___ydb_row_id";
+
     inline constexpr const char* DocsTable = "indexImplDocsTable";
     inline constexpr const char* DocLengthColumn = "__ydb_length";
 

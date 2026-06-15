@@ -1320,7 +1320,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 return sorted[Math.floor(sorted.length / 2)];
             }
 
-            function nbsTabletRenderTableSkeleton(sweepValues) {
+            function nbsTabletRenderTableSkeleton(sweepValues, showReads) {
                 const tbl = document.getElementById("nbs-run-result-table");
                 if (!tbl) {
                     return;
@@ -1328,34 +1328,45 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
 
                 let html = "<table class='table table-condensed table-bordered' style='margin-top:12px'>";
                 html += "<thead><tr>";
-                html += "<th rowspan='2' style='vertical-align:middle'>MaxInFlight</th>";
-                html += "<th rowspan='2' style='vertical-align:middle'>Direction</th>";
+                if (showReads) {
+                    html += "<th rowspan='2' style='vertical-align:middle'>MaxInFlight</th>";
+                    html += "<th rowspan='2' style='vertical-align:middle'>Direction</th>";
+                } else {
+                    html += "<th style='vertical-align:middle'>MaxInFlight</th>";
+                    html += "<th style='vertical-align:middle'>Direction</th>";
+                }
                 html += "<th>IOPS</th><th>p50 us</th><th>p95 us</th><th>p99 us</th>";
                 html += "</tr></thead>";
                 html += "<tbody>";
                 for (let i = 0; i < sweepValues.length; i++) {
                     const v = sweepValues[i];
                     html += "<tr id='nbs-sweep-w-" + i + "'>";
-                    html += "<td rowspan='2' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
+                    if (showReads) {
+                        html += "<td rowspan='2' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
+                    } else {
+                        html += "<td style='font-weight:bold'>" + v + "</td>";
+                    }
                     html += "<td>Writes</td>";
                     html += "<td id='nbs-sw-wiops-" + i + "'>&#9711;</td>";
                     html += "<td id='nbs-sw-wp50-"  + i + "'>&#9711;</td>";
                     html += "<td id='nbs-sw-wp95-"  + i + "'>&#9711;</td>";
                     html += "<td id='nbs-sw-wp99-"  + i + "'>&#9711;</td>";
                     html += "</tr>";
-                    html += "<tr id='nbs-sweep-r-" + i + "'>";
-                    html += "<td>Reads</td>";
-                    html += "<td id='nbs-sw-riops-" + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sw-rp50-"  + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sw-rp95-"  + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sw-rp99-"  + i + "'>&#9711;</td>";
-                    html += "</tr>";
+                    if (showReads) {
+                        html += "<tr id='nbs-sweep-r-" + i + "'>";
+                        html += "<td>Reads</td>";
+                        html += "<td id='nbs-sw-riops-" + i + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-rp50-"  + i + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-rp95-"  + i + "'>&#9711;</td>";
+                        html += "<td id='nbs-sw-rp99-"  + i + "'>&#9711;</td>";
+                        html += "</tr>";
+                    }
                 }
                 html += "</tbody></table>";
                 tbl.innerHTML = html;
             }
 
-            function nbsTabletRenderMultiTrialSkeleton(sweepValues, trials) {
+            function nbsTabletRenderMultiTrialSkeleton(sweepValues, trials, showReads) {
                 const tbl = document.getElementById("nbs-run-result-table");
                 if (!tbl) {
                     return;
@@ -1370,34 +1381,37 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 html += "</tr></thead><tbody>";
                 for (let i = 0; i < sweepValues.length; i++) {
                     const v = sweepValues[i];
-                    const rowSpan = 2 * trials;
+                    const rowSpan = showReads ? 2 * trials : trials;
                     for (let t = 0; t < trials; t++) {
                         html += "<tr id='nbs-sweep-w-" + i + "-" + t + "'>";
                         if (t === 0) {
                             html += "<td rowspan='" + rowSpan +
                                 "' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
                         }
-                        html += "<td rowspan='2' style='vertical-align:middle'>" + (t + 1) + "</td>";
+                        html += "<td rowspan='" + (showReads ? "2" : "1") +
+                            "' style='vertical-align:middle'>" + (t + 1) + "</td>";
                         html += "<td>Writes</td>";
                         html += "<td id='nbs-sw-wiops-" + i + "-" + t + "'>&#9711;</td>";
                         html += "<td id='nbs-sw-wp50-" + i + "-" + t + "'>&#9711;</td>";
                         html += "<td id='nbs-sw-wp95-" + i + "-" + t + "'>&#9711;</td>";
                         html += "<td id='nbs-sw-wp99-" + i + "-" + t + "'>&#9711;</td>";
                         html += "</tr>";
-                        html += "<tr id='nbs-sweep-r-" + i + "-" + t + "'>";
-                        html += "<td>Reads</td>";
-                        html += "<td id='nbs-sw-riops-" + i + "-" + t + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-rp50-" + i + "-" + t + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-rp95-" + i + "-" + t + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-rp99-" + i + "-" + t + "'>&#9711;</td>";
-                        html += "</tr>";
+                        if (showReads) {
+                            html += "<tr id='nbs-sweep-r-" + i + "-" + t + "'>";
+                            html += "<td>Reads</td>";
+                            html += "<td id='nbs-sw-riops-" + i + "-" + t + "'>&#9711;</td>";
+                            html += "<td id='nbs-sw-rp50-" + i + "-" + t + "'>&#9711;</td>";
+                            html += "<td id='nbs-sw-rp95-" + i + "-" + t + "'>&#9711;</td>";
+                            html += "<td id='nbs-sw-rp99-" + i + "-" + t + "'>&#9711;</td>";
+                            html += "</tr>";
+                        }
                     }
                 }
                 html += "</tbody></table>";
                 tbl.innerHTML = html;
             }
 
-            function nbsTabletRenderMedianSkeleton(sweepValues) {
+            function nbsTabletRenderMedianSkeleton(sweepValues, showReads) {
                 const tbl = document.getElementById("nbs-run-median-table");
                 if (!tbl) {
                     return;
@@ -1406,37 +1420,48 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 let html = "<h4 style='margin-top:0'>Median trial (by write IOPS)</h4>";
                 html += "<table class='table table-condensed table-bordered'>";
                 html += "<thead><tr>";
-                html += "<th rowspan='2' style='vertical-align:middle'>MaxInFlight</th>";
-                html += "<th rowspan='2' style='vertical-align:middle'>Direction</th>";
+                if (showReads) {
+                    html += "<th rowspan='2' style='vertical-align:middle'>MaxInFlight</th>";
+                    html += "<th rowspan='2' style='vertical-align:middle'>Direction</th>";
+                } else {
+                    html += "<th style='vertical-align:middle'>MaxInFlight</th>";
+                    html += "<th style='vertical-align:middle'>Direction</th>";
+                }
                 html += "<th>IOPS</th><th>p50 us</th><th>p95 us</th><th>p99 us</th>";
                 html += "</tr></thead><tbody>";
                 for (let i = 0; i < sweepValues.length; i++) {
                     const v = sweepValues[i];
                     html += "<tr id='nbs-median-w-" + i + "'>";
-                    html += "<td rowspan='2' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
+                    if (showReads) {
+                        html += "<td rowspan='2' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
+                    } else {
+                        html += "<td style='font-weight:bold'>" + v + "</td>";
+                    }
                     html += "<td>Writes</td>";
                     html += "<td id='nbs-sm-wiops-" + i + "'>&#9711;</td>";
                     html += "<td id='nbs-sm-wp50-" + i + "'>&#9711;</td>";
                     html += "<td id='nbs-sm-wp95-" + i + "'>&#9711;</td>";
                     html += "<td id='nbs-sm-wp99-" + i + "'>&#9711;</td>";
                     html += "</tr>";
-                    html += "<tr id='nbs-median-r-" + i + "'>";
-                    html += "<td>Reads</td>";
-                    html += "<td id='nbs-sm-riops-" + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sm-rp50-" + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sm-rp95-" + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sm-rp99-" + i + "'>&#9711;</td>";
-                    html += "</tr>";
+                    if (showReads) {
+                        html += "<tr id='nbs-median-r-" + i + "'>";
+                        html += "<td>Reads</td>";
+                        html += "<td id='nbs-sm-riops-" + i + "'>&#9711;</td>";
+                        html += "<td id='nbs-sm-rp50-" + i + "'>&#9711;</td>";
+                        html += "<td id='nbs-sm-rp95-" + i + "'>&#9711;</td>";
+                        html += "<td id='nbs-sm-rp99-" + i + "'>&#9711;</td>";
+                        html += "</tr>";
+                    }
                 }
                 html += "</tbody></table>";
                 tbl.innerHTML = html;
             }
 
-            function nbsTabletRenderDetailSkeleton(sweepValues, trials) {
+            function nbsTabletRenderDetailSkeleton(sweepValues, trials, showReads) {
                 if (trials > 1) {
-                    nbsTabletRenderMultiTrialSkeleton(sweepValues, trials);
+                    nbsTabletRenderMultiTrialSkeleton(sweepValues, trials, showReads);
                 } else {
-                    nbsTabletRenderTableSkeleton(sweepValues);
+                    nbsTabletRenderTableSkeleton(sweepValues, showReads);
                 }
             }
 
@@ -1854,13 +1879,17 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     nbsTabletTrim($("#nbs-run-duration").val())) || 0;
                 const delayBeforeSec = parseInt(
                     nbsTabletTrim($("#nbs-run-delay-before").val())) || 0;
+                const disableReplication = $("#nbs-run-disable-replication").is(":checked");
+                const readRatioPct = disableReplication ? 0 : (parseInt(
+                    nbsTabletTrim($("#nbs-run-read-ratio").val()) || "0") || 0);
+                const showReads = readRatioPct > 0;
 
-                nbsTabletRenderDetailSkeleton(sweepValues, trials);
+                nbsTabletRenderDetailSkeleton(sweepValues, trials, showReads);
                 const medianDiv = document.getElementById("nbs-run-median-table");
                 if (medianDiv) {
                     if (trials > 1) {
                         medianDiv.style.display = "";
-                        nbsTabletRenderMedianSkeleton(sweepValues);
+                        nbsTabletRenderMedianSkeleton(sweepValues, showReads);
                     } else {
                         medianDiv.style.display = "none";
                         medianDiv.innerHTML = "";

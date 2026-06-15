@@ -1008,7 +1008,7 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
         ChunkState[chunkIdx].PreviousNonce = lastNonce + noncesPerChunk * (ui64)i;
         // Mark newly allocated log chunks as chunks containing this owners record
         LogChunks.push_back(TLogChunkInfo(chunkIdx, (ui32)OwnerData.size()));
-        Mon.LogChunks->Inc();
+        *Mon.LogChunks = LogChunks.size();
         if (IsOwnerUser(owner) && i < chunksContainingPayload && OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
             LogChunks.back().RegisterLogSector<true>(owner, lsn);
         }

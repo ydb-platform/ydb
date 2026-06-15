@@ -13,10 +13,10 @@ CREATE TABLE documents (
 );
 
 UPSERT INTO documents (id, payload) VALUES
-    (1, JsonDocument(@@{"data": [1, 2, 3]}@@)),
-    (2, JsonDocument(@@{"data": "plain text"}@@)),
-    (3, JsonDocument(@@{"data": {"nested": true}}@@)),
-    (4, JsonDocument(@@{"meta": "no data field"}@@));
+    (1, JsonDocument(@@{"archived": false, "value": 1,    "data": [1, 2, 3]}@@)),
+    (2, JsonDocument(@@{"archived": false, "value": 2,    "data": "plain text"}@@)),
+    (3, JsonDocument(@@{"archived": true,  "value": 3,    "data": {"nested": true}}@@)),
+    (4, JsonDocument(@@{"archived": false, "value": null, "meta": "no data field"}@@));
 ```
 
 ## Найти документы, у которых поле содержит массив

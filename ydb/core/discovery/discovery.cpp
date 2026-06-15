@@ -334,7 +334,7 @@ namespace NDiscoveryPrivate {
 
         void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr ev) {
             YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY_CACHE, "Handle",
-                {"event", ev->Get()->ToString()});
+                {"ev", ev->Get()->ToString()});
             if (!AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
                 return;
             }
@@ -360,7 +360,7 @@ namespace NDiscoveryPrivate {
 
         void Handle(TEvStateStorage::TEvBoardInfo::TPtr ev) {
             YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY_CACHE, "Handle",
-                {"event", ev->Get()->ToString()});
+                {"ev", ev->Get()->ToString()});
 
             THolder<TEvStateStorage::TEvBoardInfo> msg = ev->Release();
 
@@ -428,7 +428,7 @@ namespace NDiscoveryPrivate {
 
         void HandleOnInitialization(TEvPrivate::TEvRequest::TPtr& ev) {
             YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY_CACHE, "Handle on initialization",
-                {"event", ev->Get()->ToString()});
+                {"ev", ev->Get()->ToString()});
 
             const auto* msg = ev->Get();
 
@@ -437,7 +437,7 @@ namespace NDiscoveryPrivate {
 
         void HandleOnWork(TEvPrivate::TEvRequest::TPtr& ev) {
             YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY_CACHE, "Handle on work",
-                {"event", ev->Get()->ToString()});
+                {"ev", ev->Get()->ToString()});
 
             const auto* msg = ev->Get();
 
@@ -466,14 +466,14 @@ namespace NDiscoveryPrivate {
 
         void HandleOnInitialization(TEvNodeWardenStorageConfig::TPtr& ev) {
             YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY_CACHE, "Handle on initialization",
-                {"event", ev->Get()->ToString()});
+                {"ev", ev->Get()->ToString()});
             BridgeInfo = ev->Get()->BridgeInfo;
             TryFinishInitialization();
         }
 
         void HandleOnWork(TEvNodeWardenStorageConfig::TPtr& ev) {
             YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY_CACHE, "Handle on work",
-                {"event", ev->Get()->ToString()});
+                {"ev", ev->Get()->ToString()});
             BridgeInfo = ev->Get()->BridgeInfo;
         }
 
@@ -507,8 +507,8 @@ namespace NDiscoveryPrivate {
                 return;
             }
 
-            YDB_LOG_DEBUG_COMP(NKikimrServices::DISCOVERY_CACHE, "Finish initialization awaiting requests",
-                {"count", AwaitingRequests.size()});
+            YDB_LOG_DEBUG_COMP(NKikimrServices::DISCOVERY_CACHE, "Finish initialization",
+                {"awaitingRequests", AwaitingRequests.size()});
 
             Become(&TThis::StateWork);
 
@@ -618,7 +618,7 @@ public:
         const auto& entry = response->ResultSet.front();
 
         YDB_LOG_TRACE_COMP(NKikimrServices::DISCOVERY, "Handle",
-            {"schemeCacheResponse", SchemeCacheResponse->ToString()},
+            {"ev", SchemeCacheResponse->ToString()},
             {"entry", entry.ToString()});
 
         if (response->ErrorCount > 0) {
@@ -661,7 +661,7 @@ public:
 
         auto info = entry.DomainInfo;
         if (NeedResolveResources(info)) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::DISCOVERY, "Resolve resources domain domain, resources domain",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::DISCOVERY, "Resolve resources domain",
                 {"domainKey", info->DomainKey},
                 {"resourcesDomainKey", info->ResourcesDomainKey});
 

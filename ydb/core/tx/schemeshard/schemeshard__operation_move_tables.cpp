@@ -38,6 +38,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         checks.IsResolved()
               .NotDeleted()
               .NotAsyncReplicaTable()
+              .NotReadOnlyColumnTable()
               .IsCommonSensePath();
 
         if (!checks) {

@@ -36,17 +36,9 @@ The `{{ ydb-cli }} export s3` command is used to back up data to S3-compatible s
 
 The `{{ ydb-cli }} import s3` command is used to recover data from a backup created in S3-compatible storage. Follow [this link](../reference/ydb-cli/export-import/import-s3.md) to the {{ ydb-short-name }} CLI reference for information about this command.
 
-### NFS {#nfs}
-
-The `{{ ydb-cli }} export nfs` command is used to back up data to [NFS](https://en.wikipedia.org/wiki/Network_File_System) mounted on hosts where {{ ydb-short-name }} is running. Follow [this link](../reference/ydb-cli/export-import/export-nfs.md) to the {{ ydb-short-name }} CLI reference for information about this command.
-
-The `{{ ydb-cli }} import nfs` command is used to recover data from a backup created in [NFS](https://en.wikipedia.org/wiki/Network_File_System) mounted on hosts where {{ ydb-short-name }} is running. Follow [this link](../reference/ydb-cli/export-import/import-nfs.md) to the {{ ydb-short-name }} CLI reference for information about this command.
-
-For NFS setup for backup and recovery, see the [Backup and recovery via NFS](../recipes/nfs-backup/nfs-backup.md) recipe.
-
 {% note info %}
 
-The speed of backup and recovery operations to/from S3-compatible storage or NFS is configured to minimize impact on user workload. To control the speed of operations, configure limits for the corresponding queue in the [resource broker](../reference/configuration/resource_broker_config.md#resource-broker-config).
+The speed of backup and recovery operations to/from S3-compatible storage is configured to minimize impact on user workload. To control the speed of operations, configure limits for the corresponding queue in the [resource broker](../reference/configuration/resource_broker_config.md#resource-broker-config).
 
 {% endnote %}
 

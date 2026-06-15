@@ -25,4 +25,3 @@ feature_flags:
 | `enable_topic_compactification_by_key`                   | Enabling topic compactification in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_kafka_transactions`                              | Enabling transactions in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_grpc_audit`                                      | Enabling [audit](../../security/audit-log.md#grpc-connection) of gRPC connection state changes |
-| `enable_fs_backups`                                      | [Backup and recovery to a network file system](../../concepts/backup.md#nfs) |

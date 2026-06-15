@@ -3,17 +3,12 @@
 The {{ ydb-short-name }} CLI contains a set of commands designed to export and import data and descriptions of data schema objects. Data can be exported to create backups for subsequent recovery and for other purposes.
 
 - [The export file structure](../file-structure.md) is used for exporting data both to the file system and S3-compatible object storage.
-- [Exporting cluster's metadata to the file system using `admin cluster dump`](../tools-dump.md#cluster)
-- [Importing cluster's metadata from the file system using `admin cluster restore`](../tools-restore.md#cluster)
-- [Exporting database's data and metadata to the file system using `admin database dump`](../tools-dump.md#db)
-- [Importing database's data and metadata from the file system using `admin database restore`](../tools-restore.md#db)
+- [Exporting cluster' metadata to the file system using `admin cluster dump`](../tools-dump.md#cluster)
+- [Importing cluster' metadata from the file system using `admin cluster restore`](../tools-restore.md#cluster)
+- [Exporting database' metadata and data to the file system using `admin database dump`](../tools-dump.md#db)
+- [Importing database' metadata and data from the file system using `admin database restore`](../tools-restore.md#db)
 - [Exporting individual schema objects to the file system using `tools dump`](../tools-dump.md#schema-objects)
 - [Importing individual schema objects from the file system using `tools restore`](../tools-restore.md#schema-objects)
 - [Connecting to and authenticating with S3-compatible object storage](../auth-s3.md)
 - [Exporting data to S3-compatible object storage using `export s3`](../export-s3.md)
 - [Importing data from S3-compatible object storage using `import s3`](../import-s3.md)
-- [Configuring NFS for backup](../../../../recipes/nfs-backup/nfs-backup.md)
-- [Exporting data to NFS using `export nfs`](../export-nfs.md)
-- [Importing data from NFS using `import nfs`](../import-nfs.md)
-
-{% include [_includes/options_overlay.md](options_overlay.md) %}

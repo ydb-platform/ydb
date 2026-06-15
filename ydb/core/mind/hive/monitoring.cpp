@@ -2802,12 +2802,8 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            TNodeInfo* node = Self->FindNode(NodeId);
-            if (node != nullptr) {
-                Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Down\":" + (node->Down ? "true" : "false") + "}";
-            } else {
-                Response = "{\"NodeId\":" + ToString(NodeId) + ",\"Down\":false}";
-            }
+            Response = R"({"error":"Must use POST request"})";
+            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);

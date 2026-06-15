@@ -6,6 +6,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
 
+#include <ydb/core/protos/set_column_constraint.pb.h>
+
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 
@@ -373,10 +375,9 @@ public:
         }
 
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
+        shardStatus.ValidateStatus = record.GetStatus();
 
-        if (record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::DONE) {
-            shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::DONE;
-
+        if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
                 operationInfo.ValidationFailed = true;
@@ -395,12 +396,10 @@ public:
 
             Progress(BuildId);
 
-        } else if (record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR ||
-                   record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+        } else if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST) {
             LOG_E("TTxReplyValidateRowCondition: error on shard# " << shardIdx
                 << ", status# " << record.GetStatus());
 
-            shardStatus.Status = record.GetStatus();
             operationInfo.ValidationFailed = true;
 
             for (const auto& issue : record.GetIssues()) {
@@ -419,7 +418,6 @@ public:
         } else {
             LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
                 << " still in progress, status# " << record.GetStatus());
-            shardStatus.Status = record.GetStatus();
             // todo: persist shard status
         }
 

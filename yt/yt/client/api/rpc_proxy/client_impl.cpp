@@ -1087,7 +1087,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateQueueProducerSessionPtr& rsp) {
         INodePtr userMeta;
         if (rsp->has_user_meta()) {
-            userMeta = ConvertTo<INodePtr>(TYsonString(FromProto<TString>(rsp->user_meta())));
+            userMeta = ConvertTo<INodePtr>(TYsonString(FromProto<std::string>(rsp->user_meta())));
         }
 
         return TCreateQueueProducerSessionResult{

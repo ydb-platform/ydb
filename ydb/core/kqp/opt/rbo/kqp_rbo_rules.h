@@ -81,6 +81,17 @@ class TInlineJoinFiltersRule : public ISimplifiedRule {
 };
 
 /**
+ * Rewrite right join into left join
+ * Swap arguments and rearrange join conditions
+ */
+class TRewriteRightJoinRule : public ISimplifiedRule {
+  public:
+    TRewriteRightJoinRule() : ISimplifiedRule("Rewrite right join", ERuleProperties::RequireParents ) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Remove a left join when the right side cannot change left-side row multiplicity
  * and no right-side output is used above the join.
  */

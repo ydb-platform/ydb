@@ -28,9 +28,20 @@ struct TNbsDbgLikeFinishStats {
     ui64 ReadsPbIssued = 0;
     ui64 ReadsPbOk = 0;
     ui64 ReadsPbBytes = 0;
+    ui64 ReadsErr = 0; // measurement-window read errors (counterpart of WritesErr)
     ui64 ReadsDDiskIssued = 0;
     ui64 ReadsDDiskOk = 0;
     ui64 ReadsDDiskBytes = 0;
+
+    // Full-run totals (not gated by the measurement window). Used by the
+    // load actor / proxy to render the run summary; the measured fields
+    // above feed the service-actor aggregation.
+    ui64 WritesOkTotal = 0;
+    ui64 WriteBytesTotal = 0;
+    ui64 ReadsIssuedTotal = 0;
+    ui64 ReadsOkTotal = 0;
+    ui64 ReadBytesTotal = 0;
+
     ui64 RunningMs = 0;
     ui64 MeasuredMs = 0;
     ui32 MaxInFlight = 0;
@@ -224,19 +235,44 @@ struct TEvLoad {
     struct TEvNbsWrite : public TEventPB<TEvNbsWrite,
         NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWrite, EvNbsWrite>
     {
+        using TBase = TEventPB<TEvNbsWrite,
+            NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWrite, EvNbsWrite>;
+
+        // Write data carried as a direct TRope on local (same-node) delivery.
+        // FillRecord() moves it into the protobuf payload before serialization.
+        TRope Payload;
+
         TEvNbsWrite() = default;
         TEvNbsWrite(ui64 address, ui32 sizeBytes) {
             Record.SetAddress(address);
             Record.SetSizeBytes(sizeBytes);
         }
+
+        ui32 CalculateSerializedSize() const override {
+            const_cast<TEvNbsWrite*>(this)->FillRecord();
+            return TBase::CalculateSerializedSize();
+        }
+
+        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
+            const_cast<TEvNbsWrite*>(this)->FillRecord();
+            return TBase::SerializeToArcadiaStream(chunker);
+        }
+
+        static TEvNbsWrite* Load(const NActors::TEventSerializedData* data);
+
+    private:
+        void FillRecord();
     };
 
     struct TEvNbsWriteResult : public TEventPB<TEvNbsWriteResult,
         NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWriteResult, EvNbsWriteResult>
     {
         TEvNbsWriteResult() = default;
-        explicit TEvNbsWriteResult(ui32 status) {
+        explicit TEvNbsWriteResult(NKikimr::ENbsIoResultStatus status, TString reason = {}) {
             Record.SetStatus(status);
+            if (!reason.empty()) {
+                Record.SetReason(std::move(reason));
+            }
         }
     };
 
@@ -256,8 +292,11 @@ struct TEvLoad {
         // Read payload is attached separately via AddPayload(TRope) and
         // recovered on the receiver via GetPayload(0).
         TEvNbsReadResult() = default;
-        explicit TEvNbsReadResult(ui32 status) {
+        explicit TEvNbsReadResult(NKikimr::ENbsIoResultStatus status, TString reason = {}) {
             Record.SetStatus(status);
+            if (!reason.empty()) {
+                Record.SetReason(std::move(reason));
+            }
         }
     };
 

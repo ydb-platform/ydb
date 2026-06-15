@@ -193,9 +193,9 @@ public:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalFulltextCompact:
             case EType::GlobalFulltextCompactRelevance: {
-                NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-                *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
-                SpecializedIndexDescription = std::move(fulltextIndexDescription);
+                // Keep the whole fulltext index description (not just Settings) so that
+                // UseRowIdAsDocId survives downstream into the query compiler.
+                SpecializedIndexDescription = index.GetFulltextIndexDescription();
                 break;
             }
             case EType::LocalBloomFilter:

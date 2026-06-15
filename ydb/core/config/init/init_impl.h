@@ -1372,7 +1372,7 @@ public:
             AddLabelToAppConfig(it->first, it->second);
         }
 
-        Logger.Out() << "configured" << Endl;
+        Logger.Out() << "Configured YDB server" << Endl;
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
@@ -1656,7 +1656,6 @@ public:
         }
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
-        configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";
         configsDispatcherInitInfo.DebugInfo = TDebugInfo {
             .InitInfo = InitDebug.ConfigTransformInfo,
         };

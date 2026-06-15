@@ -1063,7 +1063,14 @@ public:
         }
 
         if (!outputTablesByCluster.empty()) {
-            return UploadSeveralFmrTablesToYt<TPublishResult, TPublishOptions>(outputTablesByCluster, std::move(options), nodePos);
+            return UploadSeveralFmrTablesToYt<TPublishResult, TPublishOptions>(outputTablesByCluster, TPublishOptions(options), nodePos)
+                .Apply([this, node, &ctx, options = std::move(options)] (const auto& f) mutable {
+                    auto uploadResult = f.GetValue();
+                    if (!uploadResult.Success()) {
+                        return MakeFuture(std::move(uploadResult));
+                    }
+                    return Slave_->Publish(node, ctx, std::move(options));
+                });
         }
         return Slave_->Publish(node, ctx, std::move(options));
     }

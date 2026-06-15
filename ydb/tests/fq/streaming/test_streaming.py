@@ -610,8 +610,8 @@ LIMIT 1"""
         future = kikimr.ydb_client.query_async(sql)
         time.sleep(1)
 
-        rows = [('{"field1": "v1"}', {})]
-        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        data = ['{"field1": "v1"}']
+        self.write_stream(data, endpoint=endpoint)
 
         result_sets = future.result()
         row = result_sets[0].rows[0]

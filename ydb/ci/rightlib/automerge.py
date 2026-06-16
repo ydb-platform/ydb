@@ -69,6 +69,7 @@ class PrAutomerger:
             self.logger.info("check failed")
             self.add_failed_comment(pr, f"Check `{check_name}` failed.")
             self.add_pr_failed_label(pr)
+            self.clear_error_label(pr)
             return
 
         elif check.state == "success":
@@ -81,6 +82,14 @@ class PrAutomerger:
 
     def add_pr_failed_label(self, pr: PullRequest):
         pr.add_to_labels(pr_label_fail)
+
+    def clear_error_label(self, pr: PullRequest):
+        if pr_label_error not in [l.name for l in pr.labels]:
+            return
+        try:
+            pr.remove_from_labels(pr_label_error)
+        except Exception:
+            self.logger.warning("failed to remove %s label", pr_label_error)
 
     def git_merge_pr(self, pr: PullRequest):
         shutil.rmtree("merge-repo", ignore_errors=True)
@@ -105,6 +114,7 @@ class PrAutomerger:
             except subprocess.CalledProcessError:
                 self.add_failed_comment(pr, "Unable to merge PR.")
                 self.add_pr_failed_label(pr)
+                self.clear_error_label(pr)
                 return False
 
             try:
@@ -118,7 +128,7 @@ class PrAutomerger:
                     self.logger.warning("push to %s rejected again, blocking automerge", pr.base.ref)
                     self.add_failed_comment(pr, "Unable to push merged revision (failed twice in a row).")
                     self.add_pr_failed_label(pr)
-                    pr.remove_from_labels(pr_label_error)
+                    self.clear_error_label(pr)
                 else:
                     # Most likely a race: someone pushed to the base branch between
                     # our clone and push. Not a PR problem, retry on next iteration.
@@ -138,9 +148,7 @@ class PrAutomerger:
         if not self.git_merge_pr(pr):
             self.logger.info("unable to merge PR")
             return
-        pr_labels = [l.name for l in pr.labels]
-        if pr_label_error in pr_labels:
-            pr.remove_from_labels(pr_label_error)
+        self.clear_error_label(pr)
         self.logger.info("deleting ref %r", pr.head.ref)
         self.repo.get_git_ref(f"heads/{pr.head.ref}").delete()
         body = f"The PR was successfully merged into {pr.base.ref} using workflow"

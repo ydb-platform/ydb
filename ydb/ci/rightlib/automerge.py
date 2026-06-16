@@ -114,8 +114,9 @@ class PrAutomerger:
             self.add_failed_comment(pr, "Unable to push merged revision (failed to schedule retry).")
             self.add_pr_failed_label(pr)
 
-    def clone_merge_repo(self, pr: PullRequest):
-        repo_url = f"https://{self.token}@github.com/{self.repo_name}.git"
+    def git_merge_pr(self, pr: PullRequest):
+        shutil.rmtree("merge-repo", ignore_errors=True)
+        original_dir = os.getcwd()
         try:
             self.git_run(
                 "clone",
@@ -123,29 +124,9 @@ class PrAutomerger:
                 "--single-branch",
                 "--branch",
                 pr.base.ref,
-                repo_url,
+                f"https://{self.token}@github.com/{self.repo_name}.git",
                 "merge-repo",
             )
-        except subprocess.CalledProcessError:
-            self.logger.warning(
-                "blobless clone failed, falling back to single-branch clone",
-                exc_info=True,
-            )
-            shutil.rmtree("merge-repo", ignore_errors=True)
-            self.git_run(
-                "clone",
-                "--single-branch",
-                "--branch",
-                pr.base.ref,
-                repo_url,
-                "merge-repo",
-            )
-
-    def git_merge_pr(self, pr: PullRequest):
-        shutil.rmtree("merge-repo", ignore_errors=True)
-        original_dir = os.getcwd()
-        try:
-            self.clone_merge_repo(pr)
             os.chdir("merge-repo")
             self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
             self.git_run("checkout", pr.base.ref)

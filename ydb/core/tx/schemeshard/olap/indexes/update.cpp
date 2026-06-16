@@ -59,7 +59,7 @@ void TOlapIndexUpsert::SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& re
     IndexConstructor.SerializeToProto(requestedProto);
 }
 
-TConclusionStatus TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& indexSchema) {
+bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& indexSchema) {
     Name = indexSchema.GetName();
     if (!!indexSchema.GetStorageId()) {
         StorageId = indexSchema.GetStorageId();
@@ -67,10 +67,8 @@ TConclusionStatus TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::
     if (indexSchema.HasInheritPortionStorage()) {
         InheritPortionStorage = indexSchema.GetInheritPortionStorage();
     }
-    if (!IndexConstructor.DeserializeFromProto(indexSchema)) {
-        return TConclusionStatus::Fail("olap index operation error");
-    }
-    return TConclusionStatus::Success();
+    AFL_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
+    return true;
 }
 
 bool TOlapIndexesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
@@ -94,10 +92,7 @@ bool TOlapIndexesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& a
     TSet<TString> upsertIndexNames;
     for (auto& indexSchema : alterRequest.GetUpsertIndexes()) {
         TOlapIndexUpsert index;
-        if (auto res = index.DeserializeFromProto(indexSchema); res.IsFail()) {
-            errors.AddError(NKikimrScheme::StatusInvalidParameter, res.GetErrorMessage());
-            return false;
-        }
+        AFL_VERIFY(index.DeserializeFromProto(indexSchema));
         if (!upsertIndexNames.emplace(index.GetName()).second) {
             errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "index '" << index.GetName() << "' duplication for add");
             return false;

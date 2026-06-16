@@ -1,27 +1,35 @@
 #pragma once
 
+#include <ydb/mvp/meta/support_links/entity.h>
 #include <ydb/mvp/meta/support_links/types.h>
-#include <ydb/mvp/meta/meta_settings.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/http/http.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/vector.h>
 #include <memory>
 
-namespace NMVP {
+namespace NMVP::NSupportLinks {
+
+struct TRequestContext {
+    TVector<TEntityIdentity> Identities;
+    THashMap<TString, TString> ClusterInfo;
+    TCgiParameters AdditionalRequestParams;
+};
 
 class ILinkSource {
 public:
     struct TLinkResolveInput {
         const THashMap<TString, TString>& ClusterInfo;
-        const NHttp::TUrlParameters& UrlParameters;
+        const TCgiParameters& AdditionalRequestParams;
+        const TEntityIdentity& Identity;
     };
 
     struct TResolveContext {
         size_t Place = 0;
-        const NActors::TActorId& Owner;
-        const NActors::TActorId& HttpProxyId;
+        NActors::TActorId Owner;
+        NActors::TActorId HttpProxyId;
     };
 
     virtual ~ILinkSource() = default;
@@ -34,4 +42,4 @@ void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const T
 void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings);
 std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings);
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

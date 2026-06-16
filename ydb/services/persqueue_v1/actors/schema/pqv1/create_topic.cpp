@@ -43,10 +43,8 @@ public:
     void DoAction() {
         Become(&TCreateTopicActor::StateWork);
 
-        auto database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
-
         Register(NPQ::NSchema::CreateCreateTopicOperationActor(SelfId(), {
-            .Database = database,
+            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
             .Strategy = std::make_unique<TCreateTopicStrategy>(*GetProtoRequest()),
@@ -54,7 +52,7 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
@@ -64,7 +62,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

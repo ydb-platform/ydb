@@ -57,17 +57,22 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
-    NThreading::TFuture<TEvSyncWithPersistentBufferResult> SyncWithPBuffer(
+    NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
         NWilson::TSpan* span) override;
 
-    NThreading::TFuture<TEvErasePersistentBufferResult> EraseFromPBuffer(
+    NThreading::TFuture<TEvErasePersistentBufferResult> BatchEraseFromPBuffer(
         const THostConnection& connection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
+        NWilson::TSpan* span) override;
+
+    NThreading::TFuture<TEvErasePersistentBufferResult> BarrierEraseFromPBuffer(
+        const THostConnection& connection,
+        ui64 lsn,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(

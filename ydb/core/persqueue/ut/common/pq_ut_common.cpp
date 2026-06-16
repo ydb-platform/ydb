@@ -1235,6 +1235,20 @@ void CmdRead(
     );
 }
 
+void CmdReadWithoutReadToBlobEnd(
+    const ui32 partition,
+    const ui64 offset,
+    const ui32 count,
+    const ui32 size,
+    const ui32 resCount,
+    bool timeouted,
+    TTestContext& tc
+) {
+    TPQCmdReadSettings settings("", partition, offset, count, size, resCount, timeouted);
+    settings.ReadToBlobEnd = false;
+    CmdRead(settings, tc);
+}
+
 ui64 GetSizeLag(const ui32 partition,
                 const ui64 offset,
                 bool isEndOffset,
@@ -1263,6 +1277,8 @@ void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
     read->SetClientId(settings.User);
     read->SetCount(settings.Count);
     read->SetBytes(settings.Size);
+    read->SetReadToBlobEnd(settings.ReadToBlobEnd);
+    read->SetCanReadBatches(settings.CanReadBatches);
     if (settings.MaxTimeLagMs > 0) {
         read->SetMaxTimeLagMs(settings.MaxTimeLagMs);
     }

@@ -14,7 +14,7 @@ FROM
     `/Root/test/ds/store` as store
 , (
     SELECT
-        ca_zip
+        Unwrap(ca_zip) as ca_zip
     FROM (
         SELECT
             Substring(ca_zip, 1, 5) AS ca_zip
@@ -105,7 +105,7 @@ FROM
             )
         INTERSECT
         SELECT
-            ca_zip
+            Unwrap(ca_zip) as ca_zip
         FROM (
             SELECT
                 Substring(ca_zip, 1, 5) AS ca_zip,

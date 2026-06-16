@@ -61,5 +61,7 @@ private:
     TVector<TInfoUnit> SubplanDependencies;
 };
 
+using TInfoUnitSet = THashSet<TInfoUnit, TInfoUnit::THashFunction>;
+
 }
 }

@@ -11,12 +11,6 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum class EWriteMode: ui32
-{
-    PBufferReplication,
-    DirectPBuffersFilling,
-};
-
 EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode);
 NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode);
 
@@ -41,6 +35,7 @@ public:
     [[nodiscard]] TDuration GetDirtyMapDebugPrintInterval() const;
     [[nodiscard]] ui32 GetVhostThreadsCount() const;
     [[nodiscard]] ui32 GetVhostQueuesCount() const;
+    [[nodiscard]] ui64 GetPBufferCleanupLsnStep() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;

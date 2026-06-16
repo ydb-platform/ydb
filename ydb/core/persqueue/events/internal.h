@@ -239,6 +239,8 @@ struct TEvPQ {
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
         EvRewindCommitResult,
+        EvProcessBatchRead,
+        EvProcessBatchReadResult,
         EvEnd,
     };
 
@@ -338,7 +340,7 @@ struct TEvPQ {
 
     struct TEvRead : public TEventLocal<TEvRead, EvRead> {
         TEvRead(const ui64 cookie, const ui64 offset, ui64 lastOffset, const ui16 partNo, const ui32 count,
-                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size,
+                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size, const bool readToBlobEnd,
                 const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC,
                 bool externalOperation, const TActorId& pipeClient, const TActorId& replyTo = {})
             : Cookie(cookie)
@@ -349,6 +351,7 @@ struct TEvPQ {
             , ClientId(clientId)
             , Timeout(timeout)
             , Size(size)
+            , ReadToBlobEnd(readToBlobEnd)
             , MaxTimeLagMs(maxTimeLagMs)
             , ReadTimestampMs(readTimestampMs)
             , ClientDC(clientDC)
@@ -366,6 +369,7 @@ struct TEvPQ {
         TString ClientId;
         ui32 Timeout;
         ui32 Size;
+        bool ReadToBlobEnd;
         ui32 MaxTimeLagMs;
         ui64 ReadTimestampMs;
         TString ClientDC;

@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/feature_flags_service.h>
@@ -579,6 +580,7 @@ namespace Tests {
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
+            appData.AuditConfig = Settings->AppConfig->GetAuditConfig();
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
 
@@ -1431,6 +1433,11 @@ namespace Tests {
                     Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
                     actorSystemPtr,
                     FederatedQuerySetupDriver_);
+
+                federatedQuerySetupFactory->SetScriptExecutionSettings({
+                        .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
+                        .LeaseCheckStartupTimeout = TDuration::Zero(),
+                        });
             }
 
             const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
@@ -1438,13 +1445,6 @@ namespace Tests {
                 if (!allExternalSourcesTypes.contains(source)) {
                     ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
                 }
-            }
-
-            if (federatedQuerySetupFactory) {
-                federatedQuerySetupFactory->SetScriptExecutionSettings({
-                    .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
-                    .LeaseCheckStartupTimeout = TDuration::Zero(),
-                });
             }
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -1455,7 +1455,8 @@ namespace Tests {
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
                                                                   Settings->AppConfig->GetTliConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
-                                                                  nullptr, std::move(kqpProxySharedResources),
+                                                                  Settings->QueryReplayBackendFactory,
+                                                                  std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);

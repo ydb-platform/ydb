@@ -495,6 +495,7 @@ struct TPQCmdSettings : public TPQCmdSettingsBase {
 struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui32 Count = 0;
     ui32 Size = 0;
+    bool ReadToBlobEnd = true;
     ui32 ResCount = 0;
     bool Timeout = false;
     TVector<i32> Offsets;
@@ -503,6 +504,7 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui64 DirectReadId = 0;
     i64 LastOffset = 0;
     TActorId Pipe;
+    bool CanReadBatches = false;
 
     ui64* SizeLag = nullptr;
 
@@ -578,6 +580,15 @@ void CmdRead(
     const ui64 readTimestampMs = 0,
     const TString user = "user",
     ui64* sizeLag = nullptr);
+
+void CmdReadWithoutReadToBlobEnd(
+    const ui32 partition,
+    const ui64 offset,
+    const ui32 count,
+    const ui32 size,
+    const ui32 resCount,
+    bool timeouted,
+    TTestContext& tc);
 
 void CmdRead(
     const TPQCmdReadSettings& settings,

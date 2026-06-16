@@ -33,7 +33,8 @@ public:
     TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary,
         const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
         const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
-    TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary);
+    TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary,
+        bool enableLocalIndexAsSchemeObject = false);
 
 private:
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
@@ -57,9 +58,19 @@ private:
     void Format(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings);
 
     void FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc);
-    void FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
-        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatUpsertIndex(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns, bool enableLocalIndexAsSchemeObject = false);
     void FormatUpsertOptions(const TString& fullPath, const NKikimrSchemeOp::TColumnTableSchemeOptions& options);
+    void FormatLocalBloomFilterIndex(const TString& tablePath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalBloomNgramFilterIndex(const TString& tablePath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalBloomFilterIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalBloomNgramFilterIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalMinMaxIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
 
     void Format(const Ydb::TypedValue& value, bool isPartition = false);
     void FormatValue(NYdb::TValueParser& parser, bool isPartition = false, TString del = "");

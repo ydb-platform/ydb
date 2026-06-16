@@ -1,11 +1,15 @@
 #include "mock_pq_gateway.h"
 
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/testlib/common/test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
 #include <util/string/join.h>
+#include <util/system/mutex.h>
+
+#include <queue>
 
 namespace NTestUtils {
 

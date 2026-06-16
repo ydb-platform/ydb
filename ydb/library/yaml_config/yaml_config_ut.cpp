@@ -406,7 +406,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -453,7 +452,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -507,7 +505,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -554,7 +551,6 @@ config:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -816,7 +812,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value

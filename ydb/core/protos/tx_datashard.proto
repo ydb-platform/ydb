@@ -24,6 +24,7 @@ import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "google/protobuf/empty.proto";
 import "ydb/core/protos/index_builder.proto";
+import "ydb/core/protos/set_column_constraint.proto";
 
 package NKikimrTxDataShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -354,7 +355,7 @@ message TKqpVectorResolveSettings {
 
     // Database name and pool id (see below) for KqpReadActor
     optional string Database = 17;
-    
+
     // Parameters for finding overlapping clusters (multiple clusters per row)
     optional uint32 OverlapClusters = 18;
     optional double OverlapRatio = 19;
@@ -1567,7 +1568,7 @@ message TEvValidateRowConditionRequest {
 message TEvValidateRowConditionResponse {
     optional uint64 Id = 1;
     optional uint64 TabletId = 2;
-    optional NKikimrIndexBuilder.EBuildStatus Status = 3;
+    optional NKikimrSetColumnConstraint.EValidateStatus Status = 3;
     optional bool IsValid = 4;
     repeated Ydb.Issue.IssueMessage Issues = 5;
 }
@@ -1983,6 +1984,9 @@ enum EFulltextIndexType {
     FulltextPlain = 0;
     FulltextRelevance = 1;
     Json = 2;
+    FulltextCompact = 3;
+    FulltextCompactRelevance = 4;
+    JsonCompact = 5;
 }
 
 message TEvBuildFulltextIndexRequest {
@@ -2011,6 +2015,10 @@ message TEvBuildFulltextIndexRequest {
     optional EFulltextIndexType IndexType = 14;
 
     optional NKikimrTx.TKeyRange KeyRange = 15;
+
+    // When true, the scan uses the __ydb_row_id Uint64 column of the source table as the doc_id key
+    // (and as the key of the posting/docs impl tables) instead of the source table PK columns.
+    optional bool UseRowIdAsDocId = 16;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -2046,10 +2054,10 @@ message TEvBuildFulltextDictRequest {
     optional uint64 SeqNoGeneration = 7;
     optional uint64 SeqNoRound = 8;
 
-    optional string OutputName = 9;
+    optional string DictTableName = 9;
     optional string DatabaseName = 10;
 
-    optional Ydb.Table.FulltextIndexSettings Settings = 11; // also has key columns
+    reserved 11;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 12;
 
@@ -2057,6 +2065,10 @@ message TEvBuildFulltextDictRequest {
     // in the shard require cross-shard aggregation which is performed by the scheme shard
     optional bool SkipFirstToken = 13;
     optional bool SkipLastToken = 14;
+
+    optional EFulltextIndexType IndexType = 15;
+    optional string PostingTableName = 16;
+    optional uint64 MaxSegmentDocuments = 17;
 }
 
 message TEvBuildFulltextDictResponse {

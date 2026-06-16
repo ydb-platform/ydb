@@ -146,7 +146,8 @@ public:
 
     void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) override;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) override;
 
     // Operations
 

@@ -409,11 +409,11 @@ bool TReadInfo::UpdateUsage(const TClientBlob& blob,
         }
         lastBlobSize = 0;
 
-        return cnt >= Count;
+        return cnt >= Count || (size >= Size && !ReadToBlobEnd);
     }
 
     // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
-    return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count);
+    return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count || (size >= Size && !ReadToBlobEnd));
 }
 
 TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlob>& blobs,
@@ -610,10 +610,10 @@ TReadAnswer TReadInfo::FormAnswer(
                 size -= lastBlobSize;
             }
             lastBlobSize = 0;
-            return cnt >= Count;
+            return cnt >= Count || (size >= Size && !ReadToBlobEnd);
         }
         // For backward compatibility, we keep the behavior for older clients for non-FirstClassCitizen
-        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && cnt >= Count;
+        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (cnt >= Count || (size >= Size && !ReadToBlobEnd));
     };
 
     AFL_ENSURE(blobs.size() == Blobs.size());
@@ -872,6 +872,9 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     if (!userInfo) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(read->ClientId));
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
+        if (BatchProcessorActor) {
+            Send(BatchProcessorActor, new TEvPQ::TEvConsumerRemoved(user));
+        }
         OnReadRequestFinished(read->Cookie, 0, user, ctx);
         return;
     }
@@ -885,7 +888,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     }
 
     TReadInfo info(
-            user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->Cookie, read->ReadTimestampMs,
+            user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->ReadToBlobEnd, read->Cookie, read->ReadTimestampMs,
             waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal(), read->ReplyTo
     );
 
@@ -984,7 +987,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     );
 
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 0, 1, "",
-                                                               user, 0, MAX_BLOB_PART_SIZE * 2, 0, 0, "",
+                                                               user, 0, MAX_BLOB_PART_SIZE * 2, false, 0, 0, "",
                                                                false, TActorId{});
 
     ctx.Send(ctx.SelfID, event.Release());

@@ -313,8 +313,11 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
                     }
                     return true;
                 });
-            UNIT_ASSERT(indexUpdated);
-            UNIT_ASSERT(indexCleaned);
+            if (!server.GetSettings().AppConfig->GetTableServiceConfig().GetEnableIndexStreamWrite()) {
+                // No writes in AST for streaming index.
+                UNIT_ASSERT(indexUpdated);
+                UNIT_ASSERT(indexCleaned);
+            }
         }
 
         {
@@ -1031,7 +1034,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 64);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 23);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 31);
                 UNIT_ASSERT(            !stats.query_phases(0).table_access(0).has_deletes());
@@ -1050,6 +1053,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().bytes(), 23);
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
 
@@ -1131,9 +1135,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseStreamIndex) {
-        if (UseStreamIndex) {
-            return;
-        }
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
@@ -4864,10 +4865,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseStreamIndex) {
-        if (UseStreamIndex) {
-            // TODO
-            return;
-        }
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
@@ -6835,6 +6832,82 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[[1u];["Alice"]];[[3u];["Alice"]]])",
                 FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(DisableAutoIndexSelectionPragma) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestAutoIndexPragma` (
+                id Uint32,
+                name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsertResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/TestAutoIndexPragma` (id, name) VALUES
+                (1u, "Alice"),
+                (2u, "Bob");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto explainScan = [&](const TString& query) {
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = db.StreamExecuteScanQuery(query, settings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return CollectStreamResult(it);
+        };
+
+        auto countIndexAccessInPlan = [](TStringBuf planJson) {
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(planJson, &plan, true);
+            return CountPlanNodesByKv(plan, "Table", "TestAutoIndexPragma/idx_name/indexImplTable");
+        };
+
+        {
+            auto res = explainScan(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "false";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )");
+            UNIT_ASSERT(res.PlanJson);
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(*res.PlanJson), 1,
+                "Expected auto-select index with OptDisableAutoIndexSelection=false, plan: " << *res.PlanJson);
+        }
+
+        {
+            auto res = explainScan(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "true";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )");
+            UNIT_ASSERT(res.PlanJson);
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(*res.PlanJson), 0,
+                "Expected no auto-select index with OptDisableAutoIndexSelection=true, plan: " << *res.PlanJson);
+        }
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "false";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(explainResult.GetPlan()), 1,
+                "Expected auto-select index on data query with OptDisableAutoIndexSelection=false, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "true";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(explainResult.GetPlan()), 0,
+                "Expected no auto-select index on data query with OptDisableAutoIndexSelection=true, plan: " << explainResult.GetPlan());
         }
     }
 

@@ -6,6 +6,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -847,7 +848,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 rowSet.GetValueOrDefault<Schema::SharedShards::OwnerPathId>(Self->TabletID()),
                 rowSet.GetValue<Schema::SharedShards::LocalPathId>()
             );
-            Self->SharedShards[shardIdx].insert(pathId);
+            const auto currentTxId = TTxId(rowSet.GetValueOrDefault<Schema::SharedShards::LastTxId>(0));
+            Self->SharedShards[shardIdx][pathId] = currentTxId;
             if (!rowSet.Next()) {
                 return false;
             }
@@ -2349,11 +2351,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             for (const auto& [shardIdx, paths]: Self->SharedShards) {
                 Y_ABORT_UNLESS(Self->ShardInfos.contains(shardIdx));
-                for (const auto& path: paths) {
+                for (const auto& [path, lastTxId]: paths) {
                     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "TTxInit for Shared Shards"
                             << ", read: " << shardIdx
                             << ", PathId: " << path
+                            << ", LastTxId: " << lastTxId
                             << ", at schemeshard: " << Self->TabletID());
                 }
             }
@@ -3277,7 +3280,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                    << ", index pathId: " << pathId
                                    << ", parent pathId: " << path->ParentPathId);
                     TPathElement::TPtr parent = Self->PathsById.at(path->ParentPathId);
-                    Y_VERIFY_S(parent->IsTable(), "Parent path is not a table"
+                    Y_VERIFY_S(parent->IsTable() || parent->IsColumnTable(), "Parent path is not a table or column table"
                                    << ", index pathId: " << pathId
                                    << ", parent pathId: " << path->ParentPathId);
 
@@ -3922,7 +3925,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     srcPath->DbRefCount++;
                 }
 
-                if (txState.TxType == TTxState::TxMoveTable || txState.TxType == TTxState::TxMoveTableIndex || txState.TxType == TTxState::TxMoveSequence) {
+                if (txState.TxType == TTxState::TxMoveTable || txState.TxType == TTxState::TxMoveTableIndex || txState.TxType == TTxState::TxMoveSequence || txState.TxType == TTxState::TxMoveLocalIndex) {
                     Y_ABORT_UNLESS(txState.SourcePathId);
                     TPathElement::TPtr srcPath = Self->PathsById.at(txState.SourcePathId);
                     Y_VERIFY_S(srcPath, "Null path element, pathId: " << txState.SourcePathId);
@@ -5491,6 +5494,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
                 }
 
+                if (rowset.HaveValue<Schema::ColumnTables::IsReadOnly>()) {
+                    tableInfo->IsReadOnly = rowset.GetValue<Schema::ColumnTables::IsReadOnly>();
+                }
+
                 if (!rowset.Next()) {
                     return false;
                 }
@@ -6426,11 +6433,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .FullBackupIds = std::move(FullBackupsToResume),
         });
 
-        Self->ProcessForcedCompactionQueues();
-        if (Self->ForcedCompactionsDoneShardsToPersist || Self->CancellingForcedCompactions) {
-            // for cleanup and to progress cancelling forced compactions after restart
-            Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
-        }
+        Self->ScheduleForcedCompactionProgress(ctx);
     }
 };
 

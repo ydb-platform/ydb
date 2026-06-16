@@ -585,9 +585,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT(headers.Has("X-Request-Id"));
         UNIT_ASSERT(headers.Has("Set-Cookie"));
         TStringBuf setCookie = headers.Get("Set-Cookie");
-        UNIT_ASSERT_STRING_CONTAINS(
-            setCookie,
-            CreateNameYdbOidcCookie(redirectStrategy.IsNavigationRequest() ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX));
+        UNIT_ASSERT_STRING_CONTAINS(setCookie, "ydb_oidc_cookie=");
         redirectStrategy.CheckSpecificHeaders(headers);
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -696,14 +694,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TAutoPtr<IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
-        if (redirectStrategy.IsNavigationRequest()) {
-            UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
-            UNIT_ASSERT(protectedPageHeaders.Has("Location"));
-            UNIT_ASSERT_STRINGS_EQUAL(protectedPageHeaders.Get("Location"), "/requested/page");
-        } else {
-            UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
-            UNIT_ASSERT(!protectedPageHeaders.Has("Location"));
-        }
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
+        UNIT_ASSERT(protectedPageHeaders.Has("Location"));
+        UNIT_ASSERT_STRINGS_EQUAL(protectedPageHeaders.Get("Location"), "/requested/page");
     }
 
     Y_UNIT_TEST(OpenIdConnectWrongStateAuthorizationFlow) {
@@ -716,19 +709,16 @@ Y_UNIT_TEST_SUITE(Mvp) {
         OidcWrongStateAuthorizationFlow(redirectStrategy);
     }
 
-    Y_UNIT_TEST(OpenIdConnectExpiredBackgroundStateKeepsCookieSuffix) {
+    Y_UNIT_TEST(OpenIdConnectExpiredStateCheckFails) {
         TPortManager tp;
         auto settings = BuildBaseSettings(tp);
         TState sourcePayload;
         sourcePayload.AntiForgeryToken = "state";
         sourcePayload.ExpirationTime = TInstant::Seconds(0);
-        sourcePayload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
 
         TCheckStateResult result = CheckState(EncodeState(sourcePayload, settings.ClientSecret), settings.ClientSecret);
-        const TString expectedCookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
 
         UNIT_ASSERT(!result.Ok);
-        UNIT_ASSERT_STRINGS_EQUAL(result.CookieSuffix, expectedCookieSuffix);
         UNIT_ASSERT_STRING_CONTAINS(result.ErrorMessage, "State life time expired");
     }
 
@@ -1015,8 +1005,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TAutoPtr<IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
-        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, "Unknown error has occurred. Please open the page again");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Headers, "Location: /requested/page");
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateGetWrongStateAndWrongCookie) {
@@ -1638,14 +1628,12 @@ Y_UNIT_TEST_SUITE(Utils) {
         TState sourcePayload;
         sourcePayload.AntiForgeryToken = "state";
         sourcePayload.ExpirationTime = TInstant::Seconds(TInstant::Now().Seconds() + TDuration::Minutes(10).Seconds());
-        sourcePayload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
 
         const TString state = EncodeState(sourcePayload, settings.ClientSecret);
         const TCheckStateResult result = CheckState(state, settings.ClientSecret);
         const TDecodeStateResult decodedResult = DecodeState(state);
 
         UNIT_ASSERT(result.Ok);
-        UNIT_ASSERT_STRINGS_EQUAL(result.CookieSuffix, sourcePayload.CookieSuffix);
         UNIT_ASSERT(result.ErrorMessage.empty());
         UNIT_ASSERT(decodedResult.HasSignedStateJson);
         UNIT_ASSERT(decodedResult.HasStateContainerJson);

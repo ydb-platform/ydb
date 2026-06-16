@@ -308,6 +308,9 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
         auto event = readSession->GetEvent(/* block */ true);
         if (const auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             for (const auto& message : dataEvent->GetMessages()) {
+                if (message.GetWriteTime() < disposition) {
+                    continue;
+                }
                 received.push_back(std::make_pair(message.GetData(), message.GetWriteTime()));
             }
 
@@ -501,7 +504,7 @@ void TStreamingTestFixture::CreateSolomonSource(const std::string& solomonSource
     ExecQuery(fmt::format(
         R"sql(
             CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
-                SOURCE_TYPE = "Solomon",
+                SOURCE_TYPE = "Monium.Metrics",
                 LOCATION = "localhost:{solomon_port}",
                 AUTH_METHOD = "NONE",
                 USE_TLS = "false"

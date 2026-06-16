@@ -11,6 +11,7 @@ YQL_ABI_VERSION(
 SUBSCRIBER(g:yql)
 
 SRCS(
+    sql2yql.cpp
     yql_language_udf.cpp
 )
 
@@ -24,6 +25,10 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/reflect
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/gateways_utils
     library/cpp/protobuf/util
 )
 

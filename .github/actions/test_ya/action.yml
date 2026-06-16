@@ -149,14 +149,15 @@ runs:
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
 
+        export TELEGRAM_BOT_TOKEN_FILE=$(mktemp)
+        echo -n "${{ inputs.telegram_ydbot_token }}" > $TELEGRAM_BOT_TOKEN_FILE
+        echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
+
     - name: ya build and test
       id: build
       shell: bash
       env:
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
-        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
-        GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
-        GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
         PR_NUMBER: ${{ inputs.pull_number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
@@ -210,7 +211,6 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
-            IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
@@ -450,12 +450,14 @@ runs:
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
+          GH_ALERTS_TG_LOGINS='${{ inputs.telegram_alert_logins }}' \
           .github/scripts/report_ram_analyzer.py \
             --report-file "$CURRENT_REPORT" \
             --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
             --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
             --ram-usage-file ram_usage.txt \
-            --chat-id "$GH_ALERTS_TG_CHAT" \
+            --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
+            --chat-id '${{ inputs.telegram_alert_chat }}' \
             --memory-threshold 97 || true
 
           # convert to chromium trace

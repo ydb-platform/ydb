@@ -43,6 +43,8 @@ message TPersQueuePartitionRequest {
         optional int64 LastOffset = 17;
 
         optional uint64 SizeEstimate = 18;
+        optional bool ReadToBlobEnd = 19 [default = false];
+        optional bool CanReadBatches = 20 [default = false];
     }
 
     message TCmdUpdateReadMetrics {

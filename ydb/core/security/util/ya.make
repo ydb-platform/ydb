@@ -16,6 +16,8 @@ PEERDIR(
     contrib/libs/openssl
 )
 
+GENERATE_ENUM_SERIALIZATION(jwk.h)
+
 END()
 
 RECURSE_FOR_TESTS(

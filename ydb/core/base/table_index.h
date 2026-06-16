@@ -47,6 +47,7 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
 bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 
 NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation);
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexAlteringConfig& indexAlter);
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
 std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
 NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
@@ -120,6 +121,20 @@ namespace NFulltext {
     inline constexpr const char* FreqColumn = "__ydb_freq";
     inline constexpr const char* IdColumn = "__ydb_id";
 
+    // Synthetic doc_id column on the main table. When present together with a unique
+    // secondary index over [RowIdColumn], the fulltext index uses this column as doc_id
+    // instead of the main-table PK. At read time the unique index resolves __ydb_row_id -> PK.
+    // The user may pre-create it, or the schemeshard auto-provisions it (column + unique
+    // index, named RowIdUniqueIndexName, backed by RowIdSequenceName) when a fulltext index
+    // is built on a table with a non-single-integer ("custom") primary key.
+    inline constexpr const char* RowIdColumn = "__ydb_row_id";
+
+    // Deterministic names of the auto-provisioned unique secondary index over [__ydb_row_id] and
+    // of the sequence that generates __ydb_row_id values. Deterministic so a second fulltext index
+    // on the same table reuses the same infrastructure instead of creating duplicates.
+    inline constexpr const char* RowIdUniqueIndexName = "uniq__ydb_row_id";
+    inline constexpr const char* RowIdSequenceName = "_seq___ydb_row_id";
+
     inline constexpr const char* DocsTable = "indexImplDocsTable";
     inline constexpr const char* DocLengthColumn = "__ydb_length";
 
@@ -130,6 +145,13 @@ namespace NFulltext {
     inline constexpr const char* SumDocLengthColumn = "__ydb_sum_doc_length";
 
     inline constexpr const char* FullTextRelevanceColumn = "__ydb_full_text_relevance";
+
+    using TGen = ui32;
+    inline constexpr auto GenType = Ydb::Type::UINT32;
+    inline constexpr const char* MaxIdColumn = "__ydb_max_id";
+    inline constexpr const char* GenColumn = "__ydb_generation";
+    inline constexpr const char* AddedColumn = "__ydb_added";
+    inline constexpr const char* SegmentColumn = "__ydb_segment";
 
     // Impl table positions in partitioning setting list
     inline constexpr const int DictTablePosition = 0;

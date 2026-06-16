@@ -1368,7 +1368,11 @@ public:
             throw TInitializationException("YDB-CFG13") << errors.front();
         }
 
-        Logger.Out() << "configured" << Endl;
+        if (const auto it = Labels.find("empty_domain_during_node_registration"); it != Labels.end()) {
+            AddLabelToAppConfig(it->first, it->second);
+        }
+
+        Logger.Out() << "Configured YDB server" << Endl;
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
@@ -1483,6 +1487,8 @@ public:
         }
 
         TString domainName = DeduceNodeDomain(cf, AppConfig);
+
+        Labels["empty_domain_during_node_registration"] = domainName.empty() ? "true" : "false";
 
         if (!cf.NodeHost) {
             cf.NodeHost = Env.FQDNHostName();
@@ -1650,7 +1656,6 @@ public:
         }
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
-        configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";
         configsDispatcherInitInfo.DebugInfo = TDebugInfo {
             .InitInfo = InitDebug.ConfigTransformInfo,
         };

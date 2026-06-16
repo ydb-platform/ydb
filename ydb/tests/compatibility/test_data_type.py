@@ -57,13 +57,13 @@ class TestDataType(RestartToAnotherVersionFixture):
             )
             self.table_names.append(f"table_{i}_{self.store_type}")
 
-        extra_feature_flags = {
-            "enable_parameterized_decimal": True,
-            "enable_table_datetime64": True,
-        }
+        extra_feature_flags = [
+            "enable_parameterized_decimal",
+            "enable_table_datetime64",
+        ]
 
         if min(self.versions) >= (25, 4):
-            extra_feature_flags["enable_columnshard_bool"] = True
+            extra_feature_flags.append("enable_columnshard_bool")
 
         yield from self.setup_cluster(
             extra_feature_flags=extra_feature_flags,

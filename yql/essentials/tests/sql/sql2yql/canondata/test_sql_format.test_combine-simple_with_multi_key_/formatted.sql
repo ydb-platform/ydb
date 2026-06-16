@@ -1,4 +1,4 @@
-/* custom error:Unsupported function: SqlCombineInput */
+/* custom error:GetCallable(): requirement Callables_.cend() != compiler failed, message: Missed callable: SqlCombine*/
 $f = ($key, $leftList, $rightList) -> {
     RETURN <|k: $key, v: ListZip($leftList, $rightList)|>;
 };

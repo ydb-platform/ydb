@@ -61,4 +61,18 @@ DEFINE_REFCOUNTED_TYPE(TLagPenaltyProviderCounters)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DECLARE_REFCOUNTED_STRUCT(THedgingExecutorCounters)
+
+// ! Counters for THedgingExecutor.
+struct THedgingExecutorCounters final
+{
+    explicit THedgingExecutorCounters(const NProfiling::TTagSet& tagSet);
+
+    NProfiling::TGauge HedgingRequestRatio;
+};
+
+DEFINE_REFCOUNTED_TYPE(THedgingExecutorCounters)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NClient::NHedging::NRpc

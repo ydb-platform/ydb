@@ -389,6 +389,7 @@ namespace NKikimr::NHttpProxy {
                 try {
                     NSQS::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
                 } catch (const NKikimr::NSQS::TSQSException& e) {
+                    Cerr << (TStringBuilder() << e.ErrorClass.ErrorCode << ": " << e.what() << Endl);
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
                     if (e.ErrorClass.ErrorCode == "MissingParameter")
                         issueCode = NYds::EErrorCodes::MISSING_PARAMETER;

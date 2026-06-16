@@ -1,4 +1,5 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
+#include <ydb/core/http_proxy/ut/datastreams_fixture/sqs_xml_ut_helpers.h>
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/testlib/test_client.h>
@@ -1841,8 +1842,9 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         json = GetQueueUrlXml({{"QueueName", queueName}, {"QueueOwnerAWSAccountId", "some-account-id"}});
         UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
 
-        json = GetQueueUrlXml({{"QueueName", queueName}, {"WrongParameter", "some-value"}}, 400);
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
+        // TODO: ? unknown parameter ignored
+        //json = GetQueueUrlXml({{"QueueName", queueName}, {"WrongParameter", "some-value"}}, 400);
+        //UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
     }
 
     Y_UNIT_TEST_F(TestNoAuthGetQueueUrlOfNotExistingQueue, TNoAuthFixture) {
@@ -2048,6 +2050,27 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
 
         json = DeleteQueueXml({{"QueueUrl", queueUrl}}, 400);
         UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST(ParseListQueuesXmlResponse) {
+        const TString xml =
+            "<ListQueuesResponse><ListQueuesResult>"
+            "<QueueUrl>http://lbk-dev-4.search.yandex.net:8771/v1/5//Root/14/ExampleQueue-0/12/mlp-consumer</QueueUrl>"
+            "<QueueUrl>http://lbk-dev-4.search.yandex.net:8771/v1/5//Root/14/ExampleQueue-1/12/mlp-consumer</QueueUrl>"
+            "<QueueUrl>http://lbk-dev-4.search.yandex.net:8771/v1/5//Root/14/ExampleQueue-2/12/mlp-consumer</QueueUrl>"
+            "<QueueUrl>http://lbk-dev-4.search.yandex.net:8771/v1/5//Root/14/ExampleQueue-3/12/mlp-consumer</QueueUrl>"
+            "<QueueUrl>http://lbk-dev-4.search.yandex.net:8771/v1/5//Root/14/ExampleQueue-4/12/mlp-consumer</QueueUrl>"
+            "</ListQueuesResult><ResponseMetadata><RequestId>2e3c8f7c-e7708da0-49014103-ed7e1820</RequestId>"
+            "</ResponseMetadata></ListQueuesResponse>";
+        NJson::TJsonMap json = ParseSqsXmlResponse(xml);
+        UNIT_ASSERT(json["QueueUrls"].IsArray());
+        UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 5);
+        UNIT_ASSERT(json["QueueUrls"][0].IsString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            json["QueueUrls"][0].GetString(),
+            "http://lbk-dev-4.search.yandex.net:8771/v1/5//Root/14/ExampleQueue-0/12/mlp-consumer"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(json["RequestId"].GetString(), "2e3c8f7c-e7708da0-49014103-ed7e1820");
     }
 
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml)

@@ -150,6 +150,8 @@ main := |*
     ('WaitTimeSeconds')         { CurrentParams_->WaitTimeSeconds = ParseAndValidate(value, TStringBuf("WaitTimeSeconds")); };
     ('CreatedTimestamp')        { CurrentParams_->CreateTimestampSeconds = ParseAndValidate(value, TStringBuf("CreatedTimestamp")); };
     ('CustomQueueName')         { CurrentParams_->CustomQueueName = ParseAndValidate(value, TStringBuf("CustomQueueName")); };
+    ('MaxResults')              { CurrentParams_->MaxResults = ParseAndValidate(value, TStringBuf("MaxResults")); };
+    ('NextToken')               { CurrentParams_->NextToken = ParseAndValidate(value, TStringBuf("NextToken")); };
 
     attribute;
     attribute_name;

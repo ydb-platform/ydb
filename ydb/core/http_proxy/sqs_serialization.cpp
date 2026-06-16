@@ -5,6 +5,7 @@
 #include <ydb/core/http_proxy/sqs_xml/xml_builder.h>
 
 #include <util/string/builder.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NHttpProxy::NSQS {
 
@@ -80,16 +81,24 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::ListDeadLetterSourceQueuesRequest& value, const TParameters& params) {
-        // max_results
-        // next_token
         value.set_queue_url(params.QueueUrl.GetOrElse(""));
+        if (params.MaxResults) {
+            value.set_max_results(*params.MaxResults);
+        }
+        if (params.NextToken) {
+            value.set_next_token(*params.NextToken);
+        }
     }
 
     void DeserializeXml(Ydb::Ymq::V1::ListQueuesRequest& value, const TParameters& params) {
-        // max_results
-        // next_token
         if (params.QueueNamePrefix) {
             value.set_queue_name_prefix(*params.QueueNamePrefix);
+        }
+        if (params.MaxResults) {
+            value.set_max_results(*params.MaxResults);
+        }
+        if (params.NextToken) {
+            value.set_next_token(*params.NextToken);
         }
     }
 
@@ -338,12 +347,30 @@ namespace NKikimr::NHttpProxy::NSQS {
                             XML_ELEM_CONT("RequestId", httpContext.RequestId);
                         }
                     }
+                } else if (name == "ListDeadLetterSourceQueuesResult") {
+                    const auto* r = dynamic_cast<const Ydb::Ymq::V1::ListDeadLetterSourceQueuesResult*>(&value);
+                    XML_ELEM("ListDeadLetterSourceQueuesResponse") {
+                        XML_ELEM("ListDeadLetterSourceQueuesResult") {
+                            for (const auto& queueUrl : r->queue_urls()) {
+                                XML_ELEM_CONT("QueueUrl", queueUrl);
+                            }
+                            if (!r->next_token().empty()) {
+                                XML_ELEM_CONT("NextToken", r->next_token());
+                            }
+                        }
+                    }
+                    XML_ELEM("ResponseMetadata") {
+                        XML_ELEM_CONT("RequestId", httpContext.RequestId);
+                    }
                 } else if (name == "ListQueuesResult") {
                     const auto* r = dynamic_cast<const Ydb::Ymq::V1::ListQueuesResult*>(&value);
                     XML_ELEM("ListQueuesResponse") {
                         XML_ELEM("ListQueuesResult") {
                             for (const auto& queueUrl : r->queue_urls()) {
                                 XML_ELEM_CONT("QueueUrl", queueUrl);
+                            }
+                            if (!r->next_token().empty()) {
+                                XML_ELEM_CONT("NextToken", r->next_token());
                             }
                         }
                         XML_ELEM("ResponseMetadata") {
@@ -452,7 +479,7 @@ namespace NKikimr::NHttpProxy::NSQS {
                         }
                     }
                 } else {
-                    Y_ENSURE(false);
+                    Y_VERIFY_DEBUG_S(false, name.c_str());
                 }
             }
         }

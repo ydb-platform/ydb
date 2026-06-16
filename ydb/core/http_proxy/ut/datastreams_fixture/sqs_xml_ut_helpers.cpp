@@ -182,35 +182,52 @@ namespace {
         return result;
     }
 
+    NJson::TJsonValue CollectQueueUrls(const NXml::TConstNode& parent) {
+        NJson::TJsonValue queueUrls(NJson::JSON_ARRAY);
+        for (NXml::TConstNode child = parent.FirstChild(); !child.IsNull(); child = child.NextSibling()) {
+            if (child.IsElementNode() && child.Name() == "QueueUrl") {
+                queueUrls.AppendValue(child.Value<TString>());
+            }
+        }
+        return queueUrls;
+    }
+
     NJson::TJsonValue CollectSameNamedChildren(const NXml::TConstNode& parent, TStringBuf name) {
         NJson::TJsonValue array(NJson::JSON_ARRAY);
         for (NXml::TConstNode child = parent.FirstChild(); !child.IsNull(); child = child.NextSibling()) {
-            if (child.Name() == name) {
-                if (name == "QueueUrl") {
-                    array.AppendValue(child.Value<TString>());
-                } else if (name == "Attribute") {
-                    const TString attrName = child.Node("Name", true).Value<TString>("");
-                    const TString attrValue = child.Node("Value", true).Value<TString>("");
-                    if (!attrName.empty()) {
-                        array[attrName] = attrValue;
-                    }
-                } else if (name == "SendMessageBatchResultEntry"
-                        || name == "DeleteMessageBatchResultEntry"
-                        || name == "ChangeMessageVisibilityBatchResultEntry") {
-                    array.AppendValue(XmlElementToJson(child));
-                } else if (name == "BatchResultErrorEntry") {
-                    array.AppendValue(XmlElementToJson(child));
-                } else if (name == "Message") {
-                    array.AppendValue(XmlElementToJson(child));
-                } else if (name == "Tag") {
-                    const TString key = child.Node("Key", true).Value<TString>("");
-                    const TString value = child.Node("Value", true).Value<TString>("");
-                    if (!key.empty()) {
-                        array[key] = value;
-                    }
-                } else {
-                    array.AppendValue(child.Value<TString>());
+            if (!child.IsElementNode() || child.Name() != name) {
+                continue;
+            }
+            if (name == "QueueUrl") {
+                array.AppendValue(child.Value<TString>());
+            } else if (name == "Attribute") {
+                const TString attrName = child.Node("Name", true).Value<TString>("");
+                const TString attrValue = child.Node("Value", true).Value<TString>("");
+                if (!attrName.empty()) {
+                    NJson::TJsonMap attr;
+                    attr["Name"] = attrName;
+                    attr["Value"] = attrValue;
+                    array.AppendValue(std::move(attr));
                 }
+            } else if (name == "SendMessageBatchResultEntry"
+                    || name == "DeleteMessageBatchResultEntry"
+                    || name == "ChangeMessageVisibilityBatchResultEntry") {
+                array.AppendValue(XmlElementToJson(child));
+            } else if (name == "BatchResultErrorEntry") {
+                array.AppendValue(XmlElementToJson(child));
+            } else if (name == "Message") {
+                array.AppendValue(XmlElementToJson(child));
+            } else if (name == "Tag") {
+                const TString key = child.Node("Key", true).Value<TString>("");
+                const TString value = child.Node("Value", true).Value<TString>("");
+                if (!key.empty()) {
+                    NJson::TJsonMap tag;
+                    tag["Key"] = key;
+                    tag["Value"] = value;
+                    array.AppendValue(std::move(tag));
+                }
+            } else {
+                array.AppendValue(child.Value<TString>());
             }
         }
         return array;
@@ -229,7 +246,15 @@ namespace {
 
         THashMap<TString, ui32> childNameCounts;
         for (NXml::TConstNode child = resultNode.FirstChild(); !child.IsNull(); child = child.NextSibling()) {
+            if (!child.IsElementNode()) {
+                continue;
+            }
             childNameCounts[child.Name()] += 1;
+        }
+
+        const bool isListQueuesResult = resultNode.Name() == "ListQueuesResult";
+        if (isListQueuesResult) {
+            result["QueueUrls"] = CollectQueueUrls(resultNode);
         }
 
         for (const auto& [name, count] : childNameCounts) {
@@ -254,6 +279,9 @@ namespace {
                 continue;
             }
             if (name == "QueueUrl") {
+                if (isListQueuesResult) {
+                    continue;
+                }
                 if (count > 1) {
                     result["QueueUrls"] = CollectSameNamedChildren(resultNode, name);
                 } else {
@@ -271,6 +299,8 @@ namespace {
                     result["Successful"] = collected;
                 } else if (name == "BatchResultErrorEntry") {
                     result["Failed"] = collected;
+                } else if (name == "QueueUrl") {
+                    result["QueueUrls"] = collected;
                 } else {
                     result[name] = collected;
                 }

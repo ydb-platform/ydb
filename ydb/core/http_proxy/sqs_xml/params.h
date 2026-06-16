@@ -14,7 +14,7 @@ struct TParameters {
     TMaybe<ui64> DelaySeconds;
     TMaybe<TString> FolderId;
     TMaybe<TString> Id;
-    TMaybe<ui32> MaxNumberOfMessages;
+    TMaybe<i32> MaxNumberOfMessages;
     TMaybe<TString> MessageBody;
     TMaybe<TString> MessageDeduplicationId;
     TMaybe<TString> MessageGroupId;
@@ -32,7 +32,8 @@ struct TParameters {
     TMaybe<ui64> WaitTimeSeconds;
     TMaybe<ui64> CreateTimestampSeconds;
     TMaybe<TString> CustomQueueName;
-
+    TMaybe<i32> MaxResults;
+    TMaybe<TString> NextToken;
 
     TMap<int, TString> AttributeNames;
 

@@ -29,6 +29,7 @@ ydb/core/tx/columnshard/backup/iscan/ut unittest.sole chunk
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobs
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsMultipleColumns
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithCompactingMiddleRows
+ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithDeletesInTheMiddle
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithSpecificKeys
 ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
 ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk

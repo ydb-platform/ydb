@@ -19,10 +19,9 @@
 
 #include <library/cpp/testing/gtest/gtest.h>
 
-#include <library/cpp/testing/common/env.h>
-
 #include <util/generic/hash.h>
 #include <util/random/random.h>
+#include <util/stream/output.h>
 #include <util/string/printf.h>
 
 #include <atomic>
@@ -577,7 +576,7 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
     EXPECT_EQ(queryResultWithCleanedPenalty.Value().AsStringBuf(), clientResult1.AsStringBuf());
 }
 
-// Canonizes the served-by distribution over 100 requests, "local fresh" vs "local lagging" crossed
+// Checks the served-by distribution over 100 requests, "local fresh" vs "local lagging" crossed
 // with the second remote's error rate (the first always fails 1/10). A fresh local serves everything;
 // a lagging local gets LagPenalty (42), above the remote slots (+10/+20), so it sorts last and - since
 // only the top two of three clusters are dispatched (one hedge delay) - is tried only once a remote is
@@ -587,8 +586,9 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
 // Determinism: per-request error flags + a fixed lag penalty + a seeded tie-break, so background hedge
 // tasks never affect the outcome.
 //
-// Regenerate the golden with:
-//   ya make -tA --test-param GTEST_UPDATE_GOLDEN=1 yt/yt/client/hedging/unittests
+// The expected table is inlined below (no golden file, so the test stays CMake/opensource-friendly).
+// To re-canonize after an intended change, run the test and paste the "actual" block it prints on
+// mismatch verbatim between the R"(...)".
 TEST(THedgingClientTest, HedgingSimulation)
 {
     NYPath::TYPath path = "/test/1234";
@@ -722,7 +722,35 @@ TEST(THedgingClientTest, HedgingSimulation)
         }
     }
 
-    EXPECT_THAT(table, NGTest::GoldenFileEq(SRC_("canondata/hedging_simulation.txt")));
+    const TString expectedTable = R"(localLagging remote1Err remote2Err -> local remote1 remote2 failed || primLocal primR1 primR2 || total
+       false          1          0 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          1 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          2 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          3 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          4 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          5 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          6 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          7 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          8 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1          9 ->   100       0       0      0 ||   100       0       0 ||   100
+       false          1         10 ->   100       0       0      0 ||   100       0       0 ||   100
+        true          1          0 ->     0      41      59      0 ||     0      44      56 ||   103
+        true          1          1 ->     0      45      55      0 ||     0      44      56 ||   107
+        true          1          2 ->     0      47      53      0 ||     0      44      56 ||   109
+        true          1          3 ->     0      52      47      1 ||     0      44      56 ||   115
+        true          1          4 ->     0      63      34      3 ||     0      49      51 ||   124
+        true          1          5 ->     0      64      28      8 ||     0      49      51 ||   125
+        true          1          6 ->     0      73      22      5 ||     0      58      42 ||   125
+        true          1          7 ->     0      82      11      7 ||     0      68      32 ||   124
+        true          1          8 ->     0      82      11      7 ||     0      68      32 ||   124
+        true          1          9 ->     1      93       0      6 ||     0      95       5 ||   110
+        true          1         10 ->     1      93       0      6 ||     0      95       5 ||   110
+)";
+    // On mismatch print the raw table so it can be pasted between R"( and )" to re-canonize.
+    if (table != expectedTable) {
+        Cerr << "\n--- actual simulation table (paste to re-canonize) ---\n" << table;
+    }
+    EXPECT_EQ(table, expectedTable);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

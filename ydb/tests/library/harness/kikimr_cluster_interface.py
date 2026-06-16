@@ -121,7 +121,8 @@ class KiKiMRClusterInterface(object):
 
     def reset_clients(self):
         for client in (self.__client, self.__kv_client, self.__scheme_client, self.__config_client):
-            client.close()
+            if client is not None:
+                client.close()
 
         self.__client = None
         self.__kv_client = None

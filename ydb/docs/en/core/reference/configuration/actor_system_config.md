@@ -13,6 +13,15 @@ You might opt for manual configuration when a certain pool in your actor system 
 
 ## Automatic Configuring {#autoconfig}
 
+Regardless of the `node_type` parameter value, if one or more pools are starving (a shortage of compute resources), core redistribution follows the priority order below (highest to lowest):
+
+* `IC`
+* `System`
+* `User`
+* `Batch`
+
+For example, if `IC` and `User` are starving while `System` has idle cores, `IC` receives them.
+
 Example of the `actor_system_config` section for automatic configuration of the actor system:
 
 ```yaml

@@ -487,6 +487,7 @@ message TClusterBalancingSettings {
     optional uint32 MaxReplicatingVDisks = 4;
     optional bool PreferLessOccupiedRack = 5;
     optional bool WithAttentionToReplication = 6;
+    optional uint32 MaxReassignAttemptsPerBucketPerIteration = 7;
 }
 
 message TSelfHealSettings {

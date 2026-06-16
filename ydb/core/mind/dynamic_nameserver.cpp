@@ -69,7 +69,7 @@ private:
     using TCacheMiss::NodeId;
 
     void Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, const TActorContext &ctx) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Handle " << ev->Get()->ToString());
 
         if (Owner->ProtocolState != EProtocolState::UseEpochProtocol) {
             return;
@@ -128,12 +128,12 @@ TCacheMiss::TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHan
 }
 
 void TCacheMiss::OnSuccess(const TActorContext &) {
-    LOG_D("Cache miss succeed"
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Cache miss succeed"
         << ": nodeId=" << NodeId);
 }
 
 void TCacheMiss::OnError(const TString &error, const TActorContext &) {
-    LOG_D("Cache miss failed"
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Cache miss failed"
         << ": nodeId=" << NodeId
         << ", error=" << error);
 }
@@ -583,7 +583,7 @@ void TDynamicNameserver::UpdateCounters() {
 void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,
                                 const TActorContext &ctx)
 {
-    LOG_D("Handle " << ev->Get()->ToString());
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Handle " << ev->Get()->ToString());
     const ui32 nodeId = ev->Get()->NodeId;
     const TMonotonic deadline = ev->Get()->Deadline;
     auto config = AppData(ctx)->DynamicNameserviceConfig;
@@ -605,7 +605,7 @@ void TDynamicNameserver::Handle(TEvResolveAddress::TPtr &ev, const TActorContext
 void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
                                 const TActorContext &ctx)
 {
-    LOG_D("Handle " << ev->Get()->ToString());
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Handle " << ev->Get()->ToString());
 
     if (ProtocolState == EProtocolState::Connecting) {
         SendNodesList(ev->Sender, ctx);
@@ -634,7 +634,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx)
 {
-    LOG_D("Handle " << ev->Get()->ToString());
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Handle " << ev->Get()->ToString());
 
     ui32 nodeId = ev->Get()->NodeId;
     THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(nodeId));
@@ -682,13 +682,13 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
 }
 
 void TDynamicNameserver::RegisterNewCacheMiss(TCacheMiss* cacheMiss, TDynamicConfigPtr config) {
-    LOG_D("New cache miss"
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"New cache miss"
         << ": nodeId# " << cacheMiss->NodeId
         << ", deadline# " << cacheMiss->Deadline);
     
     bool newEarliestDeadline = config->PendingCacheMisses.Empty() || config->PendingCacheMisses.Top()->Deadline > cacheMiss->Deadline;
     if (cacheMiss->NeedScheduleDeadline && newEarliestDeadline) {
-        LOG_D("Schedule wakeup for new earliest deadline " << cacheMiss->Deadline);
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Schedule wakeup for new earliest deadline " << cacheMiss->Deadline);
         Schedule(cacheMiss->Deadline, new TEvents::TEvWakeup);
         cacheMiss->NeedScheduleDeadline = false;
     }
@@ -707,7 +707,7 @@ void TDynamicNameserver::SendSyncRequest(TActorId pipe, const TActorContext &ctx
 
 void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx)
 {
-    LOG_D("Handle " << ev->Get()->ToString());
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Handle " << ev->Get()->ToString());
     ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;
     if (DynamicConfigs[domain]->NodeBrokerPipe == ev->Get()->ClientId)
         OnPipeDestroyed(domain, ctx);
@@ -715,7 +715,7 @@ void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, con
 
 void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
 {
-    LOG_D("Handle " << ev->Get()->ToString());
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Handle " << ev->Get()->ToString());
 
     ui32 domain = AppData(ctx)->DomainsInfo->GetDomain()->DomainUid;
     if (DynamicConfigs[domain]->NodeBrokerPipe != ev->Get()->ClientId) {
@@ -782,7 +782,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvNodesInfo::TPtr &ev, const TAc
 
 void TDynamicNameserver::Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const TActorContext &ctx)
 {
-    LOG_D("Handle " << ev->Get()->ToString());
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Handle " << ev->Get()->ToString());
 
     auto &rec = ev->Get()->GetRecord();
     if (rec.GetSeqNo() != SeqNo) {
@@ -849,7 +849,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const T
 
 void TDynamicNameserver::Handle(TEvNodeBroker::TEvSyncNodesResponse::TPtr &ev, const TActorContext &ctx)
 {
-    LOG_D("Handle " << ev->Get()->ToString());
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Handle " << ev->Get()->ToString());
 
     auto &rec = ev->Get()->Record;
     if (rec.GetSeqNo() != SeqNo) {
@@ -884,7 +884,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvSyncNodesResponse::TPtr &ev, c
 
     if (!config->PendingCacheMisses.Empty() && config->PendingCacheMisses.Top()->NeedScheduleDeadline) {
         auto* cacheMiss = config->PendingCacheMisses.Top();
-        LOG_D("Schedule next wakeup at " << cacheMiss->Deadline);
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Schedule next wakeup at " << cacheMiss->Deadline);
         Schedule(cacheMiss->Deadline, new TEvents::TEvWakeup);
         cacheMiss->NeedScheduleDeadline = false;
     }
@@ -933,7 +933,7 @@ void TDynamicNameserver::Handle(TEvents::TEvUnsubscribe::TPtr ev) {
 
 void TDynamicNameserver::HandleWakeup(const TActorContext &ctx) {
     auto now = ctx.Monotonic();
-    LOG_D("HandleWakeup at " << now);
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"HandleWakeup at " << now);
 
     ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;
     auto &pendingCacheMisses = DynamicConfigs[domain]->PendingCacheMisses;
@@ -948,7 +948,7 @@ void TDynamicNameserver::HandleWakeup(const TActorContext &ctx) {
 
     if (!pendingCacheMisses.Empty() && pendingCacheMisses.Top()->NeedScheduleDeadline) {
         auto* cacheMiss = pendingCacheMisses.Top();
-        LOG_D("Schedule next wakeup at " << cacheMiss->Deadline);
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE,"Schedule next wakeup at " << cacheMiss->Deadline);
         Schedule(cacheMiss->Deadline, new TEvents::TEvWakeup);
         cacheMiss->NeedScheduleDeadline = false;
     }

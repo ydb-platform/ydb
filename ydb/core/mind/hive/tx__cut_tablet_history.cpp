@@ -17,7 +17,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvHive::TEvCutTabletHistory* msg = Event->Get();
         auto tabletId = msg->Record.GetTabletID();
-        BLOG_D("THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
         if (tablet != nullptr && tablet->IsReadyToReassignTablet() && Self->IsCutHistoryAllowed(tablet->Type)) {
             auto channel = msg->Record.GetChannel();

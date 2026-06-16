@@ -17,7 +17,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_DISCONNECT_NODE; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        BLOG_D("THive::TTxDisconnectNode()::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDisconnectNode()::Execute");
         TNodeInfo* node = Self->FindNode(Event->NodeId);
         if (node != nullptr) {
             Self->ScheduleUnlockTabletExecution(*node, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
@@ -35,7 +35,7 @@ public:
                 }
                 Self->ScheduleDisconnectNode(std::move(event));
             } else if (node->IsUnknown()) {
-                BLOG_W("THive::TTxDisconnectNode() - killing node " << node->Id);
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDisconnectNode() - killing node " << node->Id);
                 Self->KillNode(node->Id, node->Local);
             }
         }
@@ -43,7 +43,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxDisconnectNode()::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDisconnectNode()::Complete");
     }
 };
 

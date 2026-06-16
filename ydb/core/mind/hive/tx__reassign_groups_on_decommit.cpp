@@ -32,7 +32,7 @@ public:
             for (ui32 channel = 0; channel < tablet.GetChannelCount(); ++channel) {
                 auto *entry = channel < channels.size() ? channels[channel].LatestEntry() : nullptr;
                 if (!entry) {
-                    BLOG_W("TTxReassignGroupsOnDecommit entry not found TabletId# " << tabletId_
+                    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"TTxReassignGroupsOnDecommit entry not found TabletId# " << tabletId_
                         << " channel# " << channel << " GroupId# " << GroupId);
                     continue;
                 } else if (entry->GroupID != GroupId) {
@@ -46,7 +46,7 @@ public:
                 ++numChannels;
 
                 if (changed || !tablet.IsReadyToReassignTablet()) {
-                    BLOG_D("TTxReassignGroupsOnDecommit tablet is not ready for reassignment TabletId# " << tabletId_);
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"TTxReassignGroupsOnDecommit tablet is not ready for reassignment TabletId# " << tabletId_);
                     continue;
                 }
 
@@ -60,7 +60,7 @@ public:
             }
 
             if (changed) {
-                BLOG_D("TTxReassignGroupsOnDecommit tablet reassigned TabletId# " << tabletId_ << " numChannels# " << numChannels);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"TTxReassignGroupsOnDecommit tablet reassigned TabletId# " << tabletId_ << " numChannels# " << numChannels);
                 tablet.InitiateAssignTabletGroups();
             }
 		}

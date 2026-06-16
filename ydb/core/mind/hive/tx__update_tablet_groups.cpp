@@ -56,10 +56,10 @@ public:
 
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (!tablet) {
-            BLOG_W("THive::TTxUpdateTabletGroups:: tablet " << TabletId << " wasn't found");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups:: tablet " << TabletId << " wasn't found");
             return true;
         }
-        BLOG_D("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}("
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}("
                << tablet->Id << "," << tablet->ChannelProfileReassignReason << "," << Groups << ")");
 
         Y_ABORT_UNLESS(tablet->TabletStorageInfo);
@@ -68,7 +68,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         if (tablet->ChannelProfileNewGroup.count() != Groups.size() && !Groups.empty()) {
-            BLOG_ERROR("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                    << tablet->Id
                    << " ChannelProfileNewGroup has incorrect size");
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
@@ -78,7 +78,7 @@ public:
         }
 
         if (!tablet->ChannelProfileNewGroup.any()) {
-            BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                    << tablet->Id
                    << " ChannelProfileNewGroup is empty");
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
@@ -103,7 +103,7 @@ public:
 
             TDuration timeSinceLastReassign = ctx.Now() - lastChangeTimestamp;
             if (lastChangeTimestamp && Self->GetMinPeriodBetweenReassign() && timeSinceLastReassign < Self->GetMinPeriodBetweenReassign()) {
-                BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                     << tablet->Id
                     << " SpaceReassign was too soon - ignored");
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
@@ -129,7 +129,7 @@ public:
             } else {
                 group = tablet->FindFreeAllocationUnit(channelId);
                 if (group == nullptr) {
-                    BLOG_ERROR("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                             << tablet->Id
                             << " could not find a group for channel " << channelId
                             << " pool " << tablet->GetChannelStoragePoolName(channelId));
@@ -143,7 +143,7 @@ public:
                     ++orderNumber;
                     continue;
                 } else {
-                    BLOG_D("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                         << tablet->Id
                         << " channel "
                         << channelId
@@ -165,7 +165,7 @@ public:
             }
 
             if (MaySkipChannelReassign(tablet, channel, group)) {
-                BLOG_D("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                     << tablet->Id
                     << " skipped reassign of channel "
                     << channelId);
@@ -221,7 +221,7 @@ public:
             changed = true;
 
             if (!tablet->AcquireAllocationUnit(channelId)) {
-                BLOG_ERROR("Failed to aquire AU for tablet " << tablet->Id << " channel " << channelId);
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Failed to aquire AU for tablet " << tablet->Id << " channel " << channelId);
             }
             tablet->ChannelProfileNewGroup.reset(channelId);
 
@@ -238,14 +238,14 @@ public:
 
         if (changed && (tablet->ChannelProfileNewGroup.none() || !hasEmptyChannel)) {
             if (tablet->ChannelProfileNewGroup.any()) {
-                BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                        << tablet->Id
                        << " was partially changed");
             }
 
             for (ui32 channelId = 0; channelId < channels; ++channelId) {
                 if (tablet->ChannelProfileNewGroup.test(channelId)) {
-                    BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet " << tablet->Id
+                    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet " << tablet->Id
                            << " skipped channel " << channelId);
                     db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
                     tablet->ChannelProfileNewGroup.reset(channelId);
@@ -267,7 +267,7 @@ public:
                 db.Table<Schema::Tablet>().Key(TabletId).UpdateToNull<Schema::Tablet::ActorsToNotify>();
             }
         } else {
-            BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                    << tablet->Id
                    << " wasn't changed");
             if (hasEmptyChannel) {
@@ -277,7 +277,7 @@ public:
                 // we will continue to boot tablet even with unsuccessfull reassign
                 for (ui32 channelId = 0; channelId < channels; ++channelId) {
                     if (tablet->ChannelProfileNewGroup.test(channelId)) {
-                        BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet " << tablet->Id
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet " << tablet->Id
                                << " skipped channel " << channelId);
                         db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
                         tablet->ChannelProfileNewGroup.reset(channelId);
@@ -303,12 +303,12 @@ public:
             tablet->NotifyStorageInfo(SideEffects);
             if (tablet->IsReadyToBlockStorage()) {
                 if (!tablet->InitiateBlockStorage(SideEffects)) {
-                    BLOG_W("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"
+                    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"
                             " - InitiateBlockStorage was not successfull");
                 }
             } else if (tablet->IsReadyToWork()) {
                 if (!tablet->InitiateStop(SideEffects)) {
-                    BLOG_W("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"
+                    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"
                             " - InitiateStop was not successfull");
                 }
             } else if (tablet->IsBootingSuppressed()) {
@@ -322,14 +322,14 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration);
         }
         if (!tablet->TryToBoot()) {
-            BLOG_NOTICE("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"
                         " - TryToBoot was not successfull");
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Complete SideEffects: " << SideEffects);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Complete SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
     }
 };

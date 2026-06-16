@@ -19,7 +19,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        BLOG_D("THive::TTxStatus(" << nodeId << ")::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStatus(" << nodeId << ")::Execute");
         TEvLocal::TEvStatus::EStatus status = (TEvLocal::TEvStatus::EStatus)Record.GetStatus();
         TNodeInfo& node = Self->GetNode(nodeId);
         if (status == TEvLocal::TEvStatus::StatusOk && node.BecomeConnected()) {
@@ -48,13 +48,13 @@ public:
             }
             Self->ProcessWaitQueue(); // new node connected
             if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {
-                BLOG_D("THive::TTxStatus(" << nodeId << ") - continuing node drain");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStatus(" << nodeId << ") - continuing node drain");
                 Y_DEBUG_ABORT_UNLESS(node.DrainActor == nullptr);
                 node.DrainActor = Self->StartHiveDrain(nodeId, {.Persist = true, .DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN});
             }
             Self->ObjectDistributions.AddNode(node);
         } else {
-            BLOG_W("THive::TTxStatus(status=" << static_cast<int>(status)
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStatus(status=" << static_cast<int>(status)
                    << " node=" << TNodeInfo::EVolatileStateName(node.GetVolatileState()) << ") - killing node " << node.Id);
             Self->KillNode(node.Id, Local);
         }
@@ -63,7 +63,7 @@ public:
 
     void Complete(const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStatus(" << nodeId << ")::Complete");
     }
 };
 

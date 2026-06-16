@@ -21,10 +21,10 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
 
-        BLOG_D("THive::TTxUpdateDomain(" << SubdomainKey << ")::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateDomain(" << SubdomainKey << ")::Execute");
         const TDomainInfo* domain = Self->FindDomain(SubdomainKey);
         if (domain == nullptr) {
-            BLOG_W("THive::TTxUpdateDomain(" << SubdomainKey << ")::Execute - unknown subdomain");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateDomain(" << SubdomainKey << ")::Execute - unknown subdomain");
             return true;
         }
 
@@ -53,7 +53,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateDomain(" << SubdomainKey << ")::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateDomain(" << SubdomainKey << ")::Complete");
         SideEffects.Complete(ctx);
     }
 };

@@ -14,7 +14,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_PILES; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxUpdatePiles()::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdatePiles()::Execute");
         NIceDb::TNiceDb db(txc.DB);
         bool promotion = false;
         Y_ENSURE(Self->BridgeInfo);
@@ -72,7 +72,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxUpdatePiles()::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdatePiles()::Complete");
     }
 
 };

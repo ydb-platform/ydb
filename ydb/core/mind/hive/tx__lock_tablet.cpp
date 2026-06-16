@@ -34,7 +34,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOCK_TABLET_EXECUTION; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxLockTabletExecution::Execute TabletId: " << TabletId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLockTabletExecution::Execute TabletId: " << TabletId);
 
         SideEffects.Reset(Self->SelfId());
 
@@ -116,9 +116,9 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Success) {
-            BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
         } else {
-            BLOG_NOTICE("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
         }
         SideEffects.Complete(ctx);
     }

@@ -21,7 +21,7 @@ public:
         TEvHive::TEvUpdateTabletsObject* msg = Event->Get();
         auto objectId = msg->Record.GetObjectId();
 
-        BLOG_D("THive::TTxUpdateTabletsObject::Execute(" << objectId << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletsObject::Execute(" << objectId << ")");
 
         NIceDb::TNiceDb db(txc.DB);
         ui64 tabletsUpdated = 0;
@@ -81,7 +81,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateTabletsObject Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletsObject Complete");
         SideEffects.Complete(ctx);
     }
 };

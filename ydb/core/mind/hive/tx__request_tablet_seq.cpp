@@ -20,7 +20,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REQUEST_TABLET_SEQUENCE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxRequestTabletSequence()::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRequestTabletSequence()::Execute");
         const auto& pbRecord(Event->Get()->Record);
         Size = pbRecord.GetSize();
         if (Size == 0) {
@@ -53,11 +53,11 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxRequestTabletSequence()::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRequestTabletSequence()::Complete");
         if (Sequence == TSequencer::NO_SEQUENCE) {
-            BLOG_CRIT("Could not allocate sequence of " << Size << " elements for " << Owner);
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Could not allocate sequence of " << Size << " elements for " << Owner);
         } else {
-            BLOG_D("Respond with sequence " << Sequence << " to " << Owner);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Respond with sequence " << Sequence << " to " << Owner);
             THolder<TEvHive::TEvResponseTabletIdSequence> response = MakeHolder<TEvHive::TEvResponseTabletIdSequence>();
             const auto& pbRecord(Event->Get()->Record);
             response->Record.MutableOwner()->CopyFrom(pbRecord.GetOwner());

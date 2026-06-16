@@ -15,7 +15,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_BOOT_QUEUE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxProcessBootQueue()::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessBootQueue()::Execute");
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         Self->ExecuteProcessBootQueue(db, SideEffects);
@@ -23,7 +23,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxProcessBootQueue()::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessBootQueue()::Complete");
         SideEffects.Complete(ctx);
     }
 };

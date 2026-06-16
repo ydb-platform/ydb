@@ -41,7 +41,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvSeizeTablets& request(Request->Get()->Record);
         NKikimrHive::TEvSeizeTabletsReply& response(Response->Record);
-        BLOG_D("THive::TTxSeizeTablets::Execute " << request);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSeizeTablets::Execute " << request);
         TTabletId newOwnerId = request.GetNewOwnerID();
         response.ClearTablets();
         NIceDb::TNiceDb db(txc.DB);
@@ -57,14 +57,14 @@ public:
                 // we also skip current metrics state for followers
 
                 TTabletId id = tabletId;
-                BLOG_D("THive::TTxSeizeTablets is migrating tablet " << id << " to " << newOwnerId);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSeizeTablets is migrating tablet " << id << " to " << newOwnerId);
 
                 auto tabletRowset = db.Table<Schema::Tablet>().Key(id).Select();
                 if (!tabletRowset.IsReady()) {
                     return false;
                 }
                 if (tabletRowset.EndOfSet()) {
-                    BLOG_D("THive::TTxSeizeTablets couldn't find tablet " << id << " in database");
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSeizeTablets couldn't find tablet " << id << " in database");
                     continue;
                 }
 
@@ -153,7 +153,7 @@ public:
     }
 
     void Complete(const TActorContext& txc) override {
-        BLOG_D("THive::TTxSeizeTablets::Complete " << Request->Get()->Record);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSeizeTablets::Complete " << Request->Get()->Record);
         txc.Send(Request->Sender, Response.Release());
     }
 };

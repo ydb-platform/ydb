@@ -16,7 +16,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_TABLET_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxProcessTabletMetrics::Execute()");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"TTxProcessTabletMetrics::Execute()");
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());
         for (size_t i = 0; !Self->ProcessTabletMetricsQueue.empty() && i < MAX_UPDATES_PROCESSED; ++i) {

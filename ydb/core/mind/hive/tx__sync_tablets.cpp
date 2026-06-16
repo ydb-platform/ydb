@@ -38,7 +38,7 @@ public:
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        BLOG_D("THive::TTxSyncTablets(" << Local << ")::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ")::Execute");
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo& node = Self->GetNode(Local.NodeId());
@@ -55,10 +55,10 @@ public:
         auto foundTablet = [&](TTabletInfo* tablet, const TString& state) {
             auto tabletId = tablet->GetFullTabletId();
             if (node.MatchesFilter(tablet->NodeFilter)) {
-                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId);
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId);
                 tabletsToStop.erase(tabletId);
             } else {
-                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId << ", but it's not allowed to run on this node");
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId << ", but it's not allowed to run on this node");
             }
             if (tablet->GetLeader().IsBootingSuppressed()) {
                 tablet->InitiateStop(SideEffects);
@@ -78,7 +78,7 @@ public:
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") rejected unknown starting tablet " << tabletId);
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") rejected unknown starting tablet " << tabletId);
                 tabletsToStop.erase(tabletId);
             }
         }
@@ -105,14 +105,14 @@ public:
                     continue;
                 } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId)); // the tablet is running somewhere else
-                    BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed and stopped running tablet " << tabletId);
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") confirmed and stopped running tablet " << tabletId);
                     tabletsToBoot.insert(tabletId);
                     tabletsToStop.erase(tabletId);
                     continue;
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") rejected unknown running tablet " << tabletId);
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") rejected unknown running tablet " << tabletId);
                 tabletsToStop.erase(tabletId);
             }
         }
@@ -130,7 +130,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxSyncTablets(" << Local << ")::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ")::Complete");
         SideEffects.Complete(ctx);
     }
 };

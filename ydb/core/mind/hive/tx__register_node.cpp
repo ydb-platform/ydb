@@ -18,7 +18,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REGISTER_NODE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute");
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
@@ -59,7 +59,7 @@ public:
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
             if (node.BecomeUpOnRestart) {
-                BLOG_TRACE("THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute - node became up on restart");
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute - node became up on restart");
                 node.SetDown(false);
                 node.BecomeUpOnRestart = false;
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
@@ -96,7 +96,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRegisterNode(" << Local.NodeId() << ")::Complete");
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
             Self->NodePingsInProgress.erase(node->Id);

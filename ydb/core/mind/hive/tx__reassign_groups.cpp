@@ -32,7 +32,7 @@ public:
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
-            BLOG_D("THive::TTxReassignGroups(" << tablet->Id << "," << ChannelProfileNewGroup << ")::Execute");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReassignGroups(" << tablet->Id << "," << ChannelProfileNewGroup << ")::Execute");
             if (tablet->IsReadyToReassignTablet()) {
                 NIceDb::TNiceDb db(txc.DB);
                 tablet->ChannelProfileNewGroup |= ChannelProfileNewGroup;
@@ -55,14 +55,14 @@ public:
                     tablet->InitiateAssignTabletGroups();
                 }
             } else {
-                BLOG_W("THive::TTxReassignGroups(" << tablet->Id << ")::Execute - tablet is not ready for group reassignment");
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReassignGroups(" << tablet->Id << ")::Execute - tablet is not ready for group reassignment");
             }
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxReassignGroups(" << TabletId << ")::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReassignGroups(" << TabletId << ")::Complete");
         SideEffects.Complete(ctx);
     }
 };

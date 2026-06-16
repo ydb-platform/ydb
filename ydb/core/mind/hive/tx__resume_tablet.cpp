@@ -21,7 +21,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_RESUME_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxResumeTablet::Execute Tablet: " << TabletId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxResumeTablet::Execute Tablet: " << TabletId);
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
@@ -85,7 +85,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxResumeTablet::Complete TabletId: " << TabletId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxResumeTablet::Complete TabletId: " << TabletId);
         SideEffects.Complete(ctx);
         if (ByTenant) {
             Self->ProcessPendingResumeTablet();

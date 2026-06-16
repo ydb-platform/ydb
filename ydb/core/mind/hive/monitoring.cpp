@@ -2810,7 +2810,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2859,7 +2859,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2903,7 +2903,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };

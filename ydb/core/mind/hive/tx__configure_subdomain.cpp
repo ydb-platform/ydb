@@ -17,12 +17,12 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_CONFIGURE_SUBDOMAIN; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxConfigureSubdomain::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxConfigureSubdomain::Execute");
 
         const auto& domain(Event->Get()->Record.GetDomain());
         Self->PrimaryDomainKey = TSubDomainKey(domain);
 
-        BLOG_D("Switching primary domain to " << domain);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Switching primary domain to " << domain);
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::SubDomain>().Key(domain.GetSchemeShard(), domain.GetPathId()).Update<Schema::SubDomain::Primary>(true);
@@ -31,7 +31,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxConfigureSubdomain::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxConfigureSubdomain::Complete");
         ctx.Send(Event->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()));
     }
 };

@@ -17,13 +17,13 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvTabletOwnersReply& request(Request->Get()->Record);
-        BLOG_D("THive::TTxTabletOwnersReply::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxTabletOwnersReply::Execute");
         NIceDb::TNiceDb db(txc.DB);
         for (const NKikimrHive::TTabletOwnerRecord& protoTabletOwner : request.GetTabletOwners()) {
             TOwnershipKeeper::TOwnerType ownerId = protoTabletOwner.GetOwnerID();
             TSequencer::TSequence seq(protoTabletOwner.GetBegin(), protoTabletOwner.GetEnd());
             if (Self->Keeper.AddOwnedSequence(ownerId, seq)) {
-                BLOG_D("THive::TTxTabletOwnersReply::Execute - add new owned sequence ("
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxTabletOwnersReply::Execute - add new owned sequence ("
                     << seq.Begin << "," << seq.End << ") = " << ownerId);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(ownerId);
             }
@@ -34,7 +34,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxTabletOwnersReply::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxTabletOwnersReply::Complete");
     }
 };
 

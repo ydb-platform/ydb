@@ -9,6 +9,15 @@
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
+#include <algorithm>
+#include <limits>
+#include <map>
+#include <memory>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 namespace NKikimr::NBsController {
 
     enum {
@@ -30,11 +39,34 @@ namespace NKikimr::NBsController {
         const TActorId ControllerId;
         const TClusterBalancingSettings Settings;
 
+        struct TPDiskUsage {
+            ui32 NumSlots = 0;
+            ui32 MaxSlots = 1;
+        };
+
+        struct TPoolKey {
+            ui64 BoxId = 0;
+            ui64 StoragePoolId = 0;
+
+            friend bool operator <(const TPoolKey& left, const TPoolKey& right) {
+                return std::tie(left.BoxId, left.StoragePoolId) < std::tie(right.BoxId, right.StoragePoolId);
+            }
+        };
+
         struct TStorageInfo {
-            std::unordered_set<TGroupId> HealthyGroups;
-            std::unordered_map<TPDiskId, ui32> PDiskUsageMap;
+            std::unordered_set<TGroupId> MovableGroups;
+            std::unordered_map<TGroupId, TPoolKey> GroupPoolKeys;
+            std::unordered_map<TPDiskId, TPDiskUsage> PDiskUsageMap;
+            std::map<TPoolKey, TPDiskUsage> BestTargetUsageAfterMoveByPool;
             ui32 PDisksWithReplicatingVDisks;
             ui32 ReplicatingVDisks;
+        };
+
+        struct TPoolUsageSummary {
+            TPDiskUsage BestTargetUsageAfterMove;
+            TPDiskUsage MaxSourceUsage;
+            bool HasBestTargetUsageAfterMove = false;
+            bool HasMaxSourceUsage = false;
         };
 
         enum class ReassignResult {
@@ -43,13 +75,177 @@ namespace NKikimr::NBsController {
             Reassigned,
         };
 
-        TStorageInfo BuildStorageInfo(const NKikimrBlobStorage::TBaseConfig& config) {
+        // Compare PDisks by their occupied-slot ratio without rounding. This keeps
+        // balancing fair when PDisks in the same pool have different expected sizes.
+        static int CompareUsage(const TPDiskUsage& left, const TPDiskUsage& right) {
+            const ui64 leftProduct = ui64(left.NumSlots) * right.MaxSlots;
+            const ui64 rightProduct = ui64(right.NumSlots) * left.MaxSlots;
+            if (leftProduct < rightProduct) {
+                return -1;
+            } else if (leftProduct > rightProduct) {
+                return 1;
+            }
+            return 0;
+        }
+
+        static bool IsUsageLess(const TPDiskUsage& left, const TPDiskUsage& right) {
+            return CompareUsage(left, right) < 0;
+        }
+
+        static bool CanImproveByMovingFrom(const TPDiskUsage& source, const TPDiskUsage& bestTargetUsageAfterMove) {
+            return source.NumSlots && CompareUsage(source, bestTargetUsageAfterMove) > 0;
+        }
+
+        struct TPDiskUsageGreater {
+            bool operator()(const TPDiskUsage& left, const TPDiskUsage& right) const {
+                return CompareUsage(left, right) > 0;
+            }
+        };
+
+        static bool MatchTriStateBool(NKikimrBlobStorage::ETriStateBool actual, bool expected) {
+            return expected
+                ? actual == NKikimrBlobStorage::ETriStateBool::kTrue
+                : actual == NKikimrBlobStorage::ETriStateBool::kFalse;
+        }
+
+        static bool MatchPDiskFilter(
+            const NKikimrBlobStorage::TPDiskFilter& filter,
+            const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk
+        ) {
+            for (const auto& property : filter.GetProperty()) {
+                switch (property.GetPropertyCase()) {
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kType:
+                        if (property.GetType() != pdisk.GetType()) {
+                            return false;
+                        }
+                        break;
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kSharedWithOs:
+                        if (!MatchTriStateBool(pdisk.GetSharedWithOs(), property.GetSharedWithOs())) {
+                            return false;
+                        }
+                        break;
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kReadCentric:
+                        if (!MatchTriStateBool(pdisk.GetReadCentric(), property.GetReadCentric())) {
+                            return false;
+                        }
+                        break;
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
+                        if (property.GetKind() != pdisk.GetKind()) {
+                            return false;
+                        }
+                        break;
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        static bool MatchStoragePool(
+            const NKikimrBlobStorage::TDefineStoragePool& pool,
+            const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk
+        ) {
+            if (!pool.GetBoxId() || pool.GetBoxId() != pdisk.GetBoxId()) {
+                return false;
+            }
+
+            for (const auto& filter : pool.GetPDiskFilter()) {
+                if (MatchPDiskFilter(filter, pdisk)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        std::map<TPoolKey, TPDiskUsage> BuildImprovablePoolTargets(
+            const NKikimrBlobStorage::TBaseConfig& config,
+            const NKikimrBlobStorage::TConfigResponse::TStatus& storagePoolsStatus,
+            const TStorageInfo& storageInfo
+        ) {
+            std::map<TPoolKey, TPoolUsageSummary> poolUsageSummaries;
+
+            std::unordered_map<ui64, std::vector<const NKikimrBlobStorage::TDefineStoragePool*>> storagePoolsByBox;
+            for (const auto& pool : storagePoolsStatus.GetStoragePool()) {
+                if (!pool.GetBoxId()) {
+                    continue;
+                }
+                storagePoolsByBox[pool.GetBoxId()].push_back(&pool);
+            }
+
+            for (const auto& pdisk : config.GetPDisk()) {
+                const auto poolsIt = storagePoolsByBox.find(pdisk.GetBoxId());
+                if (poolsIt == storagePoolsByBox.end()) {
+                    continue;
+                }
+
+                const TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
+                const auto usageIt = storageInfo.PDiskUsageMap.find(pdiskId);
+                if (usageIt == storageInfo.PDiskUsageMap.end()) {
+                    continue;
+                }
+
+                const TPDiskUsage& usage = usageIt->second;
+
+                for (const auto* pool : poolsIt->second) {
+                    if (!MatchStoragePool(*pool, pdisk)) {
+                        continue;
+                    }
+
+                    const TPoolKey poolKey{
+                        .BoxId = pool->GetBoxId(),
+                        .StoragePoolId = pool->GetStoragePoolId(),
+                    };
+
+                    TPoolUsageSummary& summary = poolUsageSummaries[poolKey];
+                    if (usage.NumSlots && (!summary.HasMaxSourceUsage || IsUsageLess(summary.MaxSourceUsage, usage))) {
+                        summary.MaxSourceUsage = usage;
+                        summary.HasMaxSourceUsage = true;
+                    }
+                    if (usage.NumSlots < usage.MaxSlots) {
+                        // Targets are evaluated in the state they would have after
+                        // accepting one VDisk; otherwise a move to an almost-full
+                        // PDisk could look better than it actually is.
+                        const TPDiskUsage usageAfterMove{
+                            .NumSlots = usage.NumSlots + 1,
+                            .MaxSlots = usage.MaxSlots,
+                        };
+                        if (!summary.HasBestTargetUsageAfterMove || IsUsageLess(usageAfterMove, summary.BestTargetUsageAfterMove)) {
+                            summary.BestTargetUsageAfterMove = usageAfterMove;
+                            summary.HasBestTargetUsageAfterMove = true;
+                        }
+                    }
+                }
+            }
+
+            std::map<TPoolKey, TPDiskUsage> bestTargetUsageAfterMoveByPool;
+            for (const auto& [poolKey, summary] : poolUsageSummaries) {
+                // A pool is worth scanning only when its most loaded source PDisk
+                // would still be worse than the best target after that target
+                // receives the moved VDisk.
+                if (summary.HasBestTargetUsageAfterMove && summary.HasMaxSourceUsage &&
+                        CanImproveByMovingFrom(summary.MaxSourceUsage, summary.BestTargetUsageAfterMove)) {
+                    bestTargetUsageAfterMoveByPool.emplace(poolKey, summary.BestTargetUsageAfterMove);
+                }
+            }
+
+            return bestTargetUsageAfterMoveByPool;
+        }
+
+        TStorageInfo BuildStorageInfo(
+            const NKikimrBlobStorage::TBaseConfig& config,
+            const NKikimrBlobStorage::TConfigResponse::TStatus& storagePoolsStatus
+        ) {
             TStorageInfo storageInfo;
 
             // First, iterate over PDisk and initialize the map.
             for (const auto& pdisk : config.GetPDisk()) {
                 TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
-                storageInfo.PDiskUsageMap[pdiskId] = pdisk.GetNumStaticSlots(); // initialize with static groups
+                storageInfo.PDiskUsageMap[pdiskId] = {
+                    .NumSlots = pdisk.GetNumStaticSlots(), // initialize with static groups
+                    .MaxSlots = std::max<ui32>(pdisk.GetExpectedSlotCount(), 1),
+                };
             }
 
             ui32 replicatingVDisks = 0;
@@ -85,17 +281,32 @@ namespace NKikimr::NBsController {
                 if (it == storageInfo.PDiskUsageMap.end()) {
                     continue;
                 }
-                it->second += 1;
+                it->second.NumSlots += 1;
             }
 
             storageInfo.PDisksWithReplicatingVDisks = pdisksWithReplicatingVDisks.size();
             storageInfo.ReplicatingVDisks = replicatingVDisks;
+            storageInfo.BestTargetUsageAfterMoveByPool = BuildImprovablePoolTargets(config, storagePoolsStatus, storageInfo);
 
             for (const auto& group : config.GetGroup()) {
                 if (!NKikimr::IsDynamicGroup(TGroupId::FromValue(group.GetGroupId()))) {
                     continue;
                 }
-                
+
+                const TGroupId groupId = TGroupId::FromValue(group.GetGroupId());
+                const TPoolKey poolKey{
+                    .BoxId = group.GetBoxId(),
+                    .StoragePoolId = group.GetStoragePoolId(),
+                };
+
+                // Healthy groups from non-improvable pools are skipped to avoid
+                // issuing reassign checks that can only churn data inside the pool.
+                if (storageInfo.BestTargetUsageAfterMoveByPool.find(poolKey) == storageInfo.BestTargetUsageAfterMoveByPool.end()) {
+                    continue;
+                }
+
+                storageInfo.GroupPoolKeys.emplace(groupId, poolKey);
+
                 bool isHealthy = true;
 
                 for (const auto& vslotId : group.GetVSlotId()) {
@@ -116,7 +327,7 @@ namespace NKikimr::NBsController {
                 }
 
                 if (isHealthy) {
-                    storageInfo.HealthyGroups.insert(TGroupId::FromValue(group.GetGroupId()));
+                    storageInfo.MovableGroups.insert(groupId);
                 }
             }
 
@@ -127,15 +338,27 @@ namespace NKikimr::NBsController {
             const std::vector<const TVSlot*>& vslots,
             const TStorageInfo& storageInfo
         ) {
-            std::map<ui32, std::vector<const TVSlot*>, std::greater<>> vslotsByPDiskSlotUsage;
+            // Buckets are source-PDisk usage levels. The cap on failed reassigns is
+            // applied per bucket, so a bad top bucket should not block lower buckets.
+            std::map<TPDiskUsage, std::vector<const TVSlot*>, TPDiskUsageGreater> vslotsByPDiskSlotUsage;
 
             for (const auto* vslot : vslots) {
+                const TGroupId groupId = TGroupId::FromValue(vslot->GetGroupId());
+                const auto groupPoolIt = storageInfo.GroupPoolKeys.find(groupId);
+                if (groupPoolIt == storageInfo.GroupPoolKeys.end()) {
+                    continue;
+                }
+
+                const auto bestTargetUsageIt = storageInfo.BestTargetUsageAfterMoveByPool.find(groupPoolIt->second);
+                if (bestTargetUsageIt == storageInfo.BestTargetUsageAfterMoveByPool.end()) {
+                    continue;
+                }
+
                 TVSlotId vslotId(vslot->GetVSlotId());
                 TPDiskId pdiskId = vslotId.ComprisingPDiskId();
                 auto it = storageInfo.PDiskUsageMap.find(pdiskId);
-                if (it != storageInfo.PDiskUsageMap.end()) {
-                    ui32 usage = it->second;
-                    vslotsByPDiskSlotUsage[usage].push_back(vslot);
+                if (it != storageInfo.PDiskUsageMap.end() && CanImproveByMovingFrom(it->second, bestTargetUsageIt->second)) {
+                    vslotsByPDiskSlotUsage[it->second].push_back(vslot);
                 }
             }
 
@@ -161,6 +384,9 @@ namespace NKikimr::NBsController {
             auto& record = ev->Record;
             auto *request = record.MutableRequest();
             request->AddCommand()->MutableQueryBaseConfig();
+            // Read all pools; pool filters are needed to decide whether a PDisk can
+            // actually be a balancing target for a group's storage pool.
+            request->AddCommand()->MutableReadStoragePool()->SetBoxId(std::numeric_limits<ui64>::max());
             return ev;
         }
 
@@ -274,9 +500,14 @@ namespace NKikimr::NBsController {
             // }
 
             const auto& configResponse = bscResponse->Get()->Record.GetResponse();
+            if (configResponse.StatusSize() < 2 || !configResponse.GetStatus(0).GetSuccess() || !configResponse.GetStatus(1).GetSuccess()) {
+                STLOG(PRI_WARN, BS_CLUSTER_BALANCING, BSCB17, "Failed to read base config or storage pools for cluster balancing", (Response, configResponse));
+                return;
+            }
             const auto& config = configResponse.GetStatus(0).GetBaseConfig();
+            const auto& storagePoolsStatus = configResponse.GetStatus(1);
 
-            const auto storageInfo = BuildStorageInfo(config);
+            const auto storageInfo = BuildStorageInfo(config, storagePoolsStatus);
 
             if (storageInfo.PDisksWithReplicatingVDisks > Settings.MaxReplicatingPDisks) {
                 STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB13, "Skip balancing, too many replicating PDisks", (ReplicatingPDisks, storageInfo.PDisksWithReplicatingVDisks));
@@ -288,25 +519,36 @@ namespace NKikimr::NBsController {
                 return;
             }
 
+            if (storageInfo.BestTargetUsageAfterMoveByPool.empty()) {
+                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB15, "Skip balancing, no storage pool has a PDisk that can accept a moved VDisk");
+                return;
+            }
+
             std::vector<const TVSlot*> candidateVSlots;
 
             for (const auto& vslot : config.GetVSlot()) {
-                if (storageInfo.HealthyGroups.contains(TGroupId::FromValue(vslot.GetGroupId()))) {
+                if (storageInfo.MovableGroups.contains(TGroupId::FromValue(vslot.GetGroupId()))) {
                     candidateVSlots.push_back(&vslot);
                 }
             }
 
             auto groupSlotsOrdered = OrderVSlotsByPDiskUsage(candidateVSlots, storageInfo);
+            if (groupSlotsOrdered.empty()) {
+                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB16, "Skip balancing, cluster is balanced enough");
+                return;
+            }
+
 
             // Reading the config also increments the config transaction sequence number.
-            // We need to increment it again to get the next one. Reassignment check 
-            // and actual reassignment will use this sequence number. 
+            // We need to increment it again to get the next one. Reassignment check
+            // and actual reassignment will use this sequence number.
             // Reassignment check doesn't increment the sequence number because this transaction
             // rolls back.
             ui64 expectedConfigTxSeqNo = configResponse.GetConfigTxSeqNo();
 
             for (auto& groupSlots : groupSlotsOrdered) {
                 std::random_shuffle(groupSlots.begin(), groupSlots.end());
+                ui32 reassignAttempts = 0;
                 for (const auto& vslot : groupSlots) {
                     switch (TryReassign(vslot, storageInfo, expectedConfigTxSeqNo)) {
                         case ReassignResult::FailedToReassign:
@@ -317,7 +559,15 @@ namespace NKikimr::NBsController {
                             // Move to the next balancing iteration.
                             return;
                     }
-                    Yield();
+
+                    if (++reassignAttempts >= Settings.MaxReassignAttemptsPerBucketPerIteration) {
+                        // Move to the next source-usage bucket, keeping this cap
+                        // local to the bucket instead of the whole iteration.
+                        break;
+                    }
+
+                    // Avoid DoSing BSC.
+                    Yield(TDuration::MilliSeconds(100));
                 }
             }
         }
@@ -332,7 +582,7 @@ namespace NKikimr::NBsController {
             try {
                 while (true) {
                     RunBalancing();
-                    
+
                     Yield(TDuration::MilliSeconds(Settings.IterationIntervalMs));
                 }
             } catch (const TDtorException&) {
@@ -367,10 +617,13 @@ namespace NKikimr::NBsController {
         const auto& clusterBalancingSettings = bscSettings.GetClusterBalancingSettings();
 
         if (clusterBalancingSettings.HasEnable()) {
-            settings.Enable = clusterBalancingSettings.GetEnable();   
+            settings.Enable = clusterBalancingSettings.GetEnable();
         }
         if (clusterBalancingSettings.HasIterationIntervalMs()) {
             settings.IterationIntervalMs = clusterBalancingSettings.GetIterationIntervalMs();
+        }
+        if (clusterBalancingSettings.HasMaxReassignAttemptsPerBucketPerIteration()) {
+            settings.MaxReassignAttemptsPerBucketPerIteration = clusterBalancingSettings.GetMaxReassignAttemptsPerBucketPerIteration();
         }
         if (clusterBalancingSettings.HasMaxReplicatingPDisks()) {
             settings.MaxReplicatingPDisks = clusterBalancingSettings.GetMaxReplicatingPDisks();

@@ -9515,17 +9515,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 tabletIdExt = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(evExt), 0, false);
         MakeSureTabletIsDown(runtime, tabletIdExt, 0);
 
+        TActorId owner = runtime.AllocateEdgeActor(0);
         // Lock the external tablet with a large reconnect timeout so the lock
         // survives hive restart (ScheduleUnlockTabletExecution defers the unlock
         // by LockedReconnectTimeout).
-        TActorId owner = runtime.AllocateEdgeActor(0);
-        {
-            THolder<TEvHive::TEvLockTabletExecution> lockEv(new TEvHive::TEvLockTabletExecution(tabletIdExt));
-            lockEv->Record.SetMaxReconnectTimeout(60000);
-            runtime.SendToPipe(hiveTablet, owner, lockEv.Release());
-            TAutoPtr<IEventHandle> handle;
-            runtime.GrabEdgeEvent<TEvHive::TEvLockTabletExecutionResult>(handle);
-        }
+        SendLockTabletExecution(runtime, hiveTablet, tabletIdExt, 0, NKikimrProto::OK, owner, 60000);
         UNIT_ASSERT_EQUAL(NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_UNKNOWN, tabletState(tabletIdExt));
 
         // Send metrics for both tablets
@@ -9539,15 +9533,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
 
         // Reconnect the lock before the 60s timeout fires.
-        {
-            THolder<TEvHive::TEvLockTabletExecution> lockEv(new TEvHive::TEvLockTabletExecution(tabletIdExt));
-            lockEv->Record.SetMaxReconnectTimeout(60000);
-            lockEv->Record.SetReconnect(true);
-            runtime.SendToPipe(hiveTablet, owner, lockEv.Release());
-            TAutoPtr<IEventHandle> handle;
-            auto result = runtime.GrabEdgeEvent<TEvHive::TEvLockTabletExecutionResult>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrProto::OK);
-        }
+        SendLockTabletExecution(runtime, hiveTablet, tabletIdExt, 0, NKikimrProto::OK, owner, 60000, true);
 
         // After restart + reconnect, the locked tablet must be in UNKNOWN state
         // so that its metrics are tracked on the node.

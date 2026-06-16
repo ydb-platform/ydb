@@ -409,6 +409,7 @@ NJson::TJsonMap THttpProxyTestMock::SendXmlRequest(TString method, NJson::TJsonM
     if (expectedHttpCode != 0) {
         UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, TStringBuilder() << "REQUEST: " << method << " " << body << "\nRESPONSE: " << res.Body);
     }
+    Cerr << (TStringBuilder() << ">>>>> Http response BODY: " << res.Body << Endl);
     return ParseSqsXmlResponse(res.Body);
 }
 

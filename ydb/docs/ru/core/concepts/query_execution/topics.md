@@ -1,6 +1,6 @@
-# YQL запросы к топикам {#yql-syntax}
+# YQL-запросы к топикам {#yql-syntax}
 
-Для чтения и записи сообщений в [топики](../datamodel/topic.md) используются привычные YQL конструкции: [SELECT](../../yql/reference/syntax/select/index.md) для чтения и [INSERT](../../yql/reference/syntax/insert_into.md) для записи.
+Для чтения и записи сообщений в [топики](../datamodel/topic.md) используются привычные YQL-конструкции: [SELECT](../../yql/reference/syntax/select/index.md) для чтения и [INSERT](../../yql/reference/syntax/insert_into.md) для записи.
 
 ## Локальные и внешние топики {#local-external-topics}
 
@@ -97,7 +97,7 @@ WITH (
 
 {% include [consumer-usage](../../_includes/consumer-usage.md) %}
 
-### Запись прочитанных данных в таблицу {#upsert-from-topic}
+### Перенос данных из топика в таблицу через UPSERT {#upsert-from-topic}
 
 Данные из топика можно переложить в таблицу через [UPSERT INTO](../../yql/reference/syntax/upsert_into.md):
 
@@ -166,25 +166,24 @@ FROM
     table_name;
 ```
 
-{% note warning %}
-
-При записи в топик через YQL/`INSERT INTO` транзакционная запись не поддерживается — в топике могут появиться частичные результаты запроса.
-
-{% endnote %}
-
 ## Ограничения {#limitations}
 
 {% note warning %}
 
-- Чтение и запись [пользовательских атрибутов](../datamodel/topic.md#message) не поддерживается.
-- Транзакционная запись через `INSERT INTO` не поддерживается.
+Чтение и запись [пользовательских атрибутов](../datamodel/topic.md#message) не поддерживаются.
+
+{% endnote %}
+
+{% note warning %}
+
+Транзакционная запись через YQL/`INSERT INTO` не поддерживается — в топике могут появиться частичные результаты запроса.
 
 {% endnote %}
 
 ## См. также
 
-* [Локальные и внешние топики](local-and-external-topics.md)
-* [CREATE TOPIC](../../yql/reference/syntax/create-topic.md)
-* [ALTER TOPIC](../../yql/reference/syntax/alter-topic.md)
-* [DROP TOPIC](../../yql/reference/syntax/drop-topic.md)
-* [Потоковые запросы](../../dev/streaming-query/index.md)
+- [Локальные и внешние топики](local-and-external-topics.md)
+- [CREATE TOPIC](../../yql/reference/syntax/create-topic.md)
+- [ALTER TOPIC](../../yql/reference/syntax/alter-topic.md)
+- [DROP TOPIC](../../yql/reference/syntax/drop-topic.md)
+- [Потоковые запросы](../../dev/streaming-query/index.md)

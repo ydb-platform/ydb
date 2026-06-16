@@ -17,8 +17,7 @@ items:
       mode: link
   - name: Спиллинг
     href: spilling.md
-  - name: YQL запросы к топикам
+  - name: YQL-запросы к топикам
     href: topics.md
   - name: Локальные и внешние топики
     href: local-and-external-topics.md
-

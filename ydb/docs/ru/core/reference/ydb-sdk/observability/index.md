@@ -4,17 +4,17 @@
 
 Логирование:
 
-* [{#T}](logging/logging.md)
-* [{#T}](logging/opentelemetry.md)
+- [{#T}](logging/logging.md)
+- [{#T}](logging/opentelemetry.md)
 
 Метрики:
 
-* [{#T}](metrics/opentelemetry.md)
-* [{#T}](metrics/prometheus.md)
+- [{#T}](metrics/opentelemetry.md)
+- [{#T}](metrics/prometheus.md)
 
 Трассировка:
 
-* [{#T}](tracing/opentelemetry.md)
-* [{#T}](tracing/jaeger.md)
+- [{#T}](tracing/opentelemetry.md)
+- [{#T}](tracing/jaeger.md)
 
 Серверная наблюдаемость {{ ydb-short-name }}, не зависящая от SDK, описана в разделе [{#T}](../../observability/index.md).

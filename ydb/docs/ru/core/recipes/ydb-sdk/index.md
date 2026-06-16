@@ -33,7 +33,7 @@
   - [Публикация конфигурации](config-publication.md)
   - [Выбор лидера](leader-election.md)
 
-Подключение средств диагностики ({{ ydb-short-name }} SDK) — логирование, метрики и распределённая трассировка — описано в разделе [{#T}](../../reference/ydb-sdk/observability/index.md).
+Подключение средств диагностики {{ ydb-short-name }} SDK — логирования, метрик и распределённой трассировки — описано в разделе [{#T}](../../reference/ydb-sdk/observability/index.md).
 
 Смотрите также:
 

@@ -7,6 +7,7 @@ import subprocess
 import argparse
 from typing import Optional
 from github import Github
+from github.GithubException import GithubException
 from github.PullRequest import PullRequest
 
 automerge_pr_label = "automerge"
@@ -162,14 +163,28 @@ class PrAutomerger:
             os.chdir(original_dir)
             shutil.rmtree("merge-repo", ignore_errors=True)
 
+    def delete_head_ref(self, pr: PullRequest):
+        if pr.head.repo.full_name != self.repo_name:
+            self.logger.info("skip deleting head ref %r (fork PR)", pr.head.ref)
+            return
+        self.logger.info("deleting ref %r", pr.head.ref)
+        try:
+            self.repo.get_git_ref(f"heads/{pr.head.ref}").delete()
+        except GithubException as e:
+            if e.status == 404:
+                # GitHub may delete the branch when it detects the merge
+                # (auto-merge, "delete head branch" setting, etc.).
+                self.logger.info("head ref %r already gone", pr.head.ref)
+                return
+            raise
+
     def merge_pr(self, pr: PullRequest):
         self.logger.info("start merge %s into %s", pr, pr.base.ref)
         if not self.git_merge_pr(pr):
             self.logger.info("unable to merge PR")
             return
         self.clear_retry_label(pr)
-        self.logger.info("deleting ref %r", pr.head.ref)
-        self.repo.get_git_ref(f"heads/{pr.head.ref}").delete()
+        self.delete_head_ref(pr)
         body = f"The PR was successfully merged into {pr.base.ref} using workflow"
         pr.create_issue_comment(body=body)
 

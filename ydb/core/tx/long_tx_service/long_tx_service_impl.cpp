@@ -94,7 +94,7 @@ void TLongTxServiceActor::HandlePoison() {
         SessionSubscribeActor = nullptr;
     }
     if (SnapshotsExchangeActorId) {
-        Send(SnapshotsExchangeActorId, new TKikimrEvents::TEvPoison());
+        Send(SnapshotsExchangeActorId, new TEvents::TEvPoison());
     }
     PassAway();
 }

@@ -21,7 +21,7 @@ check_dependency "yfm" "YFM builder" "https://diplodoc.com/docs/en/tools/docs/"
 echo "Starting YFM builder"
 echo "Output directory: $DIR"
 
-if ! yfm -i . -o $DIR --allowHTML --apply-presets; then
+if ! yfm -s -i . -o $DIR --allowHTML --apply-presets; then
   echo
   echo '================================'
   echo 'YFM build completed with ERRORS!'

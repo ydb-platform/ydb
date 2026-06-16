@@ -1,6 +1,6 @@
 items:
 - name: Overview
-  href: index.md
+  href: index.md  
 - name: Initialize the driver
   href: init.md
 - name: Authentication
@@ -29,6 +29,8 @@ items:
     href: balancing-prefer-local.md
   - name: Prefer the specific availability zone
     href: balancing-prefer-location.md
+  - name: Prefer a pile with a specific state
+    href: balancing-prefer-pile.md      
 - name: Running repeat queries
   href: retry.md
 - name: Setting the session pool size
@@ -43,6 +45,8 @@ items:
   href: vector-search.md
 - name: Configuring time to live (TTL)
   href: ttl.md
+- name: Vector search
+  href: vector-search.md
 - name: Coordination
   items:
   - name: Distributed lock
@@ -61,5 +65,7 @@ items:
     href: debug-logs.md
   - name: Enable metrics in Prometheus
     href: debug-prometheus.md
+  - name: Enable tracing in OpenTelemetry
+    href: debug-otel.md
   - name: Enable tracing in Jaeger
-    href: debug-jaeger.md
+    href: debug-jaeger.md  

@@ -1515,8 +1515,25 @@ template <typename TRule>
              std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
              std::same_as<TRule, TRule_select_subexpr>
 TSourcePtr TSqlSelect::BuildStmt(const TRule& node, TPosition& pos) {
+    if (node.HasBlock1()) {
+        Token(node.GetBlock1().GetRule_cte_with_clause1().GetToken1());
+        Ctx_.Error() << "WITH CTE is available only with YqlSelect";
+        return nullptr;
+    }
+
     TBuildExtra extra;
-    TSourcePtr result = BuildUnionException(node, pos, extra);
+    TSourcePtr result;
+
+    if constexpr (std::is_same_v<TRule, TRule_select_stmt>) {
+        result = BuildUnionException(node.GetRule_select_stmt_core2(), pos, extra);
+    } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt>) {
+        result = BuildUnionException(node.GetRule_select_unparenthesized_stmt_core2(), pos, extra);
+    } else if constexpr (std::is_same_v<TRule, TRule_select_subexpr>) {
+        result = BuildUnionException(node.GetRule_select_subexpr_core2(), pos, extra);
+    } else {
+        static_assert(false, "Change implementation according to grammar changes.");
+    }
+
     return BuildStmt(std::move(result), std::move(extra));
 }
 
@@ -1597,21 +1614,21 @@ TSourcePtr TSqlSelect::BuildStmt(TSourcePtr result, TBuildExtra extra) {
 }
 
 template <typename TRule>
-    requires std::same_as<TRule, TRule_select_stmt> ||
-             std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
-             std::same_as<TRule, TRule_select_subexpr>
+    requires std::same_as<TRule, TRule_select_stmt_core> ||
+             std::same_as<TRule, TRule_select_unparenthesized_stmt_core> ||
+             std::same_as<TRule, TRule_select_subexpr_core>
 TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TSqlSelect::TBuildExtra& extra) {
-    const TSelectKindPlacement firstPlacement = {
+    TSelectKindPlacement firstPlacement = {
         .IsFirstInSelectOp = true,
         .IsLastInSelectOp = node.GetBlock2().empty(),
     };
 
     TSourcePtr first;
-    if constexpr (std::is_same_v<TRule, TRule_select_stmt>) {
+    if constexpr (std::is_same_v<TRule, TRule_select_stmt_core>) {
         first = BuildIntersection(node.GetRule_select_stmt_intersect1(), pos, firstPlacement, extra);
-    } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt>) {
+    } else if constexpr (std::is_same_v<TRule, TRule_select_unparenthesized_stmt_core>) {
         first = BuildIntersection(node.GetRule_select_unparenthesized_stmt_intersect1(), pos, firstPlacement, extra);
-    } else if constexpr (std::is_same_v<TRule, TRule_select_subexpr>) {
+    } else if constexpr (std::is_same_v<TRule, TRule_select_subexpr_core>) {
         first = BuildIntersection(node.GetRule_select_subexpr_intersect1(), pos, firstPlacement, extra);
     } else {
         static_assert(false, "Change implementation according to grammar changes.");
@@ -1657,7 +1674,7 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
         };
 
         TSourcePtr next;
-        if constexpr (std::is_same_v<TRule, TRule_select_subexpr>) {
+        if constexpr (std::is_same_v<TRule, TRule_select_subexpr_core>) {
             next = BuildIntersection(nextBlock.GetRule_select_subexpr_intersect2(), pos, nextPlacement, extra);
         } else {
             next = BuildIntersection(nextBlock.GetRule_select_stmt_intersect2(), pos, nextPlacement, extra);

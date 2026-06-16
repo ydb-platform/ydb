@@ -47,9 +47,10 @@ const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) 
         return nullptr;
     }
 
-    return &msg.GetBlock2()
-                .GetAlt1()
-                .GetRule_select_subexpr1()
+    const auto& select_subexpr = msg.GetBlock2().GetAlt1().GetRule_select_subexpr1();
+
+    return &select_subexpr
+                .GetRule_select_subexpr_core2()
                 .GetRule_select_subexpr_intersect1()
                 .GetRule_select_or_expr1();
 }
@@ -143,13 +144,15 @@ bool IsSelect(const TRule_expr& msg) {
 }
 
 bool IsOnlySubExpr(const TRule_select_subexpr& msg) {
-    return msg.GetBlock2().empty() &&
-           msg.GetRule_select_subexpr_intersect1().GetBlock2().empty();
+    return !msg.HasBlock1() &&
+           msg.GetRule_select_subexpr_core2().GetBlock2().empty() &&
+           msg.GetRule_select_subexpr_core2().GetRule_select_subexpr_intersect1().GetBlock2().empty();
 }
 
 bool IsOnlySelect(const TRule_select_stmt& rule) {
-    return rule.GetBlock2().empty() &&
-           rule.GetRule_select_stmt_intersect1().GetBlock2().empty();
+    return !rule.HasBlock1() &&
+           rule.GetRule_select_stmt_core2().GetBlock2().empty() &&
+           rule.GetRule_select_stmt_core2().GetRule_select_stmt_intersect1().GetBlock2().empty();
 }
 
 const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& rule) {

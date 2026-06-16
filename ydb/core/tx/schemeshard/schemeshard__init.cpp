@@ -4490,6 +4490,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 } else if (Self->ColumnTables.contains(pathId)) {
                     auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
                     fillBackupSettings(tableInfo);
+                } else {
+                    Y_ABORT_S("Cannot find table for backup settings"
+                        << ", pathId: " << pathId);
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
@@ -4518,6 +4521,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 } else if (Self->ColumnTables.contains(pathId)) {
                     auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(tableInfo->RestoreSettings, task));
+                } else {
+                    Y_ABORT_S("Cannot find table for restore task"
+                        << ", pathId: " << pathId);
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

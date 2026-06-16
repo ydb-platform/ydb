@@ -52,8 +52,9 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         csControllerGuard->SetOverrideMaxReadStaleness(TDuration::MilliSeconds(250));
 
         auto tracker = MakeTracker();
+        NOlap::NTest::TTestPathIdTranslator translator;
         const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
-        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker);
+        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker, translator);
 
         UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 750);
         UNIT_ASSERT(guard->MayStartScanAt(Step(1000), TSchemeShardLocalPathId::FromRawValue(1)));
@@ -133,8 +134,9 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         csControllerGuard->SetOverrideMaxReadStaleness(TDuration::MilliSeconds(250));
 
         auto tracker = MakeTracker();
+        NOlap::NTest::TTestPathIdTranslator translator;
         const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot(900, 0);
-        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker);
+        auto guard = CreateLocalScanSnapshotGuard(/*passedStep*/ 1000, lastCleanupSnapshot, tracker, translator);
 
         UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads(), lastCleanupSnapshot);
         UNIT_ASSERT(!guard->MayStartScanAt(Step(850), TSchemeShardLocalPathId::FromRawValue(1)));
@@ -152,6 +154,27 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
 
         // Border must win over cleanup watermark to avoid dropping active snapshots under the border.
         UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads(), NOlap::TSnapshot(100, 0));
+    }
+
+    Y_UNIT_TEST(RegistryGuardRespectsCopySnapshot) {
+        const auto longTxConfig = MakeExplicitLongTxConfig();
+        const ui64 schemeShardId = 123;
+        NOlap::NTest::TTestPathIdTranslator translator;
+        const auto internalPathId = TInternalPathId::FromRawValue(7);
+        const auto roTablePathId = TSchemeShardLocalPathId::FromRawValue(70);
+        translator.Add(internalPathId, { roTablePathId });
+
+        const auto copySnapshot = Step(500);
+        translator.SetCopyVersion(roTablePathId, copySnapshot);
+
+        auto registry = CreateSnapshotRegistry(TRowVersion(900, 0));
+
+        const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
+        auto guard = CreateRegistryScanSnapshotGuard(
+            /*passedStep*/ 200000, schemeShardId, lastCleanupSnapshot, translator, registry, longTxConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 900);
+        UNIT_ASSERT(guard->MayStartScanAt(copySnapshot, roTablePathId));
     }
 
     Y_UNIT_TEST(RegistryRespectsLastCleanupSnapshot) {

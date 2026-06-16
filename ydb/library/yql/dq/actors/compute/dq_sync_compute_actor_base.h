@@ -340,31 +340,6 @@ protected:
         return TaskRunner ? TaskRunner->GetInputTransformWatermarksTracker(inputId): nullptr;
     }
 
-private:
-    ui32 UnsentCheckpoints = 0;
-
-    void ResumeInputsByCheckpoint() override {
-        Y_ENSURE(UnsentCheckpoints == 0);
-        UnsentCheckpoints = this->SinksMap.size() + this->OutputChannelsMap.size();
-        MaybeResumeByCheckpoint();
-    }
-
-    void MaybeResumeByCheckpoint() {
-        if (UnsentCheckpoints > 0) {
-            CA_LOG_D("Pending " << UnsentCheckpoints << " checkpoints to be sent");
-            return;
-        }
-        CA_LOG_I("Resume inputs by checkpoint");
-        TBase::ResumeInputsByCheckpoint();
-    }
-
-public:
-    void AdvanceResumeInputsByCheckpoint() {
-        Y_ENSURE(UnsentCheckpoints > 0);
-        --UnsentCheckpoints;
-        MaybeResumeByCheckpoint();
-    }
-
 protected:
 
     // methods that are called via static_cast<TDerived*>(this) and may be overriden by a dervied class
@@ -402,10 +377,6 @@ protected:
             std::vector<typename TBase::TOutputChannelInfo::TDrainedChannelMessage> channelData = outputChannel.DrainChannel(drainPackSize);
             ui32 idx = 0;
             for (auto&& i : channelData) {
-                if (i.GetCheckpointOptional()) {
-                    AdvanceResumeInputsByCheckpoint();
-                }
-
                 this->Channels->SendChannelData(i.BuildChannelData(outputChannel.ChannelId), ++idx == channelData.size());
                 ++sentChunks;
             }

@@ -125,21 +125,18 @@ namespace NKikimr {
                 logStringBuilderAcc << (TString)logStringBuilderAcc2; \
                 (accumulator).Add(mPriorityAcc, mComponentAcc, (TString)logStringBuilderAcc); \
                 if ((accumulator).IsLogEnabled) { \
-                    YDB_LOG_COMP(mPriorityAcc, mComponentAcc, "",
-                        {"#_(TString)logStringBuilderAcc2", (TString)logStringBuilderAcc2}); \
+                    YDB_LOG_COMP(mPriorityAcc, mComponentAcc, (TString)logStringBuilderAcc2); \
                 } \
             } else { \
                 if ((accumulator).IsLogEnabled) { \
-                    YDB_LOG_COMP(priority, (component), "",
-                        {"Stream", stream}); \
+                    YDB_LOG_COMP(priority, (component), stream); \
                 } \
             } \
         } while (0)
 #else
     #define A_LOG_LOG_S_IMPL(accumulator, priority, component, stream) \
         do { \
-            YDB_LOG_COMP(priority, component, "",
-                {"Stream", stream}); \
+            YDB_LOG_COMP(priority, component, stream); \
         } while (0)
 #endif
 

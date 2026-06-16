@@ -160,9 +160,10 @@ namespace NKikimr {
                     new TEvBlobStorage::TEvPutResult(NKikimrProto::ERROR, ev->Get()->Id, 0, GroupId, 0.f));
             result->ErrorReason = errorReason;
             result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
-            YDB_LOG_COMP_ERROR(NKikimrServices::BS_PROXY, "HandleNormal Marker# DSP54",
-                {"Ev", ev->Get()->Print(false)},
-                {"Result", result->Print(false)});
+            YDB_LOG_ERROR_COMP(NKikimrServices::BS_PROXY, "HandleNormal",
+                {"ev", ev->Get()->Print(false)},
+                {"result", result->Print(false)},
+                {"marker", "DSP54"});
             Send(ev->Sender, result.release(), 0, ev->Cookie);
         };
 
@@ -1084,9 +1085,9 @@ namespace NKikimr {
                 }
                 *PoolCounters->DSProxyDiskCostCounter += cost;
 
-                YDB_LOG_CTX_COMP_TRACE(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST, "DSProxy Request",
-                    {"Type", TypeName<T>()},
-                    {"Cost", cost});
+                YDB_LOG_TRACE_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST, "DSProxy Request",
+                    {"type", TypeName<T>()},
+                    {"cost", cost});
             }
 
             if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVPut> ||

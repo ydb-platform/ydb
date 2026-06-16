@@ -29,8 +29,9 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateEstablishingSessions() {
-        YDB_LOG_INFO("SetStateEstablishingSessions Marker# DSP03",
-            {"Group", GroupId});
+        YDB_LOG_INFO("SetStateEstablishingSessions",
+            {"group", GroupId},
+            {"marker", "DSP03"});
         EstablishingSessionStartTime = TActivationContext::Now();
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
@@ -41,8 +42,9 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateEstablishingSessionsTimeout() {
-        YDB_LOG_INFO("SetStateEstablishingSessionsTimeout Marker# DSP09",
-            {"Group", GroupId});
+        YDB_LOG_INFO("SetStateEstablishingSessionsTimeout",
+            {"group", GroupId},
+            {"marker", "DSP09"});
         EstablishingSessionStartTime = TInstant::Zero();
         EstablishingSessionsPutMuteChecker.Unmute();
         EstablishingSessionsTimeoutEv = nullptr;
@@ -56,8 +58,9 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateUnconfigured() {
-        YDB_LOG_INFO("SetStateUnconfigured Marker# DSP07",
-            {"Group", GroupId});
+        YDB_LOG_INFO("SetStateUnconfigured",
+            {"group", GroupId},
+            {"marker", "DSP07"});
         ErrorDescription = "StateUnconfigured (DSPE9).";
         EstablishingSessionsTimeoutEv = nullptr;
         ClearTimeoutCounters();
@@ -67,8 +70,9 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateUnconfiguredTimeout() {
-        YDB_LOG_INFO("SetStateUnconfiguredTimeout Marker# DSP14",
-            {"Group", GroupId});
+        YDB_LOG_INFO("SetStateUnconfiguredTimeout",
+            {"group", GroupId},
+            {"marker", "DSP14"});
         EstablishingSessionsTimeoutEv = nullptr;
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
@@ -80,8 +84,9 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateWork() {
-        YDB_LOG_INFO("SetStateWork Marker# DSP15",
-            {"Group", GroupId});
+        YDB_LOG_INFO("SetStateWork",
+            {"group", GroupId},
+            {"marker", "DSP15"});
         EstablishingSessionsTimeoutEv = nullptr;
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
@@ -179,10 +184,11 @@ namespace NKikimr {
                     break;
             }
         }
-        YDB_LOG_INFO("TEvConfigureProxy received Marker# DSP02",
-            {"Group", GroupId},
-            {"GroupGeneration", (Info ? ToString(Info->GroupGeneration) : "<none>")},
-            {"IsLimitedKeyless", (IsLimitedKeyless ? "true" : "false")});
+        YDB_LOG_INFO("TEvConfigureProxy received",
+            {"group", GroupId},
+            {"groupGeneration", (Info ? ToString(Info->GroupGeneration) : "<none>")},
+            {"isLimitedKeyless", (IsLimitedKeyless ? "true" : "false")},
+            {"marker", "DSP02"});
         if (Info) { // if the new group has arrived
             if (Sessions) { // queues are already created
                 for (size_t i = 0; i < Sessions->GroupQueues->DisksByOrderNumber.size(); ++i) {
@@ -216,8 +222,9 @@ namespace NKikimr {
                 << " UnconfiguredStateTs# " << UnconfiguredStateTs
                 << " UnconfiguredStateReason# " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
 
-        YDB_LOG_ERROR("Unconfigured Wakeup TIMEOUT Marker# DSP05",
-            {"Details", details});
+        YDB_LOG_ERROR("Unconfigured Wakeup TIMEOUT",
+            {"details", details},
+            {"marker", "DSP05"});
 
         ErrorDescription = "Configuration timeout occured (DSPE1). " + details;
         EstablishingSessionsPutMuteChecker.Unmute();
@@ -227,8 +234,9 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::SwitchToWorkWhenGoodToGo() {
         Y_ABORT_UNLESS(Sessions);
         if (Sessions->GoodToGo(*Topology, ForceWaitAllDrives)) {
-            YDB_LOG_INFO("-> StateWork Marker# DSP11",
-                {"Group", GroupId});
+            YDB_LOG_INFO("-> StateWork",
+                {"group", GroupId},
+                {"marker", "DSP11"});
             ErrorDescription = "StateWork (DSPE3).";
             EstablishingSessionStartTime = TInstant::Zero();
             EstablishingSessionsPutMuteChecker.Unmute();
@@ -245,8 +253,9 @@ namespace NKikimr {
         TString details = TStringBuilder() << " GroupId# " << GroupId
                 << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
                 << " NumUnconnectedDisks# " << NumUnconnectedDisks;
-        YDB_LOG_ERROR("StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12",
-            {"Details", details});
+        YDB_LOG_ERROR("StateEstablishingSessions Wakeup TIMEOUT",
+            {"details", details},
+            {"marker", "DSP12"});
         ErrorDescription = "Timeout while establishing sessions (DSPE4). " + details;
         SetStateEstablishingSessionsTimeout();
     }
@@ -254,10 +263,11 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::Handle(TEvProxyQueueState::TPtr& ev) {
         TInstant now = TActivationContext::Now();
         TDuration establishingSessionsDuration = now - EstablishingSessionStartTime;
-        YDB_LOG_DEBUG("Handle Marker# DSP04",
-            {"Group", GroupId},
+        YDB_LOG_DEBUG("Handle",
+            {"group", GroupId},
             {"TEvProxyQueueState", ev->Get()->ToString()},
-            {"Duration", establishingSessionsDuration});
+            {"duration", establishingSessionsDuration},
+            {"marker", "DSP04"});
         Y_ABORT_UNLESS(Sessions);
         auto *msg = ev->Get();
         Y_ABORT_UNLESS(Topology);
@@ -281,9 +291,10 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::Bootstrap() {
         if (IsEjected) {
-            YDB_LOG_NOTICE("Bootstrap -> StateEjected Marker# DSP42",
-                {"Group", GroupId},
-                {"HasInvalidGroupId", HasInvalidGroupId()});
+            YDB_LOG_NOTICE("Bootstrap -> StateEjected",
+                {"group", GroupId},
+                {"hasInvalidGroupId", HasInvalidGroupId()},
+                {"marker", "DSP42"});
             if (HasInvalidGroupId()) {
                 ErrorDescription = "Created as unconfigured in error state (DSPE11). It happens when the request was sent for an invalid groupID";
                 ExtraLogInfo = "The request was sent for an invalid groupID ";
@@ -338,15 +349,17 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::EnsureMonitoring(bool fullIfPossible) {
         if (MonActor && fullIfPossible && !IsFullMonitoring) {
             IsFullMonitoring = true;
-            YDB_LOG_NOTICE("EnsureMonitoring Marker# DSP57 initialize full monitoring",
-                {"Group", GroupId},
-                {"IsLimitedKeyless", IsLimitedKeyless});
+            YDB_LOG_NOTICE("EnsureMonitoring initialize full monitoring",
+                {"group", GroupId},
+                {"isLimitedKeyless", IsLimitedKeyless},
+                {"marker", "DSP57"});
             Mon->BecomeFull();
         } else if (!MonActor) {
-            YDB_LOG_NOTICE("EnsureMonitoring Marker# DSP58",
-                {"Group", GroupId},
-                {"IsLimitedKeyless", IsLimitedKeyless},
-                {"FullIfPossible", fullIfPossible});
+            YDB_LOG_NOTICE("EnsureMonitoring",
+                {"group", GroupId},
+                {"isLimitedKeyless", IsLimitedKeyless},
+                {"fullIfPossible", fullIfPossible},
+                {"marker", "DSP58"});
 
             bool limited = IsLimitedKeyless || !fullIfPossible;
             IsFullMonitoring = IsLimitedKeyless || fullIfPossible;
@@ -366,8 +379,9 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::Handle(TEvRequestProxySessionsState::TPtr &ev) {
-        YDB_LOG_DEBUG("RequestProxySessionsState Marker# DSP59",
-            {"Group", GroupId});
+        YDB_LOG_DEBUG("RequestProxySessionsState",
+            {"group", GroupId},
+            {"marker", "DSP59"});
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
     }
 

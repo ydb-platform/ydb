@@ -78,11 +78,12 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             TActorId queue = TActivationContext::Register(queueActor.release(), ProxyActor, TMailboxType::ReadAsFilled,
                 AppData()->SystemPoolId);
 
-            YDB_LOG_DEBUG("Create Marker# DSP01",
-                {"Group", info->GroupID},
-                {"Actor", ProxyActor},
-                {"Queue", queue.ToString()},
-                {"TargetNodeId", targetNodeId});
+            YDB_LOG_DEBUG("Create",
+                {"group", info->GroupID},
+                {"actor", ProxyActor},
+                {"queue", queue},
+                {"targetNodeId", targetNodeId},
+                {"marker", "DSP01"});
 
             auto& q = stateVDisk.Queues.GetQueue(queueId);
             q.ActorId = queue;

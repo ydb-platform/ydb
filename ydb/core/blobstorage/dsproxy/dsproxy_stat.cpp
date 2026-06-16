@@ -23,8 +23,8 @@ namespace NKikimr {
             return str.Str();
         };
         YDB_LOG_TRACE("HandleUpdateResponsiveness",
-            {"Group", GroupId},
-            {"Responsiveness", formatResponsiveness()});
+            {"group", GroupId},
+            {"responsiveness", formatResponsiveness()});
 
         if (!ResponsivenessTracker.IsEmpty()) {
             ScheduleUpdateResponsiveness();

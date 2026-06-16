@@ -172,7 +172,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             }
         };
 
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ25 sending",
+        YDB_LOG_DEBUG_CTX(ctx, "Sending",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"t", getTypeName()},
@@ -184,18 +184,20 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             {"windowSize", WindowSize},
             {"inFlightCount", InFlightCount()},
             {"postpone", (postpone ? "true" : "false")},
-            {"sendMeCostSettings", (sendMeCostSettings ? "true" : "false")});
+            {"sendMeCostSettings", (sendMeCostSettings ? "true" : "false")},
+            {"marker", "BSQ25"});
 
         // check if window has enough space for such item
         if (postpone) {
             // can't send more items now
-            YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ26 Queue overflow",
+            YDB_LOG_DEBUG_CTX(ctx, "Queue overflow",
                 {"logPrefix", LogPrefix},
                 {"func", __func__},
                 {"inFlightCost", InFlightCost},
                 {"windowSize", WindowSize},
-                {"item.Cost", item.Cost},
-                {"inFlightCount", InFlightCount()});
+                {"itemCost", item.Cost},
+                {"inFlightCount", InFlightCount()},
+                {"marker", "BSQ26"});
             ++*QueueOverflow;
             break;
         }
@@ -244,13 +246,14 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
 void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason,
         const TActorContext& ctx) {
     const TDuration processingTime = TDuration::Seconds(item.ProcessingTimer.Passed());
-    YDB_LOG_INFO_CTX(ctx, "Marker# BSQ03 Reply error",
+    YDB_LOG_INFO_CTX(ctx, "Reply error",
         {"logPrefix", LogPrefix},
         {"func", __func__},
         {"type", item.Event.GetType()},
         {"status", NKikimrProto::EReplyStatus_Name(status)},
         {"cookie", item.Event.GetCookie()},
-        {"processingTime", processingTime});
+        {"processingTime", processingTime},
+        {"marker", "BSQ03"});
 
     if (item.Span) {
         item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);

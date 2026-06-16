@@ -119,10 +119,11 @@ public:
 
     void Bootstrap(const TActorId& parent, const TActorContext& ctx) {
         ApplyGroupInfo(*std::exchange(Info, nullptr));
-        YDB_LOG_INFO_CTX(ctx, "Marker# BSQ01 starting",
+        YDB_LOG_INFO_CTX(ctx, "Starting",
             {"logPrefix", LogPrefix},
             {"func", __func__},
-            {"parent", parent});
+            {"parent", parent},
+            {"marker", "BSQ01"});
         InitCounters();
         RegisteredInUniversalScheduler = RegisterActorInUniversalScheduler(SelfId(), FlowRecord, ctx.ActorSystem());
         Y_ABORT_UNLESS(!BlobStorageProxy);
@@ -138,9 +139,10 @@ public:
             TControlBoard::RegisterSharedControl(PostponePumpMsSSD, icb->DSProxyControls.PostponePumpMsSSD);
             TControlBoard::RegisterSharedControl(PostponePumpResetAfterMs, icb->DSProxyControls.PostponePumpResetAfterMs);
         } else {
-            YDB_LOG_CRIT_CTX(ctx, "Marker# BSQ21 BSQueue is unable to discover ICB",
+            YDB_LOG_CRIT_CTX(ctx, "BSQueue is unable to discover ICB",
                 {"logPrefix", LogPrefix},
-                {"func", __func__});
+                {"func", __func__},
+                {"marker", "BSQ21"});
             PostponePumpMsHDD = 0;
             PostponePumpMsSSD = 0;
             PostponePumpResetAfterMs = 0;
@@ -204,11 +206,12 @@ private:
         const TInstant now = ctx.Now();
         if (now >= WatchdogBarrier) {
             // The disk is not responsive, because we had no advance in progress since it was scheduled/reset.
-            YDB_LOG_CRIT_CTX(ctx, "Marker# BSQ19 watchdog timer hit",
+            YDB_LOG_CRIT_CTX(ctx, "Watchdog timer hit",
                 {"logPrefix", LogPrefix},
                 {"func", __func__},
                 {"inFlightCount", Queue.InFlightCount()},
-                {"StatusRequests.size", StatusRequests.size()});
+                {"statusRequests", StatusRequests.size()},
+                {"marker", "BSQ19"});
 
             // reset the connection
             ResetConnection(ctx, NKikimrProto::ERROR, "watchdog timer hit", TDuration::Seconds(1));
@@ -239,13 +242,14 @@ private:
             deadline = TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds());
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ05",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, func, t, deadline, state, cookie, marker",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"t", TypeName<decltype(*ev->Get())>()},
             {"deadline", deadline},
             {"state", GetStateName()},
-            {"cookie", ev->Cookie});
+            {"cookie", ev->Cookie},
+            {"marker", "BSQ05"});
 
         if (IsReady()) {
             Queue.Enqueue(ctx, ev, deadline, RemoteVDisk.NodeId() == SelfId().NodeId());
@@ -301,12 +305,13 @@ private:
             }
 
             if (ev->GetChannel() != expected) {
-                YDB_LOG_CRIT_CTX(ctx, "Marker# BSQ40 CheckReply reply channel mismatch",
+                YDB_LOG_CRIT_CTX(ctx, "CheckReply reply channel mismatch",
                     {"logPrefix", LogPrefix},
                     {"func", __func__},
                     {"t", TypeName<decltype(*ev->Get())>()},
                     {"received", ev->GetChannel()},
-                    {"expected", expected});
+                    {"expected", expected},
+                    {"marker", "BSQ40"});
                 Y_DEBUG_ABORT_UNLESS(false);
             }
         }
@@ -324,10 +329,11 @@ private:
         if (!IsReady()) {
             // may be this is message from the previous interconnect iteration -- we can drop it as we do not expect
             // this message
-            YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ36 NOT READY",
+            YDB_LOG_DEBUG_CTX(ctx, "NOT READY",
                 {"logPrefix", LogPrefix},
                 {"func", __func__},
-                {"t", TypeName<decltype(*ev->Get())>()});
+                {"t", TypeName<decltype(*ev->Get())>()},
+                {"marker", "BSQ36"});
             return;
         }
 
@@ -360,12 +366,13 @@ private:
                 // this is none of expected responses, so we drop it without processing -- this may happen when interconnect
                 // fails and after reconnecting we receive reply from the old query, but this query was already replied
                 // to sender with ERROR status code upon disconnecting
-                YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ37 unexpected message",
+                YDB_LOG_DEBUG_CTX(ctx, "Unexpected message",
                     {"logPrefix", LogPrefix},
                     {"func", __func__},
                     {"t", TypeName<TEv>()},
                     {"msgId", msgId},
-                    {"sequenceId", sequenceId});
+                    {"sequenceId", sequenceId},
+                    {"marker", "BSQ37"});
                 return;
             }
 
@@ -466,7 +473,7 @@ private:
                         PostponePumpDelay = Min(PostponePumpDelay * 2, TDuration::Seconds(1));
                     }
 
-                    YDB_LOG_CRIT_CTX(ctx, "Marker# BSQ06 failed message",
+                    YDB_LOG_CRIT_CTX(ctx, "Failed message",
                         {"logPrefix", LogPrefix},
                         {"func", __func__},
                         {"t", TypeName<TEv>()},
@@ -485,7 +492,8 @@ private:
                         {"bytesWaiting", Queue.GetBytesWaiting()},
                         {"timeSinceLastPostpone", timeSinceLastPostpone},
                         {"postponePump", PostponePump},
-                        {"postponePumpDelay", PostponePumpDelay});
+                        {"postponePumpDelay", PostponePumpDelay},
+                        {"marker", "BSQ06"});
 
                     switch (ws) {
                         case NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId:
@@ -517,10 +525,11 @@ private:
             }
         } catch (const TExFatal& ex) {
             const TString msg = TStringBuilder() << "fatal error: " << ex.what();
-            YDB_LOG_CRIT_CTX(ctx, "Marker# BSQ38",
+            YDB_LOG_CRIT_CTX(ctx, "Fatal error",
                 {"logPrefix", LogPrefix},
                 {"func", __func__},
-                {"msg", msg});
+                {"error", ex.what()},
+                {"marker", "BSQ38"});
             Y_DEBUG_ABORT("%s %s", LogPrefix.data(), msg.data());
             ResetConnection(ctx, NKikimrProto::ERROR, msg, TDuration::Zero());
             return;
@@ -537,7 +546,7 @@ private:
             NWilson::TTraceId traceId = std::move(ev->TraceId);
             ctx.Send(sender, ev->Release().Release(), 0, cookie, std::move(traceId));
         }
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ08",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, func, t, sequenceId, msgId, status, processingTime, dsproxyAwaitingResponse, marker",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"t", TypeName<TEv>()},
@@ -545,7 +554,8 @@ private:
             {"msgId", msgId},
             {"status", NKikimrProto::EReplyStatus_Name(status)},
             {"processingTime", processingTime},
-            {"dsproxyAwaitingResponse", dsproxyAwaitingResponse});
+            {"dsproxyAwaitingResponse", dsproxyAwaitingResponse},
+            {"marker", "BSQ08"});
 
         Pump(ctx);
     }
@@ -557,19 +567,21 @@ private:
         if (window.HasMaxWindowSize()) {
             const ui64 maxWindowSize = window.GetMaxWindowSize();
             if (Queue.SetMaxWindowSize(maxWindowSize)) {
-                YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ10",
+                YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, func, maxWindowSize, marker",
                     {"logPrefix", LogPrefix},
                     {"func", __func__},
-                    {"maxWindowSize", maxWindowSize});
+                    {"maxWindowSize", maxWindowSize},
+                    {"marker", "BSQ10"});
             }
         }
     }
 
     void Handle(TEvBlobStorage::TEvVWindowChange::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ09",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, func, windowChange, marker",
             {"logPrefix", LogPrefix},
             {"func", __func__},
-            {"windowChange", ev->Get()->ToString()});
+            {"windowChange", ev->Get()->ToString()},
+            {"marker", "BSQ09"});
         auto record = ev->Get()->Record;
         if (record.GetDropConnection()) {
             ResetConnection(ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk disconnected due to error", TDuration::Seconds(10));
@@ -594,12 +606,13 @@ private:
                 break;
 
             case EState::READY:
-                YDB_LOG_INFO_CTX(ctx, "Marker# BSQ96 connection lost",
+                YDB_LOG_INFO_CTX(ctx, "Connection lost",
                     {"logPrefix", LogPrefix},
                     {"func", __func__},
                     {"status", NKikimrProto::EReplyStatus_Name(status)},
                     {"errorReason", errorReason},
-                    {"timeout", timeout});
+                    {"timeout", timeout},
+                    {"marker", "BSQ96"});
                 ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, false, nullptr));
                 Drain(ctx, status, errorReason);
                 break;
@@ -630,11 +643,12 @@ private:
             SessionId = ev->Sender;
 
             if (ConnectionFailureTime) {
-                YDB_LOG_INFO_CTX(ctx, "Marker# BSQ20 TEvNodeConnected connection was recovered",
+                YDB_LOG_INFO_CTX(ctx, "TEvNodeConnected connection was recovered",
                     {"logPrefix", LogPrefix},
                     {"func", __func__},
                     {"nodeId", ev->Get()->NodeId},
-                    {"connectionFailureTime", ConnectionFailureTime});
+                    {"connectionFailureTime", ConnectionFailureTime},
+                    {"marker", "BSQ20"});
                 ConnectionFailureTime = TInstant();
             }
         }
@@ -644,11 +658,12 @@ private:
         if (ev->Get()->NodeId == RemoteVDisk.NodeId()) {
             if (!ConnectionFailureTime) {
                 ConnectionFailureTime = ctx.Now();
-                YDB_LOG_INFO_CTX(ctx, "Marker# BSQ13 TEvNodeDisconnected",
+                YDB_LOG_INFO_CTX(ctx, "TEvNodeDisconnected",
                     {"logPrefix", LogPrefix},
                     {"func", __func__},
                     {"nodeId", ev->Get()->NodeId},
-                    {"connectionFailureTime", ConnectionFailureTime});
+                    {"connectionFailureTime", ConnectionFailureTime},
+                    {"marker", "BSQ13"});
             }
 
             ResetConnection(ctx, NKikimrProto::ERROR, "node disconnected", ReconnectTimeoutManager.GetTimeoutForNewRequest());
@@ -667,12 +682,13 @@ private:
             return; // obsolete scheduled event
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Marker# BSQ16 called",
+        YDB_LOG_INFO_CTX(ctx, "Called",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"checkReadinessCookie", CheckReadinessCookie},
             {"state", GetStateName()},
-            {"connectionFailureTime", ConnectionFailureTime ? ConnectionFailureTime.ToString() : ""});
+            {"connectionFailureTime", ConnectionFailureTime ? ConnectionFailureTime.ToString() : ""},
+            {"marker", "BSQ16"});
 
         if (State != EState::INITIAL && State != EState::EXPECT_READY_NOTIFY) {
             return;
@@ -707,13 +723,14 @@ private:
     }
 
     void HandleCheckReadiness(TEvBlobStorage::TEvVCheckReadinessResult::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Marker# BSQ17 TEvVCheckReadinessResult",
+        YDB_LOG_INFO_CTX(ctx, "TEvVCheckReadinessResult",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"cookie", ev->Cookie},
             {"checkReadinessCookie", CheckReadinessCookie},
             {"state", GetStateName()},
-            {"status", NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus())});
+            {"status", NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus())},
+            {"marker", "BSQ17"});
 
         if (State != EState::CHECK_READINESS_SENT || ev->Cookie != CheckReadinessCookie) {
             return; // we don't expect this message right now, or this is some race reply
@@ -744,10 +761,11 @@ private:
     }
 
     void HandleReadyNotify(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Marker# BSQ18 received TEvVReadyNotify",
+        YDB_LOG_INFO_CTX(ctx, "Received TEvVReadyNotify",
             {"logPrefix", LogPrefix},
             {"func", __func__},
-            {"state", GetStateName()});
+            {"state", GetStateName()},
+            {"marker", "BSQ18"});
 
         if (State == EState::EXPECT_READY_NOTIFY) {
             RequestReadiness(nullptr, ctx);
@@ -759,7 +777,7 @@ private:
             ConnectionFailureTime = ctx.Now();
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Marker# BSQ02 TEvUndelivered",
+        YDB_LOG_INFO_CTX(ctx, "TEvUndelivered",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"sender", ev->Sender},
@@ -769,7 +787,8 @@ private:
             {"checkReadinessCookie", CheckReadinessCookie},
             {"state", GetStateName()},
             {"reason", ev->Get()->Reason},
-            {"connectionFailureTime", ConnectionFailureTime});
+            {"connectionFailureTime", ConnectionFailureTime},
+            {"marker", "BSQ02"});
 
         if (ev->Sender == RemoteVDisk) {
             ResetConnection(ctx, NKikimrProto::ERROR, "event undelivered", ReconnectTimeoutManager.GetTimeoutForNewRequest());
@@ -802,12 +821,13 @@ private:
     }
 
     void SendStatusRequest(ui64 cookie, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ33",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, func, remoteVDisk, VDiskId, cookie, marker",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"remoteVDisk", RemoteVDisk},
             {"VDiskId", VDiskId},
-            {"cookie", cookie});
+            {"cookie", cookie},
+            {"marker", "BSQ33"});
         SendToVDisk(ctx, std::make_unique<TEvBlobStorage::TEvVStatus>(VDiskId), cookie);
     }
 
@@ -839,12 +859,13 @@ private:
 
     void SendStatusErrorResponse(const TActorId& sender, ui64 cookie, NKikimrProto::EReplyStatus status,
             const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ34",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, func, status, VDiskId, cookie, marker",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"status", status},
             {"VDiskId", VDiskId},
-            {"cookie", cookie});
+            {"cookie", cookie},
+            {"marker", "BSQ34"});
         auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, VDiskId, false, false, false, 0);
         ctx.Send(sender, response.release(), 0, cookie);
     }
@@ -958,9 +979,10 @@ private:
     // STATES SECTOR
     ////////////////////////////////////////////////////////////////////////
     void Die(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ99 terminating queue actor",
+        YDB_LOG_DEBUG_CTX(ctx, "Terminating queue actor",
             {"logPrefix", LogPrefix},
-            {"func", __func__});
+            {"func", __func__},
+            {"marker", "BSQ99"});
         if (RegisteredInUniversalScheduler) {
             RegisterActorInUniversalScheduler(SelfId(), nullptr, ctx.ActorSystem());
         }
@@ -976,12 +998,13 @@ private:
 
     void Handle(TEvRequestProxyQueueState::TPtr &ev, const TActorContext &ctx) {
         bool isConnected = State == EState::READY;
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ35 RequestProxyQueueState",
+        YDB_LOG_DEBUG_CTX(ctx, "RequestProxyQueueState",
             {"logPrefix", LogPrefix},
             {"func", __func__},
             {"remoteVDisk", RemoteVDisk},
             {"VDiskId", VDiskId},
-            {"isConnected", isConnected});
+            {"isConnected", isConnected},
+            {"marker", "BSQ35"});
         ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected, isConnected && ExtraBlockChecksSupport,
             isConnected && Checksumming, Queue.GetCostModel()));
     }
@@ -1003,11 +1026,12 @@ private:
         if (info.GroupGeneration > VDiskId.GroupGeneration) { // ignore any possible races with old generations
             const TActorId prevActorId = RemoteVDisk;
             ApplyGroupInfo(info);
-            YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ97 ChangeGroupInfo",
+            YDB_LOG_DEBUG_CTX(ctx, "ChangeGroupInfo",
                 {"logPrefix", LogPrefix},
                 {"func", __func__},
                 {"reconnect", (prevActorId != RemoteVDisk ? "true" : "false")},
-                {"state", GetStateName()});
+                {"state", GetStateName()},
+                {"marker", "BSQ97"});
             if (prevActorId != RemoteVDisk) {
                 Unsubscribe(prevActorId.NodeId(), ctx);
                 ResetConnection(ctx, NKikimrProto::RACE, "target disk changed", TDuration::Zero());
@@ -1016,10 +1040,11 @@ private:
     }
 
     void HandleGenerationChange(TEvVGenerationChange::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Marker# BSQ98",
+        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, func, ev, marker",
             {"logPrefix", LogPrefix},
             {"func", __func__},
-            {"ev", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()},
+            {"marker", "BSQ98"});
         ChangeGroupInfo(*ev->Get()->NewInfo, ctx);
     }
 

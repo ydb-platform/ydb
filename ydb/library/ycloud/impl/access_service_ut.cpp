@@ -27,7 +27,7 @@ struct TTestSetup {
 
     // Access service
     TAccessServiceMock AccessServiceMockV1;
-    TTicketParserAccessServiceMockV2 AccessServiceMockV2;
+    TAccessServiceMockV2 AccessServiceMockV2;
     std::unique_ptr<grpc::Server> AccessServer;
 
     TTestSetup(bool enableV2Interface)
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         TTestSetup setup(true);
 
         TAutoPtr<IEventHandle> handle;
-        setup.AccessServiceMockV2.AllowedUserTokens.insert("good1");
+        setup.AccessServiceMockV2.AuthenticateData["good1"].Response.mutable_subject()->mutable_user_account()->set_id("1234");
 
         auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
         request->Request.set_iam_token("bad1");
@@ -134,14 +134,16 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
-        UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "good1");
+        UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "1234");
     }
 
     Y_UNIT_TEST(PassRequestIdV2) {
         TTestSetup setup(true);
 
         TAutoPtr<IEventHandle> handle;
-        setup.AccessServiceMockV2.AllowedUserTokens.insert("token");
+        auto& req = setup.AccessServiceMockV2.AuthenticateData["token"];
+        req.Response.mutable_subject()->mutable_user_account()->set_id("1234");
+        req.RequireRequestId = true;
 
         auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
         request->Request.set_iam_token("token");
@@ -150,18 +152,17 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
-        UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "token");
     }
 
     Y_UNIT_TEST(AuthorizeV2) {
         TTestSetup setup(true);
 
         TAutoPtr<IEventHandle> handle;
-        setup.AccessServiceMockV2.AllowedUserTokens.insert("user1");
-        setup.AccessServiceMockV2.AllowedUserPermissions.insert("user1-something.read");
+        setup.AccessServiceMockV2.AuthorizeData["user1-something.read-test_folder"].Response.mutable_subject()->mutable_user_account()->set_id("user1");
 
         auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequestV2>();
         request->Request.set_iam_token("user1");
+        request->Request.add_resource_path()->set_id("test_folder");
         request->Request.set_permission("something.read");
         setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
         auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthorizeResponseV2>(handle);
@@ -174,15 +175,15 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         TTestSetup setup(true);
 
         TAutoPtr<IEventHandle> handle;
-        setup.AccessServiceMockV2.AllowedUserTokens.insert("user1");
-        setup.AccessServiceMockV2.AllowedUserPermissions.insert("user1-something.read");
-        setup.AccessServiceMockV2.AllowedUserPermissions.insert("user1-something.write");
+        setup.AccessServiceMockV2.BulkAuthorizeData["user1-something.read-test_folder_1-something.write-test_folder_2"].Response.mutable_subject()->mutable_user_account()->set_id("user1");
 
         auto request = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeRequest>();
         request->Request.set_iam_token("user1");
         auto* action1 = request->Request.mutable_actions()->add_items();
+        action1->add_resource_path()->set_id("test_folder_1");
         action1->set_permission("something.read");
         auto* action2 = request->Request.mutable_actions()->add_items();
+        action2->add_resource_path()->set_id("test_folder_2");
         action2->set_permission("something.write");
         request->Request.set_result_filter(yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest::ALL_FAILED);
         setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));

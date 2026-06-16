@@ -1520,7 +1520,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationRetryError<NKikimr::TAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(AuthorizationRetryErrorV2Interace) {
+    Y_UNIT_TEST(AuthorizationRetryErrorV2Interface) {
         AuthorizationRetryError<NKikimr::TAccessServiceMockV2>();
     }
 

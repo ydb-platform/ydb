@@ -133,7 +133,7 @@ public:
     {
         TString key;
         if (request->has_signature()) {
-            key = request->signature().access_key_id();
+            key = request->signature().v4_parameters().service();
         } else {
             key = request->iam_token();
         }
@@ -180,7 +180,11 @@ public:
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
         }
 
-        const TString& token = request->signature().access_key_id() + request->iam_token();
+        TString token = request->signature().access_key_id() + request->iam_token();
+        for (const auto& action : request->actions().items()) {
+            const TString& lastResourceId = action.resource_path(action.resource_path_size() - 1).id();
+            token += "-" + action.permission() + "-" + lastResourceId;
+        }
         auto it = BulkAuthorizeData.find(token);
         if (it != BulkAuthorizeData.end()) {
             response->CopyFrom(it->second.Response);

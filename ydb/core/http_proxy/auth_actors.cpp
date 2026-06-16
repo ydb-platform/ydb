@@ -240,7 +240,7 @@ namespace NKikimr::NHttpProxy {
         }
 
         template <typename TEvResponse>
-        void HandleAuthenticationResultImpl(TEvResponse::TPtr& ev, const TActorContext& ctx) {
+        void HandleAuthenticationResultImpl(typename TEvResponse::TPtr& ev, const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "can not authenticate service account user: " << ev->Get()->Status.Msg);

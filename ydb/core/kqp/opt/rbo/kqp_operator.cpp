@@ -326,10 +326,6 @@ bool TOpMap::IsExtractableAppend(const TMapElement& element) const {
 }
 
 TVector<TInfoUnit> TOpMap::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     TVector<TInfoUnit> res = GetInput()->GetOutputIUs();
     const auto renameSources = GetRenameSources();
 
@@ -344,8 +340,13 @@ TVector<TInfoUnit> TOpMap::GetOutputIUs() {
         res = std::move(kept);
     }
 
-    for (const auto &mapElement : MapElements) {
+    for (const auto& mapElement : MapElements) {
         res.push_back(mapElement.GetElementName());
+    }
+
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        Y_ENSURE(*outputIUs == res, "Map output override must preserve Map output");
+        return *outputIUs;
     }
 
     return res;
@@ -417,24 +418,29 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
 // Pg FromPg/ToPg wrappers over a column are treated the same for property propagation.
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetPropertyPreservingMappings(TPlanProps& props) const {
     Y_UNUSED(props);
-    auto result = GetRenames();
+    TVector<std::pair<TInfoUnit, TInfoUnit>> result;
 
-    for (const auto &mapElement : MapElements) {
-        if (!mapElement.IsRename()) {
-            if (mapElement.IsColumnAccess()) {
-                result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetColumnAccess()));
-                continue;
-            }
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsRename()) {
+            result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetRename()));
+            continue;
+        }
 
-            auto expr = mapElement.GetExpression();
-            auto node = expr.Node;
+        if (mapElement.IsColumnAccess()) {
+            Y_ENSURE(mapElement.GetElementName() != mapElement.GetColumnAccess(),
+                "Non-rename Map element must not preserve a column under the same name: " << mapElement.GetElementName().GetFullName());
+            result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetColumnAccess()));
+            continue;
+        }
 
-            if (node->IsCallable("ToPg") || node->IsCallable("FromPg")) {
-                if (node->ChildPtr(0)->IsCallable("Member")) {
-                    auto transformIUs = expr.GetInputIUs();
-                    if (transformIUs.size() == 1) {
-                        result.push_back(std::make_pair(mapElement.GetElementName(), transformIUs[0]));
-                    }
+        auto expr = mapElement.GetExpression();
+        auto node = expr.Node;
+
+        if (node->IsCallable("ToPg") || node->IsCallable("FromPg")) {
+            if (node->ChildPtr(0)->IsCallable("Member")) {
+                auto transformIUs = expr.GetInputIUs();
+                if (transformIUs.size() == 1) {
+                    addNonRenameMapping(mapElement.GetElementName(), transformIUs[0]);
                 }
             }
         }

@@ -8,7 +8,6 @@ namespace {
 
 bool CanOverrideOutput(EOperator kind) {
     switch (kind) {
-        case EOperator::Map:
         case EOperator::Filter:
         case EOperator::Join:
         case EOperator::Aggregate:

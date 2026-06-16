@@ -3060,6 +3060,80 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
     }
 
+    Y_UNIT_TEST(MapMetadataAliasFanout) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+        TPlanProps expressionProps;
+
+        auto read = MakeTestRead({TInfoUnit("id"), TInfoUnit("payload")}, pos);
+        read->Props.Metadata = TRBOMetadata();
+        read->Props.Metadata->KeyColumns = {TInfoUnit("id")};
+        read->Props.Metadata->ShuffledByColumns = {TInfoUnit("id")};
+
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("id_alias", "id", pos, testContext.ExprCtx, expressionProps),
+        });
+        map->ComputeMetadata(testContext.RboCtx, expressionProps);
+
+        UNIT_ASSERT(map->Props.Metadata.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(map->Props.Metadata->KeyColumns.size(), 1);
+        UNIT_ASSERT(map->Props.Metadata->KeyColumns.front() == TInfoUnit("id"));
+        UNIT_ASSERT_VALUES_EQUAL(map->Props.Metadata->ShuffledByColumns.size(), 1);
+        UNIT_ASSERT(map->Props.Metadata->ShuffledByColumns.front() == TInfoUnit("id"));
+    }
+
+    Y_UNIT_TEST(MapOutputPruningKeepsInputForRewrite) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+        TPlanProps expressionProps;
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto rewrittenColumn = MakeBinaryPredicate(
+            "+",
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps),
+            MakeConstant("Int64", "1", pos, &testContext.ExprCtx)
+        );
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("a_plus"), rewrittenColumn, false),
+        });
+        TOpRoot root(map, pos, {"a_plus"});
+
+        ComputeLogicalTestProps(root);
+        TLogicalOutputPruningStage outputPruning;
+        outputPruning.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT(!map->GetOutputIUsOverride().has_value());
+
+        const auto mapOutput = map->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(mapOutput.size(), 2);
+        UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a")) != mapOutput.end());
+        UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a_plus")) != mapOutput.end());
+    }
+
+    Y_UNIT_TEST(FilterMetadataDropsProjectedKey) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+        TPlanProps expressionProps;
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("b")}, pos);
+        read->Props.Metadata = TRBOMetadata();
+        read->Props.Metadata->KeyColumns = {TInfoUnit("a"), TInfoUnit("b")};
+        read->Props.Metadata->ShuffledByColumns = {TInfoUnit("a"), TInfoUnit("b")};
+
+        auto filter = MakeIntrusive<TOpFilter>(
+            read,
+            pos,
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
+        );
+        filter->SetOutputIUsOverride({TInfoUnit("a")});
+        filter->ComputeMetadata(testContext.RboCtx, expressionProps);
+
+        UNIT_ASSERT(filter->Props.Metadata.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(filter->Props.Metadata->ColumnsCount, 1);
+        UNIT_ASSERT(filter->Props.Metadata->KeyColumns.empty());
+        UNIT_ASSERT(filter->Props.Metadata->ShuffledByColumns.empty());
+    }
+
     Y_UNIT_TEST(DontEliminateLeftJoinWhenNoPK) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();

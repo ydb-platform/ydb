@@ -320,7 +320,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return command
 
     def __prepare_to_shutdown(self):
-        self.server.reset_clients() # Prevent gRPC channels slow shutdown
+        self.server.reset_clients()  # Prevent gRPC channels slow shutdown
 
     def stop(self):
         self.__prepare_to_shutdown()

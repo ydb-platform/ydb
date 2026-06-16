@@ -855,7 +855,7 @@ void THierarchicalDRRQuoterResourceTree::SetupTotalCounters() {
     THierarchicalDRRQuoterResourceTree* const parent = GetParent();
 
     // Reported for non-root resources whose billing metric is published (same gate as the per-category limit/consumed).
-    if (accCfg.GetEnabled() && parent && IsPublicMetric(metric)) {
+    if (accCfg.GetEnabled() && parent && !parent->GetParent() && IsPublicMetric(metric)) {
         auto counters = GetPublicCounters(metric, AppData()->Counters);
         Counters.LimitTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.limit_total", false);
         Counters.ConsumedTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.consumed_total", true);

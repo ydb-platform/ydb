@@ -860,7 +860,7 @@ void THierarchicalDRRQuoterResourceTree::SetupTotalCounters() {
         Counters.LimitTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.limit_total", false);
         Counters.ConsumedTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.consumed_total", true);
 
-        *Counters.LimitTotal = static_cast<i64>(parent->GetMaxUnitsPerSecond());
+        *Counters.LimitTotal = parent->GetMaxUnitsPerSecond();
     } else {
         Counters.LimitTotal.Reset();
         Counters.ConsumedTotal.Reset();
@@ -868,7 +868,10 @@ void THierarchicalDRRQuoterResourceTree::SetupTotalCounters() {
 }
 
 void THierarchicalDRRQuoterResourceTree::ReportConsumedTotal(double consumed) {
-    THierarchicalDRRQuoterResourceTree* const parent = GetParent();
+    THierarchicalDRRQuoterResourceTree* parent = GetParent();
+    while (parent && parent->GetParent()) {
+        parent = parent->GetParent();
+    }
     if (!parent) {
         return;
     }

@@ -318,7 +318,7 @@ public:
 
 class TTicketParserAccessServiceMock
     : public yandex::cloud::priv::servicecontrol::v1::AccessService::Service
-    , private TTicketParserAccessServiceMockBase
+    , public TTicketParserAccessServiceMockBase
 {
 public:
     grpc::Status Authenticate(

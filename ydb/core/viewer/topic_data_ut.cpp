@@ -7,6 +7,7 @@
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -308,13 +309,14 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         const auto& messages = overallResponse.find("Messages")->second.GetArray();
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 6);
 
+        constexpr ui32 kafkaBatchCodec = static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1;
         for (ui64 i = 0; i < 6; ++i) {
             const auto& item = messages[i];
             UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
             const auto& jsonMap = item.GetMap();
             CheckMapValue(jsonMap, "Offset", i);
             UNIT_ASSERT(jsonMap.find("SeqNo") != jsonMap.end());
-            CheckMapValue(jsonMap, "Codec", 0);
+            CheckMapValue(jsonMap, "Codec", kafkaBatchCodec);
             CheckMapValue(jsonMap, "ProducerId", producerId);
             UNIT_ASSERT(jsonMap.find("Message") != jsonMap.end());
             UNIT_ASSERT_VALUES_EQUAL(

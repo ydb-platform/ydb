@@ -28,7 +28,7 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes
+        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -72,6 +72,7 @@ TPartitionActor::TPartitionActor(
     , Topic(topic)
     , Database(database)
     , DirectRead(directRead)
+    , CanReadBatches(canReadBatches)
     , PartitionInFlightMemoryController(partitionMaxInFlightBytes)
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
@@ -1457,6 +1458,7 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
         read->SetBytes(maxSize);
     }
     read->SetReadToBlobEnd(true);
+    read->SetCanReadBatches(CanReadBatches);
     if (maxTimeLagMs) {
         read->SetMaxTimeLagMs(maxTimeLagMs);
     }

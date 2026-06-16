@@ -2,6 +2,7 @@
 #include "log.h"
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb/services/lib/auth/auth_helpers.h>
 
@@ -123,6 +124,7 @@ void TTopicData::SendPQReadRequest() {
 
     cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
     cmdRead->SetExternalOperation(true);
+    cmdRead->SetCanReadBatches(true);
 
     auto req = MakeHolder<TEvPersQueue::TEvRequest>();
     req->Record.Swap(&request);
@@ -289,6 +291,10 @@ NYdb::NTopic::ICodec* TTopicData::GetCodec(NPersQueueCommon::ECodec codec) {
     if (iter != Codecs.end()) {
         return iter->second.Get();
     }
+    if (codecId == static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1) {
+        auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TKafkaBatchCodec>());
+        return iterator->second.Get();
+    }
     switch (codec) {
         case NPersQueueCommon::GZIP: {
             auto [iterator, ins] = Codecs.emplace(codecId, MakeHolder<NYdb::NTopic::TGzipCodec>());
@@ -363,4 +369,3 @@ void TTopicData::Bootstrap() {
 
 
 } // namespace NKikimr::NViewer
-

@@ -25,6 +25,9 @@
 {#-         Relative path in tests #}
 {%-         set dir = reldir + dir -%}
 {%-     endif -%}
+{%-     if use_full_source_sets_path and dir|replace(export_root, "") == dir -%}
+{%-         set dir = arcadia_root + "/" + curdir + "/" + dir -%}
+{%-     endif -%}
 {%-     if dir|replace(export_root, "") != dir -%}
 {#-         Generated (re)sources -#}
 {%-         set runs_out = current_target.runs|selectattr('out')|map(attribute='out')|sum|select('in', dir) -%}

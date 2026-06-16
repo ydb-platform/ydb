@@ -38,4 +38,8 @@ plugins {
 {%- if solomon_checkstyle and not(proto_template) %}
     checkstyle
 {%- endif %}
+
+{%- if idea_content_root %}
+    id("org.jetbrains.gradle.plugin.idea-ext") version "1.4.1"
+{%- endif %}
 }

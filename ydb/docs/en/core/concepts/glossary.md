@@ -608,7 +608,7 @@ A **Hive** is a system tablet responsible for launching and managing other table
 
 #### Cluster management system {#cms}
 
-The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc.
+The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc. You can learn more about Hive in a [dedicated article](../contributor/cms.md).
 
 #### Node Broker {#node-broker}
 

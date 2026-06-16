@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -17,7 +19,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_DISCONNECT_NODE; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        BLOG_D("THive::TTxDisconnectNode()::Execute");
+        YDB_LOG_DEBUG("THive::TTxDisconnectNode()::Execute",
+            {"logPrefix", GetLogPrefix()});
         TNodeInfo* node = Self->FindNode(Event->NodeId);
         if (node != nullptr) {
             Self->ScheduleUnlockTabletExecution(*node, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
@@ -35,7 +38,9 @@ public:
                 }
                 Self->ScheduleDisconnectNode(std::move(event));
             } else if (node->IsUnknown()) {
-                BLOG_W("THive::TTxDisconnectNode() - killing node " << node->Id);
+                YDB_LOG_WARN("THive::TTxDisconnectNode() - killing node",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", node->Id});
                 Self->KillNode(node->Id, node->Local);
             }
         }
@@ -43,7 +48,8 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxDisconnectNode()::Complete");
+        YDB_LOG_DEBUG("THive::TTxDisconnectNode()::Complete",
+            {"logPrefix", GetLogPrefix()});
     }
 };
 

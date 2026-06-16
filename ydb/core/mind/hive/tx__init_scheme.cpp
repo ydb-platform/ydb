@@ -2,6 +2,8 @@
 #include "hive_log.h"
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -14,7 +16,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_INIT_SCHEME; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxInitScheme::Execute");
+        YDB_LOG_DEBUG("THive::TTxInitScheme::Execute",
+            {"logPrefix", GetLogPrefix()});
         bool wasEmpty = txc.DB.GetScheme().IsEmpty();
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
         if (!wasEmpty) {
@@ -94,7 +97,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxInitScheme::Complete");
+        YDB_LOG_DEBUG("THive::TTxInitScheme::Complete",
+            {"logPrefix", GetLogPrefix()});
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         if (IsBridgeMode(ctx)) {

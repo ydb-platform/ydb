@@ -11,6 +11,8 @@
 #include "monitoring.h"
 #include "tx__set_down.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -2810,7 +2812,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown( )::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2859,7 +2864,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze( )::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2903,7 +2911,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_KickNode( )::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };

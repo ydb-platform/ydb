@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -32,7 +34,10 @@ public:
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
-            BLOG_D("THive::TTxReassignGroups(" << tablet->Id << "," << ChannelProfileNewGroup << ")::Execute");
+            YDB_LOG_DEBUG("THive::TTxReassignGroups( )::Execute",
+                {"logPrefix", GetLogPrefix()},
+                {"tabletId", tablet->Id},
+                {"channelProfileNewGroup", ChannelProfileNewGroup});
             if (tablet->IsReadyToReassignTablet()) {
                 NIceDb::TNiceDb db(txc.DB);
                 tablet->ChannelProfileNewGroup |= ChannelProfileNewGroup;
@@ -55,14 +60,18 @@ public:
                     tablet->InitiateAssignTabletGroups();
                 }
             } else {
-                BLOG_W("THive::TTxReassignGroups(" << tablet->Id << ")::Execute - tablet is not ready for group reassignment");
+                YDB_LOG_WARN("THive::TTxReassignGroups( )::Execute - tablet is not ready for group reassignment",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletId", tablet->Id});
             }
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxReassignGroups(" << TabletId << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxReassignGroups( )::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId});
         SideEffects.Complete(ctx);
     }
 };

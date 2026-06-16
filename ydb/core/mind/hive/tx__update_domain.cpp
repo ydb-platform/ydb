@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -21,10 +23,14 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
 
-        BLOG_D("THive::TTxUpdateDomain(" << SubdomainKey << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxUpdateDomain( )::Execute",
+            {"logPrefix", GetLogPrefix()},
+            {"subdomainKey", SubdomainKey});
         const TDomainInfo* domain = Self->FindDomain(SubdomainKey);
         if (domain == nullptr) {
-            BLOG_W("THive::TTxUpdateDomain(" << SubdomainKey << ")::Execute - unknown subdomain");
+            YDB_LOG_WARN("THive::TTxUpdateDomain( )::Execute - unknown subdomain",
+                {"logPrefix", GetLogPrefix()},
+                {"subdomainKey", SubdomainKey});
             return true;
         }
 
@@ -53,7 +59,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateDomain(" << SubdomainKey << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxUpdateDomain( )::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"subdomainKey", SubdomainKey});
         SideEffects.Complete(ctx);
     }
 };

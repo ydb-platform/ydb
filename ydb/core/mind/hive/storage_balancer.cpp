@@ -3,6 +3,8 @@
 #include "hive_log.h"
 #include "balancer.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -60,7 +62,8 @@ protected:
     }
 
     void PassAway() override {
-        BLOG_I("StorageBalancer finished");
+        YDB_LOG_INFO("StorageBalancer finished",
+            {"logPrefix", GetLogPrefix()});
         Stats.TotalRuns++;
         Stats.TotalMovements += Reassigns;
         Stats.LastRunMovements = Reassigns;
@@ -89,7 +92,9 @@ protected:
                 continue;
             }
             tablet->ActorsToNotifyOnRestart.emplace_back(SelfId());
-            BLOG_D("StorageBalancer initiating reassign for tablet " << NextReassign->first);
+            YDB_LOG_DEBUG("StorageBalancer initiating reassign for tablet",
+                {"logPrefix", GetLogPrefix()},
+                {"nextReassignKey", NextReassign->first});
             Send(Hive->SelfId(), NextReassign->second.release());
             ++ReassignInFlight;
         }
@@ -100,7 +105,10 @@ protected:
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
         auto tabletId = ev->Get()->TabletId;
-        BLOG_D("StorageBalancer received " << ev->Get()->Status << " for tablet " << tabletId);
+        YDB_LOG_DEBUG("StorageBalancer received for tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"status", ev->Get()->Status},
+            {"tabletId", tabletId});
         if (SkippedTablets.contains(tabletId)) {
             return;
         }
@@ -111,7 +119,9 @@ protected:
 
     void Handle(TEvPrivate::TEvRestartCancelled::TPtr& ev) {
         auto tabletId = ev->Get()->TabletId;
-        BLOG_D("StorageBalancer received RestartCancelled for tablet " << tabletId);
+        YDB_LOG_DEBUG("StorageBalancer received RestartCancelled for tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         SkippedTablets.insert(tabletId);
         auto tablet = Hive->FindTablet(tabletId);
         if (tablet) {
@@ -157,7 +167,10 @@ public:
                 }
             }
         }
-        BLOG_D("StorageBalancer for pool " << Settings.StoragePool << ": " << channels.size() << " tablet channels suitable for balancing");
+        YDB_LOG_DEBUG("StorageBalancer for pool tablet channels suitable for balancing",
+            {"logPrefix", GetLogPrefix()},
+            {"storagePool", Settings.StoragePool},
+            {"channelsCount", channels.size()});
         auto metricToBalance = Hive->GetStorageBalanceStrategy();
         switch (Hive->GetChannelBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM:

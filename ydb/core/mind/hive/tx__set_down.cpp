@@ -1,5 +1,7 @@
 #include "tx__set_down.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr::NHive {
 
 
@@ -46,7 +48,9 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxSetDown::Complete(const TActorContext& ctx) {
-    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete");
+    YDB_LOG_DEBUG("THive::TTxSetDown( )::Complete",
+        {"logPrefix", GetLogPrefix()},
+        {"nodeId", NodeId});
     SideEffects.Complete(ctx);
 }
 

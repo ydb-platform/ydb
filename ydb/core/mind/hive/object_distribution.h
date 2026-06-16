@@ -85,7 +85,9 @@ struct TObjectDistribution {
             RemoveFromSortedDistribution({value, node.Id});
         }
         if (diff + value < 0) {
-            BLOG_ERROR("UpdateObjectCount: new value " << diff + value << " is negative");
+            YDB_LOG_ERROR_COMP(NKikimrServices::HIVE, "UpdateObjectCount: new value is negative",
+                {"logPrefix", GetLogPrefix()},
+                {"newValue", diff + value});
         }
         Y_DEBUG_ABORT_UNLESS(diff + value >= 0);
         value += diff;

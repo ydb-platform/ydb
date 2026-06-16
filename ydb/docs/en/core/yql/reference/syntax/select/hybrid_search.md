@@ -126,6 +126,4 @@ LIMIT $limit;
 * `HybridRank(...)` must be the entire `ORDER BY` key; it cannot be negated, nested in a larger expression, or combined with other sort keys.
 * At least two scoring arguments are required — a single branch is not a hybrid query.
 * `LIMIT` must be a literal (it sizes the per-branch candidate pools). Use an explicit `AS Limits` to allow a parameterized `LIMIT`.
-* The table must have a single `Uint64` primary key column (inherited from the [fulltext index requirement](../../../../dev/fulltext-indexes.md#limitations)).
 * [Prefixed vector indexes](../../../../dev/vector-indexes.md) are not supported yet.
-* Hybrid search is controlled by the `TableServiceConfig.EnableHybridSearch` feature flag (enabled by default); with it disabled, a `HybridRank` query fails with a clear message.

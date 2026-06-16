@@ -296,11 +296,6 @@ private:
             NotifyCA();
             return;
         }
-        StartMain();
-    }
-
-    void StartMain() {
-        Phase = EPhase::Main;
         StartMainRead();
     }
 
@@ -484,6 +479,7 @@ private:
     }
 
     void StartMainRead() {
+        Phase = EPhase::Main;
         TIntrusivePtr<NActors::TProtoArenaHolder> arena;
         // The main table is mutable, so it is always read from the leader with the
         // query snapshot (never from followers).
@@ -495,16 +491,21 @@ private:
         // per leaf cluster, so they are not globally ordered yet.
         const auto* keyTypes = MainKeyTypeInfos.data();
         const ui32 keyCount = MainKeyTypeInfos.size();
-        std::sort(PostingKeys.begin(), PostingKeys.end(), [keyTypes, keyCount](const TString& a, const TString& b) {
-            TSerializedCellVec va(a);
-            TSerializedCellVec vb(b);
-            return CompareTypedCellVectors(va.GetCells().data(), vb.GetCells().data(), keyTypes, keyCount) < 0;
+        // Parse each key once up front, then sort the parsed cell vecs, instead of
+        // re-deserializing both operands on every comparison.
+        TVector<TSerializedCellVec> sortedKeys;
+        sortedKeys.reserve(PostingKeys.size());
+        for (auto& key : PostingKeys) {
+            sortedKeys.emplace_back(std::move(key));
+        }
+        std::sort(sortedKeys.begin(), sortedKeys.end(), [keyTypes, keyCount](const TSerializedCellVec& a, const TSerializedCellVec& b) {
+            return CompareTypedCellVectors(a.GetCells().data(), b.GetCells().data(), keyTypes, keyCount) < 0;
         });
 
         // Point lookups by primary key.
         auto* ranges = src->MutableRanges();
-        for (const auto& key : PostingKeys) {
-            ranges->AddKeyPoints(key);
+        for (const auto& key : sortedKeys) {
+            ranges->AddKeyPoints(key.GetBuffer());
         }
 
         for (const auto& pk : Settings.GetMainTableKeyColumns()) {
@@ -526,7 +527,24 @@ private:
         HandleRead(nullptr);
     }
 
+    // The inner read actors are not async inputs of the compute actor, so the
+    // framework never collects their stats. Drain them here, before the inner
+    // read actor is dropped: each inner read actor reports rows/bytes read from
+    // datashards against its own table path (level / posting / main).
+    void AccumulateInnerReadStats() {
+        NDqProto::TDqTaskStats innerStats;
+        ReadActorInput->FillExtraStats(&innerStats, /* last */ true, /* mstats */ nullptr);
+        for (const auto& table : innerStats.GetTables()) {
+            auto& acc = ReadStatsByTable[table.GetTablePath()];
+            acc.Rows += table.GetReadRows();
+            acc.Bytes += table.GetReadBytes();
+        }
+    }
+
     void StopInnerRead() {
+        if (ReadActorInput) {
+            AccumulateInnerReadStats();
+        }
         if (ReadActorId) {
             Send(ReadActorId, new TEvents::TEvPoison);
             ReadActorId = {};
@@ -662,8 +680,6 @@ private:
             ResultRows.pop_front();
             totalSize += rowSize;
             freeSpace -= rowSize;
-            SentRows++;
-            SentBytes += rowSize;
         }
         return totalSize;
     }
@@ -675,20 +691,25 @@ private:
     }
 
     void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats*) override {
-        if (last) {
+        if (!last) {
+            return;
+        }
+        // Report rows/bytes actually read from each index impl table (level,
+        // posting) and the main table, as accumulated from the inner read actors.
+        for (const auto& [path, readStats] : ReadStatsByTable) {
             NDqProto::TDqTableStats* tableStats = nullptr;
-            const auto& path = Settings.GetMainTable().GetTablePath();
             for (size_t i = 0; i < stats->TablesSize(); ++i) {
                 if (stats->GetTables(i).GetTablePath() == path) {
                     tableStats = stats->MutableTables(i);
+                    break;
                 }
             }
             if (!tableStats) {
                 tableStats = stats->AddTables();
                 tableStats->SetTablePath(path);
             }
-            tableStats->SetReadRows(tableStats->GetReadRows() + SentRows);
-            tableStats->SetReadBytes(tableStats->GetReadBytes() + SentBytes);
+            tableStats->SetReadRows(tableStats->GetReadRows() + readStats.Rows);
+            tableStats->SetReadBytes(tableStats->GetReadBytes() + readStats.Bytes);
         }
     }
 
@@ -718,6 +739,11 @@ private:
     struct TCandidate {
         double Distance;
         NUdf::TUnboxedValue Row;
+    };
+
+    struct TTableReadStats {
+        ui64 Rows = 0;
+        ui64 Bytes = 0;
     };
 
     // Parameters
@@ -771,8 +797,10 @@ private:
     TActorId ReadActorId = {};
 
     TVector<NKikimrDataEvents::TLock> Locks;
-    ui64 SentRows = 0;
-    ui64 SentBytes = 0;
+
+    // Rows/bytes read from each scanned table (level / posting / main), keyed by
+    // table path, accumulated from the inner read actors for query stats.
+    TMap<TString, TTableReadStats> ReadStatsByTable;
 
     NWilson::TSpan MySpan;
 };

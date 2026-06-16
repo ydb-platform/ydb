@@ -301,27 +301,6 @@ namespace NKikimr::NHttpProxy::NSQS {
                             XML_ELEM_CONT("RequestId", httpContext.RequestId);
                         }
                     }
-                } else if (name == "DeleteQueueBatchResult") {
-                    const auto* r = dynamic_cast<const Ydb::Ymq::V1::DeleteMessageBatchResult*>(&value);
-                    XML_ELEM("DeleteQueueBatchResponse") {
-                        XML_ELEM("DeleteQueueBatchResult") {
-                            for (const auto& entry : r->failed()) {
-                                XML_ELEM("BatchResultErrorEntry") {
-                                    XML_ELEM_CONT("Code", entry.code());
-                                    XML_ELEM_CONT("Id", entry.id());
-                                    XML_ELEM_CONT("Message", entry.message());
-                                }
-                            }
-                            for (const auto& entry : r->successful()) {
-                                XML_ELEM("DeleteQueueBatchResultEntry") {
-                                    XML_ELEM_CONT("Id", entry.id());
-                                }
-                            }
-                        }
-                        XML_ELEM("ResponseMetadata") {
-                            XML_ELEM_CONT("RequestId", httpContext.RequestId);
-                        }
-                    }
                 } else if (name == "GetQueueAttributesResult") {
                     const auto* r = dynamic_cast<const Ydb::Ymq::V1::GetQueueAttributesResult*>(&value);
                     XML_ELEM("GetQueueAttributesResponse") {
@@ -358,9 +337,9 @@ namespace NKikimr::NHttpProxy::NSQS {
                                 XML_ELEM_CONT("NextToken", r->next_token());
                             }
                         }
-                    }
-                    XML_ELEM("ResponseMetadata") {
-                        XML_ELEM_CONT("RequestId", httpContext.RequestId);
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", httpContext.RequestId);
+                        }
                     }
                 } else if (name == "ListQueuesResult") {
                     const auto* r = dynamic_cast<const Ydb::Ymq::V1::ListQueuesResult*>(&value);

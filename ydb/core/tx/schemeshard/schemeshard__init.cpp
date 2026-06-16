@@ -4581,6 +4581,86 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read backup settings
+        {
+            TBackupSettingsRows backupSettings;
+            if (!LoadBackupSettings(db, backupSettings)) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TTxInit for BackupSettings"
+                             << ", read records: " << backupSettings.size()
+                             << ", at schemeshard: " << Self->TabletID());
+
+            for (auto& rec: backupSettings) {
+                TPathId pathId = std::get<0>(rec);
+                TString tableName = std::get<1>(rec);
+                TString ytSerializedSettings = std::get<2>(rec);
+                TString s3SerializedSettings = std::get<3>(rec);
+                TString scanSettings = std::get<4>(rec);
+                bool needToBill = std::get<5>(rec);
+                TString tableDesc = std::get<6>(rec);
+                ui32 nRetries = std::get<7>(rec);
+                bool enableChecksums = std::get<8>(rec);
+                bool enablePermissions = std::get<9>(rec);
+                TString changefeedUnderlyingTopics = std::get<10>(rec);
+                TString fsSerializedSettings = std::get<11>(rec);
+
+                Y_ABORT_UNLESS(tableName.size() > 0);
+                
+                auto fillBackupSettings = [&](auto& tableInfo) {
+                    tableInfo->BackupSettings.SetTableName(tableName);
+                    tableInfo->BackupSettings.SetNeedToBill(needToBill);
+                    tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
+                    tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
+                    tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
+
+                    if (ytSerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableYTSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, ytSerializedSettings));
+                    } else if (s3SerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableS3Settings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
+                    } else if (fsSerializedSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableFSSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, fsSerializedSettings));
+                    } else {
+                        Y_ABORT("Unknown settings");
+                    }
+
+                    if (scanSettings) {
+                        auto settings = tableInfo->BackupSettings.MutableScanSettings();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, scanSettings));
+                    }
+
+                    if (tableDesc) {
+                        auto desc = tableInfo->BackupSettings.MutableTable();
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
+                    }
+
+                    if (changefeedUnderlyingTopics) {
+                        NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
+                        for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
+                            *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                        }
+                    }
+                };
+                
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    fillBackupSettings(it->second);
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    fillBackupSettings(tableInfo);
+                }
+
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
+                                << ", pathId: " << pathId
+                                << ", tablename: " << tableName.data());
+            }
+        }
+
         // Other persistent params
         for (const auto& si : Self->ShardInfos) {
             auto shardIdx = si.first;
@@ -5443,86 +5523,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                      "LongLocks: "
                          << " records: " << Self->LockedPaths.size()
                          << ", at schemeshard: " << Self->TabletID());
-
-        // Read backup settings
-        {
-            TBackupSettingsRows backupSettings;
-            if (!LoadBackupSettings(db, backupSettings)) {
-                return false;
-            }
-
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for BackupSettings"
-                             << ", read records: " << backupSettings.size()
-                             << ", at schemeshard: " << Self->TabletID());
-
-            for (auto& rec: backupSettings) {
-                TPathId pathId = std::get<0>(rec);
-                TString tableName = std::get<1>(rec);
-                TString ytSerializedSettings = std::get<2>(rec);
-                TString s3SerializedSettings = std::get<3>(rec);
-                TString scanSettings = std::get<4>(rec);
-                bool needToBill = std::get<5>(rec);
-                TString tableDesc = std::get<6>(rec);
-                ui32 nRetries = std::get<7>(rec);
-                bool enableChecksums = std::get<8>(rec);
-                bool enablePermissions = std::get<9>(rec);
-                TString changefeedUnderlyingTopics = std::get<10>(rec);
-                TString fsSerializedSettings = std::get<11>(rec);
-
-                Y_ABORT_UNLESS(tableName.size() > 0);
-                
-                auto fillBackupSettings = [&](auto& tableInfo) {
-                    tableInfo->BackupSettings.SetTableName(tableName);
-                    tableInfo->BackupSettings.SetNeedToBill(needToBill);
-                    tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
-                    tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
-                    tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
-
-                    if (ytSerializedSettings) {
-                        auto settings = tableInfo->BackupSettings.MutableYTSettings();
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, ytSerializedSettings));
-                    } else if (s3SerializedSettings) {
-                        auto settings = tableInfo->BackupSettings.MutableS3Settings();
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, s3SerializedSettings));
-                    } else if (fsSerializedSettings) {
-                        auto settings = tableInfo->BackupSettings.MutableFSSettings();
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, fsSerializedSettings));
-                    } else {
-                        Y_ABORT("Unknown settings");
-                    }
-
-                    if (scanSettings) {
-                        auto settings = tableInfo->BackupSettings.MutableScanSettings();
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*settings, scanSettings));
-                    }
-
-                    if (tableDesc) {
-                        auto desc = tableInfo->BackupSettings.MutableTable();
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
-                    }
-
-                    if (changefeedUnderlyingTopics) {
-                        NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
-                        for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
-                            *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
-                        }
-                    }
-                };
-                
-                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
-                    fillBackupSettings(it->second);
-                } else if (Self->ColumnTables.contains(pathId)) {
-                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
-                    fillBackupSettings(tableInfo);
-                }
-
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
-                                << ", pathId: " << pathId
-                                << ", tablename: " << tableName.data());
-            }
-        }
 
         // Read restore tasks
         {

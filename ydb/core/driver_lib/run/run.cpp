@@ -2275,8 +2275,7 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
         ActorSystem->Start();
-        YDB_LOG_NOTICE_CTX(*ActorSystem, "GetProgramSvnVersion",
-            {"version", GetProgramSvnVersion()});
+        YDB_LOG_NOTICE_CTX(*ActorSystem, GetProgramSvnVersion());
     }
 
     if (!!Monitoring) {

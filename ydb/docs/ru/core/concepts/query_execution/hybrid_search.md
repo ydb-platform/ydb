@@ -18,7 +18,7 @@
 * [fulltext_relevance](../../dev/fulltext-indexes.md#relevance) по текстовой колонке;
 * [vector_kmeans_tree](../../dev/vector-indexes.md) по колонке с эмбеддингами.
 
-Объединение задаётся в секции `ORDER BY` функцией `HybridRank`, которая принимает по одному оценивающему выражению на каждую ветвь — [FulltextScore](../../yql/reference/builtins/fulltext.md#fulltext-score) для текстовой ветви и [Knn](../../yql/reference/udf/list/knn.md)-расстояние или сходство для векторной ветви:
+Объединение задаётся в секции `ORDER BY` функцией `HybridRank`, которая принимает по одному оценивающему выражению на каждую ветвь — [FullTextScore](../../yql/reference/builtins/fulltext.md#fulltext-score) для текстовой ветви и [Knn](../../yql/reference/udf/list/knn.md)-расстояние или сходство для векторной ветви:
 
 ```yql
 $queryText = "машинное обучение";

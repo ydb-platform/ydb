@@ -20,7 +20,7 @@ LIMIT 10;
 
 A hybrid query reads through the base table and does **not** use `VIEW IndexName`: each branch's index is resolved from the corresponding `HybridRank` argument.
 
-The query requires both a [fulltext_relevance](../../../../dev/fulltext-indexes.md#relevance) index over the `FullTextScore` column and a (non-prefixed) [vector_kmeans_tree](../../../../dev/vector-indexes.md) index over the `Knn` column. The recall of the vector branch is controlled by [KMeansTreeSearchTopSize](vector_index.md#KMeansTreeSearchTopSize).
+The query requires both a [fulltext_relevance](../../../../dev/fulltext-indexes.md#relevance) index over the column passed to `FullTextScore` and a (non-prefixed) [vector_kmeans_tree](../../../../dev/vector-indexes.md) index over the column passed to `Knn`. The recall of the vector branch is controlled by [KMeansTreeSearchTopSize](vector_index.md#KMeansTreeSearchTopSize).
 
 {% endnote %}
 

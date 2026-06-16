@@ -2,7 +2,7 @@
 
 Hybrid search combines [fulltext search](fulltext-indexes.md) and [vector search](vector-indexes.md) into a single ranked result: each document is scored by both its text relevance and its embedding similarity, and the two rankings are fused into one. This brings together the precision of lexical matching and the recall of semantic similarity, and is a common building block for the retrieval stage of Retrieval-Augmented Generation (RAG).
 
-For the general idea of hybrid search, see [Hybrid search](../concepts/query_execution/hybrid_search.md).
+For the general idea of hybrid search, see [Hybrid search concept](../concepts/query_execution/hybrid_search.md).
 
 Hybrid search is not a separate index type. It reuses two existing indexes on the same table:
 
@@ -46,7 +46,7 @@ For details on each index type, see [{#T}](fulltext-indexes.md) and [{#T}](vecto
 
 ## Running a hybrid query {#query}
 
-A hybrid query is a regular `SELECT` over the base table (without `VIEW`) whose `ORDER BY` key is a single `HybridRank` call. `HybridRank` takes one scoring expression per branch: a [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) for the text branch and a [Knn](../yql/reference/udf/list/knn.md) distance or similarity for the vector branch.
+A hybrid query is a regular `SELECT` over the base table (without `VIEW`) whose `ORDER BY` key is a single `HybridRank` call. `HybridRank` takes one scoring expression per branch: a [FullTextScore](../yql/reference/builtins/fulltext.md#fulltext-score) for the text branch and a [Knn](../yql/reference/udf/list/knn.md) distance or similarity for the vector branch.
 
 ```yql
 PRAGMA ydb.KMeansTreeSearchTopSize = "10";

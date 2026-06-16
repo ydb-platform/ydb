@@ -18,7 +18,7 @@ In {{ ydb-short-name }}, a hybrid query runs over a table that has **both**:
 * a [fulltext_relevance](../../dev/fulltext-indexes.md#relevance) index over the text column, and
 * a [vector_kmeans_tree](../../dev/vector-indexes.md) index over the embedding column.
 
-The query expresses the fusion in the `ORDER BY` clause with the `HybridRank` function, which takes one scoring expression per branch — a [FulltextScore](../../yql/reference/builtins/fulltext.md#fulltext-score) for the text branch and a [Knn](../../yql/reference/udf/list/knn.md) distance or similarity for the vector branch:
+The query expresses the fusion in the `ORDER BY` clause with the `HybridRank` function, which takes one scoring expression per branch — a [FullTextScore](../../yql/reference/builtins/fulltext.md#fulltext-score) for the text branch and a [Knn](../../yql/reference/udf/list/knn.md) distance or similarity for the vector branch:
 
 ```yql
 $queryText = "machine learning";

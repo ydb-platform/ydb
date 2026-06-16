@@ -383,7 +383,7 @@ private:
                     if (!IsIn({Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_UNSPECIFIED}, static_cast<Ydb::Topic::Codec>(batch.codec()))) {
                         try {
                             const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
-                            codecResult = codecImpl->Decompress(event.data());
+                            codecResult = codecImpl->DecompressData(event.data());
                         } catch (...) {
                             decompressionException = std::current_exception();
                             codecResult.Messages.push_back(TDecompressedMessage{

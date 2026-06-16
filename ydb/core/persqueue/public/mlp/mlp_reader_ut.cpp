@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
 
         const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(Ydb::Topic::CODEC_GZIP));
-        auto data = NYdb::NTopic::TakeFirstDecompressedMessage(codecImpl->Decompress(response->Messages[0].Data));
+        auto data = codecImpl->Decompress(response->Messages[0].Data);
         UNIT_ASSERT_VALUES_EQUAL(data, "msg-1");
     }
 

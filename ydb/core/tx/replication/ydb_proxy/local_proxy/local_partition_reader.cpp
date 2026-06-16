@@ -293,7 +293,7 @@ private:
             bool isCompressed = proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1;
             if (isCompressed && !AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
                 const auto* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
-                data = NYdb::NTopic::TakeFirstDecompressedMessage(codec->Decompress(proto.GetData()));
+                data = codec->Decompress(proto.GetData());
                 isCompressed = false;
             } else {
                 data = std::move(*proto.MutableData());

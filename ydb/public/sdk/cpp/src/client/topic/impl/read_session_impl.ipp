@@ -3401,7 +3401,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                             && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
                         ) {
                             const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
-                            codecResult = codecImpl->Decompress(data.data());
+                            codecResult = codecImpl->DecompressData(data.data());
                             data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
                         } else {
                             codecResult.Messages.push_back(TDecompressedMessage{
@@ -3415,7 +3415,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                             && batchCodec != Ydb::Topic::CODEC_UNSPECIFIED
                         ) {
                             const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
-                            codecResult = codecImpl->Decompress(data.data());
+                            codecResult = codecImpl->DecompressData(data.data());
                         } else {
                             codecResult.Messages.push_back(TDecompressedMessage{
                                 .Data = std::string(data.data()),

@@ -74,32 +74,35 @@ struct TDecompressionResult {
 class ICodec {
 public:
     virtual ~ICodec() = default;
-    virtual TDecompressionResult Decompress(const std::string& data) const = 0;
+    virtual std::string Decompress(const std::string& data) const = 0;
+    virtual TDecompressionResult DecompressData(const std::string& data) const;
     virtual std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const = 0;
     virtual void CompressWriteBlock(TWriteBlockCompression& ctx) const;
 };
 
 class TGzipCodec final : public ICodec {
-    TDecompressionResult Decompress(const std::string& data) const override;
+    std::string Decompress(const std::string& data) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const override;
 };
 
 class TZstdCodec final : public ICodec {
-    TDecompressionResult Decompress(const std::string& data) const override;
+    std::string Decompress(const std::string& data) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const override;
 };
 
 class TUnsupportedCodec final : public ICodec {
-    TDecompressionResult Decompress(const std::string&) const override;
+    std::string Decompress(const std::string&) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer&, int) const override;
 };
 
 class TKafkaBatchCodec final : public ICodec {
 public:
-    TDecompressionResult Decompress(const std::string& data) const override;
+    std::string Decompress(const std::string& data) const override;
+
+    TDecompressionResult DecompressData(const std::string& data) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer&, int) const override;
 

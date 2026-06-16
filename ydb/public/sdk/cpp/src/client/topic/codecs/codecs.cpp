@@ -71,28 +71,32 @@ TDecompressionResult MakeSingleMessageResult(std::string data) {
 
 } // namespace
 
-TDecompressionResult TGzipCodec::Decompress(const std::string& data) const {
-    return MakeSingleMessageResult(DecompressGzipData(data));
+std::string TGzipCodec::Decompress(const std::string& data) const {
+    return DecompressGzipData(data);
 }
 
 std::unique_ptr<IOutputStream> TGzipCodec::CreateCoder(TBuffer& result, int quality) const {
     return std::make_unique<TZLibToStringCompressor>(result, ZLib::GZip, quality >= 0 ? quality : 6);
 }
 
-TDecompressionResult TZstdCodec::Decompress(const std::string& data) const {
-    return MakeSingleMessageResult(DecompressZstdData(data));
+std::string TZstdCodec::Decompress(const std::string& data) const {
+    return DecompressZstdData(data);
 }
 
 std::unique_ptr<IOutputStream> TZstdCodec::CreateCoder(TBuffer& result, int quality) const {
     return std::make_unique<TZstdToStringCompressor>(result, quality);
 }
 
-TDecompressionResult TUnsupportedCodec::Decompress(const std::string&) const {
+std::string TUnsupportedCodec::Decompress(const std::string&) const {
     throw yexception() << "use of unsupported codec";
 }
 
 std::unique_ptr<IOutputStream> TUnsupportedCodec::CreateCoder(TBuffer&, int) const {
     throw yexception() << "use of unsupported codec";
+}
+
+TDecompressionResult ICodec::DecompressData(const std::string& data) const {
+    return MakeSingleMessageResult(Decompress(data));
 }
 
 void ICodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
@@ -108,7 +112,11 @@ void ICodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
     ctx.CodecID = static_cast<ui32>(ctx.Codec);
 }
 
-TDecompressionResult TKafkaBatchCodec::Decompress(const std::string& data) const {
+std::string TKafkaBatchCodec::Decompress(const std::string& data) const {
+    return TakeFirstDecompressedMessage(DecompressData(data));
+}
+
+TDecompressionResult TKafkaBatchCodec::DecompressData(const std::string& data) const {
     using namespace NKafka;
 
     TDecompressionResult result;

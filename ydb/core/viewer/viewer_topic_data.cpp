@@ -230,7 +230,7 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
                 return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
             }
             try {
-                auto decompressed = codec->Decompress(dataChunk.GetData());
+                auto decompressed = codec->DecompressData(dataChunk.GetData());
                 if (decompressed.Messages.empty()) {
                     BLOG_ERROR("Topic data decompression failed"
                         << ": path=" << TopicPath

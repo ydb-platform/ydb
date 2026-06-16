@@ -17,14 +17,40 @@ std::optional<TDuration> TReadCoordinatorActor::GetNextRetryDelay(const TBlobRan
     return std::nullopt;
 }
 
+void TReadCoordinatorActor::ScheduleNextRetry() {
+    if (PendingRetries.empty()) {
+        return;
+    }
+    TMonotonic earliest = TMonotonic::Max();
+    for (const auto& [_, entry] : PendingRetries) {
+        earliest = Min(earliest, entry.DueTime);
+    }
+    if (!ScheduledWakeup || earliest < *ScheduledWakeup) {
+        auto now = TActivationContext::Monotonic();
+        auto delay = (earliest > now) ? (earliest - now) : TDuration::Zero();
+        Schedule(delay, new TEvents::TEvWakeup());
+        ScheduledWakeup = earliest;
+    }
+}
+
 void TReadCoordinatorActor::HandleRetryTimer() {
-    RetryScheduled = false;
+    ScheduledWakeup = std::nullopt;
     if (PendingRetries.empty()) {
         return;
     }
 
-    auto retries = std::exchange(PendingRetries, {});
-    for (auto&& pending : retries) {
+    auto now = TActivationContext::Monotonic();
+    std::vector<TPendingRetry> ready;
+    for (auto it = PendingRetries.begin(); it != PendingRetries.end();) {
+        if (it->second.DueTime <= now) {
+            ready.push_back(std::move(it->second));
+            it = PendingRetries.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (auto&& pending : ready) {
         if (!BlobTasks.Contains(pending.StorageId, pending.Range)) {
             continue;
         }
@@ -41,6 +67,8 @@ void TReadCoordinatorActor::HandleRetryTimer() {
             }
         }
     }
+
+    ScheduleNextRetry();
 }
 
 void TReadCoordinatorActor::Handle(TEvStartReadTask::TPtr& ev) {
@@ -62,10 +90,9 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
         if (delay) {
             ACFL_WARN("event", "S3ReadRetriableError")("blob_range", event.BlobRange)("storage_id", event.DataSourceId)(
                 "error", event.DetailedError)("delay_ms", delay->MilliSeconds());
-            PendingRetries.push_back(TPendingRetry{ event.BlobRange, event.DataSourceId });
-            if (!RetryScheduled) {
-                Schedule(*delay, new TEvents::TEvWakeup());
-                RetryScheduled = true;
+            auto dueTime = TActivationContext::Monotonic() + *delay;
+            if (PendingRetries.emplace(event.BlobRange, TPendingRetry{ event.BlobRange, event.DataSourceId, dueTime }).second) {
+                ScheduleNextRetry();
             }
             return;
         }

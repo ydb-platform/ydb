@@ -85,6 +85,7 @@ private:
     struct TPendingRetry {
         TBlobRange Range;
         TString StorageId;
+        TMonotonic DueTime;
     };
 
     ui64 TabletId;
@@ -93,10 +94,11 @@ private:
 
     IRetryPolicy::TPtr RetryPolicy;
     THashMap<TBlobRange, IRetryPolicy::IRetryState::TPtr> RetryStates;
-    std::deque<TPendingRetry> PendingRetries;
-    bool RetryScheduled = false;
+    THashMap<TBlobRange, TPendingRetry> PendingRetries;
+    std::optional<TMonotonic> ScheduledWakeup;
 
     void HandleRetryTimer();
+    void ScheduleNextRetry();
     std::optional<TDuration> GetNextRetryDelay(const TBlobRange& range, bool isRetriable);
 
 public:

@@ -20,16 +20,18 @@ private:
     struct TPendingRetry {
         TBlobRange Range;
         TString StorageId;
+        TMonotonic DueTime;
     };
 
     std::shared_ptr<ITask> Task;
 
     IRetryPolicy::TPtr RetryPolicy;
     THashMap<TBlobRange, IRetryPolicy::IRetryState::TPtr> RetryStates;
-    std::deque<TPendingRetry> PendingRetries;
-    bool RetryScheduled = false;
+    THashMap<TBlobRange, TPendingRetry> PendingRetries;
+    std::optional<TMonotonic> ScheduledWakeup;
 
     void HandleRetryTimer();
+    void ScheduleNextRetry();
     std::optional<TDuration> GetNextRetryDelay(const TBlobRange& range, bool isRetriable);
 
 public:

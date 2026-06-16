@@ -34,6 +34,15 @@ namespace NTabletFlatExecutor {
         THolder<NTable::TCompactionParams> Params;
         NTable::TRowVersionRanges::TSnapshot RemovedRowVersions;
 
+        // Fulltext compact compaction support
+        bool IsFulltextCompact = false;
+        bool FulltextWithRelevance = false;
+        bool FulltextKeySigned = false;
+        ui32 FulltextAddedTag = Max<ui32>();
+        ui32 FulltextSegmentTag = Max<ui32>();
+        ui32 FulltextMaxSegment = 10000;
+        // Key column positions are always: [0]=token, [1]=max_id, [2]=generation
+
         // Non-empty when compaction also needs to produce a tx status table part
         TVector<TIntrusiveConstPtr<NTable::TMemTable>> Frozen;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;

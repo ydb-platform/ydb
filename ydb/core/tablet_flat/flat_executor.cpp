@@ -4933,6 +4933,23 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.Groups.resize(rowScheme->Families.size());
     comp->Writer.Groups.resize(rowScheme->Families.size());
 
+    // Detect fulltext compact tables (ESpecialTableTypeFulltextCompact=1, ESpecialTableTypeFulltextCompactRelevance=2)
+    if (tableInfo->SpecialTableType == 1 || tableInfo->SpecialTableType == 2) {
+        comp->IsFulltextCompact = true;
+        comp->FulltextWithRelevance = (tableInfo->SpecialTableType == 2);
+        // Resolve column tags by name from tableInfo->Columns
+        for (const auto& [id, col] : tableInfo->Columns) {
+            if (col.Name == "__ydb_added") comp->FulltextAddedTag = id;
+            else if (col.Name == "__ydb_segment") comp->FulltextSegmentTag = id;
+        }
+        // Determine if key type is signed from key column[1] (max_id)
+        if (tableInfo->KeyColumns.size() >= 2) {
+            auto maxIdColId = tableInfo->KeyColumns[1];
+            auto keyTypeId = tableInfo->Columns.at(maxIdColId).PType.GetTypeId();
+            comp->FulltextKeySigned = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+        }
+    }
+
     auto addChannel = [&](ui8 channel) {
         auto group = Owner->Info()->GroupFor(channel, Generation());
 

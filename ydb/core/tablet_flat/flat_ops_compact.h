@@ -20,6 +20,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/fulltext.h>
 #include <ydb/library/actors/core/actor.h>
 
 #include <bitset>
@@ -68,6 +69,108 @@ namespace NTabletFlatExecutor {
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
 
+        // Deep-copy of a TRowState for fulltext buffering
+        struct TSavedRow {
+            NTable::ERowOp Op = NTable::ERowOp::Absent;
+            TString Buf;
+            struct TSlot { ui32 Offset = 0; ui32 Size = 0; NTable::TCellOp CellOp; };
+            TVector<TSlot> Slots;
+
+            void Save(const NTable::TRowState& row) {
+                Op = row.GetRowState();
+                Slots.resize(row.Size());
+                Buf.clear();
+                for (ui32 i = 0; i < row.Size(); i++) {
+                    Slots[i].CellOp = row.GetCellOp(i);
+                    const auto& cell = row.Get(i);
+                    Slots[i].Offset = Buf.size();
+                    if (!cell.IsNull()) {
+                        Slots[i].Size = cell.Size();
+                        Buf.append(cell.Data(), cell.Size());
+                    } else {
+                        Slots[i].Size = 0;
+                    }
+                }
+            }
+
+            void Restore(NTable::TRowState& out) const {
+                out.Init(Slots.size());
+                out.Touch(Op);
+                if (Op == NTable::ERowOp::Erase || Op == NTable::ERowOp::Reset) return;
+                for (ui32 i = 0; i < Slots.size(); i++) {
+                    if (Slots[i].CellOp != NTable::ECellOp::Empty) {
+                        TCell cell;
+                        if (Slots[i].Size > 0) {
+                            cell = TCell(Buf.data() + Slots[i].Offset, Slots[i].Size);
+                        }
+                        out.Set(i, Slots[i].CellOp, cell);
+                    }
+                }
+            }
+        };
+
+        // Per-key buffer for fulltext compaction
+        struct TFtKeyBuf {
+            // Deep-copied key cells
+            TString KeyBuf;
+            TVector<std::pair<ui32, ui32>> KeyRanges; // (offset, size)
+
+            // Lock (if any)
+            ELockMode LockMode = ELockMode::None;
+            ui64 LockTxId = 0;
+
+            // Deltas
+            struct TDelta { ui64 TxId; TSavedRow Row; };
+            TVector<TDelta> SavedDeltas;
+            TVector<ui64> SavedDeltaOrder;
+            bool HasDeltas = false;
+
+            // Committed versions (descending order)
+            struct TVersion {
+                TRowVersion Ver;
+                TSavedRow Row;
+                bool Added = true;
+                TString Segment;
+            };
+            TVector<TVersion> Versions;
+
+            void SaveKey(TArrayRef<const TCell> key) {
+                KeyRanges.resize(key.size());
+                KeyBuf.clear();
+                for (size_t i = 0; i < key.size(); i++) {
+                    KeyRanges[i].first = KeyBuf.size();
+                    if (!key[i].IsNull()) {
+                        KeyRanges[i].second = key[i].Size();
+                        KeyBuf.append(key[i].Data(), key[i].Size());
+                    } else {
+                        KeyRanges[i].second = 0;
+                    }
+                }
+            }
+
+            TSmallVec<TCell> GetKeyCells() const {
+                TSmallVec<TCell> cells;
+                for (const auto& [off, sz] : KeyRanges) {
+                    cells.push_back(sz > 0 ? TCell(KeyBuf.data() + off, sz) : TCell());
+                }
+                return cells;
+            }
+
+            bool IsMergeable(TRowVersion minVer) const {
+                if (HasDeltas || LockMode != ELockMode::None) return false;
+                if (Versions.empty()) return false;
+                for (const auto& v : Versions) {
+                    if (v.Ver > minVer) return false;
+                }
+                // Latest version (first) must not be an erase
+                return Versions[0].Row.Op != NTable::ERowOp::Erase;
+            }
+
+            bool IsErased() const {
+                return !Versions.empty() && Versions[0].Row.Op == NTable::ERowOp::Erase;
+            }
+        };
+
     public:
         constexpr static ui64 MaxFlight = 20ll * (1ll << 20);
 
@@ -110,6 +213,8 @@ namespace NTabletFlatExecutor {
             Scheme = std::move(scheme);
             Driver = driver;
 
+            FtMode = Conf->IsFulltextCompact;
+
             NTable::IScan::TConf conf;
 
             conf.NoErased = false; /* emit erase markers */
@@ -131,9 +236,39 @@ namespace NTabletFlatExecutor {
 
                 Writer = new TPartWriter(scheme, tags, *Bundle, Conf->Layout, Conf->Epoch);
 
+                if (FtMode) {
+                    // Resolve column positions for fulltext columns
+                    auto* addedInfo = Scheme->ColInfo(Conf->FulltextAddedTag);
+                    auto* segmentInfo = Scheme->ColInfo(Conf->FulltextSegmentTag);
+                    if (addedInfo && segmentInfo) {
+                        FtAddedPos = addedInfo->Pos;
+                        FtSegmentPos = segmentInfo->Pos;
+
+                        // Build key column position map (keyOrder -> Cols position)
+                        FtKeyColPos.clear();
+                        for (const auto& col : Scheme->Cols) {
+                            if (col.IsKey()) {
+                                if (col.Key >= FtKeyColPos.size()) {
+                                    FtKeyColPos.resize(col.Key + 1);
+                                }
+                                FtKeyColPos[col.Key] = col.Pos;
+                            }
+                        }
+                        FtMinRowVersion = Conf->Layout.MinRowVersion;
+                    } else {
+                        // Columns not found, fall back to normal compaction
+                        FtMode = false;
+                    }
+                }
+
                 return EScan::Feed;
 
             } else if (seq == 1) /* after the end(), stop compaction */ {
+                // Flush remaining fulltext buffer before finishing
+                if (FtMode && !FtTokenBuf.empty()) {
+                    FlushFulltextToken();
+                }
+
                 if (!Finished) {
                     WriteStats = Writer->Finish();
                     Results = Bundle->Results();
@@ -150,6 +285,30 @@ namespace NTabletFlatExecutor {
 
         EScan BeginKey(TArrayRef<const TCell> key) override
         {
+            if (FtMode) {
+                // Check if token changed
+                TStringBuf newToken = key.size() > 0 && !key[0].IsNull()
+                    ? key[0].AsBuf() : TStringBuf();
+
+                if (!FtTokenBuf.empty() && newToken != FtCurrentToken) {
+                    FlushFulltextToken();
+                }
+                FtCurrentToken = TString(newToken);
+
+                // Start buffering a new key (DON'T call Writer->BeginKey)
+                FtCurKey = {};
+                FtCurKey.SaveKey(key);
+
+                if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+                    logl
+                        << NFmt::Do(*this) << " ft begin key { "
+                        << NFmt::TCells(key, *Scheme->Keys, Registry)
+                        << "}";
+                }
+                Y_DEBUG_ABORT_UNLESS(!IsLocked);
+                return Flush(false);
+            }
+
             Writer->BeginKey(key);
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
@@ -165,6 +324,10 @@ namespace NTabletFlatExecutor {
 
         EScan BeginDeltas() override
         {
+            if (FtMode) {
+                FtCurKey.HasDeltas = true;
+            }
+
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " begin deltas";
             }
@@ -186,7 +349,18 @@ namespace NTabletFlatExecutor {
                 logl << " txId " << txId << " }";
             }
 
-            // Note: we assume the number of uncommitted transactions is limited
+            if (FtMode) {
+                // Buffer delta for later replay
+                auto res = Deltas.try_emplace(txId, row);
+                if (res.second) {
+                    DeltasOrder.emplace_back(txId);
+                } else if (!res.first->second.IsFinalized()) {
+                    res.first->second.Merge(row);
+                }
+                return Flush(false);
+            }
+
+            // Normal path: Note: we assume the number of uncommitted transactions is limited
             auto res = Deltas.try_emplace(txId, row);
             if (res.second) {
                 DeltasOrder.emplace_back(txId);
@@ -199,6 +373,16 @@ namespace NTabletFlatExecutor {
 
         EScan Feed(ELockMode mode, ui64 txId) override
         {
+            if (FtMode) {
+                // Buffer lock for later replay
+                if (!IsLocked) {
+                    FtCurKey.LockMode = mode;
+                    FtCurKey.LockTxId = txId;
+                    IsLocked = true;
+                }
+                return Flush(false);
+            }
+
             // We write the first (latest) lock we observe
             if (!IsLocked) {
                 Writer->AddKeyLock(mode, txId);
@@ -212,6 +396,23 @@ namespace NTabletFlatExecutor {
         {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " end deltas";
+            }
+
+            if (FtMode) {
+                // Save accumulated deltas to the key buffer
+                if (!Deltas.empty()) {
+                    for (ui64 txId : DeltasOrder) {
+                        auto it = Deltas.find(txId);
+                        Y_ENSURE(it != Deltas.end());
+                        auto& d = FtCurKey.SavedDeltas.emplace_back();
+                        d.TxId = txId;
+                        d.Row.Save(it->second);
+                    }
+                    FtCurKey.SavedDeltaOrder = TVector<ui64>(DeltasOrder.begin(), DeltasOrder.end());
+                    Deltas.clear();
+                    DeltasOrder.clear();
+                }
+                return Flush(false);
             }
 
             if (!Deltas.empty()) {
@@ -251,6 +452,23 @@ namespace NTabletFlatExecutor {
                 logl << " at " << rowVersion << " }";
             }
 
+            if (FtMode) {
+                auto& ver = FtCurKey.Versions.emplace_back();
+                ver.Ver = rowVersion;
+                ver.Row.Save(row);
+                if (row.GetRowState() != NTable::ERowOp::Erase) {
+                    const auto& addedCell = row.Get(FtAddedPos);
+                    if (!addedCell.IsNull() && addedCell.Size() >= 1) {
+                        ver.Added = *reinterpret_cast<const bool*>(addedCell.Data());
+                    }
+                    const auto& segCell = row.Get(FtSegmentPos);
+                    if (!segCell.IsNull()) {
+                        ver.Segment = TString(segCell.Data(), segCell.Size());
+                    }
+                }
+                return Flush(false);
+            }
+
             Writer->AddKeyVersion(row, rowVersion);
 
             return Flush(false /* intermediate, sleep or feed */);
@@ -258,6 +476,18 @@ namespace NTabletFlatExecutor {
 
         EScan EndKey() override
         {
+            if (FtMode) {
+                // Add current key to the per-token buffer
+                FtTokenBuf.push_back(std::move(FtCurKey));
+                FtCurKey = {};
+                IsLocked = false;
+
+                if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+                    logl << NFmt::Do(*this) << " ft end key { buffered for token }";
+                }
+                return Flush(false);
+            }
+
             ui32 written = Writer->EndKey();
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
@@ -267,6 +497,167 @@ namespace NTabletFlatExecutor {
             IsLocked = false;
 
             return Flush(false /* intermediate, sleep or feed */);
+        }
+
+        // Replay a buffered key through Writer as-is (pass-through)
+        void ReplayKey(const TFtKeyBuf& key) {
+            auto cells = key.GetKeyCells();
+            Writer->BeginKey(cells);
+
+            if (key.LockMode != ELockMode::None) {
+                Writer->AddKeyLock(key.LockMode, key.LockTxId);
+            }
+
+            for (ui64 txId : key.SavedDeltaOrder) {
+                for (const auto& d : key.SavedDeltas) {
+                    if (d.TxId == txId) {
+                        NTable::TRowState rs;
+                        d.Row.Restore(rs);
+                        Writer->AddKeyDelta(rs, txId);
+                        break;
+                    }
+                }
+            }
+
+            for (const auto& v : key.Versions) {
+                NTable::TRowState rs;
+                v.Row.Restore(rs);
+                TRowVersion ver = v.Ver;
+                Writer->AddKeyVersion(rs, ver);
+            }
+
+            Writer->EndKey();
+        }
+
+        // Write a single merged fulltext segment through Writer
+        void WriteFulltextSegment(const NFulltext::TDeltaWriter& wr) {
+            ui64 maxId = wr.GetMaxId();
+            ui32 gen = Max<ui32>();
+
+            // Build key cells: (token, maxId, gen)
+            TString maxIdBuf;
+            if (Conf->FulltextKeySigned) {
+                i64 signedMaxId = static_cast<i64>(maxId);
+                maxIdBuf.assign((const char*)&signedMaxId, sizeof(signedMaxId));
+            } else {
+                maxIdBuf.assign((const char*)&maxId, sizeof(maxId));
+            }
+            TString genBuf((const char*)&gen, sizeof(gen));
+
+            TSmallVec<TCell> keyCells;
+            keyCells.push_back(TCell(FtCurrentToken.data(), FtCurrentToken.size()));
+            keyCells.push_back(TCell(maxIdBuf.data(), maxIdBuf.size()));
+            keyCells.push_back(TCell(genBuf.data(), genBuf.size()));
+
+            // Build row state with ALL columns
+            NTable::TRowState rs(Scheme->Cols.size());
+            rs.Touch(NTable::ERowOp::Upsert);
+
+            // Set key columns from key cells
+            for (size_t k = 0; k < keyCells.size() && k < FtKeyColPos.size(); k++) {
+                rs.Set(FtKeyColPos[k], NTable::ECellOp::Set, keyCells[k]);
+            }
+
+            // Set __ydb_added = true
+            bool added = true;
+            rs.Set(FtAddedPos, NTable::ECellOp::Set, TCell((const char*)&added, sizeof(added)));
+
+            // Set __ydb_segment = merged segment data
+            auto segBuf = wr.GetBuf();
+            rs.Set(FtSegmentPos, NTable::ECellOp::Set,
+                   TCell((const char*)segBuf.data(), segBuf.size()));
+
+            Writer->BeginKey(keyCells);
+            Writer->AddKeyVersion(rs, FtMinRowVersion);
+            Writer->EndKey();
+        }
+
+        // Flush all buffered keys for the current token
+        void FlushFulltextToken() {
+            if (FtTokenBuf.empty()) return;
+
+            // Check if ALL keys in the token are mergeable
+            bool allMergeable = true;
+            for (const auto& key : FtTokenBuf) {
+                if (!key.IsMergeable(FtMinRowVersion)) {
+                    // If it's an erased key at MinRowVersion, it's still "ok" for
+                    // the allMergeable flag (we'll just skip it)
+                    if (!key.IsErased() || key.HasDeltas || key.LockMode != ELockMode::None) {
+                        // Has versions above MinRowVersion or has deltas/locks
+                        bool hasHighVersion = false;
+                        for (const auto& v : key.Versions) {
+                            if (v.Ver > FtMinRowVersion) {
+                                hasHighVersion = true;
+                                break;
+                            }
+                        }
+                        if (hasHighVersion || key.HasDeltas || key.LockMode != ELockMode::None) {
+                            allMergeable = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!allMergeable) {
+                // Pass-through: replay all keys as-is
+                for (const auto& key : FtTokenBuf) {
+                    ReplayKey(key);
+                }
+                FtTokenBuf.clear();
+                return;
+            }
+
+            // Collect segments for merging
+            bool withRelevance = Conf->FulltextWithRelevance;
+            bool keySigned = Conf->FulltextKeySigned;
+
+            NFulltext::TMultiDeltaReader merger;
+            merger.Reset(withRelevance, keySigned);
+
+            bool hasAnySegment = false;
+            for (const auto& key : FtTokenBuf) {
+                if (key.IsErased()) continue; // Skip erased keys
+                for (const auto& ver : key.Versions) {
+                    if (ver.Row.Op != NTable::ERowOp::Erase && !ver.Segment.empty()) {
+                        merger.Add(ver.Added,
+                            TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
+                        hasAnySegment = true;
+                    }
+                }
+            }
+
+            if (!hasAnySegment) {
+                FtTokenBuf.clear();
+                return;
+            }
+
+            merger.Start();
+
+            // Read merged output and write segments
+            NFulltext::TDeltaWriter wr;
+            wr.Reset(withRelevance, keySigned);
+
+            ui64 docId = 0;
+            ui32 freq = 0;
+            bool hasData = merger.Read(docId, freq);
+
+            while (hasData) {
+                wr.Add(docId, freq);
+                hasData = merger.Read(docId, freq);
+                if (hasData && wr.GetCount() >= Conf->FulltextMaxSegment) {
+                    // Flush current segment
+                    WriteFulltextSegment(wr);
+                    wr.Reset(withRelevance, keySigned);
+                }
+            }
+
+            // Flush remaining data
+            if (wr.GetCount() > 0) {
+                WriteFulltextSegment(wr);
+            }
+
+            FtTokenBuf.clear();
         }
 
         void WriteTxStatus()
@@ -643,6 +1034,16 @@ namespace NTabletFlatExecutor {
         THashMap<ui64, TRow> Deltas;
         TSmallVec<ui64> DeltasOrder;
         bool IsLocked = false;
+
+        // Fulltext compaction state
+        bool FtMode = false;
+        TString FtCurrentToken;
+        TVector<TFtKeyBuf> FtTokenBuf;  // all keys for current token
+        TFtKeyBuf FtCurKey;             // key currently being built
+        ui32 FtAddedPos = 0;            // position of __ydb_added in Scheme->Cols
+        ui32 FtSegmentPos = 0;          // position of __ydb_segment in Scheme->Cols
+        TVector<ui32> FtKeyColPos;      // keyOrder -> Cols position
+        TRowVersion FtMinRowVersion;
     };
 }
 }

@@ -510,6 +510,10 @@ void TUserTable::DoApplyCreate(
         }
     }
 
+    if (TableType != NKikimrSchemeOp::ESpecialTableTypeNone) {
+        alter.SetSpecialTableType(tid, static_cast<ui32>(TableType));
+    }
+
     // N.B. some settings only apply to the main table
 
     if (!shadow) {

@@ -670,6 +670,195 @@ Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
     ])", FulltextSearch(db, "love"));
 }
 
+Y_UNIT_TEST_TWIN(LsmCompaction, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Insert more data to create multiple SST files
+    NDataShard::gFulltextMaxDelta = 10000;
+    NDataShard::gFulltextMaxSegment = 10000;
+
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (151, "Wolves love foxes.", "wolves data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, "Rabbits love foxes.", "rabbit data")
+    )sql");
+
+    auto indexBefore = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index before LSM compaction: " << indexBefore << Endl;
+
+    // Force LSM compaction on the index impl table
+    auto* server = &kikimr.GetTestServer();
+    WaitForCompaction(server, "/Root/Texts/fulltext_idx/indexImplTable");
+
+    auto indexAfter = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index after LSM compaction: " << indexAfter << Endl;
+
+    // Verify search still returns correct results after LSM compaction
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "foxes"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "love"));
+}
+
+Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Insert rows one by one to create multiple SST files in the index table
+    NDataShard::gFulltextMaxDelta = 10000;
+    NDataShard::gFulltextMaxSegment = 10000;
+
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (151, "Wolves love foxes.", "wolves data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, "Rabbits love foxes.", "rabbit data")
+    )sql");
+
+    // Open a snapshot transaction on the main table to pin row versions
+    // (prevents the tablet from advancing MinRowVersion past this point)
+    auto session = db.GetSession().GetValueSync().GetSession();
+    auto snapshotResult = session.ExecuteQuery(R"sql(
+        SELECT `Key`, `Text`, `Data`
+        FROM `/Root/Texts`
+        ORDER BY `Key`;
+    )sql", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRO())).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(snapshotResult.GetStatus(), EStatus::SUCCESS, snapshotResult.GetIssues().ToString());
+
+    auto tx = snapshotResult.GetTransaction();
+    UNIT_ASSERT(tx);
+    UNIT_ASSERT(tx->IsActive());
+    Cerr << "snapshot pinned with " << NYdb::FormatResultSetYson(snapshotResult.GetResultSet(0)) << Endl;
+
+    // Insert more data while snapshot is held — creates new SST files
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (300, "Bears love honey.", "bears data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (301, "Eagles love fish.", "eagles data")
+    )sql");
+
+    // Verify search results before compaction
+    auto loveBeforeCompaction = FulltextSearch(db, "love");
+    Cerr << "love before compaction: " << loveBeforeCompaction << Endl;
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]];
+        [[300u];["Bears love honey."];["bears data"]];
+        [[301u];["Eagles love fish."];["eagles data"]]
+    ])", loveBeforeCompaction);
+
+    // Force LSM compaction while the snapshot is held
+    // The snapshot pins MinRowVersion, so compaction must not merge away
+    // row versions that the snapshot might need
+    auto* server = &kikimr.GetTestServer();
+    WaitForCompaction(server, "/Root/Texts/fulltext_idx/indexImplTable");
+
+    // Verify search results are identical after compaction
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]];
+        [[300u];["Bears love honey."];["bears data"]];
+        [[301u];["Eagles love fish."];["eagles data"]]
+    ])", FulltextSearch(db, "love"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "foxes"));
+
+    CompareYson(R"([
+        [[300u];["Bears love honey."];["bears data"]]
+    ])", FulltextSearch(db, "honey"));
+
+    CompareYson(R"([
+        [[301u];["Eagles love fish."];["eagles data"]]
+    ])", FulltextSearch(db, "fish"));
+
+    // Close the snapshot
+    auto commitResult = tx->Commit().ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+    // Run compaction again now that the snapshot is released
+    // This time MinRowVersion can advance and compaction can merge more aggressively
+    WaitForCompaction(server, "/Root/Texts/fulltext_idx/indexImplTable");
+
+    // Verify all data is still correct after second compaction
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]];
+        [[300u];["Bears love honey."];["bears data"]];
+        [[301u];["Eagles love fish."];["eagles data"]]
+    ])", FulltextSearch(db, "love"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[300u];["Bears love honey."];["bears data"]]
+    ])", FulltextSearch(db, "honey"));
+}
+
 } // Y_UNIT_TEST_SUITE(KqpFulltextCompact)
 
 Y_UNIT_TEST_SUITE(KqpJsonCompact) {

@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         std::vector<std::string> messages = {"key1value1"};
         messages.reserve(2 * executionsLimit + 1);
         for (ui64 i = 0; i < 2 * executionsLimit; ++i) {
-            Sleep(TDuration::Seconds(2)); // Wait for checkpoint completion
+            WaitCheckpointByPath();
 
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (
@@ -561,7 +561,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "key1value1");
         ReadTopicMessages(outputTopicName, {"key1value1"});
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
@@ -1316,7 +1316,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"Key": 1})");
         ReadTopicMessage(outputTopicName, "oltp_slj1-oltp1-olap1");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1388,7 +1388,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "message-1");
         ReadTopicMessage(outputTopicName, "message-1-value-1");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1465,7 +1465,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
         }
 
-        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1592,10 +1592,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             return status == "RUNNING";
         });
 
-        Sleep(TDuration::Seconds(1));
+        WaitCheckpointByPath();
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1736,6 +1736,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
         ReadTopicMessage(outputTopicName, "B-2025-08-24T00:00:00.000000Z-P2-1", readDisposition);
 
+        WaitCheckpointByPath();
         Sleep(TDuration::Seconds(1));
         readDisposition = TInstant::Now();
 
@@ -1815,7 +1816,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1853,7 +1854,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1894,7 +1895,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
@@ -1934,7 +1935,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1974,7 +1975,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
         });
         ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -2001,11 +2002,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "query_name"_a = info.QueryName
         ));
         CheckScriptExecutionsCount(2, 1);
-        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
+        WaitCheckpointByPath();
 
         WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
         ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
-        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
+        WaitCheckpointByPath();
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -2126,11 +2127,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"time": 0, "event": "A", "host": "host1.example.com"})");
         ReadTopicMessage(outputTopicName, "A-P1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        WaitCheckpointByPath();
+        Sleep(TDuration::Seconds(2));
 
         connectorClient->LockReading();
         WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");
-        Sleep(TDuration::Seconds(2)); // wait for checkpoint commit
+        Sleep(TDuration::Seconds(2));
         const auto readDisposition = TInstant::Now();
 
         ExecQuery(fmt::format(R"(
@@ -2182,7 +2184,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "data-1");
-        Sleep(TDuration::Seconds(2)); // wait for checkpoint commit
+        WaitCheckpointByPath();
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "data-1");
 
         ExecQuery(fmt::format(R"(
@@ -2266,7 +2268,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             Sleep(TDuration::Seconds(1));
 
             WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
-            Sleep(TDuration::Seconds(1)); // wait for checkpoit commit
+            WaitCheckpointByPath();
             CheckTable(*this, ydbTable, {{"message1", "value1"}});
 
             ExecQuery(fmt::format(R"(
@@ -2946,7 +2948,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "key1value1");
         ReadTopicMessage(outputTopicName, "key1value1");
-        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
+        WaitCheckpointByPath();
 
         // Finish query like shutdown
         {
@@ -3052,13 +3054,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName1, "A-k1-2025-08-24T00:00:00.000000Z-1");
         ReadTopicMessage(outputTopicName2, "X-k2-2025-08-24T00:00:00.000000Z-1");
 
+        WaitCheckpointByPath();
+
         const auto& result = ExecQuery("SELECT Ast FROM `.sys/streaming_queries`");
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
         CheckScriptResult(result[0], 1, 1, [&, check = AstChecker(1, 3)](TResultSetParser& resultSet) {
             check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
         });
-
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
@@ -3146,13 +3148,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName1, "A-2025-08-24T00:00:00.000000Z-1");
         ReadTopicMessage(outputTopicName2, "A-2028-08-24T00:00:00.000000Z-1");
 
+        WaitCheckpointByPath();
+
         const auto& result = ExecQuery("SELECT Ast FROM `.sys/streaming_queries`");
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
         CheckScriptResult(result[0], 1, 1, [&, check = AstChecker(1, 3)](TResultSetParser& resultSet) {
             check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
         });
-
-        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",

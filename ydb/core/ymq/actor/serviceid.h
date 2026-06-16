@@ -33,7 +33,7 @@ inline TActorId MakeSqsMeteringServiceID() {
 
 IActor* CreateSqsService();
 IActor* CreateSqsProxyService();
-IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA, bool enableV2Interface = false);
+IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA, bool enableV2Interface);
 IActor* CreateSqsFolderService(const TString& address, const TString& pathToRootCA);
 IActor* CreateMockSqsFolderService();
 IActor* CreateSqsMeteringService();

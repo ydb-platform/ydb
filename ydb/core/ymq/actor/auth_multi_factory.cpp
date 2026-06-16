@@ -127,7 +127,7 @@ bool TBaseCloudAuthRequestProxy::InitAndValidate() {
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthentication) {
     switch (ev->GetTypeRewrite()) {
         hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
-        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResultV2);
+        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResult);
         hFunc(TEvWakeup, HandleWakeup);
     }
 }
@@ -235,7 +235,7 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessSer
     HandleAuthenticationResponse<NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
 }
 
-void TBaseCloudAuthRequestProxy::HandleAuthenticationResultV2(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
     HandleAuthenticationResponse<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev);
 }
 

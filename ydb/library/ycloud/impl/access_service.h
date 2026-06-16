@@ -23,6 +23,6 @@ inline IActor* CreateAccessServiceV2(const TString& endpoint) {
     return CreateAccessServiceV2(settings);
 }
 
-IActor* CreateAccessServiceWithCache(const TAccessServiceSettings& settings, bool enableV2Interface = false); // for compatibility with older code
+IActor* CreateAccessServiceWithCache(const TAccessServiceSettings& settings, bool enableV2Interface); // for compatibility with older code
 
 }

@@ -70,7 +70,7 @@ namespace NKikimr::NHttpProxy {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 HFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
-                HFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResultV2);
+                HFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResult);
                 HFunc(NCloud::TEvIamTokenService::TEvCreateResponse, HandleServiceAccountIamToken);
                 HFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleTicketParser);
                 HFunc(TEvents::TEvPoisonPill, HandlePoison);
@@ -239,8 +239,8 @@ namespace NKikimr::NHttpProxy {
             Y_UNUSED(ev);
         }
 
-        void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev,
-                                        const TActorContext& ctx) {
+        template <typename TEvResponse>
+        void HandleAuthenticationResultImpl(TEvResponse::TPtr& ev, const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "can not authenticate service account user: " << ev->Get()->Status.Msg);
@@ -263,28 +263,14 @@ namespace NKikimr::NHttpProxy {
             SendIamTokenRequest(ctx);
         }
 
-        void HandleAuthenticationResultV2(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev,
-                                          const TActorContext& ctx) {
-            if (!ev->Get()->Status.Ok()) {
-                RetryCounter.Click();
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "can not authenticate service account user: " << ev->Get()->Status.Msg);
-                if (RetryCounter.HasAttemps()) {
-                    SendAuthenticationRequest(ctx);
-                    return;
-                }
-                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status) ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
-                                      TStringBuilder() << "requestid " << RequestId
-                                                       << "; can not authenticate service account user");
+        void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev,
+                                        const TActorContext& ctx) {
+            HandleAuthenticationResultImpl<NCloud::TEvAccessService::TEvAuthenticateResponse>(ev, ctx);
+        }
 
-            } else if (!ev->Get()->Response.subject().has_service_account()) {
-                return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
-                                      "(this error should not have been reached).");
-            }
-            RetryCounter.Void();
-
-            ServiceAccountId = ev->Get()->Response.subject().service_account().id();
-            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "authenticated to " << ServiceAccountId);
-            SendIamTokenRequest(ctx);
+        void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev,
+                                        const TActorContext& ctx) {
+            HandleAuthenticationResultImpl<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev, ctx);
         }
 
         void SendIamTokenRequest(const TActorContext& ctx) {

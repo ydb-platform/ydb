@@ -44,12 +44,6 @@ public:
         }
     }
 
-    void Handle(NCloud::TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponse>();
-        HandleAuthenticateRequest(ev->Get()->Request, result->Status, result->Response);
-        Send(ev->Sender, result.Release());
-    }
-
     template <typename TRequest, typename TResponse>
     void HandleAuthenticateRequest(const TRequest& request, NYdbGrpc::TGrpcStatus& status, TResponse& response) {
         if (++RequestNumber % 3 == 0) {
@@ -107,6 +101,12 @@ public:
                 status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
             }
         }
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponse>();
+        HandleAuthenticateRequest(ev->Get()->Request, result->Status, result->Response);
+        Send(ev->Sender, result.Release());
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {

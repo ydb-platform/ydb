@@ -100,7 +100,7 @@ public:
     template <typename TEvResponse>
     void HandleAuthenticationResponse(typename TEvResponse::TPtr& ev);
     void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev);
-    void HandleAuthenticationResultV2(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev);
+    void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev);
     void HandleAuthorizationResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev);
     void ProcessAuthorizationResult(const TEvTicketParser::TEvAuthorizeTicketResult& result);
     void HandleFolderServiceResponse(NKikimr::NFolderService::TEvFolderService::TEvGetCloudByFolderResponse::TPtr& ev);
@@ -167,7 +167,7 @@ protected:
     NKikimrClient::TSqsResponse Response_;
 
     std::function<void(TString)> UserSidCallback_;
-    const bool EnableAccessServiceV2Interface_;
+    bool EnableAccessServiceV2Interface_ {false};
 };
 
 class TCloudAuthRequestProxy : public TBaseCloudAuthRequestProxy {

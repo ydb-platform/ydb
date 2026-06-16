@@ -605,11 +605,12 @@ namespace NKikimr::NDDisk {
         auto eraseCnt = inflight.OperationCookies.erase(partCookie);
         Y_ABORT_UNLESS(eraseCnt == 1);
 
-        if (inflight.OperationCookies.empty() && (!inflight.BatchWrite || inflight.BatchWrite && inflight.BatchReady)) {
+        if (inflight.OperationCookies.empty() && (!inflight.BatchWrite || (inflight.BatchWrite && inflight.BatchReady))) {
             ui32 size = 0;
             for (auto& record : inflight.Records) {
                 size += record.Size;
             }
+            Counters.PersistentBuffer.WriteBatchSize->Collect(inflight.Records.size());
             Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, size,
                 HPMilliSecondsFloat(HPNow() - inflight.StartTs));
             if (!inflight.ErrorMessage) {
@@ -661,15 +662,15 @@ namespace NKikimr::NDDisk {
 
                     // duplicated write requests can not be batched
                     Y_ABORT_UNLESS(replyInflight.Records.size() == 1);
-                    auto& record = replyInflight.Records[0];
+                    auto& record2 = replyInflight.Records[0];
                     auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
                         status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
-                    auto h = std::make_unique<IEventHandle>(record.Sender, SelfId(), replyEv.release(), 0, record.Cookie);
-                    if (record.Session) {
-                        h->Rewrite(TEvInterconnect::EvForward, record.Session);
+                    auto h = std::make_unique<IEventHandle>(record2.Sender, SelfId(), replyEv.release(), 0, record2.Cookie);
+                    if (record2.Session) {
+                        h->Rewrite(TEvInterconnect::EvForward, record2.Session);
                     }
                     TActivationContext::Send(h.release());
-                    record.Span.End();
+                    record2.Span.End();
                     PersistentBufferDiskOperationInflight.erase(replyIt);
                 }
                 PersistentBufferWriteInflightsByRecord.erase(it);
@@ -799,7 +800,7 @@ namespace NKikimr::NDDisk {
         if (instr.PayloadId) {
             payload = ev->Get()->GetPayload(*instr.PayloadId);
         }
-        STLOG_I("TDDiskActor::ProcessPersistentBufferWrite",
+        STLOG_T("TDDiskActor::ProcessPersistentBufferWrite",
             (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
 
         auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
@@ -914,7 +915,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
         TRope payload = ev->Get()->GetPayload(*instr.PayloadId);
 
-        STLOG_I("TDDiskActor::ProcessPersistentBufferBatchWriteData",
+        STLOG_T("TDDiskActor::ProcessPersistentBufferBatchWriteData",
             (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
 
         auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt + (PersistentBufferBatchWriteCookie ? 0 : 1));

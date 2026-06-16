@@ -218,6 +218,7 @@ namespace NKikimr::NDDisk {
                 NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
                 NMonitoring::TDynamicCounters::TCounterPtr PendingEventsQueueSize;
                 NMonitoring::TDynamicCounters::TCounterPtr InMemoryCacheSize;
+                NMonitoring::THistogramPtr WriteBatchSize;
             } PersistentBuffer;
         };
 

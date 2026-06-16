@@ -17,7 +17,6 @@ namespace NKikimr::NDDisk {
             IS_BARRIER = 1,
             IS_ERASE = 2,
             IS_ERASE_COMPACT = 4,
-            IS_PACK = 8,
         };
 
         ui8 Signature[16];

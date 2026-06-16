@@ -341,7 +341,6 @@ protected:
     }
 
 protected:
-
     // methods that are called via static_cast<TDerived*>(this) and may be overriden by a dervied class
     void* GetSourcesState() const {
         return nullptr;

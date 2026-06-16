@@ -2059,6 +2059,12 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0
         }];
+        optional uint64 RejectNonExistentStorageChannel = 4 [(ControlOptions) = {
+            Description: "Return error on write/getstatus to non-existent storage channel instead of fallback to MAIN",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
     }
 
     message TKQPSessionControls {

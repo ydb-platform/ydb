@@ -28,7 +28,7 @@ using EStatus = yandex::cloud::events::EventStatus;
 
 namespace {
 
-constexpr auto EmptyPeerNameValue = "0.0.0.0";
+constexpr auto EmptyPeerNameValue = "::1";
 
 TString NormalizeRemoteAddress(const TString& peerName) {
     auto addr = NKikimr::NSecurity::ParsePeername(peerName);

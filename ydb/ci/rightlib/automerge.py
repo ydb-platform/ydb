@@ -72,6 +72,8 @@ class PrAutomerger:
             return
 
         elif check.state == "success":
+            if pr_label_error in pr_labels:
+                self.logger.info("retrying merge after previous push failure (%s)", pr_label_error)
             self.logger.info("check success, going to merge")
             self.merge_pr(pr)
         else:
@@ -111,8 +113,8 @@ class PrAutomerger:
             except subprocess.CalledProcessError:
                 pr_labels = [l.name for l in pr.labels]
                 if pr_label_error in pr_labels:
-                    # Second failure in a row: this is not a transient race
-                    # (token/permissions/branch protection?), needs a human.
+                    # Second push failure while the label is present (same run or
+                    # next run): likely persistent, not a one-off race.
                     self.logger.warning("push to %s rejected again, blocking automerge", pr.base.ref)
                     self.add_failed_comment(pr, "Unable to push merged revision (failed twice in a row).")
                     self.add_pr_failed_label(pr)
@@ -136,6 +138,9 @@ class PrAutomerger:
         if not self.git_merge_pr(pr):
             self.logger.info("unable to merge PR")
             return
+        pr_labels = [l.name for l in pr.labels]
+        if pr_label_error in pr_labels:
+            pr.remove_from_labels(pr_label_error)
         self.logger.info("deleting ref %r", pr.head.ref)
         self.repo.get_git_ref(f"heads/{pr.head.ref}").delete()
         body = f"The PR was successfully merged into {pr.base.ref} using workflow"

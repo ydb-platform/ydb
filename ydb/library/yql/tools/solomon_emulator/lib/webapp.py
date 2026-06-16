@@ -232,8 +232,10 @@ class SolomonEmulator(object):
 
         if project is None and cluster is None and service is None:
             self._data.clear()
+            self._push_failures = {}
         else:
             self._data.delete(project, cluster, service)
+            self._push_failures.pop((project, cluster, service), None)
         return web.Response(status=200)
 
     async def cleanup_api_calls(self, request):

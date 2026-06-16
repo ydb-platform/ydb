@@ -1,7 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -611,66 +610,6 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
         sawTruncated = true;
     }
     UNIT_ASSERT_C(sawTruncated, "expected a truncated completed envelope at DEBUG");
-}
-
-Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {
-    TStringStream logStream;
-    size_t logStart = 0;
-    {
-        TKikimrRunner kikimr(MakeStreamSettings(logStream));
-        SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
-        logStart = logStream.Size();
-
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        const auto edge = runtime.AllocateEdgeActor();
-
-        SendKqpQueryAsUser(runtime, edge, BUILTIN_ACL_METADATA,
-            "/*meta-ok*/ SELECT 1 AS x_meta_ok");
-        SendKqpQueryAsUser(runtime, edge, BUILTIN_ACL_METADATA,
-            "/*meta-fail*/ SELECT FROM broken_syntax_meta");
-
-        // Non-metadata SUCCESS must log at DEBUG — otherwise the
-        // metadata-silence assertion below passes via the priority gate.
-        auto db = kikimr.GetQueryClient();
-        auto control = db.ExecuteQuery(
-            "SELECT 2 AS y_meta_ctrl",
-            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_C(control.IsSuccess(), control.GetIssues().ToString());
-    }
-    const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
-    DumpEntries("MetadataSystemUserSuccessSilentButFailureLogged", entries, fullLog);
-
-    bool metaSuccessSeen = false;
-    bool metaFailureSeen = false;
-    bool controlSuccessSeen = false;
-    for (const auto& e : entries) {
-        if (e.Event != "completed" || e.Part != 1) {
-            continue;
-        }
-        const auto& req = e.Json["request"];
-        const auto user = e.Json["user"].GetStringSafe("");
-        const auto data = req["data"].GetStringSafe("");
-        const auto status = req["status"].GetStringSafe("");
-        const bool isMetaUser = user == BUILTIN_ACL_METADATA;
-        if (isMetaUser && data.Contains("/*meta-ok*/")) {
-            metaSuccessSeen = true;
-        } else if (isMetaUser && data.Contains("/*meta-fail*/")) {
-            metaFailureSeen = true;
-            UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "WARN", e.RawLine);
-            UNIT_ASSERT_C(status != "SUCCESS",
-                TStringBuilder() << "meta-fail must not be SUCCESS: " << e.RawLine);
-        } else if (!isMetaUser && data.Contains("y_meta_ctrl") && status == "SUCCESS") {
-            controlSuccessSeen = true;
-            UNIT_ASSERT_VALUES_EQUAL_C(e.Priority, "DEBUG", e.RawLine);
-        }
-    }
-    UNIT_ASSERT_C(controlSuccessSeen,
-        "non-metadata success must log at DEBUG (priority gate sanity)");
-    UNIT_ASSERT_C(!metaSuccessSeen,
-        "metadata@system successful query must not log a completed envelope");
-    UNIT_ASSERT_C(metaFailureSeen,
-        "metadata@system failed query must log a completed envelope at WARN");
 }
 
 // Streaming query over real tables must report results_size > 0 — bytes

@@ -497,6 +497,7 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
         auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig->SetEnforceUserTokenRequirement(true);
     }
+    appConfig.MutableFeatureFlags()->SetEnableAccessServiceV2Interface(initParameters.EnableAccessServiceV2Interface);
 
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
     appConfig.MutableSqsConfig()->SetYandexCloudMode(initParameters.YandexCloudMode);

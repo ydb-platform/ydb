@@ -1,10 +1,10 @@
-{#- empty string #}
 plugins {
 {%- if not(proto_template) and mainClass %}
     `application`
 {%- else %}
     `java-library`
 {%- endif %}
+
 {%- if proto_template %}
     id("com.google.protobuf") version "{{ ver_protobuf }}"
 {%- endif -%}

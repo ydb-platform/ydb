@@ -25,6 +25,9 @@
 {#-         Relative path in tests #}
 {%-         set dir = reldir + dir -%}
 {%-     endif -%}
+{%-     if auto_resource_sets and 'resources' in dir -%}
+{%-         set module = 'resources' -%}
+{%-     endif -%}
 {%-     if use_full_source_sets_path and dir|replace(export_root, "") == dir -%}
 {%-         set dir = arcadia_root + "/" + curdir + "/" + dir -%}
 {%-     endif -%}
@@ -55,29 +58,10 @@
 {%-     endif -%}
 {%- endmacro -%}
 
-{%- macro TargetSets(current_target, target_subdir, reldir = "") -%}
-{%-     if current_target.source_sets|length -%}
-{%-         if auto_resource_sets -%}
-{%-             set source_sets = current_target.source_sets|rejectattr('dir', 'eq', 'resources')|rejectattr('dir', 'eq', 'src/' + target_subdir + '/resources') -%}
-{%-         else -%}
-{%-             set source_sets = current_target.source_sets -%}
-{%-         endif -%}
-{%-     else -%}
-{%-         set source_sets = [] -%}
-{%-     endif -%}
-{{ SomeSets(source_sets, "java", reldir, current_target) }}
-{%-     if current_target.resource_sets|length -%}
-{%-         set resource_sets = current_target.resource_sets -%}
-{%-     else -%}
-{%-         set resource_sets = [] -%}
-{%-     endif -%}
-{%-     if auto_resource_sets and current_target.source_sets|length -%}
-{%-         set source2resource_sets = current_target.source_sets|selectattr('dir', 'in', ['resources', 'src/' + target_subdir + '/resources']) -%}
-{%-         if source2resource_sets|length -%}
-{%-             set resource_sets = resource_sets + source2resource_sets -%}
-{%-         endif -%}
-{%-     endif -%}
-{{ SomeSets(resource_sets, "resources", reldir, current_target) }}
+{%- macro TargetSets(current_target, reldir = "") -%}
+{{ SomeSets(current_target.source_sets, "java", reldir, current_target) }}
+{#- glue -#}
+{{ SomeSets(current_target.resource_sets, "resources", reldir, current_target) }}
 {%- endmacro %}
 
 sourceSets {
@@ -85,7 +69,7 @@ sourceSets {
 {%-     set varprefix = MAIN_VARPREFIX %}
     main {
 {#- glue -#}
-{{ TargetSets(target, "main") }}
+{{ TargetSets(target) }}
     }
 {%  elif not(target is defined) %}
     main {
@@ -108,7 +92,7 @@ sourceSets {
 {%-         endif -%}
 {#-         TestN target codegen -#}
 {%-         set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
-{{ TargetSets(extra_target, "test", reldir) }}
+{{ TargetSets(extra_target, reldir) }}
 {%-     endfor %}
     }
 {%      else %}

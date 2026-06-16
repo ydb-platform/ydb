@@ -566,13 +566,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            for (ui64 i = 0; i < rows.size(); ++i) {
-                Cerr << "row[" << i << "]: "
-                     << "TabletId=" << GetUint64(rows[i].at("TabletId"))
-                     << " PathId=" << GetUint64(rows[i].at("PathId"))
-                     << " Kind=" << GetUtf8(rows[i].at("Kind")) << Endl;
-            }
-
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId);
             UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "SPLIT_COMPACTED");

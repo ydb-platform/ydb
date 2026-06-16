@@ -214,9 +214,6 @@ protected:
         for (const auto& p : task->Portions) {
             taskBlobBytes += p->GetTotalBlobBytes();
         }
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_next_compaction_task")("target_level", (ui32)task->TargetLevel)(
-            "portions_in_task", task->Portions.size())("task_blob_bytes", taskBlobBytes)("priority", task->Priority.DebugString())(
-            "tracked_portions_total", Core.InternalLevel.size())("grabs_all", task->Portions.size() == Core.InternalLevel.size());
 
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task->Portions, TSaverContext(StoragesManager));
         result->SetTargetCompactionLevel(task->TargetLevel);
@@ -279,14 +276,10 @@ private:
 
     bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasTiling()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")(
-                "proto", proto.DebugString());
             return false;
         }
         auto status = Settings.DeserializeFromProto(proto.GetTiling());
         if (!status.IsSuccess()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling++ compaction optimizer from proto")(
-                "description", status.GetErrorDescription());
             return false;
         }
         return true;

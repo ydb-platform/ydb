@@ -74,10 +74,6 @@ public:
         return TStringBuilder() << "(" << Level << "," << InternalLevelWeight << ")";
     }
 
-    TOptimizationPriority Inc() const {
-        return TOptimizationPriority(Level + 1, InternalLevelWeight);
-    }
-
     // Scale both Level and InternalLevelWeight by (100 + percent)%. Unlike Inc(), which bumps only the
     // Level and leaves the weight stale (so the ceiling lands below its own level band and the weight
     // tiebreak trips almost immediately), this keeps the ceiling internally consistent and yields a

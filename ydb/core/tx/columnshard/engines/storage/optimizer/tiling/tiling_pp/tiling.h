@@ -82,10 +82,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             lastKey = portion->IndexKeyEnd();
         }
 
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_initial_add")("total", add.size())("to_last_level", toLastLevel.size())(
-            "to_middle_levels", toMiddleLevels.size())("to_accumulator", toAccumulator.size())(
-            "compatibility_enabled", Settings.EnableCompatibilityMode);
-
         for (auto& portion : toLastLevel) {
             this->AddPortion(portion);
         }
@@ -105,11 +101,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         } else {
             State = EState::REGULAR;
         }
-
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_initial_add_done")("useful_metric", usefulMetric.DebugString())(
-            "useful_is_critical", usefulMetric.IsCritical())("state", (ui32)State)("overload_priority", OverloadPriority.DebugString())(
-            "is_overloaded", IsOverloaded())("acc_metric", Accumulator.DoGetUsefulMetric().DebugString())(
-            "last_level_metric", LastLevel.DoGetUsefulMetric().DebugString())("middle_metric", GetMiddleUsefulMetric().first.DebugString());
     }
 
     void ModifyPortions(const std::vector<typename TPortion::TPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
@@ -125,8 +116,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 this->AddPortion(p);
             }
         }
-
-        // DoActualize();
     }
 
     void DoActualize(const TInstant currentInstant) override {
@@ -139,15 +128,10 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         if (State == EState::COMPATIBILITY) {
             const auto useful = DoGetUsefulMetric();
             const auto desiredCeiling = useful.IncPercent(10);
-            const auto prevOverload = OverloadPriority;
             if (desiredCeiling < OverloadPriority) {
                 OverloadPriority = desiredCeiling;
             }
             const bool exiting = !OverloadPriority.IsCritical();
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_compatibility_actualize")("useful_metric", useful.DebugString())(
-                "desired_ceiling", desiredCeiling.DebugString())("prev_overload", prevOverload.DebugString())(
-                "new_overload", OverloadPriority.DebugString())("overload_still_critical", OverloadPriority.IsCritical())(
-                "exiting_compatibility", exiting)("is_overloaded", IsOverloaded());
             if (exiting) {
                 State = EState::REGULAR;
                 OverloadPriority = TOptimizationPriority::Critical(0);
@@ -364,13 +348,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     }
 
     bool IsOverloaded() const {
-        const auto useful = DoGetUsefulMetric();
-        const bool overloaded = OverloadPriority < useful;
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling++_is_overloaded")("overloaded", overloaded)("state", (ui32)State)(
-            "overload_priority", OverloadPriority.DebugString())("useful_metric", useful.DebugString())(
-            "acc_metric", Accumulator.DoGetUsefulMetric().DebugString())("last_level_metric", LastLevel.DoGetUsefulMetric().DebugString())(
-            "middle_metric", GetMiddleUsefulMetric().first.DebugString());
-        return overloaded;
+        return OverloadPriority < DoGetUsefulMetric();
     }
 };
 

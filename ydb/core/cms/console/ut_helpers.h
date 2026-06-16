@@ -457,4 +457,44 @@ inline void CheckReplaceDatabaseConfig(TTenantTestRuntime &runtime,
     CheckReplaceConfig(runtime, expectedCode, yaml, expectedErrorSubstring, allowUnknownFields, true);
 }
 
+inline void CheckForceReplaceConfig(TTenantTestRuntime &runtime,
+                                    Ydb::StatusIds::StatusCode expectedCode,
+                                    const TString &yaml,
+                                    const TString &expectedErrorSubstring = {},
+                                    bool allowAbsentDatabase = false)
+{
+    auto *event = new TEvConsole::TEvSetYamlConfigRequest;
+    event->Record.MutableRequest()->set_config(yaml);
+    if (allowAbsentDatabase) {
+        event->Record.MutableRequest()->set_allow_absent_database(true);
+    }
+    runtime.SendToConsole(event);
+
+    TAutoPtr<IEventHandle> handle;
+    auto [success, error] = runtime.GrabEdgeEventsRethrow<
+        TEvConsole::TEvSetYamlConfigResponse,
+        TEvConsole::TEvGenericError>(handle, TDuration::Seconds(1));
+
+    if (expectedCode == Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT_C(success != nullptr,
+            "expected success but got error: " <<
+            (error ? error->Record.ShortDebugString() : TString("<no event>")));
+    } else {
+        UNIT_ASSERT_C(error != nullptr,
+            "expected error " << static_cast<int>(expectedCode) << " but got success");
+        UNIT_ASSERT_VALUES_EQUAL_C(error->Record.GetYdbStatus(), expectedCode, error->Record.ShortDebugString());
+        if (!expectedErrorSubstring.empty()) {
+            UNIT_ASSERT_STRING_CONTAINS(error->Record.ShortDebugString(), expectedErrorSubstring);
+        }
+    }
+}
+
+inline void CheckForceReplaceDatabaseConfig(TTenantTestRuntime &runtime,
+                                            Ydb::StatusIds::StatusCode expectedCode,
+                                            const TString &yaml,
+                                            const TString &expectedErrorSubstring = {})
+{
+    CheckForceReplaceConfig(runtime, expectedCode, yaml, expectedErrorSubstring, true);
+}
+
 } // namesapce NKikimr::NConsole::NUT

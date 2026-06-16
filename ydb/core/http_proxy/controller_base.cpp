@@ -9,7 +9,6 @@ namespace NKikimr::NHttpProxy {
         const auto& ctx = TlsActivationContext->AsActorContext();
 
         const auto name = context.MethodName;
-        const auto contentType = context.ContentType;
         const auto apiVersion = context.ApiVersion;
 
         auto proc = GetProcessor(name, context);

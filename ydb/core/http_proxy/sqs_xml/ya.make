@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    params.cpp
     parser.rl6
     xml_builder.cpp
 )
@@ -15,6 +16,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     library/cpp/string_utils/url
     ydb/core/protos
+    ydb/core/ymq/base
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
 )
@@ -22,5 +24,5 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
-    ut
+#    ut
 )

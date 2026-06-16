@@ -81,9 +81,9 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE {
+RECURSE(
     sqs_xml
-}
+)
 
 RECURSE_FOR_TESTS(
     ut

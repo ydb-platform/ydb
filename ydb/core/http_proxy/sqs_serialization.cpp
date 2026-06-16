@@ -1,12 +1,217 @@
 #include "sqs_serialization.h"
 #include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/string_utils/quote/quote.h>
 #include <ydb/core/http_proxy/sqs_xml/params.h>
 #include <ydb/core/http_proxy/sqs_xml/xml_builder.h>
 
 #include <util/string/builder.h>
-#include <ydb/public/api/protos/draft/ymq.pb.h>
 
 namespace NKikimr::NHttpProxy::NSQS {
+
+    void DeserializeXml(Ydb::Ymq::V1::ChangeMessageVisibilityRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        if (params.ReceiptHandle) {
+            value.set_receipt_handle(CGIEscapeRet(*params.ReceiptHandle));
+        }
+        if (params.VisibilityTimeout) {
+            value.set_visibility_timeout(*params.VisibilityTimeout);
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::ChangeMessageVisibilityBatchRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        for (const auto& [_, item] : params.BatchEntries) {
+            auto* entry = value.add_entries();
+            if (item.Id) {
+                entry->set_id(*item.Id);
+            }
+            if (item.ReceiptHandle) {
+                entry->set_receipt_handle(CGIEscapeRet(*item.ReceiptHandle));
+            }
+            if (item.VisibilityTimeout) {
+                entry->set_visibility_timeout(*item.VisibilityTimeout);
+            }
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::CreateQueueRequest& value, const TParameters& params) {
+        value.set_queue_name(params.QueueName.GetOrElse(""));
+        for (const auto& [_, attr] : params.Attributes) {
+            value.mutable_attributes()->insert({attr.Name.GetOrElse(""), attr.Value.GetOrElse("")});
+        }
+        for (const auto& [_, tag] : params.Tags) {
+            value.mutable_tags()->insert({tag.Key.GetOrElse(""), tag.Value.GetOrElse("")});
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::DeleteMessageRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        if (params.ReceiptHandle) {
+            value.set_receipt_handle(CGIEscapeRet(*params.ReceiptHandle));
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::DeleteMessageBatchRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        for (const auto& [_, item] : params.BatchEntries) {
+            auto* entry = value.add_entries();
+            if (item.Id) {
+                entry->set_id(*item.Id);
+            }
+            if (item.ReceiptHandle) {
+                entry->set_receipt_handle(CGIEscapeRet(*item.ReceiptHandle));
+            }
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::DeleteQueueRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::GetQueueAttributesRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        for (const auto& name : params.AttributeNames) {
+            value.add_attribute_names(name.second);
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::GetQueueUrlRequest& value, const TParameters& params) {
+        value.set_queue_name(params.QueueName.GetOrElse(""));
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::ListDeadLetterSourceQueuesRequest& value, const TParameters& params) {
+        // TODO: Implement
+        Y_UNUSED(value);
+        Y_UNUSED(params);
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::ListQueuesRequest& value, const TParameters& params) {
+        // max_results
+        // next_token
+        if (params.QueueNamePrefix) {
+            value.set_queue_name_prefix(*params.QueueNamePrefix);
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::ListQueueTagsRequest& value, const TParameters& params) {
+        // TODO: Implement
+        Y_UNUSED(value);
+        Y_UNUSED(params);
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::PurgeQueueRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::ReceiveMessageRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_max_number_of_messages(params.MaxNumberOfMessages.GetOrElse(1));
+        if (params.ReceiveRequestAttemptId) {
+            value.set_receive_request_attempt_id(*params.ReceiveRequestAttemptId);
+        }
+        if (params.VisibilityTimeout) {
+            value.set_visibility_timeout(*params.VisibilityTimeout);
+        }
+        if (params.WaitTimeSeconds) {
+            value.set_wait_time_seconds(*params.WaitTimeSeconds);
+        }
+        for (const auto& name : params.AttributeNames) {
+            value.add_attribute_names(name.second);
+        }
+        for (const auto& [_, item] : params.MessageAttributes) {
+            value.add_message_attribute_names(item.Name);
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::SendMessageRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        if (params.DelaySeconds) {
+            value.set_delay_seconds(*params.DelaySeconds);
+        }
+        if (params.MessageBody) {
+            value.set_message_body(*params.MessageBody);
+        }
+        if (params.MessageDeduplicationId) {
+            value.set_message_deduplication_id(*params.MessageDeduplicationId);
+        }
+        if (params.MessageGroupId) {
+            value.set_message_group_id(*params.MessageGroupId);
+        }
+        for (const auto& [_, item] : params.Attributes) {
+            Ydb::Ymq::V1::MessageAttribute attr;
+            attr.set_string_value(item.Value.GetOrElse(""));
+            value.mutable_message_system_attributes()->insert({item.Name.GetOrElse(""), attr});
+        }
+        for (const auto& [_, item] : params.MessageAttributes) {
+            Ydb::Ymq::V1::MessageAttribute attr;
+            if (item.DataType) {
+                attr.set_data_type(*item.DataType);
+            }
+            if (item.StringValue) {
+                attr.set_string_value(*item.StringValue);
+            }
+            if (item.BinaryValue) {
+                attr.set_binary_value(*item.BinaryValue);
+            }
+            value.mutable_message_attributes()->insert({item.Name, attr});
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::SendMessageBatchRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        for (const auto& [_, paramsEntry] : params.BatchEntries) {
+            auto& entry = *value.add_entries();
+            if (paramsEntry.DelaySeconds) {
+                entry.set_delay_seconds(*paramsEntry.DelaySeconds);
+            }
+            if (paramsEntry.MessageBody) {
+                entry.set_message_body(*paramsEntry.MessageBody);
+            }
+            if (paramsEntry.MessageDeduplicationId) {
+                entry.set_message_deduplication_id(*paramsEntry.MessageDeduplicationId);
+            }
+            if (paramsEntry.MessageGroupId) {
+                entry.set_message_group_id(*paramsEntry.MessageGroupId);
+            }
+            for (const auto& [_, item] : paramsEntry.Attributes) {
+                Ydb::Ymq::V1::MessageAttribute attr;
+                attr.set_string_value(item.Value.GetOrElse(""));
+                entry.mutable_message_system_attributes()->insert({item.Name.GetOrElse(""), attr});
+            }
+            for (const auto& [_, item] : paramsEntry.MessageAttributes) {
+                Ydb::Ymq::V1::MessageAttribute attr;
+                if (item.DataType) {
+                    attr.set_data_type(*item.DataType);
+                }
+                if (item.StringValue) {
+                    attr.set_string_value(*item.StringValue);
+                }
+                if (item.BinaryValue) {
+                    attr.set_binary_value(*item.BinaryValue);
+                }
+                entry.mutable_message_attributes()->insert({item.Name, attr});
+            }
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::SetQueueAttributesRequest& value, const TParameters& params) {
+        value.set_queue_url(params.QueueName.GetOrElse(""));
+        for (const auto& [_, attr] : params.Attributes) {
+            value.mutable_attributes()->insert({attr.Name.GetOrElse(""), attr.Value.GetOrElse("")});
+        }
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::TagQueueRequest& value, const TParameters& params) {
+        // TODO: Implement
+        Y_UNUSED(value);
+        Y_UNUSED(params);
+    }
+
+    void DeserializeXml(Ydb::Ymq::V1::UntagQueueRequest& value, const TParameters& params) {
+        // TODO: Implement
+        Y_UNUSED(value);
+        Y_UNUSED(params);
+    }
 
     TString SerializeXml(const THttpRequestContext& httpContext, const NProtoBuf::Message& value) {
         auto name = value.GetDescriptor()->name();

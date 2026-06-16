@@ -5,6 +5,8 @@
 
 #include <ydb/core/http_proxy/sqs_xml/params.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/public/api/protos/draft/ymq.pb.h>
+
 
 namespace NKikimr::NHttpProxy::NSQS {
 
@@ -13,14 +15,28 @@ namespace NKikimr::NHttpProxy::NSQS {
         Y_UNUSED(value);
     }
 
-    void DeserializeXml(NProtoBuf::Message& message, const TStringBuf& input) {
-        TCgiParameters cgiParameters(TStringBuf(input.Data(), input.Size()));
+    void DeserializeXml(Ydb::Ymq::V1::ChangeMessageVisibilityRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::ChangeMessageVisibilityBatchRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::CreateQueueRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::DeleteMessageRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::DeleteMessageBatchRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::DeleteQueueRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::GetQueueAttributesRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::GetQueueUrlRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::ListDeadLetterSourceQueuesRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::ListQueuesRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::ListQueueTagsRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::PurgeQueueRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::ReceiveMessageRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::SendMessageRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::SendMessageBatchRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::SetQueueAttributesRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::TagQueueRequest& value, const TParameters& params);
+    void DeserializeXml(Ydb::Ymq::V1::UntagQueueRequest& value, const TParameters& params);
 
-        TParameters params;
-        TParametersParser parser(&params);
-        for (auto pi = cgiParameters.begin(); pi != cgiParameters.end(); ++pi) {
-            parser.Append(pi->first, pi->second);
-        }
+    template<typename TValue>
+    void DeserializeXml(TValue& message, const TStringBuf& input) {
+        DeserializeXml(message, ParseParameters(input));
     }
 
     template<typename TValue>

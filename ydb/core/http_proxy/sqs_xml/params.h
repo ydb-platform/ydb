@@ -35,13 +35,27 @@ struct TParameters {
 
 
     TMap<int, TString> AttributeNames;
-    // <name, value>
-    TMap<int, std::pair<TString, TString>> Attributes;
-    // <name, dataType, value>
-    TMap<int, std::tuple<TString, TString, TString>> MessageAttributes;
+
+    struct TAttribute {
+        TMaybe<TString> Name;
+        TMaybe<TString> Value;
+    };
+    TMap<int, TAttribute> Attributes;
+
+    struct TMessageAttribute {
+        TString Name;
+        TMaybe<TString> DataType;
+        TMaybe<TString> StringValue;
+        TMaybe<TString> BinaryValue;
+    };
+    TMap<int, TMessageAttribute> MessageAttributes;
     TMap<int, TParameters> BatchEntries;
-    // <key, value>
-    TMap<int, std::pair<TString, TString>> Tags;
+
+    struct TTag {
+        TMaybe<TString> Key;
+        TMaybe<TString> Value;
+    };
+    TMap<int, TTag> Tags;
     TMap<int, TString> TagKeys;
 };
 
@@ -59,5 +73,7 @@ private:
     int Id_;
     int Num_;
 };
+
+TParameters ParseParameters(const TStringBuf& input);
 
 } // namespace NKikimr::NHttpProxy::NSQS

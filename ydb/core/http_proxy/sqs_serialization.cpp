@@ -159,6 +159,9 @@ namespace NKikimr::NHttpProxy::NSQS {
         value.set_queue_url(params.QueueUrl.GetOrElse(""));
         for (const auto& [_, paramsEntry] : params.BatchEntries) {
             auto& entry = *value.add_entries();
+            if (paramsEntry.Id) {
+                entry.set_id(*paramsEntry.Id);
+            }
             if (paramsEntry.DelaySeconds) {
                 entry.set_delay_seconds(*paramsEntry.DelaySeconds);
             }
@@ -455,6 +458,7 @@ namespace NKikimr::NHttpProxy::NSQS {
         }
 
         result << XML_RESULT();
+
         return result;
     }
 

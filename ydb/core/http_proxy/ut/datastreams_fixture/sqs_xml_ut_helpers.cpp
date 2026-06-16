@@ -127,21 +127,57 @@ namespace {
         }
     }
 
+    NJson::TJsonValue XmlElementToJson(const NXml::TConstNode& node);
+
+    NJson::TJsonValue XmlScalarElementToJson(const NXml::TConstNode& node) {
+        NXml::TConstNode firstChild = node.FirstChild();
+        if (firstChild.IsNull()) {
+            return "";
+        }
+        if (firstChild.IsText() && firstChild.NextSibling().IsNull()) {
+            return node.Value<TString>("");
+        }
+        return XmlElementToJson(node);
+    }
+
     NJson::TJsonValue XmlElementToJson(const NXml::TConstNode& node) {
         NJson::TJsonValue result(NJson::JSON_MAP);
+        NJson::TJsonMap attributes;
+        NJson::TJsonValue messageAttributes(NJson::JSON_ARRAY);
+        bool hasAttributes = false;
+
         for (NXml::TConstNode child = node.FirstChild(); !child.IsNull(); child = child.NextSibling()) {
             if (!child.IsElementNode()) {
                 continue;
             }
             const TString name = child.Name();
-            NXml::TConstNode firstChild = child.FirstChild();
-            if (firstChild.IsNull()) {
-                result[name] = "";
-            } else if (firstChild.IsText() && firstChild.NextSibling().IsNull()) {
-                result[name] = child.Value<TString>("");
-            } else {
-                result[name] = XmlElementToJson(child);
+            if (name == "Attribute") {
+                const TString attrName = child.Node("Name", true).Value<TString>("");
+                const TString attrValue = child.Node("Value", true).Value<TString>("");
+                if (!attrName.empty()) {
+                    attributes[attrName] = attrValue;
+                    hasAttributes = true;
+                }
+                continue;
             }
+            if (name == "MessageAttribute") {
+                NJson::TJsonMap attr;
+                attr["Name"] = child.Node("Name", true).Value<TString>("");
+                auto valueNode = child.Node("Value", true);
+                if (!valueNode.IsNull()) {
+                    attr["Value"] = XmlElementToJson(valueNode);
+                }
+                messageAttributes.AppendValue(std::move(attr));
+                continue;
+            }
+            result[name] = XmlScalarElementToJson(child);
+        }
+
+        if (hasAttributes) {
+            result["Attributes"] = std::move(attributes);
+        }
+        if (!messageAttributes.GetArraySafe().empty()) {
+            result["MessageAttributes"] = std::move(messageAttributes);
         }
         return result;
     }

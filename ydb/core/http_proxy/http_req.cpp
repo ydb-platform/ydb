@@ -93,10 +93,11 @@ namespace NKikimr::NHttpProxy {
         ParseHeaders(Request->Headers);
 
         if (MethodName.empty() && ContentType == MIME_XML && !Request->Body.empty()) {
-            const auto params = NSQS::ParseParameters(Request->Body);
-            if (params.Action) {
+            TCgiParameters cgiParameters = Request->Method == "POST" ? TCgiParameters(Request->Body) : params;
+            auto it = cgiParameters.Find("Action");
+            if (it != cgiParameters.end()) {
                 ApiVersion = "AmazonSQS";
-                MethodName = *params.Action;
+                MethodName = it->second;
             }
         }
     }

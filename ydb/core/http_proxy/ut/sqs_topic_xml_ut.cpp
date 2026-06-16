@@ -563,6 +563,8 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
             WriteMessageViaTopicSdk(driver, path.TopicPath, messageBody, NYdb::NTopic::ECodec::RAW);
 
             auto jsonReceived = ReceiveMessageXml({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+
+            Cerr << (TStringBuilder() << "jsonReceived = " << WriteJson(jsonReceived, true, true) << '\n');
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
 
             const auto& message = jsonReceived["Messages"][0];

@@ -1,7 +1,10 @@
 import os
 
+from ymake import Unit, macro
 
-def onbundle(unit, *args):
+
+@macro
+def BUNDLE(unit: Unit, *args: tuple[str, ...]):
     """
     @usage BUNDLE(<Dir [SUFFIX Suffix] [NAME Name]>...)
 

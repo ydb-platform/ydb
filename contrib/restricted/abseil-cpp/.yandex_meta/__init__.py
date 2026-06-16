@@ -36,8 +36,10 @@ def post_install(self):
         absl.after(
             "SRCS",
             Switch(
-                OS_FREERTOS=Linkable(SRCS=list(src_to_stub.values())),
-                default=Linkable(SRCS=list(src_to_stub.keys())),
+                {
+                    "OS_FREERTOS OR OS_ZEPHYR": Linkable(SRCS=list(src_to_stub.values())),
+                    "default": Linkable(SRCS=list(src_to_stub.keys())),
+                }
             ),
         )
 

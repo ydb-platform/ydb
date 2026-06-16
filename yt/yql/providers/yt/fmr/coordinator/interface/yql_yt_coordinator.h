@@ -147,6 +147,15 @@ struct TWaitForOperationsResponse {
     std::vector<TOperationIdWithStatus> FinalizedOperations;
 };
 
+struct TWaitForTasksRequest {
+    ui64 AvailableSlots = 0; // must be > 0
+    TDuration Timeout;
+};
+
+struct TWaitForTasksResponse {
+    ui64 AvailableTasksCount = 0; // informational
+};
+
 class IFmrCoordinator: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IFmrCoordinator>;
@@ -176,6 +185,8 @@ public:
     virtual NThreading::TFuture<TPrepareOperationResponse> PrepareOperation(const TPrepareOperationRequest& request) = 0;
 
     virtual NThreading::TFuture<TWaitForOperationsResponse> WaitForOperations(const TWaitForOperationsRequest& request) = 0;
+
+    virtual NThreading::TFuture<TWaitForTasksResponse> WaitForTasks(const TWaitForTasksRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

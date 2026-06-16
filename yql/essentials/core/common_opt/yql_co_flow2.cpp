@@ -2180,10 +2180,16 @@ TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext
         return node.Ptr();
     }
 
+    auto flatMapInputStructType = GetSeqItemType(node.Input().Ref().GetTypeAnn())->Cast<TStructExprType>();
+
     // originalName -> nameAfterFlatMap
     TMap<TStringBuf, TStringBuf> renames;
     for (const auto& [dstName, srcName] : backRenames) {
         if (!renames.insert({ srcName, dstName }).second) {
+            return node.Ptr();
+        }
+        if (srcName != dstName && flatMapInputStructType->FindItemType(dstName)) {
+            // we overwrite existing column - can't handle this case here
             return node.Ptr();
         }
     }
@@ -2213,14 +2219,8 @@ TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext
 
     TExprNodeList extractMembers;
     extractMembers.reserve(renames.size());
-    YQL_ENSURE(calcNode.Input().Ref().GetTypeAnn());
-    const TStructExprType& calcInputType = *calcNode.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     for (const auto& [srcName,  dstName] : renames) {
-        if (payloadColumns.contains(srcName)) {
-            if (calcInputType.FindItem(dstName)) {
-                return node.Ptr();
-            }
-        } else if (srcName != dstName) {
+        if (!payloadColumns.contains(srcName) && srcName != dstName) {
             return node.Ptr();
         }
         extractMembers.push_back(ctx.NewAtom(node.Pos(), dstName));

@@ -49,10 +49,10 @@ public:
         if (++RequestNumber % 3 == 0) {
             status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::UNAVAILABLE, false);
         } else {
-            if (request.Hasiam_token()) {
+            if (request.has_iam_token()) {
                 status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
             } else {
-                TString idStr = request.Getsignature().Getaccess_key_id();
+                TString idStr = request.signature().access_key_id();
 
                 TStringBuf id = idStr;
                 id.SkipPrefix(SERVICE_ACCOUNT_PREFIX);
@@ -63,8 +63,8 @@ public:
                     status = NYdbGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
                 } else {
                     auto& serviceAccount = *response.mutable_subject()->mutable_service_account();
-                    serviceAccount.Setid(TString(id));
-                    serviceAccount.Setfolder_id(TString::Join("FOLDER_", id));
+                    serviceAccount.set_id(TString(id));
+                    serviceAccount.set_folder_id(TString::Join("FOLDER_", id));
                 }
             }
         }
@@ -76,10 +76,10 @@ public:
             status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::DEADLINE_EXCEEDED, false);
         } else {
             TString idStr;
-            if (request.Hasiam_token()) {
-                idStr = request.Getiam_token();
+            if (request.has_iam_token()) {
+                idStr = request.iam_token();
             } else {
-                idStr = request.Getsignature().Getaccess_key_id();
+                idStr = request.signature().access_key_id();
             }
 
             TStringBuf id = idStr;
@@ -94,8 +94,8 @@ public:
                 }
             } else if (id.SkipPrefix(SERVICE_ACCOUNT_PREFIX)) {
                 auto& serviceAccount = *response.mutable_subject()->mutable_service_account();
-                serviceAccount.Setid(TString(id));
-                serviceAccount.Setfolder_id(TString::Join("FOLDER_", id));
+                serviceAccount.set_id(TString(id));
+                serviceAccount.set_folder_id(TString::Join("FOLDER_", id));
                 status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
             } else {
                 status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);

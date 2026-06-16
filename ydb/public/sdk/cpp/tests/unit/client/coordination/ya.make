@@ -10,12 +10,14 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    util
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/coordination
 )
 
 SRCS(
     coordination_ut.cpp
+    distributed_mutex_ut.cpp
 )
 
 END()

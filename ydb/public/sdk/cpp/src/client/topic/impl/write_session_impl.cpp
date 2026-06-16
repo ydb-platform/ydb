@@ -1514,11 +1514,15 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
                 Y_ABORT_UNLESS(CurrentBatch.Messages.size() == 1);
                 block.CodecID = static_cast<ui32>(*currMessage.Codec);
                 block.OriginalSize = currMessage.OriginalSize;
-                block.Compressed = false;
+                block.Compressed = true;
             }
             size += datum.size();
             UpdateTimedCountersImpl();
-            (*Counters->BytesInflightUncompressed) += datum.size();
+            if (block.Compressed) {
+                (*Counters->BytesInflightCompressed) += datum.size();
+            } else {
+                (*Counters->BytesInflightUncompressed) += datum.size();
+            }
             (*Counters->MessagesInflight)++;
             if (!currMessage.MessageMeta.empty()) {
                 OriginalMessagesToSend.emplace(id, createTs, datum.size(),

@@ -1,26 +1,7 @@
 #include "actor.h"
-
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/config.pb.h>
+#include "read_retry_policy.h"
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
-
-namespace {
-
-IRetryPolicy<>::TPtr MakeReadRetryPolicy() {
-    if (HasAppData()) {
-        const auto& rp = AppDataVerified().ColumnShardConfig.GetReadRetryPolicy();
-        return IRetryPolicy<>::GetExponentialBackoffPolicy([]() {
-            return ERetryErrorClass::ShortRetry;
-        }, TDuration::MilliSeconds(rp.GetInitialRetryDelayMs()), TDuration::MilliSeconds(rp.GetInitialRetryDelayMs()),
-            TDuration::MilliSeconds(rp.GetMaxRetryDelayMs()), rp.GetMaxRetries());
-    }
-    return IRetryPolicy<>::GetExponentialBackoffPolicy([]() {
-        return ERetryErrorClass::ShortRetry;
-    }, TDuration::MilliSeconds(100), TDuration::MilliSeconds(100), TDuration::Seconds(5), 10);
-}
-
-}   // namespace
 
 TAtomicCounter TActor::WaitingBlobsCount = 0;
 

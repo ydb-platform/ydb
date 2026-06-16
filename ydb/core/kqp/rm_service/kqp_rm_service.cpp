@@ -465,6 +465,12 @@ public:
         }
     }
 
+    NMonotonic::TMonotonic GetFirstBoardUnavailableAt() const override {
+        with_lock (ResourceSnapshotState->Lock) {
+            return ResourceSnapshotState->FirstBoardUnavailableAt;
+        }
+    }
+
     TKqpLocalNodeResources GetLocalResources() const override {
         TKqpLocalNodeResources result;
 

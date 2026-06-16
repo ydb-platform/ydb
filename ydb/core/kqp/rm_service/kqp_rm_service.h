@@ -293,6 +293,12 @@ public:
     // per-peer TEvSendResources (no RTT).
     virtual TVector<ui32> GetInitialBoardNodeIds() const = 0;
 
+    // Monotonic time of the first NotAvailable board response before the first
+    // sync, or Zero() if never. Non-Zero only on a cold self-managed bootstrap
+    // (board is a stub until distconf converges); tells "infra not ready" from
+    // "no peers yet".
+    virtual NMonotonic::TMonotonic GetFirstBoardUnavailableAt() const = 0;
+
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 
     virtual ui32 GetNodeId() {
@@ -306,6 +312,8 @@ struct TResourceSnapshotState {
     TMutex Lock;
     bool InitialBoardSyncReceived = false;
     TVector<ui32> InitialBoardNodeIds;
+    // See IKqpResourceManager::GetFirstBoardUnavailableAt().
+    NMonotonic::TMonotonic FirstBoardUnavailableAt = NMonotonic::TMonotonic::Zero();
 };
 
 struct TEvKqpResourceInfoExchanger {

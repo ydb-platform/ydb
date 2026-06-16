@@ -463,10 +463,21 @@ private:
     }
 
 
+    // Stamp once, only before the first sync — later blips don't matter.
+    void NoteBoardUnavailable() {
+        with_lock (ResourceSnapshotState->Lock) {
+            if (!ResourceSnapshotState->InitialBoardSyncReceived
+                && ResourceSnapshotState->FirstBoardUnavailableAt == NMonotonic::TMonotonic::Zero()) {
+                ResourceSnapshotState->FirstBoardUnavailableAt = TlsActivationContext->Monotonic();
+            }
+        }
+    }
+
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
             LOG_I("Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path);
+            NoteBoardUnavailable();
             CreateSubscriber();
             return;
         }
@@ -504,6 +515,7 @@ private:
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
             LOG_I("Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path);
+            NoteBoardUnavailable();
             CreateSubscriber();
             return;
         }

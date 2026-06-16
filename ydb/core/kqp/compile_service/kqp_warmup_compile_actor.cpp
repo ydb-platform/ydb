@@ -416,6 +416,21 @@ private:
     void HandleCheckTopology() {
         auto rm = TryGetKqpResourceManager(SelfId().NodeId());
         if (!rm || !rm->GetInitialBoardSyncDone()) {
+            // Cold self-managed bootstrap: board stays a stub until distconf
+            // converges (long past our deadline) and there's nothing to warm from
+            // anyway. Skip once it has stayed down past the grace window; a warm
+            // restart's transient blip syncs first and exits this branch.
+            if (rm) {
+                const auto unavailableSince = rm->GetFirstBoardUnavailableAt();
+                if (unavailableSince != NMonotonic::TMonotonic::Zero()
+                    && TActivationContext::Monotonic() - unavailableSince >= BoardUnavailableSkipDelay) {
+                    LOG_I("State Storage board unavailable for "
+                          << (TActivationContext::Monotonic() - unavailableSince)
+                          << ", infra not ready (cold bootstrap), skipping warmup");
+                    Complete(true, "Skipped: state storage board unavailable");
+                    return;
+                }
+            }
             Schedule(TopologyCheckInterval, new TEvPrivate::TEvCheckTopology());
             return;
         }
@@ -724,6 +739,9 @@ private:
     }
 
     static constexpr TDuration TopologyCheckInterval = TDuration::MilliSeconds(500);
+    // How long the board must stay unavailable before we treat it as a cold
+    // bootstrap: above warm-restart sync latency, well below the soft deadline.
+    static constexpr TDuration BoardUnavailableSkipDelay = TDuration::Seconds(1);
 
     const TKqpWarmupConfig Config;
 

@@ -9,7 +9,7 @@
 namespace NKikimr::NHttpProxy::NSQS {
 
     void DeserializeXml(Ydb::Ymq::V1::ChangeMessageVisibilityRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         if (params.ReceiptHandle) {
             value.set_receipt_handle(CGIEscapeRet(*params.ReceiptHandle));
         }
@@ -19,7 +19,7 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::ChangeMessageVisibilityBatchRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         for (const auto& [_, item] : params.BatchEntries) {
             auto* entry = value.add_entries();
             if (item.Id) {
@@ -45,14 +45,14 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::DeleteMessageRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         if (params.ReceiptHandle) {
             value.set_receipt_handle(CGIEscapeRet(*params.ReceiptHandle));
         }
     }
 
     void DeserializeXml(Ydb::Ymq::V1::DeleteMessageBatchRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         for (const auto& [_, item] : params.BatchEntries) {
             auto* entry = value.add_entries();
             if (item.Id) {
@@ -65,11 +65,11 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::DeleteQueueRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
     }
 
     void DeserializeXml(Ydb::Ymq::V1::GetQueueAttributesRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         for (const auto& name : params.AttributeNames) {
             value.add_attribute_names(name.second);
         }
@@ -80,9 +80,9 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::ListDeadLetterSourceQueuesRequest& value, const TParameters& params) {
-        // TODO: Implement
-        Y_UNUSED(value);
-        Y_UNUSED(params);
+        // max_results
+        // next_token
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
     }
 
     void DeserializeXml(Ydb::Ymq::V1::ListQueuesRequest& value, const TParameters& params) {
@@ -94,17 +94,15 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::ListQueueTagsRequest& value, const TParameters& params) {
-        // TODO: Implement
-        Y_UNUSED(value);
-        Y_UNUSED(params);
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
     }
 
     void DeserializeXml(Ydb::Ymq::V1::PurgeQueueRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
     }
 
     void DeserializeXml(Ydb::Ymq::V1::ReceiveMessageRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         value.set_max_number_of_messages(params.MaxNumberOfMessages.GetOrElse(1));
         if (params.ReceiveRequestAttemptId) {
             value.set_receive_request_attempt_id(*params.ReceiveRequestAttemptId);
@@ -124,7 +122,7 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::SendMessageRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         if (params.DelaySeconds) {
             value.set_delay_seconds(*params.DelaySeconds);
         }
@@ -158,7 +156,7 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::SendMessageBatchRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         for (const auto& [_, paramsEntry] : params.BatchEntries) {
             auto& entry = *value.add_entries();
             if (paramsEntry.DelaySeconds) {
@@ -195,22 +193,24 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     void DeserializeXml(Ydb::Ymq::V1::SetQueueAttributesRequest& value, const TParameters& params) {
-        value.set_queue_url(params.QueueName.GetOrElse(""));
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
         for (const auto& [_, attr] : params.Attributes) {
             value.mutable_attributes()->insert({attr.Name.GetOrElse(""), attr.Value.GetOrElse("")});
         }
     }
 
     void DeserializeXml(Ydb::Ymq::V1::TagQueueRequest& value, const TParameters& params) {
-        // TODO: Implement
-        Y_UNUSED(value);
-        Y_UNUSED(params);
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
+        for (const auto& [_, tag] : params.Tags) {
+            value.mutable_tags()->insert({tag.Key.GetOrElse(""), tag.Value.GetOrElse("")});
+        }
     }
 
     void DeserializeXml(Ydb::Ymq::V1::UntagQueueRequest& value, const TParameters& params) {
-        // TODO: Implement
-        Y_UNUSED(value);
-        Y_UNUSED(params);
+        value.set_queue_url(params.QueueUrl.GetOrElse(""));
+        for (const auto& key : params.TagKeys) {
+            value.add_tag_keys(key.second);
+        }
     }
 
     TString SerializeXml(const THttpRequestContext& httpContext, const NProtoBuf::Message& value) {

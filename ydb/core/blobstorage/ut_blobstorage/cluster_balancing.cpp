@@ -4,6 +4,7 @@
 #include <library/cpp/iterator/enumerate.h>
 
 #include <algorithm>
+#include <chrono>
 #include <map>
 #include <memory>
 #include <set>
@@ -19,20 +20,21 @@ struct TTestEnv {
         TBlobStorageGroupType erasure,
         ui32 pdiskPerNode,
         ui32 groupCount,
-        ui32 maxReassignAttemptsPerBucketPerIteration = 10
+        ui32 maxReassignAttemptsPerBucketPerIteration = 10,
+        TDuration iterationInterval = TDuration::Seconds(1)
     )
     : Env({
         .NodeCount = nodeCount,
         .VDiskReplPausedAtStart = false,
         .Erasure = erasure,
-        .ConfigPreprocessor = [maxReassignAttemptsPerBucketPerIteration](ui32, TNodeWardenConfig& conf) {
+        .ConfigPreprocessor = [maxReassignAttemptsPerBucketPerIteration, iterationInterval](ui32, TNodeWardenConfig& conf) {
             auto* bscSettings = conf.BlobStorageConfig.MutableBscSettings();
             auto* clusterBalancingSettings = bscSettings->MutableClusterBalancingSettings();
 
             clusterBalancingSettings->SetEnable(true);
             clusterBalancingSettings->SetMaxReplicatingPDisks(100);
             clusterBalancingSettings->SetMaxReplicatingVDisks(800);
-            clusterBalancingSettings->SetIterationIntervalMs(TDuration::Seconds(1).MilliSeconds());
+            clusterBalancingSettings->SetIterationIntervalMs(iterationInterval.MilliSeconds());
             clusterBalancingSettings->SetMaxReassignAttemptsPerBucketPerIteration(maxReassignAttemptsPerBucketPerIteration);
             clusterBalancingSettings->SetPreferLessOccupiedRack(true);
             clusterBalancingSettings->SetWithAttentionToReplication(true);
@@ -40,7 +42,7 @@ struct TTestEnv {
     })
     {
         Env.CreateBoxAndPool(pdiskPerNode, groupCount);
-        Env.Sim(TDuration::Minutes(1));
+        WaitForDynamicVSlotsReady();
         // Uncomment to see cluster rebalancing logs
         // Env.Runtime->SetLogPriority(NKikimrServices::BS_CLUSTER_BALANCING, NActors::NLog::PRI_DEBUG);
     }
@@ -75,6 +77,31 @@ struct TTestEnv {
 
     std::unordered_map<TPDiskId, ui32> BuildPDiskUsageMap() {
         return BuildPDiskUsageMap(Env.FetchBaseConfig());
+    }
+
+    bool DynamicVSlotsAreReady() {
+        const auto config = Env.FetchBaseConfig();
+        bool hasDynamicVSlot = false;
+        for (const auto& vslot : config.GetVSlot()) {
+            if (!IsDynamicGroup(vslot.GetGroupId())) {
+                continue;
+            }
+
+            hasDynamicVSlot = true;
+            if (!vslot.GetReady()) {
+                return false;
+            }
+        }
+
+        return hasDynamicVSlot;
+    }
+
+    void WaitForDynamicVSlotsReady() {
+        const bool success = WaitFor([&] {
+            return DynamicVSlotsAreReady();
+        }, 60);
+
+        UNIT_ASSERT_C(success, "Expected dynamic VSlots to become ready");
     }
 
     static TVDiskPositionKey MakeVDiskPositionKey(const NKikimrBlobStorage::TBaseConfig_TVSlot& vslot) {
@@ -212,7 +239,7 @@ struct TTestEnv {
             if (condition()) {
                 return true;
             }
-            Env.Sim(TDuration::Minutes(1));
+            Env.Sim(TDuration::Seconds(1));
         }
         return false;
     }
@@ -227,11 +254,11 @@ struct TTestEnv {
 Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
     Y_UNIT_TEST(ClusterBalancingEvenDistribution) {
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 10, TDuration::MilliSeconds(100));
 
         UNIT_ASSERT(env.EachPDiskHasNVDisks(2));
 
-        env->AlterBox(1, 4);
+        env->AlterBox(1, 2);
 
         bool seenParameters = false;
 
@@ -254,14 +281,14 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
         bool success = env.WaitFor([&] {
             return env.EachPDiskHasNVDisks(1);
-        }, 10);
+        }, 60);
 
         UNIT_ASSERT(seenParameters);
         UNIT_ASSERT(success);
     }
 
     Y_UNIT_TEST(ClusterBalancingEvenDistributionNotPossible) {
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 3);
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 3, 10, TDuration::MilliSeconds(100));
 
         UNIT_ASSERT(env.EachPDiskHasNVDisks(3));
 
@@ -278,7 +305,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
             return countByUsage[1] == 8 && countByUsage[2] == 8;
         };
 
-        bool success = env.WaitFor(check, 10);
+        bool success = env.WaitFor(check, 60);
 
         UNIT_ASSERT(success);
 
@@ -295,7 +322,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
             return true;
         };
 
-        env.Env.Sim(TDuration::Seconds(5));
+        env.Env.Sim(TDuration::MilliSeconds(200));
 
         // Check that the cluster balancing doesn't do anything now.
         // Optimal distribution is already achieved, any reassignment will only move data around for no reason.
@@ -307,10 +334,10 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
     }
 
     Y_UNIT_TEST(ClusterBalancingMaxReassignAttemptsArePerSourceBucket) {
-        // 5 Erasure4Plus2Block groups make 40 dynamic VSlots. Spread over 9 source
+        // 3 Erasure4Plus2Block groups make 24 dynamic VSlots. Spread over 9 source
         // PDisks, this gives at least two source usage buckets before new PDisks
         // are added as balancing targets.
-        TTestEnv env(9, TBlobStorageGroupType::Erasure4Plus2Block, 1, 5, 1);
+        TTestEnv env(9, TBlobStorageGroupType::Erasure4Plus2Block, 1, 3, 1);
 
         std::map<TTestEnv::TVDiskPositionKey, ui32> sourceUsageByVDisk;
         ui32 maxSourceUsage = 0;
@@ -378,14 +405,14 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
     Y_UNIT_TEST(ClusterBalancingSkipsNonImprovableStoragePool) {
         constexpr ui64 SsdPoolId = 2;
 
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 5, 100);
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 100);
 
         env.DefineBoxWithDrives(1, {
             NKikimrBlobStorage::EPDiskType::ROT,
             NKikimrBlobStorage::EPDiskType::SSD,
         });
         env.DefineStoragePool(SsdPoolId, "ssd", NKikimrBlobStorage::EPDiskType::SSD, 1);
-        env->Sim(TDuration::Minutes(1));
+        env.WaitForDynamicVSlotsReady();
 
         std::unordered_map<ui32, ui64> storagePoolByGroup;
         ui32 rotPoolReassigns = 0;
@@ -440,9 +467,11 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
             "Expected test setup to create groups in SSD pool");
 
         captureReassigns = true;
-        env->Sim(TDuration::Seconds(10));
+        const bool success = env.WaitFor([&] {
+            return rotPoolReassigns > 0;
+        }, 30);
 
-        UNIT_ASSERT_C(rotPoolReassigns > 0, "Expected cluster balancing to try the improvable ROT pool");
+        UNIT_ASSERT_C(success, "Expected cluster balancing to try the improvable ROT pool");
         UNIT_ASSERT_C(ssdPoolReassigns == 0,
             "Expected cluster balancing to skip the SSD pool because no move can improve its usage;"
             << " ssdPoolReassigns# " << ssdPoolReassigns

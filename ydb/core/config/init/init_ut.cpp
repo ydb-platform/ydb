@@ -61,11 +61,11 @@ Y_UNIT_TEST_SUITE(Init) {
         auto errorCollector = MakeDefaultErrorCollector();
 
         try {
-            errorCollector->Fatal("Failed to parse protobuf file: broken.pb", "YDB-CFG24");
+            errorCollector->Fatal("Failed to parse protobuf file: broken.pb", "YDBE-10024");
             UNIT_FAIL("Expected exception");
         } catch (const TInitializationException& e) {
             UNIT_ASSERT_C(e.HasErrorCode(), "error code missing");
-            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDB-CFG24");
+            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDBE-10024");
             UNIT_ASSERT_VALUES_EQUAL(TString(e.what()), "Failed to parse protobuf file: broken.pb");
         }
     }
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(Init) {
             UNIT_FAIL("Expected exception");
         } catch (const TInitializationException& e) {
             UNIT_ASSERT_C(e.HasErrorCode(), "error code missing");
-            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDB-CFG24");
+            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDBE-10024");
             TString msg = e.what();
             UNIT_ASSERT_C(msg.StartsWith("Failed to parse protobuf file \"broken.pb\": "), msg);
             UNIT_ASSERT_C(msg.Contains("line 1, column 5"), msg);
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(Init) {
             UNIT_FAIL("Expected exception");
         } catch (const TInitializationException& e) {
             UNIT_ASSERT_C(e.HasErrorCode(), "error code missing");
-            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDB-CFG25");
+            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDBE-10025");
             UNIT_ASSERT_VALUES_EQUAL(TString(e.what()), "File /tmp/ydb_init_ut_missing.pb does not exist");
         }
     }
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(InitStructuredErrors) {
             UNIT_FAIL("Expected exception");
         } catch (const TInitializationException& e) {
             UNIT_ASSERT_C(e.HasErrorCode(), "error code missing");
-            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDB-CFG18");
+            UNIT_ASSERT_VALUES_EQUAL(*e.GetErrorCode(), "YDBE-10018");
             UNIT_ASSERT_VALUES_EQUAL(TString(e.what()), TStringBuilder() << "Seed nodes file not found: " << missingSeedNodesPath);
         }
     }

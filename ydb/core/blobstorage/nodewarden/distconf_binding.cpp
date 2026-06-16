@@ -26,11 +26,12 @@ namespace NKikimr::NStorage {
 
             const bool hasReachablePeers = reachablePeers != 0;
             TStringBuilder msg;
-            msg << "[YDBE-DC01] local node " << selfNodeId << " cannot join cluster";
             if (!hasReachablePeers) {
-                msg << ": no accepted interconnect sessions to configured remote nodes";
+                msg << "[YDBE-21001] local node " << selfNodeId << " cannot join cluster"
+                    << ": no accepted interconnect sessions to configured remote nodes";
             } else {
-                msg << ": distconf bind failing";
+                msg << "[YDBE-21002] local node " << selfNodeId << " cannot join cluster"
+                    << ": distconf bind failing";
             }
             if (staticPeers) {
                 msg << " (" << reachablePeers << "/" << staticPeers << " remote nodes connected)";

@@ -176,7 +176,7 @@ auto MutableConfigPart(
             if (parseError) {
                 message << ": " << parseError;
             }
-            errorCollector.Fatal(message, "YDB-CFG24");
+            errorCollector.Fatal(message, "YDBE-10024");
             return nullptr;
         }
 
@@ -224,7 +224,7 @@ auto MutableConfigPartMerge(
             if (parseError) {
                 message << ": " << parseError;
             }
-            errorCollector.Fatal(message, "YDB-CFG24");
+            errorCollector.Fatal(message, "YDBE-10024");
             return nullptr;
         }
 
@@ -258,7 +258,7 @@ struct TWithDefault {
 
     void EnsureDefined() const {
         if (Y_UNLIKELY(Default)) {
-            throw TInitializationException("YDB-CFG06") << "TWithDefault access through GetRef() assuming it is non-default";
+            throw TInitializationException("YDBE-10006") << "TWithDefault access through GetRef() assuming it is non-default";
         }
     }
 
@@ -607,11 +607,11 @@ struct TCommonAppOptions {
         }
 
         if (!appConfig.HasDomainsConfig()) {
-            throw TInitializationException("YDB-CFG07") << "DomainsConfig is not provided";
+            throw TInitializationException("YDBE-10007") << "DomainsConfig is not provided";
         }
 
         if (!appConfig.HasChannelProfileConfig()) {
-            throw TInitializationException("YDB-CFG08") << "ChannelProfileConfig is not provided";
+            throw TInitializationException("YDBE-10008") << "ChannelProfileConfig is not provided";
         }
 
         if (NodeKind == NODE_KIND_YQ && InterconnectPort) {
@@ -892,7 +892,7 @@ struct TCommonAppOptions {
                 try {
                     nodeId = FindStaticNodeId(appConfig, env);
                 } catch(TSystemError& e) {
-                    throw TInitializationException("YDB-CFG09") << "cannot detect host name: " << e.what();
+                    throw TInitializationException("YDBE-10009") << "cannot detect host name: " << e.what();
                 }
 
                 if (!nodeId) {
@@ -904,7 +904,7 @@ struct TCommonAppOptions {
                         msg << " or " << fqdn << ":" << InterconnectPort;
                     }
                     msg << " in cluster configuration";
-                    throw TInitializationException("YDB-CFG10") << msg;
+                    throw TInitializationException("YDBE-10010") << msg;
                 }
                 return nodeId;
             } else {
@@ -1025,7 +1025,7 @@ struct TCommonAppOptions {
             }
         } else {
             if (!NodeBrokerPort) {
-                throw TInitializationException("YDB-CFG11") << "NodeBrokerPort MUST be defined";
+                throw TInitializationException("YDBE-10011") << "NodeBrokerPort MUST be defined";
             }
 
             for (const auto &node : appConfig.GetNameserviceConfig().GetNode()) {
@@ -1272,7 +1272,7 @@ public:
                     yamlConfigs.StorageSource = "storage YAML config fetched from seed nodes";
                 }
             } else if (CommonAppOptions.ConfigDirPath) {
-                throw TInitializationException("YDB-CFG12") << "YAML config is not provided for static node and no seed nodes given";
+                throw TInitializationException("YDBE-10012") << "YAML config is not provided for static node and no seed nodes given";
             }
         }
 
@@ -1365,7 +1365,7 @@ public:
 
         std::vector<TString> errors;
         if (csk && csk->ValidateConfig(AppConfig, errors) == NYamlConfig::EValidationResult::Error) {
-            throw TInitializationException("YDB-CFG13") << errors.front();
+            throw TInitializationException("YDBE-10013") << errors.front();
         }
 
         if (const auto it = Labels.find("empty_domain_during_node_registration"); it != Labels.end()) {
@@ -1483,7 +1483,7 @@ public:
         }
 
         if (addrs.empty()) {
-            throw TInitializationException("YDB-CFG14") << "List of Node Broker end-points is empty";
+            throw TInitializationException("YDBE-10014") << "List of Node Broker end-points is empty";
         }
 
         TString domainName = DeduceNodeDomain(cf, AppConfig);
@@ -1676,26 +1676,26 @@ public:
                         if (item.Type() == NFyaml::ENodeType::Scalar) {
                             cf.SeedNodes.push_back(item.Scalar());
                         } else {
-                            throw TInitializationException("YDB-CFG15")
+                            throw TInitializationException("YDBE-10015")
                                 << "Invalid format in seed nodes file: expected a list of strings, but found non-scalar item at "
                                 << item.Path();
                         }
                     }
                 } else {
-                    throw TInitializationException("YDB-CFG16")
+                    throw TInitializationException("YDBE-10016")
                         << "Invalid format in seed nodes file: expected a list of strings at root";
                 }
             } catch (const std::exception& e) {
-                throw TInitializationException("YDB-CFG17") << "Failed to read or parse seed nodes file: " << e.what();
+                throw TInitializationException("YDBE-10017") << "Failed to read or parse seed nodes file: " << e.what();
             }
         } else {
-            throw TInitializationException("YDB-CFG18") << "Seed nodes file not found: " << cf.SeedNodesFile;
+            throw TInitializationException("YDBE-10018") << "Seed nodes file not found: " << cf.SeedNodesFile;
         }
     }
 
     void InitConfigFromSeedNodes(TString& mainYamlConfigString, std::optional<TString>& storageYamlConfigString) {
         if (!AppConfig.GetConfigDirPath()) {
-            throw TInitializationException("YDB-CFG19") << "Seed nodes file provided, but config dir path is not set";
+            throw TInitializationException("YDBE-10019") << "Seed nodes file provided, but config dir path is not set";
         }
 
         std::vector<TString> hostOptions = {
@@ -1709,7 +1709,7 @@ public:
         auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger,
             hostOptions, CommonAppOptions.InterconnectPort);
         if (!result || !result->IsSuccess()) {
-            throw TInitializationException("YDB-CFG20")
+            throw TInitializationException("YDBE-10020")
                 << (result
                     ? DescribeFetchConfigFailure("from seed nodes for static node", *result)
                     : TString("Failed to fetch config from seed nodes for static node"));
@@ -1718,7 +1718,7 @@ public:
         if (const auto& config = result->GetMainYamlConfig()) {
             mainYamlConfigString = *config;
         } else {
-            throw TInitializationException("YDB-CFG21")
+            throw TInitializationException("YDBE-10021")
                 << "No main YAML config has been provided from seed nodes for static node";
         }
 
@@ -1768,7 +1768,7 @@ public:
                 }
                 errorMsg << "storage config";
             }
-            throw TInitializationException("YDB-CFG22") << errorMsg;
+            throw TInitializationException("YDBE-10022") << errorMsg;
         } else if (storageYamlConfigString) {
             Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
                 << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
@@ -1790,7 +1790,7 @@ public:
 
     void InitConfigFromSeedNodesDynamic() {
         if (CommonAppOptions.SeedNodes.empty()) {
-            throw TInitializationException("YDB-CFG23") << "No seed nodes provided";
+            throw TInitializationException("YDBE-10023") << "No seed nodes provided";
         }
 
         auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger, {}, 0);

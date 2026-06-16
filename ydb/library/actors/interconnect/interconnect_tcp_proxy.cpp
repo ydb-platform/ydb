@@ -885,7 +885,7 @@ namespace NActors {
             return notice;
         };
 
-        LOG_NOTICE_SOURCELESS(ctx, NActorsServices::INTERCONNECT, "[YDBE-IC01] %s", makeNotice().data());
+        LOG_NOTICE_SOURCELESS(ctx, NActorsServices::INTERCONNECT, "[YDBE-02001] %s", makeNotice().data());
     }
 
     void TInterconnectProxyTCP::AppendSuppressedErrorStateLogs(TStringBuilder& stream, ui64 globalSuppressed, ui64 perPeerSuppressed) const {
@@ -937,7 +937,7 @@ namespace NActors {
                     AppendHandshakeFailDebugInfo(notice, "ICP32", explanation);
                     return notice;
                 };
-                LOG_NOTICE_SOURCELESS(ctx, NActorsServices::INTERCONNECT, "[YDBE-IC01] %s", makeNotice().data());
+                LOG_NOTICE_SOURCELESS(ctx, NActorsServices::INTERCONNECT, "[YDBE-02001] %s", makeNotice().data());
 
                 LOG_DEBUG_IC("ICP32", "transit to hold-by-error state Explanation# %s", explanation.data());
             } else {

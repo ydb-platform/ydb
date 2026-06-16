@@ -52,7 +52,7 @@ TString StripSourceLocationPrefix(TStringBuf message) {
         msg << " at line " << e.mark.line + 1 << ", column " << e.mark.column + 1;
     }
     msg << ": " << e.msg;
-    throw TInitializationException("YDB-CFG01") << msg;
+    throw TInitializationException("YDBE-10001") << msg;
 }
 
 [[noreturn]] void ThrowUnknownYamlFieldsError(TStringBuf source, const NYamlConfig::TBasicUnknownFieldsCollector& collector) {
@@ -79,7 +79,7 @@ TString StripSourceLocationPrefix(TStringBuf message) {
             }
         }
     }
-    throw TInitializationException("YDB-CFG02") << msg;
+    throw TInitializationException("YDBE-10002") << msg;
 }
 
 [[noreturn]] void ThrowJsonToProtoError(TStringBuf source, const NYamlConfig::TBasicUnknownFieldsCollector& collector, const yexception& e) {
@@ -93,13 +93,13 @@ TString StripSourceLocationPrefix(TStringBuf message) {
         msg << " at path " << currentPath.Quote();
     }
     msg << ": " << StripSourceLocationPrefix(e.AsStrBuf());
-    throw TInitializationException("YDB-CFG03") << msg;
+    throw TInitializationException("YDBE-10003") << msg;
 }
 
 [[noreturn]] void ThrowInvalidConfigurationError(TStringBuf source, const yexception& e) {
     TStringBuilder msg;
     msg << "Invalid configuration in " << EffectiveYamlSource(source) << ": " << StripSourceLocationPrefix(e.AsStrBuf());
-    throw TInitializationException("YDB-CFG04") << msg;
+    throw TInitializationException("YDBE-10004") << msg;
 }
 
 } // anonymous namespace
@@ -112,7 +112,7 @@ NJson::TJsonValue LoadYamlAsJsonOrThrow(const TString& config, TStringBuf source
     } catch (const yexception& e) {
         TStringBuilder msg;
         msg << "Failed to parse " << EffectiveYamlSource(source) << ": " << StripSourceLocationPrefix(e.AsStrBuf());
-        throw TInitializationException("YDB-CFG05") << msg;
+        throw TInitializationException("YDBE-10005") << msg;
     }
 }
 

@@ -5,8 +5,4 @@ SRCS(
     config.proto
 )
 
-IF (NOT PY_PROTOS_FOR)
-    INCLUDE_TAGS(GO_PROTO)
-ENDIF()
-
 END()

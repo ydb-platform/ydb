@@ -201,7 +201,7 @@ public:
     STRICT_STFUNC(StateFunc,
         cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
-        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleV2);
+        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, Handle);
     )
 
     void HandleTimeout() {
@@ -259,7 +259,7 @@ public:
         HandleResponse<NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
     }
 
-    void HandleV2(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
         HandleResponse<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev);
     }
 

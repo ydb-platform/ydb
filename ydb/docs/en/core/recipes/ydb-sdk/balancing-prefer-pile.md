@@ -1,10 +1,10 @@
 # Prefer a pile with a specific state
 
-Below is an example of setting the balancing algorithm option that prefers a [pile](../../concepts/glossary.md#pile) in a given [state](../../concepts/bridge.md#pile-states) in the {{ ydb-short-name }} SDK.
+Below is an example of setting the balancing algorithm option that prefers a [pile](../../concepts/glossary.md#pile) in a given state in the {{ ydb-short-name }} SDK.
 
 If no state is specified when setting the option, the SDK prefers the PRIMARY pile.
 
-This option only makes sense if the cluster is operating in [bridge mode](../../concepts/bridge.md). Otherwise, the SDK uses [random choice balancing](./balancing-random-choice.md).
+This option only makes sense if the cluster is operating in bridge mode. Otherwise, the SDK uses [random choice balancing](./balancing-random-choice.md).
 
 {% list tabs %}
 

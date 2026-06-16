@@ -121,6 +121,7 @@ TDecompressionResult TKafkaBatchCodec::DecompressData(const std::string& data) c
 
     TDecompressionResult result;
     const TKafkaRecordBatch kafkaBatch = ReadKafkaRecordBatch(data);
+    result.BatchBaseOffset = kafkaBatch.BaseOffset;
     result.BatchBaseSequence = 0;
     result.BatchBaseTimestampMs = kafkaBatch.BaseTimestamp;
     result.Messages.reserve(kafkaBatch.Records.size());

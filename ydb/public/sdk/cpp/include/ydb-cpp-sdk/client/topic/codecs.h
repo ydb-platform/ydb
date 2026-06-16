@@ -67,6 +67,7 @@ struct TDecompressedMessage {
 struct TDecompressionResult {
     std::vector<TDecompressedMessage> Messages;
     //! Populated when codec expands one blob into many messages (Kafka batch).
+    std::optional<i64> BatchBaseOffset;
     std::optional<i64> BatchBaseSequence;
     std::optional<i64> BatchBaseTimestampMs;
 };

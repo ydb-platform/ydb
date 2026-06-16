@@ -210,14 +210,12 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
     };
     ProtoResponse.SetStartOffset(cmdRead.GetStartOffset());
     ProtoResponse.SetEndOffset(cmdRead.GetEndOffset());
-
     for (auto& r : cmdRead.GetResult()) {
         if (totalSize >= maxTotalSize) {
             isTruncated = true;
             break;
         }
         auto dataChunk = (NKikimr::GetDeserializedData(r.GetData()));
-        auto* messageProto = ProtoResponse.AddMessages();
 
         TString decodedSrcId;
         if (!r.GetSourceId().empty()) {
@@ -242,20 +240,38 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
                     return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
                 }
                 for (size_t i = 0; i < decompressed.Messages.size(); ++i) {
-                    auto* proto = (i == 0) ? messageProto : ProtoResponse.AddMessages();
                     const auto& msg = decompressed.Messages[i];
 
                     ui64 offset = r.GetOffset();
                     ui64 seqNo = r.GetSeqNo();
                     i64 createTs = r.GetCreateTimestampMS();
                     if (msg.Meta) {
-                        offset += static_cast<ui64>(*msg.Meta->OffsetDelta);
+                        const ui64 headerBaseOffset = decompressed.BatchBaseOffset
+                            ? static_cast<ui64>(*decompressed.BatchBaseOffset)
+                            : r.GetOffset();
+                        const ui64 batchBaseOffset = r.GetOffset() > Offset ? r.GetOffset() : headerBaseOffset;
+                        offset = batchBaseOffset + static_cast<ui64>(*msg.Meta->OffsetDelta);
                         seqNo = static_cast<ui64>(*decompressed.BatchBaseSequence) + static_cast<ui64>(*msg.Meta->SequenceDelta);
                         createTs = *decompressed.BatchBaseTimestampMs + *msg.Meta->TimestampDelta;
                     }
+
+                    if (offset < Offset) {
+                        continue;
+                    }
+                    if (LastOffset > 0 && offset >= LastOffset) {
+                        break;
+                    }
+                    if (static_cast<ui64>(ProtoResponse.MessagesSize()) >= Limit) {
+                        break;
+                    }
+                    auto* proto = ProtoResponse.AddMessages();
                     fillViewerMessageFields(proto, r, dataChunk, decodedSrcId, offset, seqNo, createTs);
                     setData(*proto, TString(msg.Data));
                     copyMessageMetadata(proto, dataChunk);
+                    if (totalSize >= maxTotalSize) {
+                        isTruncated = true;
+                        break;
+                    }
                 }
                 continue;
             } catch (...) {
@@ -268,6 +284,10 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
                 return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
             }
         } else {
+            if (static_cast<ui64>(ProtoResponse.MessagesSize()) >= Limit) {
+                break;
+            }
+            auto* messageProto = ProtoResponse.AddMessages();
             fillViewerMessageFields(messageProto, r, dataChunk, decodedSrcId, r.GetOffset(), r.GetSeqNo(), r.GetCreateTimestampMS());
             setData(*messageProto, std::move(*dataChunk.MutableData()));
             copyMessageMetadata(messageProto, dataChunk);

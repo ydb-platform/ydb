@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         }
     }
 
-    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessages) {
+    void CheckReadKafkaBatchMessages(ui64 readFromOffset, ui32 limit = 6) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
 
         TJsonValue json;
-        auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 0, 6), json);
+        auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, readFromOffset, limit), json);
         UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
 
         const auto& overallResponse = json.GetMap();
@@ -307,25 +307,38 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         CheckMapValue(overallResponse, "EndOffset", 6);
 
         const auto& messages = overallResponse.find("Messages")->second.GetArray();
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), Min<ui64>(limit, 6 - readFromOffset));
 
         constexpr ui32 kafkaBatchCodec = static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1;
-        for (ui64 i = 0; i < 6; ++i) {
+        for (ui64 i = 0; i < messages.size(); ++i) {
+            const ui64 messageOffset = i + readFromOffset;
             const auto& item = messages[i];
             UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
             const auto& jsonMap = item.GetMap();
-            CheckMapValue(jsonMap, "Offset", i);
+            CheckMapValue(jsonMap, "Offset", messageOffset);
             UNIT_ASSERT(jsonMap.find("SeqNo") != jsonMap.end());
-            UNIT_ASSERT_VALUES_EQUAL(jsonMap.find("SeqNo")->second.GetInteger(), i + 1);
+            UNIT_ASSERT_VALUES_EQUAL(jsonMap.find("SeqNo")->second.GetInteger(), messageOffset + 1);
             CheckMapValue(jsonMap, "Codec", kafkaBatchCodec);
             CheckMapValue(jsonMap, "ProducerId", producerId);
             UNIT_ASSERT(jsonMap.find("Message") != jsonMap.end());
             UNIT_ASSERT_VALUES_EQUAL(
                 Base64Decode(jsonMap.find("Message")->second.GetString()),
-                TString(dataSize, i < 3 ? 'a' : 'b'));
-            CheckMapValue(jsonMap, "CreateTimestamp", 1000 + i);
+                TString(dataSize, messageOffset < 3 ? 'a' : 'b'));
+            CheckMapValue(jsonMap, "CreateTimestamp", 1000 + messageOffset);
             UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
             UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
         }
+    }
+
+    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessages) {
+        CheckReadKafkaBatchMessages(0);
+    }
+
+    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessagesReadFromMiddle) {
+        CheckReadKafkaBatchMessages(2);
+    }
+
+    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessagesRespectsLimit) {
+        CheckReadKafkaBatchMessages(2, 2);
     }
 };

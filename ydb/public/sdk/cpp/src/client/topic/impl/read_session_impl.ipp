@@ -3115,7 +3115,14 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
 
                 if (decompressedMsg.Meta) {
                     const auto& recordMeta = *decompressedMsg.Meta;
-                    offset = static_cast<ui64>(messageData.offset()) + static_cast<ui64>(*recordMeta.OffsetDelta);
+                    const ui64 outerOffset = static_cast<ui64>(messageData.offset());
+                    const ui64 headerBaseOffset = codecResult.BatchBaseOffset
+                        ? static_cast<ui64>(*codecResult.BatchBaseOffset)
+                        : outerOffset;
+                    const ui64 batchBaseOffset = outerOffset > committedOffset
+                        ? outerOffset
+                        : headerBaseOffset;
+                    offset = batchBaseOffset + static_cast<ui64>(*recordMeta.OffsetDelta);
                     if (offset < committedOffset) {
                         ++result.MessagesTaken;
                         ++recordsSkipped;

@@ -89,8 +89,8 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
             }
 
             auto newStats = fut.ExtractValue();
-            if (!sharedState) {
-                sharedState = std::make_shared<TColumnStatisticsSharedState>(std::move(newStats));
+            if (!sharedState->Response.has_value()) {
+                sharedState->Response = std::move(newStats);
             } else {
                 // merge statistics
                 for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
@@ -114,7 +114,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 }
 
 IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TExprNode::TPtr, TExprNode::TPtr&, TExprContext&) {
-    Y_ENSURE(AsyncReadiness.IsReady() && SharedState);
+    Y_ENSURE(AsyncReadiness.IsReady() && SharedState->Response.has_value());
 
     if (!SharedState->Response->Issues().Empty()) {
         TStringStream ss; SharedState->Response->Issues().PrintTo(ss);

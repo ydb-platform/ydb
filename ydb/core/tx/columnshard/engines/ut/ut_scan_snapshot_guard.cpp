@@ -147,6 +147,27 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads(), NOlap::TSnapshot(100, 0));
     }
 
+    Y_UNIT_TEST(RegistryGuardRespectsCopySnapshot) {
+        const auto longTxConfig = MakeExplicitLongTxConfig();
+        const ui64 schemeShardId = 123;
+        NOlap::NTest::TTestPathIdTranslator translator;
+        const auto internalPathId = TInternalPathId::FromRawValue(7);
+        const auto roTablePathId = TSchemeShardLocalPathId::FromRawValue(70);
+        translator.Add(internalPathId, { roTablePathId });
+
+        const auto copySnapshot = Step(500);
+        translator.SetCopyVersion(roTablePathId, copySnapshot);
+
+        auto registry = CreateSnapshotRegistry(TRowVersion(900, 0));
+
+        const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
+        auto guard = CreateRegistryScanSnapshotGuard(
+            /*passedStep*/ 200000, schemeShardId, lastCleanupSnapshot, translator, registry, longTxConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 900);
+        UNIT_ASSERT(guard->MayStartScanAt(copySnapshot, roTablePathId));
+    }
+
     Y_UNIT_TEST(RegistryRespectsLastCleanupSnapshot) {
         const auto longTxConfig = MakeExplicitLongTxConfig();
         const ui64 schemeShardId = 123;

@@ -144,7 +144,8 @@ public:
     }
 
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const TSchemeShardLocalPathId& schemeShardLocalPathId) const override {
-        if (PathIdTranslator.GetCopyVersionOptional(schemeShardLocalPathId)) {
+        if (const auto copySnapshot = PathIdTranslator.GetCopyVersionOptional(schemeShardLocalPathId)) {
+            AFL_VERIFY(*copySnapshot == snapshot);
             return true;
         }
         if (MinSnapshotForNewReads <= snapshot) {

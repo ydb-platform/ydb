@@ -533,6 +533,7 @@ private:
     NConfig::TComputeConfig ComputeConfig;
     TActorId AccessService;
     ::NFq::TSigner::TPtr Signer;
+    bool EnableAccessServiceV2Interface{false};
 
 public:
     TControlPlaneProxyActor(
@@ -559,6 +560,8 @@ public:
     void Bootstrap() {
         CPP_LOG_D("Starting yandex query control plane proxy. Actor id: " << SelfId());
 
+        EnableAccessServiceV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_PROXY_PROVIDER));
 
         NActors::TMon* mon = AppData()->Mon;
@@ -575,7 +578,7 @@ public:
             if (accessServiceProto.GetPathToRootCA()) {
                 asSettings.CertificateRootCA = TUnbufferedFileInput(accessServiceProto.GetPathToRootCA()).ReadAll();
             }
-            AccessService = Register(NCloud::CreateAccessServiceWithCache(asSettings, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+            AccessService = Register(NCloud::CreateAccessServiceWithCache(asSettings, EnableAccessServiceV2Interface));
         } else {
             AccessService = Register(NCloud::CreateMockAccessServiceWithCache());
         }
@@ -721,7 +724,7 @@ private:
                                     TEvControlPlaneProxy::TEvCreateQueryResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -791,7 +794,7 @@ private:
                                     TEvControlPlaneProxy::TEvListQueriesResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -856,7 +859,7 @@ private:
                                     TEvControlPlaneProxy::TEvDescribeQueryResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -923,7 +926,7 @@ private:
                                     TEvControlPlaneProxy::TEvGetQueryStatusResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -989,7 +992,7 @@ private:
                                     TEvControlPlaneProxy::TEvModifyQueryResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1064,7 +1067,7 @@ private:
                                     TEvControlPlaneProxy::TEvDeleteQueryResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1129,7 +1132,7 @@ private:
                                     TEvControlPlaneProxy::TEvControlQueryResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1197,7 +1200,7 @@ private:
                                     TEvControlPlaneProxy::TEvGetResultDataResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1262,7 +1265,7 @@ private:
                                     TEvControlPlaneProxy::TEvListJobsResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1327,7 +1330,7 @@ private:
                                     TEvControlPlaneProxy::TEvDescribeJobResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1398,7 +1401,7 @@ private:
                                     TEvControlPlaneProxy::TEvCreateConnectionResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1546,7 +1549,7 @@ private:
                                     TEvControlPlaneProxy::TEvListConnectionsResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1611,7 +1614,7 @@ private:
                                     TEvControlPlaneProxy::TEvDescribeConnectionResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1681,7 +1684,7 @@ private:
                                     TEvControlPlaneProxy::TEvModifyConnectionResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1832,7 +1835,7 @@ private:
                                     TEvControlPlaneProxy::TEvDeleteConnectionResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -1953,7 +1956,7 @@ private:
                                     TEvControlPlaneProxy::TEvTestConnectionResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -2011,7 +2014,7 @@ private:
                                     TEvControlPlaneProxy::TEvCreateBindingResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -2165,7 +2168,7 @@ private:
                                     TEvControlPlaneProxy::TEvListBindingsResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -2230,7 +2233,7 @@ private:
                                     TEvControlPlaneProxy::TEvDescribeBindingResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -2295,7 +2298,7 @@ private:
                                     TEvControlPlaneProxy::TEvModifyBindingResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -2441,7 +2444,7 @@ private:
                                     TEvControlPlaneProxy::TEvDeleteBindingResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 
@@ -2540,7 +2543,7 @@ private:
                                     TEvControlPlaneProxy::TEvDeleteFolderResourcesResponse>
                                     (Counters.GetCommonCounters(RTC_RESOLVE_SUBJECT_TYPE), sender,
                                     Config, token,
-                                    probe, ev, cookie, AccessService, AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()));
+                                    probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
         }
 

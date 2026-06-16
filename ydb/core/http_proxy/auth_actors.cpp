@@ -224,7 +224,7 @@ namespace NKikimr::NHttpProxy {
                 v4params.mutable_signed_at()->set_nanos(nanos_left);
             };
 
-            if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+            if (EnableAccessServiceV2Interface) {
                 auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
                 setupRequest(request);
                 ctx.Send(MakeAccessServiceID(), std::move(request));
@@ -315,6 +315,8 @@ namespace NKikimr::NHttpProxy {
 
     public:
         void Bootstrap(const TActorContext& ctx) {
+            EnableAccessServiceV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+
             TBase::Become(&THttpAuthActor::StateWork);
 
             if (Authorize) {
@@ -344,6 +346,7 @@ namespace NKikimr::NHttpProxy {
         TString DatabaseId;
         TString DatabasePath;
         TString SourceAddress;
+        bool EnableAccessServiceV2Interface{false};
     };
 
     NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature)

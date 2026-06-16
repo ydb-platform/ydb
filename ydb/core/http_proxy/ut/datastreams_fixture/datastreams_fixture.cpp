@@ -878,36 +878,28 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
     // Service Account Service Mock
     grpc::ServerBuilder builder;
 
+    const auto setupAccessServiceMock = [&](auto& asMock) {
+        asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+        // asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+
+        asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+
+        asMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+
+        asMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    };
+
     if (enableAccessServiceV2Interface) {
         // V2 mock setup
-        AccessServiceMockV2.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        AccessServiceMockV2.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-
-        AccessServiceMockV2.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        AccessServiceMockV2.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-
-        AccessServiceMockV2.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        AccessServiceMockV2.AuthorizeData["proxy_sa@builtin-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-
-        AccessServiceMockV2.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        AccessServiceMockV2.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-
+        setupAccessServiceMock(AccessServiceMockV2);
         builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMockV2);
     } else {
         // V1 mock setup
-        AccessServiceMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        AccessServiceMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-    //        AccessServiceMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-
-        AccessServiceMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        AccessServiceMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-
-        AccessServiceMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        AccessServiceMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-
-        AccessServiceMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-        AccessServiceMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-
+        setupAccessServiceMock(AccessServiceMock);
         builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMock);
     }
 

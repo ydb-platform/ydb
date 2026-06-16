@@ -87,6 +87,10 @@ public:
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
         }
 
+        if (request->resource_path_size() == 0) {
+            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
+        }
+
         const TString& lastResourceId = request->resource_path(request->resource_path_size() - 1).id();
         const TString& token = request->signature().access_key_id() + request->iam_token() + "-" + request->permission() + "-" + lastResourceId;
         auto it = AuthorizeData.find(token);
@@ -158,6 +162,10 @@ public:
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
         }
 
+        if (request->resource_path_size() == 0) {
+            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
+        }
+
         const TString& lastResourceId = request->resource_path(request->resource_path_size() - 1).id();
         const TString& token = request->signature().access_key_id() + request->iam_token() + "-" + request->permission() + "-" + lastResourceId;
         auto it = AuthorizeData.find(token);
@@ -182,6 +190,9 @@ public:
 
         TString token = request->signature().access_key_id() + request->iam_token();
         for (const auto& action : request->actions().items()) {
+            if (action.resource_path_size() == 0) {
+                continue;
+            }
             const TString& lastResourceId = action.resource_path(action.resource_path_size() - 1).id();
             token += "-" + action.permission() + "-" + lastResourceId;
         }
@@ -356,9 +367,6 @@ public:
         const yandex::cloud::priv::accessservice::v2::AuthenticateRequest* request,
         yandex::cloud::priv::accessservice::v2::AuthenticateResponse* response) override
     {
-        if (!isUserAuthenticated) {
-            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
-        }
         return HandleAuthenticateBase(request, response);
     }
 
@@ -367,9 +375,6 @@ public:
         const yandex::cloud::priv::accessservice::v2::AuthorizeRequest* request,
         yandex::cloud::priv::accessservice::v2::AuthorizeResponse* response) override
     {
-        if (!isUserAuthenticated) {
-            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, UnauthenticatedErrorMessage);
-        }
         return HandleAuthorizeBase(ctx, request, response);
     }
 

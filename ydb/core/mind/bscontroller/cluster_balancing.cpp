@@ -146,7 +146,7 @@ namespace NKikimr::NBsController {
             const NKikimrBlobStorage::TDefineStoragePool& pool,
             const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk
         ) {
-            if (!pool.HasBoxId() || pool.GetBoxId() != pdisk.GetBoxId()) {
+            if (!pool.GetBoxId() || pool.GetBoxId() != pdisk.GetBoxId()) {
                 return false;
             }
 
@@ -168,7 +168,7 @@ namespace NKikimr::NBsController {
 
             std::unordered_map<ui64, std::vector<const NKikimrBlobStorage::TDefineStoragePool*>> storagePoolsByBox;
             for (const auto& pool : storagePoolsStatus.GetStoragePool()) {
-                if (!pool.HasBoxId()) {
+                if (!pool.GetBoxId()) {
                     continue;
                 }
                 storagePoolsByBox[pool.GetBoxId()].push_back(&pool);

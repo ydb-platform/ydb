@@ -2,12 +2,6 @@
 
 This guide shows how to enable AI assistant in {{ ydb-short-name }} Enterprise Manager (YDB EM). After the setup, users will see the assistant in the YDB EM web interface. The assistant sends model requests through Gateway and can use MCP tools provided by Gateway.
 
-{% note info %}
-
-The AI assistant described here runs in the YDB EM browser client. It does not use `POST /api/chat`.
-
-{% endnote %}
-
 ## Before you start {#before-start}
 
 You can use this guide before the first YDB EM deployment or when updating an existing installation. For a new deployment, add the variables to the inventory before running the initial setup playbook. For deployment instructions, see [{#T}](initial-deployment.md).

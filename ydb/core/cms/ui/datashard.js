@@ -2,7 +2,6 @@
 
 var TabletId = 0;
 var FollowerId = 0;
-var EnableTabletDevUiSecurePath = false;
 
 function getMonRootPath() {
     var marker = '/tablets/app';
@@ -23,9 +22,11 @@ function makeTabletDevUiUrl(queryAndMaybeHash) {
 }
 
 function detectTabletDevUiModeAndRun(onReady) {
+    window.FeatureFlags.EnableTabletDevUiSecurePath = false;
+
     $.get(makeMonUrl('/viewer/capabilities'))
         .done(function(data) {
-            EnableTabletDevUiSecurePath = Boolean(
+            window.FeatureFlags.EnableTabletDevUiSecurePath = Boolean(
                 data &&
                 data.Settings &&
                 data.Settings.Features &&
@@ -34,7 +35,6 @@ function detectTabletDevUiModeAndRun(onReady) {
             onReady();
         })
         .fail(function() {
-            EnableTabletDevUiSecurePath = false;
             onReady();
         });
 }

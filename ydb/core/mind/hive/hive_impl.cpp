@@ -791,9 +791,9 @@ void THive::OnDetach(const TActorContext&) {
 }
 
 void THive::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) {
-    YDB_LOG_INFO("",
+    YDB_LOG_INFO("OnTabletDead",
         {"logPrefix", GetLogPrefix()},
-        {"onTabletDead", TabletID()});
+        {"tabletId", TabletID()});
     Cleanup();
     return PassAway();
 }

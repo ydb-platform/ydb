@@ -433,8 +433,8 @@ void TTenantSlotBroker::OnDetach(const TActorContext &ctx)
 void TTenantSlotBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &,
                                      const TActorContext &ctx)
 {
-    YDB_LOG_INFO_CTX(ctx, "",
-        {"onTabletDead", TabletID()});
+    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+        {"tabletId", TabletID()});
 
     if (Counters)
         Counters->Counters->ResetCounters();

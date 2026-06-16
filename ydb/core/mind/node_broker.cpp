@@ -125,8 +125,8 @@ void TNodeBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
 {
     Y_UNUSED(ev);
 
-    YDB_LOG_INFO_CTX(ctx, "",
-        {"onTabletDead", TabletID()});
+    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+        {"tabletId", TabletID()});
 
     Die(ctx);
 }

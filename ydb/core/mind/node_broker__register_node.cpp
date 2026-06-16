@@ -118,8 +118,7 @@ public:
                     << ", expected (address, resolve host) = (" << node.Address << ", " << node.ResolveHost << ")"
                     << ", got (address, resolve host) = (" << rec.GetAddress() << ", " << rec.GetResolveHost() << ")";
 
-                YDB_LOG_WARN_CTX(ctx, "",
-                    {"errorText", errorText});
+                YDB_LOG_WARN_CTX(ctx, errorText);
                 return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             }
 
@@ -128,8 +127,7 @@ public:
                     << ", expected = " << node.Location.ToString()
                     << ", got = " << loc.ToString();
 
-                YDB_LOG_WARN_CTX(ctx, "",
-                    {"errorText", errorText});
+                YDB_LOG_WARN_CTX(ctx, errorText);
                 return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             } else if (node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
                 return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);

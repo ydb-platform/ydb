@@ -7,7 +7,7 @@
 
 #include <util/generic/yexception.h>
 
-namespace NMVP {
+namespace NMVP::NSupportLinks {
 
 class TGrafanaDashboardSource : public ILinkSource {
 public:
@@ -18,13 +18,13 @@ public:
         , GrafanaEndpoint(std::move(grafanaEndpoint))
     {}
 
-    TResolveOutput Resolve(const TLinkResolveInput& input, const TResolveContext&) const override {
-        TString resolvedUrl = NSupportLinks::BuildGrafanaDashboardUrl(GrafanaEndpoint, Url, input.ClusterInfo, input.UrlParameters);
+    TResolveOutput Resolve(const ILinkSource::TLinkResolveInput& input, const ILinkSource::TResolveContext&) const override {
+        TString resolvedUrl = BuildGrafanaDashboardUrl(GrafanaEndpoint, Url, input);
         TResolveOutput result{
             .Name = SourceName,
         };
         if (!resolvedUrl.empty()) {
-            result.Links.emplace_back(NSupportLinks::TResolvedLink{
+            result.Links.emplace_back(TResolvedLink{
                 .Title = Title,
                 .Url = std::move(resolvedUrl),
             });
@@ -43,7 +43,7 @@ inline void ValidateGrafanaDashboardSourceConfig(const TSupportLinkEntryConfig& 
     if (config.GetUrl().empty()) {
         ythrow yexception() << "url is required for source=" << config.GetSource();
     }
-    if (!NSupportLinks::IsAbsoluteUrl(config.GetUrl()) && metaSettings.SupportLinks.GrafanaEndpoint.empty()) {
+    if (!IsAbsoluteUrl(config.GetUrl()) && metaSettings.SupportLinks.GrafanaEndpoint.empty()) {
         ythrow yexception() << "grafana.endpoint is required for relative url";
     }
 }
@@ -58,4 +58,4 @@ inline std::shared_ptr<ILinkSource> MakeGrafanaDashboardSource(TSupportLinkEntry
     );
 }
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

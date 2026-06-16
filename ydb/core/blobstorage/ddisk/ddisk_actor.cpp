@@ -261,8 +261,7 @@ namespace {
             hFunc(TEvDisconnect, handleQuery)
             hFunc(TEvWrite, handleQuery)
             hFunc(TEvRead, handleQuery)
-            hFunc(TEvSyncWithPersistentBuffer, handleQuery)
-            hFunc(TEvSyncWithDDisk, handleQuery)
+            hFunc(TEvSync, handleQuery)
             hFunc(TEvDeleteTabletChunks, handleQuery)
             hFunc(TEvPrivate::TEvIssuePersistentBufferChunkAllocation, Handle)
 

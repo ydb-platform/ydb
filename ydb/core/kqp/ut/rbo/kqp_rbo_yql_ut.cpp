@@ -1640,6 +1640,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 SELECT stddev_samp(t1.a), stddev_samp(t1.b) from `/Root/t1` as t1;
             )",
+            R"(
+                select sum(distinct t1.a), max(distinct t1.b) from `/Root/t1` as t1;
+            )",
         };
         std::vector<std::string> resultsEmptyColumns = {
             R"([[0u]])",
@@ -1647,15 +1650,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[#;#]])",
             R"([[#;#]])",
             R"([[#;#]])",
-            R"([[#;#]])"
+            R"([[#;#]])",
+            R"([[#;#]])",
         };
 
         for (ui32 i = 0; i < queriesOnEmptyColumns.size(); ++i) {
             const auto& query = queriesOnEmptyColumns[i];
-            // Cout << query << Endl;
+            //Cout << query << Endl;
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), resultsEmptyColumns[i]);
         }
 
@@ -1835,6 +1838,26 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a, t1.b;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select max(distinct t1.a), min(distinct t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select max(t1.a), min(distinct t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select max(distinct t1.a), min(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(distinct t1.a), sum(t1.a) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(distinct t1.b), sum(t1.b) from `/Root/t1` as t1;
+            )",
             /*
             R"(
                 select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
@@ -1883,6 +1906,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[[2]];[[4]];[[6]]])",
                                             R"([[[2]];[[3]]])",
                                             R"([[0;[2]];[1;[1]];[2;[2]];[3;[1]];[4;[2]]])",
+                                            R"([[[4];[1]]])",
+                                            R"([[[4];[1]]])",
+                                            R"([[[4];[1]]])",
+                                            R"([[[10];[10]]])",
+                                            R"([[[3];[8]]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -1941,7 +1969,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {
-        TestAggregation(ColumnStore);
+        TestAggregation(true);
     }
 
     void BasicHashJoinTest(bool useBlockHashJoin) {

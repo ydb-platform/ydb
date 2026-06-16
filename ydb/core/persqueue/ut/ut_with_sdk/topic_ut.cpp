@@ -1,4 +1,9 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/library/kafka/kafka_records.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -35,6 +40,100 @@ using TMessage = TDataEvent::TMessage;
 
 
 Y_UNIT_TEST_SUITE(WithSDK) {
+
+    TString MakeKafkaBatchPayload(const TVector<TString>& values, ui64 baseSequence) {
+        NKafka::TKafkaRecordBatch batch;
+        batch.BaseOffset = 0;
+        batch.Magic = 2;
+        batch.Attributes = static_cast<NKafka::TKafkaRecordBatch::AttributesMeta::Type>(NKafka::ECompressionType::NONE);
+        batch.LastOffsetDelta = values.size() - 1;
+        batch.BaseTimestamp = 1000;
+        batch.MaxTimestamp = 1000 + values.size() - 1;
+        batch.ProducerId = 42;
+        batch.ProducerEpoch = 0;
+        batch.BaseSequence = baseSequence;
+
+        batch.Records.reserve(values.size());
+        for (size_t i = 0; i < values.size(); ++i) {
+            NKafka::TKafkaRecord record;
+            record.TimestampDelta = i;
+            record.OffsetDelta = i;
+            record.SetValue(TString{values[i]});
+            record.Length = record.Size(2)
+                - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
+            batch.Records.push_back(std::move(record));
+        }
+
+        batch.BatchLength = batch.Size(2)
+            - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type)
+            - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
+        return NKafka::WriteKafkaRecordBatch(batch);
+    }
+
+    ui64 GetPQTabletId(TTopicSdkTestSetup& setup, const TString& topicPath, ui32 partitionId) {
+        auto pathDescr = setup.GetServer().AnnoyingClient->Describe(&setup.GetRuntime(), topicPath, Tests::SchemeRoot, true);
+        const auto& partitions = pathDescr.GetPathDescription().GetPersQueueGroup().GetPartitions();
+        for (const auto& partition : partitions) {
+            if (partition.GetPartitionId() == partitionId) {
+                UNIT_ASSERT(partition.GetTabletId());
+                return partition.GetTabletId();
+            }
+        }
+        UNIT_FAIL(TStringBuilder() << "Partition " << partitionId << " not found in " << pathDescr.DebugString());
+        return 0;
+    }
+
+    void WriteKafkaBatch(
+        TTopicSdkTestSetup& setup,
+        ui64 tabletId,
+        const TActorId& edge,
+        const ui32 partitionId,
+        const TString& ownerCookie,
+        ui32 messageNo,
+        const TString& sourceId,
+        ui64 seqNo,
+        const TVector<TString>& values,
+        i64 offset)
+    {
+        TAutoPtr<IEventHandle> handle;
+        THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+        auto* req = request->Record.MutablePartitionRequest();
+        req->SetPartition(partitionId);
+        req->SetOwnerCookie(ownerCookie);
+        req->SetMessageNo(messageNo);
+        req->SetCmdWriteOffset(offset);
+
+        auto* write = req->AddCmdWrite();
+        write->SetSourceId(sourceId);
+        write->SetSeqNo(seqNo);
+
+        NKikimrPQClient::TDataChunk dataChunk;
+        dataChunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
+        dataChunk.SetCodec(NPersQueueCommon::RAW);
+        dataChunk.SetData(MakeKafkaBatchPayload(values, seqNo));
+
+        TString serializedDataChunk;
+        Y_ENSURE(dataChunk.SerializeToString(&serializedDataChunk));
+        write->SetData(std::move(serializedDataChunk));
+        write->SetMessageCount(values.size());
+        write->SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+        write->SetMaxSeqNo(seqNo + values.size() - 1);
+
+        setup.GetRuntime().SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        auto* result = setup.GetRuntime().GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+            [](const TEvPersQueue::TEvResponse& ev) {
+                return ev.Record.HasPartitionResponse()
+                    && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0
+                    || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+            });
+
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            static_cast<ui32>(result->Record.GetErrorCode()),
+            static_cast<ui32>(NPersQueue::NErrorCode::OK),
+            result->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1u);
+    }
 
     Y_UNIT_TEST(DescribeConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
@@ -724,6 +823,80 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
         auto nextMessages = readUntil(1);
         UNIT_ASSERT_VALUES_EQUAL(1, nextMessages.size());
+
+        UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+    }
+
+    Y_UNIT_TEST(KafkaBatchesReadThroughSdkAreCut) {
+        auto serverSettings = TTopicSdkTestSetup::MakeServerSettings();
+        serverSettings.FeatureFlags.SetEnableTopicMessagesBatching(true);
+        serverSettings.FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, serverSettings, false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        constexpr ui32 partitionId = 0;
+        constexpr size_t batchCount = 3;
+        constexpr size_t messagesPerBatch = 10;
+
+        const ui64 tabletId = GetPQTabletId(setup, setup.GetFullTopicPath(), partitionId);
+        const auto edge = setup.GetRuntime().AllocateEdgeActor();
+        const TString ownerCookie = NPQ::CmdSetOwner(&setup.GetRuntime(), tabletId, edge, partitionId).first;
+
+        TVector<TString> expected;
+        expected.reserve(batchCount * messagesPerBatch);
+        for (size_t batchIdx = 0; batchIdx < batchCount; ++batchIdx) {
+            TVector<TString> values;
+            values.reserve(messagesPerBatch);
+            for (size_t messageIdx = 0; messageIdx < messagesPerBatch; ++messageIdx) {
+                values.push_back(TStringBuilder() << "value-" << batchIdx << "-" << messageIdx);
+                expected.push_back(values.back());
+            }
+
+            WriteKafkaBatch(
+                setup,
+                tabletId,
+                edge,
+                partitionId,
+                ownerCookie,
+                batchIdx,
+                "sourceid_kafka_batch_sdk",
+                batchIdx * messagesPerBatch + 1,
+                values,
+                batchIdx * messagesPerBatch);
+        }
+
+        TTopicClient client(setup.MakeDriver());
+        TReadSessionSettings settings;
+        settings.ConsumerName(TEST_CONSUMER);
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC));
+
+        auto session = client.CreateReadSession(settings);
+        TVector<TString> actual;
+        actual.reserve(expected.size());
+
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (actual.size() < expected.size()) {
+            UNIT_ASSERT_C(deadline > TInstant::Now(), "Unable to read all messages");
+            auto event = session->GetEvent();
+            if (!event) {
+                continue;
+            }
+
+            if (auto* start = std::get_if<TStartPartitionEvent>(&*event)) {
+                start->Confirm();
+            } else if (auto* data = std::get_if<TDataEvent>(&*event)) {
+                for (const auto& message : data->GetMessages()) {
+                    UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), actual.size());
+                    actual.push_back(TString{message.GetData()});
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+        for (size_t i = 0; i < expected.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(actual[i], expected[i]);
+        }
 
         UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
     }

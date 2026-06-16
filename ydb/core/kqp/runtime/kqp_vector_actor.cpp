@@ -405,9 +405,11 @@ private:
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
-        if (!ReadingChildClustersOf && !FetchedClusters.size()) {
+        if (!FetchedClusters.size()) {
             // Index is empty
-            EmptyIndex = true;
+            if (!ReadingChildClustersOf) {
+                EmptyIndex = true;
+            }
             ContinueResolveClusters();
             return;
         }

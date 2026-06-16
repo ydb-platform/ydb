@@ -18,7 +18,7 @@ const TStringBuf ValidateAlphaNumAndPunctuation128ForAssign(const TStringBuf val
         if (parameterName) {
             throw TSQSException(NErrors::INVALID_PARAMETER_VALUE)
                 << "Invalid parameter \"" << parameterName
-                << "\". It is expected to be shorter than 128 characters and consist of aplhanum and punctuation characters.";
+                << "\". It is expected to be no longer than 128 characters and consist of alphanum and punctuation characters.";
         } else {
             throw TSQSException(NErrors::INVALID_PARAMETER_VALUE);
         }

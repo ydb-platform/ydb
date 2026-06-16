@@ -106,8 +106,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.Trigger.Portions = 100;
         settings.Compaction.Bytes = 150;
         settings.Compaction.Portions = 10;
-        settings.Overload.Bytes = 1000;
-        settings.Overload.Portions = 1000;
+        settings.OverloadPortions = 1000;
 
         TCounters counters;
         TTestAccumulator accumulator(settings, counters);
@@ -214,8 +213,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.AccumulatorSettings.Trigger.Portions = 100;
         settings.AccumulatorSettings.Compaction.Bytes = 150;
         settings.AccumulatorSettings.Compaction.Portions = 10;
-        settings.AccumulatorSettings.Overload.Bytes = 1000;
-        settings.AccumulatorSettings.Overload.Portions = 1000;
+        settings.AccumulatorSettings.OverloadPortions = 1000;
         settings.LastLevelSettings.Compaction.Bytes = 10000;
         settings.LastLevelSettings.Compaction.Portions = 10;
         settings.LastLevelSettings.CandidatePortionsOverload = 100;
@@ -297,8 +295,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.AccumulatorSettings.Trigger.Portions = 1'000'000;
         settings.AccumulatorSettings.Compaction.Bytes = 1'000'000;
         settings.AccumulatorSettings.Compaction.Portions = 1'000'000;
-        settings.AccumulatorSettings.Overload.Bytes = 1'000'000;
-        settings.AccumulatorSettings.Overload.Portions = 1'000'000;
+        settings.AccumulatorSettings.OverloadPortions = 1'000'000;
         settings.LastLevelSettings.Compaction.Bytes = 1'000'000;
         settings.LastLevelSettings.Compaction.Portions = 1'000'000;
         settings.LastLevelSettings.CandidatePortionsOverload = 1'000'000;
@@ -360,8 +357,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         settings.AccumulatorSettings.Trigger.Portions = 1'000'000;
         settings.AccumulatorSettings.Compaction.Bytes = 1'000'000;
         settings.AccumulatorSettings.Compaction.Portions = 1'000'000;
-        settings.AccumulatorSettings.Overload.Bytes = 1'000'000;
-        settings.AccumulatorSettings.Overload.Portions = 1'000'000;
+        settings.AccumulatorSettings.OverloadPortions = 1'000'000;
         settings.LastLevelSettings.Compaction.Bytes = 1'000'000;
         settings.LastLevelSettings.Compaction.Portions = 1'000'000;
         settings.LastLevelSettings.CandidatePortionsOverload = 1'000'000;
@@ -492,9 +488,8 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         settings.AccumulatorPortionSizeLimit = 1'000'000;   // small portions land in the accumulator
         settings.K = 10;
         settings.AccumulatorSettings.Trigger.Portions = 1;
-        settings.AccumulatorSettings.Overload.Portions = 10;
+        settings.AccumulatorSettings.OverloadPortions = 10;
         settings.AccumulatorSettings.Trigger.Bytes = 1'000'000'000;
-        settings.AccumulatorSettings.Overload.Bytes = 1'000'000'000;
         settings.AccumulatorSettings.Compaction.Portions = 1'000'000;
         settings.AccumulatorSettings.Compaction.Bytes = 1'000'000'000;
         settings.LastLevelSettings.CandidatePortionsOverload = 1'000'000;
@@ -510,7 +505,7 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
     static TTestTiling::TilingSettings MakeWideBandSettings() {
         auto settings = MakeCountPrioritySettings(/*compatibilityMode=*/true);
         settings.AccumulatorSettings.Trigger.Portions = 1;
-        settings.AccumulatorSettings.Overload.Portions = 901;
+        settings.AccumulatorSettings.OverloadPortions = 901;
         return settings;
     }
 
@@ -634,7 +629,7 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         settings.K = 2;
         settings.MiddleLevelCount = 5;
         settings.AccumulatorSettings.Trigger.Portions = 1'000'000;
-        settings.AccumulatorSettings.Overload.Portions = 2'000'000;
+        settings.AccumulatorSettings.OverloadPortions = 2'000'000;
         settings.AccumulatorSettings.Compaction.Portions = 1'000'000;
         settings.AccumulatorSettings.Compaction.Bytes = 1'000'000'000;
         settings.LastLevelSettings.Compaction.Portions = 1'000'000;
@@ -679,7 +674,6 @@ Y_UNIT_TEST_SUITE(TilingCompactionState) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.InternalLevel.at(200).Level, 1);
         UNIT_ASSERT(tiling.GetNextOptimizationTask(NeverLocked()));
         tiling.DoActualize(insertTime);
-        Cerr << tiling.GetNextOptimizationTask(NeverLocked())->Priority.DebugString() << "#";
         UNIT_ASSERT(tiling.State == TTestTiling::EState::REGULAR);
     }
 

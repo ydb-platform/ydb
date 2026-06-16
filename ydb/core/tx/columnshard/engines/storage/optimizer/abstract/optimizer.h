@@ -82,16 +82,11 @@ public:
         return TOptimizationPriority(Level + Level * (i64)percent / 100, InternalLevelWeight + InternalLevelWeight * (i64)percent / 100);
     }
 
-    TOptimizationPriority Dec() const {
-        return TOptimizationPriority(Level - 1, InternalLevelWeight);
-    }
-
     static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
         if (weight < min) {
             return TOptimizationPriority(0, weight);
         }
 
-        // Never triggers, because if min < max one of two ifs must trigger
         AFL_VERIFY(min < max);
 
         ui64 range = max - min;

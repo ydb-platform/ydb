@@ -126,7 +126,6 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
     using TLevelCounters = typename TBase::TLevelCounters;
     TAccumulatorSettings Settings;
     TSet<typename TPortion::TConstPtr, TPortionByIdComparator<TPortion>> Portions;
-    ui64 TotalBlobBytes = 0;
 
     Accumulator(TAccumulatorSettings settings, const TCounters& counters)
         : TBase(counters.GetAccumulatorCounters(0))
@@ -136,19 +135,16 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
     void DoAddPortion(typename TPortion::TPtr p) override {
         AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
-        Portions.insert(p);
-        TotalBlobBytes += p->GetTotalBlobBytes();
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         AFL_VERIFY(Portions.erase(p))("portion_id", p->GetPortionId());
-        TotalBlobBytes -= p->GetTotalBlobBytes();
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
     TOptimizationPriority BuildPriority(ui64 locked) const {
-        return TOptimizationPriority::Normalize(Settings.Trigger.Portions, Settings.Overload.Portions, Portions.size() - locked);
+        return TOptimizationPriority::Normalize(Settings.Trigger.Portions, Settings.OverloadPortions, Portions.size() - locked);
     }
 
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(

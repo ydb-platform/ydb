@@ -323,9 +323,10 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     }
 
     void ConsiderState() {
-        if (DoGetUsefulMetric().IsZeroLevel() && State == EState::REGULAR) {
+        auto priority = DoGetUsefulMetric();
+        if (priority.IsZeroLevel() && State == EState::REGULAR) {
             State = EState::BORED;
-        } else if (!DoGetUsefulMetric().IsZeroLevel() && State == EState::BORED) {
+        } else if (!priority.IsZeroLevel() && State == EState::BORED) {
             State = EState::REGULAR;
         }
     }

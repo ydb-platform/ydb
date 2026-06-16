@@ -30,7 +30,7 @@ struct TAccumulatorSettings {
 
     TLimit Compaction{ 1'000, 64ULL * 1024 * 1024 };
     TLimit Trigger{ 1'000, 64ULL * 1024 * 1024 };
-    TLimit Overload{ 10'000, 256ULL * 1024 * 1024 };
+    ui64 OverloadPortions = 10'000;
 };
 
 struct TMiddleLevelSettings {

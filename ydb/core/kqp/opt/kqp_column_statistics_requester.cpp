@@ -82,13 +82,18 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     auto sharedState = std::make_shared<TColumnStatisticsSharedState>();
     AsyncReadiness = NThreading::WaitAll(futures).Apply(
-            [sharedState, futures=std::move(futures)](const TFuture<void>&) mutable {
+            [weakSharedState=std::weak_ptr{sharedState}, futures=std::move(futures)](const TFuture<void>&) mutable {
         for (auto& fut : futures) {
             if (fut.HasException()) {
                 fut.TryRethrow();
             }
 
             auto newStats = fut.ExtractValue();
+            auto sharedState = weakSharedState.lock();
+            if (!sharedState) {
+                //parent already deleted, just return
+                return;
+            }
             if (!sharedState->Response.has_value()) {
                 sharedState->Response = std::move(newStats);
             } else {
@@ -114,7 +119,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 }
 
 IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TExprNode::TPtr, TExprNode::TPtr&, TExprContext&) {
-    Y_ENSURE(AsyncReadiness.IsReady() && SharedState->Response.has_value());
+    Y_ENSURE(AsyncReadiness.IsReady() && SharedState && SharedState->Response.has_value());
 
     if (!SharedState->Response->Issues().Empty()) {
         TStringStream ss; SharedState->Response->Issues().PrintTo(ss);

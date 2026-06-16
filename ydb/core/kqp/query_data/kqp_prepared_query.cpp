@@ -227,6 +227,19 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     tablesSet.insert(settings.GetTable().GetPath());
+                    for (const auto& indexSettings : settings.GetIndexes()) {
+                        tablesSet.insert(indexSettings.GetTable().GetPath());
+                    }
+                }
+            }
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    tablesSet.insert(settings.GetTable().GetPath());
+                    for (const auto& indexSettings : settings.GetIndexes()) {
+                        tablesSet.insert(indexSettings.GetTable().GetPath());
+                    }
                 }
             }
         }
@@ -287,6 +300,33 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
                     auto& info = GetInfo(MakeTableId(settings.GetTable()));
                     for (auto& column : settings.GetColumns()) {
                         info->AddColumn(column.GetName());
+                    }
+
+                    for (const auto& indexSettings : settings.GetIndexes()) {
+                        auto& indexInfo = GetInfo(MakeTableId(indexSettings.GetTable()));
+                        for (auto& column : indexSettings.GetColumns()) {
+                            indexInfo->AddColumn(column.GetName());
+                        }
+                    }
+                }
+            }
+        }
+
+        for (const auto& transform : stage.GetOutputTransforms()) {
+            if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+
+                AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+                auto& info = GetInfo(MakeTableId(settings.GetTable()));
+                for (auto& column : settings.GetColumns()) {
+                    info->AddColumn(column.GetName());
+                }
+
+                for (const auto& indexSettings : settings.GetIndexes()) {
+                    auto& indexInfo = GetInfo(MakeTableId(indexSettings.GetTable()));
+                    for (auto& column : indexSettings.GetColumns()) {
+                        indexInfo->AddColumn(column.GetName());
                     }
                 }
             }

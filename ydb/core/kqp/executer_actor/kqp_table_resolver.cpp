@@ -106,12 +106,25 @@ private:
                     }
 
                     const auto& stage = stageMeta.GetStage(stageId);
-                    AFL_ENSURE(stage.GetSinks().size() == 1);
-                    const auto& sink = stage.GetSinks(0);
+                    const NKqpProto::TKqpInternalSink* intSinkPtr = nullptr;
 
-                    AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    if (stage.GetSinks().size() == 1) {
+                        AFL_ENSURE(stage.OutputTransformsSize() == 0);
+                        const auto& sink = stage.GetSinks(0);
+                        AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink);
+                        intSinkPtr = &sink.GetInternalSink();
+                    } else if (stage.OutputTransformsSize() == 1) {
+                        AFL_ENSURE(stage.GetSinks().size() == 0);
+                        const auto& transform = stage.GetOutputTransforms(0);
+                        AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                        intSinkPtr = &transform.GetInternalSink();
+                    } else {
+                        YQL_ENSURE(false);
+                    }
+
+                    AFL_ENSURE(intSinkPtr->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
-                    AFL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings));
+                    AFL_ENSURE(intSinkPtr->GetSettings().UnpackTo(&settings));
                     AFL_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
                     settings.MutableTable()->SetOwnerId(entry.TableId.PathId.OwnerId);
                     settings.MutableTable()->SetTableId(entry.TableId.PathId.LocalPathId);

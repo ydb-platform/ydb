@@ -2,30 +2,34 @@
 
 #include <util/system/hostname.h>
 
+#include <memory>
+
 namespace NYdb {
 namespace NCoordination {
-    static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(10);
+    static constexpr TDuration CLIENT_WAIT_MARGIN = TDuration::Seconds(10);
     struct TDistributedMutex::TImpl {
         std::mutex localMutex;
-        std::stop_source stopSource;
+        std::shared_ptr<std::stop_source> stopSource = std::make_shared<std::stop_source>();
         TSession session;
         TAcquireSemaphoreSettings settings;
         std::string name;
         std::string path;
-        TClient& client;
+        TClient client;
         TDuration clientWait_;
         TSessionSettings MakeSessionSettings() {
+            auto stopSource = std::atomic_load(&this->stopSource);
             return TSessionSettings()
-                .OnStateChanged([this](ESessionState state) {
+                .OnStateChanged([stopSource](ESessionState state) {
                     if (state == ESessionState::EXPIRED) {
-                        stopSource.request_stop();
+                        stopSource->request_stop();
                     }
                 })
-                .OnStopped([this] {
-                    stopSource.request_stop();
+                .OnStopped([stopSource]() {
+                    stopSource->request_stop();
                 });
         }
         void ResetSession() {
+            std::atomic_store(&stopSource, std::make_shared<std::stop_source>());
             session.Close().GetValueSync();
             auto sessionResult = client.StartSession(path, MakeSessionSettings()).GetValueSync();
             if (!sessionResult.IsSuccess()) {
@@ -33,9 +37,18 @@ namespace NCoordination {
             }
             session = sessionResult.GetResult();
         }
+        void ResetSessionNoexcept() noexcept {
+            try {
+                ResetSession();
+            } catch (...) {
+            }
+        }
+        ~TImpl() {
+            session.Close().GetValueSync();
+        }
         TImpl(TClient& client, std::string_view path, std::string_view name, TDuration timeout)
             : client(client)
-            , clientWait_(timeout + DEFAULT_TIMEOUT)
+            , clientWait_(timeout + CLIENT_WAIT_MARGIN)
         {
             this->path = std::string(path);
             auto sessionResult = client.StartSession(this->path, MakeSessionSettings()).GetValueSync();
@@ -52,17 +65,19 @@ namespace NCoordination {
         }
         bool try_lock() noexcept {
             if (localMutex.try_lock()) {
-                auto aquireFuture = session.AcquireSemaphore(name, settings);
-                if (!aquireFuture.Wait(clientWait_)) {
-                    try {
-                        ResetSession();
-                    } catch (...) {
-                    }
+                auto acquireFuture = session.AcquireSemaphore(name, settings);
+                if (!acquireFuture.Wait(clientWait_)) {
+                    ResetSessionNoexcept();
                     localMutex.unlock();
                     return false;
                 }
-                const auto result = aquireFuture.GetValue();
-                if (!result.IsSuccess() || !result.GetResult()) {
+                const auto result = acquireFuture.GetValue();
+                if (!result.IsSuccess()) {
+                    ResetSessionNoexcept();
+                    localMutex.unlock();
+                    return false;
+                }
+                if (!result.GetResult()) {
                     localMutex.unlock();
                     return false;
                 }
@@ -72,15 +87,19 @@ namespace NCoordination {
         }
         void lock() {
             localMutex.lock();
-            auto aquireFuture = session.AcquireSemaphore(name, settings);
-            if (!aquireFuture.Wait(clientWait_)) {
+            auto acquireFuture = session.AcquireSemaphore(name, settings);
+            if (!acquireFuture.Wait(clientWait_)) {
                 ResetSession();
                 localMutex.unlock();
                 throw TYdbLockException("Failed to acquire semaphore");
             }
-            const auto result = aquireFuture.GetValue();
-            if (!result.IsSuccess() || !result.GetResult()) {
-                session.Close();
+            const auto result = acquireFuture.GetValue();
+            if (!result.IsSuccess()) {
+                ResetSession();
+                localMutex.unlock();
+                throw TYdbLockException("Failed to acquire semaphore");
+            }
+            if (!result.GetResult()) {
                 localMutex.unlock();
                 throw TYdbLockException("Failed to acquire semaphore");
             }
@@ -90,10 +109,10 @@ namespace NCoordination {
             if (releaseFuture.Wait(clientWait_)) {
                 const auto result = releaseFuture.GetValue();
                 if (!result.IsSuccess() || !result.GetResult()) {
-                    session.Close();
+                    ResetSessionNoexcept();
                 }
             } else {
-                session.Close();
+                ResetSessionNoexcept();
             }
             localMutex.unlock();
         }
@@ -101,6 +120,7 @@ namespace NCoordination {
     TDistributedMutex::TDistributedMutex(TClient& client, std::string_view path, std::string_view name, TDuration timeout) {
         impl_ = std::make_unique<TImpl>(client, path, name, timeout);
     }
+    TDistributedMutex::~TDistributedMutex() = default;
     void TDistributedMutex::lock() {
         impl_->lock();
     }
@@ -111,7 +131,7 @@ namespace NCoordination {
         return impl_->try_lock();
     }
     std::stop_token TDistributedMutex::getStopToken() const {
-        return impl_->stopSource.get_token();
+        return std::atomic_load(&impl_->stopSource)->get_token();
     }
 }
 }

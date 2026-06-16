@@ -9,9 +9,13 @@ namespace NCoordination {
     class TDistributedMutex {
     public:
         TDistributedMutex(TClient& client, std::string_view path, std::string_view name, TDuration timeout);
+        ~TDistributedMutex();
         void lock();
         void unlock() noexcept;
         bool try_lock() noexcept;
+        // Returns a stop token for the current coordination session. After internal
+        // session reset (e.g. transport recovery), previously obtained tokens are
+        // stale; call getStopToken() again.
         std::stop_token getStopToken() const;
     private:
         struct TImpl;

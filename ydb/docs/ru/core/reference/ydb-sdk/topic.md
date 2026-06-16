@@ -670,6 +670,7 @@
 
     auto session = topicClient.CreateWriteSession(settings);
     ```
+
   - ISimpleBlockingWriteSession
 
     Вариант для простой записи по одному сообщению без подтверждения представлен интерфейсом `ISimpleBlockingWriteSession`. Метод `Write` блокируется при превышении числа inflight записей или размера буфера SDK. Настройки сессии записи представлены структурой `TWriteSessionSettings`, как и в случае `IWriteSession`, однако часть настроек не поддерживается.
@@ -860,7 +861,7 @@
 
     Для записи каждого сообщения пользователь должен "потратить" move-only объект `TContinuationToken`, который выдаёт SDK с событием `TReadyToAcceptEvent`. При записи сообщения можно установить пользовательские seqNo и временную метку создания, но по умолчанию их проставляет SDK автоматически.
 
-    По умолчанию `Write` выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Сессия сама переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку сообщений пока это возможно, в соответствии с настройкой `RetryPolicy`. При получении ошибки, после которой невозможно продолжить работу, сессия чтения отправляет пользователю `TSessionClosedEvent` с диагностической информацией.
+    По умолчанию `Write` выполняется асинхронно — данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Сессия сама переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку сообщений пока это возможно, в соответствии с настройкой `RetryPolicy`. При получении ошибки, после которой невозможно продолжить работу, сессия записи отправляет пользователю `TSessionClosedEvent` с диагностической информацией.
 
     Так может выглядеть запись нескольких сообщений в цикле событий без использования обработчиков:
 
@@ -899,11 +900,11 @@
 
     `TProducerSettings` наследует `TWriteSessionSettings`, поэтому буферизация, отправка и переподключение устроены так же, как у `IWriteSession`: `Write` кладёт сообщение во внутренний буфер, отправка на сервер идёт в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Продюсер переподключается к {{ ydb-short-name }} при обрывах связи и повторяет отправку, пока это возможно, в соответствии с `RetryPolicy`. При неустранимой ошибке продюсер закрывается; статус и причину можно получить из результата `Write` или `Flush`.
 
-    `Flush` дожидается доставки накопленных данных на сервер, `Close` завершает работу продюсера и сбрасывает буфер.
+    `Flush` дожидается доставки накопленных данных на сервер; `Close` дожидается отправки оставшихся в буфере сообщений и завершает работу продюсера.
 
     ```cpp
     auto messageData = std::string("order-created");
-    // Первый аргумент — ключ партиционирования; SDK выберет партицию по ключу.
+    // First argument is the partitioning key — the SDK chooses a partition by it.
     NYdb::NTopic::TWriteMessage writeMessage("user-42", messageData);
     producer->Write(std::move(writeMessage));
     producer->Flush().GetValueSync();
@@ -1143,7 +1144,9 @@
         .EventHandlers(
             NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
                 .AcksHandler([](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
-                    // обработка подтверждений
+                .AcksHandler([](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
+                    // handle acknowledgements
+                })
                 })
         );
 

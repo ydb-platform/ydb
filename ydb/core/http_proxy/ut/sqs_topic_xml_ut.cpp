@@ -493,6 +493,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         Y_UNIT_TEST_F(TestReceiveMessageInvalidQueueUrl, TFixture) {
             auto jsonReceived = ReceiveMessageXml({{"QueueUrl", "/invalid/queue/url/"}, {"WaitTimeSeconds", 1}}, 400);
             TString resultType = GetByPath<TString>(jsonReceived, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidArgumentException");
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageNonExistingQueue, TFixture) {

@@ -37,9 +37,9 @@ void TActor::HandleRetryTimer() {
             if (!Task->AddError(pending.StorageId, pending.Range,
                     IBlobsReadingAction::TErrorStatus::Fail(NKikimrProto::EReplyStatus::ERROR, "cannot retry read: storage action not found"))) {
                 Task = nullptr;
-                PassAway();
-                return;
             }
+            PassAway();
+            return;
         }
     }
 }

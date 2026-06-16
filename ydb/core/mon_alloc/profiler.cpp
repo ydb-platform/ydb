@@ -27,6 +27,8 @@
 
 #include <stdio.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MEMORY_PROFILER
+
 namespace NActors {
     using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;
     using TDynamicCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
@@ -281,7 +283,7 @@ namespace NActors {
             TVector<TString> split;
             Split(out.Str(), "\n", split);
             for (const auto& line : split) {
-                LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, line);
+                YDB_LOG_WARN_CTX(ctx, line);
             }
             return true;
         }

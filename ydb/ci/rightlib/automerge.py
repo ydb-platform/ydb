@@ -14,6 +14,7 @@ pr_label_fail = "automerge-blocked"
 pr_label_error = "automerge-error"
 check_name = "checks_integrated"
 failed_comment_mark = "<!--SyncFailed-->"
+retry_comment_mark = "<!--SyncRetry-->"
 
 
 class PrAutomerger:
@@ -91,6 +92,24 @@ class PrAutomerger:
         except Exception:
             self.logger.warning("failed to remove %s label", pr_label_error, exc_info=True)
 
+    def add_retry_comment(self, pr: PullRequest, text: str):
+        if self.workflow_url:
+            text += f" Sync workflow logs can be found [here]({self.workflow_url})."
+        pr.create_issue_comment(f"{retry_comment_mark}\n{text}")
+
+    def mark_push_retry(self, pr: PullRequest, base_ref: str):
+        text = (
+            f"Unable to push merged revision to `{base_ref}` "
+            "(probably a race with another push), will retry automatically."
+        )
+        try:
+            pr.add_to_labels(pr_label_error)
+            self.add_retry_comment(pr, text)
+        except Exception:
+            self.logger.warning("failed to mark push retry on %r", pr, exc_info=True)
+            self.add_failed_comment(pr, "Unable to push merged revision (failed to schedule retry).")
+            self.add_pr_failed_label(pr)
+
     def git_merge_pr(self, pr: PullRequest):
         shutil.rmtree("merge-repo", ignore_errors=True)
         original_dir = os.getcwd()
@@ -133,11 +152,7 @@ class PrAutomerger:
                     # Most likely a race: someone pushed to the base branch between
                     # our clone and push. Not a PR problem, retry on next iteration.
                     self.logger.warning("push to %s rejected, will retry on next iteration", pr.base.ref)
-                    pr.add_to_labels(pr_label_error)
-                    text = f"Unable to push merged revision to `{pr.base.ref}` (probably a race with another push), will retry automatically."
-                    if self.workflow_url:
-                        text += f" Sync workflow logs can be found [here]({self.workflow_url})."
-                    pr.create_issue_comment(text)
+                    self.mark_push_retry(pr, pr.base.ref)
                 return False
         finally:
             os.chdir(original_dir)

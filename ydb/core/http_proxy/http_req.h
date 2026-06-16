@@ -64,6 +64,8 @@ struct THttpRequestContext {
     NYdb::TDriver* Driver;
     std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
 
+    TCgiParameters CgiParameters;
+
     TString ServiceAccountId;
     TString RequestId;
     TString DiscoveryEndpoint;

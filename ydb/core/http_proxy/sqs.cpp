@@ -387,7 +387,7 @@ namespace NKikimr::NHttpProxy {
             void Bootstrap(const TActorContext& ctx) {
                 StartTime = ctx.Now();
                 try {
-                    NSQS::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
+                    NSQS::Deserialize<TProtoRequest>(HttpContext, Request);
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     Cerr << (TStringBuilder() << e.ErrorClass.ErrorCode << ": " << e.what() << Endl);
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;

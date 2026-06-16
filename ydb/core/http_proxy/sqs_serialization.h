@@ -35,29 +35,29 @@ namespace NKikimr::NHttpProxy::NSQS {
     void DeserializeXml(Ydb::Ymq::V1::UntagQueueRequest& value, const TParameters& params);
 
     template<typename TValue>
-    void DeserializeXml(TValue& message, const TStringBuf& input) {
-        DeserializeXml(message, ParseParameters(input));
+    void DeserializeXml(TValue& message, const TCgiParameters& cgiParameters) {
+        DeserializeXml(message, ParseParameters(cgiParameters));
     }
 
     template<typename TValue>
-    void Deserialize(const MimeTypes mimeType, TValue& value, const TStringBuf& input)
+    void Deserialize(const THttpRequestContext& httpContext, TValue& value)
         requires std::is_base_of_v<NProtoBuf::Message, TValue> {
 
-        if (input.empty()) {
+        if (httpContext.Request->Body.empty()) {
             throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) << "Empty body";
         }
 
         PrepareValue(value);
 
-        switch (mimeType) {
+        switch (httpContext.ContentType) {
         case MIME_CBOR:
-            DeserializeCbor(value, input);
+            DeserializeCbor(value, httpContext.Request->Body);
             break;
         case MIME_JSON:
-            DeserializeJson(value, input);
+            DeserializeJson(value, httpContext.Request->Body);
             break;
         case MIME_XML:
-            DeserializeXml(value, input);
+            DeserializeXml(value, httpContext.CgiParameters);
             break;
         default:
             throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<

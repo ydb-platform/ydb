@@ -2,6 +2,7 @@
 
 //#include <ydb/core/protos/sqs.pb.h>
 
+#include <library/cpp/cgiparam/cgiparam.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -76,5 +77,6 @@ private:
 };
 
 TParameters ParseParameters(const TStringBuf& input);
+TParameters ParseParameters(const TCgiParameters& cgiParameters);
 
 } // namespace NKikimr::NHttpProxy::NSQS

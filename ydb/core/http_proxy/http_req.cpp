@@ -89,13 +89,14 @@ namespace NKikimr::NHttpProxy {
             FolderId = it->second;
         }
 
+        CgiParameters = Request->Method == "POST" ? TCgiParameters(Request->Body) : params;
+
         //TODO: find out databaseId
         ParseHeaders(Request->Headers);
 
         if (MethodName.empty() && ContentType == MIME_XML && !Request->Body.empty()) {
-            TCgiParameters cgiParameters = Request->Method == "POST" ? TCgiParameters(Request->Body) : params;
-            auto it = cgiParameters.Find("Action");
-            if (it != cgiParameters.end()) {
+            auto it = CgiParameters.Find("Action");
+            if (it != CgiParameters.end()) {
                 ApiVersion = "AmazonSQS";
                 MethodName = it->second;
             }

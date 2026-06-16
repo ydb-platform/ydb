@@ -398,7 +398,7 @@ private:
             info.ProfilingKey = info.ThreadName;
 
             // Group threads by thread pool, using YT thread naming convention.
-            if (auto index = info.ProfilingKey.rfind(':'); index != TString::npos) {
+            if (auto index = info.ProfilingKey.rfind(':'); index != std::string::npos) {
                 bool isDigit = std::all_of(info.ProfilingKey.cbegin() + index + 1, info.ProfilingKey.cend(), [] (char c) {
                     return std::isdigit(c);
                 });

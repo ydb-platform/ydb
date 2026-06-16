@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 {"error": true, "stderr": "Terminating due to uncaught exception REDACTED    what() -> \"ydb/library/yaml_config/yaml_config_parser.cpp:930: Disk type is not specified for storage pool type, id 0\"\n of type TWithBackTrace<yexception>\n"}
+=======
+{"error": true, "stderr": "Terminating due to uncaught exception REDACTED    what() -> \"ydb/library/yaml_config/yaml_config_parser.cpp:894: Disk type is not specified for storage pool type, id 0\"\n of type TWithBackTrace<yexception>\n"}
+>>>>>>> e1ba7f0175c (Introduce cluster-opaque TAppConfig::PrivateDatabaseConfig (#43238))

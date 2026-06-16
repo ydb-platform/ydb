@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/config/init/init.h>
 #include <ydb/core/mind/labels_maintainer.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -98,6 +99,9 @@ struct TTenantTestConfig {
     ui32 DataCenterCount;
     bool CreateConfigsDispatcher = false;
     bool RegisterFeatureFlagsConfigurator = false;
+    // Per-kind opaque config parsers injected into the framework-created
+    // ConfigsDispatcher (only used when CreateConfigsDispatcher is true).
+    THashMap<ui32, NConfig::TOpaqueConfigParser> OpaqueConfigParsers = {};
 };
 
 extern const ui64 SCHEME_SHARD1_ID;

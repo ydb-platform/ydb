@@ -1,0 +1,5 @@
+items:
+- name: Включение логирования
+  href: logging.md
+- name: Логи SDK в OpenTelemetry
+  href: opentelemetry.md

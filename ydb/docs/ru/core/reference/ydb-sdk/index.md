@@ -27,6 +27,7 @@
 - [Форматы данных](data-formats/index.md)
 - [Работа с топиками](topic.md)
 - [Работа с узлами координации](coordination.md)
+- [{#T}](observability/index.md)
 
 Смотрите также:
 

@@ -998,6 +998,48 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         tryToUpsert();
     }
 
+    Y_UNIT_TEST(DirectModifySchemeSetNotNullRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "value" NotNull: true }
+        )", {{NKikimrScheme::StatusInvalidParameter,
+              "You cannot set the notNull flag to true within the external ModifyScheme without the Internal flag set. Column 'value'. Note that you can change the flag value by additionally setting Internal = true. However, this action is very dangerous — only do it if you know exactly what you are doing."}});
+    }
+
+    Y_UNIT_TEST(DirectModifySchemeSetNotNullInProgressRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "value" SetNotNullInProgress: true }
+        )", {{NKikimrScheme::StatusInvalidParameter,
+              "You cannot set the setNotNullInProgress flag within the external ModifyScheme without the Internal flag set. Column 'value'. Note that you can change the flag value by additionally setting Internal = true. However, this action is very dangerous — only do it if you know exactly what you are doing."}});
+    }
+
     Y_UNIT_TEST(DirectModifySchemeSetNotNullOnSerialColumnRejected) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1053,5 +1095,4 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TestModificationResults(runtime, txId,
             {{NKikimrScheme::StatusInvalidParameter, "Cannot alter serial column 'key'"}});
     }
-
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

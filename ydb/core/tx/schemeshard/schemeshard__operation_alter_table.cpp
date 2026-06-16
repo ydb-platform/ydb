@@ -58,7 +58,8 @@ bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partiti
 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed, const THashSet<TString>& localSequences,
-                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
+                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context,
+                                      bool isInternal = false) {
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
@@ -225,7 +226,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
         table, copyAlter, *appData->TypeRegistry, limits, subDomain,
-        featureFlags, errStr, localSequences);
+        featureFlags, errStr, localSequences, isInternal);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -696,7 +697,8 @@ public:
 
         NKikimrScheme::EStatus status;
         TTableInfo::TAlterDataPtr alterData = ParseParams(
-            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context,
+            Transaction.GetInternal());
         if (!alterData) {
             result->SetError(status, errStr);
             return result;

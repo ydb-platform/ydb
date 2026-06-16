@@ -336,7 +336,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     const TSubDomainInfo& subDomain,
     const TCreateAlterDataFeatureFlags& featureFlags,
     TString& errStr,
-    const THashSet<TString>& localSequences)
+    const THashSet<TString>& localSequences,
+    bool isInternal)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
@@ -505,10 +506,21 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column = sourceColumn;
 
             if (isChangeNotNullConstraint) {
-                column.NotNull = col.GetNotNull();
+                auto notNullValue = col.GetNotNull();
+                if (notNullValue && !isInternal) {
+                    errStr = Sprintf("You cannot set the notNull flag to true within the external ModifyScheme. Column '%s'.", colName.c_str());
+                    return nullptr;
+                }
+
+                column.NotNull = notNullValue;
             }
 
             if (isChangeSetNotNullInProgress) {
+                if (!isInternal) {
+                    errStr = Sprintf("You cannot set the setNotNullInProgress flag within the external ModifyScheme. Column '%s'.", colName.c_str());
+                    return nullptr;
+                }
+
                 column.SetNotNullInProgress = col.GetSetNotNullInProgress();
             }
 

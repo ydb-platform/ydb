@@ -1011,7 +1011,8 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         const TCreateAlterDataFeatureFlags& featureFlags,
-        TString& errStr, const THashSet<TString>& localSequences = {});
+        TString& errStr, const THashSet<TString>& localSequences = {},
+        bool isInternal = false);
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
         if (descr.HasUniformPartitionsCount()) {

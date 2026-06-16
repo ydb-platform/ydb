@@ -1,3 +1,4 @@
+* Added `--codec kafka-batch` and `--batch-inner-codec` options to `ydb workload topic run write|full` commands.
 * `ydb scheme describe` now prints a human-readable description for external data sources (source type, location, auth method, database, properties and creation time) instead of empty output.
 * Added `--partition-max-inflight-bytes` option to `ydb topic workload`
 * Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.

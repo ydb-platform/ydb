@@ -2,9 +2,7 @@
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
-
-#include <ydb/library/kafka/kafka_records.h>
-#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -31,48 +29,28 @@ const uint64_t WRITE_ERROR_PARTITION_INACTIVE = 500029;
 namespace {
 
 using TTxId = std::pair<std::string_view, std::string_view>;
+
+bool ValidateWriteSessionSettings(const TWriteSessionSettings& settings, NYdb::NIssue::TIssues& issues) {
+    if (!settings.BatchInnerCodec_.has_value()) {
+        return true;
+    }
+
+    if (settings.Codec_ != ECodec::KAFKA_BATCH) {
+        issues.AddIssue("BatchInnerCodec can be set only when Codec is KAFKA_BATCH.");
+        return false;
+    }
+
+    const ECodec innerCodec = *settings.BatchInnerCodec_;
+    if (innerCodec != ECodec::GZIP && innerCodec != ECodec::ZSTD) {
+        issues.AddIssue("BatchInnerCodec supports only GZIP and ZSTD when Codec is KAFKA_BATCH.");
+        return false;
+    }
+
+    return true;
+}
 using TTxIdOpt = std::optional<TTxId>;
 
 static constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
-
-TBuffer BuildKafkaRecordBatchData(
-        const std::vector<std::string_view>& payloads,
-        const std::vector<TInstant>& createdAt,
-        i64 baseSequence)
-{
-    using namespace NKafka;
-
-    Y_ABORT_UNLESS(payloads.size() == createdAt.size());
-    Y_ABORT_UNLESS(!payloads.empty());
-
-    TKafkaRecordBatch kafkaBatch;
-    kafkaBatch.Magic = 2;
-    kafkaBatch.ProducerId = 0;
-    kafkaBatch.ProducerEpoch = 0;
-    kafkaBatch.BaseSequence = static_cast<TKafkaRecordBatch::BaseSequenceMeta::Type>(baseSequence);
-
-    const i64 baseTimestamp = static_cast<i64>(createdAt.front().MilliSeconds());
-    kafkaBatch.BaseTimestamp = baseTimestamp;
-    kafkaBatch.MaxTimestamp = baseTimestamp;
-    kafkaBatch.LastOffsetDelta = static_cast<TKafkaRecordBatch::LastOffsetDeltaMeta::Type>(payloads.size() - 1);
-
-    for (size_t i = 0; i < payloads.size(); ++i) {
-        TKafkaRecord record;
-        record.OffsetDelta = static_cast<TKafkaRecord::OffsetDeltaMeta::Type>(i);
-        record.TimestampDelta = createdAt[i].MilliSeconds() - baseTimestamp;
-        kafkaBatch.MaxTimestamp = Max<i64>(kafkaBatch.MaxTimestamp, static_cast<i64>(createdAt[i].MilliSeconds()));
-        record.Value = TKafkaRawBytes(payloads[i].data(), payloads[i].size());
-        record.Length = record.Size(2) - NKafka::NPrivate::SizeOfVarint<TKafkaRecord::LengthMeta::Type>(0);
-        kafkaBatch.Records.push_back(std::move(record));
-    }
-
-    kafkaBatch.BatchLength = kafkaBatch.Size(2)
-        - sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type)
-        - sizeof(TKafkaRecordBatch::BatchLengthMeta::Type);
-
-    const TString serialized = WriteKafkaRecordBatch(kafkaBatch);
-    return TBuffer(serialized.data(), serialized.size());
-}
 
 TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
 {
@@ -168,6 +146,16 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
     }
 
     if (!Started) {
+        NYdb::NIssue::TIssues issues;
+        if (!ValidateWriteSessionSettings(Settings, issues)) {
+            with_lock(Lock) {
+                CloseImpl(
+                    EStatus::BAD_REQUEST,
+                    MakeIssueWithSubIssues("Invalid write session settings", issues));
+            }
+            return;
+        }
+
         with_lock(Lock) {
             HandleWakeUpImpl();
         }
@@ -1342,23 +1330,32 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
     }
     Y_ABORT_UNLESS(block_.Valid);
 
+    const i64 baseSequence = static_cast<i64>(GetSeqNoImpl(block_.Offset));
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
     auto lambda = [cbContext = SelfContext,
                    codec = Settings.Codec_,
+                   batchInnerCodec = Settings.BatchInnerCodec_,
                    level = Settings.CompressionLevel_,
+                   baseSequence,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
                    blockPtr,
                    client = Client]() mutable {
         Y_ABORT_UNLESS(!blockPtr->Compressed);
 
-        auto compressedData = CompressBuffer(
-            std::move(client), blockPtr->OriginalDataRefs, codec, level
-        );
-        Y_ABORT_UNLESS(!compressedData.Empty());
-        blockPtr->Data = std::move(compressedData);
-        blockPtr->Compressed = true;
-        blockPtr->CodecID = static_cast<ui32>(codec);
+        const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(codec));
+        TWriteBlockCompression compression{
+            .Codec = codec,
+            .Payloads = blockPtr->OriginalDataRefs,
+            .CreatedAt = blockPtr->CreatedAt,
+            .Data = blockPtr->Data,
+            .CodecID = blockPtr->CodecID,
+            .Compressed = blockPtr->Compressed,
+            .BaseSequence = baseSequence,
+            .BatchInnerCodec = batchInnerCodec,
+            .CompressionLevel = level,
+        };
+        codecImpl->CompressWriteBlock(compression);
         if (auto self = cbContext->LockShared()) {
             self->OnCompressed(std::move(*blockPtr), isSyncCompression);
         }
@@ -1385,9 +1382,13 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     UpdateTimedCountersImpl();
     Y_ABORT_UNLESS(block.Valid);
-    auto memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
-    (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
-    (*Counters->BytesInflightCompressed) += block.Data.size();
+
+    TMemoryUsageChange memoryUsage{MemoryUsage <= Settings.MaxMemoryUsage_, MemoryUsage <= Settings.MaxMemoryUsage_};
+    if (block.Compressed) {
+        memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
+        (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
+        (*Counters->BytesInflightCompressed) += block.Data.size();
+    }
 
     PackedMessagesToSend.emplace(std::move(block));
 
@@ -1481,8 +1482,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
         }
     }
 
-    const bool isKafkaBatchMode = Settings.Codec_ == ECodec::KAFKA_BATCH;
-    const bool skipCompression = Settings.Codec_ == ECodec::RAW || isKafkaBatchMode || CurrentBatch.HasCodec();
+    const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
     if (!skipCompression && Settings.CompressionExecutor_->IsAsync()) {
         MessagesAcquired += static_cast<uint64_t>(CurrentBatch.Acquire());
     }
@@ -1490,7 +1490,6 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     size_t size = 0;
     for (size_t i = 0; i != CurrentBatch.Messages.size();) {
         TBlock block{};
-        const size_t blockStartIndex = i;
         for (; block.OriginalSize < MaxBlockSize && i != CurrentBatch.Messages.size(); ++i) {
             auto& currMessage = CurrentBatch.Messages[i];
 
@@ -1510,6 +1509,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             block.OriginalSize += datum.size();
             block.OriginalMemoryUsage += datum.size();
             block.OriginalDataRefs.emplace_back(datum);
+            block.CreatedAt.emplace_back(createTs);
             if (CurrentBatch.Messages[i].Codec.has_value()) {
                 Y_ABORT_UNLESS(CurrentBatch.Messages.size() == 1);
                 block.CodecID = static_cast<ui32>(*currMessage.Codec);
@@ -1530,29 +1530,9 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             }
         }
 
-        // In Kafka batch mode, multi-message blocks are sent as CODEC_KAFKA_BATCH.
-        const bool isKafkaBatchBlock = isKafkaBatchMode && block.MessageCount > 1;
-        if (isKafkaBatchBlock) {
-            std::vector<std::string_view> payloads;
-            std::vector<TInstant> createdAt;
-            payloads.reserve(block.MessageCount);
-            createdAt.reserve(block.MessageCount);
-            for (size_t j = 0; j < block.MessageCount; ++j) {
-                const auto& message = CurrentBatch.Messages[blockStartIndex + j];
-                payloads.push_back(message.DataRef);
-                createdAt.push_back(message.CreatedAt);
-            }
-            block.Data = BuildKafkaRecordBatchData(
-                payloads,
-                createdAt,
-                static_cast<i64>(GetSeqNoImpl(CurrentBatch.Messages[blockStartIndex].Id)));
-            block.OriginalDataRefs.assign(1, std::string_view(block.Data.data(), block.Data.size()));
-            block.CodecID = static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH);
-        } else {
-            block.Data = std::move(CurrentBatch.Data);
-        }
+        block.Data = std::move(CurrentBatch.Data);
 
-        if (skipCompression || isKafkaBatchBlock) {
+        if (skipCompression) {
             PackedMessagesToSend.emplace(std::move(block));
         } else {
             CompressImpl(std::move(block));

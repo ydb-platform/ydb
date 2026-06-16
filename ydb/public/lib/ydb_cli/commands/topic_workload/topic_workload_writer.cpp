@@ -147,6 +147,9 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
 
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
+    if (Params.BatchInnerCodec.Defined()) {
+        settings.BatchInnerCodec((NYdb::NTopic::ECodec)*Params.BatchInnerCodec);
+    }
     settings.Path(Params.TopicName);
     settings.ProducerId(producerId);
     settings.BatchFlushInterval(Params.BatchFlushInterval);

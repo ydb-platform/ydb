@@ -98,6 +98,10 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);
     FLUENT_SETTING_DEFAULT(int32_t, CompressionLevel, 4);
 
+    //! Inner compression for Kafka record batch payload when Codec is KAFKA_BATCH.
+    //! Allowed values: not set (no inner compression), GZIP, ZSTD.
+    FLUENT_SETTING_OPTIONAL(ECodec, BatchInnerCodec);
+
     //! Writer will not accept new messages if memory usage exceeds this limit.
     //! Memory usage consists of raw data pending compression and compressed messages being sent.
     FLUENT_SETTING_DEFAULT(uint64_t, MaxMemoryUsage, 20_MB);

@@ -233,6 +233,7 @@ private:
         size_t OriginalMemoryUsage = 0;
         ui32 CodecID = static_cast<ui32>(ECodec::RAW);
         mutable std::vector<std::string_view> OriginalDataRefs;
+        mutable std::vector<TInstant> CreatedAt;
         mutable TBuffer Data;
         bool Compressed = false;
         mutable bool Valid = true;
@@ -250,11 +251,13 @@ private:
             OriginalMemoryUsage = rhs.OriginalMemoryUsage;
             CodecID = rhs.CodecID;
             OriginalDataRefs.swap(rhs.OriginalDataRefs);
+            CreatedAt.swap(rhs.CreatedAt);
             Data.Swap(rhs.Data);
             Compressed = rhs.Compressed;
 
             rhs.Data.Clear();
             rhs.OriginalDataRefs.clear();
+            rhs.CreatedAt.clear();
         }
     };
 

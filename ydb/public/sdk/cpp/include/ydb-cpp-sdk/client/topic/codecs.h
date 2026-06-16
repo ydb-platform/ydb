@@ -7,6 +7,12 @@
 #include <util/generic/yexception.h>
 
 #include <util/generic/buffer.h>
+#include <util/datetime/base.h>
+#include <util/system/types.h>
+
+#include <optional>
+#include <string_view>
+#include <vector>
 
 #include <unordered_map>
 #include <memory>
@@ -33,11 +39,24 @@ inline const std::string& GetCodecId(const ECodec codec) {
     return idByCodec[codec];
 }
 
+struct TWriteBlockCompression {
+    ECodec Codec = ECodec::RAW;
+    std::vector<std::string_view>& Payloads;
+    const std::vector<TInstant>& CreatedAt;
+    TBuffer& Data;
+    ui32& CodecID;
+    bool& Compressed;
+    i64 BaseSequence = 0;
+    std::optional<ECodec> BatchInnerCodec;
+    int CompressionLevel = 0;
+};
+
 class ICodec {
 public:
     virtual ~ICodec() = default;
     virtual std::string Decompress(const std::string& data) const = 0;
     virtual std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const = 0;
+    virtual void CompressWriteBlock(TWriteBlockCompression& ctx) const;
 };
 
 class TGzipCodec final : public ICodec {
@@ -56,6 +75,15 @@ class TUnsupportedCodec final : public ICodec {
     std::string Decompress(const std::string&) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer&, int) const override;
+};
+
+class TKafkaBatchCodec final : public ICodec {
+public:
+    std::string Decompress(const std::string&) const override;
+
+    std::unique_ptr<IOutputStream> CreateCoder(TBuffer&, int) const override;
+
+    void CompressWriteBlock(TWriteBlockCompression& ctx) const override;
 };
 
 class TCodecMap {

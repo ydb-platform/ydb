@@ -64,10 +64,13 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.Opts->AddLongOption("byte-rate", "Total message rate for all producer threads (bytes per second). Exclusive with --message-rate.")
         .DefaultValue(0)
         .StoreMappedResult(&Scenario.BytesPerSec, &TCommandWorkloadTopicParams::StrToBytes);
-    config.Opts->AddLongOption("codec", PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", InitAllowedCodecs()))
+    config.Opts->AddLongOption("codec", PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", TCommandWorkloadTopicParams::GetWriteAllowedCodecs()))
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResult(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
+    config.Opts->AddLongOption("batch-inner-codec", PrepareAllowedCodecsDescription("Inner compression for Kafka record batch payload. Can be set only when --codec is kafka-batch", TCommandWorkloadTopicParams::GetBatchInnerAllowedCodecs()))
+        .Optional()
+        .StoreResult(&Scenario.BatchInnerCodecStr);
     config.Opts->AddLongOption("direct", "Direct write to a partition node.")
         .Hidden()
         .StoreTrue(&Scenario.Direct);
@@ -146,6 +149,7 @@ void TCommandWorkloadTopicRunWrite::Parse(TConfig& config)
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
     Scenario.EnsureRatesIsValid();
+    Scenario.EnsureCodecOptionsAreValid();
 }
 
 int TCommandWorkloadTopicRunWrite::Run(TConfig& config)

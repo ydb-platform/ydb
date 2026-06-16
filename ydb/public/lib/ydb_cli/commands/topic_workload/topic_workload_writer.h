@@ -31,6 +31,7 @@ namespace NYdb {
             ui32 PartitionSeed;
             bool Direct;
             ui32 Codec = 0;
+            TMaybe<ui32> BatchInnerCodec;
             bool UseTransactions = false;
             bool TrackProducerIdInTx = true;
             bool UseAutoPartitioning = false;

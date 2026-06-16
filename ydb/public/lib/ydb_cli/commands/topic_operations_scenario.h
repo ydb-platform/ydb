@@ -42,6 +42,7 @@ public:
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
     void EnsureRatesIsValid() const;
+    void EnsureCodecOptionsAreValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;
@@ -96,7 +97,7 @@ public:
     TDuration BatchFlushInterval = TDuration::Seconds(1);
     std::optional<ui64> BatchFlushSizeBytes;
     ui32 BatchFlushMessageCount = 1;
-    ui32 MessageFormat = 0;
+    TString BatchInnerCodecStr;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;
     size_t ConfigConsumerCount = 0;

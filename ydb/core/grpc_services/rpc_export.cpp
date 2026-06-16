@@ -247,9 +247,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         for (const auto& item : TTraits::GetItems(settings)) {
             TString userSpecifiedPath = CanonizePath(item.source_path());
             TString fullPath;
-            const bool isAbsolute = item.source_path().StartsWith('/');
-            if (HasCommonSourcePathPrefix(userSpecifiedPath)
-                || (isAbsolute && userSpecifiedPath == CommonSourcePath)) {
+            if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
                 fullPath = userSpecifiedPath; // Full path
             } else {
                 fullPath = CommonSourcePath + userSpecifiedPath; // Relative path

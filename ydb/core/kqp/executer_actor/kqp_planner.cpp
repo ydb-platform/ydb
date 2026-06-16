@@ -78,6 +78,7 @@ bool NeedToRunLocally(const TTask& task) {
                 return true;
             }
         } else if (output.Transform && output.Transform->Type == NYql::KqpTableSinkName) {
+            // Always run RETURNING on session node.
             return true;
         }
     }

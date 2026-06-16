@@ -9,6 +9,8 @@
 #include "sock_config.h"
 #include "sock64.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NRawSocket {
 
 using namespace NActors;
@@ -62,17 +64,22 @@ public:
 
             err = Socket->Listen(LISTEN_QUEUE);
             if (err == 0) {
-                LOG_INFO_S(*NActors::TlsActivationContext, Service,
-                           "Listening on " << bindAddress->ToString() << (endpoint->SecureContext ? " (ssl)" : ""));
+                YDB_LOG_INFO("Listening",
+                    {"bindAddress", bindAddress->ToString()},
+                    {"secureContext", (endpoint->SecureContext ? "(ssl)" : "")});
                 Socket->SetNonBlock();
                 Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 Become(&TThis::StateWorking);
                 return;
             } else {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to listen on " << bindAddress->ToString() << ". Error: " << strerror(-err));
+                YDB_LOG_ERROR("Failed to listen",
+                    {"bindAddress", bindAddress->ToString()},
+                    {"error", strerror(-err)});
             }
         } else {
-            LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to bind " << bindAddress->ToString() << ". Error: " << strerror(-err));
+            YDB_LOG_ERROR("Failed to bind",
+                {"bindAddress", bindAddress->ToString()},
+                {"error", strerror(-err)});
         }
 
         switch(ErrorAction) {
@@ -81,7 +88,7 @@ public:
                                 << " errno# " << -err << " (" << strerror(-err) << ")" << Endl;
                 abort();
                 break;
-            
+
             case EErrorAction::Ignore:
                 PassAway();
                 break;

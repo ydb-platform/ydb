@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 class TBlobsForRead {
@@ -46,6 +48,26 @@ public:
         return result;
     }
 
+    bool Contains(const TString& storageId, const TBlobRange& bRange) const {
+        auto it = BlobTasks.find(storageId);
+        if (it == BlobTasks.end()) {
+            return false;
+        }
+        return it->second.contains(bRange);
+    }
+
+    std::shared_ptr<IBlobsReadingAction> FindAction(const TString& storageId, const TBlobRange& bRange) const {
+        auto it = BlobTasks.find(storageId);
+        if (it == BlobTasks.end()) {
+            return nullptr;
+        }
+        auto itRange = it->second.find(bRange);
+        if (itRange == it->second.end() || itRange->second.empty()) {
+            return nullptr;
+        }
+        return itRange->second.front()->GetAgents().FindByStorageId(storageId);
+    }
+
     void AddTask(const std::shared_ptr<ITask>& task) {
         for (auto&& i : task->GetAgents()) {
             auto& storage = BlobTasks[i.second->GetStorageId()];
@@ -58,9 +80,24 @@ public:
 
 class TReadCoordinatorActor: public NActors::TActorBootstrapped<TReadCoordinatorActor> {
 private:
+    using IRetryPolicy = IRetryPolicy<>;
+
+    struct TPendingRetry {
+        TBlobRange Range;
+        TString StorageId;
+    };
+
     ui64 TabletId;
     NActors::TActorId Parent;
     TBlobsForRead BlobTasks;
+
+    IRetryPolicy::TPtr RetryPolicy;
+    THashMap<TBlobRange, IRetryPolicy::IRetryState::TPtr> RetryStates;
+    std::deque<TPendingRetry> PendingRetries;
+    bool RetryScheduled = false;
+
+    void HandleRetryTimer();
+    std::optional<TDuration> GetNextRetryDelay(const TBlobRange& range, bool isRetriable);
 
 public:
     TReadCoordinatorActor(ui64 tabletId, const TActorId& parent);
@@ -78,6 +115,7 @@ public:
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvStartReadTask, Handle);
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleRetryTimer);
             default:
                 break;
         }

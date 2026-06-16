@@ -1,6 +1,65 @@
 #include "read_coordinator.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+
 namespace NKikimr::NOlap::NBlobOperations::NRead {
+
+namespace {
+
+IRetryPolicy<>::TPtr MakeReadRetryPolicy() {
+    if (HasAppData()) {
+        const auto& rp = AppDataVerified().ColumnShardConfig.GetReadRetryPolicy();
+        return IRetryPolicy<>::GetExponentialBackoffPolicy([]() {
+            return ERetryErrorClass::ShortRetry;
+        }, TDuration::MilliSeconds(rp.GetInitialRetryDelayMs()), TDuration::MilliSeconds(rp.GetInitialRetryDelayMs()),
+            TDuration::MilliSeconds(rp.GetMaxRetryDelayMs()), rp.GetMaxRetries());
+    }
+    return IRetryPolicy<>::GetExponentialBackoffPolicy([]() {
+        return ERetryErrorClass::ShortRetry;
+    }, TDuration::MilliSeconds(100), TDuration::MilliSeconds(100), TDuration::Seconds(5), 10);
+}
+
+}   // namespace
+
+std::optional<TDuration> TReadCoordinatorActor::GetNextRetryDelay(const TBlobRange& range, bool isRetriable) {
+    if (!isRetriable) {
+        return std::nullopt;
+    }
+    auto it = RetryStates.find(range);
+    if (it == RetryStates.end()) {
+        it = RetryStates.emplace(range, RetryPolicy->CreateRetryState()).first;
+    }
+    if (auto delay = it->second->GetNextRetryDelay()) {
+        return *delay;
+    }
+    return std::nullopt;
+}
+
+void TReadCoordinatorActor::HandleRetryTimer() {
+    RetryScheduled = false;
+    if (PendingRetries.empty()) {
+        return;
+    }
+
+    auto retries = std::exchange(PendingRetries, {});
+    for (auto&& pending : retries) {
+        if (!BlobTasks.Contains(pending.StorageId, pending.Range)) {
+            continue;
+        }
+        auto action = BlobTasks.FindAction(pending.StorageId, pending.Range);
+        if (action) {
+            ACFL_DEBUG("event", "RetryS3Read")("blob_range", pending.Range)("storage_id", pending.StorageId);
+            action->RetryRead(pending.Range);
+        } else {
+            ACFL_ERROR("event", "RetryS3ReadNoAction")("blob_range", pending.Range)("storage_id", pending.StorageId);
+            auto tasks = BlobTasks.Extract(pending.StorageId, pending.Range);
+            for (auto&& task : tasks) {
+                task->AddError(pending.StorageId, pending.Range,
+                    IBlobsReadingAction::TErrorStatus::Fail(NKikimrProto::EReplyStatus::ERROR, "cannot retry read: storage action not found"));
+            }
+        }
+    }
+}
 
 void TReadCoordinatorActor::Handle(TEvStartReadTask::TPtr& ev) {
     const auto& externalTaskId = ev->Get()->GetTask()->GetExternalTaskId();
@@ -15,12 +74,32 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
     ACFL_TRACE("event", "TEvReadBlobRangeResult")("blob_id", ev->Get()->BlobRange);
 
     auto& event = *ev->Get();
+
+    if (event.Status != NKikimrProto::EReplyStatus::OK) {
+        auto delay = GetNextRetryDelay(event.BlobRange, event.IsRetriable);
+        if (delay) {
+            ACFL_WARN("event", "S3ReadRetriableError")("blob_range", event.BlobRange)("storage_id", event.DataSourceId)(
+                "error", event.DetailedError)("delay_ms", delay->MilliSeconds());
+            PendingRetries.push_back(TPendingRetry{ event.BlobRange, event.DataSourceId });
+            if (!RetryScheduled) {
+                Schedule(*delay, new TEvents::TEvWakeup());
+                RetryScheduled = true;
+            }
+            return;
+        }
+        if (event.IsRetriable) {
+            ACFL_ERROR("event", "S3ReadRetryExhausted")("blob_range", event.BlobRange)("storage_id", event.DataSourceId)(
+                "error", event.DetailedError);
+        }
+    }
+
     auto tasks = BlobTasks.Extract(event.DataSourceId, event.BlobRange);
     for (auto&& i : tasks) {
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
             i->AddError(event.DataSourceId, event.BlobRange,
                 IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob, detailed error: " + event.DetailedError));
         } else {
+            RetryStates.erase(event.BlobRange);
             i->AddData(event.DataSourceId, event.BlobRange, event.Data);
         }
     }
@@ -29,6 +108,7 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
 TReadCoordinatorActor::TReadCoordinatorActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
     , Parent(parent)
+    , RetryPolicy(MakeReadRetryPolicy())
 {
 }
 

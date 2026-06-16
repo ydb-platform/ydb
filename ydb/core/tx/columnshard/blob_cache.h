@@ -74,16 +74,18 @@ struct TEvBlobCache {
         TString Data;
         TString DetailedError;
         const bool FromCache = false;
+        const bool IsRetriable = false;
         const TInstant ConstructTime = Now();
         const TString DataSourceId;
 
         TEvReadBlobRangeResult(const TBlobRange& blobRange, NKikimrProto::EReplyStatus status, const TString& data, const TString& detailedError,
-            const bool fromCache = false, const TString& dataSourceId = Default<TString>())
+            const bool fromCache = false, const TString& dataSourceId = Default<TString>(), const bool isRetriable = false)
             : BlobRange(blobRange)
             , Status(status)
             , Data(data)
             , DetailedError(detailedError)
             , FromCache(fromCache)
+            , IsRetriable(isRetriable)
             , DataSourceId(dataSourceId)
         {
         }

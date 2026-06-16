@@ -9,11 +9,28 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 class TActor: public TActorBootstrapped<TActor> {
 private:
+    using IRetryPolicy = IRetryPolicy<>;
+
+    struct TPendingRetry {
+        TBlobRange Range;
+        TString StorageId;
+    };
+
     std::shared_ptr<ITask> Task;
+
+    IRetryPolicy::TPtr RetryPolicy;
+    THashMap<TBlobRange, IRetryPolicy::IRetryState::TPtr> RetryStates;
+    std::deque<TPendingRetry> PendingRetries;
+    bool RetryScheduled = false;
+
+    void HandleRetryTimer();
+    std::optional<TDuration> GetNextRetryDelay(const TBlobRange& range, bool isRetriable);
 
 public:
     static TAtomicCounter WaitingBlobsCount;
@@ -27,6 +44,7 @@ public:
         TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event_type", ev->GetTypeName());
         switch (ev->GetTypeRewrite()) {
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleRetryTimer);
             default:
                 AFL_VERIFY(false);
         }

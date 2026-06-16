@@ -169,10 +169,19 @@ private:
 
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
+
+    virtual void DoRetryRead(const TBlobRange& range) {
+        Y_UNUSED(range);
+    }
+
     void StartReading(std::vector<TBlobRange>&& ranges);
     virtual THashMap<TBlobRange, std::vector<TBlobRange>> GroupBlobsForOptimization(std::vector<TBlobRange>&& ranges) const = 0;
 
 public:
+    void RetryRead(const TBlobRange& range) {
+        DoRetryRead(range);
+    }
+
     const THashMap<TBlobRange, std::vector<TBlobRange>>& GetGroups() const {
         return Groups;
     }
@@ -270,6 +279,14 @@ public:
 
     ui32 IsEmpty() const {
         return Actions.empty();
+    }
+
+    std::shared_ptr<IBlobsReadingAction> FindByStorageId(const TString& storageId) const {
+        auto it = Actions.find(storageId);
+        if (it == Actions.end()) {
+            return nullptr;
+        }
+        return it->second;
     }
 
     void Add(const std::shared_ptr<IBlobsReadingAction>& action) {

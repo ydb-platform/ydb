@@ -3204,7 +3204,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UPSERT INTO TestDdlDml2 (Key, Value1, Value2) VALUES (1, "1", "1");
                 SELECT * FROM TestDdlDml2;
                 ALTER TABLE TestDdlDml2 DROP COLUMN Value2;
-            )", TTxControl::NoTx()).ExtractValueSync();
+            )", TTxControl::NoTx(), NoRetryExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
 
             result = db.ExecuteQuery(R"(

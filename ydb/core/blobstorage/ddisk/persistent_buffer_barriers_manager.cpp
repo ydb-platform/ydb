@@ -148,7 +148,8 @@ namespace NKikimr::NDDisk {
     void TPersistentBufferBarriersManager::RestoreBarriers(std::map<TPersistentBufferId, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
         for (ui32 pos = 0; pos < PersistentBufferBarriers.size(); pos++) {
             auto& b = PersistentBufferBarriers[pos];
-            allocator.MarkOccupied({{.ChunkIdx = b.ChunkIdx, .SectorIdx = b.SectorIdx}});
+            const TPersistentBufferSectorInfo barrierSector{.ChunkIdx = b.ChunkIdx, .SectorIdx = b.SectorIdx};
+            allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&barrierSector, 1));
             for (FreeBarrierPosition = 0; FreeBarrierPosition < TPersistentBufferBarriers::MaxBarriersPerHeader && b.Header.Barriers[FreeBarrierPosition].TabletId > 0; FreeBarrierPosition++) {
                 auto& barrier = b.Header.Barriers[FreeBarrierPosition];
                 auto it = persistentBuffers.lower_bound({barrier.TabletId, 0});
@@ -379,7 +380,8 @@ namespace NKikimr::NDDisk {
                 continue;
             }
 
-            allocator.MarkOccupied({{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx}});
+            const TPersistentBufferSectorInfo eraseSector{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx};
+            allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&eraseSector, 1));
 
             TPersistentBuffer& buffer = pbIt->second;
             for (ui64 lsn : erase.Lsns) {

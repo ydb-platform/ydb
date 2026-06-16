@@ -395,6 +395,9 @@ std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& quer
     if (astValidator) {
         settings.StatsMode(EStatsMode::Full);
     }
+    if (expectedStatus != NYdb::EStatus::SUCCESS) {
+        settings.RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+    }
 
     auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString() << "\nQuery text:\n" << query);

@@ -461,7 +461,6 @@ public:
         if (Config->StaticSlotLabel != staticSlotLabel) {
             YDB_LOG_DEBUG_CTX(ctx, "Static slot label modified",
                 {"logPrefix", LogPrefix},
-                {"staticSlotLabel", Config->StaticSlotLabel},
                 {"staticSlotLabel", staticSlotLabel});
             if (Config->StaticSlots.size())
                 modified = true;

@@ -34,6 +34,7 @@ public:
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
+        const TString& diskId,
         ui64 tabletId,
         ui32 generation,
         size_t directBlockGroupIndex,

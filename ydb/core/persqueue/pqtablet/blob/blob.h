@@ -114,7 +114,7 @@ private:
     TBuffer Buffer;
     TIntrusivePtr<TPackedBatchDataOwner> Owner;
     ui32 Offset = 0;
-    ui32 Size_ = 0;
+    ui32 PayloadSize = 0;
 };
 
 //TBatch represents several clientBlobs. Can be in unpacked state(TVector<TClientBlob> blobs)
@@ -203,6 +203,7 @@ private:
 };
 
 class TPartitionedBlob;
+struct TPartitionBlobEncoder;
 
 //THead represents bathes, stored in head(at most 8 Mb)
 struct THead {
@@ -216,6 +217,9 @@ private:
     ui16 InternalPartsCount = 0;
 
     friend class TPartitionedBlob;
+    friend struct TPartitionBlobEncoder;
+
+    void MaterializeRetainedSharedData();
 
     class TBatchAccessor {
         TBatch& Batch;
@@ -262,8 +266,6 @@ public:
     TBatchAccessor MutableLastBatch();
     TBatch ExtractFirstBatch(bool materializeSharedData = true);
     void AddBlob(const TClientBlob& blob);
-
-    void MaterializeRetainedSharedData();
 
     friend IOutputStream& operator <<(IOutputStream& out, const THead& value);
 };

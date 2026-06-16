@@ -20,24 +20,29 @@ bool CanWriteOffsetDeltaInKeys() {
 struct TSharedPackedDataStats {
     ui32 LiveBatchCount = 0;
     ui64 LivePayloadSize = 0;
-    bool ShouldMaterialize = false;
 };
 
 bool ShouldMaterializeSharedData(const TPackedBatchDataOwner& owner, const TSharedPackedDataStats& stats)
 {
-    if (!owner.InitialBatchCount || !stats.LiveBatchCount) {
+    if (!stats.LiveBatchCount) {
         return false;
     }
 
-    // A materialized batch gets its own small heap allocation. The estimate is
-    // deliberately conservative: it accounts for allocator rounding plus local
-    // buffer metadata without depending on a particular allocator size class.
-    static constexpr ui64 PerOwnedBatchOverheadEstimate = 256;
-    static constexpr ui32 MinDroppedBatchRatio = 2;
-    const ui64 materializedBytesEstimate = stats.LivePayloadSize + stats.LiveBatchCount * PerOwnedBatchOverheadEstimate;
+    AFL_ENSURE(stats.LiveBatchCount <= owner.InitialBatchCount)
+        ("liveBatchCount", stats.LiveBatchCount)
+        ("initialBatchCount", owner.InitialBatchCount);
+    AFL_ENSURE(stats.LivePayloadSize <= owner.InitialPayloadSize)
+        ("livePayloadSize", stats.LivePayloadSize)
+        ("initialPayloadSize", owner.InitialPayloadSize);
 
-    return stats.LiveBatchCount * MinDroppedBatchRatio <= owner.InitialBatchCount
-        && owner.Data.size() > materializedBytesEstimate;
+    // Keep the DataHead value shared while most of its parsed batches are still
+    // live. Materialize only after at least as much data was dropped as remains
+    // live, so small head movement does not destroy the allocation-saving
+    // effect of sharing.
+    const ui32 droppedBatchCount = owner.InitialBatchCount - stats.LiveBatchCount;
+    const ui64 droppedPayloadSize = owner.InitialPayloadSize - stats.LivePayloadSize;
+    return droppedBatchCount >= stats.LiveBatchCount
+        || droppedPayloadSize >= stats.LivePayloadSize;
 }
 
 }
@@ -70,14 +75,14 @@ TPackedBatchData::TPackedBatchData(TBuffer&& data)
 TPackedBatchData::TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 offset, ui32 size)
     : Owner(std::move(owner))
     , Offset(offset)
-    , Size_(size)
+    , PayloadSize(size)
 {
     AFL_ENSURE(Owner);
-    AFL_ENSURE(static_cast<size_t>(Offset) + Size_ <= Owner->Data.size())
+    AFL_ENSURE(static_cast<size_t>(Offset) + PayloadSize <= Owner->Data.size())
         ("offset", Offset)
-        ("size", Size_)
+        ("size", PayloadSize)
         ("ownerSize", Owner->Data.size());
-    Owner->RegisterBatch(Size_);
+    Owner->RegisterBatch(PayloadSize);
 }
 
 const char* TPackedBatchData::data() const noexcept
@@ -92,12 +97,12 @@ size_t TPackedBatchData::size() const noexcept
 
 size_t TPackedBatchData::Size() const noexcept
 {
-    return Owner ? Size_ : Buffer.Size();
+    return Owner ? PayloadSize : Buffer.Size();
 }
 
 size_t TPackedBatchData::Capacity() const noexcept
 {
-    return Owner ? Size_ : Buffer.Capacity();
+    return Owner ? PayloadSize : Buffer.Capacity();
 }
 
 bool TPackedBatchData::Empty() const noexcept
@@ -121,10 +126,10 @@ void TPackedBatchData::Materialize()
         return;
     }
 
-    TBuffer buffer(Owner->Data.data() + Offset, Size_);
+    TBuffer buffer(Owner->Data.data() + Offset, PayloadSize);
     Owner.Reset();
     Offset = 0;
-    Size_ = 0;
+    PayloadSize = 0;
     Buffer = std::move(buffer);
 }
 
@@ -132,7 +137,7 @@ void TPackedBatchData::Reset()
 {
     Owner.Reset();
     Offset = 0;
-    Size_ = 0;
+    PayloadSize = 0;
     TBuffer().Swap(Buffer);
 }
 
@@ -500,10 +505,6 @@ void THead::MaterializeRetainedSharedData() {
         }
     }
 
-    for (auto& [owner, stats] : owners) {
-        stats.ShouldMaterialize = ShouldMaterializeSharedData(*owner, stats);
-    }
-
     for (auto& batch : Batches) {
         if (!batch.Packed) {
             continue;
@@ -511,7 +512,7 @@ void THead::MaterializeRetainedSharedData() {
 
         if (const auto* owner = batch.PackedData.SharedOwner()) {
             const auto it = owners.find(owner);
-            if (it != owners.end() && it->second.ShouldMaterialize) {
+            if (it != owners.end() && ShouldMaterializeSharedData(*owner, it->second)) {
                 batch.PackedData.Materialize();
             }
         }

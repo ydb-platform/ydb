@@ -72,6 +72,18 @@ TDataKey MakeDataKey(const TKey& key, ui32 size)
     };
 }
 
+TKey MakeHeadKey(ui64 offset, ui32 count)
+{
+    return TKey::ForHead(
+        TKeyPrefix::TypeData,
+        TPartitionId(0),
+        offset,
+        0,
+        count,
+        0
+    );
+}
+
 } // namespace
 
 TEST(TPartitionBlobEncoderTest, SyncNewHeadKeyMaterializesSparseSharedHeadAfterKeyReplacement)
@@ -80,14 +92,7 @@ TEST(TPartitionBlobEncoderTest, SyncNewHeadKeyMaterializesSparseSharedHeadAfterK
     constexpr size_t PayloadSize = 1_KB;
 
     TPartitionBlobEncoder encoder(TPartitionId(0), false);
-    const auto key = TKey::ForHead(
-        TKeyPrefix::TypeData,
-        TPartitionId(0),
-        1000,
-        0,
-        BatchesPerDataHeadBlob,
-        0
-    );
+    const auto key = MakeHeadKey(1000, BatchesPerDataHeadBlob);
     const TString value = MakeDataHeadValue(key.GetOffset(), BatchesPerDataHeadBlob, PayloadSize);
 
     LoadSharedHead(encoder.Head, key, value);
@@ -103,4 +108,82 @@ TEST(TPartitionBlobEncoderTest, SyncNewHeadKeyMaterializesSparseSharedHeadAfterK
     encoder.SyncNewHeadKey();
 
     EXPECT_FALSE(encoder.Head.GetLastBatch().PackedData.IsShared());
+}
+
+TEST(TPartitionBlobEncoderTest, SyncNewHeadKeyKeepsDenseSharedHeadAfterKeyReplacement)
+{
+    constexpr ui32 BatchesPerDataHeadBlob = 64;
+    constexpr size_t PayloadSize = 1_KB;
+
+    TPartitionBlobEncoder encoder(TPartitionId(0), false);
+    const auto key = MakeHeadKey(1000, BatchesPerDataHeadBlob);
+    const TString value = MakeDataHeadValue(key.GetOffset(), BatchesPerDataHeadBlob, PayloadSize);
+
+    LoadSharedHead(encoder.Head, key, value);
+    encoder.HeadKeys.push_back(MakeDataKey(key, value.size()));
+
+    ASSERT_TRUE(encoder.Head.GetLastBatch().PackedData.IsShared());
+
+    encoder.NewHeadKey = MakeDataKey(key, value.size());
+    encoder.SyncNewHeadKey();
+
+    EXPECT_TRUE(encoder.Head.GetLastBatch().PackedData.IsShared());
+}
+
+TEST(TPartitionBlobEncoderTest, SyncNewHeadKeyKeepsMostlyLiveSharedHeadAfterKeyReplacement)
+{
+    constexpr ui32 BatchesPerDataHeadBlob = 64;
+    constexpr size_t PayloadSize = 1_KB;
+
+    TPartitionBlobEncoder encoder(TPartitionId(0), false);
+    const auto key = MakeHeadKey(1000, BatchesPerDataHeadBlob);
+    const TString value = MakeDataHeadValue(key.GetOffset(), BatchesPerDataHeadBlob, PayloadSize);
+
+    LoadSharedHead(encoder.Head, key, value);
+    encoder.HeadKeys.push_back(MakeDataKey(key, value.size()));
+
+    encoder.Head.ExtractFirstBatch(false);
+
+    ASSERT_TRUE(encoder.Head.GetLastBatch().PackedData.IsShared());
+
+    encoder.NewHeadKey = MakeDataKey(key, value.size() - PayloadSize);
+    encoder.SyncNewHeadKey();
+
+    EXPECT_TRUE(encoder.Head.GetLastBatch().PackedData.IsShared());
+}
+
+TEST(TPartitionBlobEncoderTest, SyncNewHeadKeyDefersSparseSharedHeadWhenCompactedKeysWillClearHead)
+{
+    constexpr ui32 BatchesPerDataHeadBlob = 64;
+    constexpr size_t PayloadSize = 1_KB;
+
+    TPartitionBlobEncoder encoder(TPartitionId(0), false);
+    const auto key = MakeHeadKey(1000, BatchesPerDataHeadBlob);
+    const TString value = MakeDataHeadValue(key.GetOffset(), BatchesPerDataHeadBlob, PayloadSize);
+
+    LoadSharedHead(encoder.Head, key, value);
+    encoder.HeadKeys.push_back(MakeDataKey(key, value.size()));
+
+    while (encoder.Head.GetBatches().size() > 1) {
+        encoder.Head.ExtractFirstBatch(false);
+    }
+
+    ASSERT_TRUE(encoder.Head.GetLastBatch().PackedData.IsShared());
+
+    encoder.CompactedKeys.emplace_back(TKey::ForBody(
+        TKeyPrefix::TypeData,
+        TPartitionId(0),
+        key.GetOffset(),
+        key.GetPartNo(),
+        key.GetCount(),
+        key.GetInternalPartsCount()
+    ), value.size());
+    encoder.NewHeadKey = MakeDataKey(key, encoder.Head.GetLastBatch().GetPackedSize());
+    encoder.SyncNewHeadKey();
+
+    ASSERT_TRUE(encoder.Head.GetLastBatch().PackedData.IsShared());
+
+    encoder.SyncHeadFromNewHead();
+
+    EXPECT_TRUE(encoder.Head.GetBatches().empty());
 }

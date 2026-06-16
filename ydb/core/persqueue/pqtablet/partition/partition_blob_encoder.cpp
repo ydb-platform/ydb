@@ -497,10 +497,10 @@ void TPartitionBlobEncoder::SyncNewHeadKey()
     }
 
     if (replacedHeadKeys && CompactedKeys.empty()) {
-        // The new head key replaces a suffix of the old head key layout, but
-        // the old in-memory batches remain live and are now covered by the new
-        // key. This is the production path where init-loaded shared owners can
-        // become sparse without Head being cleared wholesale.
+        // This is the only sync path where old HeadKeys are replaced while the
+        // old in-memory Head is retained. If some init-loaded shared owners
+        // became sparse, materialize them here. Paths with CompactedKeys clear
+        // Head wholesale via SyncHeadFromNewHead().
         Head.MaterializeRetainedSharedData();
     }
 

@@ -1,6 +1,7 @@
 #include "read_coordinator.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 

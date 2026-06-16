@@ -1182,6 +1182,7 @@ TVector<ui64> CheckConfigureLogAffected(TTenantTestRuntime &runtime,
     return {reply->Record.GetAddedItemIds().begin(), reply->Record.GetAddedItemIds().end()};
 }
 
+<<<<<<< HEAD
 void DoFetchMainConfigFromConsole(TTenantTestRuntime &runtime, TString &yamlConfig)
 {
     auto *event = new TEvConsole::TEvGetAllConfigsRequest;
@@ -1281,6 +1282,109 @@ void DoEnsureDatabaseConfigReplacedWith(TTenantTestRuntime &runtime, const TStri
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
+=======
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
+    // Unit test for the unknown/deprecated -> proto conversion helper.
+    Y_UNIT_TEST(BuildYamlConfigUnknownFieldsHelper) {
+        TMap<TString, std::pair<TString, TString>> unknown{
+            {"/config/foo", {"foo", "NKikimrConfig.TAppConfig"}},
+        };
+        TMap<TString, std::pair<TString, TString>> deprecated{
+            {"/config/old", {"old", "NKikimrConfig.TAppConfig"}},
+        };
+
+        NKikimrConsole::TYamlConfigUnknownFields out;
+        BuildYamlConfigUnknownFields(unknown, deprecated, out);
+
+        UNIT_ASSERT_VALUES_EQUAL(out.FieldsSize(), 2u);
+        THashMap<TString, NKikimrConsole::TYamlConfigUnknownField> byName;
+        for (const auto& f : out.GetFields()) {
+            byName[f.GetName()] = f;
+        }
+        UNIT_ASSERT_C(byName.contains("foo"), "missing unknown field 'foo'");
+        UNIT_ASSERT_VALUES_EQUAL(byName.at("foo").GetPath(), "/config/foo");
+        UNIT_ASSERT_VALUES_EQUAL(byName.at("foo").GetProto(), "NKikimrConfig.TAppConfig");
+        UNIT_ASSERT_VALUES_EQUAL(byName.at("foo").GetDeprecated(), false);
+        UNIT_ASSERT_C(byName.contains("old"), "missing deprecated field 'old'");
+        UNIT_ASSERT_VALUES_EQUAL(byName.at("old").GetDeprecated(), true);
+    }
+
+    // Uploading a config with an unknown field (allow_unknown_fields) caches it and
+    // GetAllConfigs returns it.
+    Y_UNIT_TEST(YamlConfigUnknownFieldsRoundTrip) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_WITH_UNKNOWN,
+            /* errorSubstring = */ {}, /* allowUnknownFields = */ true);
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        const auto& unknown = response->Record.GetMainConfigUnknownFields();
+        UNIT_ASSERT_VALUES_EQUAL(unknown.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetName(), "unknown_field_for_test");
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetDeprecated(), false);
+    }
+
+    // The cached unknown fields are persisted and survive a console tablet restart
+    // (no re-validation needed on load).
+    Y_UNIT_TEST(YamlConfigUnknownFieldsSurviveReboot) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_WITH_UNKNOWN,
+            /* errorSubstring = */ {}, /* allowUnknownFields = */ true);
+
+        GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        const auto& unknown = response->Record.GetMainConfigUnknownFields();
+        UNIT_ASSERT_VALUES_EQUAL(unknown.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetName(), "unknown_field_for_test");
+    }
+
+    // A clean config yields no unknown fields.
+    Y_UNIT_TEST(YamlConfigNoUnknownFieldsWhenClean) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetMainConfigUnknownFields().size(), 0);
+    }
+
+    // An unknown field nested inside a selector_config entry is reported with a path that
+    // pinpoints the selector, so the UI can highlight it and its parents in the editable YAML.
+    Y_UNIT_TEST(YamlConfigUnknownFieldsInSelectorHaveSelectorPath) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_WITH_UNKNOWN_IN_SELECTOR,
+            /* errorSubstring = */ {}, /* allowUnknownFields = */ true);
+
+        auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+        runtime.SendToConsole(event);
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+
+        const auto& unknown = response->Record.GetMainConfigUnknownFields();
+        UNIT_ASSERT_VALUES_EQUAL(unknown.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetName(), "unknown_in_selector");
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetPath(), "/selector_config/0/config/unknown_in_selector");
+        UNIT_ASSERT_VALUES_EQUAL(unknown[0].GetDeprecated(), false);
+    }
+
+>>>>>>> e1ba7f0175c (Introduce cluster-opaque TAppConfig::PrivateDatabaseConfig (#43238))
     Y_UNIT_TEST(TestAddConfigItem) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
@@ -4501,9 +4605,9 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 1, VOLATILE_YAML_CONFIG_1_2);
 
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, DATABASE_1_YAML_CONFIG_1, true);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, DATABASE_1_YAML_CONFIG_1);
 
-        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, DATABASE_2_YAML_CONFIG_1, true);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, DATABASE_2_YAML_CONFIG_1);
 
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
 
@@ -4686,86 +4790,133 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         // Fresh runtime: YamlVersion = 0. Per documentation, the client must send
         // the *current* stored version. A version ahead of stored is rejected.
-        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V1,
-            Ydb::StatusIds::BAD_REQUEST, "Version mismatch");
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, VERSIONED_MAIN_CONFIG_V1,
+            "Version mismatch");
 
         // version: 0 matches stored YamlVersion = 0 — accepted; YamlVersion becomes 1.
-        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V0_STALE,
-            Ydb::StatusIds::SUCCESS);
-        DoEnsureMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V0_STALE);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V0_STALE);
+        CheckMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V0_STALE);
 
         // version: 2 with stored = 1 — rejected.
-        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V2,
-            Ydb::StatusIds::BAD_REQUEST, "Version mismatch");
+        CheckReplaceConfig(runtime, Ydb::StatusIds::BAD_REQUEST, VERSIONED_MAIN_CONFIG_V2,
+            "Version mismatch");
 
         // Re-applying the same body with the stale version: 0 is silently
         // accepted (documented idempotent behaviour: wire == stored - 1 with
         // identical content). YamlVersion stays at 1.
-        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V0_STALE,
-            Ydb::StatusIds::SUCCESS);
-        DoEnsureMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V0_STALE);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V0_STALE);
+        CheckMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V0_STALE);
 
         // version: 1 matches stored YamlVersion = 1 — accepted; YamlVersion becomes 2.
-        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V1,
-            Ydb::StatusIds::SUCCESS);
-        DoEnsureMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V1);
+        CheckMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V1);
 
         // version: 2 with a differing body now matches stored — accepted; YamlVersion = 3.
-        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V2,
-            Ydb::StatusIds::SUCCESS);
-        DoEnsureMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V2);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V2);
+        CheckMainConfigReplacedWith(runtime, VERSIONED_MAIN_CONFIG_V2);
     }
 
     Y_UNIT_TEST(TestReplaceDatabaseYamlConfigVersionCheck) {
         NKikimrConfig::TAppConfig appcfg;
         appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
-        TTenantTestRuntime runtime(MultipleTenantsConsoleTestConfig(), appcfg);
+        TTenantTestRuntime runtime(TenantConsoleTestConfig(), appcfg);
 
-        const TString DATABASE = "/dc-1/users/tenant-1";
+        const TString DATABASE = TENANT1_1_NAME;
 
         // ValidateDatabaseConfig appends the database config into the main config
         // and re-validates the result, which requires a non-empty MainYamlConfig.
         // Seed a minimal main config first (fresh YamlVersion = 0, so wire = 0).
-        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V0_STALE,
-            Ydb::StatusIds::SUCCESS);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V0_STALE);
 
         // Fresh runtime: no per-database config stored, so currentVersion = 0.
         // Per documentation, the wire version must equal the stored version.
         // Sending version: 1 must be rejected.
-        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V1,
-            Ydb::StatusIds::BAD_REQUEST, "Version mismatch",
-            /* allowAbsentDatabase = */ true);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, VERSIONED_DATABASE_CONFIG_V1,
+            "Version mismatch");
 
         // version: 0 matches stored currentVersion = 0 — accepted; stored version becomes 1.
-        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V0_STALE,
-            Ydb::StatusIds::SUCCESS, {},
-            /* allowAbsentDatabase = */ true);
-        DoEnsureDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V0_STALE);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_DATABASE_CONFIG_V0_STALE);
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V0_STALE);
 
         // version: 2 with stored = 1 — rejected.
-        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V2,
-            Ydb::StatusIds::BAD_REQUEST, "Version mismatch",
-            /* allowAbsentDatabase = */ true);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, VERSIONED_DATABASE_CONFIG_V2,
+            "Version mismatch");
 
         // Re-applying the same body with the stale version: 0 is silently
         // accepted (documented idempotent behaviour: wire == stored - 1 with
         // identical content). Stored version stays at 1.
-        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V0_STALE,
-            Ydb::StatusIds::SUCCESS, {},
-            /* allowAbsentDatabase = */ true);
-        DoEnsureDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V0_STALE);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_DATABASE_CONFIG_V0_STALE);
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V0_STALE);
 
         // version: 1 matches stored = 1 — accepted; stored version becomes 2.
-        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V1,
-            Ydb::StatusIds::SUCCESS, {},
-            /* allowAbsentDatabase = */ true);
-        DoEnsureDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V1);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_DATABASE_CONFIG_V1);
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V1);
 
         // version: 2 with a differing body now matches stored = 2 — accepted; version = 3.
-        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V2,
-            Ydb::StatusIds::SUCCESS, {},
-            /* allowAbsentDatabase = */ true);
-        DoEnsureDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V2);
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_DATABASE_CONFIG_V2);
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, VERSIONED_DATABASE_CONFIG_V2);
+    }
+
+    // PrivateDatabaseConfig is marked '(NMarkers.OpaqueConfig) = true'
+    // - unknown fields nested anywhere inside it must NOT cause Console's YAML
+    // validator to reject the config, in both the main cluster YAML and the
+    // per-database YAML.
+
+    Y_UNIT_TEST(TestReplaceMainYamlConfigWithUnknownsUnderPrivateDatabaseConfig) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        TTenantTestRuntime runtime(TenantConsoleTestConfig(), appcfg);
+
+        const TString mainConfig = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: clusterA
+  private_database_config:
+    some_unknown_field: 42
+    some_unknown_struct:
+      field_1: 1
+      field_2: abc
+      struct_3:
+        field_1: 2
+        field_2: def
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, mainConfig);
+        CheckMainConfigReplacedWith(runtime, mainConfig);
+    }
+
+    Y_UNIT_TEST(TestReplaceDatabaseYamlConfigWithUnknownsUnderPrivateDatabaseConfig) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        TTenantTestRuntime runtime(TenantConsoleTestConfig(), appcfg);
+
+        // ValidateDatabaseConfig appends the database config into the main config
+        // and re-validates the result, which requires a non-empty MainYamlConfig.
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, VERSIONED_MAIN_CONFIG_V0_STALE);
+
+        const TString DATABASE = TENANT1_1_NAME;
+        const TString databaseConfig = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
+config:
+  private_database_config:
+    some_unknown_field: 42
+    some_unknown_struct:
+      field_1: 1
+      field_2: abc
+      struct_3:
+        field_1: 2
+        field_2: def
+)";
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, databaseConfig);
+        CheckDatabaseConfigReplacedWith(runtime, DATABASE, databaseConfig);
     }
 }
 

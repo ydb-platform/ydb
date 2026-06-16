@@ -5,7 +5,9 @@
 #include <ydb/core/base/appdata.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/util.h>
 
+#include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/config/validation/validators.h>
 

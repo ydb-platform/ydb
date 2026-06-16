@@ -104,7 +104,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void DecompressMessage(TTopicMessage& message) {
         const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(message.GetCodec()));
-        message.GetData() = codecImpl->Decompress(message.GetData());
+        auto decompressed = codecImpl->Decompress(message.GetData());
+        message.GetData() = std::move(decompressed);
     }
 
     void ProcessData() {

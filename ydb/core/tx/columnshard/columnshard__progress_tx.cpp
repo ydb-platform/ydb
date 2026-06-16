@@ -30,7 +30,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)(
-            "tablet_id", Self->TabletID())("tx_state", "TTxProgressTx::Execute")("tx_current", Self->ProgressTxInFlight);
+            "tablet_id", Self->TabletID())("tx_state", "TTxProgressTx::Execute")("tx_current", Self->InProgressTxId);
         AFL_VERIFY(Self->ProgressTxScheduled);
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
@@ -56,13 +56,13 @@ public:
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "BuildTxPrepareForProgress")(
                     "op_type", TxOperator->GetOpType());
                 AbortedThroughRemoveExpired = true;
-                Self->ProgressTxInFlight = txId;
+                Self->InProgressTxId = txId;
                 Self->Execute(txPrepare.release(), ctx);
                 return true;
             } else if (TxOperator->IsInProgress()) {
                 AbortedThroughRemoveExpired = true;
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemContinue")("op_type", TxOperator->GetOpType());
-                AFL_VERIFY(Self->ProgressTxInFlight == txId);
+                AFL_VERIFY(Self->InProgressTxId == txId);
                 return true;
             } else {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "PlannedItemStart")("details", "PopFirstPlannedTx")(
@@ -82,9 +82,9 @@ public:
             Self->ProgressTxController->ProgressOnExecute(txId, txc);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
-        Self->ProgressTxInFlight = 0;
+        Self->InProgressTxId = 0;
         if (!!Self->ProgressTxController->GetPlannedTx()) {
-            Self->EnqueueProgressTx(ctx, std::nullopt);
+            Self->EnqueueProgressTx(ctx);
         }
         return true;
     }
@@ -115,14 +115,16 @@ public:
     }
 };
 
-void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId) {
+void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTx")("tablet_id", TabletID())("tx_id", continueTxId);
     if (continueTxId) {
-        AFL_VERIFY(ProgressTxInFlight == 0 || ProgressTxInFlight == *continueTxId)("current", ProgressTxInFlight)("expected", *continueTxId);
+        AFL_VERIFY(InProgressTxId == 0 || InProgressTxId == continueTxId)("current", InProgressTxId)("expected", continueTxId);
+    } else if (InProgressTxId != 0) {
+        return;
     }
     if (!ProgressTxScheduled) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTxStart")("tablet_id", TabletID())("tx_id", continueTxId)(
-            "tx_current", ProgressTxInFlight);
+            "tx_current", InProgressTxId);
         ProgressTxScheduled = true;
         Execute(new TTxProgressTx(this), ctx);
     }

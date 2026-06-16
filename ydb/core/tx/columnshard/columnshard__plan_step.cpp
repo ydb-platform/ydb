@@ -102,7 +102,7 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
 
     if (plannedCount > 0 || Self->ProgressTxController->HaveOutdatedTxs()) {
-        Self->EnqueueProgressTx(ctx, std::nullopt);
+        Self->EnqueueProgressTx(ctx);
     }
     return true;
 }

@@ -57,6 +57,7 @@
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
+
 {% endlist %}
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
@@ -115,6 +116,7 @@
 
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
+
 
 {% endlist %}
 
@@ -341,7 +343,5 @@
   ```java
   TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
   ```
-
-{% endlist %}
 
 {% endlist %}

@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }} распределенная система, поддерживающая плавное обновление (rolling restart) без даунтайма и деградации производительности.
 
-{% include "../_includes/versioning-warning.md" %}
+{% include [versioning warning](../_includes/versioning-warning.md) %}
 
 ## Порядок обновления {#upgrade-order}
 

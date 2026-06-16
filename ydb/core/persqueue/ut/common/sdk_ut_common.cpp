@@ -22,7 +22,8 @@ void WriteKafkaBatchMessages(
     size_t dataSize,
     ui64 maxBatchMessageCount,
     const TVector<std::tuple<ui64, ui32, char>>& writes,
-    bool directWriteToPartition)
+    bool directWriteToPartition,
+    TInstant baseCreateTimestamp)
 {
     NYdb::NTopic::TWriteSessionSettings writeSettings;
     writeSettings.Path(topicPath)
@@ -47,7 +48,9 @@ void WriteKafkaBatchMessages(
         while (ackedSeqNos.size() < messageCount) {
             if (token.has_value() && nextSeqNo <= lastSeqNo) {
                 NYdb::NTopic::TWriteMessage message(TString(dataSize, fill));
-                message.SeqNo(nextSeqNo++);
+                message.SeqNo(nextSeqNo);
+                message.CreateTimestamp(baseCreateTimestamp + TDuration::MilliSeconds(nextSeqNo - 1));
+                ++nextSeqNo;
                 writeSession->Write(std::move(*token), std::move(message));
                 token.reset();
                 continue;

@@ -6,6 +6,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/datetime/base.h>
 
 #include <tuple>
 
@@ -21,6 +22,7 @@ void WriteKafkaBatchMessages(
     size_t dataSize,
     ui64 maxBatchMessageCount,
     const TVector<std::tuple<ui64, ui32, char>>& writes,
-    bool directWriteToPartition = true);
+    bool directWriteToPartition = true,
+    TInstant baseCreateTimestamp = TInstant::MilliSeconds(1000));
 
 } // namespace NKikimr::NPQ::NTest

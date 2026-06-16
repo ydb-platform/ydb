@@ -121,14 +121,15 @@ TDecompressionResult TKafkaBatchCodec::DecompressData(const std::string& data) c
 
     TDecompressionResult result;
     const TKafkaRecordBatch kafkaBatch = ReadKafkaRecordBatch(data);
-    result.BatchBaseSequence = static_cast<i64>(kafkaBatch.BaseSequence);
+    result.BatchBaseSequence = 0;
     result.BatchBaseTimestampMs = kafkaBatch.BaseTimestamp;
     result.Messages.reserve(kafkaBatch.Records.size());
 
-    for (const auto& record : kafkaBatch.Records) {
+    for (size_t i = 0; i < kafkaBatch.Records.size(); ++i) {
+        const auto& record = kafkaBatch.Records[i];
         TDecompressedMessageMeta meta{
             .OffsetDelta = static_cast<i32>(record.OffsetDelta),
-            .SequenceDelta = static_cast<i32>(record.OffsetDelta),
+            .SequenceDelta = static_cast<i64>(GetRecordSeqNo(kafkaBatch, i, record)),
             .TimestampDelta = record.TimestampDelta,
         };
         result.Messages.push_back(TDecompressedMessage{

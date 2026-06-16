@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             UNIT_ASSERT_VALUES_EQUAL(
                 Base64Decode(jsonMap.find("Message")->second.GetString()),
                 TString(dataSize, i < 3 ? 'a' : 'b'));
-            UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
+            CheckMapValue(jsonMap, "CreateTimestamp", 1000 + i);
             UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
             UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
         }

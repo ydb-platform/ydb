@@ -55,7 +55,7 @@ struct TWriteBlockCompression {
 //! When not set, read path uses metadata from outer message_data.
 struct TDecompressedMessageMeta {
     std::optional<i32> OffsetDelta;
-    std::optional<i32> SequenceDelta;
+    std::optional<i64> SequenceDelta;
     std::optional<i64> TimestampDelta;
 };
 

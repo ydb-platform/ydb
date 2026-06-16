@@ -1111,15 +1111,18 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         for (ui64 offset = 0; offset < 5; ++offset) {
             UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetOffset(), offset);
             UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetSeqNo(), offset + 1);
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetCreateTime(), TInstant::MilliSeconds(1000 + offset));
             UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetData(), TString(dataSize, 'a'));
         }
         for (ui64 offset = 5; offset < 8; ++offset) {
             UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetOffset(), offset);
             UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetSeqNo(), offset + 1);
+            UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetCreateTime(), TInstant::MilliSeconds(1000 + offset));
             UNIT_ASSERT_VALUES_EQUAL(receivedMessages[offset].GetData(), TString(dataSize, 'b'));
         }
         UNIT_ASSERT_VALUES_EQUAL(receivedMessages[8].GetOffset(), 8u);
         UNIT_ASSERT_VALUES_EQUAL(receivedMessages[8].GetSeqNo(), 9u);
+        UNIT_ASSERT_VALUES_EQUAL(receivedMessages[8].GetCreateTime(), TInstant::MilliSeconds(1008));
         UNIT_ASSERT_VALUES_EQUAL(receivedMessages[8].GetData(), TString(dataSize, 'c'));
 
         UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));

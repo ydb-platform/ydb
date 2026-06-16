@@ -316,6 +316,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             const auto& jsonMap = item.GetMap();
             CheckMapValue(jsonMap, "Offset", i);
             UNIT_ASSERT(jsonMap.find("SeqNo") != jsonMap.end());
+            UNIT_ASSERT_VALUES_EQUAL(jsonMap.find("SeqNo")->second.GetInteger(), i + 1);
             CheckMapValue(jsonMap, "Codec", kafkaBatchCodec);
             CheckMapValue(jsonMap, "ProducerId", producerId);
             UNIT_ASSERT(jsonMap.find("Message") != jsonMap.end());

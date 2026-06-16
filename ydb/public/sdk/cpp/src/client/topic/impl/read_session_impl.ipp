@@ -2609,7 +2609,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::GetDataEventImpl(TIntr
 }
 
 template <bool UseMigrationProtocol>
-TADataReceivedEvent<UseMigrationProtocol>
+std::optional<TADataReceivedEvent<UseMigrationProtocol>>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                                                                 size_t& maxByteSize,
                                                                 TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator) // Assumes that we're under lock.
@@ -2635,19 +2635,21 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<TP
         TParent::Events.pop();
     }
 
-    Y_ABORT_UNLESS(!messages.empty() || !compressedMessages.empty());
+    if (messages.empty() && compressedMessages.empty()) {
+        return std::nullopt;
+    }
 
-    return {std::move(messages), std::move(compressedMessages), stream};
+    return TADataReceivedEvent<UseMigrationProtocol>{std::move(messages), std::move(compressedMessages), stream};
 }
 
 template <bool UseMigrationProtocol>
-TReadSessionEventInfo<UseMigrationProtocol>
+std::optional<TReadSessionEventInfo<UseMigrationProtocol>>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
                                                             TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator) // Assumes that we're under lock.
 {
     Y_ASSERT(TParent::HasEventsImpl());
 
-    if (!TParent::Events.empty()) {
+    while (!TParent::Events.empty()) {
         TReadSessionEventInfo<UseMigrationProtocol>& front = TParent::Events.front();
         auto partitionStream = front.PartitionStream;
 
@@ -2658,7 +2660,15 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
         std::optional<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> event;
         auto frontCbContext = front.CbContext;
         if (partitionStream->TopEvent().IsDataEvent()) {
-            event = GetDataEventImpl(partitionStream, maxByteSize, accumulator);
+            auto dataEvent = GetDataEventImpl(partitionStream, maxByteSize, accumulator);
+            if (!dataEvent) {
+                TParent::RenewWaiterImpl();
+                if (maxByteSize == 0) {
+                    return std::nullopt;
+                }
+                continue;
+            }
+            event = std::move(*dataEvent);
         } else {
             event = std::move(partitionStream->TopEvent().GetEvent());
             partitionStream->PopEvent();
@@ -2677,12 +2687,14 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
 
         TParent::RenewWaiterImpl();
 
-        return {partitionStream, std::move(frontCbContext), std::move(*event)};
+        return TReadSessionEventInfo<UseMigrationProtocol>{partitionStream, std::move(frontCbContext), std::move(*event)};
     }
 
-    Y_ASSERT(TParent::CloseEvent);
+    if (!TParent::CloseEvent) {
+        return std::nullopt;
+    }
 
-    return {*TParent::CloseEvent};
+    return TReadSessionEventInfo<UseMigrationProtocol>{*TParent::CloseEvent};
 }
 
 template <bool UseMigrationProtocol>
@@ -2705,8 +2717,11 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvents(bool block, std::option
             }
 
             while (TParent::HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
-                TReadSessionEventInfo<UseMigrationProtocol> event = GetEventImpl(maxByteSize, accumulator);
-                eventInfos.emplace_back(std::move(event));
+                auto event = GetEventImpl(maxByteSize, accumulator);
+                if (!event) {
+                    continue;
+                }
+                eventInfos.emplace_back(std::move(*event));
                 if (eventInfos.back().IsSessionClosedEvent()) {
                     break;
                 }
@@ -3115,13 +3130,9 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
 
                 if (decompressedMsg.Meta) {
                     const auto& recordMeta = *decompressedMsg.Meta;
-                    const ui64 outerOffset = static_cast<ui64>(messageData.offset());
-                    const ui64 headerBaseOffset = codecResult.BatchBaseOffset
+                    const ui64 batchBaseOffset = codecResult.BatchBaseOffset
                         ? static_cast<ui64>(*codecResult.BatchBaseOffset)
-                        : outerOffset;
-                    const ui64 batchBaseOffset = outerOffset > committedOffset
-                        ? outerOffset
-                        : headerBaseOffset;
+                        : static_cast<ui64>(messageData.offset());
                     offset = batchBaseOffset + static_cast<ui64>(*recordMeta.OffsetDelta);
                     if (offset < committedOffset) {
                         ++result.MessagesTaken;
@@ -3291,7 +3302,8 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PutDecompressedData(size_t ba
 
 template<bool UseMigrationProtocol>
 typename TDataDecompressionInfo<UseMigrationProtocol>::TDecompressedData
-TDataDecompressionInfo<UseMigrationProtocol>::TakeData(size_t batch,
+TDataDecompressionInfo<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                                       size_t batch,
                                                        size_t message,
                                                        size_t& maxByteSize)
 {
@@ -3299,6 +3311,9 @@ TDataDecompressionInfo<UseMigrationProtocol>::TakeData(size_t batch,
     Y_ASSERT(message < DecompressedData[batch].size());
 
     TDecompressedData result = std::move(DecompressedData[batch][message]);
+    if (result.MessagesTaken == 0 && result.Messages.empty() && result.CompressedMessages.empty()) {
+        result = BuildDecompressedData(partitionStream, batch, message, TDecompressionResult{});
+    }
     maxByteSize -= Min(maxByteSize, result.DataSize);
     return result;
 }
@@ -3308,8 +3323,7 @@ typename TDataDecompressionInfo<UseMigrationProtocol>::TDecompressedData
 TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                                                         size_t& maxByteSize) const
 {
-    Y_UNUSED(partitionStream);
-    return Parent->TakeData(Batch, Message, maxByteSize);
+    return Parent->TakeData(partitionStream, Batch, Message, maxByteSize);
 }
 
 template<bool UseMigrationProtocol>

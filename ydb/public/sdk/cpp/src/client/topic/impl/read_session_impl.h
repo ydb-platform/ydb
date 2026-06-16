@@ -326,7 +326,8 @@ public:
     void PutDecompressionError(std::exception_ptr error, size_t batch, size_t message);
     std::exception_ptr GetDecompressionError(size_t batch, size_t message);
 
-    TDecompressedData TakeData(size_t batch,
+    TDecompressedData TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                               size_t batch,
                                size_t message,
                                size_t& maxByteSize);
 
@@ -924,7 +925,7 @@ public:
     TReadSessionEventsQueue(const TAReadSessionSettings<UseMigrationProtocol>& settings);
 
     // Assumes we are under lock.
-    TReadSessionEventInfo<UseMigrationProtocol>
+    std::optional<TReadSessionEventInfo<UseMigrationProtocol>>
     GetEventImpl(size_t& maxByteSize,
                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
@@ -1143,7 +1144,7 @@ private:
         TCallbackContextPtr<UseMigrationProtocol> CbContext;
     };
 
-    TADataReceivedEvent<UseMigrationProtocol>
+    std::optional<TADataReceivedEvent<UseMigrationProtocol>>
         GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                          size_t& maxByteSize,
                          TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator); // Assumes that we're under lock.

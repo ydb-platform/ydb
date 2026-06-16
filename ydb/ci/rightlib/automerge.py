@@ -89,7 +89,7 @@ class PrAutomerger:
         try:
             pr.remove_from_labels(pr_label_error)
         except Exception:
-            self.logger.warning("failed to remove %s label", pr_label_error)
+            self.logger.warning("failed to remove %s label", pr_label_error, exc_info=True)
 
     def git_merge_pr(self, pr: PullRequest):
         shutil.rmtree("merge-repo", ignore_errors=True)

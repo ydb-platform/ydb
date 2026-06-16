@@ -31,10 +31,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)(
             "tablet_id", Self->TabletID())("tx_state", "TTxProgressTx::Execute")("tx_current", Self->ProgressTxInFlight);
-        if (!Self->ProgressTxInFlight) {
-            AbortedThroughRemoveExpired = true;
-            return true;
-        }
+        AFL_VERIFY(Self->ProgressTxScheduled);
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
         const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs();
@@ -45,6 +42,7 @@ public:
             return true;
         }
 
+        Self->ProgressTxScheduled = false;
         // Process a single transaction at the front of the queue
         const auto plannedItem = Self->ProgressTxController->GetFirstPlannedTx();
         if (!!plannedItem) {
@@ -84,7 +82,7 @@ public:
             Self->ProgressTxController->ProgressOnExecute(txId, txc);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
-        Self->ProgressTxInFlight = std::nullopt;
+        Self->ProgressTxInFlight = 0;
         if (!!Self->ProgressTxController->GetPlannedTx()) {
             Self->EnqueueProgressTx(ctx, std::nullopt);
         }
@@ -120,12 +118,12 @@ public:
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTx")("tablet_id", TabletID())("tx_id", continueTxId);
     if (continueTxId) {
-        AFL_VERIFY(!ProgressTxInFlight || ProgressTxInFlight == continueTxId)("current", ProgressTxInFlight)("expected", continueTxId);
+        AFL_VERIFY(ProgressTxInFlight == 0 || ProgressTxInFlight == *continueTxId)("current", ProgressTxInFlight)("expected", *continueTxId);
     }
-    if (!ProgressTxInFlight || ProgressTxInFlight == continueTxId) {
+    if (!ProgressTxScheduled) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTxStart")("tablet_id", TabletID())("tx_id", continueTxId)(
             "tx_current", ProgressTxInFlight);
-        ProgressTxInFlight = continueTxId.value_or(0);
+        ProgressTxScheduled = true;
         Execute(new TTxProgressTx(this), ctx);
     }
 }

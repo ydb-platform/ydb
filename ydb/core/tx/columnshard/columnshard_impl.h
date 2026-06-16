@@ -566,7 +566,8 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
-    std::optional<ui64> ProgressTxInFlight;
+    ui64 ProgressTxInFlight = 0;
+    bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;

@@ -75,7 +75,7 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
 
         YDB_LOG_TRACE("[MSR] Scale in window: bottom",
             {"logPrefix", GetLogPrefix()},
-            {"#_num_0", JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)},
+            {"scaleInWindow", JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)},
             {"threshold", usageBottomThreshold});
         bool needScaleIn = std::all_of(
             scaleInWindowBegin,
@@ -105,7 +105,7 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
 
         YDB_LOG_TRACE("[MSR] Scale out window",
             {"logPrefix", GetLogPrefix()},
-            {"#_num_0", JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)},
+            {"scaleOutWindow", JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)},
             {"target", TargetUsage});
         bool needScaleOut = std::all_of(
             scaleOutWindowBegin,

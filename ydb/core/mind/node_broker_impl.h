@@ -225,8 +225,8 @@ private:
                         const TActorContext &ctx)
     {
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::NODE_BROKER, "Reply with",
-            {"#_NKikimrNodeBroker::TStatus::ECode_Name(code).data", NKikimrNodeBroker::TStatus::ECode_Name(code).data()},
-            {"#_reason.data", reason.data()});
+            {"statusCode", NKikimrNodeBroker::TStatus::ECode_Name(code).data()},
+            {"reason", reason.data()});
 
         TAutoPtr<TResponseEvent> resp = new TResponseEvent;
         resp->Record.MutableStatus()->SetCode(code);

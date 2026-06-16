@@ -164,7 +164,7 @@ private:
         Expire = TInstant::MicroSeconds(rec.GetExpire());
         LastResponse = ctx.Now();
         YDB_LOG_DEBUG_CTX(ctx, "Node has now extended lease expiring",
-            {"#_ToString(Expire)", ToString(Expire)});
+            {"expire", ToString(Expire)});
 
         if (rec.HasEpoch()) {
             LastPingEpoch = rec.GetEpoch().GetId();

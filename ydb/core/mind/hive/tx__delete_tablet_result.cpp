@@ -28,7 +28,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxDeleteTabletResult::Execute(",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
-            {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)});
+            {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             if (msg->Status == NKikimrProto::OK) {
@@ -72,7 +72,7 @@ public:
                 YDB_LOG_WARN("THive::TTxDeleteTabletResult retrying for because of",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", TabletId},
-                    {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)});
+                    {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
                 if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("Failed condition tablet->IsDeleting() tablet",
                                                    {"logPrefix", GetLogPrefix()},
                                                    {"tabletId", tablet->Id}); }

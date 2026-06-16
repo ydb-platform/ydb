@@ -181,7 +181,7 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "Try to register in tenant slot broker (pipe",
             {"logPrefix", LogPrefix},
-            {"#_TenantSlotBroker.Pipe", TenantSlotBroker.Pipe});
+            {"tenantSlotBrokerPipe", TenantSlotBroker.Pipe});
     }
 
     void HandlePipeDestroyed(const TActorContext &ctx) {
@@ -234,7 +234,7 @@ public:
             if (slot->ActiveAction) {
                 YDB_LOG_DEBUG_CTX(ctx, "Slot configure for finished with status",
                     {"logPrefix", LogPrefix},
-                    {"#_slot->Id", slot->Id},
+                    {"slotId", slot->Id},
                     {"tenantName", tenant->Name},
                     {"status", status});
 
@@ -289,7 +289,7 @@ public:
             YDB_LOG_DEBUG_CTX(ctx, "Send request to add tenant with resources",
                 {"logPrefix", LogPrefix},
                 {"tenantName", tenant->Name},
-                {"#_tenant->ResourceLimit", tenant->ResourceLimit});
+                {"resourceLimit", tenant->ResourceLimit});
 
             auto event = MakeHolder<TEvLocal::TEvAddTenant>(tenant->Name,
                                                             tenant->ResourceLimit);
@@ -299,7 +299,7 @@ public:
                 YDB_LOG_DEBUG_CTX(ctx, "Send request to alter tenant with resources",
                     {"logPrefix", LogPrefix},
                     {"tenantName", tenant->Name},
-                    {"#_tenant->ResourceLimit", tenant->ResourceLimit});
+                    {"resourceLimit", tenant->ResourceLimit});
 
                 auto event = MakeHolder<TEvLocal::TEvAlterTenant>(tenant->Name,
                                                                   tenant->ResourceLimit);
@@ -329,7 +329,7 @@ public:
         YDB_LOG_NOTICE_CTX(ctx, "Attached tenant to slot with label",
             {"logPrefix", LogPrefix},
             {"tenantName", tenant->Name},
-            {"#_slot->Id", slot->Id},
+            {"slotId", slot->Id},
             {"label", label});
     }
 
@@ -340,9 +340,9 @@ public:
 
         YDB_LOG_NOTICE_CTX(ctx, "Detach tenant from slot with label",
             {"logPrefix", LogPrefix},
-            {"#_slot->AssignedTenant->Name", slot->AssignedTenant->Name},
-            {"#_slot->Id", slot->Id},
-            {"#_slot->Label", slot->Label});
+            {"assignedTenantName", slot->AssignedTenant->Name},
+            {"slotId", slot->Id},
+            {"slotLabel", slot->Label});
 
         slot->AssignedTenant->AssignedSlots.erase(slot);
         slot->AssignedTenant = nullptr;
@@ -461,7 +461,7 @@ public:
         if (Config->StaticSlotLabel != staticSlotLabel) {
             YDB_LOG_DEBUG_CTX(ctx, "Static slot label modified",
                 {"logPrefix", LogPrefix},
-                {"#_Config->StaticSlotLabel", Config->StaticSlotLabel},
+                {"staticSlotLabel", Config->StaticSlotLabel},
                 {"staticSlotLabel", staticSlotLabel});
             if (Config->StaticSlots.size())
                 modified = true;
@@ -615,14 +615,14 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "Configures slot for tenant",
             {"logPrefix", LogPrefix},
-            {"#_ev->Sender", ev->Sender},
-            {"#_rec.GetSlotId", rec.GetSlotId()},
-            {"#_rec.GetAssignedTenant", rec.GetAssignedTenant()});
+            {"sender", ev->Sender},
+            {"slotId", rec.GetSlotId()},
+            {"assignedTenant", rec.GetAssignedTenant()});
 
         if (ev->Sender != TenantSlotBroker.ActorId) {
             YDB_LOG_DEBUG_CTX(ctx, "Configure sender doesn't own pool",
                 {"logPrefix", LogPrefix},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
             SendConfigureError(ev, rec.GetSlotId(), NKikimrTenantPool::NOT_OWNER,
                                "pool is not owned by request sender", ctx);
             return;
@@ -631,7 +631,7 @@ public:
         if (!DynamicSlots.contains(rec.GetSlotId())) {
             YDB_LOG_DEBUG_CTX(ctx, "Got configure for unknown slot",
                 {"logPrefix", LogPrefix},
-                {"#_rec.GetSlotId", rec.GetSlotId()});
+                {"slotId", rec.GetSlotId()});
             SendConfigureError(ev, rec.GetSlotId(), NKikimrTenantPool::UNKNOWN_SLOT,
                                "unknown slot id", ctx);
             return;
@@ -670,14 +670,14 @@ public:
                 if (TenantSlotBroker.ActorId) {
                     YDB_LOG_DEBUG_CTX(ctx, "Lost ownership",
                         {"logPrefix", LogPrefix},
-                        {"#_TenantSlotBroker.ActorId", TenantSlotBroker.ActorId});
+                        {"tenantSlotBrokerActorId", TenantSlotBroker.ActorId});
                     ctx.Send(TenantSlotBroker.ActorId, new TEvTenantPool::TEvLostOwnership);
                 }
 
                 TenantSlotBroker.ActorId = ev->Sender;
                 YDB_LOG_DEBUG_CTX(ctx, "Took ownership",
                     {"logPrefix", LogPrefix},
-                    {"#_TenantSlotBroker.ActorId", TenantSlotBroker.ActorId});
+                    {"tenantSlotBrokerActorId", TenantSlotBroker.ActorId});
             }
 
             auto event = BuildStatusEvent();

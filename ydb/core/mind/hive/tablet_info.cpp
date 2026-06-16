@@ -120,7 +120,7 @@ void TTabletInfo::ChangeVolatileState(EVolatileState state) {
                 {"logPrefix", GetLogPrefix()},
                 {"toString", ToString()},
                 {"volatileState", EVolatileStateName(VolatileState)},
-                {"#_Node->Id", Node->Id});
+                {"nodeId", Node->Id});
         } else {
             YDB_LOG_DEBUG("Tablet(",
                 {"logPrefix", GetLogPrefix()},
@@ -133,14 +133,14 @@ void TTabletInfo::ChangeVolatileState(EVolatileState state) {
                 {"logPrefix", GetLogPrefix()},
                 {"toString", ToString()},
                 {"volatileState", EVolatileStateName(VolatileState)},
-                {"#_EVolatileStateName(state)", EVolatileStateName(state)},
-                {"#_Node->Id", Node->Id});
+                {"volatileStateName", EVolatileStateName(state)},
+                {"nodeId", Node->Id});
         } else {
             YDB_LOG_DEBUG("Tablet( ->",
                 {"logPrefix", GetLogPrefix()},
                 {"toString", ToString()},
                 {"volatileState", EVolatileStateName(VolatileState)},
-                {"#_EVolatileStateName(state)", EVolatileStateName(state)});
+                {"volatileStateName", EVolatileStateName(state)});
         }
     }
     if (Node != nullptr) {
@@ -370,7 +370,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
                 YDB_LOG_WARN("Ignoring too high CPU metric for tablet",
                     {"logPrefix", GetLogPrefix()},
-                    {"#_metrics.GetCPU", metrics.GetCPU()},
+                    {"cpu", metrics.GetCPU()},
                     {"toString", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumCPU.SetValue(metrics.GetCPU(), now);
@@ -385,7 +385,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             if (metrics.GetMemory() > static_cast<ui64>(std::get<NMetrics::EResource::Memory>(maximum))) {
                 YDB_LOG_WARN("Ignoring too high Memory metric for tablet",
                     {"logPrefix", GetLogPrefix()},
-                    {"#_metrics.GetMemory", metrics.GetMemory()},
+                    {"memory", metrics.GetMemory()},
                     {"toString", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumMemory.SetValue(metrics.GetMemory(), now);
@@ -400,7 +400,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             if (metrics.GetNetwork() > static_cast<ui64>(std::get<NMetrics::EResource::Network>(maximum))) {
                 YDB_LOG_WARN("Ignoring too high Network metric for tablet",
                     {"logPrefix", GetLogPrefix()},
-                    {"#_metrics.GetNetwork", metrics.GetNetwork()},
+                    {"network", metrics.GetNetwork()},
                     {"toString", ToString()});
             } else {
                 ResourceMetricsAggregates.MaximumNetwork.SetValue(metrics.GetNetwork(), now);
@@ -546,7 +546,7 @@ void TTabletInfo::SendStopTablet(const TActorId& local, TSideEffects& sideEffect
             {"logPrefix", GetLogPrefix()},
             {"toString", ToString()},
             {"gen", gen},
-            {"#_local.NodeId", local.NodeId()});
+            {"localNodeId", local.NodeId()});
         sideEffects.Send(local, new TEvLocal::TEvStopTablet(tabletId, gen));
     }
 }

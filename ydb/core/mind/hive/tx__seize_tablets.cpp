@@ -164,7 +164,7 @@ public:
     void Complete(const TActorContext& txc) override {
         YDB_LOG_DEBUG("THive::TTxSeizeTablets::Complete",
             {"logPrefix", GetLogPrefix()},
-            {"#_Request->Get()->Record", Request->Get()->Record});
+            {"requestRecord", Request->Get()->Record});
         txc.Send(Request->Sender, Response.Release());
     }
 };

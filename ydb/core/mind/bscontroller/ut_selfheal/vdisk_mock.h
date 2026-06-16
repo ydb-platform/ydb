@@ -70,7 +70,7 @@ public:
             YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "->",
                 {"nodeId", NodeId},
                 {"VDiskId", VDiskId},
-                {"#_newVDiskId", newVDiskId});
+                {"vdiskId", newVDiskId});
             VDiskId = newVDiskId;
         }
     }
@@ -94,7 +94,7 @@ public:
             YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::BS_NODE, "Status changed",
                 {"nodeId", NodeId},
                 {"VDiskId", VDiskId},
-                {"#_EVDiskStatus_Name(Status).data", EVDiskStatus_Name(Status).data()});
+                {"vdiskStatus", EVDiskStatus_Name(Status).data()});
             NextStatusChange = duration != TDuration::Max() ? now + duration : TInstant::Max();
         }
         return NextStatusChange;

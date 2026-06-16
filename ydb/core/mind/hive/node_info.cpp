@@ -29,7 +29,7 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         {"id", Id},
         {"resourceValues", ResourceValues},
         {"volatileState", EVolatileStateName(VolatileState)},
-        {"#_EVolatileStateName(state)", EVolatileStateName(state)});
+        {"volatileStateName", EVolatileStateName(state)});
 
     if (VolatileState != state) {
         if (VolatileState == EVolatileState::Connected) {
@@ -85,7 +85,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
                     {"logPrefix", GetLogPrefix()},
                     {"id", Id},
                     {"tablet", tablet->ToString()},
-                    {"#_TTabletInfo::EVolatileStateName(oldState)", TTabletInfo::EVolatileStateName(oldState)});
+                    {"oldVolatileState", TTabletInfo::EVolatileStateName(oldState)});
             }
         }
     }
@@ -109,7 +109,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
                 {"logPrefix", GetLogPrefix()},
                 {"id", Id},
                 {"tablet", tablet->ToString()},
-                {"#_TTabletInfo::EVolatileStateName(newState)", TTabletInfo::EVolatileStateName(newState)});
+                {"newVolatileState", TTabletInfo::EVolatileStateName(newState)});
         }
     }
     if (IsAliveState(newState)) {
@@ -541,7 +541,7 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
                 if (tablet) {
                     YDB_LOG_DEBUG("Estimate impact of tablet on usage of node as",
                         {"logPrefix", GetLogPrefix()},
-                        {"#_LastScheduledTablet->TabletId", LastScheduledTablet->TabletId},
+                        {"lastScheduledTabletId", LastScheduledTablet->TabletId},
                         {"id", Id},
                         {"usageImpact", usageImpact});
                     tablet->UsageImpact = usageImpact;

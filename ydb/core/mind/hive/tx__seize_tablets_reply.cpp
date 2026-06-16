@@ -171,7 +171,7 @@ public:
         } else {
             YDB_LOG_DEBUG("Migration complete tablets migrated)",
                 {"logPrefix", GetLogPrefix()},
-                {"#_Self->MigrationProgress", Self->MigrationProgress});
+                {"migrationProgress", Self->MigrationProgress});
             Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_COMPLETE;
         }
     }

@@ -27,7 +27,7 @@ public:
         Self->Keeper.GetOwnedSequences(ownerId, sequences);
         YDB_LOG_DEBUG("THive::TTxRequestTabletOwners - replying with sequences",
             {"logPrefix", GetLogPrefix()},
-            {"#_sequences.size", sequences.size()});
+            {"sequencesCount", sequences.size()});
         for (const auto& seq : sequences) {
             auto* tabletOwners = Response->Record.AddTabletOwners();
             tabletOwners->SetOwnerID(ownerId);

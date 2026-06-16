@@ -1375,9 +1375,9 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     for (auto &dc : preferredDCs) {
         auto layout = ComputeLayoutForGroup(group, dc);
         YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
-            {"#_group->Id", group->Id},
+            {"groupId", group->Id},
             {"dc", dc},
-            {"#_layout->ToString", layout->ToString()});
+            {"layoutString", layout->ToString()});
         if (!layout->MissingCount && !layout->MisplacedCount && !layout->SplitCount) {
             group->SetPreferredDataCenter(dc);
             ApplyLayout(tenant, layout, txc, ctx);
@@ -1391,9 +1391,9 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
         auto layout = ComputeLayoutForGroup(group, currentDC);
         layouts[currentDC] = layout;
         YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
-            {"#_group->Id", group->Id},
+            {"groupId", group->Id},
             {"currentDC", currentDC},
-            {"#_layout->ToString", layout->ToString()});
+            {"layoutString", layout->ToString()});
         if (!layout->MissingCount && !layout->MisplacedCount && !layout->SplitCount) {
             group->SetPreferredDataCenter(currentDC);
             ApplyLayout(tenant, layout, txc, ctx);
@@ -1406,16 +1406,16 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
         if (!layouts.contains(pr.first)) {
             layouts[pr.first] = ComputeLayoutForGroup(group, pr.first);
             YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
-                {"#_group->Id", group->Id},
-                {"#_pr.first", pr.first},
-                {"#_layouts[pr.first]->ToString", layouts[pr.first]->ToString()});
+                {"groupId", group->Id},
+                {"key", pr.first},
+                {"layoutString", layouts[pr.first]->ToString()});
         }
     }
 
     // We expect at least one layout to be computed.
     if (layouts.empty())
         YDB_LOG_ERROR_CTX(ctx, "AssignFreeSlotsForGroup: no computed layouts for group",
-            {"#_group->Id", group->Id});
+            {"groupId", group->Id});
 
     // Now choose the best layout and apply it if it is better than the
     // current one.
@@ -1433,7 +1433,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
                                             layout->SplitCount, layout->DetachCount);
 
         YDB_LOG_DEBUG_CTX(ctx, "Layout in has penalty",
-            {"#_it->first", it->first},
+            {"key", it->first},
             {"penalty", penalty});
 
         if (bestPenalty > penalty) {
@@ -1444,7 +1444,7 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
 
     if (best != layouts.end()) {
         YDB_LOG_DEBUG_CTX(ctx, "Layout in was chosen",
-            {"#_best->first", best->first});
+            {"bestKey", best->first});
         if (best->first != currentDC)
             group->SetPreferredDataCenter(best->first);
         ApplyLayout(tenant, best->second, txc, ctx);
@@ -1486,7 +1486,7 @@ void TTenantSlotBroker::DisconnectNodeSlots(ui32 nodeId,
     for (auto &slot : it->second) {
         if (slot->IsConnected) {
             YDB_LOG_DEBUG_CTX(ctx, "Mark slot as disconnected",
-                {"#_slot->IdString", slot->IdString()});
+                {"slotIdString", slot->IdString()});
 
             if (slot->IsFree()) {
                 FreeSlots.Remove(slot);
@@ -1519,7 +1519,7 @@ void TTenantSlotBroker::SendConfigureSlot(TSlot::TPtr slot,
     slot->LastRequestId = RequestId++;
 
     YDB_LOG_DEBUG_CTX(ctx, "Send configuration request",
-        {"#_slot->LastRequestId", slot->LastRequestId},
+        {"lastRequestId", slot->LastRequestId},
         {"slotId", slot->IdString(true)});
 
     auto serviceId = MakeTenantPoolID(slot->Id.NodeId);
@@ -1640,7 +1640,7 @@ void TTenantSlotBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
         YDB_LOG_ERROR_CTX(ctx, "Cannot subscribe for config",
             {"updates", rec.GetStatus().GetCode()},
-            {"#_rec.GetStatus().GetReason", rec.GetStatus().GetReason()});
+            {"statusReason", rec.GetStatus().GetReason()});
         return;
     }
 
@@ -1738,7 +1738,7 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetSlotStats::TPtr &ev,
     Counters->FillSlotStats(resp->Record);
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"#_TEvTenantSlotBroker::TEvSlotStats", resp->ToString()});
+        {"slotStats", resp->ToString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -1750,7 +1750,7 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetTenantState::TPtr &ev,
     FillTenantState(ev->Get()->Record.GetTenantName(), resp->Record);
 
     YDB_LOG_TRACE_CTX(ctx, "Send",
-        {"#_TEvTenantSlotBroker::TEvTenantState", resp->ToString()});
+        {"tenantState", resp->ToString()});
 
     ctx.Send(ev->Sender, resp.Release());
 }

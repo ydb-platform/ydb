@@ -49,8 +49,8 @@ public:
     void ProcessMigrationBatch(TTransactionContext &txc, const TActorContext &ctx)
     {
         YDB_LOG_DEBUG_CTX(ctx, "TTxMigrateState ProcessMigrationBatch UpdateNodes left NewVersionUpdateNodes left",
-            {"#_DbChanges.UpdateNodes.size", DbChanges.UpdateNodes.size()},
-            {"#_DbChanges.NewVersionUpdateNodes.size", DbChanges.NewVersionUpdateNodes.size()});
+            {"updateNodesCount", DbChanges.UpdateNodes.size()},
+            {"newVersionUpdateNodesCount", DbChanges.NewVersionUpdateNodes.size()});
 
         size_t nodesBatchSize = 0;
         while (nodesBatchSize < MAX_NODES_BATCH_SIZE && !DbChanges.UpdateNodes.empty()) {

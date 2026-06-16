@@ -87,7 +87,7 @@ struct TObjectDistribution {
         if (diff + value < 0) {
             YDB_LOG_ERROR_COMP(NKikimrServices::HIVE, "UpdateObjectCount: new value is negative",
                 {"logPrefix", GetLogPrefix()},
-                {"#_diff + value", diff + value});
+                {"newValue", diff + value});
         }
         Y_DEBUG_ABORT_UNLESS(diff + value >= 0);
         value += diff;

@@ -84,7 +84,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete",
             {"logPrefix", GetLogPrefix()},
-            {"#_Request->Get()->Record", Request->Get()->Record},
+            {"requestRecord", Request->Get()->Record},
             {"sideEffects", SideEffects});
         SideEffects.Complete(ctx);
         for (const auto& unlockedFromActor : UnlockedFromActor) {

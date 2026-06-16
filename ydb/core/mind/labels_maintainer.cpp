@@ -154,14 +154,14 @@ private:
         auto root = AppData(ctx)->Counters;
         for (auto &service : DatabaseSensorServices) {
             YDB_LOG_DEBUG_CTX(ctx, "Reset counters",
-                {"#_service.data", service.data()});
+                {"service", service.data()});
 
             auto serviceGroup = GetServiceCounters(root, service);
             serviceGroup->ResetCounters(true);
         }
         for (auto &service : DatabaseAttributeSensorServices) {
             YDB_LOG_DEBUG_CTX(ctx, "Reset counters",
-                {"#_service.data", service.data()});
+                {"service", service.data()});
 
             auto serviceGroup = GetServiceCounters(root, service);
             serviceGroup->ResetCounters(true);

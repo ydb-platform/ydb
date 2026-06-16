@@ -420,7 +420,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TTabletId tabletId(info->TabletID, record.GetFollowerId());
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet",
             {"tabletId", tabletId},
-            {"#_num_0", (record.HasBootMode() && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER ? ".Follower" : ".Leader")},
+            {"bootModeSuffix", (record.HasBootMode() && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER ? ".Follower" : ".Leader")},
             {"storage", info->ToString()});
         Y_ABORT_UNLESS(!info->Channels.empty() && !info->Channels[0].History.empty());
         auto tabletType = info->TabletType;
@@ -770,7 +770,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         const auto tabletId = msg->TabletID;
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: Handle TEvTablet::TEvReady tablet generation",
             {"tabletId", tabletId},
-            {"#_msg->Generation", msg->Generation});
+            {"generation", msg->Generation});
         auto inbootIt = std::find_if(InbootTablets.begin(), InbootTablets.end(), [&](const auto& pr) -> bool {
             return pr.second.Tablet == ev->Sender;
         });
@@ -780,8 +780,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (msg->Generation < entry.Generation) {
             YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar: Handle TEvTablet::TEvReady tablet ready with generation but we are waiting for generation - ignored",
                 {"tabletId", tabletId},
-                {"#_msg->Generation", msg->Generation},
-                {"#_entry.Generation", entry.Generation});
+                {"generation", msg->Generation},
+                {"entryGeneration", entry.Generation});
             return;
         }
         MarkRunningTablet(inbootIt->first, msg->Generation, ctx);
@@ -1121,7 +1121,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         YDB_LOG_DEBUG_CTX(ctx, "Send resolve request for to schemeshard",
             {"logPrefix", LogPrefix},
-            {"#_info.TenantName", info.TenantName},
+            {"tenantName", info.TenantName},
             {"schemeRoot", SchemeRoot});
 
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(info.TenantName);
@@ -1205,7 +1205,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             YDB_LOG_DEBUG_CTX(ctx, "Binding to hive at domain (allocated",
                 {"logPrefix", LogPrefix},
                 {"id", id},
-                {"#_info.DomainName", info.DomainName},
+                {"domainName", info.DomainName},
                 {"resources", info.ResourceLimit});
         }
     }
@@ -1228,7 +1228,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         for (TTabletId hId : hiveIds) {
             YDB_LOG_DEBUG_CTX(ctx, "Binding tenant to hive (allocated",
                 {"logPrefix", LogPrefix},
-                {"#_task.Info.TenantName", task.Info.TenantName},
+                {"taskTenantName", task.Info.TenantName},
                 {"hId", hId},
                 {"resources", task.Info.ResourceLimit});
             RegisterLocalNode(task.Info.TenantName, task.Info.ResourceLimit, hId, {domainKey}, ctx);
@@ -1244,13 +1244,13 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             for (auto aid : pr.second.Locals) {
                 YDB_LOG_DEBUG_CTX(ctx, "Send poison pill to local of",
                     {"logPrefix", LogPrefix},
-                    {"#_pr.second.Info.TenantName", pr.second.Info.TenantName});
+                    {"tenantName", pr.second.Info.TenantName});
                 ctx.Send(aid, new TEvents::TEvPoisonPill);
             }
             if (pr.second.Subscriber) {
                 YDB_LOG_DEBUG_CTX(ctx, "Send poison pill to scheme subscriber of",
                     {"logPrefix", LogPrefix},
-                    {"#_pr.second.Info.TenantName", pr.second.Info.TenantName});
+                    {"tenantName", pr.second.Info.TenantName});
                 ctx.Send(pr.second.Subscriber, new TEvents::TEvPoisonPill);
                 pr.second.Subscriber = TActorId();
             }
@@ -1269,7 +1269,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::TEvClientConnected for shard",
             {"logPrefix", LogPrefix},
             {"domain", Domain},
-            {"#_msg->TabletId", msg->TabletId});
+            {"tabletId", msg->TabletId});
 
         if (msg->Status != NKikimrProto::EReplyStatus::OK) {
             OpenPipe(ctx);
@@ -1286,7 +1286,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
 
         YDB_LOG_DEBUG_CTX(ctx, "TEvTabletPipe::TEvClientDestroyed from tablet",
             {"logPrefix", LogPrefix},
-            {"#_msg->TabletId", msg->TabletId});
+            {"tabletId", msg->TabletId});
 
         OpenPipe(ctx);
     }
@@ -1298,12 +1298,12 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         YDB_LOG_DEBUG_CTX(ctx, "HandleResolve from schemeshard",
             {"logPrefix", LogPrefix},
             {"schemeRoot", SchemeRoot},
-            {"#_rec", rec});
+            {"rec", rec});
 
         if (!ResolveTasks.contains(rec.GetPath())) {
             YDB_LOG_DEBUG_CTX(ctx, "Missing task",
                 {"logPrefix", LogPrefix},
-                {"#_rec.GetPath", rec.GetPath()});
+                {"path", rec.GetPath()});
             return;
         }
 
@@ -1313,9 +1313,9 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         if (rec.GetStatus() != EDescStatus::StatusSuccess) {
             YDB_LOG_ERROR_CTX(ctx, "Receive TEvDescribeSchemeResult with bad status reason is < > while resolving subdomain",
                 {"logPrefix", LogPrefix},
-                {"#_NKikimrScheme::EStatus_Name(rec.GetStatus())", NKikimrScheme::EStatus_Name(rec.GetStatus())},
-                {"#_rec.GetReason", rec.GetReason()},
-                {"#_task.Info.DomainName", task.Info.DomainName});
+                {"schemeStatus", NKikimrScheme::EStatus_Name(rec.GetStatus())},
+                {"reason", rec.GetReason()},
+                {"taskDomainName", task.Info.DomainName});
 
             SendStatus(rec.GetPath(), TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
                        rec.GetReason(), task.Senders, ctx);
@@ -1329,8 +1329,8 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             && rec.GetPathDescription().GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeExtSubDomain) {
             YDB_LOG_CRIT_CTX(ctx, "Resolve subdomain fail, requested path has invalid path type",
                 {"logPrefix", LogPrefix},
-                {"#_task.Info.DomainName", task.Info.DomainName},
-                {"#_NKikimrSchemeOp::EPathType_Name(rec.GetPathDescription().GetSelf().GetPathType())", NKikimrSchemeOp::EPathType_Name(rec.GetPathDescription().GetSelf().GetPathType())});
+                {"taskDomainName", task.Info.DomainName},
+                {"pathType", NKikimrSchemeOp::EPathType_Name(rec.GetPathDescription().GetSelf().GetPathType())});
 
             SendStatus(rec.GetPath(), TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
                        rec.GetPath() + " is not a tenant path", task.Senders, ctx);
@@ -1368,7 +1368,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         } else {
             YDB_LOG_WARN_CTX(ctx, "Local tenant info not found, requested path",
                 {"logPrefix", LogPrefix},
-                {"#_task.Info.DomainName", task.Info.DomainName});
+                {"taskDomainName", task.Info.DomainName});
         }
     }
 
@@ -1387,7 +1387,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
 
                     YDB_LOG_DEBUG_CTX(ctx, "Binding tenant to hive (allocated",
                         {"logPrefix", LogPrefix},
-                        {"#_tenant.Info.TenantName", tenant.Info.TenantName},
+                        {"tenantName", tenant.Info.TenantName},
                         {"hiveId", hiveId},
                         {"resources", tenant.Info.ResourceLimit});
                     RegisterLocalNode(tenant.Info.TenantName, tenant.Info.ResourceLimit, hiveId, servicedDomains, ctx);
@@ -1476,7 +1476,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
 
         YDB_LOG_DEBUG_CTX(ctx, "Alter tenant",
             {"logPrefix", LogPrefix},
-            {"#_info.TenantName", info.TenantName});
+            {"tenantName", info.TenantName});
 
         auto it = RunningTenants.find(info.TenantName);
         if (it != RunningTenants.end()) {

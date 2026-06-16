@@ -55,7 +55,7 @@ public:
                     followers.push_back(std::prev(tablet->AsLeader().Followers.end()));
                     YDB_LOG_DEBUG("THive::TTxProcessUpdateFollowers::Execute(): created follower",
                         {"logPrefix", GetLogPrefix()},
-                        {"#_follower.GetFullTabletId", follower.GetFullTabletId()});
+                        {"followerTabletId", follower.GetFullTabletId()});
                     break;
                 }
                 case TFollowerUpdates::EAction::Update:

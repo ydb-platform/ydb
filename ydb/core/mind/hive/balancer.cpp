@@ -261,8 +261,8 @@ protected:
             YDB_LOG_TRACE("Balancer on node / tablets are suitable for balancing",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", node->Id},
-                {"#_tablets.size", tablets.size()},
-                {"#_nodeTablets.size", nodeTablets.size()});
+                {"tabletsCount", tablets.size()},
+                {"nodeTabletsCount", nodeTablets.size()});
             if (!tablets.empty()) {
                 // avoid moving system tablets if possible
                 std::vector<TTabletInfo*>::iterator partitionIt;
@@ -343,7 +343,7 @@ protected:
                     YDB_LOG_DEBUG("Balancer moving tablet from node to node",
                         {"logPrefix", GetLogPrefix()},
                         {"tablet", tablet->ToString()},
-                        {"#_tablet->Node->Id", tablet->Node->Id},
+                        {"nodeId", tablet->Node->Id},
                         {"nodeId", node->Id});
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
@@ -362,8 +362,8 @@ protected:
         YDB_LOG_DEBUG("Balancer received for tablet",
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},
-            {"#_ev->Get()->Status", ev->Get()->Status},
-            {"#_ev->Get()->TabletId", ev->Get()->TabletId});
+            {"status", ev->Get()->Status},
+            {"tabletId", ev->Get()->TabletId});
         --KickInFlight;
         BalanceNodes();
         KickNextTablet();

@@ -94,7 +94,7 @@ protected:
             tablet->ActorsToNotifyOnRestart.emplace_back(SelfId());
             YDB_LOG_DEBUG("StorageBalancer initiating reassign for tablet",
                 {"logPrefix", GetLogPrefix()},
-                {"#_NextReassign->first", NextReassign->first});
+                {"nextReassignKey", NextReassign->first});
             Send(Hive->SelfId(), NextReassign->second.release());
             ++ReassignInFlight;
         }
@@ -107,7 +107,7 @@ protected:
         auto tabletId = ev->Get()->TabletId;
         YDB_LOG_DEBUG("StorageBalancer received for tablet",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->Status", ev->Get()->Status},
+            {"status", ev->Get()->Status},
             {"tabletId", tabletId});
         if (SkippedTablets.contains(tabletId)) {
             return;
@@ -169,8 +169,8 @@ public:
         }
         YDB_LOG_DEBUG("StorageBalancer for pool tablet channels suitable for balancing",
             {"logPrefix", GetLogPrefix()},
-            {"#_Settings.StoragePool", Settings.StoragePool},
-            {"#_channels.size", channels.size()});
+            {"storagePool", Settings.StoragePool},
+            {"channelsCount", channels.size()});
         auto metricToBalance = Hive->GetStorageBalanceStrategy();
         switch (Hive->GetChannelBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM:

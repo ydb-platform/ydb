@@ -21,27 +21,27 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateSlotStatus for node",
             {"nodeId", nodeId},
-            {"#_rec", rec});
+            {"rec", rec});
 
         auto slot = Self->GetSlot(nodeId, rec.GetSlotStatus().GetId());
         if (!slot) {
             YDB_LOG_WARN_CTX(ctx, "Update for unknown slot < >",
                 {"nodeId", nodeId},
-                {"#_rec.GetSlotStatus().GetId", rec.GetSlotStatus().GetId()});
+                {"slotStatusId", rec.GetSlotStatus().GetId()});
             return true;
         }
 
         if (!slot->IsConnected) {
             YDB_LOG_WARN_CTX(ctx, "Update for disconnected slot",
-                {"#_slot->IdString", slot->IdString()});
+                {"slotIdString", slot->IdString()});
             return true;
         }
 
         if (Event->Cookie != slot->LastRequestId) {
             YDB_LOG_DEBUG_CTX(ctx, "Late response",
                 {"slotId", slot->IdString(true)},
-                {"#_Event->Cookie", Event->Cookie},
-                {"#_slot->LastRequestId", slot->LastRequestId});
+                {"cookie", Event->Cookie},
+                {"lastRequestId", slot->LastRequestId});
             return true;
         }
         slot->LastRequestId = 0;
@@ -49,7 +49,7 @@ public:
         if (rec.GetStatus() == NKikimrTenantPool::ERROR) {
             YDB_LOG_ERROR_CTX(ctx, "Configure error",
                 {"slotId", slot->IdString(true)},
-                {"#_rec.GetError", rec.GetError()});
+                {"error", rec.GetError()});
 
             Modified = slot->AssignedTenant != nullptr;
             Self->RemoveSlot(slot, txc, ctx);
@@ -94,8 +94,8 @@ public:
         if (rec.GetStatus() != NKikimrTenantPool::SUCCESS) {
             YDB_LOG_ERROR_CTX(ctx, "Unknown status",
                 {"slotId", slot->IdString(true)},
-                {"#_NKikimrTenantPool::EStatus_Name(rec.GetStatus())", NKikimrTenantPool::EStatus_Name(rec.GetStatus())},
-                {"#_rec.GetError", rec.GetError()});
+                {"slotStatus", NKikimrTenantPool::EStatus_Name(rec.GetStatus())},
+                {"error", rec.GetError()});
 
             Modified = slot->AssignedTenant != nullptr;
             Self->RemoveSlot(slot, txc, ctx);
@@ -122,13 +122,13 @@ public:
                 Self->SendConfigureSlot(slot, ctx);
             } else if (slot->IsFree()) {
                 YDB_LOG_DEBUG_CTX(ctx, "Confirmed free slot",
-                    {"#_slot->IdString", slot->IdString()});
+                    {"slotIdString", slot->IdString()});
 
                 Self->FreeSlots.Add(slot);
                 Modified = true;
             } else {
                 YDB_LOG_DEBUG_CTX(ctx, "Confirmed detached slot",
-                    {"#_slot->IdString", slot->IdString()});
+                    {"slotIdString", slot->IdString()});
             }
         }
 

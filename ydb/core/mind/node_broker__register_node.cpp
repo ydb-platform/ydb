@@ -84,7 +84,7 @@ public:
         YDB_LOG_INFO_CTX(ctx, "Registration request",
             {"host", host},
             {"port", port},
-            {"#_num_0", (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)")},
+            {"fixedNodeIdNote", (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)")},
             {"tenant", (rec.HasPath() ? rec.GetPath() : "<unspecified>")});
 
         TNodeLocation loc(rec.GetLocation());

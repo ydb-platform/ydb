@@ -25,7 +25,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxBlockStorageResult::Execute(",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
-            {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)});
+            {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             NIceDb::TNiceDb db(txc.DB);
@@ -38,7 +38,7 @@ public:
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                         YDB_LOG_WARN("THive::TTxBlockStorageResult Complete status was for TabletId",
                             {"logPrefix", GetLogPrefix()},
-                            {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)},
+                            {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)},
                             {"tabletId", tablet->Id});
                     }
                     for (TFollowerTabletInfo& follower : tablet->Followers) {
@@ -59,8 +59,8 @@ public:
                 YDB_LOG_WARN("THive::TTxBlockStorageResult retrying for because of",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", TabletId},
-                    {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)},
-                    {"#_msg->ErrorReason", msg->ErrorReason});
+                    {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)},
+                    {"errorReason", msg->ErrorReason});
                 if (tablet->IsDeleting()) {
                     --Self->DeleteTabletInProgress;
                     Self->UpdateCounterTabletsDeleting();
@@ -76,7 +76,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxBlockStorageResult::Complete(",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
-            {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)});
+            {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
         SideEffects.Complete(ctx);
     }
 };

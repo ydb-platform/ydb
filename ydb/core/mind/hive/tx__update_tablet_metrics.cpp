@@ -57,8 +57,8 @@ public:
             YDB_LOG_TRACE("THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node value accumulated",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", nodeId},
-                {"#_ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())", ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())},
-                {"#_node->ResourceTotalValues", node->ResourceTotalValues});
+                {"resourceUsage", ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())},
+                {"resourceTotalValues", node->ResourceTotalValues});
             if (Self->NotEnoughResources && !node->IsOverloaded() && node->IsAllowedToRunTablet() && node->IsAbleToScheduleTablet()) {
                 Self->NotEnoughResources = false;
                 Self->ProcessWaitQueue();

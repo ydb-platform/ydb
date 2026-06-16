@@ -122,7 +122,7 @@ void THive::ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLos
     YDB_LOG_NOTICE("ScheduleUnlockTabletExecution(",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", node.Id},
-        {"#_NKikimrHive::ELockLostReason_Name(reason)", NKikimrHive::ELockLostReason_Name(reason)});
+        {"lockLostReason", NKikimrHive::ELockLostReason_Name(reason)});
     for (TLeaderTabletInfo* tablet : node.LockedTablets) {
         Y_ABORT_UNLESS(FindTabletEvenInDeleting(tablet->Id) == tablet);
         Y_ABORT_UNLESS(tablet->LockedToActor.NodeId() == node.Id);

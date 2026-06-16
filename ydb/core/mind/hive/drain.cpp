@@ -93,7 +93,7 @@ protected:
                         {"logPrefix", GetLogPrefix()},
                         {"selfId", SelfId()},
                         {"tablet", tablet->ToString()},
-                        {"#_tablet->Node->Id", tablet->Node->Id},
+                        {"nodeId", tablet->Node->Id},
                         {"nodeId", node->Id});
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_EXECUTED].Increment(1);
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
@@ -105,7 +105,7 @@ protected:
                             {"logPrefix", GetLogPrefix()},
                             {"selfId", SelfId()},
                             {"tablet", tablet->ToString()},
-                            {"#_tablet->Node->Id", tablet->Node->Id});
+                            {"nodeId", tablet->Node->Id});
                     } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)){
                         YDB_LOG_DEBUG("Drain could not move tablet and will try again later",
                             {"logPrefix", GetLogPrefix()},
@@ -136,8 +136,8 @@ protected:
         YDB_LOG_DEBUG("Drain received for tablet",
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},
-            {"#_ev->Get()->Status", ev->Get()->Status},
-            {"#_ev->Get()->TabletId", ev->Get()->TabletId});
+            {"status", ev->Get()->Status},
+            {"tabletId", ev->Get()->TabletId});
         --KickInFlight;
         KickNextTablet();
     }
@@ -151,7 +151,7 @@ protected:
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},
             {"target", Target},
-            {"#_Tablets.size", Tablets.size()});
+            {"tabletsCount", Tablets.size()});
         DomainDrainCompleted(ev->Get()->Record.GetMovements());
     }
 
@@ -258,7 +258,7 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"selfId", SelfId()},
             {"target", Target},
-            {"#_Tablets.size", Tablets.size()});
+            {"tabletsCount", Tablets.size()});
         KickNextTablet();
     }
 

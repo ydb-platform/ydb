@@ -666,7 +666,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("TBlobStorageController::TTxMonEvent_SetDown",
             {"marker", "BSCTXMO01"},
-            {"#_GroupId.GetRawId", GroupId.GetRawId()},
+            {"groupId", GroupId.GetRawId()},
             {"down", Down},
             {"persist", Persist},
             {"response", Response});
@@ -721,7 +721,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("TBlobStorageController::TTxMonEvent_GetDown",
             {"marker", "BSCTXMO02"},
-            {"#_GroupId.GetRawId", GroupId.GetRawId()},
+            {"groupId", GroupId.GetRawId()},
             {"response", Response});
         TActivationContext::Send(new IEventHandle(Source, Self->SelfId(), new NMon::TEvRemoteJsonInfoRes(Response)));
     }

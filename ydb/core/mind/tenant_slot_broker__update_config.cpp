@@ -19,7 +19,7 @@ public:
         auto &rec = Event->Get()->Record;
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Execute",
-            {"#_rec", rec});
+            {"rec", rec});
 
         NIceDb::TNiceDb db(txc.DB);
 

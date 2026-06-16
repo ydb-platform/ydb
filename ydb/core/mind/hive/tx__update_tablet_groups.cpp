@@ -67,7 +67,7 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"this" (ui64)this},
             {"tabletId", tablet->Id},
-            {"#_tablet->ChannelProfileReassignReason", tablet->ChannelProfileReassignReason},
+            {"reassignReason", tablet->ChannelProfileReassignReason},
             {"groups", Groups});
 
         Y_ABORT_UNLESS(tablet->TabletStorageInfo);
@@ -145,7 +145,7 @@ public:
                         {"this" (ui64)this},
                         {"tabletId", tablet->Id},
                         {"channelId", channelId},
-                        {"#_tablet->GetChannelStoragePoolName(channelId)", tablet->GetChannelStoragePoolName(channelId)});
+                        {"storagePoolName", tablet->GetChannelStoragePoolName(channelId)});
                     if (tabletBootState.empty()) {
                         tabletBootState << "Couldn't find a group for channel: ";
                         tabletBootState << channelId;
@@ -161,7 +161,7 @@ public:
                         {"this" (ui64)this},
                         {"tabletId", tablet->Id},
                         {"channelId", channelId},
-                        {"#_group->GetGroupID", group->GetGroupID()});
+                        {"groupId", group->GetGroupID()});
                 }
             }
 

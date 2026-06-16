@@ -102,7 +102,7 @@ public:
             for (auto* group : newGroupsToRemove) {
                 YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute marking group as inactive",
                     {"logPrefix", GetLogPrefix()},
-                    {"#_group->Id", group->Id});
+                    {"groupId", group->Id});
                 group->Status = EGroupState::Inactive;
                 db.Table<Schema::Group>().Key(group->Id).Update(
                     NIceDb::TUpdate<Schema::Group::StoragePool>(StoragePool),

@@ -197,7 +197,7 @@ public:
         const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
         YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute",
             {"logPrefix", GetLogPrefix()},
-            {"#_RequestData", RequestData});
+            {"requestData", RequestData});
         SideEffects.Reset(Self->SelfId());
         ErrorReason = NKikimrHive::ERROR_REASON_UNKNOWN;
         for (const auto& domain : AllowedDomains) {
@@ -363,7 +363,7 @@ public:
             TabletId = MakeTabletID(true, tabletIdIndex);
             YDB_LOG_DEBUG("Hive allocated TabletId from TabletIdIndex",
                 {"logPrefix", GetLogPrefix()},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"selfTabletId", Self->TabletID()},
                 {"tabletId", TabletId},
                 {"tabletIdIndex", tabletIdIndex});
             Y_ABORT_UNLESS(Self->Tablets.count(TabletId) == 0);
@@ -453,20 +453,20 @@ public:
         Self->GetDefaultResourceValuesForTabletType(tablet.Type).ToProto(&resourceValues);
         YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for type",
             {"logPrefix", GetLogPrefix()},
-            {"#_tablet.Type", tablet.Type},
-            {"#_resourceValues", resourceValues});
+            {"tabletType", tablet.Type},
+            {"resourceValues", resourceValues});
         if (IsValidObjectId(tablet.ObjectId)) {
             Self->GetDefaultResourceValuesForObject(tablet.ObjectId).ToProto(&resourceValues);
             YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for object",
                 {"logPrefix", GetLogPrefix()},
-                {"#_tablet.ObjectId", tablet.ObjectId},
-                {"#_resourceValues", resourceValues});
+                {"objectId", tablet.ObjectId},
+                {"resourceValues", resourceValues});
         }
         // TODO: provide Hive with resource profile used by the tablet instead of default one.
         Self->GetDefaultResourceValuesForProfile(tablet.Type, "default").ToProto(&resourceValues);
         YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for profile 'default'",
             {"logPrefix", GetLogPrefix()},
-            {"#_resourceValues", resourceValues});
+            {"resourceValues", resourceValues});
         if (resourceValues.ByteSize() == 0) {
             resourceValues.SetStorage(1ULL << 30); // 1 GB
             resourceValues.SetReadThroughput(10ULL << 20); // 10 MB/s

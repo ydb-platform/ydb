@@ -57,7 +57,7 @@ public:
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded",
                 {"config", Endl},
-                {"#_config.DebugString", config.DebugString()});
+                {"configDebugString", config.DebugString()});
         } else {
             Self->LoadConfigFromProto(NKikimrTenantSlotBroker::TConfig());
             YDB_LOG_DEBUG_CTX(ctx, "Using default config");
@@ -78,7 +78,7 @@ public:
             tenant->AddSlotsAllocation(descr, count);
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded required slots for tenant",
-                {"#_descr", descr},
+                {"descr", descr},
                 {"tenantName", tenantName});
 
             if (!tenantRowset.Next())
@@ -100,7 +100,7 @@ public:
             tenant->AddSlotsAllocation(descr, count);
 
             YDB_LOG_DEBUG_CTX(ctx, "Loaded required slots for tenant",
-                {"#_descr", descr},
+                {"descr", descr},
                 {"tenantName", tenantName});
 
             if (!allocationRowset.Next())
@@ -178,7 +178,7 @@ public:
         // Request node info to check slot's data center.
         for (auto &pr : Self->SlotsByNodeId) {
             YDB_LOG_DEBUG_CTX(ctx, "Taking ownership of tenant pool on node",
-                {"#_pr.first", pr.first});
+                {"key", pr.first});
 
             ctx.Send(MakeTenantPoolID(pr.first), new TEvTenantPool::TEvTakeOwnership(Self->Generation()));
             ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(pr.first));

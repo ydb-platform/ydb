@@ -62,7 +62,7 @@ public:
         } else {
             YDB_LOG_WARN("- killing node",
                 {"logPrefix", GetLogPrefix()},
-                {"#_THive::TTxStatus(status", static_cast<int>(status)},
+                {"status", static_cast<int>(status)},
                 {"node", TNodeInfo::EVolatileStateName(node.GetVolatileState())},
                 {"nodeId", node.Id});
             Self->KillNode(node.Id, Local);

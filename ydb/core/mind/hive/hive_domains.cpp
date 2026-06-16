@@ -18,8 +18,8 @@ void TDomainsView::DeregisterNode(const TNodeInfo& node) {
              {"logPrefix", GetLogPrefix()},
              {"nodeId", node.Id},
              {"domainKey", domainKey},
-             {"#_)", TotalCount[domainKey]},
-             {"#_TotalCount[domainKey] - 1", TotalCount[domainKey] - 1});
+             {"totalCount", TotalCount[domainKey]},
+             {"remainingCount", TotalCount[domainKey] - 1});
          Y_ABORT_UNLESS(TotalCount[domainKey], "try decrement empty counter for DomainKey %s", ToString(domainKey).c_str());
         --TotalCount[domainKey];
     }
@@ -47,7 +47,7 @@ void THive::ResolveDomain(TSubDomainKey domain) {
     entry.RedirectRequired = false;
     YDB_LOG_DEBUG("Resolving domain",
         {"logPrefix", GetLogPrefix()},
-        {"#_entry.TableId", entry.TableId});
+        {"tableId", entry.TableId});
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -64,14 +64,14 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             }
             YDB_LOG_DEBUG("Received NavigateKeySetResult for domain with path",
                 {"logPrefix", GetLogPrefix()},
-                {"#_entry.TableId", entry.TableId},
+                {"tableId", entry.TableId},
                 {"path", path});
             Execute(CreateUpdateDomain(key));
         } else {
             YDB_LOG_WARN("Received NavigateKeySetResult for domain with status",
                 {"logPrefix", GetLogPrefix()},
-                {"#_entry.TableId", entry.TableId},
-                {"#_entry.Status", entry.Status});
+                {"tableId", entry.TableId},
+                {"entryStatus", entry.Status});
         }
     } else {
         YDB_LOG_WARN("Received empty NavigateKeySetResult",

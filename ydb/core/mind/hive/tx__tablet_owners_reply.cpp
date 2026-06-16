@@ -28,9 +28,9 @@ public:
             if (Self->Keeper.AddOwnedSequence(ownerId, seq)) {
                 YDB_LOG_DEBUG("THive::TTxTabletOwnersReply::Execute - add new owned sequence",
                     {"logPrefix", GetLogPrefix()},
-                    {"#_seq.Begin", seq.Begin},
-                    {"#_seq.End", seq.End},
-                    {"#_)", ownerId});
+                    {"seqBegin", seq.Begin},
+                    {"seqEnd", seq.End},
+                    {"ownerId", ownerId});
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(ownerId);
             }
         }

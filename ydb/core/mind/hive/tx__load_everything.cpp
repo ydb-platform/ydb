@@ -251,7 +251,7 @@ public:
                 YDB_LOG_WARN("THive::TTxLoadEverything fixing TabletOwners",
                     {"logPrefix", GetLogPrefix()},
                     {"seq", seq},
-                    {"#_Self->TabletID", Self->TabletID()});
+                    {"selfTabletId", Self->TabletID()});
                 Self->Keeper.AddOwnedSequence(Self->TabletID(), seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
             }
@@ -632,7 +632,7 @@ public:
         }
         YDB_LOG_NOTICE("THive::TTxLoadEverything initialized allocation units for tablets",
             {"logPrefix", GetLogPrefix()},
-            {"#_Self->Tablets.size", Self->Tablets.size()});
+            {"tabletsCount", Self->Tablets.size()});
 
         {
             size_t numTabletFollowerGroups = 0;
@@ -899,7 +899,7 @@ public:
                 ui64 freeSequenceIdx = 0;
                 YDB_LOG_DEBUG("THive::TTxLoadEverything",
                     {"logPrefix", GetLogPrefix()},
-                    {"#_Self->NextTabletId", Self->NextTabletId},
+                    {"nextTabletId", Self->NextTabletId},
                     {"nextTabletId", nextTabletId});
                 if (nextTabletId < TABLET_ID_BLACKHOLE_BEGIN) {
                     TSequencer::TOwnerType owner(TSequencer::NO_OWNER, freeSequenceIdx++);
@@ -956,7 +956,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_NOTICE("THive::TTxLoadEverything::Complete",
             {"logPrefix", GetLogPrefix()},
-            {"#_Self->DatabaseConfig", Self->DatabaseConfig});
+            {"databaseConfig", Self->DatabaseConfig});
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;

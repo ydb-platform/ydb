@@ -35,7 +35,7 @@ public:
         auto &rec = Notification->Get()->Record;
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Execute",
-            {"#_rec", rec});
+            {"rec", rec});
 
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
@@ -52,7 +52,7 @@ public:
         auto &rec = Request->Get()->Record;
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Execute",
-            {"#_rec", rec});
+            {"rec", rec});
 
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;

@@ -72,8 +72,8 @@ public:
                     if (startTime > TDuration::Seconds(30)) {
                         YDB_LOG_WARN("Tablet was starting for seconds",
                             {"logPrefix", GetLogPrefix()},
-                            {"#_tablet->GetFullTabletId", tablet->GetFullTabletId()},
-                            {"#_startTime.Seconds", startTime.Seconds()});
+                            {"fullTabletId", tablet->GetFullTabletId()},
+                            {"startTimeSeconds", startTime.Seconds()});
                     }
                     Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
                     Self->UpdateCounterTabletsStarting(-1);
@@ -146,7 +146,7 @@ public:
                             YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute for tablet postponed start until",
                                 {"logPrefix", GetLogPrefix()},
                                 {"tablet", tablet->ToString()},
-                                {"#_leader.PostponedStart", leader.PostponedStart});
+                                {"postponedStart", leader.PostponedStart});
                         }
                     }
                 }

@@ -32,7 +32,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         YDB_LOG_DEBUG_CTX(ctx, "TTxCheckSlotStatus Execute",
-            {"#_num_0", (Slot ? Slot->IdString() : TString("all slots"))});
+            {"slotFilter", (Slot ? Slot->IdString() : TString("all slots"))});
 
         if (Slot) {
             // Check slot wasn't re-created.
@@ -48,7 +48,7 @@ public:
 
         for (auto &slot : SlotsToRemove) {
             YDB_LOG_DEBUG_CTX(ctx, "Removing slot due to connection timeout",
-                {"#_slot->IdString", slot->IdString()});
+                {"slotIdString", slot->IdString()});
             if (slot->AssignedTenant)
                 ReassignSlots = true;
             Self->RemoveSlot(slot, txc, ctx);

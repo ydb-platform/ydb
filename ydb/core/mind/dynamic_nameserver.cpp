@@ -72,7 +72,7 @@ private:
 
     void Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, const TActorContext &ctx) {
         YDB_LOG_DEBUG("Handle",
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"eventString", ev->Get()->ToString()});
 
         if (Owner->ProtocolState != EProtocolState::UseEpochProtocol) {
             return;
@@ -587,7 +587,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvResolveNode::TPtr &ev,
                                 const TActorContext &ctx)
 {
     YDB_LOG_DEBUG("Handle",
-        {"#_ev->Get()->ToString", ev->Get()->ToString()});
+        {"eventString", ev->Get()->ToString()});
     const ui32 nodeId = ev->Get()->NodeId;
     const TMonotonic deadline = ev->Get()->Deadline;
     auto config = AppData(ctx)->DynamicNameserviceConfig;
@@ -610,7 +610,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
                                 const TActorContext &ctx)
 {
     YDB_LOG_DEBUG("Handle",
-        {"#_ev->Get()->ToString", ev->Get()->ToString()});
+        {"eventString", ev->Get()->ToString()});
 
     if (ProtocolState == EProtocolState::Connecting) {
         SendNodesList(ev->Sender, ctx);
@@ -640,7 +640,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
 void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx)
 {
     YDB_LOG_DEBUG("Handle",
-        {"#_ev->Get()->ToString", ev->Get()->ToString()});
+        {"eventString", ev->Get()->ToString()});
 
     ui32 nodeId = ev->Get()->NodeId;
     THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(nodeId));
@@ -695,7 +695,7 @@ void TDynamicNameserver::RegisterNewCacheMiss(TCacheMiss* cacheMiss, TDynamicCon
     bool newEarliestDeadline = config->PendingCacheMisses.Empty() || config->PendingCacheMisses.Top()->Deadline > cacheMiss->Deadline;
     if (cacheMiss->NeedScheduleDeadline && newEarliestDeadline) {
         YDB_LOG_DEBUG("Schedule wakeup for new earliest deadline",
-            {"#_cacheMiss->Deadline", cacheMiss->Deadline});
+            {"deadline", cacheMiss->Deadline});
         Schedule(cacheMiss->Deadline, new TEvents::TEvWakeup);
         cacheMiss->NeedScheduleDeadline = false;
     }
@@ -715,7 +715,7 @@ void TDynamicNameserver::SendSyncRequest(TActorId pipe, const TActorContext &ctx
 void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx)
 {
     YDB_LOG_DEBUG("Handle",
-        {"#_ev->Get()->ToString", ev->Get()->ToString()});
+        {"eventString", ev->Get()->ToString()});
     ui32 domain = AppData()->DomainsInfo->GetDomain()->DomainUid;
     if (DynamicConfigs[domain]->NodeBrokerPipe == ev->Get()->ClientId)
         OnPipeDestroyed(domain, ctx);
@@ -724,7 +724,7 @@ void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, con
 void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
 {
     YDB_LOG_DEBUG("Handle",
-        {"#_ev->Get()->ToString", ev->Get()->ToString()});
+        {"eventString", ev->Get()->ToString()});
 
     ui32 domain = AppData(ctx)->DomainsInfo->GetDomain()->DomainUid;
     if (DynamicConfigs[domain]->NodeBrokerPipe != ev->Get()->ClientId) {
@@ -792,7 +792,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvNodesInfo::TPtr &ev, const TAc
 void TDynamicNameserver::Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const TActorContext &ctx)
 {
     YDB_LOG_DEBUG("Handle",
-        {"#_ev->Get()->ToString", ev->Get()->ToString()});
+        {"eventString", ev->Get()->ToString()});
 
     auto &rec = ev->Get()->GetRecord();
     if (rec.GetSeqNo() != SeqNo) {
@@ -860,7 +860,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const T
 void TDynamicNameserver::Handle(TEvNodeBroker::TEvSyncNodesResponse::TPtr &ev, const TActorContext &ctx)
 {
     YDB_LOG_DEBUG("Handle",
-        {"#_ev->Get()->ToString", ev->Get()->ToString()});
+        {"eventString", ev->Get()->ToString()});
 
     auto &rec = ev->Get()->Record;
     if (rec.GetSeqNo() != SeqNo) {
@@ -896,7 +896,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvSyncNodesResponse::TPtr &ev, c
     if (!config->PendingCacheMisses.Empty() && config->PendingCacheMisses.Top()->NeedScheduleDeadline) {
         auto* cacheMiss = config->PendingCacheMisses.Top();
         YDB_LOG_DEBUG("Schedule next wakeup",
-            {"#_cacheMiss->Deadline", cacheMiss->Deadline});
+            {"deadline", cacheMiss->Deadline});
         Schedule(cacheMiss->Deadline, new TEvents::TEvWakeup);
         cacheMiss->NeedScheduleDeadline = false;
     }
@@ -962,7 +962,7 @@ void TDynamicNameserver::HandleWakeup(const TActorContext &ctx) {
     if (!pendingCacheMisses.Empty() && pendingCacheMisses.Top()->NeedScheduleDeadline) {
         auto* cacheMiss = pendingCacheMisses.Top();
         YDB_LOG_DEBUG("Schedule next wakeup",
-            {"#_cacheMiss->Deadline", cacheMiss->Deadline});
+            {"deadline", cacheMiss->Deadline});
         Schedule(cacheMiss->Deadline, new TEvents::TEvWakeup);
         cacheMiss->NeedScheduleDeadline = false;
     }

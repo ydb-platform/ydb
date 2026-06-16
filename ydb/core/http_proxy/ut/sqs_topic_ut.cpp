@@ -656,7 +656,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
             const NYdb::NTopic::ICodec* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(
                 static_cast<uint32_t>(NYdb::NTopic::ECodec::ZSTD));
-            const TString decompressed = codec->Decompress(Base64Decode(message["Body"].GetString()));
+            const TString decompressed = NYdb::NTopic::TakeFirstDecompressedMessage(codec->Decompress(Base64Decode(message["Body"].GetString())));
             UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
         }
 

@@ -33,7 +33,9 @@ public:
 
 }
 
-std::string TGzipCodec::Decompress(const std::string& data) const {
+namespace {
+
+std::string DecompressGzipData(const std::string& data) {
     TMemoryInput input(data.data(), data.size());
     TString result;
     TStringOutput resultOutput(result);
@@ -42,11 +44,7 @@ std::string TGzipCodec::Decompress(const std::string& data) const {
     return result;
 }
 
-std::unique_ptr<IOutputStream> TGzipCodec::CreateCoder(TBuffer& result, int quality) const {
-    return std::make_unique<TZLibToStringCompressor>(result, ZLib::GZip, quality >= 0 ? quality : 6);
-}
-
-std::string TZstdCodec::Decompress(const std::string& data) const {
+std::string DecompressZstdData(const std::string& data) {
     TMemoryInput input(data.data(), data.size());
     TString result;
     TStringOutput resultOutput(result);
@@ -55,11 +53,41 @@ std::string TZstdCodec::Decompress(const std::string& data) const {
     return result;
 }
 
+std::string KafkaBytesToString(const NKafka::TKafkaBytes& bytes) {
+    if (!bytes) {
+        return {};
+    }
+    return std::string(bytes->data(), bytes->size());
+}
+
+TDecompressionResult MakeSingleMessageResult(std::string data) {
+    TDecompressionResult result;
+    result.Messages.push_back(TDecompressedMessage{
+        .Data = std::move(data),
+        .Meta = std::nullopt,
+    });
+    return result;
+}
+
+} // namespace
+
+TDecompressionResult TGzipCodec::Decompress(const std::string& data) const {
+    return MakeSingleMessageResult(DecompressGzipData(data));
+}
+
+std::unique_ptr<IOutputStream> TGzipCodec::CreateCoder(TBuffer& result, int quality) const {
+    return std::make_unique<TZLibToStringCompressor>(result, ZLib::GZip, quality >= 0 ? quality : 6);
+}
+
+TDecompressionResult TZstdCodec::Decompress(const std::string& data) const {
+    return MakeSingleMessageResult(DecompressZstdData(data));
+}
+
 std::unique_ptr<IOutputStream> TZstdCodec::CreateCoder(TBuffer& result, int quality) const {
     return std::make_unique<TZstdToStringCompressor>(result, quality);
 }
 
-std::string TUnsupportedCodec::Decompress(const std::string&) const {
+TDecompressionResult TUnsupportedCodec::Decompress(const std::string&) const {
     throw yexception() << "use of unsupported codec";
 }
 
@@ -80,8 +108,28 @@ void ICodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
     ctx.CodecID = static_cast<ui32>(ctx.Codec);
 }
 
-std::string TKafkaBatchCodec::Decompress(const std::string&) const {
-    throw yexception() << "use of unsupported codec";
+TDecompressionResult TKafkaBatchCodec::Decompress(const std::string& data) const {
+    using namespace NKafka;
+
+    TDecompressionResult result;
+    const TKafkaRecordBatch kafkaBatch = ReadKafkaRecordBatch(data);
+    result.BatchBaseSequence = static_cast<i64>(kafkaBatch.BaseSequence);
+    result.BatchBaseTimestampMs = kafkaBatch.BaseTimestamp;
+    result.Messages.reserve(kafkaBatch.Records.size());
+
+    for (const auto& record : kafkaBatch.Records) {
+        TDecompressedMessageMeta meta{
+            .OffsetDelta = static_cast<i32>(record.OffsetDelta),
+            .SequenceDelta = static_cast<i32>(record.OffsetDelta),
+            .TimestampDelta = record.TimestampDelta,
+        };
+        result.Messages.push_back(TDecompressedMessage{
+            .Data = KafkaBytesToString(record.Value),
+            .Meta = std::move(meta),
+        });
+    }
+
+    return result;
 }
 
 std::unique_ptr<IOutputStream> TKafkaBatchCodec::CreateCoder(TBuffer&, int) const {

@@ -326,10 +326,12 @@ public:
     void PutDecompressionError(std::exception_ptr error, size_t batch, size_t message);
     std::exception_ptr GetDecompressionError(size_t batch, size_t message);
 
-    TDecompressedData TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-                               size_t batch,
+    TDecompressedData TakeData(size_t batch,
                                size_t message,
                                size_t& maxByteSize);
+
+    size_t GetPreparedDataSize(size_t batch, size_t message) const;
+    size_t GetPreparedMessageCount(size_t batch, size_t message) const;
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount);
     void OnUserRetrievedEvent(i64 decompressedDataSize, size_t messagesCount);
@@ -380,6 +382,13 @@ private:
     };
 
     void BuildBatchesMeta();
+    TDecompressedData BuildDecompressedData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                            size_t batch,
+                                            size_t message,
+                                            const TDecompressionResult& codecResult);
+    void PutDecompressedData(size_t batch,
+                             size_t message,
+                             TDecompressedData&& data);
 
 private:
     TPartitionData<UseMigrationProtocol> ServerMessage;
@@ -387,6 +396,7 @@ private:
     using TMessageMetaPtrVector = std::vector<typename TAMessageMeta<UseMigrationProtocol>::TPtr>;
     TMetadataPtrVector BatchesMeta;
     std::vector<TMessageMetaPtrVector> MessagesMeta;
+    std::vector<std::vector<TDecompressedData>> DecompressedData;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
     bool DoDecompress;
     std::atomic<i64> ServerBytesSize = 0;

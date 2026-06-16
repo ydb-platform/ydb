@@ -51,35 +51,55 @@ struct TWriteBlockCompression {
     int CompressionLevel = 0;
 };
 
+//! Per-record metadata extracted from codec payload (e.g. Kafka record batch).
+//! When not set, read path uses metadata from outer message_data.
+struct TDecompressedMessageMeta {
+    std::optional<i32> OffsetDelta;
+    std::optional<i32> SequenceDelta;
+    std::optional<i64> TimestampDelta;
+};
+
+struct TDecompressedMessage {
+    std::string Data;
+    std::optional<TDecompressedMessageMeta> Meta;
+};
+
+struct TDecompressionResult {
+    std::vector<TDecompressedMessage> Messages;
+    //! Populated when codec expands one blob into many messages (Kafka batch).
+    std::optional<i64> BatchBaseSequence;
+    std::optional<i64> BatchBaseTimestampMs;
+};
+
 class ICodec {
 public:
     virtual ~ICodec() = default;
-    virtual std::string Decompress(const std::string& data) const = 0;
+    virtual TDecompressionResult Decompress(const std::string& data) const = 0;
     virtual std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const = 0;
     virtual void CompressWriteBlock(TWriteBlockCompression& ctx) const;
 };
 
 class TGzipCodec final : public ICodec {
-    std::string Decompress(const std::string& data) const override;
+    TDecompressionResult Decompress(const std::string& data) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const override;
 };
 
 class TZstdCodec final : public ICodec {
-    std::string Decompress(const std::string& data) const override;
+    TDecompressionResult Decompress(const std::string& data) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const override;
 };
 
 class TUnsupportedCodec final : public ICodec {
-    std::string Decompress(const std::string&) const override;
+    TDecompressionResult Decompress(const std::string&) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer&, int) const override;
 };
 
 class TKafkaBatchCodec final : public ICodec {
 public:
-    std::string Decompress(const std::string&) const override;
+    TDecompressionResult Decompress(const std::string& data) const override;
 
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer&, int) const override;
 
@@ -121,5 +141,12 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<ICodec>> Codecs;
     TAdaptiveLock Lock;
 };
+
+inline std::string TakeFirstDecompressedMessage(TDecompressionResult&& result) {
+    if (result.Messages.empty()) {
+        throw yexception() << "empty decompression result";
+    }
+    return std::move(result.Messages.front().Data);
+}
 
 } // namespace NYdb::NTopic

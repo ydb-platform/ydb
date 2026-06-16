@@ -234,6 +234,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasWritesBatchingPeriodMicroseconds()) {
                     pbufferFormat.WritesBatchingPeriodMicroseconds = Cfg->PBufferConfig->GetWritesBatchingPeriodMicroseconds();
                 }
+                if (Cfg->PBufferConfig->HasEnableWritesBatching()) {
+                    pbufferFormat.EnableWritesBatching = Cfg->PBufferConfig->GetEnableWritesBatching();
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));

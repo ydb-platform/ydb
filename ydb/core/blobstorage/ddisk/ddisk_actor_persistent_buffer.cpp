@@ -1116,10 +1116,8 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBufferHeader))
             / (sizeof(TPersistentBufferLsnRecordHeader) + TPersistentBufferLsnRecordHeader::MaxSectorsPerPackBufferRecord * sizeof(TPersistentBufferSectorInfo));
 
-        if (selector.Size <= TPersistentBufferLsnRecordHeader::MaxSectorsPerPackBufferRecord * SectorSize
-            && PersistentBufferFormat.WritesBatchingPeriodMicroseconds > 0
-            && PendingPersistentBufferEvents.size() < PersistentBufferFormat.MaxPendingEventsQueueSize
-            && (PersistentBufferBatchWriteCookie != 0 || PersistentBufferDiskOperationInflight.size() > 0)
+        if (PersistentBufferFormat.EnableWritesBatching && PersistentBufferDiskOperationInflight.size() > 0
+            && selector.Size <= TPersistentBufferLsnRecordHeader::MaxSectorsPerPackBufferRecord * SectorSize
             && (PersistentBufferBatchWriteCookie == 0 || PersistentBufferDiskOperationInflight[PersistentBufferBatchWriteCookie].Records.size() < MaxLsnsPerPack)
         ) {
             ProcessPersistentBufferBatchWriteData(ev);

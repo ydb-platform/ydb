@@ -260,6 +260,7 @@ struct TPersistentBufferFormat {
     ui32 MaxPendingEventsQueueSize = 1024;
     bool EnableFastErases = true;
     ui32 WritesBatchingPeriodMicroseconds = 10;
+    bool EnableWritesBatching = true;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \

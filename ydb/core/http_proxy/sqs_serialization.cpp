@@ -253,6 +253,23 @@ namespace NKikimr::NHttpProxy::NSQS {
         return result;
     }
 
+    TString BuildErrorXmlString(const TString& message, const TString& errorCode, const TString& requestId) {
+        XML_BUILDER() {
+            XML_DOC() {
+                XML_ELEM("ErrorResponse") {
+                    XML_ELEM("Error") {
+                        XML_ELEM_CONT("Message", message);
+                        XML_ELEM_CONT("Code", errorCode);
+                    }
+                    XML_ELEM_CONT("RequestId", requestId);
+                }
+            }
+        }
+        return XML_RESULT();
+    }
+
+    // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+    // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList - list of error codes
     TString Serialize(const THttpRequestContext& httpContext, const NProtoBuf::Message& value) {
         switch (httpContext.ContentType) {
         case MIME_XML:
@@ -266,20 +283,24 @@ namespace NKikimr::NHttpProxy::NSQS {
         }
     }
 
+    TString Serialize(const THttpRequestContext& httpContext, TErrorResponse&& value) {
+        auto makeJson = [&]() {
+            NJson::TJsonValue json;
+            json.SetType(NJson::JSON_MAP);
+            json["message"] = value.ErrorText;
+            json["__type"] = value.StatusCode;
+            return json;
+        };
 
-    TString Serialize(const MimeTypes mimeType, TErrorResponse&& value) {
-        NJson::TJsonValue json;
-        json.SetType(NJson::JSON_MAP);
-        json["message"] = value.ErrorText;
-        json["__type"] = value.StatusCode;
-
-        switch (mimeType) {
+        switch (httpContext.ContentType) {
+        case MIME_XML:
+            return BuildErrorXmlString(value.ErrorText, value.StatusCode, httpContext.RequestId);
         case MIME_CBOR:
-            return SerializeCbor(json);
+            return SerializeCbor(makeJson());
         case MIME_JSON:
             [[fallthrough]];
         default:
-            return SerializeJson(json);
+            return SerializeJson(makeJson());
         }
     }
 

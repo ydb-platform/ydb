@@ -1,6 +1,6 @@
 #include <ydb/library/http_proxy/error/error.h>
 #include <ydb/core/ymq/base/helpers.h>
-#include <ydb/core/ymq/http/params.h>
+#include <ydb/core/http_proxy/sqs_xml/params.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -179,7 +179,7 @@ TParametersParser::TParametersParser(TParameters* params)
 TParametersParser::~TParametersParser()
 { }
 
-void TParametersParser::Append(const TString& name, const TString& value) {
+void TParametersParser::Append(const TString& name, const TStringBuf value) {
     CurrentParams_ = Params_;
 
     int cs;

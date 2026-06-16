@@ -3,6 +3,8 @@
 #include <util/generic/yexception.h>
 #include <util/system/defaults.h>
 
+namespace NKikimr::NHttpProxy::NSQS {
+
 class TXmlDocument;
 class TXmlElement;
 class TXmlRecursiveElement;
@@ -85,3 +87,5 @@ class TWriteXmlError: public yexception {
 #define XML_ELEM_CONT_IMPL(name, content, suffix) TXmlElement Y_CAT(xmlElement, suffix)(xmlBuilder, name, content)
 #define XML_ELEM(name) XML_ELEM_IMPL(name, __LINE__)
 #define XML_ELEM_CONT(name, content) XML_ELEM_CONT_IMPL(name, content, __LINE__)
+
+} // namespace NKikimr::NHttpProxy::NSQS

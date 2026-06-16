@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/sqs.pb.h>
+//#include <ydb/core/protos/sqs.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -51,7 +51,7 @@ public:
     ~TParametersParser();
 
     // Throws TSQSException
-    void Append(const TString& name, const TString& value);
+    void Append(const TString& name, const TStringBuf value);
 
 private:
     TParameters* const Params_;

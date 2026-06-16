@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     parser.rl6
-    xml.cpp
     xml_builder.cpp
 )
 

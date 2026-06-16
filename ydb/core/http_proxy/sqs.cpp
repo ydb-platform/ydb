@@ -209,7 +209,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = static_cast<ui32>(httpCode),
                     .ContentType = HttpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = errorName,
                         .ErrorText = errorText,
                     })
@@ -240,7 +240,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = httpStatusCode,
                     .ContentType = HttpContext.ContentType,
                     .Message = ymqStatusCode,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = ymqStatusCode,
                         .ErrorText = errorText,
                     })
@@ -512,13 +512,13 @@ namespace NKikimr::NHttpProxy {
                 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
             }
 
-            THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+            THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
                     .HttpCode = static_cast<ui32>(httpCode),
-                    .ContentType = contentType,
+                    .ContentType = httpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(contentType, NSQS::TErrorResponse{
+                    .Body = NSQS::Serialize(httpContext, NSQS::TErrorResponse{
                         .StatusCode = errorName,
                         .ErrorText = TString(message),
                     })

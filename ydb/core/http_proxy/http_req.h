@@ -134,7 +134,7 @@ public:
         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
     ) const = 0;
 
-    virtual THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
+    virtual THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
 
     virtual bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
 };

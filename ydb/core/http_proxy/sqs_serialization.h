@@ -1,8 +1,9 @@
 #pragma once
 
+#include "http_req.h"
 #include "serialization.h"
 
-#include <ydb/core/http_proxy/http_req.h>
+#include <ydb/core/http_proxy/sqs_xml/params.h>
 #include <ydb/library/http_proxy/error/error.h>
 
 namespace NKikimr::NHttpProxy::NSQS {
@@ -10,6 +11,16 @@ namespace NKikimr::NHttpProxy::NSQS {
     template<typename TValue>
     void PrepareValue(TValue& value) {
         Y_UNUSED(value);
+    }
+
+    void DeserializeXml(NProtoBuf::Message& message, const TStringBuf& input) {
+        TCgiParameters cgiParameters(TStringBuf(input.Data(), input.Size()));
+
+        TParameters params;
+        TParametersParser parser(&params);
+        for (auto pi = cgiParameters.begin(); pi != cgiParameters.end(); ++pi) {
+            parser.Append(pi->first, pi->second);
+        }
     }
 
     template<typename TValue>
@@ -20,14 +31,17 @@ namespace NKikimr::NHttpProxy::NSQS {
             throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) << "Empty body";
         }
 
+        PrepareValue(value);
+
         switch (mimeType) {
         case MIME_CBOR:
-            PrepareValue(value);
             DeserializeCbor(value, input);
             break;
         case MIME_JSON:
-            PrepareValue(value);
             DeserializeJson(value, input);
+            break;
+        case MIME_XML:
+            DeserializeXml(value, input);
             break;
         default:
             throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
@@ -41,6 +55,6 @@ namespace NKikimr::NHttpProxy::NSQS {
         TString StatusCode;
         TString ErrorText;
     };
-    TString Serialize(const MimeTypes mimeType, TErrorResponse&& value);
+    TString Serialize(const THttpRequestContext& httpContext, TErrorResponse&& value);
 
 } // namespace NKikimr::NHttpProxy::NSQS

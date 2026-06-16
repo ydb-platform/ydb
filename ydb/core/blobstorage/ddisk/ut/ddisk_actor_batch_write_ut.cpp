@@ -1071,6 +1071,268 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
             "Restored batch record C must have the original payload");
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 7: batch-written records from DIFFERENT tablets are correctly
+    // restored after a restart.
+    //
+    // This test is analogous to BatchWriteRecordRestoredAfterRestart but
+    // exercises the case where B and C belong to two distinct tablets
+    // (different TabletId / Generation credentials).  The shared header sector
+    // must encode the correct TabletId/Generation for each record so that the
+    // restore path can reconstruct both records independently.
+    //
+    // Write sequence:
+    //   A  — non-batch, tablet 91 gen 1  (keeps PDisk write in-flight so B/C
+    //         enter the batch path)
+    //   B  — batch, tablet 92 gen 1      (data write while A in-flight)
+    //   C  — batch, tablet 93 gen 2      (data write while B's data write still
+    //         in-flight → same batch as B, BatchSize=2)
+    //
+    // B and C share ONE header sector.  After restart all three records must be
+    // listed and both B and C must be readable with their original payloads via
+    // their respective credentials.
+    // ─────────────────────────────────────────────────────────────────────────
+    Y_UNIT_TEST(BatchWriteMultiTabletRecordsRestoredAfterRestart) {
+        TTestContext ctx;
+
+        const TDiskHandle disk1 = ctx.CreateDDisk(55, 1);
+
+        // Three distinct tablets.
+        NDDisk::TQueryCredentials credsA = Connect(ctx, disk1.PBServiceId, 91, 1);
+        NDDisk::TQueryCredentials credsB = Connect(ctx, disk1.PBServiceId, 92, 1);
+        NDDisk::TQueryCredentials credsC = Connect(ctx, disk1.PBServiceId, 93, 2);
+
+        const ui64 lsnA = 1;
+        const ui64 lsnB = 55;
+        const ui64 lsnC = 66;
+        const TString payloadA = MakeData('A', BlockSize);
+        const TString payloadB = MakeData('B', BlockSize);
+        const TString payloadC = MakeData('C', BlockSize);
+        // Each tablet uses its own VChunkIndex namespace, so they can all use
+        // VChunkIndex=1 without collision.
+        const NDDisk::TBlockSelector selectorA{1, 0, BlockSize};
+        const NDDisk::TBlockSelector selectorB{1, 0, BlockSize};
+        const NDDisk::TBlockSelector selectorC{1, 0, BlockSize};
+
+        // Accumulate all raw PDisk writes into per-chunk buffers.
+        std::unordered_map<ui32, TString> chunkBufs;
+        auto captureWrite = [&](const std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>>& raw) {
+            const ui32 chunkIdx = raw->Get()->ChunkIdx;
+            const ui32 offset   = raw->Get()->Offset;
+            TString written = raw->Get()->Data.ConvertToString();
+            if (chunkBufs.find(chunkIdx) == chunkBufs.end()) {
+                chunkBufs[chunkIdx] = TString(TTestContext::ChunkSize, '\0');
+            }
+            UNIT_ASSERT_C(offset + written.size() <= TTestContext::ChunkSize,
+                "Write exceeds chunk size");
+            memcpy(chunkBufs[chunkIdx].Detach() + offset, written.data(), written.size());
+        };
+
+        // ── Step 1: send A (tablet 91), keep its PDisk write pending ─────────
+        {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                credsA, selectorA, lsnA, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(payloadA));
+            SendToDDisk(ctx, disk1.PBServiceId, write.release());
+        }
+        auto rawA = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
+        const TActorId disk1ActorId = rawA->Sender;
+        captureWrite(rawA);
+
+        // ── Step 2: send B (tablet 92) while A is in-flight → batch path ─────
+        {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                credsB, selectorB, lsnB, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(payloadB));
+            SendToDDisk(ctx, disk1.PBServiceId, write.release());
+        }
+        auto rawB_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawB_data->Get()->Data.size(), BlockSize,
+            "B: batch data write must be exactly one data sector");
+        captureWrite(rawB_data);
+
+        // ── Step 3: send C (tablet 93 gen 2) while B's data write is in-flight ─
+        // C joins the same batch inflight as B (PersistentBufferBatchWriteCookie != 0).
+        {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                credsC, selectorC, lsnC, NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(payloadC));
+            SendToDDisk(ctx, disk1.PBServiceId, write.release());
+        }
+        auto rawC_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawC_data->Get()->Data.size(), BlockSize,
+            "C: batch data write must be exactly one data sector");
+        captureWrite(rawC_data);
+
+        // ── Step 4: complete A → A replies ───────────────────────────────────
+        ctx.SendPDiskResponse(disk1, *rawA, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto wrA = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(wrA, TReplyStatus::OK);
+
+        // ── Step 5: complete B's data write ──────────────────────────────────
+        ctx.SendPDiskResponse(disk1, *rawB_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        // ── Step 6: complete C's data write ──────────────────────────────────
+        ctx.SendPDiskResponse(disk1, *rawC_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        // ── Step 7: wakeup fires → shared header sector written (BatchSize=2) ─
+        auto rawBC_header = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawBC_header->Get()->Data.size(), BlockSize,
+            "Shared header write must be exactly one sector");
+        captureWrite(rawBC_header);
+
+        // Verify BatchSize == 2 and extract PersistentBufferUniqueId.
+        //
+        // On-disk layout inside the header sector (interleaved per record):
+        //   TPersistentBufferHeader
+        //   [record 0] TPersistentBufferLsnRecordHeader
+        //              (Sectors.size() - 1) × TPersistentBufferSectorInfo
+        //   [record 1] TPersistentBufferLsnRecordHeader
+        //              (Sectors.size() - 1) × TPersistentBufferSectorInfo
+        //   ...
+        // Each record here has exactly 1 data sector, so Sectors.size() == 2
+        // (header sector + 1 data sector), meaning (Sectors.size()-1) == 1
+        // TPersistentBufferSectorInfo entry follows each LsnRecordHeader.
+        const ui32 headerChunkIdx = rawBC_header->Get()->ChunkIdx;
+        const ui32 headerOffset   = rawBC_header->Get()->Offset;
+        const ui64 actualUniqueId = [&]() -> ui64 {
+            const TString& buf = chunkBufs[headerChunkIdx];
+            const auto* hdr = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(
+                buf.data() + headerOffset);
+            UNIT_ASSERT_VALUES_EQUAL_C(hdr->BatchSize, 2u,
+                "Header must record BatchSize=2 for B and C");
+
+            // Record B: LsnRecordHeader immediately after TPersistentBufferHeader.
+            const char* pos = buf.data() + headerOffset + sizeof(NDDisk::TPersistentBufferHeader);
+            const auto* recB = reinterpret_cast<const NDDisk::TPersistentBufferLsnRecordHeader*>(pos);
+            UNIT_ASSERT_VALUES_EQUAL_C(recB->TabletId, credsB.TabletId,
+                "First batched record must belong to tablet B");
+            UNIT_ASSERT_VALUES_EQUAL_C(recB->Generation, credsB.Generation,
+                "First batched record generation must match tablet B");
+
+            // Advance past recB's LsnRecordHeader and its 1 TPersistentBufferSectorInfo
+            // (Sectors.size()-1 == 1 for a single-sector data write).
+            pos += sizeof(NDDisk::TPersistentBufferLsnRecordHeader);
+            pos += sizeof(NDDisk::TPersistentBufferSectorInfo); // (Sectors.size()-1) entries
+
+            // Record C: immediately follows.
+            const auto* recC = reinterpret_cast<const NDDisk::TPersistentBufferLsnRecordHeader*>(pos);
+            UNIT_ASSERT_VALUES_EQUAL_C(recC->TabletId, credsC.TabletId,
+                "Second batched record must belong to tablet C");
+            UNIT_ASSERT_VALUES_EQUAL_C(recC->Generation, credsC.Generation,
+                "Second batched record generation must match tablet C");
+
+            return hdr->PersistentBufferUniqueId;
+        }();
+        UNIT_ASSERT_C(actualUniqueId != 0, "PersistentBufferUniqueId must not be zero");
+
+        // ── Step 8: complete header write → B and C both reply ───────────────
+        ctx.SendPDiskResponse(disk1, *rawBC_header, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto writeResultB = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResultB, TReplyStatus::OK);
+        auto writeResultC = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResultC, TReplyStatus::OK);
+
+        // Collect the chunk IDs owned by instance 1.
+        std::vector<ui32> pbChunkIds;
+        for (ui32 i = 0; i < PersistentBufferInitChunks; ++i) {
+            pbChunkIds.push_back(disk1.FirstChunkId + i);
+        }
+
+        // ── Phase 2: restart with instance 2 (same PDiskId=55) ───────────────
+        std::optional<TActorId> disk2PdiskEdge;
+
+        ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
+            // Drop all PDisk-bound events from disk1's actor.
+            if (ev->Sender == disk1ActorId) {
+                if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
+                    ctx.Runtime.Send(new IEventHandle(ev->Sender, disk1.PDiskEdge,
+                        new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
+                        0, ev->Cookie), NodeId);
+                }
+                return false;
+            }
+            // Auto-respond to TEvChunkReadRaw from disk2 with the captured chunk slice.
+            if (disk2PdiskEdge &&
+                    ev->GetTypeRewrite() == NPDisk::TEvChunkReadRaw::EventType &&
+                    ev->GetRecipientRewrite() == *disk2PdiskEdge) {
+                auto* req = ev->Get<NPDisk::TEvChunkReadRaw>();
+                const ui32 chunkIdx = req->ChunkIdx;
+                const ui32 offset   = req->Offset;
+                const ui32 size     = req->Size;
+                auto it = chunkBufs.find(chunkIdx);
+                TString slice(size, '\0');
+                if (it != chunkBufs.end()) {
+                    const TString& buf = it->second;
+                    UNIT_ASSERT_C(offset + size <= buf.size(), "Read request out of chunk bounds");
+                    memcpy(slice.Detach(), buf.data() + offset, size);
+                }
+                ctx.Runtime.Send(new IEventHandle(ev->Sender, *disk2PdiskEdge,
+                    new NPDisk::TEvChunkReadRawResult(TRope(slice)),
+                    0, ev->Cookie), NodeId);
+                return false;
+            }
+            return true;
+        };
+
+        // Pass (actualUniqueId - 1) as oldUniqueId so disk2 uses
+        // (actualUniqueId - 1 + 1) = actualUniqueId — matching the written checksums.
+        // Must use the same PDiskId (55) as disk1 because PDiskId is part of the checksum.
+        const TDiskHandle disk2 = ctx.CreateDDiskWithRestoredChunkData(
+            55, 1,
+            pbChunkIds,
+            /*oldUniqueId=*/actualUniqueId - 1,
+            chunkBufs);
+        disk2PdiskEdge = disk2.PDiskEdge;
+
+        // ── Phase 3: verify all three records are restored ────────────────────
+        // Connect with each tablet's credentials separately.
+        NDDisk::TQueryCredentials creds2A = Connect(ctx, disk2.PBServiceId, 91, 1);
+        NDDisk::TQueryCredentials creds2B = Connect(ctx, disk2.PBServiceId, 92, 1);
+        NDDisk::TQueryCredentials creds2C = Connect(ctx, disk2.PBServiceId, 93, 2);
+
+        // List from tablet A's perspective — must see exactly A's record.
+        auto listA = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
+            ctx, disk2.PBServiceId, new NDDisk::TEvListPersistentBuffer(creds2A));
+        AssertStatus(listA, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL_C(listA->Get()->Record.RecordsSize(), 1,
+            "Tablet A must have exactly 1 restored record");
+
+        // List from tablet B's perspective — must see exactly B's record.
+        auto listB = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
+            ctx, disk2.PBServiceId, new NDDisk::TEvListPersistentBuffer(creds2B));
+        AssertStatus(listB, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL_C(listB->Get()->Record.RecordsSize(), 1,
+            "Tablet B must have exactly 1 restored record");
+
+        // List from tablet C's perspective — must see exactly C's record.
+        auto listC = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
+            ctx, disk2.PBServiceId, new NDDisk::TEvListPersistentBuffer(creds2C));
+        AssertStatus(listC, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL_C(listC->Get()->Record.RecordsSize(), 1,
+            "Tablet C must have exactly 1 restored record");
+
+        // Verify B's payload.
+        // The 4th argument to TEvReadPersistentBuffer is the record's generation
+        // (used as the key in PersistentBuffers map: {TabletId, generation}).
+        auto readB = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
+            ctx, disk2.PBServiceId,
+            new NDDisk::TEvReadPersistentBuffer(creds2B, selectorB, lsnB, credsB.Generation, {true}));
+        AssertStatus(readB, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL_C(readB->Get()->GetPayload(0).ConvertToString(), payloadB,
+            "Restored batch record B (tablet 92) must have the original payload");
+
+        // Verify C's payload — exercises the second iteration of the BatchSize loop
+        // and the pos-advance fix for multi-sector records.
+        // C was written with generation=2, so the lookup key is {93, 2}.
+        auto readC = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
+            ctx, disk2.PBServiceId,
+            new NDDisk::TEvReadPersistentBuffer(creds2C, selectorC, lsnC, credsC.Generation, {true}));
+        AssertStatus(readC, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL_C(readC->Get()->GetPayload(0).ConvertToString(), payloadC,
+            "Restored batch record C (tablet 93 gen 2) must have the original payload");
+    }
+
 } // Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest)
 
 } // namespace NKikimr

@@ -32,6 +32,9 @@
 
 #include <util/generic/hash_set.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+
 namespace NKikimrBlobStorage::NDDisk::NInternal {
     class TChunkMapLogRecord;
     class TPersistentBufferChunkMapLogRecord;
@@ -686,7 +689,7 @@ namespace NKikimr::NDDisk {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         std::map<TPersistentBufferId, TPersistentBuffer> PersistentBuffers;
-        std::map<TInstant, std::unordered_set<TPersistentBufferRecordId>> PersistentBuffersInMemoryCacheUptime;
+        std::map<TInstant, absl::flat_hash_set<TPersistentBufferRecordId>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
 
@@ -737,7 +740,7 @@ namespace NKikimr::NDDisk {
             TPersistentBufferSectorInfo BatchHeaderSectorInfo;
             std::vector<TRecord> Records;
 
-            std::unordered_set<ui64> OperationCookies;
+            absl::flat_hash_set<ui64> OperationCookies;
 
             // map operationCookie to <lsn, generation> pairs that were erased by this operation
             std::unordered_map<ui64, std::vector<TEraseLsnId>> Erases;
@@ -756,12 +759,12 @@ namespace NKikimr::NDDisk {
         };
 
         ui64 PersistentBufferBatchWriteCookie = 0;
-        std::unordered_map<TPersistentBufferLocation, std::unordered_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
-        std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
+        absl::flat_hash_map<TPersistentBufferLocation, absl::flat_hash_set<TPersistentBufferRecordId>> PersistentBufferHeaders;
+        absl::flat_hash_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
         // map record to operation cookie + record in inflight position
-        std::unordered_map<TPersistentBufferRecordId, std::vector<std::tuple<ui64, ui32>>> PersistentBufferWriteInflightsByRecord;
-        std::unordered_map<TPersistentBufferRecordId, TPersistentBufferEraseInflight> PersistentBufferEraseInflightsByRecord;
+        absl::flat_hash_map<TPersistentBufferRecordId, std::vector<std::tuple<ui64, ui32>>> PersistentBufferWriteInflightsByRecord;
+        absl::flat_hash_map<TPersistentBufferRecordId, TPersistentBufferEraseInflight> PersistentBufferEraseInflightsByRecord;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
         std::vector<ui32> PersistentBufferChunks;
@@ -774,9 +777,9 @@ namespace NKikimr::NDDisk {
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
         bool PersistentBufferReady = false;
 
-        std::unordered_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
-        std::unordered_set<ui32> PersistentBufferAllocatedChunks;
-        std::unordered_set<ui32> PersistentBufferRestoringChunks;
+        absl::flat_hash_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
+        absl::flat_hash_set<ui32> PersistentBufferAllocatedChunks;
+        absl::flat_hash_set<ui32> PersistentBufferRestoringChunks;
 
         TActorId WritePersistentBuffersActor;
         TActorId PersistentBufferActorId;

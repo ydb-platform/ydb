@@ -10,6 +10,8 @@
 #include <util/random/fast.h>
 #include <util/generic/queue.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
+
 namespace NKikimr {
 
 class TPDiskWriterLoadTestActor : public TActorBootstrapped<TPDiskWriterLoadTestActor> {
@@ -223,7 +225,8 @@ public:
         if (msg->Status != NKikimrProto::OK) {
             TStringStream str;
             str << "yard init failed, Status# " << NKikimrProto::EReplyStatus_Name(msg->Status);
-            LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            YDB_LOG_INFO_CTX(ctx, "Yard init failed",
+                {"status", NKikimrProto::EReplyStatus_Name(msg->Status)});
             ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;

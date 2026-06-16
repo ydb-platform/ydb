@@ -15,6 +15,8 @@
 #include <util/generic/queue.h>
 #include <util/random/shuffle.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
+
 namespace NKikimr {
 class TKeyValueWriterLoadTestActor;
 
@@ -89,7 +91,9 @@ public:
     void OnSuccess(ui32 size, TDuration responseTime) {
         ReduceInFlight(size);
         if (!LatencyHistogram.RecordValue(responseTime.MicroSeconds())) {
-            LOG_INFO_S(*NActors::TActivationContext::ActorSystem(), NKikimrServices::BS_LOAD_TEST, "Worker# " << Idx << " skipped recording of " << responseTime << " response time");
+            YDB_LOG_INFO_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped recording of response time",
+                {"worker", Idx},
+                {"responseTime", responseTime});
             ++OutOfBoundsLatencies;
         }
     }
@@ -190,7 +194,8 @@ public:
     }
 
     void Connect(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " TKeyValueWriterLoadTestActor Connect called");
+        YDB_LOG_DEBUG_CTX(ctx, "TKeyValueWriterLoadTestActor Connect called",
+            {"tag", Tag});
         Pipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId));
         for (auto& worker : Workers) {
             worker->ItemsInFlight = 0;
@@ -199,21 +204,24 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TKeyValueWriterLoadTestActor Bootstrap called");
+        YDB_LOG_DEBUG_CTX(ctx, "TKeyValueWriterLoadTestActor Bootstrap called",
+            {"tag", Tag});
         Become(&TKeyValueWriterLoadTestActor::StateFunc);
-        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
+        YDB_LOG_INFO_CTX(ctx, "Schedule PoisonPill",
+            {"tag", Tag});
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
 
         TestStartTime = TAppData::TimeProvider->Now();
-        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Bootstrap, Workers.size# " << Workers.size());
+        YDB_LOG_INFO_CTX(ctx, "Bootstrap,",
+            {"tag", Tag},
+            {"workersCount", Workers.size()});
         for (auto& worker : Workers) {
             AppData(ctx)->Dcb->RegisterLocalControl(worker->MaxInFlight,
                     Sprintf("KeyValueWriteLoadActor_MaxInFlight_%04" PRIu64 "_%04" PRIu32, Tag, worker->Idx));
         }
-        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " last TEvKeyValueResult, "
-                << "all workers are initialized, start test");
+        YDB_LOG_INFO_CTX(ctx, "Last TEvKeyValueResult, all workers are initialized, start test",
+            {"tag", Tag});
         EarlyStop = false;
         Connect(ctx);
     }
@@ -225,18 +233,18 @@ public:
     void HandlePoisonPill(const TActorContext& ctx) {
         EarlyStop = (TAppData::TimeProvider->Now() - TestStartTime).Seconds() < DurationSeconds;
         if (OwnerInitInProgress) {
-            LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, "
-                    << "not all workers is initialized, so wait them to end initialization");
+            YDB_LOG_INFO_CTX(ctx, "HandlePoisonPill, not all workers is initialized, so wait them to end initialization",
+                {"tag", Tag});
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, "
-                    << "all workers is initialized, so starting death process");
+            YDB_LOG_INFO_CTX(ctx, "HandlePoisonPill, all workers is initialized, so starting death process",
+                {"tag", Tag});
             StartDeathProcess(ctx);
         }
     }
 
     void StartDeathProcess(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TKeyValueWriterLoadTestActor StartDeathProcess called");
+        YDB_LOG_DEBUG_CTX(ctx, "TKeyValueWriterLoadTestActor StartDeathProcess called",
+            {"tag", Tag});
         Become(&TKeyValueWriterLoadTestActor::StateEndOfWork);
         TIntrusivePtr<TEvLoad::TLoadReport> report = nullptr;
         if (!EarlyStop) {
@@ -285,7 +293,9 @@ public:
                 ++sent;
             }
         }
-        LOG_TRACE_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " SendWriteRequests sent# " << sent);
+        YDB_LOG_TRACE_CTX(ctx, "SendWriteRequests",
+            {"tag", Tag},
+            {"sent", sent});
     }
 
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -302,13 +312,15 @@ public:
         if (record.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
             worker->OnSuccess(stats.Size, responseTime);
         } else {
-            LOG_WARN_S(ctx, NKikimrServices::BS_LOAD_TEST, " TEvKeyValue::TEvResponse is not OK, msg.ToString()# " << msg->ToString());
+            YDB_LOG_WARN_CTX(ctx, "TEvKeyValue::TEvResponse is not OK,",
+                {"msg", msg->ToString()});
 
             worker->OnFailure(stats.Size);
         }
         WrittenBytes = WrittenBytes + stats.Size;
-        LOG_TRACE_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " EvResult, "
-                << " WrittenBytes# " << WrittenBytes);
+        YDB_LOG_TRACE_CTX(ctx, "EvResult,",
+            {"tag", Tag},
+            {"writtenBytes", WrittenBytes});
         InFlightWrites.erase(it);
 
         SendWriteRequests(ctx);
@@ -399,8 +411,9 @@ public:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TKeyValueWriterLoadTestActor Handle TEvClientConnected called, Status# " << msg->Status);
+        YDB_LOG_DEBUG_CTX(ctx, "TKeyValueWriterLoadTestActor Handle TEvClientConnected called,",
+            {"tag", Tag},
+            {"status", msg->Status});
 
         if (msg->Status != NKikimrProto::OK) {
             if (msg->ClientId == Pipe) {
@@ -412,8 +425,8 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TKeyValueWriterLoadTestActor Handle TEvClientDestroyed called");
+        YDB_LOG_DEBUG_CTX(ctx, "TKeyValueWriterLoadTestActor Handle TEvClientDestroyed called",
+            {"tag", Tag});
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
         if (msg->ClientId == Pipe) {
             Pipe = TActorId();

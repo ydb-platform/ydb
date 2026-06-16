@@ -18,6 +18,8 @@
 #include <cstring>
 #include <memory>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
+
 namespace NKikimr {
 
 namespace {
@@ -208,7 +210,8 @@ public:
         if (msg.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
             TStringStream str;
             str << "persistent buffer connect failed, Status# " << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus());
-            LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            YDB_LOG_INFO_CTX(ctx, "Persistent buffer connect failed",
+                {"status", NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())});
             FinishAndDie(ctx, str.Str());
             return;
         }

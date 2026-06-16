@@ -274,6 +274,8 @@ private:
                 return subject.user_account().federation_id() ? "federated_account" : "user_account";
             case TSubject::kServiceAccount:
                 return "service_account";
+            default:
+                return "unknown";
         }
     }
 

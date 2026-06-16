@@ -220,13 +220,13 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvRespon
             SendReplyAndDie();
         }
         return;
-    } else if (!ev->Get()->Response.Getsubject().Hasservice_account()) {
+    } else if (!ev->Get()->Response.subject().has_service_account()) {
         SetError(NErrors::ACCESS_DENIED, "(this error should be unreachable).");
         SendReplyAndDie();
         return;
     }
 
-    FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();
+    FolderId_ = ev->Get()->Response.subject().service_account().folder_id();
 
     GetCloudIdAndAuthorize();
 }

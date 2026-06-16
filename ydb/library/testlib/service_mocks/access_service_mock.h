@@ -32,9 +32,9 @@ bool IsServiceAuthenticated(const THashSet<TString>& allowedServiceAuthTokens, g
 
 class TAccessServiceMock : public yandex::cloud::priv::servicecontrol::v1::AccessService::Service {
 public:
-    template <class TResonseProto>
+    template <class TResponseProto>
     struct TResponse {
-        TResonseProto Response;
+        TResponseProto Response;
         grpc::Status Status = grpc::Status::OK;
         bool RequireRequestId = false;
     };
@@ -45,8 +45,8 @@ public:
     TMutex UserIpMutex;
     TString CapturedXUserIP;
 
-    template <class TResonseProto>
-    void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResonseProto>& resp, const TString& token) {
+    template <class TResponseProto>
+    void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
         if (resp.RequireRequestId) {
             auto [reqIdBegin, reqIdEnd] = ctx->client_metadata().equal_range("x-request-id");
             UNIT_ASSERT_C(reqIdBegin != reqIdEnd, "RequestId is expected. Token: " << token);
@@ -102,9 +102,9 @@ public:
 
 class TAccessServiceMockV2 : public yandex::cloud::priv::accessservice::v2::AccessService::Service {
 public:
-    template <class TResonseProto>
+    template <class TResponseProto>
     struct TResponse {
-        TResonseProto Response;
+        TResponseProto Response;
         grpc::Status Status = grpc::Status::OK;
         bool RequireRequestId = false;
     };
@@ -116,8 +116,8 @@ public:
     TMutex UserIpMutex;
     TString CapturedXUserIP;
 
-    template <class TResonseProto>
-    void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResonseProto>& resp, const TString& token) {
+    template <class TResponseProto>
+    void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
         if (resp.RequireRequestId) {
             auto [reqIdBegin, reqIdEnd] = ctx->client_metadata().equal_range("x-request-id");
             UNIT_ASSERT_C(reqIdBegin != reqIdEnd, "RequestId is expected. Token: " << token);

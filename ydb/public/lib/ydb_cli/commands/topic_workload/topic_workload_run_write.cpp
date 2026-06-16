@@ -70,6 +70,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .StoreMappedResult(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
     config.Opts->AddLongOption("batch-inner-codec", PrepareAllowedCodecsDescription("Inner compression for Kafka record batch payload. Can be set only when --codec is kafka-batch", TCommandWorkloadTopicParams::GetBatchInnerAllowedCodecs()))
         .Optional()
+        .Hidden()
         .StoreResult(&Scenario.BatchInnerCodecStr);
     config.Opts->AddLongOption("direct", "Direct write to a partition node.")
         .Hidden()

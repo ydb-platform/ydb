@@ -29,9 +29,12 @@ using EStatus = yandex::cloud::events::EventStatus;
 
 namespace {
 
+constexpr auto EmptyValue = "{none}";
+
 TString NormalizeRemoteAddress(const TString& peerName) {
     auto addr = NKikimr::NSecurity::ParsePeername(peerName);
-    return addr ? NAddr::PrintHost(*addr) : peerName;
+    auto result = addr ? NAddr::PrintHost(*addr) : peerName;
+    return result ? result : EmptyValue;
 }
 
 TString NormalizeSubjectId(const TString& subjectId) {

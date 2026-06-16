@@ -24,9 +24,9 @@
 * `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
 * `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
 * `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
-* `WATERMARK` - выражение для вычисления [водяного знака](../../../../dev/streaming-query/watermarks.md). Сейчас поддерживается только время записи в [топик](../../../../concepts/datamodel/topic.md) с константной задержкой
-* `WATERMARK_GRANULARITY` - периодичность генерации водяных знаков. Чем она меньше, тем больше потребление CPU запросом и тем меньше задержка ответа, и наоборот. Имеет смысл только для [потоковых запросов](../../../../dev/streaming-query/index.md). Значение по умолчанию - 1 секунда;
-* `WATERMARK_IDLE_TIMEOUT` - период, после которого партиция без данных будет исключена из вычисления объединенного водяного знака. Имеет смысл только для [потоковых запросов](../../../../dev/streaming-query/index.md). Значение по умолчанию - 5 секунд.
+* `WATERMARK` - выражение для вычисления [водяного знака](../../../../dev/streaming-query/watermarks.md). Сейчас поддерживается только время записи в [топик](../../../../concepts/datamodel/topic.md) с константной задержкой. Формат: `SystemMetadata("write_time") - Interval("<delay>")`, где `<delay>` задаётся в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#Durations).
+* `WATERMARK_GRANULARITY` - периодичность генерации водяных знаков. Чем она меньше, тем больше потребление CPU запросом и тем меньше задержка ответа, и наоборот. Имеет смысл только для [потоковых запросов](../../../../dev/streaming-query/index.md). Задаётся в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#Durations). Значение по умолчанию - 1 секунда.
+* `WATERMARK_IDLE_TIMEOUT` - период, после которого партиция без данных будет исключена из вычисления объединённого водяного знака. Имеет смысл только для [потоковых запросов](../../../../dev/streaming-query/index.md). Задаётся в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#Durations). Значение по умолчанию - 5 секунд.
 
 {% endif %}
 

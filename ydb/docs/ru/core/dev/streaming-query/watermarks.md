@@ -63,7 +63,7 @@ sequenceDiagram
 
 {% note warning %}
 
-При использовании [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) первый параметр (time extractor) должен совпадать с выражением в `WATERMARK`. Несовпадение приведёт к некорректным результатам агрегации. В текущей реализации оба значения должны быть `SystemMetadata("write_time")`.
+При использовании [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) первый параметр (time extractor) и источник времени в выражении WATERMARK должны совпадать. В текущей реализации оба должны использовать `SystemMetadata("write_time")`.
 
 {% endnote %}
 

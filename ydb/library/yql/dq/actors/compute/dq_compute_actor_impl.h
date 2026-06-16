@@ -1216,8 +1216,10 @@ protected:
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
-                ReportStats();
-                this->Schedule(RuntimeSettings.ReportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+                if (State == NDqProto::COMPUTE_STATE_EXECUTING || State == NDqProto::COMPUTE_STATE_UNKNOWN) {
+                    ReportStats();
+                    this->Schedule(RuntimeSettings.ReportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+                }
                 break;
             }
             default:

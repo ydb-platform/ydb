@@ -508,6 +508,11 @@
                 "ColumnId": 13,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -526,7 +531,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1054,6 +1060,11 @@
                 "ColumnId": 13,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1072,7 +1083,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4116,6 +4128,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4135,7 +4152,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4639,6 +4657,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4658,7 +4681,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,

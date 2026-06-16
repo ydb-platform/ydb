@@ -382,7 +382,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, TString, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool, bool> TColumnRec;
+    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeInfo, TString, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool, bool, bool> TColumnRec;
     typedef TDeque<TColumnRec> TColumnRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -416,7 +416,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValue<typename SchemaTable::DefaultKind>(),
             rowSet.template GetValue<typename SchemaTable::DefaultValue>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::NotNull>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::IsBuildInProgress>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsBuildInProgress>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::SetNotNullInProgress>(false)
         );
     }
 
@@ -2184,6 +2185,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = std::get<10>(rec);
                 auto notNull = std::get<11>(rec);
                 auto isBuildInProgress = std::get<12>(rec);
+                auto setNotNullInProgress = std::get<13>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable() || Self->PathsById.at(pathId)->IsExternalTable(), "Path is not a table or external table, pathId: " << pathId);
@@ -2198,6 +2200,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.DefaultValue = defaultValue;
                 colInfo.NotNull = notNull;
                 colInfo.IsBuildInProgress = isBuildInProgress;
+                colInfo.SetNotNullInProgress = setNotNullInProgress;
 
                 if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
                     TTableInfo::TPtr tableInfo = it->second;
@@ -2244,6 +2247,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto defaultValue = std::get<10>(rec);
                 auto notNull = std::get<11>(rec);
                 auto isBuildInProgress = std::get<12>(rec);
+                auto setNotNullInProgress = std::get<13>(rec);
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
@@ -2265,6 +2269,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.DefaultValue = defaultValue;
                 colInfo.NotNull = notNull;
                 colInfo.IsBuildInProgress = isBuildInProgress;
+                colInfo.SetNotNullInProgress = setNotNullInProgress;
                 tableInfo->AlterData->Columns[colId] = colInfo;
             }
         }

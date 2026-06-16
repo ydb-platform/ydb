@@ -562,6 +562,7 @@ struct TKikimrColumnMetadata {
     ui32 Id = 0;
     TString Type;
     bool NotNull = false;
+    bool SetNotNullInProgress = false;
     NKikimr::NScheme::TTypeInfo TypeInfo;
     TString TypeMod;
     TVector<TString> Families;
@@ -578,11 +579,12 @@ struct TKikimrColumnMetadata {
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         const TKikimrPathId& defaultFromSequencePathId = {}, NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
-        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
+        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false, bool setNotNullInProgress = false)
         : Name(name)
         , Id(id)
         , Type(type)
         , NotNull(notNull)
+        , SetNotNullInProgress(setNotNullInProgress)
         , TypeInfo(typeInfo)
         , TypeMod(typeMod)
         , DefaultKind(defaultKind)
@@ -597,6 +599,7 @@ struct TKikimrColumnMetadata {
         , Id(message->GetId())
         , Type(message->GetType())
         , NotNull(message->GetNotNull())
+        , SetNotNullInProgress(message->GetSetNotNullInProgress())
         , Families(message->GetFamily().begin(), message->GetFamily().end())
         , DefaultKind(message->GetDefaultKind())
         , DefaultFromSequence(message->GetDefaultFromSequence())
@@ -662,6 +665,7 @@ struct TKikimrColumnMetadata {
         message->SetId(Id);
         message->SetType(Type);
         message->SetNotNull(NotNull);
+        message->SetSetNotNullInProgress(SetNotNullInProgress);
         auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(TypeInfo, TypeMod);
         message->SetTypeId(columnType.TypeId);
         message->SetDefaultFromSequence(DefaultFromSequence);

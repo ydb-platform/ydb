@@ -226,12 +226,18 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
-                columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType, columnDesc.PTypeMod,
+                columnDesc.Name,
+                columnDesc.Id,
+                typeName,
+                notNull,
+                columnDesc.PType,
+                columnDesc.PTypeMod,
                 columnDesc.DefaultFromSequence,
                 defaultFromSequencePathId,
                 defaultKind,
                 columnDesc.DefaultFromLiteral,
-                columnDesc.IsBuildInProgress
+                columnDesc.IsBuildInProgress,
+                columnDesc.SetNotNullInProgress
             )
         );
         if (columnDesc.KeyOrder >= 0) {
@@ -379,7 +385,8 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
 
         tableMeta->Columns.emplace(
             column.Name,
-            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.PType, column.PTypeMod)
+            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.PType, column.PTypeMod,
+                {}, {}, NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED, {}, false, column.SetNotNullInProgress)
         );
 
         if (column.KeyOrder >= 0) {

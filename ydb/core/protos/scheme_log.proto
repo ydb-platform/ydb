@@ -64,6 +64,7 @@ message TAlterRecord {
     optional NKikimrProto.TTypeInfo ColumnTypeInfo = 25;
     optional bytes Default = 10;    // Serialized default value for cell
     optional bool NotNull = 24 [default = false];
+    optional bool SetNotNullInProgress = 31 [default = false];
     optional bool IsSensitive = 28 [default = false];
     reserved 29; // deprecated -> ByKeyFilterPrefixes
     repeated NKikimrSchemeOp.TByKeyFilterPrefix ByKeyFilterPrefixes = 30; // Bloom filters on PK prefixes

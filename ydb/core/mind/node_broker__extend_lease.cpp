@@ -4,6 +4,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -26,9 +28,10 @@ public:
     {
         auto nodeId = Event->Get()->Record.GetNodeId();
 
-        LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Cannot extend lease for node #" << nodeId
-                    << ": " << code << ": " << reason);
+        YDB_LOG_ERROR_CTX(ctx, "Cannot extend lease",
+            {"node", nodeId},
+            {"code", code},
+            {"reason", reason});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(reason);
@@ -40,8 +43,8 @@ public:
     {
         auto nodeId = Event->Get()->Record.GetNodeId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxExtendLease Execute node #" << nodeId);
+        YDB_LOG_DEBUG_CTX(ctx, "TTxExtendLease Execute",
+            {"node", nodeId});
 
         Response = new TEvNodeBroker::TEvExtendLeaseResponse;
         Response->Record.SetNodeId(nodeId);
@@ -75,11 +78,11 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxExtendLease Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxExtendLease Complete");
 
         Y_ABORT_UNLESS(Response);
-        LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxExtendLease reply with: " << Response->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TTxExtendLease reply",
+            {"with", Response->ToString()});
         ctx.Send(Event->Sender, Response.Release());
 
         if (Update) {

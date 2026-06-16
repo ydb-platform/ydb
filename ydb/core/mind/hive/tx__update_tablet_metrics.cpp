@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -52,12 +54,11 @@ public:
             node->UpdateResourceTotalUsage(record, db);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node "
-                       << nodeId
-                       << " value "
-                       << ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())
-                       << " accumulated to "
-                       << node->ResourceTotalValues);
+            YDB_LOG_TRACE("THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node value accumulated",
+                {"logPrefix", GetLogPrefix()},
+                {"nodeId", nodeId},
+                {"#_ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())", ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())},
+                {"#_node->ResourceTotalValues", node->ResourceTotalValues});
             if (Self->NotEnoughResources && !node->IsOverloaded() && node->IsAllowedToRunTablet() && node->IsAbleToScheduleTablet()) {
                 Self->NotEnoughResources = false;
                 Self->ProcessWaitQueue();

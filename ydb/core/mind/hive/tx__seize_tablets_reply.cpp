@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -18,7 +20,8 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvSeizeTabletsReply& request(Request->Get()->Record);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSeizeTabletsReply::Execute");
+        YDB_LOG_DEBUG("THive::TTxSeizeTabletsReply::Execute",
+            {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         for (const NKikimrHive::TTabletInfo& protoTabletInfo : request.GetTablets()) {
             TTabletId tabletId = protoTabletInfo.GetTabletID();
@@ -156,7 +159,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSeizeTabletsReply::Complete");
+        YDB_LOG_DEBUG("THive::TTxSeizeTabletsReply::Complete",
+            {"logPrefix", GetLogPrefix()});
         if (!TabletIds.empty()) {
             THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
             request->Record.SetNewOwnerID(Self->TabletID());
@@ -165,7 +169,9 @@ public:
             }
             ctx.Send(Request->Sender, request.Release());
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Migration complete (" << Self->MigrationProgress << " tablets migrated)");
+            YDB_LOG_DEBUG("Migration complete tablets migrated)",
+                {"logPrefix", GetLogPrefix()},
+                {"#_Self->MigrationProgress", Self->MigrationProgress});
             Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_COMPLETE;
         }
     }

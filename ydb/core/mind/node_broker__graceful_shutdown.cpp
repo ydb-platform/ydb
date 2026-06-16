@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr::NNodeBroker {
 
 using namespace NKikimrNodeBroker;
@@ -22,8 +24,8 @@ public:
         const auto& rec = Event->Get()->Record;
         const auto nodeId = rec.GetNodeId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxGracefulShutdown Execute. Graceful Shutdown request from " << nodeId << " ");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGracefulShutdown Execute. Graceful Shutdown request",
+            {"nodeId", nodeId});
 
         Response = MakeHolder<TEvNodeBroker::TEvGracefulShutdownResponse>();
         const auto it = Self->Dirty.Nodes.find(nodeId);
@@ -47,7 +49,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGracefulShutdown Complete");
         if (Update) {
             Self->Committed.ReleaseSlotIndex(Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId()));
         }

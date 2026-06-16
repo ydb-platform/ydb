@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -22,7 +24,12 @@ TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
 {}
 
 void TNodeInfo::ChangeVolatileState(EVolatileState state) {
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ", " << ResourceValues << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
+    YDB_LOG_WARN("Node( ->",
+        {"logPrefix", GetLogPrefix()},
+        {"id", Id},
+        {"resourceValues", ResourceValues},
+        {"volatileState", EVolatileStateName(VolatileState)},
+        {"#_EVolatileStateName(state)", EVolatileStateName(state)});
 
     if (VolatileState != state) {
         if (VolatileState == EVolatileState::Connected) {
@@ -74,7 +81,11 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
             }
         } else {
             if (oldState != newState) {
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ") could not delete tablet " << tablet->ToString() << " from state " << TTabletInfo::EVolatileStateName(oldState));
+                YDB_LOG_WARN("Node( could not delete tablet from state",
+                    {"logPrefix", GetLogPrefix()},
+                    {"id", Id},
+                    {"tablet", tablet->ToString()},
+                    {"#_TTabletInfo::EVolatileStateName(oldState)", TTabletInfo::EVolatileStateName(oldState)});
             }
         }
     }
@@ -94,7 +105,11 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
                 LastScheduledTablet = {.TabletId = tablet->GetFullTabletId(), .UsageBefore = NodeTotalUsage};
             }
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ") could not insert tablet " << tablet->ToString() << " to state " << TTabletInfo::EVolatileStateName(newState));
+            YDB_LOG_WARN("Node( could not insert tablet to state",
+                {"logPrefix", GetLogPrefix()},
+                {"id", Id},
+                {"tablet", tablet->ToString()},
+                {"#_TTabletInfo::EVolatileStateName(newState)", TTabletInfo::EVolatileStateName(newState)});
         }
     }
     if (IsAliveState(newState)) {
@@ -115,7 +130,11 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& 
     auto oldNormalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     ResourceValues += delta;
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ", " << oldResourceValues << "->" << ResourceValues << ")");
+    YDB_LOG_TRACE("Node( ->",
+        {"logPrefix", GetLogPrefix()},
+        {"id", Id},
+        {"oldResourceValues", oldResourceValues},
+        {"resourceValues", ResourceValues});
     Hive.UpdateTotalResourceValues(this, tablet, before, after, ResourceValues - oldResourceValues, normalizedValues - oldNormalizedValues);
 }
 
@@ -366,12 +385,18 @@ void TNodeInfo::DeregisterInDomains() {
 
 void TNodeInfo::Ping() {
     Y_ABORT_UNLESS((bool)Local);
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ") Ping(" << Local << ")");
+    YDB_LOG_DEBUG("Node( Ping(",
+        {"logPrefix", GetLogPrefix()},
+        {"id", Id},
+        {"local", Local});
     Hive.QueuePing(Local);
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ") Reconnect(" << local << ")");
+    YDB_LOG_DEBUG("Node( Reconnect(",
+        {"logPrefix", GetLogPrefix()},
+        {"id", Id},
+        {"local", local});
     Hive.SendReconnect(local);
 }
 
@@ -514,7 +539,11 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
                 usageImpact = std::max<double>(usageImpact, 0);
                 auto* tablet = Hive.FindTablet(LastScheduledTablet->TabletId);
                 if (tablet) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Estimate impact of tablet " << LastScheduledTablet->TabletId << " on usage of node " << Id << " as " << usageImpact);
+                    YDB_LOG_DEBUG("Estimate impact of tablet on usage of node as",
+                        {"logPrefix", GetLogPrefix()},
+                        {"#_LastScheduledTablet->TabletId", LastScheduledTablet->TabletId},
+                        {"id", Id},
+                        {"usageImpact", usageImpact});
                     tablet->UsageImpact = usageImpact;
                     db.Table<Schema::Metrics>().Key(LastScheduledTablet->TabletId).Update<Schema::Metrics::UsageImpact>(usageImpact);
                 }

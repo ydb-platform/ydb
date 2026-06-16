@@ -6,6 +6,8 @@
 #include "node_info.h"
 #include "balancer.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -134,7 +136,9 @@ protected:
     }
 
     void PassAway() override {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer finished with " << Movements << " movements made");
+        YDB_LOG_INFO("Balancer finished with movements made",
+            {"logPrefix", GetLogPrefix()},
+            {"movements", Movements});
         Stats.TotalRuns++;
         Stats.TotalMovements += Movements;
         Stats.LastRunMovements = Movements;
@@ -146,14 +150,16 @@ protected:
             for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
                 if (node != nullptr && node->IsOverloaded()) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer suggests scale-up");
+                    YDB_LOG_DEBUG("Balancer suggests scale-up",
+                        {"logPrefix", GetLogPrefix()});
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_SUGGESTED_SCALE_UP].Increment(1);
                     break;
                 }
             }
         }
         if (Settings.RecheckOnFinish && Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer initiated recheck");
+            YDB_LOG_DEBUG("Balancer initiated recheck",
+                {"logPrefix", GetLogPrefix()});
             Hive->ProcessTabletBalancer();
         } else {
             Send(Hive->SelfId(), new TEvPrivate::TEvBalancerOut());
@@ -234,7 +240,9 @@ protected:
             if (node == nullptr) {
                 continue;
             }
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer selected node " << node->Id);
+            YDB_LOG_TRACE("Balancer selected node",
+                {"logPrefix", GetLogPrefix()},
+                {"nodeId", node->Id});
             auto itTablets = node->Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
             if (itTablets == node->Tablets.end()) {
                 continue;
@@ -243,14 +251,18 @@ protected:
             std::vector<TTabletInfo*> tablets;
             tablets.reserve(nodeTablets.size());
             for (TTabletInfo* tablet : nodeTablets) {
-                if (tablet->IsGoodForBalancer(now) && 
+                if (tablet->IsGoodForBalancer(now) &&
                     (!Settings.FilterObjectId || tablet->GetObjectId() == *Settings.FilterObjectId) &&
                     tablet->HasMetric(Settings.ResourceToBalance)) {
                     tablet->UpdateWeight();
                     tablets.emplace_back(tablet);
                 }
             }
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer on node " << node->Id <<  ": " << tablets.size() << "/" << nodeTablets.size() << " tablets are suitable for balancing");
+            YDB_LOG_TRACE("Balancer on node / tablets are suitable for balancing",
+                {"logPrefix", GetLogPrefix()},
+                {"nodeId", node->Id},
+                {"#_tablets.size", tablets.size()},
+                {"#_nodeTablets.size", nodeTablets.size()});
             if (!tablets.empty()) {
                 // avoid moving system tablets if possible
                 std::vector<TTabletInfo*>::iterator partitionIt;
@@ -304,7 +316,8 @@ protected:
 
         while (CanKickNextTablet()) {
             if (tabletsProcessed == MAX_TABLETS_PROCESSED) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer - rescheduling");
+                YDB_LOG_TRACE("Balancer - rescheduling",
+                    {"logPrefix", GetLogPrefix()});
                 Send(SelfId(), new TEvents::TEvWakeup);
                 return;
             }
@@ -316,7 +329,9 @@ protected:
             if (tablet == nullptr || !tablet->IsRunning()) {
                 continue;
             }
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer selected tablet " << tablet->ToString());
+            YDB_LOG_TRACE("Balancer selected tablet",
+                {"logPrefix", GetLogPrefix()},
+                {"tablet", tablet->ToString()});
             THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
             if (std::holds_alternative<TNodeInfo*>(result)) {
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
@@ -325,9 +340,11 @@ protected:
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
                     ++Movements;
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer moving tablet " << tablet->ToString()
-                           << " from node " << tablet->Node->Id
-                           << " to node " << node->Id);
+                    YDB_LOG_DEBUG("Balancer moving tablet from node to node",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tablet", tablet->ToString()},
+                        {"#_tablet->Node->Id", tablet->Node->Id},
+                        {"nodeId", node->Id});
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
@@ -342,7 +359,11 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer " << SelfId() << " received " << ev->Get()->Status << " for tablet " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG("Balancer received for tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", SelfId()},
+            {"#_ev->Get()->Status", ev->Get()->Status},
+            {"#_ev->Get()->TabletId", ev->Get()->TabletId});
         --KickInFlight;
         BalanceNodes();
         KickNextTablet();

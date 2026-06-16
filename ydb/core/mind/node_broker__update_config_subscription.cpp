@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -21,7 +23,7 @@ public:
     bool Execute(TTransactionContext &txc,
                  const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateConfigSubscription Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfigSubscription Execute");
 
         auto &rec = Event->Get()->Record;
         Y_ABORT_UNLESS(rec.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
@@ -35,10 +37,10 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateConfigSubscription Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfigSubscription Complete");
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Using new subscription id=" << SubscriptionId);
+        YDB_LOG_DEBUG_CTX(ctx, "Using new subscription",
+            {"id", SubscriptionId});
 
         Self->Committed.ConfigSubscriptionId = SubscriptionId;
 

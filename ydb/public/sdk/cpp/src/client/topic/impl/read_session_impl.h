@@ -231,6 +231,15 @@ template <bool UseMigrationProtocol>
 class TDataDecompressionInfo : public std::enable_shared_from_this<TDataDecompressionInfo<UseMigrationProtocol>> {
 public:
     using TPtr = std::shared_ptr<TDataDecompressionInfo<UseMigrationProtocol>>;
+    using TMessage = typename TADataReceivedEvent<UseMigrationProtocol>::TMessage;
+    using TCompressedMessage = typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage;
+
+    struct TDecompressedData {
+        std::vector<TMessage> Messages;
+        std::vector<TCompressedMessage> CompressedMessages;
+        size_t DataSize = 0;
+        size_t MessagesTaken = 0;
+    };
 
     TDataDecompressionInfo(const TDataDecompressionInfo&) = default;
     TDataDecompressionInfo(TDataDecompressionInfo&&) = default;
@@ -316,6 +325,11 @@ public:
 
     void PutDecompressionError(std::exception_ptr error, size_t batch, size_t message);
     std::exception_ptr GetDecompressionError(size_t batch, size_t message);
+
+    TDecompressedData TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                               size_t batch,
+                               size_t message,
+                               size_t& maxByteSize);
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount);
     void OnUserRetrievedEvent(i64 decompressedDataSize, size_t messagesCount);
@@ -418,12 +432,9 @@ public:
         return !Ready;
     }
 
-    void TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-                  std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TMessage>& messages,
-                  std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
-                  size_t& maxByteSize,
-                  size_t& dataSize,
-                  size_t& messagesTaken) const;
+    typename TDataDecompressionInfo<UseMigrationProtocol>::TDecompressedData
+    TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+             size_t& maxByteSize) const;
 
     size_t GetDataSize() const;
     size_t GetMessageCount() const;

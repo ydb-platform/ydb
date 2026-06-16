@@ -209,6 +209,8 @@ public:
 
     private:
         mutable TAtomicCounter PreparationsStarted = 0;
+        bool NeedResendReplyFlag = false;
+        std::optional<bool> StartedAsync;
 
         friend class TTxController;
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
@@ -253,11 +255,7 @@ public:
             Status = {};
         }
 
-        bool NeedResendReplyFlag = false;
-
         virtual TString DoDebugString() const = 0;
-
-        std::optional<bool> StartedAsync;
 
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;

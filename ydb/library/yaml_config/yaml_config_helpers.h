@@ -67,7 +67,7 @@ ui64 GetConfigHash(const TString& config);
 template<typename Proto>
 std::shared_ptr<const ::google::protobuf::Message> DefaultOpaqueConfigParser(const TString& opaqueYamlConfig, bool allowUnknownFields)
 {
-    const auto& subYaml = ( opaqueYamlConfig.StartsWith("---") ? opaqueYamlConfig.substr(3) : opaqueYamlConfig);
+    const auto& subYaml = (opaqueYamlConfig.StartsWith("---") ? opaqueYamlConfig.substr(3) : opaqueYamlConfig);
     if ( subYaml.find_first_not_of(" \t\n\r") == TString::npos )
     {
         return nullptr;
@@ -83,7 +83,6 @@ std::shared_ptr<const ::google::protobuf::Message> DefaultOpaqueConfigParser(con
     Y_ENSURE(NJson::ReadJsonTree(jsonStream.Str(), &json));
 
     auto config = GetJsonToProtoConfig(allowUnknownFields);
-    config.CastRobust = false;
     NProtobufJson::Json2Proto(json, *msg, config);
 
     return msg;

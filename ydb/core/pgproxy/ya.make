@@ -4,7 +4,6 @@ SRCS(
     pg_connection.cpp
     pg_connection.h
     pg_listener.h
-    pg_log_impl.h
     pg_log.h
     pg_proxy_events.h
     pg_proxy_types.cpp

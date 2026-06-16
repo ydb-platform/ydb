@@ -246,7 +246,7 @@ THttpResult THttpProxyTestMock::SendHttpRequestXmlRaw(const TString& handler, co
     parts.push_back(IOutputStream::TPart::CrLf());
     parts.push_back(body);
 
-    Cerr << ">>>>> Http request BODY: " << std::string_view(static_cast<const char*>(body.buf), body.len) << Endl;
+    Cerr << (TStringBuilder() << ">>>>> Http request BODY: " << std::string_view(static_cast<const char*>(body.buf), body.len) << Endl);
 
     output.Write(&parts[0], parts.size());
     output.Finish();

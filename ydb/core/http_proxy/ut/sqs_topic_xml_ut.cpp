@@ -1550,11 +1550,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         DeleteQueueXml({{"QueueUrl", queueUrl}});
 
         NJson::TJsonMap getQueueUrlRequest{{"QueueName", "ExampleQueueName"}};
-        for (const TInstant deadline = TDuration::Seconds(60).ToDeadLine(); TInstant::Now() <= deadline; ) {
-            auto jsonTry = GetQueueUrlXml(getQueueUrlRequest, 200);
-            Y_UNUSED(jsonTry);
-            Sleep(TDuration::MilliSeconds(250));
-        }
+        // for (const TInstant deadline = TDuration::Seconds(60).ToDeadLine(); TInstant::Now() <= deadline; ) {
+        //     auto jsonTry = GetQueueUrlXml(getQueueUrlRequest, 200);
+        //     Y_UNUSED(jsonTry);
+        //     Sleep(TDuration::MilliSeconds(250));
+        // }
         auto notFoundJson = GetQueueUrlXml(getQueueUrlRequest, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(notFoundJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
     }

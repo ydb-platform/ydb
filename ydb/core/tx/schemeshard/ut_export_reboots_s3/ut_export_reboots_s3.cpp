@@ -863,39 +863,23 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             TTestData::ColumnTable()
         }, TTestData::Items(EPathTypeColumnTable));
     }
+    
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
+        if (IsFs) {
+            return; // It is not supported yet
+        }
+        CancelExport<IsFs>(t, {
+            TTestData::ColumnTable()
+        }, TTestData::Items(EPathTypeColumnTable));
+    }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ForgetShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
         if (IsFs) {
             return; // It is not supported yet
         }
-        TExportEnv<IsFs> env(TTestData::Items(EPathTypeColumnTable));
-
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            env.SetupRuntime(runtime);
-            runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-            {
-                TInactiveZone inactive(activeZone);
-                CreateSchemeObjects(t, runtime, {
-                    TTestData::ColumnTable()
-                });
-
-                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            }
-
-            const ui64 exportId = t.TxId;
-
-            t.TestEnv->ReliablePropose(runtime, ForgetExportRequest(++t.TxId, "/MyRoot", exportId), {
-                Ydb::StatusIds::SUCCESS,
-            });
-            t.TestEnv->TestWaitNotification(runtime, exportId);
-
-            {
-                TInactiveZone inactive(activeZone);
-                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-            }
-        });
+        ForgetExport<IsFs>(t, {
+            TTestData::ColumnTable()
+        }, TTestData::Items(EPathTypeColumnTable));
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemViewPermissions, 2, 1, false, IsFs) {

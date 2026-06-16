@@ -4152,7 +4152,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         txState->TxType != TTxState::TxCreateReplication &&
                         txState->TxType != TTxState::TxAlterReplication &&
                         txState->TxType != TTxState::TxDropReplication &&
-                        txState->TxType != TTxState::TxDropReplicationCascade)
+                        txState->TxType != TTxState::TxDropReplicationCascade &&
+                        txState->TxType != TTxState::TxBackup
+                    )
                     {
                         Y_VERIFY_S(txState->TxType == TTxState::TxCopyTable || txState->TxType == TTxState::TxReadOnlyCopyColumnTable, "Only CopyTable Tx can have participating shards from a different table"
                                        << ", txId: " << operationId.GetTxId()
@@ -4338,102 +4340,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
         Self->LoginProvider.UpdateSecurityState(std::move(securityState));
-
-        {
-            TShardBackupStatusRows backupStatuses;
-            if (!LoadBackupStatuses(db, backupStatuses)) {
-                return false;
-            }
-
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for ShardBackupStatus"
-                             << ", read records: " << backupStatuses.size()
-                             << ", at schemeshard: " << Self->TabletID());
-
-            THashMap<TTxId, TShardBackupStatusRows> statusesByTxId;
-            for (auto& rec: backupStatuses) {
-                TTxId txId = std::get<0>(rec);
-                statusesByTxId[txId].push_back(rec);
-            }
-
-            TCompletedBackupRestoreRows history;
-            if (!LoadBackupRestoreHistory(db, history)) {
-                return false;
-            }
-
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for CompletedBackup"
-                             << ", read records: " << history.size()
-                             << ", at schemeshard: " << Self->TabletID());
-
-            RestoreTablesToUnmark.clear();
-
-            for (auto& rec: history) {
-                auto pathId = std::get<0>(rec);
-                auto txId = std::get<1>(rec);
-                auto completeTime = std::get<2>(rec);
-
-                auto successShardsCount = std::get<3>(rec);
-                auto totalShardCount = std::get<4>(rec);
-                auto startTime = std::get<5>(rec);
-                auto dataSize = std::get<6>(rec);
-                auto kind = static_cast<TTableInfo::TBackupRestoreResult::EKind>(std::get<7>(rec));
-
-                TTableInfo::TBackupRestoreResult info;
-                info.CompletionDateTime = completeTime;
-                info.TotalShardCount = totalShardCount;
-                info.SuccessShardCount = successShardsCount;
-                info.StartDateTime = startTime;
-                info.DataTotalSize = dataSize;
-
-                if (!Self->Tables.FindPtr(pathId)) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                "Skip record in CompletedBackups"
-                                    << ", pathId: " << pathId
-                                    << ", txid: " << txId);
-                    continue;
-                }
-
-
-                if (statusesByTxId.contains(txId)) {
-                    for (auto& recByTxId: statusesByTxId.at(txId)) {
-                        auto shardIdx = std::get<1>(recByTxId);
-                        auto success = std::get<2>(recByTxId);
-                        auto error = std::get<3>(recByTxId);
-                        auto bytes = std::get<4>(recByTxId);
-                        auto rows = std::get<5>(recByTxId);
-
-                        info.ShardStatuses[shardIdx] = TTxState::TShardStatus(success, error, bytes, rows);
-                    }
-                }
-
-                auto fillBackupInfo = [&](auto& tableInfo) {
-                    switch (kind) {
-                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
-                        tableInfo->BackupHistory[txId] = std::move(info);
-                        break;
-                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
-                        tableInfo->RestoreHistory[txId] = std::move(info);
-                        if (tableInfo->IsRestore) {
-                            RestoreTablesToUnmark.push_back(pathId);
-                        }
-                        break;
-                    }
-                };
-
-                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
-                    fillBackupInfo(it->second);
-                } else if (Self->ColumnTables.contains(pathId)) {
-                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
-                    fillBackupInfo(tableInfo);
-                }
-
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Loaded completed backup status"
-                                << ", pathId: " << pathId
-                                << ", txid: " << txId);
-            }
-        }
 
         // Other persistent params
         for (const auto& si : Self->ShardInfos) {
@@ -5438,6 +5344,104 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (!rowset.Next()) {
                     return false;
                 }
+            }
+        }
+
+        // Read completed backup/restore history
+        // NB: must be after ColumnTables are loaded so that BackupHistory is populated for column tables
+        {
+            TShardBackupStatusRows backupStatuses;
+            if (!LoadBackupStatuses(db, backupStatuses)) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TTxInit for ShardBackupStatus"
+                             << ", read records: " << backupStatuses.size()
+                             << ", at schemeshard: " << Self->TabletID());
+
+            THashMap<TTxId, TShardBackupStatusRows> statusesByTxId;
+            for (auto& rec: backupStatuses) {
+                TTxId txId = std::get<0>(rec);
+                statusesByTxId[txId].push_back(rec);
+            }
+
+            TCompletedBackupRestoreRows history;
+            if (!LoadBackupRestoreHistory(db, history)) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TTxInit for CompletedBackup"
+                             << ", read records: " << history.size()
+                             << ", at schemeshard: " << Self->TabletID());
+
+            RestoreTablesToUnmark.clear();
+
+            for (auto& rec: history) {
+                auto pathId = std::get<0>(rec);
+                auto txId = std::get<1>(rec);
+                auto completeTime = std::get<2>(rec);
+
+                auto successShardsCount = std::get<3>(rec);
+                auto totalShardCount = std::get<4>(rec);
+                auto startTime = std::get<5>(rec);
+                auto dataSize = std::get<6>(rec);
+                auto kind = static_cast<TTableInfo::TBackupRestoreResult::EKind>(std::get<7>(rec));
+
+                TTableInfo::TBackupRestoreResult info;
+                info.CompletionDateTime = completeTime;
+                info.TotalShardCount = totalShardCount;
+                info.SuccessShardCount = successShardsCount;
+                info.StartDateTime = startTime;
+                info.DataTotalSize = dataSize;
+
+                if (!Self->Tables.FindPtr(pathId) && !Self->ColumnTables.contains(pathId)) {
+                    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                "Skip record in CompletedBackups"
+                                    << ", pathId: " << pathId
+                                    << ", txid: " << txId);
+                    continue;
+                }
+
+
+                if (statusesByTxId.contains(txId)) {
+                    for (auto& recByTxId: statusesByTxId.at(txId)) {
+                        auto shardIdx = std::get<1>(recByTxId);
+                        auto success = std::get<2>(recByTxId);
+                        auto error = std::get<3>(recByTxId);
+                        auto bytes = std::get<4>(recByTxId);
+                        auto rows = std::get<5>(recByTxId);
+
+                        info.ShardStatuses[shardIdx] = TTxState::TShardStatus(success, error, bytes, rows);
+                    }
+                }
+
+                auto fillBackupInfo = [&](auto& tableInfo) {
+                    switch (kind) {
+                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
+                        tableInfo->BackupHistory[txId] = std::move(info);
+                        break;
+                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
+                        tableInfo->RestoreHistory[txId] = std::move(info);
+                        if (tableInfo->IsRestore) {
+                            RestoreTablesToUnmark.push_back(pathId);
+                        }
+                        break;
+                    }
+                };
+
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    fillBackupInfo(it->second);
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    fillBackupInfo(tableInfo);
+                }
+
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Loaded completed backup status"
+                                << ", pathId: " << pathId
+                                << ", txid: " << txId);
             }
         }
 

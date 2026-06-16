@@ -24,6 +24,6 @@
 
 {% include notitle [analytics.md](../analytics.md) %}
 
-## Known issues
+## Known issues {#known-issues}
 
 {% include notitle [known-issues.md](../known-issues.md) %}

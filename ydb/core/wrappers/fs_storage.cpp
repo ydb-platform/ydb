@@ -198,7 +198,9 @@ private:
         }
 
         auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
-        opts.ErrorMessage = ex.what();
+        if (opts.ErrorMessage.empty()) {
+            opts.ErrorMessage = ex.what();
+        }
         ReplyError<TEvResponse>(sender, std::move(opts), std::forward<Args>(args)...);
     }
 

@@ -1170,13 +1170,21 @@ bool TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
 
     for (const auto& [topicName, topic] : Topics) {
         if (ReadWithoutConsumer) {
-            if (topic->Groups.size() == 0) {
-                CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer", ctx);
-                return false;
-            }
-            for (auto group : topic->Groups) {
-                if (!SendLockPartitionToSelf(group-1, topicName, topic, ctx)) {
+            if (topic->Groups.empty()) {
+                if (!AutoPartitioningSupport) {
+                    CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer by non-autoscale aware client", ctx);
                     return false;
+                }
+                for (auto partitionId : topic->GetPartitionGraph()->GetRootPartitions()) {
+                    if (!SendLockPartitionToSelf(partitionId, topicName, topic, ctx)) {
+                        return false;
+                    }
+                }
+            } else {
+                for (auto group : topic->Groups) {
+                    if (!SendLockPartitionToSelf(group-1, topicName, topic, ctx)) {
+                        return false;
+                    }
                 }
             }
         } else {
@@ -2470,6 +2478,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
             }
             for (auto p : msg->ChildPartitionIds) {
                 r->add_child_partition_ids(p);
+                if (ReadWithoutConsumer && topic->Groups.empty()) {
+                    if (!SendLockPartitionToSelf(p, it->first, topic, ctx)) {
+                        return;
+                    }
+                }
             }
 
             LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client end partition stream event");

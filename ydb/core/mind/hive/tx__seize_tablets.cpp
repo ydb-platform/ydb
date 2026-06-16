@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -43,9 +41,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvSeizeTablets& request(Request->Get()->Record);
         NKikimrHive::TEvSeizeTabletsReply& response(Response->Record);
-        YDB_LOG_DEBUG("THive::TTxSeizeTablets::Execute",
-            {"logPrefix", GetLogPrefix()},
-            {"request", request});
+        BLOG_D("THive::TTxSeizeTablets::Execute " << request);
         TTabletId newOwnerId = request.GetNewOwnerID();
         response.ClearTablets();
         NIceDb::TNiceDb db(txc.DB);
@@ -61,19 +57,14 @@ public:
                 // we also skip current metrics state for followers
 
                 TTabletId id = tabletId;
-                YDB_LOG_DEBUG("THive::TTxSeizeTablets is migrating tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"id", id},
-                    {"newOwnerId", newOwnerId});
+                BLOG_D("THive::TTxSeizeTablets is migrating tablet " << id << " to " << newOwnerId);
 
                 auto tabletRowset = db.Table<Schema::Tablet>().Key(id).Select();
                 if (!tabletRowset.IsReady()) {
                     return false;
                 }
                 if (tabletRowset.EndOfSet()) {
-                    YDB_LOG_DEBUG("THive::TTxSeizeTablets couldn't find tablet in database",
-                        {"logPrefix", GetLogPrefix()},
-                        {"id", id});
+                    BLOG_D("THive::TTxSeizeTablets couldn't find tablet " << id << " in database");
                     continue;
                 }
 
@@ -162,9 +153,7 @@ public:
     }
 
     void Complete(const TActorContext& txc) override {
-        YDB_LOG_DEBUG("THive::TTxSeizeTablets::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"requestRecord", Request->Get()->Record});
+        BLOG_D("THive::TTxSeizeTablets::Complete " << Request->Get()->Record);
         txc.Send(Request->Sender, Response.Release());
     }
 };

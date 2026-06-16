@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -18,8 +16,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_TABLET_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxProcessTabletMetrics::Execute()",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("TTxProcessTabletMetrics::Execute()");
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());
         for (size_t i = 0; !Self->ProcessTabletMetricsQueue.empty() && i < MAX_UPDATES_PROCESSED; ++i) {

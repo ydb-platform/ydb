@@ -5,8 +5,6 @@
 #include "leader_tablet_info.h"
 #include "follower_tablet_info.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -116,31 +114,15 @@ TString TTabletInfo::FamilyString() const {
 void TTabletInfo::ChangeVolatileState(EVolatileState state) {
     if (VolatileState == state) {
         if (Node != nullptr) {
-            YDB_LOG_DEBUG("Tablet( (Node",
-                {"logPrefix", GetLogPrefix()},
-                {"toString", ToString()},
-                {"volatileState", EVolatileStateName(VolatileState)},
-                {"nodeId", Node->Id});
+            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " (Node " << Node->Id << ")");
         } else {
-            YDB_LOG_DEBUG("Tablet(",
-                {"logPrefix", GetLogPrefix()},
-                {"toString", ToString()},
-                {"volatileState", EVolatileStateName(VolatileState)});
+            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState));
         }
     } else {
         if (Node != nullptr) {
-            YDB_LOG_DEBUG("Tablet( -> (Node",
-                {"logPrefix", GetLogPrefix()},
-                {"toString", ToString()},
-                {"volatileState", EVolatileStateName(VolatileState)},
-                {"volatileStateName", EVolatileStateName(state)},
-                {"nodeId", Node->Id});
+            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state) << " (Node " << Node->Id << ")");
         } else {
-            YDB_LOG_DEBUG("Tablet( ->",
-                {"logPrefix", GetLogPrefix()},
-                {"toString", ToString()},
-                {"volatileState", EVolatileStateName(VolatileState)},
-                {"volatileStateName", EVolatileStateName(state)});
+            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
         }
     }
     if (Node != nullptr) {
@@ -368,10 +350,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)) {
         if (metrics.HasCPU()) {
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
-                YDB_LOG_WARN("Ignoring too high CPU metric for tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"cpu", metrics.GetCPU()},
-                    {"toString", ToString()});
+                BLOG_W("Ignoring too high CPU metric (" << metrics.GetCPU() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumCPU.SetValue(metrics.GetCPU(), now);
             }
@@ -383,10 +362,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)) {
         if (metrics.HasMemory()) {
             if (metrics.GetMemory() > static_cast<ui64>(std::get<NMetrics::EResource::Memory>(maximum))) {
-                YDB_LOG_WARN("Ignoring too high Memory metric for tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"memory", metrics.GetMemory()},
-                    {"toString", ToString()});
+                BLOG_W("Ignoring too high Memory metric (" << metrics.GetMemory() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumMemory.SetValue(metrics.GetMemory(), now);
             }
@@ -398,10 +374,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)) {
         if (metrics.HasNetwork()) {
             if (metrics.GetNetwork() > static_cast<ui64>(std::get<NMetrics::EResource::Network>(maximum))) {
-                YDB_LOG_WARN("Ignoring too high Network metric for tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"network", metrics.GetNetwork()},
-                    {"toString", ToString()});
+                BLOG_W("Ignoring too high Network metric (" << metrics.GetNetwork() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumNetwork.SetValue(metrics.GetNetwork(), now);
             }
@@ -542,11 +515,7 @@ void TTabletInfo::SendStopTablet(const TActorId& local, TSideEffects& sideEffect
         if (IsLeader()) {
             gen = AsLeader().KnownGeneration;
         }
-        YDB_LOG_DEBUG("Sending TEvStopTablet( gen to node",
-            {"logPrefix", GetLogPrefix()},
-            {"toString", ToString()},
-            {"gen", gen},
-            {"localNodeId", local.NodeId()});
+        BLOG_D("Sending TEvStopTablet(" << ToString() << " gen " << gen << ") to node " << local.NodeId());
         sideEffects.Send(local, new TEvLocal::TEvStopTablet(tabletId, gen));
     }
 }

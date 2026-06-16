@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr::NHive {
 
 class TTxUpdatePiles : public TTransactionBase<THive> {
@@ -16,8 +14,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_PILES; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxUpdatePiles()::Execute",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("THive::TTxUpdatePiles()::Execute");
         NIceDb::TNiceDb db(txc.DB);
         bool promotion = false;
         Y_ENSURE(Self->BridgeInfo);
@@ -75,8 +72,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxUpdatePiles()::Complete",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("THive::TTxUpdatePiles()::Complete");
     }
 
 };

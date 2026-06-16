@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -20,14 +18,11 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REQUEST_TABLET_OWNERS; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxRequestTabletOwners::Execute",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("THive::TTxRequestTabletOwners::Execute");
         auto ownerId = Request->Get()->Record.GetOwnerID();
         std::vector<TSequencer::TSequence> sequences;
         Self->Keeper.GetOwnedSequences(ownerId, sequences);
-        YDB_LOG_DEBUG("THive::TTxRequestTabletOwners - replying with sequences",
-            {"logPrefix", GetLogPrefix()},
-            {"sequencesCount", sequences.size()});
+        BLOG_D("THive::TTxRequestTabletOwners - replying with " << sequences.size() << " sequences");
         for (const auto& seq : sequences) {
             auto* tabletOwners = Response->Record.AddTabletOwners();
             tabletOwners->SetOwnerID(ownerId);
@@ -38,8 +33,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxRequestTabletOwners::Complete",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("THive::TTxRequestTabletOwners::Complete");
         Self->Send(Request->Sender, Response.Release());
     }
 };

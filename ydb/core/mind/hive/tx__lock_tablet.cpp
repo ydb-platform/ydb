@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -36,9 +34,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOCK_TABLET_EXECUTION; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxLockTabletExecution::Execute",
-            {"logPrefix", GetLogPrefix()},
-            {"tabletId", TabletId});
+        BLOG_D("THive::TTxLockTabletExecution::Execute TabletId: " << TabletId);
 
         SideEffects.Reset(Self->SelfId());
 
@@ -120,15 +116,9 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Success) {
-            YDB_LOG_DEBUG("THive::TTxLockTabletExecution::Complete",
-                {"logPrefix", GetLogPrefix()},
-                {"tabletId", TabletId},
-                {"sideEffects", SideEffects});
+            BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
         } else {
-            YDB_LOG_NOTICE("THive::TTxLockTabletExecution::Complete",
-                {"logPrefix", GetLogPrefix()},
-                {"tabletId", TabletId},
-                {"sideEffects", SideEffects});
+            BLOG_NOTICE("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
         }
         SideEffects.Complete(ctx);
     }

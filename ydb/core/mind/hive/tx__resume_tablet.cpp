@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -23,9 +21,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_RESUME_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxResumeTablet::Execute",
-            {"logPrefix", GetLogPrefix()},
-            {"tablet", TabletId});
+        BLOG_D("THive::TTxResumeTablet::Execute Tablet: " << TabletId);
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
@@ -89,9 +85,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxResumeTablet::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"tabletId", TabletId});
+        BLOG_D("THive::TTxResumeTablet::Complete TabletId: " << TabletId);
         SideEffects.Complete(ctx);
         if (ByTenant) {
             Self->ProcessPendingResumeTablet();

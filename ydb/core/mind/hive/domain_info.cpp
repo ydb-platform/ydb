@@ -2,8 +2,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -73,10 +71,8 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
         auto scaleInWindowEnd = UsageHistory.end();
         double usageBottomThreshold = TargetUsage - config.GetTargetTrackingCPUMargin();
 
-        YDB_LOG_TRACE("[MSR] Scale in window: bottom",
-            {"logPrefix", GetLogPrefix()},
-            {"scaleInWindow", JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)},
-            {"threshold", usageBottomThreshold});
+        BLOG_TRACE("[MSR] Scale in window: [" << JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)
+                   << "], bottom threshold: " << usageBottomThreshold);
         bool needScaleIn = std::all_of(
             scaleInWindowBegin,
             scaleInWindowEnd,
@@ -90,23 +86,18 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
                 readyNodesCount,
                 TargetUsage
             );
-            YDB_LOG_TRACE("[MSR] Need scale in, rounded recommended",
-                {"logPrefix", GetLogPrefix()},
-                {"nodes", recommendedNodes});
+            BLOG_TRACE("[MSR] Need scale in, rounded recommended nodes: " << recommendedNodes);
         }
     } else {
-        YDB_LOG_TRACE("[MSR] Not enough history for scale",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_TRACE("[MSR] Not enough history for scale in");
     }
 
     if (UsageHistory.size() >= config.GetScaleOutWindowSize()) {
         auto scaleOutWindowBegin = UsageHistory.end() - config.GetScaleOutWindowSize();
         auto scaleOutWindowEnd = UsageHistory.end();
 
-        YDB_LOG_TRACE("[MSR] Scale out window",
-            {"logPrefix", GetLogPrefix()},
-            {"scaleOutWindow", JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)},
-            {"target", TargetUsage});
+        BLOG_TRACE("[MSR] Scale out window: [" << JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)
+                   << "], target: " << TargetUsage);
         bool needScaleOut = std::all_of(
             scaleOutWindowBegin,
             scaleOutWindowEnd,
@@ -120,13 +111,10 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
                 readyNodesCount,
                 TargetUsage
             );
-            YDB_LOG_TRACE("[MSR] Need scale out, rounded recommended",
-                {"logPrefix", GetLogPrefix()},
-                {"nodes", recommendedNodes});
+            BLOG_TRACE("[MSR] Need scale out, rounded recommended nodes: " << recommendedNodes);
         }
     } else {
-        YDB_LOG_TRACE("[MSR] Not enough history for scale out",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_TRACE("[MSR] Not enough history for scale out");
     }
 
     return recommendedNodes ? std::max(*recommendedNodes, 1u) : recommendedNodes;

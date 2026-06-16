@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -19,15 +17,12 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_CONFIGURE_SUBDOMAIN; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxConfigureSubdomain::Execute",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("THive::TTxConfigureSubdomain::Execute");
 
         const auto& domain(Event->Get()->Record.GetDomain());
         Self->PrimaryDomainKey = TSubDomainKey(domain);
 
-        YDB_LOG_DEBUG("Switching primary domain",
-            {"logPrefix", GetLogPrefix()},
-            {"domain", domain});
+        BLOG_D("Switching primary domain to " << domain);
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::SubDomain>().Key(domain.GetSchemeShard(), domain.GetPathId()).Update<Schema::SubDomain::Primary>(true);
@@ -36,8 +31,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxConfigureSubdomain::Complete",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("THive::TTxConfigureSubdomain::Complete");
         ctx.Send(Event->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()));
     }
 };

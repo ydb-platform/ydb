@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -15,8 +13,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOAD_EVERYTHING; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        YDB_LOG_NOTICE("THive::TTxLoadEverything::Execute",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_NOTICE("THive::TTxLoadEverything::Execute");
 
         TAppData* appData = AppData();
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
@@ -239,19 +236,13 @@ public:
 
             // remove after upgrade vvvv
             if (ownerId != TSequencer::NO_OWNER && Self->Keeper.GetOwner(seq.Begin) == TSequencer::NO_OWNER) {
-                YDB_LOG_WARN("THive::TTxLoadEverything fixing TabletOwners",
-                    {"logPrefix", GetLogPrefix()},
-                    {"seq", seq},
-                    {"ownerId", ownerId});
+                BLOG_W("THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << ownerId);
                 Self->Keeper.AddOwnedSequence(ownerId, seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(ownerId);
             }
 
             if (ownerId == TSequencer::NO_OWNER && !isRootHive && Self->Keeper.GetOwner(seq.Begin) == TSequencer::NO_OWNER) {
-                YDB_LOG_WARN("THive::TTxLoadEverything fixing TabletOwners",
-                    {"logPrefix", GetLogPrefix()},
-                    {"seq", seq},
-                    {"selfTabletId", Self->TabletID()});
+                BLOG_W("THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << Self->TabletID());
                 Self->Keeper.AddOwnedSequence(Self->TabletID(), seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
             }
@@ -262,9 +253,7 @@ public:
             }
         }
 
-        YDB_LOG_NOTICE("THive::TTxLoadEverything loaded sequences",
-            {"logPrefix", GetLogPrefix()},
-            {"numSequences", numSequences});
+        BLOG_NOTICE("THive::TTxLoadEverything loaded " << numSequences << " sequences");
 
         auto tabletTypeAllowedMetrics = db.Table<Schema::TabletTypeMetrics>().Select();
         if (!tabletTypeAllowedMetrics.IsReady())
@@ -309,9 +298,7 @@ public:
                 if (!domainRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded subdomains",
-                {"logPrefix", GetLogPrefix()},
-                {"numSubDomains", numSubDomains});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numSubDomains << " subdomains");
         }
 
         {
@@ -325,9 +312,7 @@ public:
                 if (!blockedOwnerRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded blocked owners",
-                {"logPrefix", GetLogPrefix()},
-                {"numBlockedOwners", numBlockedOwners});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numBlockedOwners << " blocked owners");
         }
 
         {
@@ -347,9 +332,7 @@ public:
                     return false;
                 }
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded bridge piles",
-                {"logPrefix", GetLogPrefix()},
-                {"numPiles", numPiles});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numPiles << " bridge piles");
         }
 
         {
@@ -404,9 +387,7 @@ public:
                 if (!nodeRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded nodes",
-                {"logPrefix", GetLogPrefix()},
-                {"numNodes", numNodes});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numNodes << " nodes");
         }
 
         {
@@ -423,9 +404,7 @@ public:
                 if (!categoryRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet categories",
-                {"logPrefix", GetLogPrefix()},
-                {"numTabletCategories", numTabletCategories});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletCategories << " tablet categories");
         }
 
         if (auto systemCategoryId = Self->CurrentConfig.GetSystemTabletCategoryId(); systemCategoryId != 0 && Self->TabletCategories.empty()) {
@@ -540,9 +519,7 @@ public:
                 if (!tabletRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablets",
-                {"logPrefix", GetLogPrefix()},
-                {"numTablets", numTablets});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTablets << " tablets");
         }
 
         {
@@ -581,10 +558,8 @@ public:
                 if (!tabletChannelRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet/channel pairs for missing tablets)",
-                {"logPrefix", GetLogPrefix()},
-                {"numTabletChannels", numTabletChannels},
-                {"numMissingTablets", numMissingTablets});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletChannels << " tablet/channel pairs ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         {
@@ -621,18 +596,14 @@ public:
                 if (!tabletChannelGenRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet/channel history items for missing tablets)",
-                {"logPrefix", GetLogPrefix()},
-                {"numTabletChannelHistories", numTabletChannelHistories},
-                {"numMissingTablets", numMissingTablets});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletChannelHistories << " tablet/channel history items ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         for (auto& [tabletId, tabletInfo] : Self->Tablets) {
             tabletInfo.AcquireAllocationUnits();
         }
-        YDB_LOG_NOTICE("THive::TTxLoadEverything initialized allocation units for tablets",
-            {"logPrefix", GetLogPrefix()},
-            {"tabletsCount", Self->Tablets.size()});
+        BLOG_NOTICE("THive::TTxLoadEverything initialized allocation units for " << Self->Tablets.size() << " tablets");
 
         {
             size_t numTabletFollowerGroups = 0;
@@ -669,10 +640,8 @@ public:
                 if (!tabletFollowerGroupRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet follower groups for missing tablets)",
-                {"logPrefix", GetLogPrefix()},
-                {"numTabletFollowerGroups", numTabletFollowerGroups},
-                {"numMissingTablets", numMissingTablets});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowerGroups << " tablet follower groups ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         {
@@ -715,10 +684,8 @@ public:
                 if (!tabletFollowerRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet followers for missing tablets)",
-                {"logPrefix", GetLogPrefix()},
-                {"numTabletFollowers", numTabletFollowers},
-                {"numMissingTablets", numMissingTablets});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowers << " tablet followers ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         // Compatability: some per-dc followers do not have their datacenter set - try to set it now
@@ -804,10 +771,8 @@ public:
                 if (!metricsRowset.Next())
                     return false;
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded metrics for missing tablets)",
-                {"logPrefix", GetLogPrefix()},
-                {"numMetrics", numMetrics},
-                {"numMissingTablets", numMissingTablets});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
+                    << numMissingTablets << " for missing tablets)");
         }
 
         {
@@ -832,10 +797,8 @@ public:
                     return false;
                 }
             }
-            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet availability restrictions for missing nodes)",
-                {"logPrefix", GetLogPrefix()},
-                {"numRestrictions", numRestrictions},
-                {"numMissingNodes", numMissingNodes});
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numRestrictions << " tablet availability restrictions ("
+                        << numMissingNodes << " for missing nodes)");
         }
 
         {
@@ -879,10 +842,7 @@ public:
                 ++itNode;
             }
         }
-        YDB_LOG_NOTICE("THive::TTxLoadEverything deleted unnecessary nodes << (and restrictions for them)",
-            {"logPrefix", GetLogPrefix()},
-            {"numDeletedNodes", numDeletedNodes},
-            {"numDeletedRestrictions", numDeletedRestrictions});
+        BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
 
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 
@@ -897,10 +857,7 @@ public:
         if (isRootHive) {
             if (numSequences == 0) {
                 ui64 freeSequenceIdx = 0;
-                YDB_LOG_DEBUG("THive::TTxLoadEverything",
-                    {"logPrefix", GetLogPrefix()},
-                    {"nextTabletId", Self->NextTabletId},
-                    {"nextTabletId", nextTabletId});
+                BLOG_D("THive::TTxLoadEverything Self->NextTabletId = " << Self->NextTabletId << " NextTabletId = " << nextTabletId);
                 if (nextTabletId < TABLET_ID_BLACKHOLE_BEGIN) {
                     TSequencer::TOwnerType owner(TSequencer::NO_OWNER, freeSequenceIdx++);
                     TSequencer::TSequence sequence({0x10000, std::max<TTabletId>(nextTabletId, 0x10000), TABLET_ID_BLACKHOLE_BEGIN});
@@ -922,27 +879,19 @@ public:
 
         if (numSequences != 0) {
             std::vector<TSequencer::TOwnerType> modified;
-            YDB_LOG_DEBUG("THive::TTxLoadEverything",
-                {"logPrefix", GetLogPrefix()},
-                {"nextElement", Self->Sequencer.GetNextElement()},
-                {"nextTabletId", nextTabletId});
+            BLOG_D("THive::TTxLoadEverything NextElement = " << Self->Sequencer.GetNextElement() << " NextTabletId = " << nextTabletId);
             while (Self->Sequencer.GetNextElement() < nextTabletId) {
                 TSequencer::TElementType element = Self->Sequencer.AllocateElement(modified);
                 SortUnique(modified);
                 if (element == TSequencer::NO_ELEMENT) {
-                    YDB_LOG_ERROR("THive::TTxLoadEverything - unable to equalize NextTabletId - could not allocate free element",
-                        {"logPrefix", GetLogPrefix()},
-                        {"nextTabletId", nextTabletId});
+                    BLOG_ERROR("THive::TTxLoadEverything - unable to equalize NextTabletId " << nextTabletId << " - could not allocate free element");
                     break;
                 }
             }
             if (!modified.empty()) {
                 for (auto owner : modified) {
                     auto sequence = Self->Sequencer.GetSequence(owner);
-                    YDB_LOG_CRIT("THive::TTxLoadEverything - equalizing sequence",
-                        {"logPrefix", GetLogPrefix()},
-                        {"owner", owner},
-                        {"sequence", sequence});
+                    BLOG_CRIT("THive::TTxLoadEverything - equalizing sequence " << owner << " to " << sequence);
                     db.Table<Schema::Sequences>()
                             .Key(owner)
                             .Update<Schema::Sequences::Begin, Schema::Sequences::Next, Schema::Sequences::End>(sequence.Begin, sequence.Next, sequence.End);
@@ -954,9 +903,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_NOTICE("THive::TTxLoadEverything::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"databaseConfig", Self->DatabaseConfig});
+        BLOG_NOTICE("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;

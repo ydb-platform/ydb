@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -26,7 +24,7 @@ public:
         for (const auto& metrics : record.GetTabletMetrics()) {
             TTabletId tabletId = metrics.GetTabletID();
             TFollowerId followerId = metrics.GetFollowerID();
-            //LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletMetrics::Execute Tablet: " << tabletId);
+            //BLOG_D("THive::TTxUpdateTabletMetrics::Execute Tablet: " << tabletId);
             TTabletInfo* tablet = Self->FindTablet(tabletId, followerId);
             if (tablet != nullptr && metrics.HasResourceUsage()) {
                 tablet->UpdateResourceUsage(metrics.GetResourceUsage());
@@ -54,11 +52,12 @@ public:
             node->UpdateResourceTotalUsage(record, db);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);
-            YDB_LOG_TRACE("THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node value accumulated",
-                {"logPrefix", GetLogPrefix()},
-                {"nodeId", nodeId},
-                {"resourceUsage", ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())},
-                {"resourceTotalValues", node->ResourceTotalValues});
+            BLOG_TRACE("THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node "
+                       << nodeId
+                       << " value "
+                       << ResourceRawValuesFromMetrics(record.GetTotalResourceUsage())
+                       << " accumulated to "
+                       << node->ResourceTotalValues);
             if (Self->NotEnoughResources && !node->IsOverloaded() && node->IsAllowedToRunTablet() && node->IsAbleToScheduleTablet()) {
                 Self->NotEnoughResources = false;
                 Self->ProcessWaitQueue();

@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -15,13 +13,11 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_PENDING_OPERATIONS; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxProcessPendingOperations()::Execute",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("THive::TTxProcessPendingOperations()::Execute");
         for (auto& [owner, pendingCreateTablet] : Self->PendingCreateTablets) {
             THolder<TEvHive::TEvCreateTablet> evCreateTablet(new TEvHive::TEvCreateTablet());
             evCreateTablet->Record = pendingCreateTablet.CreateTablet;
-            YDB_LOG_DEBUG("THive::TTxProcessPendingOperations(): retry CreateTablet",
-                {"logPrefix", GetLogPrefix()});
+            BLOG_D("THive::TTxProcessPendingOperations(): retry CreateTablet");
             TlsActivationContext->Send(new IEventHandle(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));
         }
         for (auto& handle : Self->PendingOperations) {
@@ -32,8 +28,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("THive::TTxProcessPendingOperations()::Complete",
-            {"logPrefix", GetLogPrefix()});
+        BLOG_D("THive::TTxProcessPendingOperations()::Complete");
     }
 };
 

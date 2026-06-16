@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -21,9 +19,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        YDB_LOG_DEBUG("THive::TTxStatus( )::Execute",
-            {"logPrefix", GetLogPrefix()},
-            {"nodeId", nodeId});
+        BLOG_D("THive::TTxStatus(" << nodeId << ")::Execute");
         TEvLocal::TEvStatus::EStatus status = (TEvLocal::TEvStatus::EStatus)Record.GetStatus();
         TNodeInfo& node = Self->GetNode(nodeId);
         if (status == TEvLocal::TEvStatus::StatusOk && node.BecomeConnected()) {
@@ -52,19 +48,14 @@ public:
             }
             Self->ProcessWaitQueue(); // new node connected
             if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {
-                YDB_LOG_DEBUG("THive::TTxStatus( - continuing node drain",
-                    {"logPrefix", GetLogPrefix()},
-                    {"nodeId", nodeId});
+                BLOG_D("THive::TTxStatus(" << nodeId << ") - continuing node drain");
                 Y_DEBUG_ABORT_UNLESS(node.DrainActor == nullptr);
                 node.DrainActor = Self->StartHiveDrain(nodeId, {.Persist = true, .DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN});
             }
             Self->ObjectDistributions.AddNode(node);
         } else {
-            YDB_LOG_WARN("- killing node",
-                {"logPrefix", GetLogPrefix()},
-                {"status", static_cast<int>(status)},
-                {"node", TNodeInfo::EVolatileStateName(node.GetVolatileState())},
-                {"nodeId", node.Id});
+            BLOG_W("THive::TTxStatus(status=" << static_cast<int>(status)
+                   << " node=" << TNodeInfo::EVolatileStateName(node.GetVolatileState()) << ") - killing node " << node.Id);
             Self->KillNode(node.Id, Local);
         }
         return true;
@@ -72,9 +63,7 @@ public:
 
     void Complete(const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        YDB_LOG_DEBUG("THive::TTxStatus( )::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"nodeId", nodeId});
+        BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete");
     }
 };
 

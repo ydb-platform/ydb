@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -40,9 +38,7 @@ public:
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxSyncTablets( )::Execute",
-            {"logPrefix", GetLogPrefix()},
-            {"local", Local});
+        BLOG_D("THive::TTxSyncTablets(" << Local << ")::Execute");
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo& node = Self->GetNode(Local.NodeId());
@@ -59,18 +55,10 @@ public:
         auto foundTablet = [&](TTabletInfo* tablet, const TString& state) {
             auto tabletId = tablet->GetFullTabletId();
             if (node.MatchesFilter(tablet->NodeFilter)) {
-                YDB_LOG_TRACE("THive::TTxSyncTablets( confirmed tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"local", Local},
-                    {"state", state},
-                    {"tabletId", tabletId});
+                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId);
                 tabletsToStop.erase(tabletId);
             } else {
-                YDB_LOG_TRACE("THive::TTxSyncTablets( confirmed tablet but it's not allowed to run on this node",
-                    {"logPrefix", GetLogPrefix()},
-                    {"local", Local},
-                    {"state", state},
-                    {"tabletId", tabletId});
+                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId << ", but it's not allowed to run on this node");
             }
             if (tablet->GetLeader().IsBootingSuppressed()) {
                 tablet->InitiateStop(SideEffects);
@@ -90,10 +78,7 @@ public:
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                YDB_LOG_TRACE("THive::TTxSyncTablets( rejected unknown starting tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"local", Local},
-                    {"tabletId", tabletId});
+                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") rejected unknown starting tablet " << tabletId);
                 tabletsToStop.erase(tabletId);
             }
         }
@@ -120,20 +105,14 @@ public:
                     continue;
                 } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId)); // the tablet is running somewhere else
-                    YDB_LOG_TRACE("THive::TTxSyncTablets( confirmed and stopped running tablet",
-                        {"logPrefix", GetLogPrefix()},
-                        {"local", Local},
-                        {"tabletId", tabletId});
+                    BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed and stopped running tablet " << tabletId);
                     tabletsToBoot.insert(tabletId);
                     tabletsToStop.erase(tabletId);
                     continue;
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                YDB_LOG_TRACE("THive::TTxSyncTablets( rejected unknown running tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"local", Local},
-                    {"tabletId", tabletId});
+                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") rejected unknown running tablet " << tabletId);
                 tabletsToStop.erase(tabletId);
             }
         }
@@ -151,9 +130,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxSyncTablets( )::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"local", Local});
+        BLOG_D("THive::TTxSyncTablets(" << Local << ")::Complete");
         SideEffects.Complete(ctx);
     }
 };

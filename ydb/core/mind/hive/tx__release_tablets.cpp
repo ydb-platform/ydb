@@ -1,8 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr {
 namespace NHive {
 
@@ -25,9 +23,7 @@ public:
         const NKikimrHive::TEvReleaseTablets& request(Request->Get()->Record);
         NKikimrHive::TEvReleaseTabletsReply& response(Response->Record);
         SideEffects.Reset(Self->SelfId());
-        YDB_LOG_DEBUG("THive::TTxReleaseTablets::Execute",
-            {"logPrefix", GetLogPrefix()},
-            {"request", request});
+        BLOG_D("THive::TTxReleaseTablets::Execute " << request);
         NIceDb::TNiceDb db(txc.DB);
         for (TTabletId tabletId : request.GetTabletIDs()) {
             TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
@@ -82,10 +78,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete",
-            {"logPrefix", GetLogPrefix()},
-            {"requestRecord", Request->Get()->Record},
-            {"sideEffects", SideEffects});
+        BLOG_D("THive::TTxReleaseTablets::Complete " << Request->Get()->Record << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost
@@ -93,8 +86,7 @@ public:
         }
         ctx.Send(Request->Sender, Response.Release());
         if (NeedToProcessPendingOperations) {
-            YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete - retrying pending operations",
-                {"logPrefix", GetLogPrefix()});
+            BLOG_D("THive::TTxReleaseTablets::Complete - retrying pending operations");
             Self->ProcessPendingOperations();
         }
     }

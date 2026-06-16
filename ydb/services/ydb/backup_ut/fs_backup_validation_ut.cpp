@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         // Test that base_path must be absolute
         NExport::TExportToFsSettings settings = MakeExportSettings("");
         settings.BasePath("relative/path");
-        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});  // Add item to pass items validation
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(),
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
     Y_UNIT_TEST(InvalidCompression) {
         // Test that compression codec must be valid
         NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
-        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});  // Add item to pass items validation
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
         settings.Compression("invalid-codec");
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
     Y_UNIT_TEST(InvalidCompressionLevel) {
         // Test that compression level must be in valid range [1, 22]
         NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
-        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});  // Add item to pass items validation
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
 
         // Level too high
         settings.Compression("zstd-100");
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         // Test that base_path must be absolute for import
         NImport::TImportFromFsSettings settings = MakeImportSettings("");
         settings.BasePath("relative/path");
-        settings.AppendItem({"table1", "/Root/Restored/table1"});  // Add item to pass items validation
+        settings.AppendItem({"table1", "/Root/Restored/table1"});
 
         auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(),

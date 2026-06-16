@@ -39,7 +39,7 @@ Parameters specific to fulltext indexes:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
 
-Parameters specific to local Bloom skip indexes: {#local-bloom}
+### Local Bloom skip index parameters {#local-bloom}
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 

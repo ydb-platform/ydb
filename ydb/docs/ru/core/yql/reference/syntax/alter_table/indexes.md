@@ -40,7 +40,7 @@ ALTER TABLE `<table_name>`
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
 
-Параметры, специфичные для локальных блум-индексов: {#local-bloom}
+### Параметры локальных блум-индексов {#local-bloom}
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 

@@ -84,6 +84,8 @@ namespace NKikimr::NDDisk {
     };
 
     static_assert(sizeof(TPersistentBufferLsnRecordHeader) <= DataAlignment);
-
+    static_assert(DataAlignment >= sizeof(TPersistentBufferHeader) + sizeof(TPersistentBufferLsnRecordHeader)
+        + TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord * sizeof(TPersistentBufferSectorInfo)
+    );
 #pragma pack(pop)
 }

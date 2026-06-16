@@ -33,12 +33,8 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
         Y_ABORT_UNLESS(DiskFormat);
         SectorSize = DiskFormat->SectorSize;
-        Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferFastErases));
-        Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferBarriers));
-        Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferHeader)
-            + sizeof(TPersistentBufferLsnRecordHeader)
-            + TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord * sizeof(TPersistentBufferSectorInfo)
-        );
+        Y_ABORT_UNLESS(SectorSize >= DataAlignment);
+
         // The persistent-buffer write path reserves exactly GetPayloadHeaderSize() bytes (compile-time
         // MinSectorSize) of payload headroom for the on-disk header sector, while slicing and header
         // formatting use the runtime SectorSize. The sector math only holds when the two are equal, so

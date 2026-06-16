@@ -122,6 +122,7 @@ private: //IDqComputeActorAsyncInput
         InputFlowFetchStatus = NUdf::EFetchStatus::Finish;
         this->Send(LookupSourceId, new NActors::TEvents::TEvPoison{});
         static_cast<TDerived *>(this)->Free();
+        TActor::PassAway();
     }
 
     void Free() {

@@ -33,7 +33,7 @@ constexpr auto EmptyPeerNameValue = "::1";
 TString NormalizeRemoteAddress(const TString& peerName) {
     auto addr = NKikimr::NSecurity::ParsePeername(peerName);
     auto result = addr ? NAddr::PrintHost(*addr) : peerName;
-    return result ? result : EmptyPeerNameValue;
+    return !result.empty() ? result : EmptyPeerNameValue;
 }
 
 TString NormalizeSubjectId(const TString& subjectId) {

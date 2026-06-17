@@ -254,7 +254,7 @@ def main():
                 )
                 exit_code = 1
     out = out.replace(args.source_root, "$(SOURCE_ROOT)")
-    profile = load_profile(profile_tmpdir)
+    profile = compact_profile(load_profile(profile_tmpdir))
     if statistics_file is not None:
         build_volume = load_build_volume(statistics_file)
         if build_volume is not None:
@@ -267,7 +267,7 @@ def main():
             {
                 "file": testing_src,
                 "exit_code": exit_code,
-                "profile": compact_profile(profile),
+                "profile": profile,
                 "stderr": err,
                 "stdout": out,
                 "fixes": tidy_fixes,

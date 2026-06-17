@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-This page describes the [basic query example](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples/basic_query_series) from the {{ ydb-short-name }} [Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk) (`ydb` crate on crates.io). It mirrors the Go sample `basic/native/query`: create `series`, `seasons`, and `episodes` tables, bulk-load sample TV-show data, and read series metadata via the Query Service.
+This page describes the [basic query example](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples/basic) from the {{ ydb-short-name }} [Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk) (`ydb` crate on crates.io). It mirrors the Go sample `basic/native/query`: create `series`, `seasons`, and `episodes` tables, bulk-load sample TV-show data, and read series metadata via the Query Service.
 
 ## Downloading and starting {#download}
 

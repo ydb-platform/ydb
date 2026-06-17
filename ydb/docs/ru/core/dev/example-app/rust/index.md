@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-На этой странице описан [базовый пример Query Service](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples/basic_query_series) из [Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk) {{ ydb-short-name }} (crate `ydb` на crates.io). Пример соответствует Go-версии `basic/native/query`: создаёт таблицы `series`, `seasons` и `episodes`, загружает тестовые данные о сериалах и читает метаданные через Query Service.
+На этой странице описан [базовый пример Query Service](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples/basic) из [Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk) {{ ydb-short-name }} (crate `ydb` на crates.io). Пример соответствует Go-версии `basic/native/query`: создаёт таблицы `series`, `seasons` и `episodes`, загружает тестовые данные о сериалах и читает метаданные через Query Service.
 
 ## Получение и запуск {#download}
 

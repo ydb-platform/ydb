@@ -25,7 +25,7 @@ public:
     {}
 
     void Bootstrap() {
-        if (NeedToRedirect(false)) {
+        if (TBase::NeedToRedirect(false/* don't require viewer access for whoami */)) {
             return;
         }
         ReplyAndPassAway();

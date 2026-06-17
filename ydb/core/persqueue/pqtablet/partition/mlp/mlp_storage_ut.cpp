@@ -235,6 +235,7 @@ struct TUtils {
         UNIT_ASSERT_VALUES_EQUAL(ometrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageCount, metrics.LockedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.InflightMessageGroupCount, metrics.InflightMessageGroupCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.DelayedMessageCount, metrics.DelayedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.CommittedMessageCount, metrics.CommittedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
@@ -260,6 +261,7 @@ Y_UNIT_TEST(NextFromEmptyStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -285,6 +287,7 @@ Y_UNIT_TEST(CommitToEmptyStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -310,6 +313,7 @@ Y_UNIT_TEST(UnlockToEmptyStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -335,6 +339,7 @@ Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -377,6 +382,7 @@ Y_UNIT_TEST(AddMessageToEmptyStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -417,6 +423,7 @@ Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -465,6 +472,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
@@ -497,6 +505,7 @@ Y_UNIT_TEST(AddMessageWithDelay) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
@@ -533,6 +542,7 @@ Y_UNIT_TEST(AddMessageWithBigDelay) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
@@ -569,6 +579,7 @@ Y_UNIT_TEST(AddMessageWithZeroDelay) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
@@ -615,6 +626,7 @@ void AddMessageWithDelay_UnlockImpl(bool keepMessageOrder, bool differentGroups)
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, keepMessageOrder ? 1 : 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, keepMessageOrder ? (differentGroups ? 2 : 1) : 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -740,6 +752,7 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -878,6 +891,7 @@ Y_UNIT_TEST(SkipLockedMessageGroups) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -1410,6 +1424,7 @@ Y_UNIT_TEST(StorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 2);
         UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 2);
         UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
@@ -1489,6 +1504,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);

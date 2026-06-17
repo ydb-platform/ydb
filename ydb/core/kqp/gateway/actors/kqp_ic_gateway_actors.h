@@ -68,6 +68,14 @@ public:
         this->Die(ctx);
     }
 
+    ~TRequestHandlerBase() override {
+        if (!Promise.IsReady()) {
+            Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(
+                NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                "Shutting down.", {}));
+        }
+    }
+
 protected:
     THolder<TRequest> Request;
     NThreading::TPromise<TResult> Promise;

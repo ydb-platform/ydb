@@ -47,7 +47,9 @@ public:
         for (auto it = PendingRetries.begin(); it != PendingRetries.end();) {
             if (it->second.DueTime <= now) {
                 ready.push_back(std::move(it->second));
-                it = PendingRetries.erase(it);
+                auto toErase = it;
+                ++it;
+                PendingRetries.erase(toErase);
             } else {
                 ++it;
             }

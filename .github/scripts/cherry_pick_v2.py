@@ -15,7 +15,7 @@ import re
 import tempfile
 import shutil
 import json
-from typing import List, Optional, Tuple, Any
+from typing import List, Optional, Tuple, Any, Set
 from dataclasses import dataclass, field
 from github import Github, GithubException, Auth
 import requests
@@ -50,10 +50,63 @@ class BackportResult:
     pr: Optional[Any] = None
     conflict_files: List[ConflictInfo] = field(default_factory=list)
     cherry_pick_logs: List[str] = field(default_factory=list)
+    skipped_commit_shas: List[str] = field(default_factory=list)
+    applied_commit_shas: List[str] = field(default_factory=list)
     
     @property
     def has_conflicts(self) -> bool:
         return len(self.conflict_files) > 0
+
+
+@dataclass
+class CherryPickProgress:
+    skipped_commit_shas: List[str] = field(default_factory=list)
+    applied_commit_shas: List[str] = field(default_factory=list)
+    failed_commit_sha: Optional[str] = None
+
+
+class BranchBackportSkipped(Exception):
+    def __init__(self, target_branch: str, progress: CherryPickProgress):
+        self.target_branch = target_branch
+        self.progress = progress
+        super().__init__(f"all commits already present in `{target_branch}`")
+
+
+class CherryPickFailed(Exception):
+    def __init__(self, target_branch: str, message: str, progress: CherryPickProgress):
+        self.target_branch = target_branch
+        self.progress = progress
+        super().__init__(message)
+
+
+@dataclass
+class BranchBackportFailure:
+    target_branch: str
+    error: str
+    progress: CherryPickProgress
+
+
+def describe_commit(commit_sha: str, sources: List[Source]) -> str:
+    for source in sources:
+        if commit_sha in source.commit_shas:
+            return source.title
+    return f"commit {commit_sha[:7]}"
+
+
+def get_source_for_pull(pull_number: int, sources: List[Source]) -> Optional[Source]:
+    for source in sources:
+        for pull in source.pull_requests:
+            if pull.number == pull_number:
+                return source
+    return None
+
+
+def is_empty_cherry_pick_output(output: str) -> bool:
+    lowered = output.lower()
+    return (
+        "cherry-pick is now empty" in lowered
+        or "nothing to commit" in lowered
+    )
 
 
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
@@ -397,76 +450,151 @@ def find_existing_backport_comment(pull: Any, logger):
     return None
 
 
-def update_comments(backport_comments: List[Tuple[Any, object]], results: List, skipped_branches: List[Tuple[str, str]], target_branches: List[str], workflow_url: Optional[str], logger):
-    """Updates comments with backport results"""
+def format_source_branch_status(
+    source: Source,
+    target_branch: str,
+    ordered_commit_shas: List[str],
+    result: Optional[BackportResult],
+    failure: Optional[BranchBackportFailure],
+    skip: Optional[BranchBackportSkipped],
+    sources: List[Source],
+) -> str:
+    source_shas = set(source.commit_shas)
+    source_indices = [ordered_commit_shas.index(sha) for sha in source.commit_shas]
+
+    if skip and skip.target_branch == target_branch:
+        if all(sha in skip.progress.skipped_commit_shas for sha in source.commit_shas):
+            return f"`{target_branch}`: already present"
+
+    if failure and failure.target_branch == target_branch:
+        progress = failure.progress
+        failed_idx = (
+            ordered_commit_shas.index(progress.failed_commit_sha)
+            if progress.failed_commit_sha in ordered_commit_shas
+            else len(ordered_commit_shas)
+        )
+        max_source_idx = max(source_indices)
+        min_source_idx = min(source_indices)
+
+        if progress.failed_commit_sha in source_shas:
+            return f"`{target_branch}`: failed ({failure.error})"
+        if max_source_idx < failed_idx:
+            if all(sha in progress.skipped_commit_shas for sha in source.commit_shas):
+                return f"`{target_branch}`: already present"
+            if all(sha in progress.applied_commit_shas for sha in source.commit_shas):
+                return (
+                    f"`{target_branch}`: not backported "
+                    f"(workflow failed before backport PR was created)"
+                )
+        if min_source_idx > failed_idx and progress.failed_commit_sha:
+            failed_label = describe_commit(progress.failed_commit_sha, sources)
+            return f"`{target_branch}`: not backported (workflow failed on {failed_label})"
+
+    if result and result.target_branch == target_branch:
+        if all(sha in result.skipped_commit_shas for sha in source.commit_shas):
+            return f"`{target_branch}`: already present"
+        if any(sha in result.applied_commit_shas for sha in source.commit_shas) and result.pr:
+            status = "draft PR" if result.has_conflicts else "backport PR"
+            conflict_note = " (contains conflicts requiring manual resolution)" if result.has_conflicts else ""
+            return f"`{target_branch}`: included in {status} {result.pr.html_url}{conflict_note}"
+
+    return f"`{target_branch}`: status unknown"
+
+
+def build_pull_result_comment(
+    pull_number: int,
+    sources: List[Source],
+    ordered_commit_shas: List[str],
+    results: List[BackportResult],
+    branch_failures: List[BranchBackportFailure],
+    branch_skips: List[BranchBackportSkipped],
+    invalid_branches: Set[str],
+    target_branches: List[str],
+    workflow_url: Optional[str],
+) -> str:
+    source = get_source_for_pull(pull_number, sources)
+    if not source:
+        return "Backport completed (no source metadata for this PR)"
+
+    branch_lines = []
+    for branch in target_branches:
+        if branch in invalid_branches:
+            branch_lines.append(f"`{branch}`: skipped (branch does not exist)")
+            continue
+
+        result = next((r for r in results if r.target_branch == branch), None)
+        failure = next((f for f in branch_failures if f.target_branch == branch), None)
+        skip = next((s for s in branch_skips if s.target_branch == branch), None)
+        branch_lines.append(format_source_branch_status(
+            source, branch, ordered_commit_shas, result, failure, skip, sources,
+        ))
+
+    if len(branch_lines) == 1:
+        text = f"Backport result for this PR: {branch_lines[0]}"
+    else:
+        text = "Backport results for this PR:\n" + "\n".join(f"- {line}" for line in branch_lines)
+
+    if workflow_url:
+        text += f"\n\n[workflow run]({workflow_url})"
+    return text
+
+
+def update_comments(
+    backport_comments: List[Tuple[Any, object]],
+    sources: List[Source],
+    ordered_commit_shas: List[str],
+    results: List[BackportResult],
+    branch_failures: List[BranchBackportFailure],
+    branch_skips: List[BranchBackportSkipped],
+    invalid_branches: Set[str],
+    target_branches: List[str],
+    workflow_url: Optional[str],
+    logger,
+):
+    """Updates comments with per-PR backport results"""
     if not backport_comments:
         return
-    
+
     for pull, comment in backport_comments:
         try:
             existing_body = comment.body
-            total_branches = len(results) + len(skipped_branches)
-            
-            if total_branches == 0:
-                new_results = f"Backport to {', '.join([f'`{b}`' for b in target_branches])} completed with no results"
-                if workflow_url:
-                    new_results += f" - [workflow run]({workflow_url})"
-            elif total_branches == 1 and len(results) == 1:
-                result = results[0]
-                if result.pr:
-                    status = "draft PR" if result.has_conflicts else "PR"
-                    new_results = f"Backported to `{result.target_branch}`: {status} {result.pr.html_url}"
-                    if result.has_conflicts:
-                        new_results += " (contains conflicts requiring manual resolution)"
-                    if workflow_url:
-                        new_results += f" - [workflow run]({workflow_url})"
-                else:
-                    new_results = f"Backported to `{result.target_branch}`: failed"
-                    if workflow_url:
-                        new_results += f" - [workflow run]({workflow_url})"
-            else:
-                new_results = "Backport results:\n"
-                for result in results:
-                    if result.pr:
-                        status = "draft PR" if result.has_conflicts else "PR"
-                        conflict_note = " (contains conflicts requiring manual resolution)" if result.has_conflicts else ""
-                        new_results += f"- `{result.target_branch}`: {status} {result.pr.html_url}{conflict_note}\n"
-                    else:
-                        new_results += f"- `{result.target_branch}`: failed\n"
-                for target_branch, reason in skipped_branches:
-                    new_results += f"- `{target_branch}`: skipped ({reason})\n"
-                if workflow_url:
-                    new_results += f"\n[workflow run]({workflow_url})"
-            
-            # Replace "in progress" line with results
+            new_results = build_pull_result_comment(
+                pull.number,
+                sources,
+                ordered_commit_shas,
+                results,
+                branch_failures,
+                branch_skips,
+                invalid_branches,
+                target_branches,
+                workflow_url,
+            )
+
             lines = existing_body.split('\n')
             updated_lines = []
             found = False
-            
+
             for line in lines:
-                # Check if this is the "in progress" line for our target branches
                 is_progress_line = (
-                    "in progress" in line and 
-                    any(f"`{b}`" in line for b in target_branches) and
-                    (not workflow_url or workflow_url in line)
+                    "in progress" in line
+                    and any(f"`{b}`" in line for b in target_branches)
+                    and (not workflow_url or workflow_url in line)
                 )
-                
+
                 if is_progress_line and not found:
                     updated_lines.append(new_results)
                     found = True
                 else:
                     updated_lines.append(line)
-            
+
             if not found:
                 updated_lines.append("")
                 updated_lines.append(new_results)
-            
-            updated_comment = '\n'.join(updated_lines)
-            
-            comment.edit(updated_comment)
-            logger.info(f"Updated backport comment in original PR #{pull.number}")
+
+            comment.edit('\n'.join(updated_lines))
+            logger.info("Updated backport comment in original PR #%s", pull.number)
         except GithubException as e:
-            logger.warning(f"Failed to update comment in original PR #{pull.number}: {e}")
+            logger.warning("Failed to update comment in original PR #%s: %s", pull.number, e)
 
 
 def process_branch(
@@ -484,33 +612,71 @@ def process_branch(
     run_git(repo_path, ['checkout', '-B', target_branch, f'origin/{target_branch}'], logger)
     run_git(repo_path, ['checkout', '-b', dev_branch_name, target_branch], logger)
     
+    progress = CherryPickProgress()
+
     # Cherry-pick each commit
     for commit_sha in commit_shas:
-        logger.info("Cherry-picking commit: %s", commit_sha[:7])
-        # Fetch commit to ensure it's available locally (needed for unmerged PRs)
+        commit_label = describe_commit(commit_sha, sources)
+        logger.info("Cherry-picking %s (%s)", commit_sha[:7], commit_label)
         run_git(repo_path, ['fetch', 'origin', commit_sha], logger, check=False)
         try:
             result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
-            
+
             if result.returncode != 0:
+                if is_empty_cherry_pick_output(output):
+                    run_git(repo_path, ['cherry-pick', '--skip'], logger, check=False)
+                    skip_msg = (
+                        f"{commit_label} ({commit_sha[:7]}) is already present in `{target_branch}`, skipped"
+                    )
+                    logger.warning("ALREADY_PRESENT: %s", skip_msg)
+                    cherry_pick_logs.append(f"=== Skipped {commit_sha[:7]} ===\n{skip_msg}\n")
+                    progress.skipped_commit_shas.append(commit_sha)
+                    continue
+
+                progress.failed_commit_sha = commit_sha
                 if "conflict" in output.lower():
                     conflicts = detect_conflicts(repo_path, logger)
                     if conflicts:
                         run_git(repo_path, ['add', '-A'], logger)
                         run_git(repo_path, ['commit', '-m', f"BACKPORT-CONFLICT: manual resolution required for commit {commit_sha[:7]}"], logger)
                         all_conflict_files.extend(conflicts)
+                        progress.applied_commit_shas.append(commit_sha)
                     else:
                         run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)
-                        raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}")
+                        raise CherryPickFailed(
+                            target_branch,
+                            f"Cherry-pick failed for {commit_label} ({commit_sha[:7]}): "
+                            f"git reported a conflict but no conflicted files were detected.\n{output.strip()}",
+                            progress,
+                        )
                 else:
-                    raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {output}")
-            
-            if output:
+                    raise CherryPickFailed(
+                        target_branch,
+                        f"Cherry-pick failed for {commit_label} ({commit_sha[:7]}): {output.strip()}",
+                        progress,
+                    )
+            else:
+                progress.applied_commit_shas.append(commit_sha)
+
+            if output and commit_sha not in progress.skipped_commit_shas:
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{output}")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}")
-    
+            progress.failed_commit_sha = commit_sha
+            raise CherryPickFailed(
+                target_branch,
+                f"Cherry-pick failed for {commit_label} ({commit_sha[:7]}): {e}",
+                progress,
+            )
+
+    if not progress.applied_commit_shas:
+        raise BranchBackportSkipped(target_branch, progress)
+
+    applied_sources = [
+        source for source in sources
+        if any(sha in progress.applied_commit_shas for sha in source.commit_shas)
+    ]
+
     # Push branch
     run_git(repo_path, ['push', '--set-upstream', 'origin', dev_branch_name], logger)
     
@@ -518,7 +684,7 @@ def process_branch(
     has_conflicts = len(all_conflict_files) > 0
     title, body = build_pr_content(
         repo_name, repo, token, target_branch, dev_branch_name,
-        sources, all_conflict_files, cherry_pick_logs,
+        applied_sources, all_conflict_files, cherry_pick_logs,
         workflow_triggerer, workflow_url, None, logger
     )
     
@@ -535,7 +701,7 @@ def process_branch(
     if has_conflicts:
         _, updated_body = build_pr_content(
             repo_name, repo, token, target_branch, dev_branch_name,
-            sources, all_conflict_files, cherry_pick_logs,
+            applied_sources, all_conflict_files, cherry_pick_logs,
             workflow_triggerer, workflow_url, pr.number, logger
         )
         pr.edit(body=updated_body)
@@ -574,7 +740,9 @@ def process_branch(
         target_branch=target_branch,
         pr=pr,
         conflict_files=all_conflict_files,
-        cherry_pick_logs=cherry_pick_logs
+        cherry_pick_logs=cherry_pick_logs,
+        skipped_commit_shas=progress.skipped_commit_shas,
+        applied_commit_shas=progress.applied_commit_shas,
     )
 
 
@@ -764,15 +932,14 @@ def main():
         )
         
         # Process each target branch
-        results: list[BackportResult] = []
-        skipped_branches = []
-        # Add invalid branches from validation
-        for invalid_branch in invalid_branches:
-            skipped_branches.append((invalid_branch, "branch does not exist"))
-        
+        results: List[BackportResult] = []
+        branch_failures: List[BranchBackportFailure] = []
+        branch_skips: List[BranchBackportSkipped] = []
+        invalid_branch_set = set(invalid_branches)
+
         has_errors = False
         dtm = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
-        
+
         for target_branch in valid_target_branches:
             try:
                 dev_branch_name = f"cherry-pick-{target_branch}-{dtm}"
@@ -781,34 +948,65 @@ def main():
                     repo_name, repo, token, sources, workflow_triggerer, workflow_url, summary_path, logger
                 )
                 results.append(result)
-            except Exception as e:
+            except BranchBackportSkipped as e:
+                logger.info("Branch %s skipped: %s", target_branch, e)
+                branch_skips.append(e)
+                if summary_path:
+                    skipped_labels = ", ".join(
+                        describe_commit(sha, sources) for sha in e.progress.skipped_commit_shas
+                    )
+                    with open(summary_path, 'a') as f:
+                        f.write(f"### Branch `{target_branch}`: skipped\n\nAll commits already present: {skipped_labels}\n\n")
+            except CherryPickFailed as e:
                 has_errors = True
-                error_msg = f"UNEXPECTED_ERROR: Branch {target_branch} - {type(e).__name__}: {e}"
-                logger.error(error_msg)
+                logger.error("BACKPORT_ERROR: Branch `%s`: %s", target_branch, e)
+                branch_failures.append(BranchBackportFailure(target_branch, str(e), e.progress))
                 if summary_path:
                     with open(summary_path, 'a') as f:
-                        f.write(f"Branch {target_branch} error: {type(e).__name__}\n```\n{e}\n```\n\n")
-                skipped_branches.append((target_branch, f"unexpected error: {type(e).__name__}"))
-        
-        # Update comments
-        update_comments(backport_comments, results, skipped_branches, target_branches, workflow_url, logger)
-        
-        # Check errors
+                        f.write(f"### Branch `{target_branch}`: failed\n\n```\n{e}\n```\n\n")
+            except Exception as e:
+                has_errors = True
+                logger.error("BACKPORT_ERROR: Branch `%s`: %s", target_branch, e)
+                branch_failures.append(BranchBackportFailure(
+                    target_branch, str(e), CherryPickProgress(failed_commit_sha=all_commit_shas[0] if all_commit_shas else None),
+                ))
+                if summary_path:
+                    with open(summary_path, 'a') as f:
+                        f.write(f"### Branch `{target_branch}`: failed\n\n```\n{e}\n```\n\n")
+
+        update_comments(
+            backport_comments, sources, all_commit_shas, results,
+            branch_failures, branch_skips, invalid_branch_set,
+            target_branches, workflow_url, logger,
+        )
+
         if has_errors:
-            error_msg = "WORKFLOW_FAILED: Cherry-pick workflow completed with errors. Check logs above for details."
-            logger.error(error_msg)
+            error_msg = "Cherry-pick workflow completed with errors. See details above."
+            logger.error("WORKFLOW_FAILED: %s", error_msg)
             if summary_path:
                 with open(summary_path, 'a') as f:
-                    f.write(f'{error_msg}\n\n')
+                    f.write(f"**{error_msg}**\n\n")
             sys.exit(1)
-        
-        logger.info("WORKFLOW_SUCCESS: All cherry-pick operations completed successfully")
-        if summary_path:
-            with open(summary_path, 'a') as f:
-                f.write("All cherry-pick operations completed successfully\n\n")
+
+        if branch_skips and not results:
+            logger.info(
+                "WORKFLOW_SUCCESS: Nothing to backport — all commits are already present in target branch(es)."
+            )
+            if summary_path:
+                with open(summary_path, 'a') as f:
+                    f.write("Nothing to backport — all commits are already present in target branch(es).\n\n")
+        else:
+            logger.info("WORKFLOW_SUCCESS: Cherry-pick workflow completed successfully")
+            if summary_path:
+                with open(summary_path, 'a') as f:
+                    f.write("Cherry-pick workflow completed successfully\n\n")
         if results_path:
             with open(results_path, 'w') as f:
-                json.dump([{'pr_id': r.pr.id, 'pr_number': r.pr.number, 'branch': r.target_branch} for r in results if r.pr], f, indent=2)
+                json.dump(
+                    [{'pr_id': r.pr.id, 'pr_number': r.pr.number, 'branch': r.target_branch} for r in results if r.pr],
+                    f,
+                    indent=2,
+                )
     finally:
         if os.path.exists(repo_dir):
             shutil.rmtree(repo_dir)

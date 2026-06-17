@@ -723,10 +723,12 @@ public:
         }
 
         if (isCompact) {
-            YQL_ENSURE(keyColumns.size() == 3);
-            YQL_ENSURE(keyColumns[0].GetName() == TokenColumn);
-            YQL_ENSURE(keyColumns[1].GetName() == MaxIdColumn);
-            YQL_ENSURE(keyColumns[2].GetName() == GenColumn);
+            // Compact posting key is [prefix..., __ydb_token, __ydb_max_id, __ydb_generation].
+            const int numPrefix = static_cast<int>(prefixColumnNames.size());
+            YQL_ENSURE(keyColumns.size() == numPrefix + 3);
+            YQL_ENSURE(keyColumns[numPrefix].GetName() == TokenColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 1].GetName() == MaxIdColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 2].GetName() == GenColumn);
             auto addCol = [&](const char* str) {
                 for (auto& column: columns) {
                     if (column.GetName() == str) {
@@ -3823,8 +3825,11 @@ static NScheme::TTypeId GetDocIdTypeId(const NKikimrKqp::TKqpFullTextSourceSetti
     if (settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
-        YQL_ENSURE(keyColumns.size() == 3);
-        idx = 1; // __ydb_max_id
+        // Compact key is [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the doc-id type
+        // is that of __ydb_max_id, which sits right after the prefix columns and the token.
+        const int numPrefix = settings->GetQuerySettings().GetPrefixColumns().size();
+        YQL_ENSURE(keyColumns.size() == numPrefix + 3);
+        idx = numPrefix + 1; // __ydb_max_id
     }
     return static_cast<NScheme::TTypeId>(keyColumns[idx].GetTypeId());
 }

@@ -390,7 +390,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                 result.push_back(createIndexImplTable(compact
                     ? CalcFulltextCompactImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                        userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType)
+                        userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType,
+                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))
                     : CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
                         indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
                         NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
@@ -410,7 +411,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                 result.push_back(createIndexImplTable(compact
                     ? CalcFulltextCompactImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                        userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType)
+                        userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType,
+                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))
                     : CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
                         indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
                         NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));

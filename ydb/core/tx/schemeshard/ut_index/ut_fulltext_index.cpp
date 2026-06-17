@@ -140,6 +140,49 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         }
     }
 
+    Y_UNIT_TEST(CreateTablePrefixDisabled) {
+        // Server-side enforcement: with EnableFulltextIndexPrefix off, SchemeShard must reject a
+        // prefixed fulltext index even via a direct scheme operation (bypassing KQP validation).
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableFulltextIndexPrefix(false));
+        ui64 txId = 100;
+
+        TString fulltextSettings = R"(
+            columns: {
+                column: "text"
+                analyzers: {
+                    tokenizer: STANDARD
+                    use_filter_lowercase: true
+                }
+            }
+        )";
+        // "another" is a prefix column => index has more than one key column => rejected.
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                Columns { Name: "another" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: [ "another", "text"]
+                Type: EIndexTypeGlobalFulltextPlain
+                FulltextIndexDescription: {
+                    Settings: {
+                        %s
+                    }
+                }
+            }
+        )", fulltextSettings.c_str()), {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"), {
+            NLs::PathNotExist,
+        });
+    }
+
     Y_UNIT_TEST(CreateTableMultipleColumns) { // not supported for now, maybe later
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -2073,6 +2073,11 @@ message TEvBuildFulltextDictRequest {
     optional EFulltextIndexType IndexType = 15;
     optional string PostingTableName = 16;
     optional uint64 MaxSegmentDocuments = 17;
+
+    // Leading prefix key columns of the posting table, in key order. The posting key is
+    // [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the dict scan must skip these
+    // to locate the token and to group/compact segments per (prefix, token).
+    repeated string PrefixColumns = 18;
 }
 
 message TEvBuildFulltextDictResponse {

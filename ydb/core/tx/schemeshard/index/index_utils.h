@@ -109,14 +109,16 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType);
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType);
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -292,6 +294,15 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
+
+            // Fulltext index key columns are [prefix..., text]; more than one key column means the
+            // index has prefix columns. Enforce the feature flag server-side so direct scheme
+            // operations or older clients cannot bypass the KQP-side check.
+            if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
+                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+                error = "Fulltext index prefix columns support is disabled";
+                return false;
+            }
 
             // __ydb_row_id opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
             // skip the single-integer-PK requirement (the doc_id is __ydb_row_id, not the PK).

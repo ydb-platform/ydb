@@ -1392,6 +1392,14 @@ private:
                         "Fulltext index prefix columns support is disabled"));
                     return TStatus::Error;
                 }
+                // Relevance scoring uses a corpus-global dictionary keyed by token only; with prefix
+                // columns as the leading sort key the same token scatters across prefix groups, which
+                // the streaming dictionary/borders build cannot aggregate. Not supported yet.
+                if (indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                        "Fulltext index prefix columns are not supported for compact relevance indexes"));
+                    return TStatus::Error;
+                }
                 // Prefix columns must be disjoint from the primary key (doc-id) columns:
                 // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
                 const THashSet<TString> pkColumns{meta->KeyColumnNames.begin(), meta->KeyColumnNames.end()};

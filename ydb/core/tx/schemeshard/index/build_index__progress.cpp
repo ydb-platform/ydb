@@ -464,10 +464,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
 
+    // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+    TVector<TString> prefixColumns;
+    if (buildInfo.IndexColumns.size() > 1) {
+        prefixColumns.assign(buildInfo.IndexColumns.begin(), buildInfo.IndexColumns.end() - 1);
+    }
+
     op = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         NKikimrSchemeOp::TTableDescription(),
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
-        buildInfo.IndexType);
+        buildInfo.IndexType, prefixColumns);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
@@ -1368,6 +1374,14 @@ private:
         if (buildInfo.IsBuildFulltextRelevance()) {
             path.Rise().Dive(NTableIndex::NFulltext::DictTable);
             ev->Record.SetDictTableName(path.PathString());
+        }
+
+        // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+        // The dict scan needs them to skip prefix cells and compact segments per (prefix, token).
+        if (buildInfo.IndexColumns.size() > 1) {
+            for (size_t i = 0; i + 1 < buildInfo.IndexColumns.size(); ++i) {
+                ev->Record.AddPrefixColumns(buildInfo.IndexColumns[i]);
+            }
         }
 
         const auto& shardStatus = buildInfo.Shards.at(shardIdx);

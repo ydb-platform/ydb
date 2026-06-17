@@ -248,7 +248,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
             auto implTableDesc = compact
                 ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
+                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()))
                 : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
                     indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
                     NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
@@ -270,7 +271,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
             auto implTableDesc = compact
                 ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
+                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()))
                 : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
                     indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
                     NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));

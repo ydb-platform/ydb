@@ -52,12 +52,17 @@ using namespace NKikimr::NFulltext;
 
 struct TTokenState {
     TString Token;
+    // Segments are bucketed per (prefix, token): a delta segment is a doc-id run within a single
+    // prefix, so different prefix values must never share a segment. BucketKey uniquely identifies
+    // the (prefix, token) bucket; Prefix holds the leading key cells prepended to the posting key.
+    TString BucketKey;
+    TOwnedCellVec Prefix;
     TDeltaWriter Segment;
 };
 
 struct TTokenStateLess {
     bool operator()(const TTokenState* a, const TTokenState* b) const {
-        return a->Segment.GetCount() > b->Segment.GetCount() || a->Segment.GetCount() == b->Segment.GetCount() && a->Token < b->Token;
+        return a->Segment.GetCount() > b->Segment.GetCount() || a->Segment.GetCount() == b->Segment.GetCount() && a->BucketKey < b->BucketKey;
     }
 };
 
@@ -395,13 +400,16 @@ public:
                     freq++;
                     continue;
                 }
-                auto& state = TokenBuf[tokens[i]];
-                if (state.Token.empty()) {
+                TString bucketKey = MakeCompactBucketKey(prefixCells, tokens[i]);
+                auto& state = TokenBuf[bucketKey];
+                if (state.BucketKey.empty()) {
                     state.Token = tokens[i];
+                    state.BucketKey = bucketKey;
+                    state.Prefix = TOwnedCellVec(prefixCells);
                     state.Segment.Reset(WithRelevance, Signed);
-                    BufferedBytes += tokens[i].size(); // count token sizes
+                    BufferedBytes += bucketKey.size(); // count bucket-key sizes
                 } else if (!state.Segment.GetCount()) {
-                    EmptyTokenBytes -= tokens[i].size();
+                    EmptyTokenBytes -= bucketKey.size();
                     state.Segment.Reset(WithRelevance, Signed);
                 }
                 TokensBySize.erase(&state);
@@ -422,7 +430,7 @@ public:
                     if (!(*mostFreqIt)->Segment.GetCount()) {
                         break;
                     }
-                    FlushToken(TokenBuf.at((*mostFreqIt)->Token));
+                    FlushToken(TokenBuf.at((*mostFreqIt)->BucketKey));
                 }
             }
             if (EmptyTokenBytes >= MaxBatchBytes/3) {
@@ -522,13 +530,27 @@ public:
         }
     }
 
+    // Unique map key for the (prefix, token) segment bucket. Without prefix it is the raw token
+    // (preserving the non-prefixed behavior); with prefix it is the serialized [prefix..., token] key.
+    static TString MakeCompactBucketKey(TArrayRef<const TCell> prefix, const TString& token)
+    {
+        if (prefix.empty()) {
+            return token;
+        }
+        TVector<TCell> cells(::Reserve(prefix.size() + 1));
+        cells.insert(cells.end(), prefix.begin(), prefix.end());
+        cells.push_back(TCell(token.data(), token.size()));
+        return TSerializedCellVec::Serialize(cells);
+    }
+
     void FlushToken(TTokenState& state)
     {
         if (!state.Segment.GetCount()) {
             return;
         }
         auto segment = state.Segment.GetBuf();
-        TVector<TCell> uploadKey(::Reserve(3));
+        TVector<TCell> uploadKey(::Reserve(state.Prefix.size() + 3));
+        uploadKey.insert(uploadKey.end(), state.Prefix.begin(), state.Prefix.end());
         uploadKey.push_back(TCell(state.Token));
         if (KeyTypeId == NScheme::NTypeIds::Uint64 || KeyTypeId == NScheme::NTypeIds::Int64) {
             uploadKey.push_back(TCell::Make(state.Segment.GetMaxId()));
@@ -542,7 +564,7 @@ public:
         UploadBuf->AddRow(uploadKey, uploadValue);
         TokensBySize.erase(&state);
         BufferedBytes -= state.Segment.GetBuf().size();
-        EmptyTokenBytes += state.Token.size();
+        EmptyTokenBytes += state.BucketKey.size();
         state.Segment = TDeltaWriter();
         TokensBySize.insert(&state);
     }
@@ -847,10 +869,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         }
 
         if (request.GetPrefixColumns().size() &&
-            (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
-             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
+            (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
              request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact)) {
-            badRequest(TStringBuilder() << "Prefix columns are not supported for compact fulltext indexes");
+            badRequest(TStringBuilder() << "Prefix columns are not supported for JSON indexes");
         }
 
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||

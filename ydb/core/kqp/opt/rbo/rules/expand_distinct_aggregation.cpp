@@ -55,6 +55,11 @@ TIntrusivePtr<IOperator> BuildDistinct(const TIntrusivePtr<IOperator>& input, TV
     return MakeIntrusive<TOpAggregate>(input, distAggTraitsList, distColumns, EOpPhase::Undefined, /*distinctAll=*/true, input->Pos);
 }
 
+bool IsDecimalType(const TTypeAnnotationNode* type) {
+    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(*type).Cast<TDataExprType>()->GetSlot()).Features;
+    return (features & NUdf::EDataTypeFeatures::DecimalType);
+}
+
 const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputType, const TString& aggFunction, TExprContext& ctx) {
     Y_ENSURE(inputType, "Type is nullptr");
     const TTypeAnnotationNode* resultType = inputType;
@@ -65,7 +70,17 @@ const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputTy
     } else if (aggFunction == "sum") {
         Y_ENSURE(GetSumResultType(pos, *inputType, resultType, ctx), "Unsupported type for sum aggregation function");
     } else if (aggFunction == "avg") {
-        Y_ENSURE(false, "Avg not supported for multiple distinct.");
+        // Early: (counter, sum)
+        std::vector<const TTypeAnnotationNode*> tupleTypes;
+        if (IsDecimalType(inputType)) {
+            auto decimalType = inputType->Cast<TDataExprParamsType>();
+            const auto precision = "35"; //TString(decimalType->GetParamOne());
+            const auto scale = TString(decimalType->GetParamTwo());
+            tupleTypes = {ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, precision, scale), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)};
+        } else {
+            tupleTypes = {ctx.MakeType<TDataExprType>(EDataSlot::Double), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)};
+        }
+        return ctx.MakeType<TTupleExprType>(tupleTypes);
     } else if (aggFunction == "variance_1_1") {
         Y_ENSURE(false, "Variacnce not supported for multiple distinct.");
     }

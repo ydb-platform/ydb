@@ -911,11 +911,11 @@ namespace NKikimr::NDDisk {
             (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn));
 
         if (PersistentBufferBatchWriteCookie == 0) {
-            PersistentBufferBatchWriteCookie = NextCookie++;
             auto sectors = PersistentBufferSpaceAllocator.Occupy(MaxLsnsPerPack * TPersistentBufferLsnRecordHeader::MaxSectorsPerPackBufferRecord + 1);
             if (sectors.empty()) {
                 return false;
             }
+            PersistentBufferBatchWriteCookie = NextCookie++;
             auto headerData = TRcBuf::UninitializedPageAligned(SectorSize);
             TRope headerRope(std::move(headerData));
             auto [it, inserted] = PersistentBufferDiskOperationInflight.try_emplace(PersistentBufferBatchWriteCookie, TPersistentBufferDiskOperationInFlight{
@@ -987,7 +987,6 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(PersistentBufferBatchWriteCookie != 0, "PersistentBufferBatchWriteCookie is not set");
         auto& inflight = PersistentBufferDiskOperationInflight[PersistentBufferBatchWriteCookie];
         auto sectorsCnt = inflight.DataToWrite.size() / SectorSize;
-
 
         PersistentBufferSpaceAllocator.Free({inflight.OccupiedSectors.begin() + sectorsCnt, inflight.OccupiedSectors.end()});
         inflight.OccupiedSectors.resize(sectorsCnt);

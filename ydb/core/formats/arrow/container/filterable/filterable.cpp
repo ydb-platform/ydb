@@ -11,7 +11,15 @@ void TGeneralContainerFilterable::ApplyEmpty() {
 }
 
 void TGeneralContainerFilterable::ApplyArrowFilter(const TColumnFilter& filter) {
-    Container = std::make_shared<TGeneralContainer>(ApplyArrowFilterToTable(Container->BuildTableVerified(), filter));
+    if (!Container->GetColumns().size()) {
+        Container = Container->BuildEmptySame();
+    } else {
+        std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columns;
+        for (auto&& i : Container->GetColumns()) {
+            columns.emplace_back(filter.Apply(i));
+        }
+        Container = std::make_shared<TGeneralContainer>(Container->GetSchema()->GetFields(), std::move(columns));
+    }
 }
 
 void TGeneralContainerFilterable::ApplySlicesFilter(TColumnFilter::TSlicesIterator slices) {

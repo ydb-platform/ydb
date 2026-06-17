@@ -6,9 +6,7 @@
 
 Release date: June 17, 2026.
 
-This version includes all improvements from {{ ydb-short-name }} 25.4.1.15; see the [changelog](./changelog-server.md#25-4-1-15).
-
-It also includes all [additional fixes](#25-2-1-ent-13-extras) listed below for version 25.2.1.ent.13.
+This version includes all improvements from {{ ydb-short-name }} 25.4.1.15; see the [changelog](./changelog-server.md#25-4-1-15). It also includes all [additional fixes](#25-2-1-ent-13-extras) listed below for version 25.2.1.ent.13.
 
 ## Version 25.3 {#25-3}
 
@@ -26,7 +24,7 @@ Release date: June 11, 2026.
 
 This version includes all improvements from {{ ydb-short-name }} 25.2.1.26; see the [changelog](./changelog-server.md#25-2-1-26). It also includes a number of additional improvements ported from the current 26.1 version.
 
-#### Additional fixes {#25-2-1-ent-13-extras}
+#### Additional Fixes {#25-2-1-ent-13-extras}
 
 The following changes were ported from version 26.1 into supported stable versions of Yandex Enterprise Database:
 

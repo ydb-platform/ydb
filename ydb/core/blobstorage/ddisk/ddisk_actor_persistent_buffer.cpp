@@ -17,8 +17,8 @@ namespace NKikimr::NDDisk {
 #define STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::BS_PERSISTENT_BUFFER, BSPB, TStringBuilder() << "PBufferId: " << SelfId() << ", " << MESSAGE, __VA_ARGS__)
 #define STLOG_T(MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::BS_PERSISTENT_BUFFER, BSPB, TStringBuilder() << "PBufferId: " << SelfId() << ", " << MESSAGE, __VA_ARGS__)
 
-static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBufferHeader))
-    / (sizeof(TPersistentBufferLsnRecordHeader) + TPersistentBufferLsnRecordHeader::MaxSectorsPerPackBufferRecord * sizeof(TPersistentBufferSectorInfo));
+    static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBufferHeader))
+        / (sizeof(TPersistentBufferLsnRecordHeader) + TPersistentBufferLsnRecordHeader::MaxSectorsPerPackBufferRecord * sizeof(TPersistentBufferSectorInfo));
 
     void TDDiskActor::IssuePersistentBufferChunkAllocation() {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
@@ -166,17 +166,8 @@ static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBuffer
     }
 
     std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBufferData(
-        TRope payload, std::vector<TPersistentBufferSectorInfo>& sectors)
+        TRope& payload, std::vector<TPersistentBufferSectorInfo>& sectors)
     {
-        for (ui32 i = 0; i < sectors.size(); ++i) {
-            auto it = payload.Begin() + SectorSize * i;
-            if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                sectors[i].HasSignatureCorrection = true;
-                *it.ContiguousDataMut() = 0;
-            }
-            sectors[i].Checksum = CalculateChecksum(it);
-        }
-
         std::vector<std::tuple<ui32, ui32, TRope>> parts;
         parts.reserve(sectors.size());
         for (ui32 sectorIdx = 0, first = 0; sectorIdx <= sectors.size(); sectorIdx++) {
@@ -969,10 +960,10 @@ static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBuffer
         Y_ABORT_UNLESS(sectorsCnt <= TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord && sectorsCnt > 0);
 
         r.Sectors.push_back(inflight.OccupiedSectors[0]);
-        auto sectorsIt = inflight.OccupiedSectors.begin() + 1 + inflight.DataToWrite.size() / SectorSize;
+        auto sectorsIt = inflight.OccupiedSectors.begin() + inflight.DataToWrite.size() / SectorSize;
         r.Sectors.insert(r.Sectors.end(), sectorsIt, sectorsIt + sectorsCnt);
         inflight.DataToWrite.Insert(inflight.DataToWrite.End(), std::move(payload));
-        for (ui32 i = 0; i < r.Sectors.size(); ++i) {
+        for (ui32 i = 0; i < sectorsCnt; ++i) {
             auto it = inflight.DataToWrite.End() - r.Size + SectorSize * i;
             if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
                 r.Sectors[i + 1].HasSignatureCorrection = true;
@@ -995,12 +986,11 @@ static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBuffer
 
         Y_ABORT_UNLESS(PersistentBufferBatchWriteCookie != 0, "PersistentBufferBatchWriteCookie is not set");
         auto& inflight = PersistentBufferDiskOperationInflight[PersistentBufferBatchWriteCookie];
-        auto sectorsCnt = inflight.DataToWrite.size() / SectorSize + 1;
+        auto sectorsCnt = inflight.DataToWrite.size() / SectorSize;
 
 
         PersistentBufferSpaceAllocator.Free({inflight.OccupiedSectors.begin() + sectorsCnt, inflight.OccupiedSectors.end()});
         inflight.OccupiedSectors.resize(sectorsCnt);
-        auto parts = SlicePersistentBufferData(inflight.DataToWrite, inflight.OccupiedSectors);
 
         auto* header = reinterpret_cast<TPersistentBufferHeader*>(inflight.DataToWrite.Begin().UnsafeContiguousDataMut());
 
@@ -1041,6 +1031,7 @@ static constexpr ui32 MaxLsnsPerPack = (DataAlignment - sizeof(TPersistentBuffer
         }
         header->Checksum = CalculateChecksum(inflight.DataToWrite.Begin(), SectorSize);
 
+        auto parts = SlicePersistentBufferData(inflight.DataToWrite, inflight.OccupiedSectors);
         for(auto& [chunkIdx, offset, data] : parts) {
             const ui64 cookie = NextCookie++;
             inflight.OperationCookies.insert(cookie);

@@ -2,6 +2,8 @@
 
 #include <ydb/core/sys_view/service/query_interval.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -19,10 +21,11 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_INTERVAL_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SVLOG_D("[" << Self->TabletID() << "] TTxIntervalMetrics::Execute: "
-            << "node id# " << NodeId
-            << ", metrics count# " << Record.MetricsSize()
-            << ", texts count# " << Record.QueryTextsSize());
+        YDB_LOG_DEBUG("TTxIntervalMetrics::Execute: node metrics texts",
+            {"tabletId", Self->TabletID()},
+            {"id", NodeId},
+            {"count", Record.MetricsSize()},
+            {"queryTextsCount", Record.QueryTextsSize()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -112,7 +115,8 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
             Self->SendRequests();
         }
 
-        SVLOG_D("[" << Self->TabletID() << "] TTxIntervalMetrics::Complete");
+        YDB_LOG_DEBUG("TTxIntervalMetrics::Complete",
+            {"tabletId", Self->TabletID()});
     }
 };
 
@@ -121,16 +125,18 @@ void TSysViewProcessor::Handle(TEvSysView::TEvGetIntervalMetricsResponse::TPtr& 
     TNodeId nodeId = ev.Get()->Cookie;
 
     if (CurrentStage != AGGREGATE) {
-        SVLOG_W("[" << TabletID() << "] TEvGetIntervalMetricsResponse, wrong stage: "
-            << "node id# " << nodeId);
+        YDB_LOG_WARN("TEvGetIntervalMetricsResponse, wrong stage: node",
+            {"tabletID", TabletID()},
+            {"id", nodeId});
         return;
     }
 
     if (record.GetIntervalEndUs() != IntervalEnd.MicroSeconds()) {
-        SVLOG_W("[" << TabletID() << "] TEvGetIntervalMetricsResponse, time mismatch: "
-            << "node id# " << nodeId
-            << "interval end# " << IntervalEnd
-            << "event interval end# " << TInstant::MicroSeconds(record.GetIntervalEndUs()));
+        YDB_LOG_WARN("TEvGetIntervalMetricsResponse, time mismatch: node interval event interval",
+            {"tabletID", TabletID()},
+            {"id", nodeId},
+            {"end", IntervalEnd},
+            {"recordIntervalEnd", TInstant::MicroSeconds(record.GetIntervalEndUs())});
         return;
     }
 

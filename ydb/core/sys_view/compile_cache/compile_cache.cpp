@@ -20,6 +20,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/scheduler_cookie.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr::NSysView {
 
 namespace {
@@ -167,8 +169,8 @@ public:
             hFunc(NKqp::TEvKqp::TEvListProxyNodesResponse, Handle);
             hFunc(TEvPrivate::TEvNodeRequestTimeout, HandleNodeRequestTimeout);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TCompileCacheQueriesScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TCompileCacheQueriesScan: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -233,11 +235,10 @@ private:
     }
 
     void SkipCurrentNode(const char* reason, ui32 nodeId, const NYql::TIssues* peerIssues = nullptr) {
-        LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Skipping compile cache scan for node_id=" << nodeId << ": " << reason
-            << (peerIssues && !peerIssues->Empty()
-                ? TStringBuilder() << ", peer issues: " << peerIssues->ToOneLineString()
-                : TString()));
+        YDB_LOG_WARN("Skipping compile cache scan for peer",
+            {"nodeId", nodeId},
+            {"reason", reason},
+            {"issues", (peerIssues && !peerIssues->Empty() ? peerIssues->ToOneLineString() : TString())});
 
         if (auto& counters = AppData()->Counters) {
             counters
@@ -288,8 +289,9 @@ private:
         PartialWarningSent = true;
 
         const ui32 nodesTotal = NodesTotal > 0 ? NodesTotal : (NodesSucceeded + NodesFailed);
-        LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Compile cache scan: skipped " << NodesFailed << " of " << nodesTotal << " nodes");
+        YDB_LOG_WARN("Compile cache scan: skipped of nodes",
+            {"nodesFailed", NodesFailed},
+            {"nodesTotal", nodesTotal});
 
         NYql::TIssue summary(TStringBuilder()
             << "compile cache scan: skipped " << NodesFailed << " of " << nodesTotal << " nodes");
@@ -360,8 +362,9 @@ private:
 
             req->Record.SetFreeSpace(FreeSpace);
 
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node_id=" << nodeId << ", request: " << req->Record.ShortDebugString());
+            YDB_LOG_DEBUG("Send request",
+                {"toNodeId", nodeId},
+                {"request", req->Record});
 
             Send(kqpProxyId, req.release(), IEventHandle::FlagTrackDelivery, nodeId);
             PendingRequest = true;
@@ -402,8 +405,8 @@ private:
 
         // Stale: timeout/disconnect already advanced PendingNodes.
         if (!PendingRequest || PendingNodes.empty() || PendingNodes.front() != responseNodeId) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Ignoring stale TEvListQueryCacheQueriesResponse from node_id=" << responseNodeId);
+            YDB_LOG_DEBUG("Ignoring stale TEvListQueryCacheQueriesResponse",
+                {"fromNodeId", responseNodeId});
             return;
         }
 
@@ -437,8 +440,8 @@ private:
         }
         const ui32 nodeId = ev->Cookie;
         if (!PendingRequest || PendingNodes.empty() || PendingNodes.front() != nodeId) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Ignoring stale TEvUndelivered from node_id=" << nodeId);
+            YDB_LOG_DEBUG("Ignoring stale TEvUndelivered",
+                {"fromNodeId", nodeId});
             return;
         }
         SkipCurrentNode("undelivered", nodeId);

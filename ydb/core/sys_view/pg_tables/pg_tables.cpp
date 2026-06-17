@@ -12,6 +12,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 
 namespace NKikimr {
 namespace NSysView {
@@ -160,8 +162,8 @@ void TPgTablesScanBase::StateScan(TAutoPtr<IEventHandle>& ev) {
         cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
-            LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+            YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                {"eventType", ev->GetTypeRewrite()});
     }
 }
 

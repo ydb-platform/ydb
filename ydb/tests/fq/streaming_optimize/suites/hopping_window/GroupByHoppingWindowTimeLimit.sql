@@ -3,7 +3,6 @@
 
 PRAGMA dq.MaxTasksPerStage="2";
 PRAGMA dq.WatermarksMode="default";
-PRAGMA dq.ComputeActorType="async";
 
 PRAGMA pq.Consumer="test_client";
 

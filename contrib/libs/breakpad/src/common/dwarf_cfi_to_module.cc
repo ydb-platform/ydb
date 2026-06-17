@@ -1,7 +1,6 @@
 // -*- mode: c++ -*-
 
-// Copyright (c) 2010, Google Inc.
-// All rights reserved.
+// Copyright 2010 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -13,7 +12,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -34,7 +33,9 @@
 // Implementation of google_breakpad::DwarfCFIToModule.
 // See dwarf_cfi_to_module.h for details.
 
+#include <memory>
 #include <sstream>
+#include <utility>
 
 #include "common/dwarf_cfi_to_module.h"
 
@@ -152,7 +153,7 @@ bool DwarfCFIToModule::Entry(size_t offset, uint64_t address, uint64_t length,
   // need to check them here.
 
   // Get ready to collect entries.
-  entry_ = new Module::StackFrameEntry;
+  entry_ = std::make_unique<Module::StackFrameEntry>();
   entry_->address = address;
   entry_->size = length;
   entry_offset_ = offset;
@@ -259,9 +260,12 @@ bool DwarfCFIToModule::ValExpressionRule(uint64_t address, int reg,
 }
 
 bool DwarfCFIToModule::End() {
-  module_->AddStackFrameEntry(entry_);
-  entry_ = NULL;
+  module_->AddStackFrameEntry(std::move(entry_));
   return true;
+}
+
+string DwarfCFIToModule::Architecture() {
+  return module_->architecture();
 }
 
 void DwarfCFIToModule::Reporter::UnnamedRegister(size_t offset, int reg) {

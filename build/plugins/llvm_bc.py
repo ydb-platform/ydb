@@ -1,7 +1,9 @@
 from _common import rootrel_arc_src, sort_by_keywords, skip_build_root
+from ymake import macro, Unit
 
 
-def onllvm_bc(unit, *args):
+@macro
+def LLVM_BC(unit: Unit, *args: tuple[str, ...]):
     free_args, kwds = sort_by_keywords(
         {'SYMBOLS': -1, 'NAME': 1, 'GENERATE_MACHINE_CODE': 0, 'NO_COMPILE': 0, 'SUFFIX': 1}, args
     )

@@ -237,7 +237,7 @@ TICStorageTransport::ReadFromDDisk(
     return future;
 }
 
-TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
+TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult>
 TICStorageTransport::SyncWithPBuffer(
     const THostConnection& pbufferConnection,
     const THostConnection& ddiskConnection,

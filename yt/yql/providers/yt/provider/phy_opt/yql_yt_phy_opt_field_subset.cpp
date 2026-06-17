@@ -192,4 +192,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MultiReduceFieldsSubset
     return node;
 }
 
-}  // namespace NYql
+} // namespace NYql

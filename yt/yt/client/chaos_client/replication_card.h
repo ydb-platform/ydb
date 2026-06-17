@@ -138,7 +138,7 @@ void FormatValue(
     const TReplicationCard& replicationCard,
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
-TString ToString(
+std::string ToString(
     const TReplicationCard& replicationCard,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
 

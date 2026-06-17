@@ -288,9 +288,7 @@ void BasicWriteRead(EWriteMode writeMode)
     runtime->FilterFunction =
         [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
     {
-        if (ev->GetTypeRewrite() ==
-            NDDisk::TEvSyncWithPersistentBuffer::EventType)
-        {
+        if (ev->GetTypeRewrite() == NDDisk::TEvSync::EventType) {
             if (syncRequestsCount++ < 3) {
                 runtime->Schedule(
                     TDuration::Seconds(10),

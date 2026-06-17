@@ -9,9 +9,8 @@
     val library_path = listOf(
 {%-             for jnis_arg in jnis_args -%}
 {%-                 set jnis = split(jnis_arg|replace('jnis=', ''), ',') -%}
-{%-                 for jni in jnis -%}
-{%-                     set path_and_name = rsplit(jni, "/", 2) %}
-        "$arcadia_root/{{ path_and_name[0] }}",
+{%-                 for jni in jnis %}
+        "$arcadia_root/{{ dirname(jni) }}",
 {%-                 endfor -%}
 {%-             endfor %}
     ).joinToString(":")

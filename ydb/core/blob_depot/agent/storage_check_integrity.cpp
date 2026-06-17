@@ -1,6 +1,8 @@
 #include "agent_impl.h"
 #include "blob_mapping_cache.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+
 namespace NKikimr::NBlobDepot {
 
     template<>
@@ -12,9 +14,13 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
-                    BDEV_QUERY(BDEV25, "TEvCheckIntegrity_new", (U.BlobId, Request.Id));
-                }
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCheckIntegrity_new",
+                    {"marker", "BDEV25"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"U.BlobId", Request.Id});
 
                 TString blobId = Request.Id.AsBinaryString();
 
@@ -22,14 +28,20 @@ namespace NKikimr::NBlobDepot {
                         std::make_shared<TRequestContext>(), false)) {
                     ProcessResolveResult(value);
                 } else {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA58, "resolve pending", (AgentId, Agent.LogId),
-                        (QueryId, GetQueryId()), (BlobId, Request.Id));
+                    YDB_LOG_DEBUG("Resolve pending",
+                        {"marker", "BDA58"},
+                        {"agentId", Agent.LogId},
+                        {"queryId", GetQueryId()},
+                        {"blobId", Request.Id});
                 }
             }
 
             void ProcessResolveResult(const TKeyResolved& result) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA59, "ProcessResolveResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Result, result));
+                YDB_LOG_DEBUG("ProcessResolveResult",
+                    {"marker", "BDA59"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"result", result});
 
                 if (result.Error()) {
                     EndWithError(NKikimrProto::ERROR, result.GetErrorReason());
@@ -51,8 +63,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnCheckIntegrity(TCheckOutcome&& outcome) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA60, "OnCheckIntegrity", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                    (Outcome, outcome));
+                YDB_LOG_DEBUG("OnCheckIntegrity",
+                    {"marker", "BDA60"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"outcome", outcome});
                 TraceResponse(outcome.Result->Status);
                 TBlobStorageQuery::EndWithSuccess(std::move(outcome.Result));
             }
@@ -63,9 +78,14 @@ namespace NKikimr::NBlobDepot {
             }
 
             void TraceResponse(NKikimrProto::EReplyStatus status) {
-                if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
-                    BDEV_QUERY(BDEV26, "TEvCheckIntegrity_end", (BlobId, Request.Id), (Status, status));
-                }
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCheckIntegrity_end",
+                    {"marker", "BDEV26"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"blobId", Request.Id},
+                    {"status", status});
             }
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
@@ -74,8 +94,10 @@ namespace NKikimr::NBlobDepot {
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvCheckIntegrityResult*>(&response)) {
                     TQuery::HandleCheckIntegrityResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA61, "TTabletDisconnected",
-                        (AgentId, Agent.LogId), (QueryId, GetQueryId()));
+                    YDB_LOG_DEBUG("TTabletDisconnected",
+                        {"marker", "BDA61"},
+                        {"agentId", Agent.LogId},
+                        {"queryId", GetQueryId()});
                     EndWithError(NKikimrProto::ERROR, "Tablet disconnected");
                 } else {
                     Y_ABORT();

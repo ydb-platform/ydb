@@ -442,6 +442,8 @@ public:
         switch (ev->GetTypeRewrite()) {    
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+
+            sFunc(TEvents::TEvPoison, HandlePoison);
         }
     }
 
@@ -456,11 +458,13 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandlePrefill);
             hFunc(TEvents::TEvUndelivered, HandlePrefill);
             hFunc(TEvPrivate::TEvPrefillTimeout, HandlePrefill);
+
+            sFunc(TEvents::TEvPoison, HandlePoison);
         }
     }
 
     STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {    
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvCollectSnapshots, Handle);
             hFunc(TEvLongTxService::TEvCollectSnapshotsResult, Handle);
             hFunc(TEvLongTxService::TEvPropagateSnapshots, Handle);
@@ -478,6 +482,8 @@ public:
             IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
             IgnoreFunc(TEvents::TEvUndelivered);
             IgnoreFunc(TEvPrivate::TEvPrefillTimeout);
+
+            sFunc(TEvents::TEvPoison, HandlePoison);
         }
     }
 
@@ -747,6 +753,18 @@ private:
         resultEvent->Record.MutableSnapshots()->SetBorderStep(snapshotBorder.Step);
         resultEvent->Record.MutableSnapshots()->SetBorderTxId(snapshotBorder.TxId);
 
+        // Convey per-node collection times so the receiver's registry freshness (OldestCollectionTime)
+        // is meaningful right after prefill, instead of treating all prefilled nodes as unknown (Zero).
+        for (const auto& [nodeId, collectionTime] : RemoteSnapshotsStorage->GetNodeIdToCollectionTime()) {
+            auto* nodeInfoProto = resultEvent->Record.MutableSnapshots()->AddNodesCollectionInfo();
+            nodeInfoProto->SetNodeId(nodeId);
+            nodeInfoProto->SetUpdateTime(collectionTime.Seconds());
+        }
+        // This node's own snapshots are known as of now.
+        auto* localNodeInfoProto = resultEvent->Record.MutableSnapshots()->AddNodesCollectionInfo();
+        localNodeInfoProto->SetNodeId(SelfId().NodeId());
+        localNodeInfoProto->SetUpdateTime(AppData()->TimeProvider->Now().Seconds());
+
         TXLOG_DEBUG("Sending TEvRemoteSnapshotsPrefillResult to " << ev->Sender
             << " with " << resultEvent->Record.GetSnapshots().GetSnapshots().size() << " snapshots");
         Send(ev->Sender, resultEvent.release());
@@ -814,6 +832,11 @@ private:
         for (const auto& snapshot : snapshots.GetSnapshots()) {
             NActors::TActorId sessionActorId = ActorIdFromProto(snapshot.GetSessionActorId());
             AFL_ENSURE(sessionActorId);
+            // RemoteSnapshotsStorage tracks other nodes only (own snapshots live in LocalSnapshotsStorage),
+            // so skip our own node here, consistently with collection times below and the propagation path.
+            if (sessionActorId.NodeId() == SelfId().NodeId()) {
+                continue;
+            }
             TVector<::NKikimr::TTableId> tableIds;
             tableIds.reserve(snapshot.GetTableIds().size());
             for (const auto& tableIdProto : snapshot.GetTableIds()) {
@@ -825,6 +848,13 @@ private:
                 std::move(tableIds)});
         }
 
+        THashMap<ui32, TInstant> nodeIdToCollectionTime;
+        for (const auto& nodeCollectionInfo : snapshots.GetNodesCollectionInfo()) {
+            if (nodeCollectionInfo.GetNodeId() != SelfId().NodeId()) {
+                nodeIdToCollectionTime[nodeCollectionInfo.GetNodeId()] = TInstant::Seconds(nodeCollectionInfo.GetUpdateTime());
+            }
+        }
+
         TRowVersion border(snapshots.GetBorderStep(), snapshots.GetBorderTxId());
         TXLOG_DEBUG("Applying prefill remote snapshots: " << remoteSnapshots.size()
             << ", border " << border.Step << ":" << border.TxId);
@@ -832,7 +862,7 @@ private:
         RemoteSnapshotsStorage->UpdateBorder(border);
         std::sort(std::begin(remoteSnapshots), std::end(remoteSnapshots),
             TRemoteSnapshotInfo::TComparatorBySnapshotAndSessionId{});
-        RemoteSnapshotsStorage->Init(remoteSnapshots);
+        RemoteSnapshotsStorage->Init(remoteSnapshots, nodeIdToCollectionTime);
         LastRemoteSnapshotsUpdate = AppData()->TimeProvider->Now();
 
         ProceedToPublish();
@@ -866,6 +896,10 @@ private:
             auto* childActorId = tree->AddChildrenActorIds();
             ActorIdToProto(actorId, childActorId);
         }
+    }
+
+    void HandlePoison() {
+        PassAway();
     }
 
 private:

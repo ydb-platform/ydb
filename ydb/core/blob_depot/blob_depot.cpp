@@ -7,6 +7,8 @@
 #include "data_uncertain.h"
 #include "space_monitor.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     TBlobDepot::TBlobDepot(TActorId tablet, TTabletStorageInfo *info)
@@ -53,8 +55,13 @@ namespace NKikimr::NBlobDepot {
             auto handleDelivery = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
                 if (it == PipeServers.end()) {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "HandleDelivery dropped", (Id, GetLogId()),
-                        (RequestId, ev->Cookie), (Sender, ev->Sender), (PipeServerId, ev->Recipient), (Type, ev->Type));
+                    YDB_LOG_DEBUG("HandleDelivery dropped",
+                        {"marker", "BDT29"},
+                        {"id", GetLogId()},
+                        {"requestId", ev->Cookie},
+                        {"sender", ev->Sender},
+                        {"pipeServerId", ev->Recipient},
+                        {"type", ev->Type});
                     return;
                 }
                 auto& info = it->second;
@@ -76,16 +83,28 @@ namespace NKikimr::NBlobDepot {
             auto handleFromAgentPipe = [this](auto& ev) {
                 const auto it = PipeServers.find(ev->Recipient);
                 if (it == PipeServers.end()) {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT23, "HandleFromAgentPipe dropped", (Id, GetLogId()),
-                        (RequestId, ev->Cookie), (Sender, ev->Sender), (PipeServerId, ev->Recipient), (Type, ev->Type));
+                    YDB_LOG_DEBUG("HandleFromAgentPipe dropped",
+                        {"marker", "BDT23"},
+                        {"id", GetLogId()},
+                        {"requestId", ev->Cookie},
+                        {"sender", ev->Sender},
+                        {"pipeServerId", ev->Recipient},
+                        {"type", ev->Type});
                     return; // this may be a race with TEvServerDisconnected and postpone queue; it's okay to have this
                 }
                 auto& info = it->second;
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT69, "HandleFromAgentPipe", (Id, GetLogId()), (RequestId, ev->Cookie),
-                    (Sender, ev->Sender), (PipeServerId, ev->Recipient), (NextExpectedMsgId, info.NextExpectedMsgId),
-                    (PostponeQ.size, info.PostponeQ.size()), (InFlightDeliveries, info.InFlightDeliveries),
-                    (ReadyForAgentQueries, ReadyForAgentQueries()), (Type, ev->Type));
+                YDB_LOG_DEBUG("HandleFromAgentPipe",
+                    {"marker", "BDT69"},
+                    {"id", GetLogId()},
+                    {"requestId", ev->Cookie},
+                    {"sender", ev->Sender},
+                    {"pipeServerId", ev->Recipient},
+                    {"nextExpectedMsgId", info.NextExpectedMsgId},
+                    {"PostponeQ.size", info.PostponeQ.size()},
+                    {"inFlightDeliveries", info.InFlightDeliveries},
+                    {"readyForAgentQueries", ReadyForAgentQueries()},
+                    {"type", ev->Type});
 
                 Y_ABORT_UNLESS(ev->Type == ev->GetTypeRewrite());
                 ev->Rewrite(TEvPrivate::EvDeliver, ev->GetRecipientRewrite());
@@ -168,7 +187,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::InitChannelKinds() {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "InitChannelKinds", (Id, GetLogId()));
+        YDB_LOG_DEBUG("InitChannelKinds",
+            {"marker", "BDT07"},
+            {"id", GetLogId()});
 
         TTabletStorageInfo *info = Info();
         const ui32 generation = Executor()->Generation();

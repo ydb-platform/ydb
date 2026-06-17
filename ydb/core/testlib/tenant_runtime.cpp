@@ -1049,6 +1049,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                     NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = Extension,
                         .Labels = labels,
+                        .OpaqueConfigParsers = Config.OpaqueConfigParsers,
                     }
                 ));
             EnableScheduleForActor(aid, true);

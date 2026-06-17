@@ -94,6 +94,16 @@ private:
 public:
     using TBase::TBase;
 
+    void OnPlanStep(TColumnShard& owner, const ui64 planStep, NTabletFlatExecutor::TTransactionContext& txc) override {
+        if (SchemaTxBody.TxBody_case() != NKikimrTxColumnShard::TSchemaTxBody::kCopyTable) {
+            return;
+        }
+        NIceDb::TNiceDb db(txc.DB);
+        const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
+        const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
+        owner.TablesManager.CopyTablePlanStep(db, NOlap::TSnapshot(planStep, GetTxId()), srcSchemeShardLocalPathId, dstSchemeShardLocalPathId);
+    }
+
     virtual bool ProgressOnExecute(
         TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
         if (!!TxAddSharding) {

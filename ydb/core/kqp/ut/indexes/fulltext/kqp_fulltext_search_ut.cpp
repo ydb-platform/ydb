@@ -2743,7 +2743,10 @@ Y_UNIT_TEST(FullTextReadResultStatusAbort) {
             ORDER BY Relevance DESC
             LIMIT 10
         )sql";
-        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        return db.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            NoRetryExecuteQuerySettings()).ExtractValueSync();
     });
 
     UNIT_ASSERT(errorInjected);

@@ -32,3 +32,9 @@ END()
 RECURSE_FOR_TESTS(
     unittests
 )
+
+IF (NOT OPENSOURCE)
+    RECURSE(
+        benchmark
+    )
+ENDIF()

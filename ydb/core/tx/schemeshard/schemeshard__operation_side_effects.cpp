@@ -289,7 +289,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
     }
 }
 
-bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
+bool TSideEffects::CheckDecouplingProposes(const TSchemeShard* ss, TString& errExpl) const {
     THashMap<TTabletId, TOperationId> checkDecoupling;
     for (auto& rec: CoordinatorProposesShards) {
         TOperationId opId;
@@ -300,6 +300,18 @@ bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
         auto position = checkDecoupling.end();
         std::tie(position, inserted) = checkDecoupling.emplace(shard, opId);
         if (!inserted && position->second != opId) {
+            // For shared shards, the same tablet can legitimately be involved
+            // in multiple concurrent operations (one per sharing table).
+            auto shardIdxIt = ss->TabletIdToShardIdx.find(shard);
+            if (shardIdxIt != ss->TabletIdToShardIdx.end()
+                && ss->SharedShards.contains(shardIdxIt->second))
+            {
+                const auto* txState1 = ss->TxInFlight.FindPtr(opId);
+                const auto* txState2 = ss->TxInFlight.FindPtr(position->second);
+                if (txState1 && txState2 && txState1->TargetPathId != txState2->TargetPathId) {
+                    continue;
+                }
+            }
             errExpl = TStringBuilder()
                     << "can't propose more then one operation to the shard with the same txId"
                     << ", here shardId is " << shard
@@ -314,7 +326,7 @@ bool TSideEffects::CheckDecouplingProposes(TString& errExpl) const {
 
 void TSideEffects::ExpandCoordinatorProposes(TSchemeShard* ss, const TActorContext& ctx) {
     TString errExpl;
-    Y_ABORT_UNLESS(CheckDecouplingProposes(errExpl), "check decoupling: %s", errExpl.c_str());
+    Y_ABORT_UNLESS(CheckDecouplingProposes(ss, errExpl), "check decoupling: %s", errExpl.c_str());
 
     TSet<TTxId> touchedTxIds;
     for (auto& rec: CoordinatorProposes) {

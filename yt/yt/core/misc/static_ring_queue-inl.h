@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "static_ring_queue.h"
 #endif
-#undef STATIC_RING_QUEUE_INL_H_
 
 namespace NYT {
 

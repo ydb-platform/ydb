@@ -91,9 +91,9 @@ private:
     TSourcePtr BuildStmt(TSourcePtr result, TBuildExtra extra);
 
     template <typename TRule>
-        requires std::same_as<TRule, TRule_select_stmt> ||
-                 std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
-                 std::same_as<TRule, TRule_select_subexpr>
+        requires std::same_as<TRule, TRule_select_stmt_core> ||
+                 std::same_as<TRule, TRule_select_unparenthesized_stmt_core> ||
+                 std::same_as<TRule, TRule_select_subexpr_core>
     TSourcePtr BuildUnionException(const TRule& node, TPosition& pos, TBuildExtra& extra);
 
     template <typename TRule>

@@ -1,0 +1,26 @@
+# /* custom error:GetCallable(): requirement Callables_.cend() != compiler failed, message: Missed callable: ListJoinCore*/
+(
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+
+(let i32 (DataType 'Int32))
+(let optI32 (OptionalType i32))
+(let leftRow1  (AsStruct '('"_yql_table_index" (Uint32 '0)) '('"_yql_ljc_key_key" (Int32 '9)) '('"_yql_ljc_left_input_a" (Just (Int32 '1))) '('"_yql_ljc_right_input_b" (Nothing optI32))))
+(let rightRow1 (AsStruct '('"_yql_table_index" (Uint32 '1)) '('"_yql_ljc_key_key" (Int32 '9)) '('"_yql_ljc_left_input_a" (Nothing optI32)) '('"_yql_ljc_right_input_b" (Just (Int32 '3)))))
+(let leftRow2  (AsStruct '('"_yql_table_index" (Uint32 '0)) '('"_yql_ljc_key_key" (Int32 '9)) '('"_yql_ljc_left_input_a" (Just (Int32 '2))) '('"_yql_ljc_right_input_b" (Nothing optI32))))
+(let rightRow2 (AsStruct '('"_yql_table_index" (Uint32 '1)) '('"_yql_ljc_key_key" (Int32 '9)) '('"_yql_ljc_left_input_a" (Nothing optI32)) '('"_yql_ljc_right_input_b" (Just (Int32 '4)))))
+(let stream (Iterator (AsList leftRow1 rightRow1 leftRow2 rightRow2)))
+
+(let keyType (StructType '('"key" i32)))
+(let leftInputType (StructType '('"a" i32)))
+(let rightInputType (StructType '('"b" i32)))
+
+(let leftPremap (lambda '(row) (Member row '"a")))
+(let rightPremap (lambda '(row) (Member row '"b")))
+(let joinLambda (lambda '(key leftList rightList) (Iterator (Map (Zip leftList rightList) (lambda '(item) (AsStruct '('"a" (Nth item '0)) '('"b" (Nth item '1))))))))
+
+(let listJoin (ListJoinCore stream keyType leftPremap leftInputType rightPremap rightInputType joinLambda))
+(let world (Write! world res_sink (Key) (Collect listJoin) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

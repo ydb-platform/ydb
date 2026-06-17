@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "scheduler_api.h"
 #endif
-#undef SCHEDULER_API_INL_H_
 
 namespace NYT::NConcurrency {
 
@@ -60,4 +59,4 @@ inline void SwitchTo(IInvokerPtr invoker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

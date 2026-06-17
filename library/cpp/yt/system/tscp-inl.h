@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "tscp.h"
 #endif
-#undef TSCP_INL_H_
 
 #include <util/system/cpu_id.h>
 

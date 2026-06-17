@@ -740,17 +740,8 @@ private:
     bool Cancelable_ = false;
     TSingleShotCallbackList<void(const TError&)> CanceledList_;
 
-    struct TInstantSentinel
-    {
-        static constexpr auto Sentinel = TInstant::Zero();
-    };
-    using TSentinelOptionalInstant = TSentinelOptional<TInstant, TInstantSentinel>;
-
-    struct TDurationSentinel
-    {
-        static constexpr auto Sentinel = TDuration::Max();
-    };
-    using TSentinelOptionalDuration = TSentinelOptional<TDuration, TDurationSentinel>;
+    YT_DEFINE_SENTINEL_OPTIONAL(TSentinelOptionalInstant, TInstant, TInstant::Zero());
+    YT_DEFINE_SENTINEL_OPTIONAL(TSentinelOptionalDuration, TDuration, TDuration::Max());
 
     const TInstant ArriveInstant_;
     std::atomic<TSentinelOptionalInstant> RunInstant_;

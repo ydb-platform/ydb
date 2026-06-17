@@ -7,7 +7,7 @@
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <yt/yt/core/threading/thread.h>
 

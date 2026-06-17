@@ -172,7 +172,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
 {
     auto nameTable = TNameTable::FromSchema(tableSchema);
 
-    auto rowParts = ConvertTo<THashMap<TString, INodePtr>>(TYsonString(yson, ysonType));
+    auto rowParts = ConvertTo<THashMap<std::string, INodePtr>>(TYsonString(yson, ysonType));
 
     TUnversionedOwningRowBuilder rowBuilder;
     auto validateAndAddValue = [&rowBuilder, &validateValues] (const TUnversionedValue& value, const TColumnSchema& column) {

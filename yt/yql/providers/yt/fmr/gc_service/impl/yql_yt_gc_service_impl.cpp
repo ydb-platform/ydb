@@ -48,6 +48,7 @@ public:
                     GroupsToDeleteBatches_.back().emplace_back(group);
                     ++cnt;
                 }
+                CondVar_.Signal();
             }
             promise.SetValue();
         };
@@ -65,6 +66,9 @@ private:
             while (!StopGcService_) {
                 std::vector<TString> groupsToDelete;
                 with_lock(Mutex_) {
+                    CondVar_.WaitT(Mutex_, TimeToSleepBetweenGroupDeletionRequests_, [&] {
+                        return !GroupsToDeleteBatches_.empty() || StopGcService_;
+                    });
                     if (!GroupsToDeleteBatches_.empty()) {
                         groupsToDelete = GroupsToDeleteBatches_.front();
                         GroupsToDeleteBatches_.pop();

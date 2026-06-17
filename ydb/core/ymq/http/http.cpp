@@ -856,7 +856,7 @@ static void ValidateMessageAttribute(const TParameters::TMessageAttribute& attr,
     if (!ValidateMessageAttributeName(attr.Name, hasYandexPrefix, allowYandexPrefix)) {
         throw TSQSException(NErrors::INVALID_PARAMETER_VALUE) << "Invalid message attribute name.";
     }
-    if (!attr.DataType.GetOrElse("").empty()) {
+    if (attr.DataType.GetOrElse("").empty()) {
         throw TSQSException(NErrors::INVALID_PARAMETER_COMBINATION) << "No message attribute data type provided.";
     }
     if (attr.DataType.GetOrElse("").size() > 256) {

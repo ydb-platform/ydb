@@ -103,9 +103,6 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return OutputIUs;
 }
 
@@ -344,11 +341,6 @@ TVector<TInfoUnit> TOpMap::GetOutputIUs() {
         res.push_back(mapElement.GetElementName());
     }
 
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        Y_ENSURE(*outputIUs == res, "Map output override must preserve Map output");
-        return *outputIUs;
-    }
-
     return res;
 }
 
@@ -537,10 +529,6 @@ void TOpAddDependencies::SetDependencyPairs(const TVector<std::pair<TInfoUnit, c
 }
 
 TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     auto ius = GetInput()->GetOutputIUs();
     ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
     return ius;
@@ -576,9 +564,6 @@ TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const 
 }
 
 TVector<TInfoUnit> TOpFilter::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return GetInput()->GetOutputIUs();
 }
 
@@ -653,10 +638,6 @@ TVector<TInfoUnit> TOpJoin::GetRHSKeys() const {
 }
 
 TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     TVector<TInfoUnit> res;
 
     auto leftInputIUs = GetLeftInput()->GetOutputIUs();
@@ -801,10 +782,6 @@ TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOper
     : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput), Ordered(ordered) {}
 
 TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     const auto leftOutput = GetLeftInput()->GetOutputIUs();
     const auto rightOutput = GetRightInput()->GetOutputIUs();
     if (leftOutput.size() == rightOutput.size()) {
@@ -868,9 +845,6 @@ TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TP
 }
 
 TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return GetInput()->GetOutputIUs();
 }
 
@@ -920,9 +894,6 @@ TOpSort::TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhy
 }
 
 TVector<TInfoUnit> TOpSort::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return GetInput()->GetOutputIUs();
 }
 
@@ -1000,10 +971,6 @@ TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggr
 }
 
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     // We assume that aggregation returns column is order [keys, states].
     // DistinctAll uses keys only as physical aggregation state and returns distinct states.
     TVector<TInfoUnit> outputIU;
@@ -1157,9 +1124,6 @@ TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVec
 }
 
 TVector<TInfoUnit> TOpRoot::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return GetInput()->GetOutputIUs();
 }
 

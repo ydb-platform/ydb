@@ -3102,36 +3102,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TLogicalOutputPruningStage outputPruning;
         outputPruning.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT(!map->GetOutputIUsOverride().has_value());
-
         const auto mapOutput = map->GetOutputIUs();
         UNIT_ASSERT_VALUES_EQUAL(mapOutput.size(), 2);
         UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a")) != mapOutput.end());
         UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a_plus")) != mapOutput.end());
-    }
-
-    Y_UNIT_TEST(FilterMetadataDropsProjectedKey) {
-        TMapRuleTestContext testContext;
-        const auto pos = NYql::TPositionHandle();
-        TPlanProps expressionProps;
-
-        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("b")}, pos);
-        read->Props.Metadata = TRBOMetadata();
-        read->Props.Metadata->KeyColumns = {TInfoUnit("a"), TInfoUnit("b")};
-        read->Props.Metadata->ShuffledByColumns = {TInfoUnit("a"), TInfoUnit("b")};
-
-        auto filter = MakeIntrusive<TOpFilter>(
-            read,
-            pos,
-            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
-        );
-        filter->SetOutputIUsOverride({TInfoUnit("a")});
-        filter->ComputeMetadata(testContext.RboCtx, expressionProps);
-
-        UNIT_ASSERT(filter->Props.Metadata.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(filter->Props.Metadata->ColumnsCount, 1);
-        UNIT_ASSERT(filter->Props.Metadata->KeyColumns.empty());
-        UNIT_ASSERT(filter->Props.Metadata->ShuffledByColumns.empty());
     }
 
     Y_UNIT_TEST(DontEliminateLeftJoinWhenNoPK) {

@@ -92,21 +92,6 @@ TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
     }
 }
 
-void PreserveVisibleColumns(TVector<TInfoUnit>& columns, const TVector<TInfoUnit>& outputIUs) {
-    for (const auto& column : columns) {
-        if (!ContainsInfoUnit(outputIUs, column)) {
-            columns.clear();
-            return;
-        }
-    }
-}
-
-void AlignMetadataWithOutput(TRBOMetadata& metadata, const TVector<TInfoUnit>& outputIUs) {
-    metadata.ColumnsCount = outputIUs.size();
-    PreserveVisibleColumns(metadata.KeyColumns, outputIUs);
-    PreserveVisibleColumns(metadata.ShuffledByColumns, outputIUs);
-}
-
 } // anonymous namespace
 
 /**
@@ -116,11 +101,6 @@ void IUnaryOperator::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     Props.Metadata = GetInput()->Props.Metadata;
-    if (!Props.Metadata.has_value()) {
-        return;
-    }
-
-    AlignMetadataWithOutput(*Props.Metadata, GetOutputIUs());
 }
 
 /**
@@ -464,8 +444,6 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     for (const auto & iu : outputIUs) {
         Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, "", iu.GetColumnName(), duplicateId));
     }
-
-    AlignMetadataWithOutput(*Props.Metadata, outputIUs);
 }
 
 /**
@@ -581,7 +559,6 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     // Currently there are no other algos.
     // If any other are added, leave ShuffledByColumns empty (unknown distribution) - the safest default.
-    AlignMetadataWithOutput(*Props.Metadata, GetOutputIUs());
 }
 
 void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {

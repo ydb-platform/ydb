@@ -196,8 +196,11 @@ namespace NKikimr::NHttpProxy {
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
                 const auto [errorName, httpCode] = MapToException(status, Method, issueCode);
+                ReplyWithYdbError(ctx, errorName, errorText, httpCode);
+            }
 
-                ctx.Send(MakeMetricsServiceID(),
+            void ReplyWithYdbError(const TActorContext& ctx, const TString& errorName, const TString& errorText, ui32 httpCode) {
+                    ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
                              AddCommonLabels({
@@ -390,10 +393,13 @@ namespace NKikimr::NHttpProxy {
                     NSQS::Deserialize<TProtoRequest>(HttpContext, Request);
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
-                    if (e.ErrorClass.ErrorCode == "MissingParameter")
+                    if (e.ErrorClass.ErrorCode == "MissingParameter") {
                         issueCode = NYds::EErrorCodes::MISSING_PARAMETER;
-                    else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString")
+                    } else if (e.ErrorClass.ErrorCode == "InvalidParameterValue") {
+                        return ReplyWithYdbError(ctx, "InvalidParameterValue", e.what(), static_cast<ui32>(e.ErrorClass.HttpStatusCode));
+                    } else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString") {
                         issueCode = NYds::EErrorCodes::INVALID_ARGUMENT;
+                    }
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
                     LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,

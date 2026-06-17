@@ -9235,8 +9235,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         BalanceTablets(runtime, hiveTablet);
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
-<<<<<<< HEAD
-=======
 
     Y_UNIT_TEST(TestShrinkStoragePoolReply) {
 
@@ -9448,7 +9446,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         sendMetrics(owner, { std::make_pair(tabletIdExt, 70) });
         UNIT_ASSERT_VALUES_EQUAL(120, getTabletsCounter());
     }
->>>>>>> 0cbdb11a180 ([HIVE] don't change state to Stopped for locked tablets on load (#43446))
 }
 
 Y_UNIT_TEST_SUITE(THeavyPerfTest) {

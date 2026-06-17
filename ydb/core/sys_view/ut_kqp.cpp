@@ -3133,6 +3133,7 @@ R"(CREATE TABLE `test_show_create` (
                     NodeId,
                     PDiskId,
                     Replicated,
+                    PhantomOnly,
                     State,
                     Status,
                     VDisk,
@@ -3152,7 +3153,7 @@ R"(CREATE TABLE `test_show_create` (
             }
         }
 
-        TYsonFieldChecker check(ysonString, 15);
+        TYsonFieldChecker check(ysonString, 16);
 
         check.Uint64(0u, true); // AllocatedSize
         check.Uint64(0u, true); // AvailableSize
@@ -3165,6 +3166,7 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
         check.Null(); // Replicated
+        check.Bool(false); // PhantomOnly
         check.Null(); // State
         check.Null(); // Status
         check.Uint64(0u); // VDisk

@@ -2,7 +2,7 @@
 
 #include "summary.h"
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 namespace NYT::NProfiling {
 

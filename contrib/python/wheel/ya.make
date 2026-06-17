@@ -12,6 +12,11 @@ PEERDIR(
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    wheel._bdist_wheel
+    wheel.bdist_wheel
+)
+
 PY_SRCS(
     TOP_LEVEL
     wheel/__init__.py

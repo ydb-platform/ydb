@@ -41,7 +41,7 @@ std::tuple<TColumnsVec, TColumnsVec, TColumnsVec> BuildDefaultColumnMaps(const T
 
 template <bool All>
 TRuntimeNode BuildZipJoin(TProgramBuilder& pb, TVector<TDefaultInRow>&& rows) {
-    const auto list = ConvertValueToLiteralNode(pb, rows);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, rows);
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto elemType = All ? pb.NewOptionalType(int32Type) : int32Type;
@@ -121,8 +121,8 @@ Y_UNIT_TEST_QUAD(EmptyLeftList, LLVM, All) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto listJoin = BuildZipJoin<All>(pb, TVector<TDefaultInRow>{
-                                                    {{{TMaybe<i32>{}}, {TMaybe<i32>{3}}, {TMaybe<i32>{9}}, {1}}},
-                                                    {{{TMaybe<i32>{}}, {TMaybe<i32>{4}}, {TMaybe<i32>{9}}, {1}}},
+                                                    {{{TMaybe<i32>{}}, {i32(3)}, {i32(9)}, {1}}},
+                                                    {{{TMaybe<i32>{}}, {i32(4)}, {i32(9)}, {1}}},
                                                 });
 
     const auto graph = setup.BuildGraph(listJoin);
@@ -130,8 +130,8 @@ Y_UNIT_TEST_QUAD(EmptyLeftList, LLVM, All) {
     using TOutRow = TDefaultOutRow<All>;
     if constexpr (All) {
         const TVector<TOutRow> expected{
-            {{TMaybe<i32>{}}, {TMaybe<i32>{3}}},
-            {{TMaybe<i32>{}}, {TMaybe<i32>{4}}},
+            {{TMaybe<i32>{}}, {i32(3)}},
+            {{TMaybe<i32>{}}, {i32(4)}},
         };
         AssertUnboxedValueElementEqual(graph->GetValue(), NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
     } else {
@@ -146,8 +146,8 @@ Y_UNIT_TEST_QUAD(EmptyRightList, LLVM, All) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto listJoin = BuildZipJoin<All>(pb, TVector<TDefaultInRow>{
-                                                    {{{TMaybe<i32>{1}}, {TMaybe<i32>{}}, {TMaybe<i32>{9}}, {0}}},
-                                                    {{{TMaybe<i32>{2}}, {TMaybe<i32>{}}, {TMaybe<i32>{9}}, {0}}},
+                                                    {{{i32(1)}, {TMaybe<i32>{}}, {i32(9)}, {0}}},
+                                                    {{{i32(2)}, {TMaybe<i32>{}}, {i32(9)}, {0}}},
                                                 });
 
     const auto graph = setup.BuildGraph(listJoin);
@@ -155,8 +155,8 @@ Y_UNIT_TEST_QUAD(EmptyRightList, LLVM, All) {
     using TOutRow = TDefaultOutRow<All>;
     if constexpr (All) {
         const TVector<TOutRow> expected{
-            {{TMaybe<i32>{1}}, {TMaybe<i32>{}}},
-            {{TMaybe<i32>{2}}, {TMaybe<i32>{}}},
+            {{i32(1)}, {TMaybe<i32>{}}},
+            {{i32(2)}, {TMaybe<i32>{}}},
         };
         AssertUnboxedValueElementEqual(graph->GetValue(), NYql::NUdf::TUnboxedValueComparatorStreamView<TOutRow>(expected));
     } else {
@@ -186,10 +186,10 @@ Y_UNIT_TEST_LLVM(InterleavedRows) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto listJoin = BuildZipJoin<false>(pb, TVector<TDefaultInRow>{
-                                                      {{{TMaybe<i32>{1}}, {TMaybe<i32>{}}, {TMaybe<i32>{9}}, {0}}}, // left
-                                                      {{{TMaybe<i32>{}}, {TMaybe<i32>{3}}, {TMaybe<i32>{9}}, {1}}}, // right
-                                                      {{{TMaybe<i32>{2}}, {TMaybe<i32>{}}, {TMaybe<i32>{9}}, {0}}}, // left
-                                                      {{{TMaybe<i32>{}}, {TMaybe<i32>{4}}, {TMaybe<i32>{9}}, {1}}}, // right
+                                                      {{{i32(1)}, {TMaybe<i32>{}}, {i32(9)}, {0}}}, // left
+                                                      {{{TMaybe<i32>{}}, {i32(3)}, {i32(9)}, {1}}}, // right
+                                                      {{{i32(2)}, {TMaybe<i32>{}}, {i32(9)}, {0}}}, // left
+                                                      {{{TMaybe<i32>{}}, {i32(4)}, {i32(9)}, {1}}}, // right
                                                   });
 
     const auto graph = setup.BuildGraph(listJoin);
@@ -205,7 +205,7 @@ Y_UNIT_TEST(InvalidTableIndex) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto listJoin = BuildZipJoin<false>(pb, TVector<TDefaultInRow>{
-                                                      {{{TMaybe<i32>{1}}, {TMaybe<i32>{}}, {TMaybe<i32>{9}}, {2}}},
+                                                      {{{i32(1)}, {TMaybe<i32>{}}, {i32(9)}, {2}}},
                                                   });
 
     const auto graph = setup.BuildGraph(listJoin);
@@ -220,9 +220,9 @@ Y_UNIT_TEST(InvalidColumnsMapping) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
-                                                        {{{TMaybe<i32>{23}}, {TMaybe<i32>{}}, {9}, {0}}},
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
+                                                               {{{i32(23)}, {TMaybe<i32>{}}, {9}, {0}}},
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto uint32Type = pb.NewDataType(NUdf::TDataType<ui32>::Id);
@@ -257,10 +257,10 @@ Y_UNIT_TEST_LLVM(ColumnReordering) {
                                       NTest::TStructMember<"right.d", TMaybe<i32>>,
                                       NTest::TStructMember<"key", i32>,
                                       NTest::TStructMember<"_yql_table_index", i32>>;
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TInRow>{
-                                                        {{{TMaybe<i32>{9}}, {TMaybe<i32>{24}}, {TMaybe<i32>{}}, {TMaybe<i32>{}}, {0}, {0}}},  // left:  a=9,  b=24
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{}}, {TMaybe<i32>{42}}, {TMaybe<i32>{73}}, {0}, {1}}}, // right: c=42, d=73
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{i32(9)}, {i32(24)}, {TMaybe<i32>{}}, {TMaybe<i32>{}}, {0}, {0}}},  // left:  a=9,  b=24
+                                                               {{{TMaybe<i32>{}}, {TMaybe<i32>{}}, {i32(42)}, {i32(73)}, {0}, {1}}}, // right: c=42, d=73
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     // Left output struct: {x (idx=0), y (idx=1)}; a->y (outCol=1), b->x (outCol=0).
@@ -314,10 +314,10 @@ Y_UNIT_TEST_LLVM(MultipleColumnsPerSide) {
                                       NTest::TStructMember<"right.c", TMaybe<i32>>,
                                       NTest::TStructMember<"key", i32>,
                                       NTest::TStructMember<"_yql_table_index", i32>>;
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TInRow>{
-                                                        {{{1}, {3}, {TMaybe<i32>{}}, {TMaybe<i32>{}}, {0}, {0}}}, // left:  a=1, c=3
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{}}, {2}, {4}, {0}, {1}}}, // right: a=2, c=4
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{1}, {3}, {TMaybe<i32>{}}, {TMaybe<i32>{}}, {0}, {0}}}, // left:  a=1, c=3
+                                                               {{{TMaybe<i32>{}}, {TMaybe<i32>{}}, {2}, {4}, {0}, {1}}}, // right: a=2, c=4
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto leftArgType = AS_TYPE(TStructType, pb.NewStructType({{"la", int32Type}, {"lc", int32Type}}));
@@ -358,12 +358,12 @@ Y_UNIT_TEST_LLVM(KeyUsedInLambda) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
-                                                        {{{TMaybe<i32>{1}}, {TMaybe<i32>{}}, {9}, {0}}},
-                                                        {{{TMaybe<i32>{2}}, {TMaybe<i32>{}}, {9}, {0}}},
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{3}}, {9}, {1}}},
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{4}}, {9}, {1}}},
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
+                                                               {{{i32(1)}, {TMaybe<i32>{}}, {9}, {0}}},
+                                                               {{{i32(2)}, {TMaybe<i32>{}}, {9}, {0}}},
+                                                               {{{TMaybe<i32>{}}, {i32(3)}, {9}, {1}}},
+                                                               {{{TMaybe<i32>{}}, {i32(4)}, {9}, {1}}},
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto [inputRowType, leftArgType, rightArgType] = BuildDefaultStructTypes(pb, list, int32Type);
@@ -401,12 +401,12 @@ Y_UNIT_TEST_LLVM(MultiColumnKey) {
                                       NTest::TStructMember<"key1", i32>,
                                       NTest::TStructMember<"key2", i32>,
                                       NTest::TStructMember<"_yql_table_index", i32>>;
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TInRow>{
-                                                        {{{TMaybe<i32>{1}}, {TMaybe<i32>{}}, {5}, {7}, {0}}},
-                                                        {{{TMaybe<i32>{2}}, {TMaybe<i32>{}}, {5}, {7}, {0}}},
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{3}}, {5}, {7}, {1}}},
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{4}}, {5}, {7}, {1}}},
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{i32(1)}, {TMaybe<i32>{}}, {5}, {7}, {0}}},
+                                                               {{{i32(2)}, {TMaybe<i32>{}}, {5}, {7}, {0}}},
+                                                               {{{TMaybe<i32>{}}, {i32(3)}, {5}, {7}, {1}}},
+                                                               {{{TMaybe<i32>{}}, {i32(4)}, {5}, {7}, {1}}},
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto [inputRowType, leftArgType, rightArgType] = BuildDefaultStructTypes(pb, list, int32Type);
@@ -446,13 +446,13 @@ Y_UNIT_TEST_LLVM(CrossProductJoin) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
-                                                        {{{TMaybe<i32>{1}}, {TMaybe<i32>{}}, {0}, {0}}},
-                                                        {{{TMaybe<i32>{2}}, {TMaybe<i32>{}}, {0}, {0}}},
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{3}}, {0}, {1}}},
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{4}}, {0}, {1}}},
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{5}}, {0}, {1}}},
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
+                                                               {{{i32(1)}, {TMaybe<i32>{}}, {0}, {0}}},
+                                                               {{{i32(2)}, {TMaybe<i32>{}}, {0}, {0}}},
+                                                               {{{TMaybe<i32>{}}, {i32(3)}, {0}, {1}}},
+                                                               {{{TMaybe<i32>{}}, {i32(4)}, {0}, {1}}},
+                                                               {{{TMaybe<i32>{}}, {i32(5)}, {0}, {1}}},
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto [inputRowType, leftArgType, rightArgType] = BuildDefaultStructTypes(pb, list, int32Type);
@@ -486,10 +486,10 @@ Y_UNIT_TEST_LLVM(ArgmapTransform) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
-                                                        {{{42}, {TMaybe<i32>{}}, {9}, {0}}}, // left:  a=42 -> premap: 42+1=43
-                                                        {{{TMaybe<i32>{}}, {73}, {9}, {1}}}, // right: a=73 -> premap: 73*2=146
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
+                                                               {{{42}, {TMaybe<i32>{}}, {9}, {0}}}, // left:  a=42 -> premap: 42+1=43
+                                                               {{{TMaybe<i32>{}}, {73}, {9}, {1}}}, // right: a=73 -> premap: 73*2=146
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto [inputRowType, leftArgType, rightArgType] = BuildDefaultStructTypes(pb, list, int32Type);
@@ -519,12 +519,12 @@ Y_UNIT_TEST_LLVM(SpecialArgmapLambdas) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
-                                                        {{{TMaybe<i32>{23}}, {TMaybe<i32>{}}, {9}, {0}}}, // left:  a=23
-                                                        {{{TMaybe<i32>{24}}, {TMaybe<i32>{}}, {9}, {0}}}, // left:  a=24
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{42}}, {9}, {1}}}, // right: b=42 (ignored by premap)
-                                                        {{{TMaybe<i32>{}}, {TMaybe<i32>{42}}, {9}, {1}}}, // right: b=42 (ignored by premap)
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{
+                                                               {{{i32(23)}, {TMaybe<i32>{}}, {9}, {0}}}, // left:  a=23
+                                                               {{{i32(24)}, {TMaybe<i32>{}}, {9}, {0}}}, // left:  a=24
+                                                               {{{TMaybe<i32>{}}, {i32(42)}, {9}, {1}}}, // right: b=42 (ignored by premap)
+                                                               {{{TMaybe<i32>{}}, {i32(42)}, {9}, {1}}}, // right: b=42 (ignored by premap)
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto [inputRowType, leftArgType, rightArgType] = BuildDefaultStructTypes(pb, list, int32Type);
@@ -555,7 +555,7 @@ Y_UNIT_TEST_LLVM(FinishImmediate) {
     TSetup<LLVM> setup(GetUnreachableFactory());
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TDefaultInRow>{});
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto [inputRowType, leftArgType, rightArgType] = BuildDefaultStructTypes(pb, list, int32Type);
@@ -591,12 +591,12 @@ Y_UNIT_TEST_LLVM(CheckOptionalWithNoUnwrap) {
                                       NTest::TStructMember<"right.b", TOuterOpt>,
                                       NTest::TStructMember<"key", i32>,
                                       NTest::TStructMember<"_yql_table_index", i32>>;
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TInRow>{
-                                                        {{{TOuterOpt{42}}, {TOuterOpt{}}, {9}, {0}}},          // left: 42??
-                                                        {{{TOuterOpt{}}, {TOuterOpt{TInnerOpt{}}}, {9}, {1}}}, // right: Just(Nothing(Int32)
-                                                        {{{TOuterOpt{73}}, {TOuterOpt{}}, {9}, {0}}},          // left: 73??
-                                                        {{{TOuterOpt{}}, {TOuterOpt{}}, {9}, {1}}},            // right: Nothing(Int32?)
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{TOuterOpt{42}}, {TOuterOpt{}}, {9}, {0}}},          // left: 42??
+                                                               {{{TOuterOpt{}}, {TOuterOpt{TInnerOpt{}}}, {9}, {1}}}, // right: Just(Nothing(Int32)
+                                                               {{{TOuterOpt{73}}, {TOuterOpt{}}, {9}, {0}}},          // left: 73??
+                                                               {{{TOuterOpt{}}, {TOuterOpt{}}, {9}, {1}}},            // right: Nothing(Int32?)
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto innerOptType = pb.NewOptionalType(int32Type);
@@ -633,12 +633,12 @@ Y_UNIT_TEST_LLVM(CheckPgTypeWithNoUnwrap) {
                                       NTest::TStructMember<"right.b", NTest::TPgInt>,
                                       NTest::TStructMember<"key", i32>,
                                       NTest::TStructMember<"_yql_table_index", i32>>;
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TInRow>{
-                                                        {{{NTest::TPgInt(23)}, {NTest::TPgInt()}, {9}, {0}}}, // left: 23
-                                                        {{{NTest::TPgInt(24)}, {NTest::TPgInt()}, {9}, {0}}}, // left: 24
-                                                        {{{NTest::TPgInt()}, {NTest::TPgInt(42)}, {9}, {1}}}, // right: 42
-                                                        {{{NTest::TPgInt()}, {NTest::TPgInt(73)}, {9}, {1}}}, // right: 73
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{NTest::TPgInt(23)}, {NTest::TPgInt()}, {9}, {0}}}, // left: 23
+                                                               {{{NTest::TPgInt(24)}, {NTest::TPgInt()}, {9}, {0}}}, // left: 24
+                                                               {{{NTest::TPgInt()}, {NTest::TPgInt(42)}, {9}, {1}}}, // right: 42
+                                                               {{{NTest::TPgInt()}, {NTest::TPgInt(73)}, {9}, {1}}}, // right: 73
+                                                           });
 
     const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
     const auto pgIntType = pb.NewPgType(NYql::NPg::LookupType("int4").TypeId);

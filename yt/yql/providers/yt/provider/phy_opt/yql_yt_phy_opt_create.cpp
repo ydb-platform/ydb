@@ -31,4 +31,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Create(TExprBase node, 
         .Done();
 }
 
-}  // namespace NYql
+} // namespace NYql

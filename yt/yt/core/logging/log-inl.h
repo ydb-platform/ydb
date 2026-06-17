@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "log.h"
 #endif
-#undef LOG_INL_H_
 
 #include <yt/yt/core/misc/error.h>
 

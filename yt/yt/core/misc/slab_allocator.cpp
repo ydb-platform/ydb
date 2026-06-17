@@ -179,6 +179,17 @@ public:
         return segmentCount > 1 && refCount * 2 < maxRefCount || segmentCount == 1 && refCount == 2;
     }
 
+    i64 GetAliveByteSize() const
+    {
+        return GetAliveItemCount() * ObjectSize_;
+    }
+
+    i64 GetAliveItemCount() const
+    {
+        auto refCount = GetRefCounter(this)->GetRefCount();
+        return refCount;
+    }
+
     IMemoryUsageTrackerPtr GetMemoryTracker() const
     {
         return MemoryTracker_;
@@ -314,6 +325,16 @@ public:
         FreedItems.Increment();
         AliveItems.Update(RefCount_.load() - 1);
         Unref();
+    }
+
+    i64 GetAliveByteSize() const
+    {
+        return AcquiredMemory_.load();
+    }
+
+    i64 GetAliveItemCount() const
+    {
+        return RefCount_.load();
     }
 
     size_t Unref()
@@ -515,6 +536,34 @@ bool TSlabAllocator::ReallocateArenasIfNeeded()
         }
     }
     return hasReallocatedArenas;
+}
+
+i64 TSlabAllocator::GetAliveByteSize() const
+{
+    i64 byteSize = 0;
+
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
+        auto arena = SmallArenas_[rank].Acquire();
+        byteSize += arena->GetAliveByteSize();
+    }
+
+    byteSize += LargeArena_->GetAliveByteSize();
+
+    return byteSize;
+}
+
+i64 TSlabAllocator::GetAliveItemCount() const
+{
+    i64 itemCount = 0;
+
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
+        auto arena = SmallArenas_[rank].Acquire();
+        itemCount += arena->GetAliveItemCount();
+    }
+
+    itemCount += LargeArena_->GetAliveItemCount();
+
+    return itemCount;
 }
 
 void TSlabAllocator::Free(void* ptr)

@@ -75,8 +75,6 @@ BELONGS ya.make
         absl/base/internal/sysinfo.h [1:1]
         absl/base/internal/thread_identity.cc [1:1]
         absl/base/internal/thread_identity.h [1:1]
-        absl/base/internal/throw_delegate.cc [1:1]
-        absl/base/internal/throw_delegate.h [2:2]
         absl/base/internal/tsan_mutex_interface.h [1:1]
         absl/base/internal/unaligned_access.h [2:2]
         absl/base/internal/unscaledcycleclock.cc [1:1]
@@ -88,6 +86,8 @@ BELONGS ya.make
         absl/base/policy_checks.h [1:1]
         absl/base/port.h [1:1]
         absl/base/thread_annotations.h [1:1]
+        absl/base/throw_delegate.cc [1:1]
+        absl/base/throw_delegate.h [1:1]
         absl/container/internal/test_instance_tracker.h [1:1]
         absl/debugging/internal/address_is_readable.cc [1:1]
         absl/debugging/internal/address_is_readable.h [1:1]
@@ -219,6 +219,7 @@ BELONGS ya.make
         absl/time/time.h [1:1]
         absl/types/any.h [2:2]
         absl/types/optional.h [1:1]
+        absl/types/source_location.h [1:1]
         absl/types/span.h [2:2]
         absl/utility/utility.h [1:1]
 
@@ -331,6 +332,7 @@ BELONGS ya.make
         absl/random/internal/mock_helpers.h [2:2]
         absl/random/internal/mock_overload_set.h [2:2]
         absl/random/internal/uniform_helper.h [1:1]
+        absl/random/mocking_access.h [1:1]
         absl/status/internal/status_internal.h [1:1]
         absl/status/status.cc [1:1]
         absl/status/status.h [1:1]
@@ -449,6 +451,30 @@ BELONGS ya.make
         absl/time/internal/get_current_time_chrono.inc [1:1]
         absl/types/compare.h [1:1]
         absl/types/variant.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55e5a14abd4f1e4354295a877d34f4d6
+BELONGS ya.make
+    License text:
+        // Copyright 2026 The Abseil Authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        absl/base/internal/hardening.h [2:2]
+        absl/functional/bind_back.h [1:1]
+        absl/functional/internal/back_binder.h [1:1]
+        absl/status/status_builder.cc [1:1]
+        absl/status/status_builder.h [1:1]
+        absl/status/status_macros.h [1:1]
+        absl/strings/internal/stringify_stream.h [1:1]
+        absl/time/clock_interface.cc [1:1]
+        absl/time/clock_interface.h [1:1]
+        absl/time/simulated_clock.h [1:1]
+        absl/types/any_span.h [1:1]
+        absl/types/internal/any_span.h [1:1]
+        absl/types/optional_ref.h [1:1]
+        absl/types/source_location.cc [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 58e60221a225d38384f3c66b2400cc91
 BELONGS ya.make
@@ -619,6 +645,16 @@ BELONGS ya.make
     Files with this license:
         absl/debugging/internal/demangle_rust.cc [38:40]
 
+KEEP     COPYRIGHT_SERVICE_LABEL b711fe82ef820a5779938811e77419a3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        absl/status/status_builder.h [403:406]
+
 KEEP     COPYRIGHT_SERVICE_LABEL cf1ca39881e3a11851beebfeb11f8493
 BELONGS ya.make
     License text:
@@ -640,8 +676,6 @@ BELONGS ya.make
         absl/container/linked_hash_map.h [1:1]
         absl/container/linked_hash_set.h [1:1]
         absl/debugging/internal/addresses.h [1:1]
-        absl/debugging/internal/borrowed_fixup_buffer.cc [1:1]
-        absl/debugging/internal/borrowed_fixup_buffer.h [1:1]
         absl/hash/internal/weakly_mixed_integer.h [1:1]
         absl/log/internal/container.h [1:1]
         absl/log/log_entry.cc [1:1]

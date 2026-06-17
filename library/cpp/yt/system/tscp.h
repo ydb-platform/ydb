@@ -1,6 +1,6 @@
 #pragma once
 
-#include "public.h"
+#include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <util/generic/bitops.h>
 

@@ -33,7 +33,7 @@ struct TAstNodeFlags {
         ArbitraryContent = 0x01,
         BinaryContent = 0x02,
         MultilineContent = 0x04,
-        IgnoredContent = 0x08, // e.g. for AST with __query_text equality
+        UnstableFormat = 0x08, // e.g. for AST with __query_text equality
     };
 
     static constexpr ui32 FlagsMask = 0x0F; // all flags should fit here

@@ -2372,7 +2372,7 @@ TExprNode::TPtr EquiJoinEmitPruneKeys(const TExprNode::TPtr& node, TExprContext&
     return ctx.ChangeChildren(*node, std::move(children));
 }
 
-TExprNodeList RenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext& ctx) {
+TMaybe<TExprNodeList> TryRenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(TCoCalcOverWindowBase::Match(node.Get()) || TCoCalcOverWindowGroup::Match(node.Get()));
     YQL_ENSURE(TCoExtractMembers::Match(node->Child(0)));
     TCoExtractMembers extract(node->HeadPtr());
@@ -2386,9 +2386,15 @@ TExprNodeList RenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext&
     // we rename all child payload columns which are filtered by ExtractMembers to new names which will non conflict with any parent columns
     TMap<TStringBuf, TStringBuf> renames;
     for (auto& item : childOutput.GetItems()) {
-        if (!childInput.FindItem(item->GetName()) && !extractOutput.FindItem(item->GetName())) {
-            // this is a payload column for rename - name will be assigned later
-            YQL_ENSURE(renames.insert({ item->GetName(), ""}).second);
+        TStringBuf childOutName = item->GetName();
+        if (!extractOutput.FindItem(childOutName)) {
+            if (!childInput.FindItem(childOutName)) {
+                // this is a payload column for rename - name will be assigned later
+                YQL_ENSURE(renames.insert({childOutName, ""}).second);
+            } else {
+                // non-payload column which is removed by ExtractMembers - can not optimize this case
+                return {};
+            }
         }
     }
 
@@ -3290,7 +3296,17 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        TExprNodeList calcs = seenExtractMembers ? RenameChildCalcPayloads(node, ctx) : ExtractCalcsOverWindow(child, ctx);
+        TExprNodeList calcs;
+        if (seenExtractMembers) {
+            auto maybeChildCalcs = TryRenameChildCalcPayloads(node, ctx);
+            if (!maybeChildCalcs) {
+                return node;
+            }
+            calcs = std::move(*maybeChildCalcs);
+        } else {
+            calcs = ExtractCalcsOverWindow(child, ctx);
+        }
+
         calcs.insert(calcs.end(), parentCalcs.begin(), parentCalcs.end());
 
         auto result = RebuildCalcOverWindowGroup(child->Pos(), std::move(input), calcs, ctx);

@@ -672,8 +672,6 @@ private:
                             ++it;
                         }
                     }
-                }
-                with_lock(Mutex_) {
                     MaintenanceCondVar_.WaitD(Mutex_, TInstant::Now() + TimeToSleepBetweenClearKeyRequests_);
                 }
             }
@@ -756,6 +754,9 @@ private:
                 TGcTask gcTask;
                 bool hasTask = false;
                 with_lock(GcQueueMutex_) {
+                    GcQueueCondVar_.WaitT(GcQueueMutex_, TDuration::MilliSeconds(100), [&] {
+                        return !GcQueue_.empty() || StopCoordinator_.load();
+                    });
                     if (!GcQueue_.empty()) {
                         gcTask = std::move(GcQueue_.front());
                         GcQueue_.pop();
@@ -1039,6 +1040,7 @@ private:
                 .GroupsToClear = std::move(groupsToClear),
                 .PartIdsToKeep = std::move(partIdsToKeep),
             });
+            GcQueueCondVar_.Signal();
         }
     }
 

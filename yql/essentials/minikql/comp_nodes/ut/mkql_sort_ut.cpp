@@ -10,6 +10,9 @@
 #include <yql/essentials/utils/sort.h>
 
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
+
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <random>
 #include <ctime>
@@ -26,27 +29,26 @@ TRuntimeNode MakeStream(TSetup<LLVM>& setup) {
 
     TCallableBuilder callableBuilder(*setup.Env, "TestYieldStream",
                                      pgmBuilder.NewStreamType(
-                                         pgmBuilder.NewStructType({{TStringBuf("a"), pgmBuilder.NewDataType(NUdf::EDataSlot::Uint64)},
-                                                                   {TStringBuf("b"), pgmBuilder.NewDataType(NUdf::EDataSlot::String)}})));
+                                         NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"a", ui64>, NTest::TStructMember<"b", TStringBuf>>>(pgmBuilder)));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
 TRuntimeNode StreamToString(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     return pgmBuilder.Condense(stream,
-                               pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|"),
-                               [&](TRuntimeNode, TRuntimeNode) { return pgmBuilder.NewDataLiteral<bool>(false); },
+                               NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("|")),
+                               [&](TRuntimeNode, TRuntimeNode) { return NTest::ConvertValueToLiteralNode(pgmBuilder, false); },
                                [&](TRuntimeNode item, TRuntimeNode state) {
                 auto str = pgmBuilder.Concat(
                     pgmBuilder.Concat(
                         pgmBuilder.ToString(pgmBuilder.Member(item, "a")),
-                        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("-")
+                        NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("-"))
                     ),
                     pgmBuilder.Member(item, "b")
                 );
 
                 return pgmBuilder.Concat(pgmBuilder.Concat(state, str),
-                    pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|")); });
+                    NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("|"))); });
 }
 
 } // namespace
@@ -57,10 +59,7 @@ Y_UNIT_TEST_LLVM(TestStreamSort) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
     auto stream = MakeStream(setup);
-    std::vector<TRuntimeNode> order{
-        pgmBuilder.NewDataLiteral<bool>(true),
-        pgmBuilder.NewDataLiteral<bool>(false)};
-    auto sort = pgmBuilder.Sort(stream, pgmBuilder.NewTuple(order),
+    auto sort = pgmBuilder.Sort(stream, NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool, bool>{true, false}),
                                 [&pgmBuilder](TRuntimeNode item) {
                                     std::vector<TRuntimeNode> keys{
                                         pgmBuilder.Member(item, "a"),
@@ -86,8 +85,7 @@ Y_UNIT_TEST_LLVM(TestStreamSort) {
 
     UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish);
     UNIT_ASSERT_EQUAL(yieldCount, 3U);
-    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()),
-                             "|0-8|0-4|0-11|0-0|1-9|1-6|1-13|1-1|2-7|2-2|2-14|2-10|");
+    AssertUnboxedValueElementEqual(result, TStringBuf("|0-8|0-4|0-11|0-0|1-9|1-6|1-13|1-1|2-7|2-2|2-14|2-10|"));
 }
 
 Y_UNIT_TEST_LLVM(TestFlowSortByLambdaComparator) {
@@ -100,7 +98,7 @@ Y_UNIT_TEST_LLVM(TestFlowSortByLambdaComparator) {
         pgmBuilder.FromFlow(pgmBuilder.FlatMap(
             pgmBuilder.Condense1(pgmBuilder.ToFlow(stream),
                                  [&](TRuntimeNode item) { return pgmBuilder.AsList(item); },
-                                 [&](TRuntimeNode, TRuntimeNode) { return pgmBuilder.NewDataLiteral<bool>(false); },
+                                 [&](TRuntimeNode, TRuntimeNode) { return NTest::ConvertValueToLiteralNode(pgmBuilder, false); },
                                  [&](TRuntimeNode item, TRuntimeNode state) { return pgmBuilder.Append(state, item); }),
             [&](TRuntimeNode list) { return pgmBuilder.StableSort(list,
                                                                   [&](TRuntimeNode left, TRuntimeNode right) {
@@ -126,8 +124,7 @@ Y_UNIT_TEST_LLVM(TestFlowSortByLambdaComparator) {
 
     UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Finish);
     UNIT_ASSERT_EQUAL(yieldCount, 3U);
-    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()),
-                             "|0-8|0-4|0-11|0-0|1-9|1-6|1-13|1-1|2-7|2-2|2-14|2-10|");
+    AssertUnboxedValueElementEqual(result, TStringBuf("|0-8|0-4|0-11|0-0|1-9|1-6|1-13|1-1|2-7|2-2|2-14|2-10|"));
 }
 
 Y_UNIT_TEST_LLVM(TestListSort) {
@@ -136,14 +133,9 @@ Y_UNIT_TEST_LLVM(TestListSort) {
     TSetup<LLVM> setup;
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, 10U> data;
-    std::transform(xxx.cbegin(), xxx.cend(), data.begin(),
-                   std::bind(&TProgramBuilder::NewDataLiteral<double>, std::ref(pgmBuilder), std::placeholders::_1));
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<double>(xxx.begin(), xxx.end()));
 
-    const auto type = pgmBuilder.NewDataType(NUdf::TDataType<double>::Id);
-    const auto list = pgmBuilder.NewList(type, data);
-
-    const auto pgmReturn = pgmBuilder.Sort(list, pgmBuilder.NewDataLiteral<bool>(false),
+    const auto pgmReturn = pgmBuilder.Sort(list, NTest::ConvertValueToLiteralNode(pgmBuilder, false),
                                            std::bind(&TProgramBuilder::Abs, std::ref(pgmBuilder), std::placeholders::_1));
 
     const auto graph = setup.BuildGraph(pgmReturn);
@@ -154,9 +146,7 @@ Y_UNIT_TEST_LLVM(TestListSort) {
     auto copy = xxx;
     std::stable_sort(copy.begin(), copy.end(), [](double l, double r) { return std::abs(l) > std::abs(r); });
 
-    for (auto i = 0U; i < copy.size(); ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(copy[i], result.GetElement(i).template Get<double>());
-    }
+    AssertUnboxedValueElementEqual(result, TVector<double>(copy.begin(), copy.end()));
 }
 
 Y_UNIT_TEST_LLVM(TestListTop) {
@@ -170,7 +160,6 @@ Y_UNIT_TEST_LLVM(TestListTop) {
 
     constexpr ui64 total = 999ULL;
 
-    std::array<TRuntimeNode, total> data;
     std::vector<std::pair<double, ui64>> test;
     test.reserve(total);
 
@@ -178,16 +167,17 @@ Y_UNIT_TEST_LLVM(TestListTop) {
 
     std::generate_n(std::back_inserter(test), total, [&]() { return std::make_pair(unifd(eng), unifi(eng) % 100U); });
 
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const auto& pair) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<double>(pair.first), pgmBuilder.NewDataLiteral<ui64>(pair.second)});
-    });
+    TVector<std::tuple<double, ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto& pair : test) {
+        tupleData.emplace_back(pair.first, pair.second);
+    }
 
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<double>::Id), pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto order = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false), pgmBuilder.NewDataLiteral<bool>(true)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto order = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool, bool>{false, true});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder](TRuntimeNode item) { return pgmBuilder.NewTuple({pgmBuilder.Nth(item, 1U), pgmBuilder.Abs(pgmBuilder.Nth(item, 0U))}); };
     const auto n = 17ULL;
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
 
     const auto pgmReturn = pgmBuilder.Top(list, limit, order, extractor);
 
@@ -220,19 +210,12 @@ Y_UNIT_TEST_LLVM(TestStreamZeroTop) {
 
     constexpr ui64 total = 9ULL;
 
-    std::array<TRuntimeNode, total> data;
-
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    std::generate_n(data.begin(), total, [&]() {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(42ULL)});
-    });
-
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto order = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto order = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool>{false});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<std::tuple<ui64>>(total, std::tuple<ui64>{42ULL}));
     const auto extractor = [&pgmBuilder](TRuntimeNode item) { return pgmBuilder.NewTuple({pgmBuilder.Nth(item, 0U)}); };
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(0ULL);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(0ULL));
 
     const auto pgmReturn = pgmBuilder.Top(pgmBuilder.Iterator(list, {}), limit, order, extractor);
 
@@ -253,7 +236,6 @@ Y_UNIT_TEST_LLVM(TestListTopSort) {
 
     constexpr ui64 total = 999ULL;
 
-    std::array<TRuntimeNode, total> data;
     std::vector<std::pair<double, ui64>> test;
     test.reserve(total);
 
@@ -261,16 +243,17 @@ Y_UNIT_TEST_LLVM(TestListTopSort) {
 
     std::generate_n(std::back_inserter(test), total, [&]() { return std::make_pair(unifd(eng), unifi(eng) % 100U); });
 
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const auto& pair) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<double>(pair.first), pgmBuilder.NewDataLiteral<ui64>(pair.second)});
-    });
+    TVector<std::tuple<double, ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto& pair : test) {
+        tupleData.emplace_back(pair.first, pair.second);
+    }
 
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<double>::Id), pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto order = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false), pgmBuilder.NewDataLiteral<bool>(true)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto order = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool, bool>{false, true});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder](TRuntimeNode item) { return pgmBuilder.NewTuple({pgmBuilder.Nth(item, 1U), pgmBuilder.Abs(pgmBuilder.Nth(item, 0U))}); };
     const auto n = 17ULL;
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
 
     const auto pgmReturn = pgmBuilder.TopSort(list, limit, order, extractor);
 
@@ -307,7 +290,6 @@ Y_UNIT_TEST_LLVM(TestStreamTop) {
 
     constexpr ui64 total = 999ULL;
 
-    std::array<TRuntimeNode, total> data;
     std::vector<std::pair<double, ui64>> test;
     test.reserve(total);
 
@@ -315,16 +297,17 @@ Y_UNIT_TEST_LLVM(TestStreamTop) {
 
     std::generate_n(std::back_inserter(test), total, [&]() { return std::make_pair(unifd(eng), unifi(eng) % 100U); });
 
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const auto& pair) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<double>(pair.first), pgmBuilder.NewDataLiteral<ui64>(pair.second)});
-    });
+    TVector<std::tuple<double, ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto& pair : test) {
+        tupleData.emplace_back(pair.first, pair.second);
+    }
 
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<double>::Id), pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto order = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(true), pgmBuilder.NewDataLiteral<bool>(false)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto order = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool, bool>{true, false});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder](TRuntimeNode item) { return pgmBuilder.NewTuple({pgmBuilder.Nth(item, 1U), pgmBuilder.Abs(pgmBuilder.Nth(item, 0U))}); };
     const auto n = 17ULL;
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
 
     const auto pgmReturn = pgmBuilder.Top(pgmBuilder.Iterator(list, {}), limit, order, extractor);
 
@@ -362,7 +345,6 @@ Y_UNIT_TEST_LLVM(TestStreamTopSort) {
 
     constexpr ui64 total = 999ULL;
 
-    std::array<TRuntimeNode, total> data;
     std::vector<std::pair<double, ui64>> test;
     test.reserve(total);
 
@@ -370,16 +352,17 @@ Y_UNIT_TEST_LLVM(TestStreamTopSort) {
 
     std::generate_n(std::back_inserter(test), total, [&]() { return std::make_pair(unifd(eng), unifi(eng) % 100U); });
 
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const auto& pair) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<double>(pair.first), pgmBuilder.NewDataLiteral<ui64>(pair.second)});
-    });
+    TVector<std::tuple<double, ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto& pair : test) {
+        tupleData.emplace_back(pair.first, pair.second);
+    }
 
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<double>::Id), pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto order = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(true), pgmBuilder.NewDataLiteral<bool>(false)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto order = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool, bool>{true, false});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder](TRuntimeNode item) { return pgmBuilder.NewTuple({pgmBuilder.Nth(item, 1U), pgmBuilder.Abs(pgmBuilder.Nth(item, 0U))}); };
     const auto n = 17ULL;
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
 
     const auto pgmReturn = pgmBuilder.TopSort(pgmBuilder.Iterator(list, {}), limit, order, extractor);
 
@@ -413,7 +396,6 @@ Y_UNIT_TEST_LLVM(TestStreamTopSortBySingleField) {
 
     constexpr ui64 total = 999ULL;
 
-    std::array<TRuntimeNode, total> data;
     std::vector<ui64> test;
     test.reserve(total);
 
@@ -421,16 +403,17 @@ Y_UNIT_TEST_LLVM(TestStreamTopSortBySingleField) {
 
     std::generate_n(std::back_inserter(test), total, [&]() { return unifi(eng) % 100ULL; });
 
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
-    });
+    TVector<std::tuple<ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto v : test) {
+        tupleData.emplace_back(v);
+    }
 
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto order = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto order = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool>{false});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder](TRuntimeNode item) { return pgmBuilder.NewTuple({pgmBuilder.Nth(item, 0U)}); };
     const auto n = 17ULL;
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
 
     const auto pgmReturn = pgmBuilder.TopSort(pgmBuilder.Iterator(list, {}), limit, order, extractor);
 
@@ -463,7 +446,6 @@ Y_UNIT_TEST_LLVM(TestFlowTopSortWithoutKey) {
 
     constexpr ui64 total = 99ULL;
 
-    std::array<TRuntimeNode, total> data;
     std::vector<ui64> test;
     test.reserve(total);
 
@@ -471,16 +453,17 @@ Y_UNIT_TEST_LLVM(TestFlowTopSortWithoutKey) {
 
     std::generate_n(std::back_inserter(test), total, [&]() { return unifi(eng) % 100ULL; });
 
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
-    });
+    TVector<std::tuple<ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto v : test) {
+        tupleData.emplace_back(v);
+    }
 
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
     const auto order = pgmBuilder.NewTuple({});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder](TRuntimeNode) { return pgmBuilder.NewTuple({}); };
     const auto n = 17ULL;
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
 
     const auto pgmReturn = pgmBuilder.FromFlow(pgmBuilder.TopSort(pgmBuilder.ToFlow(list), limit, order, extractor));
 
@@ -533,20 +516,20 @@ Y_UNIT_TEST(TestStreamTopSort) {
     setup.PgmBuilder.Reset(new TProgramBuilder(*setup.Env, *setup.FunctionRegistry));
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, total> data;
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
-    });
+    TVector<std::tuple<ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto v : test) {
+        tupleData.emplace_back(v);
+    }
 
     constexpr ui64 n = 17ULL;
     const auto echoUdf = pgmBuilder.Udf("CountCalls.EchoU64");
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto ascending = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto ascending = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool>{false});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder, echoUdf](TRuntimeNode item) {
         return pgmBuilder.NewTuple({pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
     };
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
     const auto pgmRoot = pgmBuilder.TopSort(pgmBuilder.Iterator(list, {}), limit, ascending, extractor);
     const auto graph = setup.BuildGraph(pgmRoot);
     const auto& value = graph->GetValue();
@@ -585,25 +568,25 @@ Y_UNIT_TEST(TestStreamTop) {
     setup.PgmBuilder.Reset(new TProgramBuilder(*setup.Env, *setup.FunctionRegistry));
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, total> data;
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
-    });
+    TVector<std::tuple<ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto v : test) {
+        tupleData.emplace_back(v);
+    }
 
     constexpr ui64 n = 17ULL;
     const auto echoUdf = pgmBuilder.Udf("CountCalls.EchoU64");
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto ascending = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto ascending = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool>{false});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder, echoUdf](TRuntimeNode item) {
         return pgmBuilder.NewTuple({pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
     };
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
     const auto pgmRoot = pgmBuilder.Top(pgmBuilder.Iterator(list, {}), limit, ascending, extractor);
     // XXX: The order of the result being yielded by Top
     // computation node is not defined by design, hence
     // manually sort the result to match the canonical one.
-    const auto pgmSorted = pgmBuilder.Sort(pgmRoot, pgmBuilder.NewDataLiteral(false),
+    const auto pgmSorted = pgmBuilder.Sort(pgmRoot, NTest::ConvertValueToLiteralNode(pgmBuilder, false),
                                            [&](TRuntimeNode item) { return item; });
     const auto graph = setup.BuildGraph(pgmSorted);
     const auto& value = graph->GetValue();
@@ -642,20 +625,20 @@ Y_UNIT_TEST(TestFlowTopSort) {
     setup.PgmBuilder.Reset(new TProgramBuilder(*setup.Env, *setup.FunctionRegistry));
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, total> data;
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
-    });
+    TVector<std::tuple<ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto v : test) {
+        tupleData.emplace_back(v);
+    }
 
     constexpr ui64 n = 17ULL;
     const auto echoUdf = pgmBuilder.Udf("CountCalls.EchoU64");
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto ascending = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto ascending = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool>{false});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder, echoUdf](TRuntimeNode item) {
         return pgmBuilder.NewTuple({pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
     };
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
     const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.TopSort(pgmBuilder.ToFlow(list), limit, ascending, extractor));
     const auto graph = setup.BuildGraph(pgmRoot);
     const auto& value = graph->GetValue();
@@ -694,25 +677,25 @@ Y_UNIT_TEST(TestFlowTop) {
     setup.PgmBuilder.Reset(new TProgramBuilder(*setup.Env, *setup.FunctionRegistry));
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    std::array<TRuntimeNode, total> data;
-    std::transform(test.cbegin(), test.cend(), data.begin(), [&](const ui64& v) {
-        return pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<ui64>(v)});
-    });
+    TVector<std::tuple<ui64>> tupleData;
+    tupleData.reserve(total);
+    for (const auto v : test) {
+        tupleData.emplace_back(v);
+    }
 
     constexpr ui64 n = 17ULL;
     const auto echoUdf = pgmBuilder.Udf("CountCalls.EchoU64");
-    const auto tupleType = pgmBuilder.NewTupleType({pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-    const auto ascending = pgmBuilder.NewTuple({pgmBuilder.NewDataLiteral<bool>(false)});
-    const auto list = pgmBuilder.NewList(tupleType, data);
+    const auto ascending = NTest::ConvertValueToLiteralNode(pgmBuilder, std::tuple<bool>{false});
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, tupleData);
     const auto extractor = [&pgmBuilder, echoUdf](TRuntimeNode item) {
         return pgmBuilder.NewTuple({pgmBuilder.Apply(echoUdf, {pgmBuilder.Nth(item, 0U)})});
     };
-    const auto limit = pgmBuilder.NewDataLiteral<ui64>(n);
+    const auto limit = NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(n));
     const auto pgmRoot = pgmBuilder.FromFlow(pgmBuilder.Top(pgmBuilder.ToFlow(list), limit, ascending, extractor));
     // XXX: The order of the result being yielded by Top
     // computation node is not defined by design, hence
     // manually sort the result to match the canonical one.
-    const auto pgmSorted = pgmBuilder.Sort(pgmRoot, pgmBuilder.NewDataLiteral(false),
+    const auto pgmSorted = pgmBuilder.Sort(pgmRoot, NTest::ConvertValueToLiteralNode(pgmBuilder, false),
                                            [&](TRuntimeNode item) { return item; });
     const auto graph = setup.BuildGraph(pgmSorted);
     const auto& value = graph->GetValue();

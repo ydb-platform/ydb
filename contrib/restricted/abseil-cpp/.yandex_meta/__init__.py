@@ -84,9 +84,9 @@ abseil_cpp = CMakeNinjaNixProject(
     },
     put_with={
         "absl_base": [
-            "absl_borrowed_fixup_buffer",
             "absl_city",
             "absl_civil_time",
+            "absl_clock_interface",
             "absl_cord",
             "absl_cord_internal",
             "absl_cordz_functions",
@@ -158,9 +158,11 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_raw_hash_set",
             "absl_raw_logging_internal",
             "absl_scoped_set_env",
+            "absl_source_location",
             "absl_spinlock_wait",
             "absl_stacktrace",
             "absl_status",
+            "absl_status_builder",
             "absl_statusor",
             "absl_str_format_internal",
             "absl_strerror",

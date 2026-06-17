@@ -183,6 +183,24 @@ public:
         DoRetryRead(range);
     }
 
+    void OnRetryEnqueue(const TBlobRange& range) const {
+        if (Counters) {
+            Counters->OnRetryEnqueue(range.Size);
+        }
+    }
+
+    void OnRetryExecute() const {
+        if (Counters) {
+            Counters->OnRetryExecute();
+        }
+    }
+
+    void OnRetryExhausted() const {
+        if (Counters) {
+            Counters->OnRetryExhausted();
+        }
+    }
+
     const THashMap<TBlobRange, std::vector<TBlobRange>>& GetGroups() const {
         return Groups;
     }

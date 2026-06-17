@@ -18,6 +18,7 @@ void TActor::HandleRetryTimer() {
         auto action = Task->GetAgents().FindByStorageId(pending.StorageId);
         if (action) {
             ACFL_DEBUG("event", "RetryS3Read")("blob_range", pending.Range)("storage_id", pending.StorageId);
+            action->OnRetryExecute();
             action->RetryRead(pending.Range);
         } else {
             ACFL_ERROR("event", "RetryS3ReadNoAction")("blob_range", pending.Range)("storage_id", pending.StorageId);
@@ -52,6 +53,9 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
                 "error", event.DetailedError)("delay_ms", delay->MilliSeconds());
             auto now = TActivationContext::Monotonic();
             if (RetryState.EnqueueRetry(event.BlobRange, event.DataSourceId, now + *delay)) {
+                if (auto action = Task->GetAgents().FindByStorageId(event.DataSourceId)) {
+                    action->OnRetryEnqueue(event.BlobRange);
+                }
                 if (auto d = RetryState.NeedsReschedule(now)) {
                     Schedule(*d, new TEvents::TEvWakeup());
                 }
@@ -61,6 +65,9 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
         if (event.IsRetriable) {
             ACFL_ERROR("event", "S3ReadRetryExhausted")("blob_range", event.BlobRange)("storage_id", event.DataSourceId)(
                 "error", event.DetailedError);
+            if (auto action = Task->GetAgents().FindByStorageId(event.DataSourceId)) {
+                action->OnRetryExhausted();
+            }
         }
 
         WaitingBlobsCount.Sub(Task->GetWaitingRangesCount());

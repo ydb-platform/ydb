@@ -44,6 +44,7 @@ SRCS(
     ut_scan_snapshot_guard.cpp
     ut_script.cpp
     ut_minmax_index.cpp
+    ut_sync_portion_index_reuse.cpp
     ut_predicate_ranges_builder.cpp
     helper.cpp
 )

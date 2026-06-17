@@ -419,8 +419,8 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
                 TStringBuilder() << "AST should contain BlockHashJoin. Actual AST: " << ast);
-            UNIT_ASSERT_C(ast.Contains("BuildSide"),
-                TStringBuilder() << "AST should contain the BuildSide=Left setting when the left side is built. Actual AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains(R"('('"BuildSide" '"Left")"),
+                TStringBuilder() << "AST should contain the BuildSide=Left. Actual AST: " << ast);
         }
     }
 

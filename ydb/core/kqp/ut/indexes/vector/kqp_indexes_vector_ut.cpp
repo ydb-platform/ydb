@@ -1474,14 +1474,26 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 ui32 shardType = actorTypes[ev->GetRecipientRewrite()];
                 bool isFollower = (shardType & followerTypeFlag);
                 shardType = shardType & ~followerTypeFlag;
-                // The specialized vector read actor reads the immutable index impl
-                // tables (level, posting) from followers under stale-RO; the main
-                // table is always read from the leader.
+                // Check that level & posting are read from followers
                 UNIT_ASSERT(isFollower == (Followers && (shardType == levelType || shardType == postingType)));
-                // The actor performs top-K ranking itself and no longer pushes
-                // VectorTopK down into datashard reads.
                 auto & read = ev->Get<TEvDataShard::TEvRead>()->Record;
-                UNIT_ASSERT(!read.HasVectorTopK());
+                if (shardType == levelType) {
+                    // Level table reads do full scan for caching (VectorTopK cleared by cache layer)
+                    UNIT_ASSERT(!read.HasVectorTopK());
+                } else if (shardType == (Covered ? mainType : postingType)) {
+                    // Non-covering index does topK on main table, covering does it on posting
+                    UNIT_ASSERT(!read.HasVectorTopK());
+                } else {
+                    UNIT_ASSERT(shardType != 0);
+                    UNIT_ASSERT(read.HasVectorTopK());
+                    auto & topK = read.GetVectorTopK();
+                    // Check that target and limit are pushed down
+                    UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
+                    if (shardType == (Covered ? postingType : mainType)) {
+                        // Equal to LIMIT
+                        UNIT_ASSERT(topK.GetLimit() == 3);
+                    }
+                }
             }
             return false;
         };

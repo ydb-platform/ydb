@@ -133,31 +133,8 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
     {
     }
 
-<<<<<<< HEAD
-    void DoActualize() override {
-        return;
-    }
-
-<<<<<<< HEAD
-<<<<<<< HEAD
-    void DoAddPortion(typename TPortion::TConstPtr p) override {
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 6f95b324387 (tiering (#41470))
     void DoAddPortion(typename TPortion::TPtr p) override {
         AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
-        LastAdd = TInstant::Now();
->>>>>>> 3762dac960c (tiling++ by default (#40146))
-        Portions.insert(p);
-=======
-        AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
->>>>>>> 73c7e833124 (parallel compaction (#40678))
-        TotalBlobBytes += p->GetTotalBlobBytes();
-=======
-    void DoAddPortion(typename TPortion::TPtr p) override {
-        AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
->>>>>>> ea30680671c (Tiling++ priority (#42410))
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
@@ -172,21 +149,6 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        if (TotalBlobBytes < Settings.Trigger.Bytes && Portions.size() < Settings.Trigger.Portions) {
-<<<<<<< HEAD
-            return {};
-=======
-        if (TInstant::Now() - LastAdd < BoredTime && TotalBlobBytes < Settings.Trigger.Bytes && Portions.size() < Settings.Trigger.Portions) {
-            return std::nullopt;
->>>>>>> 3762dac960c (tiling++ by default (#40146))
-=======
-            return std::nullopt;
->>>>>>> 73c7e833124 (parallel compaction (#40678))
-        }
-=======
->>>>>>> ea30680671c (Tiling++ priority (#42410))
         CompactionTask<TKey, TPortion> result;
         result.TargetLevel = 0;
         ui64 currentBlobBytes = 0;
@@ -202,19 +164,13 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
                 break;
             }
         }
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 
         if (result.Portions.size() > 1) {
             result.Priority = BuildPriority(locked);
-            return { result };
+            return result;
         }
->>>>>>> 3762dac960c (tiling++ by default (#40146))
-        return {};
-=======
+
         return std::nullopt;
->>>>>>> 73c7e833124 (parallel compaction (#40678))
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

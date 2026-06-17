@@ -6,17 +6,10 @@
 namespace NKikimr::NOlap::NDataFetcher {
 
 void TFetchingExecutor::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
-<<<<<<< HEAD
-    NActors::TLogContextGuard lGuard =
-        NActors::TLogContextBuilder::Build()("event", "on_execution")("input", Fetcher->GetInput().DebugString())(
-            "consumer", Fetcher->GetInput().GetConsumer())(
-            "task_id", Fetcher->GetInput().GetExternalTaskId())("script", Fetcher->MutableScript().GetScriptClassName());
-=======
     TMemoryProfileGuard mpg("CS::FETCHER::" + Fetcher->MutableScript().GetScriptClassName());
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_execution")("input", Fetcher->GetInput().DebugString())(
         "consumer", Fetcher->GetInput().GetConsumer())("task_id", Fetcher->GetInput().GetExternalTaskId())(
         "script", Fetcher->MutableScript().GetScriptClassName());
->>>>>>> 629f11d7f3b (allocation guard has been fixed (#41774))
     while (!Fetcher->MutableScript().IsFinished()) {
         switch (Fetcher->MutableScript().GetCurrentStep()->Execute(Fetcher)) {
             case IFetchingStep::EStepResult::Continue:

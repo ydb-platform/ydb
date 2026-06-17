@@ -207,8 +207,7 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
 }
 
 bool TInsertOptionsPolicy::MeetsMinBlobBytes(const ui64 totalBlobBytes) const {
-    const ui64 minBlobBytes = BuildIndexesMinBlobBytes.value_or(0);
-    return minBlobBytes == 0 || totalBlobBytes >= minBlobBytes;
+    return totalBlobBytes >= BuildIndexesMinBlobBytes.value_or(0);
 }
 
 bool TInsertOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {

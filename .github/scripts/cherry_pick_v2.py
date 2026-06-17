@@ -286,7 +286,7 @@ def build_pr_content(
     repo_name: str, repo, token: str, target_branch: str, dev_branch_name: str,
     sources: List[Source], conflict_files: List[ConflictInfo],
     cherry_pick_logs: List[str], workflow_triggerer: str, workflow_url: Optional[str],
-    pr_number: Optional[int], logger
+    pr_number: Optional[int], logger, *, skipped_lines: Optional[List[str]] = None,
 ) -> Tuple[str, str]:
     """Generates PR title and body"""
     has_conflicts = len(conflict_files) > 0
@@ -379,6 +379,11 @@ def build_pr_content(
     description += f"- **Original PR author(s):** {authors_str}\n"
     description += f"- **Cherry-picked by:** @{workflow_triggerer}\n"
     description += f"- **Related issues:** {issue_refs}"
+
+    skipped_section = ""
+    if skipped_lines:
+        skipped_section = "\n\n#### Already present (skipped)\n\n"
+        skipped_section += "\n".join(f"- {line}" for line in skipped_lines) + "\n"
     
     cherry_pick_log_section = ""
     if cherry_pick_logs:
@@ -423,7 +428,7 @@ After resolving conflicts:
 
 ### Description for reviewers <!-- (optional) description for those who read this PR -->
 
-{description}{conflicts_section}{cherry_pick_log_section}{workflow_section}
+{description}{skipped_section}{conflicts_section}{cherry_pick_log_section}{workflow_section}
 """
     
     return title, body
@@ -581,7 +586,8 @@ def process_branch(
     title, body = build_pr_content(
         repo_name, repo, token, target_branch, dev_branch_name,
         sources, all_conflict_files, cherry_pick_logs,
-        workflow_triggerer, workflow_url, None, logger
+        workflow_triggerer, workflow_url, None, logger,
+        skipped_lines=skipped_lines,
     )
     
     pr = repo.create_pull(
@@ -598,7 +604,8 @@ def process_branch(
         _, updated_body = build_pr_content(
             repo_name, repo, token, target_branch, dev_branch_name,
             sources, all_conflict_files, cherry_pick_logs,
-            workflow_triggerer, workflow_url, pr.number, logger
+            workflow_triggerer, workflow_url, pr.number, logger,
+            skipped_lines=skipped_lines,
         )
         pr.edit(body=updated_body)
     

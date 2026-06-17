@@ -9,6 +9,10 @@
 
 namespace NKikimr::NReplication::NTransfer {
 
+inline TBackoff MakeBackoff() {
+    return TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
+}
+
 template<typename TData>
 class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     using TThis = TTableUploader<TData>;
@@ -79,11 +83,29 @@ private:
             return;
         }
 
+        auto& retry = Retries[tablePath];
+
+        if (status == Ydb::StatusIds::SCHEME_ERROR) { 
+            const auto issues = ev->Get()->Issues.ToOneLineString();
+            if (issues.contains("unknown table")) {
+                if (retry.DefaultTable) {
+                    ReplyErrorAndDie(status, std::move(ev->Get()->Issues));
+                } else {
+                    retry.DefaultTable = true;
+                    TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath, true));
+                    CookieMapping.erase(ev->Cookie);
+                }
+                return;
+            }
+            if (issues.contains("Only the OLTP table is supported") || issues.contains("Only the OLAP table is supported")) {
+                return ReplyErrorAndDie(status, std::move(ev->Get()->Issues));
+            }
+        }
+
         const auto schemeError = status == Ydb::StatusIds::SCHEME_ERROR
             || status == Ydb::StatusIds::BAD_REQUEST
             || status == Ydb::StatusIds::UNAUTHORIZED;
 
-        auto& retry = Retries[tablePath];
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
             LOG_D("Schedule retry: table=" << tablePath
@@ -96,16 +118,6 @@ private:
             } else {
                 retry.SchemeCount = 0;
             }
-            CookieMapping.erase(ev->Cookie);
-            return;
-        }
-
-        if (status == Ydb::StatusIds::SCHEME_ERROR && !retry.DefaultTable && !DefaultTablePath.empty()) {
-            retry.DefaultTable = true;
-            retry.Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
-            retry.SchemeCount = 0;
-
-            TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath, true));
             CookieMapping.erase(ev->Cookie);
             return;
         }
@@ -173,7 +185,7 @@ private:
     std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
 
     struct Retry {
-        TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
+        TBackoff Backoff = MakeBackoff();
         size_t SchemeCount = 0;
         bool DefaultTable = false;
     };

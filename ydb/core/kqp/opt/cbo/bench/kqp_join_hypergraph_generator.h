@@ -1,5 +1,5 @@
 #include "kqp_join_topology_generator.h"
-#include <ydb/core/kqp/ut/common/kqp_serializable_rng.h>
+#include <ydb/core/kqp/opt/cbo/bench/kqp_serializable_rng.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_make_join_hypergraph.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>

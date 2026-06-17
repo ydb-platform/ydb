@@ -1,19 +1,20 @@
-#include "kqp_join_topology_generator.h"
+#include <ydb/core/kqp/opt/cbo/bench/kqp_join_topology_generator.h>
 
-#include <library/cpp/testing/common/env.h>
 #include <library/cpp/iterator/zip.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/generic/array_size.h>
 #include <util/generic/ptr.h>
+#include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/stream/output.h>
-#include <ydb/core/kqp/ut/common/kqp_arg_parser.h>
-#include <ydb/core/kqp/ut/common/kqp_tuple_parser.h>
-#include <ydb/core/kqp/ut/common/kqp_aligner.h>
-#include <ydb/core/kqp/ut/common/kqp_benches.h>
+#include <ydb/core/kqp/opt/cbo/bench/kqp_benches.h>
+#include <ydb/core/kqp/opt/cbo/bench/kqp_join_hypergraph_generator.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/join/kqp_join_hypergraph_generator.h>
+
+#include "kqp_aligner.h"
+#include "kqp_arg_parser.h"
+#include "kqp_tuple_parser.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -24,21 +25,114 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_cbo_latency_predictor.h>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <map>
+#include <mutex>
+#include <optional>
+#include <queue>
 #include <random>
+#include <regex>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <chrono>
 
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-Y_UNIT_TEST_SUITE(KqpJoinTopology) {
+class TToolOptions {
+public:
+    static TToolOptions Parse(int argc, char** argv) {
+        TToolOptions options;
+        for (int i = 1; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--help" || arg == "-h") {
+                options.Values_["HELP"] = "1";
+                continue;
+            }
+
+            if (!arg.starts_with("--")) {
+                ythrow yexception() << "Unexpected positional argument: " << arg;
+            }
+
+            arg.erase(0, 2);
+            std::string key;
+            std::string value;
+            size_t equal = arg.find('=');
+            if (equal == std::string::npos) {
+                key = arg;
+                if (i + 1 < argc && !std::string(argv[i + 1]).starts_with("--")) {
+                    value = argv[++i];
+                } else {
+                    value = "1";
+                }
+            } else {
+                key = arg.substr(0, equal);
+                value = arg.substr(equal + 1);
+            }
+
+            options.Values_[Normalize(key)] = std::move(value);
+        }
+        return options;
+    }
+
+    bool Has(const std::string& key) const {
+        return Values_.contains(Normalize(key));
+    }
+
+    std::string Get(const std::string& key) const {
+        auto it = Values_.find(Normalize(key));
+        if (it == Values_.end()) {
+            return "";
+        }
+        return it->second;
+    }
+
+    std::string Require(const std::string& key) const {
+        std::string value = Get(key);
+        if (value.empty()) {
+            ythrow yexception() << "Missing required option --" << key;
+        }
+        return value;
+    }
+
+private:
+    static std::string Normalize(std::string key) {
+        std::replace(key.begin(), key.end(), '-', '_');
+        std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) {
+            return std::toupper(c);
+        });
+        return key;
+    }
+
+private:
+    std::map<std::string, std::string> Values_;
+};
+
+std::string ToLower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+    return value;
+}
+
+void PrintUsage(IOutputStream& os) {
+    os << "Usage:\n"
+       << "  cbo_latency_dataset --mode dataset --dataset-file FILE --output FILE [--benchmark ARGS] [--seed N]\n"
+       << "  cbo_latency_dataset --mode dataset --dataset ARGS --output FILE [--benchmark ARGS] [--seed N]\n"
+       << "  cbo_latency_dataset --mode benchmark --topology ARGS [--save-dir DIR] [--benchmark ARGS]\n"
+       << "  cbo_latency_dataset --mode custom --query SQL [--benchmark ARGS]\n";
+}
 
     std::optional<TString> ExplainQuery(NYdb::NQuery::TSession session, const std::string& query) {
         auto explainRes = session.ExecuteQuery(query,
@@ -66,7 +160,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         execRes.GetIssues().PrintTo(Cout);
-        UNIT_ASSERT(execRes.IsSuccess());
+        Y_ENSURE(execRes.IsSuccess());
 
         return true;
     }
@@ -227,7 +321,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             Cout << deletionQuery;
 
             bool deletionSucceeded = ExecuteQuery(session, deletionQuery);
-            UNIT_ASSERT_C(deletionSucceeded, "Table deletion timeouted, can't proceed!");
+            Y_ENSURE(deletionSucceeded, "Table deletion timed out, can't proceed!");
             Cout << "==========================================================================\n";
         };
 
@@ -556,17 +650,16 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
     }
 
-    Y_UNIT_TEST(Benchmark) {
-        TArgs args{GetTestParam("TOPOLOGY")};
+    void RunTopologyBenchmark(const TToolOptions& options) {
+        TArgs args{options.Require("TOPOLOGY")};
         if (!args.HasArg("N")) {
-            // prevent this test from launching non-interactively
-            return;
+            ythrow yexception() << "TOPOLOGY must include N, for example: --topology 'type=star; N=8'";
         }
 
         auto config = GetBenchmarkConfig(args);
         DumpBenchmarkConfig(Cout, config);
 
-        TTestContext ctx = CreateTestContext(args, GetTestParam("SAVE_DIR"));
+        TTestContext ctx = CreateTestContext(args, options.Get("SAVE_DIR"));
 
         RunBenches(ctx, config, args);
     }
@@ -1291,17 +1384,16 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     };
 
 
-    Y_UNIT_TEST(Dataset) {
-        std::string benchArgs = GetTestParam("BENCHMARK");
+    void RunDataset(const TToolOptions& options) {
+        std::string benchArgs = options.Get("BENCHMARK");
         auto config = GetBenchmarkConfig(TArgs{benchArgs});
         DumpBenchmarkConfig(Cout, config);
 
-        std::string args = GetTestParam("DATASET");
+        std::string args = options.Get("DATASET");
         if (args.empty()) {
-            std::string datasetFile = GetTestParam("DATASET_FILE");
+            std::string datasetFile = options.Get("DATASET_FILE");
             if (datasetFile.empty()) {
-                Cerr << "Filename required: --test-param DATASET_FILE='<filename>'" << Endl;
-                return;
+                ythrow yexception() << "Filename required: --dataset-file FILE";
             }
             args = TFileInput(datasetFile).ReadAll();
         }
@@ -1326,15 +1418,15 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         Cout << "\n";
         // PrintTable(parameters); // Assuming this function exists in env
 
-        std::string outputFile = GetTestParam("OUTPUT");
+        std::string outputFile = options.Get("OUTPUT");
         if (outputFile.empty()) {
-            ythrow yexception() << "Output required: --test-param OUTPUT='<filename>'";
+            ythrow yexception() << "Output required: --output FILE";
         }
 
         // Initialize file stream here so it persists for the lifetime of runner
         TUnbufferedFileOutput outFileStream(outputFile.c_str());
 
-        std::string seedStr = GetTestParam("SEED");
+        std::string seedStr = options.Get("SEED");
         std::random_device randomDevice;
         ui32 seed = randomDevice() % UINT32_MAX;
         if (!seedStr.empty()) {
@@ -1441,10 +1533,10 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     }
 
 
-    Y_UNIT_TEST(CustomBenchmark) {
-        std::string query = GetTestParam("QUERY");
+    void RunCustomBenchmark(const TToolOptions& options) {
+        std::string query = options.Get("QUERY");
         if (query.empty()) {
-            return;
+            ythrow yexception() << "Query required: --query SQL";
         }
 
         std::random_device randomDevice;
@@ -1457,7 +1549,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto db = kikimr->GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        std::string benchArgs = GetTestParam("BENCHMARK");
+        std::string benchArgs = options.Get("BENCHMARK");
         auto config = GetBenchmarkConfig(TArgs{benchArgs});
         DumpBenchmarkConfig(Cout, config);
 
@@ -1476,6 +1568,45 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         ExecuteQuery(session, customQuery.DropSchema);
     }
 
-} // Y_UNIT_TEST_SUITE(KqpJoinTopology)
+int RunCboLatencyDatasetTool(int argc, char** argv) {
+    TToolOptions options = TToolOptions::Parse(argc, argv);
+    if (options.Has("HELP")) {
+        PrintUsage(Cout);
+        return 0;
+    }
+
+    std::string mode = ToLower(options.Get("MODE"));
+    if (mode.empty()) {
+        if (options.Has("DATASET") || options.Has("DATASET_FILE")) {
+            mode = "dataset";
+        } else if (options.Has("QUERY")) {
+            mode = "custom";
+        } else if (options.Has("TOPOLOGY")) {
+            mode = "benchmark";
+        }
+    }
+
+    if (mode == "dataset") {
+        RunDataset(options);
+    } else if (mode == "benchmark" || mode == "topology") {
+        RunTopologyBenchmark(options);
+    } else if (mode == "custom") {
+        RunCustomBenchmark(options);
+    } else {
+        PrintUsage(Cerr);
+        ythrow yexception() << "Unknown or missing mode: " << mode;
+    }
+
+    return 0;
+}
 
 } // namespace NKikimr::NKqp
+
+int main(int argc, char** argv) {
+    try {
+        return NKikimr::NKqp::RunCboLatencyDatasetTool(argc, argv);
+    } catch (const std::exception& e) {
+        Cerr << "ERROR: " << e.what() << Endl;
+        return 1;
+    }
+}

@@ -3,8 +3,8 @@
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <util/generic/map.h>
-#include <ydb/core/kqp/ut/common/kqp_serializable_rng.h>
-#include <ydb/core/kqp/ut/common/kqp_mcmc_rng.h>
+#include <ydb/core/kqp/opt/cbo/bench/kqp_serializable_rng.h>
+#include <ydb/core/kqp/opt/cbo/bench/kqp_mcmc_rng.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/disjoint_sets/disjoint_sets.h>

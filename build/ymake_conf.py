@@ -1787,6 +1787,9 @@ class Linker(object):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
 
+        if self.build.target.is_freertos or self.build.target.is_zephyr:
+            return Linker.BFD
+
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD

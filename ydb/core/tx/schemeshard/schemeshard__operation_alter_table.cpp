@@ -905,9 +905,15 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
         return std::nullopt;
     }
 
-    // Duplicate-column-set prevention: reject if a local bloom index over the same columns
-    // already exists on the table.
     for (const auto& indexDesc : alter.GetTableIndexes()) {
+        // Only row-table prefix bloom filters travel through this path.
+        if (indexDesc.GetType() != NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+            return TVector<ISubOperation::TPtr>{CreateReject(id, NKikimrScheme::EStatus::StatusInvalidParameter,
+                TStringBuilder() << "Only local bloom filter indexes can be added via alter on table " << name)};
+        }
+
+        // Duplicate-column-set prevention: reject if a bloom filter index over the same columns
+        // already exists on the table (other local index types over the same columns are allowed).
         const TVector<TString> newKeys(indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end());
         for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
             const auto& child = context.SS->PathsById.at(childPathId);
@@ -916,7 +922,7 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
             }
             auto it = context.SS->Indexes.find(childPathId);
             if (it != context.SS->Indexes.end()
-                && TTableIndexInfo::IsLocalIndex(it->second->Type)
+                && it->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
                 && it->second->IndexKeys == newKeys) {
                 return TVector<ISubOperation::TPtr>{CreateReject(id, NKikimrScheme::EStatus::StatusSchemeError,
                     TStringBuilder() << "Local bloom filter index over the same columns already exists on table " << name)};
@@ -925,11 +931,11 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
     }
 
     TVector<ISubOperation::TPtr> result;
-    if (alter.HasPartitionConfig()) {
-        // Forward a copy with the transient index list cleared so the base alter sub-op never
-        // observes it (the indexes are handled here, not downstream).
-        TTxTransaction baseTx = tx;
-        baseTx.MutableAlterTable()->ClearTableIndexes();
+    // Forward the base alter only when it carries a real table-level change besides the index list,
+    // with the transient index list cleared so the base sub-op never observes it.
+    TTxTransaction baseTx = tx;
+    baseTx.MutableAlterTable()->ClearTableIndexes();
+    if (!CheckAllowedFields(baseTx.GetAlterTable(), {"Name", "PathId"})) {
         result.push_back(CreateAlterTable(NextPartId(id, result), baseTx));
     }
 

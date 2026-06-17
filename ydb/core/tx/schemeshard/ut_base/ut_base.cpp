@@ -7240,11 +7240,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // idx_bloom_1 gone; idx_bloom_2 and its prefix survive.
+        // idx_bloom_1 gone; idx_bloom_2 and its prefix (length 2, not 1) survive.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_bloom_1"), {NLs::PathNotExist});
         NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "idx_bloom_2",
             NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"Key1", "Key2"});
-        UNIT_ASSERT_VALUES_EQUAL(byKeyFilterPrefixesSize("/MyRoot/Table"), 1);
+        {
+            const auto cfg = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription()
+                .GetTable().GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 2);
+        }
     }
 
     Y_UNIT_TEST(RowTableLocalBloomIndexDisableFilter) {

@@ -1452,7 +1452,8 @@ namespace Tests {
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
                                                                   Settings->AppConfig->GetTliConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
-                                                                  nullptr, std::move(kqpProxySharedResources),
+                                                                  Settings->QueryReplayBackendFactory,
+                                                                  std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);

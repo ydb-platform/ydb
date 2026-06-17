@@ -7,6 +7,7 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
 ENDIF()
 
 SRCS(
+    column_table_index_entity_id_ut.cpp
     compression_ut.cpp
     table_description_ut.cpp
     ydb_convert_ut.cpp
@@ -14,6 +15,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/testlib/basics
     ydb/core/testlib/pg
 )
 

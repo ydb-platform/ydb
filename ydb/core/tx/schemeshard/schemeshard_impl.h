@@ -912,7 +912,7 @@ public:
 
     // ColumnTable
     void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
-    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx);
+    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx, bool skipStatsUpdate = false);
     void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
     void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
@@ -1756,11 +1756,13 @@ public:
     TFifoQueue<TPathId> ForcedCompactionTablesQueue;
     THashMap<TPathId, TFifoQueue<TShardIdx>> ForcedCompactionShardsByTable;
     ui64 ForcedCompactionTotalInQueues = 0;
+    bool ForcedCompactionProgressScheduled = false;
 
-    TVector<std::pair<TShardIdx, TForcedCompactionInfo::TPtr>> ForcedCompactionsDoneShardsToPersist; // info may be null
+    THashMap<TShardIdx, TForcedCompactionInfo::TPtr> ForcedCompactionsDoneShardsToPersist; // info may be null
     ui32 ForcedCompactionPersistBatchSize = 100;
     TInstant ForcedCompactionProgressStartTime;
     TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
+    bool ForcedCompactionNeedsImmediatePersist = false;
 
     struct TCancellingForcedCompaction {
         struct TWaiter {
@@ -1800,13 +1802,14 @@ public:
     void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact);
+    void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
     void PersistForcedCompactionDoneShard(NIceDb::TNiceDb& db, const TShardIdx& shardId);
 
     void FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedCompaction& compaction, const TForcedCompactionInfo& forcedCompactionInfo);
 
     void CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx);
     bool IsForcedCompactionCompleted(const TForcedCompactionInfo& forcedCompactionInfo) const;
-    void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId);
+    void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId, const TActorContext &ctx);
     void ProcessForcedCompactionQueues();
     void UpdateForcedCompactionQueueMetrics();
 
@@ -1814,6 +1817,13 @@ public:
     NOperationQueue::EStartStatus StartForcedCompaction(const TShardIdx& shardIdx);
     void OnForcedCompactionTimeout(const TShardIdx& shardIdx);
     void HandleForcedCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
+    void ScheduleForcedCompactionProgress(const TActorContext& ctx);
+
+    void ProcessForcedCompactionOnSplitMerge(
+        NIceDb::TNiceDb& db,
+        const TPathId& tablePathId,
+        const THashSet<TShardIdx>& srcShardIdxs,
+        const TVector<TShardIdx>& dstShardIdxs);
 
     NTabletFlatExecutor::ITransaction* CreateTxCreateForcedCompaction(TEvForcedCompaction::TEvCreateRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxGetForcedCompaction(TEvForcedCompaction::TEvGetRequest::TPtr& ev);
@@ -1827,6 +1837,7 @@ public:
     void Handle(TEvForcedCompaction::TEvCancelRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvForcedCompaction::TEvForgetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvForcedCompaction::TEvListRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvProgressForcedCompaction::TPtr& ev, const TActorContext& ctx);
     // } // NForcedCompaction
 
     // namespace NCdcStreamScan {

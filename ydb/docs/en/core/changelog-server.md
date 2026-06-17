@@ -1,5 +1,36 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 25.3 {#25-3}
+
+### Version 25.3.1.25 {#25-3-1-25}
+
+Release date: April 3, 2026.
+
+#### Functionality
+
+* Added support for two–data center configuration with synchronous data writes (Bridge mode). Available in {{ ydb-short-name }} Enterprise.
+* Topic improvements:
+  * In Kafka API [compacted ](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
+  * Topic APIs were extended with new `DescribeConsumer`  and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
+* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
+* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) в S3 и из S3.
+
+#### Bug Fixes
+
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
+* [Fixed behavior ](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18088) nconsistent results in some read-write transactions — conflicting writes no longer overwrite uncommitted changes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18234) serializability violations in read-write transactions after shard restarts.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20560) a memory management issue when committing offsets in topics with automatic partitioning enabled.
+* [Added ](https://github.com/ydb-platform/ydb/pull/18698) checks for enabled encryption in zero-copy transfers.
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20519) an issue that could cause a VDisk to hang in local recovery after a ChunkRead error.
+* [Eliminated](https://github.com/ydb-platform/ydb/pull/18924) появление фантомных VDisk из-за гонок между операциями создания и удаления группы.
+* [Улучшено](https://github.com/ydb-platform/ydb/pull/17687) phantom VDisks caused by races between group creation and deletion operations.
+* When a session ends via attach stream, a notification is now [sent](https://github.com/ydb-platform/ydb/pull/22298).
+* The coordination service now correctly [returns](https://github.com/ydb-platform/ydb/pull/16901) `SCHEME_ERROR` for non-existent resources instead of the incorrect `INTERNAL_ERROR` code.
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20157) memory handling issues and internal data consistency violations in Workload Manager and related scheduler code.
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20432) an issue where PDisk info requests could time out when the target node was disabled or unavailable.
+
 ## Version 25.2 {#25-2}
 
 ### Version 25.2.1.24 {#25-2-1-24}
@@ -30,24 +61,24 @@ Release date: September 21, 2025.
 
 #### Functionality
 
-* [Analytical capabilities](./concepts/analytics/index.md) are available by default: [column-oriented tables](./concepts/datamodel/table.md?version=v25.2#column-oriented-tables) can be created without special flags, using LZ4 compression and hash partitioning. Supported operations include a wide range of DML operations (UPDATE, DELETE, UPSERT, INSERT INTO ... SELECT) and CREATE TABLE AS SELECT. Integration with dbt, Apache Airflow, Jupyter, Superset, and federated queries to S3 enables building end-to-end analytical pipelines in YDB.
-* [Cost-Based Optimizer](./concepts/query_execution/optimizer.md?version=v25.2) is enabled by default for queries involving at least one column-oriented table but can also be enabled manually for other queries. The Cost-Based Optimizer improves query performance by determining the optimal join order and join types based on table statistics; supported [hints](./dev/query-hints.md) allow fine-tuning execution plans for complex analytical queries.
+* [Analytical capabilities](./concepts/analytics/index.md) are available by default: [column-oriented tables](./concepts/datamodel/table.md#column-oriented-tables) can be created without special flags, using LZ4 compression and hash partitioning. Supported operations include a wide range of DML operations (UPDATE, DELETE, UPSERT, INSERT INTO ... SELECT) and CREATE TABLE AS SELECT. Integration with dbt, Apache Airflow, Jupyter, Superset, and federated queries to S3 enables building end-to-end analytical pipelines in YDB.
+* [Cost-Based Optimizer](./concepts/query_execution/optimizer.md) is enabled by default for queries involving at least one column-oriented table but can also be enabled manually for other queries. The Cost-Based Optimizer improves query performance by determining the optimal join order and join types based on table statistics; supported [hints](./dev/query-execution-optimization/query-hints.md) allow fine-tuning execution plans for complex analytical queries.
 * Added YDB Transfer – an asynchronous mechanism for transferring data from a topic to a table. You can create a transfer, update or delete it using YQL commands.
-* Added [spilling](./concepts/query_execution/spilling.md?version=v25.2), a memory management mechanism, that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. Spilling allows executing user queries that require processing large data volumes exceeding available node memory.
-* Increased the [maximum amount of time allowed for a single query to execute](./concepts/limits-ydb?version=v25.2) from 30 minutes to 2 hours.
-* Added support for a user-defined Certificate Authority (CA) and [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) authentication in [asynchronous replication](./yql/reference/syntax/create-async-replication.md?version=v25.2).
+* Added [spilling](./concepts/query_execution/spilling.md), a memory management mechanism, that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. Spilling allows executing user queries that require processing large data volumes exceeding available node memory.
+* Increased the [maximum amount of time allowed for a single query to execute](./concepts/limits-ydb) from 30 minutes to 2 hours.
+* Added support for a user-defined Certificate Authority (CA) and [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) authentication in [asynchronous replication](./yql/reference/syntax/create-async-replication.md).
 * Enabled by default:
 
-  * [vector index](./dev/vector-indexes.md?version=v25.2) for approximate vector similarity search,
-  * support for [client-side consumer balancing](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html) and [transactions](https://www.confluent.io/blog/transactions-apache-kafka/) in [YDB Topics Kafka API](./reference/kafka-api/index.md?version=v25.2),
-  * support for [auto-partitioning topics](./concepts/cdc.md?version=v25.2#topic-partitions) for row-oriented tables in CDC,
+  * [vector index](./dev/vector-indexes.md) for approximate vector similarity search,
+  * support for [client-side consumer balancing](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html) and [transactions](https://www.confluent.io/blog/transactions-apache-kafka/) in [YDB Topics Kafka API](./reference/kafka-api/index.md),
+  * support for [auto-partitioning topics](./concepts/cdc.md#topic-partitions) for row-oriented tables in CDC,
   * support for auto-partitioning topics in asynchronous replication,
-  * support for [parameterized Decimal type](./yql/reference/types/primitive.md?version=v25.2#numeric),
-  * support for [Datetime64 data type](./yql/reference/types/primitive.md?version=v25.2#datetime),
+  * support for [parameterized Decimal type](./yql/reference/types/primitive.md#numeric),
+  * support for [Datetime64 data type](./yql/reference/types/primitive.md#datetime),
   * automatic cleanup of temporary tables and directories during export to S3,
-  * support for [changefeeds](./concepts/cdc.md?version=v25.2) in backup and restore operations,
-  * the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md?version=v25.2) for covered secondary indexes,
-  * system views with [history of overloaded partitions](./dev/system-views.md?version=v25.2#top-overload-partitions).
+  * support for [changefeeds](./concepts/cdc.md) in backup and restore operations,
+  * the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes,
+  * system views with [history of overloaded partitions](./dev/system-views.md#top-overload-partitions).
 
 #### Bug Fixes
 

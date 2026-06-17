@@ -18,13 +18,14 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.ref }}
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
@@ -39,13 +40,14 @@ jobs:
         branch: [ main ]
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.ref }}
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas

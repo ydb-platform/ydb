@@ -4,11 +4,13 @@
 
 Подробно будут разобраны операции:
 
-* [Подключение к YDB](#connect-ydb)
-* [Создание таблицы для хранения векторов](#create-table)
-* [Вставка векторов в таблицу](#insert-vectors)
-* [Добавление векторного индекса](#add-vector-index)
-* [Поиск ближайших векторов](#search-by-vector)
+- [Векторный поиск](#векторный-поиск)
+  - [Подключение к {{ ydb-short-name }}](#connect-ydb)
+  - [Создание таблицы](#create-table)
+  - [Вставка векторов](#insert-vectors)
+  - [Добавление индекса](#add-vector-index)
+  - [Поиск по вектору](#search-by-vector)
+  - [Итоговый пример](#full-example)
 
 В данном рецепте будет создано хранилище текстов со следующей структурой:
 
@@ -49,6 +51,17 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query, unsafe, identifier } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  const sql = query(driver)
+  ```
+
 - Java
 
     Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
@@ -57,16 +70,24 @@
     import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
     import tech.ydb.query.tools.SessionRetryContext;
-    
+
     String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-    
+
     try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
        QueryClient queryClient = QueryClient.newClient(transport).build()) {
-    
+
       SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
       // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
     }
     ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -130,6 +151,17 @@
     }
     ```
 
+- JavaScript
+
+  ```javascript
+  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+  );`
+  ```
+
 - Java
 
   ```java
@@ -137,7 +169,6 @@
   import tech.ydb.query.tools.QueryReader;
   import tech.ydb.query.tools.SessionRetryContext;
   import tech.ydb.table.query.Params;
-  
   void createVectorTable(SessionRetryContext retryCtx, String tableName) {
       String query = String.format("""
               CREATE TABLE IF NOT EXISTS `%s` (
@@ -146,14 +177,22 @@
                   embedding String,
                   PRIMARY KEY (id)
               );""", tableName);
-  
+
       retryCtx.supplyResult(session -> QueryReader.readFrom(
               session.createQuery(query, TxMode.NONE, Params.empty())
       )).join().getValue();
-  
+
       System.out.println("Vector table created: " + tableName);
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -536,6 +575,31 @@
     }
     ```
 
+- JavaScript (альтернативный)
+
+  ```javascript
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: new Float32Array([1.5, 2.5, 3.5])
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    FROM AS_TABLE($items);`
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 
@@ -655,6 +719,10 @@
     }
     ```
 
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Java
 
     ```java
@@ -708,6 +776,14 @@
 
     // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
     ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1082,6 +1158,29 @@
     }
     ```
 
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ## Итоговый пример {#full-example}
@@ -1264,6 +1363,10 @@
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Java
 
     Пример объединяет шаги из разделов выше: `QueryClient` + `SessionRetryContext` для YQL и `TableClient` + `SessionRetryContext` для `ALTER TABLE` с переименованием индекса. Методы `createVectorTable`, `insertItemsAsBytes`, `searchItemsAsBytes`, `addVectorIndex` и тип `Item` / `ResultItem` — как в соответствующих фрагментах этой страницы.
@@ -1345,5 +1448,13 @@
     ```
 
     Вывод совпадает с примером на Python.
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

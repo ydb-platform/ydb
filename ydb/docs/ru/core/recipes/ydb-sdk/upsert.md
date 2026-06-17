@@ -128,208 +128,163 @@
   }
   ```
 
-- Java
+- Rust
 
-  {% list tabs %}
+  ```rust
+  use ydb::{
+      ydb_params, ydb_struct, AccessTokenCredentials, ClientBuilder, Query, Value, YdbResult,
+  };
 
-  - Native SDK
+  fn series_row(
+      series_id: u64,
+      title: &str,
+      series_info: &str,
+      comment: Option<&str>,
+  ) -> YdbResult<Value> {
+      let comment_val = match comment {
+          None => Value::optional_from(Value::Text(String::new()), None)?,
+          Some(s) => Value::optional_from(
+              Value::Text(String::new()),
+              Some(Value::Text(s.into())),
+          )?,
+      };
+      Ok(ydb_struct!(
+          "series_id" => series_id,
+          "title" => title,
+          "series_info" => series_info,
+          "comment" => comment_val,
+      ))
+  }
 
-    Используйте `SessionRetryContext` и `TableSession.executeDataQuery` с параметром `$seriesData` типа `List<Struct<...>>`. Значения для `AS_TABLE($seriesData)` собираются так же, как структуры строк в примере [пакетной вставки](./bulk-upsert.md).
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
 
-    ```java
-    SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+      client.wait().await?;
 
-    String yql = """
-            PRAGMA TablePathPrefix("/local");
-            DECLARE $seriesData AS List<Struct<
-                series_id: Uint64,
-                title: Utf8,
-                series_info: Utf8,
-                comment: Optional<Utf8>
-            >>;
-            UPSERT INTO series
-            SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
-            """;
+      let example = series_row(0, "", "", None)?;
+      let series_data = Value::list_from(
+          example,
+          vec![
+              series_row(
+                  1,
+                  "IT Crowd",
+                  "The IT Crowd is a British sitcom...",
+                  None,
+              )?,
+              series_row(
+                  2,
+                  "Silicon Valley",
+                  "Silicon Valley is an American comedy...",
+                  Some("lorem ipsum"),
+              )?,
+          ],
+      )?;
 
-    Params params = Params.of("$seriesData", seriesDataListValue);
+      let query = Query::new(
+          r#"
+          PRAGMA TablePathPrefix("/local");
+          DECLARE $seriesData AS List<Struct<
+              series_id: Uint64,
+              title: Utf8,
+              series_info: Utf8,
+              comment: Optional<Utf8>
+          >>;
 
-    retryCtx.supplyResult(session -> session.executeDataQuery(yql, TxControl.serializableRw(), params))
-            .join();
-    ```
+          UPSERT INTO series
+          (
+              series_id,
+              title,
+              series_info,
+              comment
+          )
+          SELECT
+              series_id,
+              title,
+              series_info,
+              comment
+          FROM AS_TABLE($seriesData);
+          "#,
+      )
+      .with_params(ydb_params!("$seriesData" => series_data));
 
-  - JDBC
+      client
+          .table_client()
+          .retry_transaction(|mut t| {
+              let query = query.clone();
+              async move {
+                  t.query(query).await?;
+                  t.commit().await?;
+                  Ok(())
+              }
+          })
+          .await?;
 
-    ```java
-    try (Connection conn = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
-         PreparedStatement ps = conn.prepareStatement(
-                 """
-                 REPLACE INTO series (series_id, title, series_info, comment)
-                 SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
-                 """
-         )) {
-        // Параметр $seriesData задаётся в соответствии с типом запроса (см. документацию JDBC-драйвера)
-    }
-    ```
+      Ok(())
+  }
+  ```
 
-    В Spring Boot, Hibernate, JOOQ и других фреймворках поверх JDBC драйвер также стремится оптимизировать **крупные** последовательности вставок и изменений: при необходимости **UPSERT**, `INSERT`, `UPDATE`, `DELETE` автоматически **группируются в пакеты** на стороне драйвера (в том числе при больших батчах из ORM).
+- PHP
 
-  {% endlist %}
+  ```php
+  <?php
 
-- Python
+  use YdbPlatform\Ydb\Session;
+  use YdbPlatform\Ydb\Ydb;
 
-  {% list tabs %}
+  $ydb = new Ydb($config);
 
-  - Native SDK
+  $yql = <<<'EOS'
+  PRAGMA TablePathPrefix("/local");
+  DECLARE $seriesData AS List<Struct<
+      series_id: Uint64,
+      title: Utf8,
+      series_info: Utf8,
+      comment: Optional<Utf8>
+  >>;
 
-    Для вставки данных используется `QuerySessionPool` и метод `execute_with_retries` с параметризованным YQL-запросом. Запрос оперирует контейнерным типом `List<Struct<...>>`, что позволяет передавать несколько строк за один вызов.
+  UPSERT INTO series
+  (
+      series_id,
+      title,
+      series_info,
+      comment
+  )
+  SELECT
+      series_id,
+      title,
+      series_info,
+      comment
+  FROM AS_TABLE($seriesData);
+  EOS;
 
-    ```python
-    import os
-    import ydb
+  $seriesData = [
+      [
+          'series_id' => 1,
+          'title' => 'IT Crowd',
+          'series_info' => 'The IT Crowd is a British sitcom...',
+          'comment' => null,
+      ],
+      [
+          'series_id' => 2,
+          'title' => 'Silicon Valley',
+          'series_info' => 'Silicon Valley is an American comedy...',
+          'comment' => 'lorem ipsum',
+      ],
+  ];
 
-    with ydb.Driver(
-        connection_string=os.environ["YDB_CONNECTION_STRING"],
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=5)
-        pool = ydb.QuerySessionPool(driver)
-
-        series_struct_type = ydb.StructType()
-        series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
-        series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
-        series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
-        series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-
-        series_data = [
-            {
-                "series_id": 1,
-                "title": "IT Crowd",
-                "series_info": "The IT Crowd is a British sitcom...",
-                "comment": None,
-            },
-            {
-                "series_id": 2,
-                "title": "Silicon Valley",
-                "series_info": "Silicon Valley is an American comedy...",
-                "comment": "lorem ipsum",
-            },
-        ]
-
-        pool.execute_with_retries(
-            """
-            DECLARE $seriesData AS List<Struct<
-                series_id: Uint64,
-                title: Utf8,
-                series_info: Utf8,
-                comment: Optional<Utf8>
-            >>;
-
-            UPSERT INTO series
-            (
-                series_id,
-                title,
-                series_info,
-                comment
-            )
-            SELECT
-                series_id,
-                title,
-                series_info,
-                comment
-            FROM AS_TABLE($seriesData);
-            """,
-            {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
-            retry_settings=ydb.RetrySettings(idempotent=True),
-        )
-    ```
-
-  - Native SDK (Asyncio)
-
-    ```python
-    import os
-    import ydb
-    import asyncio
-
-    async def ydb_init():
-        async with ydb.aio.Driver(
-            connection_string=os.environ["YDB_CONNECTION_STRING"],
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
-            await driver.wait()
-            pool = ydb.aio.QuerySessionPool(driver)
-
-            series_struct_type = ydb.StructType()
-            series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
-            series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
-            series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
-            series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-
-            series_data = [
-                {"series_id": 1, "title": "IT Crowd", "series_info": "The IT Crowd is a British sitcom...", "comment": None},
-                {"series_id": 2, "title": "Silicon Valley", "series_info": "Silicon Valley is an American comedy...", "comment": "lorem ipsum"},
-            ]
-
-            await pool.execute_with_retries(
-                """
-                DECLARE $seriesData AS List<Struct<
-                    series_id: Uint64,
-                    title: Utf8,
-                    series_info: Utf8,
-                    comment: Optional<Utf8>
-                >>;
-
-                UPSERT INTO series (series_id, title, series_info, comment)
-                SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
-                """,
-                {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
-                retry_settings=ydb.RetrySettings(idempotent=True),
-            )
-
-    asyncio.run(ydb_init())
-    ```
-
-  - SQLAlchemy
-
-    При использовании {{ ydb-short-name }} через SQLAlchemy для вставки данных используется функция `ydb_sqlalchemy.upsert`, которая формирует запрос `UPSERT INTO` на основе таблицы и переданных значений. Можно вставлять как одну строку, так и несколько строк за один вызов:
-
-    ```python
-    import os
-    import sqlalchemy as sa
-    from sqlalchemy import Column, Integer, MetaData, String, Table
-    import ydb_sqlalchemy as ydb_sa
-
-    engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
-
-    series = Table(
-        "series",
-        MetaData(),
-        Column("series_id", Integer, primary_key=True),
-        Column("title", String),
-        Column("series_info", String),
-        Column("comment", String, nullable=True),
-    )
-
-    with engine.connect() as connection:
-        stmt = ydb_sa.upsert(series).values(
-            [
-                {
-                    "series_id": 1,
-                    "title": "IT Crowd",
-                    "series_info": "The IT Crowd is a British sitcom...",
-                    "comment": None,
-                },
-                {
-                    "series_id": 2,
-                    "title": "Silicon Valley",
-                    "series_info": "Silicon Valley is an American comedy...",
-                    "comment": "lorem ipsum",
-                },
-            ]
-        )
-        connection.execute(stmt)
-        connection.commit()
-    ```
-
-  {% endlist %}
+  $ydb->table()->retryTransaction(
+      function (Session $session) use ($yql, $seriesData) {
+          return $session->prepare($yql)->execute([
+              'seriesData' => $seriesData,
+          ]);
+      },
+      true
+  );
+  ```
 
 {% endlist %}

@@ -22,6 +22,22 @@ using namespace Aws::Utils::Stream;
 
 namespace {
 
+static const TString OkStatusName = "OK";
+static const TString UnknownStatusName = "Unknown";
+static const TString StatusCountersGroup = "status";
+static const TString HttpCodeCountersGroup = "http_code";
+static const TString AwsCodeCountersGroup = "aws_code";
+static const TString RequestsCountCounter = "RequestsCount";
+static const TString BytesWrittenCounter = "BytesWritten";
+static const TString BytesReadCounter = "BytesRead";
+static const TString LatencyCounter = "LatencyMs";
+
+NMonitoring::IHistogramCollectorPtr GetLatencyCollector() {
+    return NMonitoring::ExplicitHistogram({
+        5, 10, 25, 50, 100, 500, 1000, 2500, 5000,
+        10'000, 30'000, 60'000, 120'000, 180'000, 300'000, 600'000});
+}
+
 template <typename TEvRequest, typename TEvResponse>
 class TContextBase: public AsyncCallerContext {
 public:
@@ -30,10 +46,12 @@ public:
             const TActorId& sender,
             IRequestContext::TPtr requestContext,
             const Aws::S3::Model::StorageClass storageClass,
-            const TReplyAdapterContainer& replyAdapter)
+            const TReplyAdapterContainer& replyAdapter,
+            TIntrusivePtr<TS3ExternalStorage::TS3RequestCounters> counters)
         : AsyncCallerContext()
         , ActorSystem(sys)
         , Sender(sender)
+        , Counters(std::move(counters))
         , RequestContext(requestContext)
         , StorageClass(storageClass)
         , ReplyAdapter(replyAdapter)
@@ -57,11 +75,53 @@ protected:
         Send(Sender, std::move(ev));
     }
 
+    void IncrementCounters(const typename TEvResponse::TOutcome& outcome) const {
+        if (!Counters) {
+            return;
+        }
+
+        // Error code: requests per second
+        NMonitoring::TCounterForPtr* requestsCount = nullptr;
+        if (outcome.IsSuccess()) {
+            requestsCount = Counters->GetSuccessRequestsCountCounter();
+        } else {
+            requestsCount = Counters->GetRequestsCountCounter(
+                TString(outcome.GetError().GetExceptionName()),
+                static_cast<int>(outcome.GetError().GetResponseCode()),
+                static_cast<int>(outcome.GetError().GetErrorType()));
+        }
+        if (requestsCount) {
+            ++*requestsCount;
+        }
+
+        // Latency
+        if (auto* hist = Counters->GetLatency()) {
+            hist->Collect((TInstant::Now() - Start).MilliSeconds());
+        }
+
+        if (outcome.IsSuccess() && BytesWritten) {
+            if (auto* bw = Counters->GetBytesWritten()) {
+                *bw += *BytesWritten;
+            }
+        }
+
+        if (outcome.IsSuccess() && BytesRead) {
+            if (auto* br = Counters->GetBytesRead()) {
+                *br += *BytesRead;
+            }
+        }
+    }
+
 private:
     const TActorSystem* ActorSystem;
     const TActorId Sender;
 
 protected:
+    const TInstant Start = TInstant::Now();
+    // Metrics for some special methods
+    std::optional<size_t> BytesWritten;
+    std::optional<size_t> BytesRead;
+    TIntrusivePtr<TS3ExternalStorage::TS3RequestCounters> Counters;
     mutable bool Replied = false;
     IRequestContext::TPtr RequestContext;
     const Aws::S3::Model::StorageClass StorageClass;
@@ -76,6 +136,7 @@ public:
 
     void Reply(const typename TEvRequest::TRequest&, const typename TEvResponse::TOutcome& outcome) const {
         Y_ABORT_UNLESS(!std::exchange(this->Replied, true), "Double-reply");
+        this->IncrementCounters(outcome);
         this->Send(std::make_unique<TEvResponse>(outcome, this->RequestContext));
     }
 };
@@ -93,6 +154,7 @@ public:
             key = request.GetKey();
         }
 
+        this->IncrementCounters(outcome);
         this->Send(MakeResponse(key, outcome));
     }
 
@@ -131,6 +193,7 @@ public:
         Range = range;
 
         Buffer.resize(range.second - range.first + 1);
+        this->BytesRead = Buffer.size();
         request.SetResponseStreamFactory([this]() {
             return Aws::New<DefaultUnderlyingStream>("StreamContext",
                 MakeUnique<TOutputStreamBuf>("StreamContext", Buffer));
@@ -187,6 +250,7 @@ public:
     const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
         auto& request = ev->Get()->MutableRequest();
         Buffer = std::move(ev->Get()->Body);
+        this->BytesWritten = Buffer.size();
         request.SetBody(MakeShared<DefaultUnderlyingStream>("StreamContext",
             MakeUnique<TInputStreamBuf>("StreamContext", Buffer)));
 
@@ -225,6 +289,70 @@ public:
 };
 
 } // anonymous
+
+NMonitoring::THistogramCounter* TS3ExternalStorage::TS3RequestCounters::GetLatency() const {
+    if (auto* hist = LatencyHist.load(std::memory_order_acquire)) {
+        return hist;
+    }
+    if (!RequestGroup) {
+        return nullptr;
+    }
+
+    auto* hist = RequestGroup->GetHistogram(LatencyCounter, GetLatencyCollector()).Get();
+    LatencyHist.store(hist, std::memory_order_release);
+    return hist;
+}
+
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesWritten() const {
+    if (auto* counter = BytesWritten.load(std::memory_order_acquire)) {
+        return counter;
+    }
+    if (!RequestGroup) {
+        return nullptr;
+    }
+
+    auto* counter = RequestGroup->GetCounter(BytesWrittenCounter, true).Get();
+    BytesWritten.store(counter, std::memory_order_release);
+    return counter;
+}
+
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetBytesRead() const {
+    if (auto* counter = BytesRead.load(std::memory_order_acquire)) {
+        return counter;
+    }
+    if (!RequestGroup) {
+        return nullptr;
+    }
+
+    auto* counter = RequestGroup->GetCounter(BytesReadCounter, true).Get();
+    BytesRead.store(counter, std::memory_order_release);
+    return counter;
+}
+
+NMonitoring::TDynamicCounterPtr TS3ExternalStorage::TS3RequestCounters::GetStatusSubgroupImpl(const TString& statusName, int httpResponseCode, int awsErrorType) const {
+    return RequestGroup
+        ->GetSubgroup(StatusCountersGroup, statusName ? statusName : UnknownStatusName)
+        ->GetSubgroup(HttpCodeCountersGroup, ToString(httpResponseCode))
+        ->GetSubgroup(AwsCodeCountersGroup, ToString(awsErrorType));
+}
+
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetRequestsCountCounter(const TString& statusName, int httpResponseCode, int awsErrorType) const {
+    if (!RequestGroup) {
+        return nullptr;
+    }
+
+    return GetStatusSubgroupImpl(statusName, httpResponseCode, awsErrorType)->GetCounter(RequestsCountCounter, true).Get();
+}
+
+NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetSuccessRequestsCountCounter() const {
+    if (auto* counter = SuccessRequests.load(std::memory_order_acquire)) {
+        return counter;
+    }
+
+    auto* counter = GetRequestsCountCounter(OkStatusName, 200, -1);
+    SuccessRequests.store(counter, std::memory_order_release);
+    return counter;
+}
 
 TS3ExternalStorage::~TS3ExternalStorage() {
     if (Client) {

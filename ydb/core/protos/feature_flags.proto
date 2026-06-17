@@ -281,4 +281,5 @@ message TFeatureFlags {
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
     optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
+    optional bool EnableKqpConstraintsTransformer = 277 [default = false];
 }

@@ -181,6 +181,7 @@ Y_UNIT_TEST_SUITE(TBlobReaderRetry) {
         }
 
         UNIT_ASSERT(setup.Task->HasError());
+        UNIT_ASSERT(setup.RetryCount.load() > 0);
         UNIT_ASSERT(setup.RetryCount.load() <= 10);
     }
 }

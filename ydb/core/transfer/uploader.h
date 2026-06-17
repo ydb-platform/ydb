@@ -17,12 +17,16 @@ class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     static constexpr size_t MaxSchemeRetries = 3;
 
 public:
-    TTableUploader(const TActorId& parentActor,
-        const TString& database, const TScheme::TPtr& scheme,
+    TTableUploader(
+        const TActorId& parentActor,
+        const TString& database,
+        const TString& defaultTablePath,
+        const TScheme::TPtr& scheme,
         std::unordered_map<TString, std::shared_ptr<TData>>&& data
     )
         : ParentActor(parentActor)
         , Database(database)
+        , DefaultTablePath(defaultTablePath)
         , Scheme(scheme)
         , Data(std::move(data))
     {
@@ -36,17 +40,17 @@ public:
 private:
     void DoRequests() {
         for (const auto& [tablePath, data] : Data) {
-            DoUpload(tablePath, data);
+            DoUpload(tablePath, data, false);
         }
     }
 
     IActor* CreateUploaderInternal(const TString& database, const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie);
 
-    void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data) {
+    void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data, bool defaultTablePath) {
         auto cookie = ++Cookie;
 
         auto actorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            CreateUploaderInternal(Database, tablePath, data, cookie)
+            CreateUploaderInternal(Database, defaultTablePath ? DefaultTablePath : tablePath, data, cookie)
         );
         CookieMapping[cookie] = {tablePath, actorId};
     }
@@ -86,13 +90,22 @@ private:
                 << ", iteration=" << retry.Backoff.GetIteration()
                 << ", error=" << status << " " << ev->Get()->Issues.ToOneLineString());
 
-            TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath));
+            TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath, retry.DefaultTable));
             if (schemeError) {
                 ++retry.SchemeCount;
             } else {
                 retry.SchemeCount = 0;
             }
             CookieMapping.erase(ev->Cookie);
+            return;
+        }
+
+        if (status == Ydb::StatusIds::SCHEME_ERROR && !retry.DefaultTable && !DefaultTablePath.empty()) {
+            retry.DefaultTable = true;
+            retry.Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
+            retry.SchemeCount = 0;
+
+            TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath, true));
             return;
         }
 
@@ -107,7 +120,7 @@ private:
             return ReplyErrorAndDie(TStringBuilder() << "Unexpected retry for table '" << tablePath << "'");
         }
 
-        DoUpload(tablePath, it->second);
+        DoUpload(tablePath, it->second, ev->Get()->DefaultTable);
     }
 
     STFUNC(StateWork) {
@@ -149,6 +162,7 @@ private:
 private:
     const TActorId ParentActor;
     const TString Database;
+    const TString DefaultTablePath;
     const TScheme::TPtr Scheme;
     // Table path -> Data
     std::unordered_map<TString, std::shared_ptr<TData>> Data;
@@ -160,6 +174,7 @@ private:
     struct Retry {
         TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
         size_t SchemeCount = 0;
+        bool DefaultTable = false;
     };
     std::unordered_map<TString, Retry> Retries;
 };

@@ -138,9 +138,9 @@ private:
         DefaultTablePath = JoinPath(entry.Path);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
-            TableState = CreateColumnTableState(SelfId(), Database, result);
+            TableState = CreateColumnTableState(SelfId(), Database, DirectoryPath.empty() ? "" : DefaultTablePath, result);
         } else {
-            TableState = CreateRowTableState(SelfId(), Database, result);
+            TableState = CreateRowTableState(SelfId(), Database, DirectoryPath.empty() ? "" : DefaultTablePath, result);
         }
 
         CompileTransferLambda();

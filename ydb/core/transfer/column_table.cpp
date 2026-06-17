@@ -10,9 +10,10 @@ public:
     TColumnTableState(
         const TActorId& selfId,
         const TString& database,
+        const TString& defaultTablePath,
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
     )
-        : ITableKindState(selfId, database, result)
+        : ITableKindState(selfId, database, defaultTablePath, result)
     {
         Path = JoinPath(result->ResultSet.front().Path);
     }
@@ -34,7 +35,7 @@ public:
         }
 
         UploaderActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            new TTableUploader(SelfId, Database, GetScheme(), std::move(tableData))
+            new TTableUploader(SelfId, Database, DefaultTablePath, GetScheme(), std::move(tableData))
         );
 
         Batchers.clear();
@@ -46,8 +47,8 @@ private:
     TString Path;
 };
 
-std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, const TString& database, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
-    return std::make_unique<TColumnTableState>(selfId, database, result);
+std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, const TString& database, const TString& defaultTablePath, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
+    return std::make_unique<TColumnTableState>(selfId, database, defaultTablePath, result);
 }
 
 template<>

@@ -81,7 +81,7 @@ use ydb::{Value, ydb_struct};
 
 let rows: Vec<Value> = /* ... */;
 let list = Value::list_from(example_row, rows)?;
-qc.exec("DECLARE $seriesData AS List<Struct<...>>; REPLACE INTO ... FROM AS_TABLE($seriesData);")
+qc.exec("REPLACE INTO ... FROM AS_TABLE($seriesData);")
     .param("$seriesData", list)
     .await?;
 ```

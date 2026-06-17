@@ -27,7 +27,7 @@
 1. UI получает runtime-настройки из `GET /meta/ai_assistant_client_config`.
 1. UI отправляет запросы к модели в `/proxy/model/...`.
 1. Gateway перенаправляет запросы к модели в `ydb_em_ai_model_endpoint` и добавляет заголовок Authorization из tokenator.
-1. UI отправляет MCP-запросы в `/meta/mcp`. Gateway выполняет MCP-инструменты через API YDB EM и proxy endpoints кластеров.
+1. UI отправляет MCP-запросы в `/meta/mcp`. Gateway публикует MCP-инструменты через этот endpoint и выполняет их через API YDB EM и proxy endpoints кластеров. Если поиск по документации настроен, `search_docs` публикуется через тот же MCP endpoint и доступен ассистенту.
 
 ## Настройте доступ к модели {#configure-model-access}
 
@@ -84,7 +84,7 @@ Gateway добавляет путь из `/proxy/model/...` к `ydb_em_ai_model_
 
 ## Настройте поиск по документации {#configure-docs-search}
 
-Этот шаг необязателен. Включайте его только если ассистенту нужен MCP-инструмент `search_docs`. Для этого инструмента Gateway вызывает OpenAI-compatible embeddings endpoint и добавляет `/embeddings` к настроенному base URL, если suffix отсутствует.
+Этот шаг необязателен. Включайте его только если ассистенту нужен MCP-инструмент `search_docs`. Для этого инструмента Gateway вызывает OpenAI-compatible embeddings endpoint и добавляет `/embeddings` к настроенному base URL, если suffix отсутствует. Отдельный browser endpoint для discovery tools настраивать не нужно: ассистент получает `search_docs` через настроенный `/meta/mcp` server.
 
 ```yaml
 ydb_em_docs_search_enabled: true

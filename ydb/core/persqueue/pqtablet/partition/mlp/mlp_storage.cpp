@@ -249,6 +249,7 @@ bool TStorage::Purge(ui64 endOffset) {
     Metrics.UnprocessedMessageCount = 0;
     Metrics.LockedMessageCount = 0;
     Metrics.LockedMessageGroupCount = 0;
+    Metrics.InflightMessageGroupCount = 0;
     Metrics.DelayedMessageCount = 0;
     Metrics.CommittedMessageCount = 0;
     Metrics.DeadlineExpiredMessageCount = 0;
@@ -548,6 +549,8 @@ void TStorage::UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& mess
         MessageGroups.Groups.erase(messageGroupIterator);
         MessageGroups.LockedMessageGroupsId.erase(message.MessageGroupIdHash);
         MessageGroups.UnlockedMessageGroupsId.erase(message.MessageGroupIdHash);
+        AFL_ENSURE(Metrics.InflightMessageGroupCount > 0);
+        --Metrics.InflightMessageGroupCount;
         return;
     }
     ptr->FirstOffset = *nextOffset;
@@ -634,6 +637,7 @@ void TStorage::UpdateMessageGroupForNewMessage(ui64 offset, TMessage& message) {
     TSingleMessageGroupIdInfo& group = it->second;
     group.Size++;
     if (firstMessageInGroup) {
+        ++Metrics.InflightMessageGroupCount;
         group.FirstOffset = offset;
         firstReadableMessageInGroup = TrackMessageStatusInLockedGroups(message); // may be false on snapshot restore
     } else {
@@ -1339,6 +1343,7 @@ TString TStorage::DebugString() const {
         << "Unprocessed: " << Metrics.UnprocessedMessageCount << ", "
         << "Locked: " << Metrics.LockedMessageCount << ", "
         << "LockedGroups: " << Metrics.LockedMessageGroupCount << ", "
+        << "InflightGroups: " << Metrics.InflightMessageGroupCount << ", "
         << "Committed: " << Metrics.CommittedMessageCount << ", "
         << "DLQ: " << Metrics.DLQMessageCount
         << "}";
@@ -1506,6 +1511,7 @@ void TStorage::InitMetrics() {
     }
 
     Metrics.InflightMessageCount = Messages.size() + SlowMessages.size();
+    Metrics.InflightMessageGroupCount = KeepMessageOrder ? MessageGroups.Groups.size() : 0;
 }
 
 void TStorage::TMessageGroups::Clear() {

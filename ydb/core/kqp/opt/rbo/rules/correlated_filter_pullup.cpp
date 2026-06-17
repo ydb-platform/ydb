@@ -67,6 +67,21 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     if (input->Kind == EOperator::Map) {
         auto map = CastOperator<TOpMap>(input);
 
+        TVector<TMapElement> retainedMapElements;
+        retainedMapElements.reserve(map->MapElements.size());
+        for (const auto& mapEl : map->MapElements) {
+            const auto usedDeps = IUSetIntersect(mapEl.GetExpression().GetInputIUs(false, true), deps->Dependencies);
+            if (usedDeps.empty()) {
+                retainedMapElements.push_back(mapEl);
+                continue;
+            }
+
+            if (!mapEl.IsRename() || !IsGeneratedIgnoreIU(mapEl.GetElementName())) {
+                return false;
+            }
+        }
+        map->MapElements = std::move(retainedMapElements);
+
         // Stop if we compute something from one of the dependent columns, except for Just
         for (const auto & mapEl : map->MapElements) {
             for (const auto & iu : mapEl.GetExpression().GetInputIUs(false, true)) {

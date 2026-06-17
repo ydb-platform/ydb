@@ -7,8 +7,10 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -972,6 +974,42 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(join.get(), 0).contains(TInfoUnit("a")));
         UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(leftMap.get(), 0).contains(TInfoUnit("a")));
+    }
+
+    Y_UNIT_TEST(ProjectedKqpOpMapAddsIgnoreRenamesForInputColumns) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto inputNode = testContext.ExprCtx.NewCallable(pos, "TestInput", {});
+        auto output = testContext.ExprCtx.NewAtom(pos, "projected");
+        auto source = testContext.ExprCtx.NewAtom(pos, "a");
+        auto mapElement = testContext.ExprCtx.NewCallable(pos, "KqpOpMapElementRename", {inputNode, output, source});
+        auto mapElements = testContext.ExprCtx.NewList(pos, {mapElement});
+        auto project = testContext.ExprCtx.NewAtom(pos, "true");
+        auto mapNode = testContext.ExprCtx.NewCallable(pos, "KqpOpMap", {inputNode, mapElements, project});
+
+        PlanConverter converter(testContext.TypeCtx, testContext.ExprCtx);
+        converter.Converted[inputNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+
+        auto converted = CastOperator<TOpMap>(converter.ConvertTKqpOpMap(mapNode));
+        for (auto exprRef : converted->GetExpressions()) {
+            exprRef.get().PlanProps = &converter.PlanProps;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(converted->MapElements.size(), 2);
+        UNIT_ASSERT(converted->MapElements[0].GetElementName() == TInfoUnit("projected"));
+        UNIT_ASSERT(converted->MapElements[0].IsRename());
+        UNIT_ASSERT(converted->MapElements[0].IsColumnAccess());
+        UNIT_ASSERT(converted->MapElements[0].GetColumnAccess() == TInfoUnit("a"));
+
+        UNIT_ASSERT(converted->MapElements[1].IsRename());
+        UNIT_ASSERT(converted->MapElements[1].GetRename() == TInfoUnit("payload"));
+        UNIT_ASSERT(IsGeneratedIgnoreIU(converted->MapElements[1].GetElementName()));
+
+        const auto convertedOutput = converted->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(convertedOutput.size(), 2);
+        UNIT_ASSERT(convertedOutput[0] == TInfoUnit("projected"));
+        UNIT_ASSERT(IsGeneratedIgnoreIU(convertedOutput[1]));
     }
 
     Y_UNIT_TEST(ReplaceAliasSubqueryDoesNotDuplicateVisibleColumns) {

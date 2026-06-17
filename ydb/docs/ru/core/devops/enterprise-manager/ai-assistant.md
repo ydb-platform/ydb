@@ -1,6 +1,6 @@
 # Подключение AI-ассистента в YDB EM
 
-В этой инструкции описано, как включить AI-ассистента в {{ ydb-short-name }} Enterprise Manager (YDB EM). После настройки пользователи увидят ассистента в веб-интерфейсе YDB EM. Ассистент отправляет запросы к модели через Gateway и может использовать MCP-инструменты Gateway.
+В этой инструкции описано, как включить AI-ассистента в {{ ydb-short-name }} Enterprise Manager (YDB EM). После настройки пользователи увидят ассистента в веб-интерфейсе YDB EM. Ассистент отправляет запросы к модели через Gateway и может использовать инструменты Model Context Protocol (MCP), предоставляемые Gateway.
 
 ## Перед началом {#before-start}
 
@@ -10,7 +10,7 @@
 
 1. Доступ к Ansible inventory, который используется для развёртывания YDB EM.
 1. OpenAI-compatible endpoint модели, который будет доступен с хоста Gateway.
-1. Способ добавить именованную запись с учётными данными модели в token-файл Gateway. Tokenator в Gateway читает этот файл и использует запись, у которой поле `Name` равно `ydb_em_ai_model_token_name`, например `model-token`, как upstream-заголовок `Authorization`.
+1. Способ добавить именованную запись с учётными данными модели в token-файл Gateway. Tokenator в Gateway читает этот файл и использует значение поля `Token` записи, у которой поле `Name` равно `ydb_em_ai_model_token_name`, например `model-token`, как upstream-заголовок `Authorization`.
 1. Если вы обновляете существующую установку, доступ к развёрнутому хосту Gateway.
 
 {% note warning %}
@@ -56,7 +56,7 @@ StaticTokenInfo {
 
 ```yaml
 ydb_em_ai_assistant_enabled: true
-ydb_em_ai_model_endpoint: "https://llm.example.com/"
+ydb_em_ai_model_endpoint: "https://llm.example.com"
 ydb_em_ai_model_token_name: "model-token"
 
 ydb_em_ai_assistant_client_runtime_config:
@@ -99,12 +99,12 @@ ydb_em_docs_search_score: 0.6
 Параметр | Описание
 --- | ---
 `ydb_em_docs_search_enabled` | Настраивает backend семантического поиска по документации и публикует `search_docs` через MCP, если все обязательные настройки поиска валидны.
-`ydb_em_docs_search_embeddings_upstream_base_url` | Base URL OpenAI-compatible embeddings endpoint.
+`ydb_em_docs_search_embeddings_upstream_base_url` | Базовый URL OpenAI-совместимого endpoint для embeddings.
 `ydb_em_docs_search_embeddings_token_name` | Имя записи tokenator для embeddings-запросов.
 `ydb_em_docs_search_embeddings_model` | Имя embeddings-модели.
-`ydb_em_docs_search_vector_size` | Ожидаемый размер vector. Используйте `0`, чтобы отключить проверку размера.
+`ydb_em_docs_search_vector_size` | Ожидаемая размерность вектора эмбеддинга. Используйте `0`, чтобы отключить проверку размера.
 `ydb_em_docs_search_limit` | Максимальное количество возвращаемых документов.
-`ydb_em_docs_search_score` | Минимальный score поиска от `0` до `1`.
+`ydb_em_docs_search_score` | Минимальная оценка релевантности от `0` до `1`. Документы с меньшей оценкой не возвращаются.
 
 ## Примените конфигурацию {#apply-configuration}
 

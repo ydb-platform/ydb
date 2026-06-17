@@ -75,7 +75,6 @@ ydb/core/transfer/ut/functional Transfer.WriteToNotTable
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_describe_column_table_local_index
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
-ydb/services/config/ut ConfigGRPCService.ReplaceConfig
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/tests/compatibility py3test.[test_kafka_topic.py */*] chunk
 ydb/tests/compatibility py3test.[test_stress.py */*] chunk
@@ -139,7 +138,6 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_prestable-26-3_to_stable-26-2-1-1-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-0-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-1-1_to_stable-26-2-1-2-2048-COLUMN]
-ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1-False]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
@@ -497,6 +495,5 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpc
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[only_level-level=3-specified without an algorithm]
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[too_big_level-algorithm=zstd, level=99-annot parse serializer]
-ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test

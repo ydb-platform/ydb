@@ -136,9 +136,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvRegisterCoord
         {"issues", ev->Get()->Issues.ToOneLineString()});
     const auto& issues = ev->Get()->Issues;
     if (issues) {
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("StorageError: can't register in storage: ",
             {"coordinatorId", CoordinatorId},
-            {"error", "StorageError: can't register in storage: " + issues.ToOneLineString()});
+            {"issues", issues.ToOneLineString()});
         ++*Metrics.StorageError;
         OnInternalError("Can't register in storage", issues);
         return;
@@ -202,9 +202,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvGetCheckpoint
 
     if (event->Issues) {
         ++*Metrics.StorageError;
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("StorageError: can't get checkpoints to restore",
             {"coordinatorId", CoordinatorId},
-            {"error", "StorageError: can't get checkpoints to restore: " + event->Issues.ToOneLineString()});
+            {"issues", event->Issues.ToOneLineString()});
         OnInternalError("Can't get checkpoints to restore", event->Issues);
         return;
     }
@@ -252,9 +252,8 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     if (!checkpoint.Graph) {
         ++*Metrics.StorageError;
         const TString message = TStringBuilder() << "StorageError: can't get graph params from checkpoint " << checkpoint.CheckpointId;
-        YDB_LOG_INFO("",
-            {"coordinatorId", CoordinatorId},
-            {"message", message});
+        YDB_LOG_INFO(message,
+            {"coordinatorId", CoordinatorId});
         OnInternalError(message);
         return;
     }
@@ -269,7 +268,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         issues);
 
     if (issues) {
-        YDB_LOG_INFO("",
+        YDB_LOG_INFO("Issues while building continue-from-streaming-offsets restore plan",
             {"coordinatorId", CoordinatorId},
             {"issues", issues.ToOneLineString()});
     }
@@ -292,9 +291,9 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         const auto actorIdIt = TaskIdToActor.find(taskId);
         if (actorIdIt == TaskIdToActor.end()) {
             const TString msg = TStringBuilder() << "ActorId for task id " << taskId << " was not found";
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("ActorId for task was not found",
                 {"coordinatorId", CoordinatorId},
-                {"msg", msg});
+                {"taskId", taskId});
             OnInternalError(msg);
             return;
         }
@@ -350,7 +349,8 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
 
     if (status != NYql::NDqProto::TEvRestoreFromCheckpointResult_ERestoreStatus_OK) {
         auto msg = TStringBuilder() << "Can't restore: " << statusName << ", " << NYql::IssuesFromMessageAsString(record.GetIssues());
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("Can't restore",
+            {"status", statusName},
             {"coordinatorId", CoordinatorId},
             {"checkpoint", checkpoint},
             {"msg", msg});
@@ -448,10 +448,9 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
         {"checkpointId", checkpointId});
 
     auto cancelCheckpoint = [&](const TString& str) {
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR(str,
             {"coordinatorId", CoordinatorId},
-            {"checkpointId", checkpointId},
-            {"str", str});
+            {"checkpointId", checkpointId});
         PendingCheckpoints.erase(checkpointId);
         FailedZeroCheckpoint = InitingZeroCheckpoint;
         UpdateInProgressMetric();

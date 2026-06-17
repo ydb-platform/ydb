@@ -132,17 +132,6 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             continue;
         }
 
-        TString data;
-        Ydb::Topic::Codec codec;
-        if (Settings.UncompressMessages && proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
-            const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
-            data = codecImpl->Decompress(proto.GetData());
-            codec = static_cast<Ydb::Topic::Codec>(proto.codec() + 1);
-        } else {
-            data = std::move(*proto.MutableData());
-            codec = Ydb::Topic::CODEC_RAW;
-        }
-
         THashMap<TString, TString> messageMetaAttr(proto.messagemeta_size());
         for (const auto& meta : proto.messagemeta()) {
             messageMetaAttr.try_emplace(meta.key(), meta.value());
@@ -155,8 +144,8 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
         }
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
-            .Codec = codec,
-            .Data = std::move(data),
+            .Codec = proto.has_codec() ? static_cast<Ydb::Topic::Codec>(proto.codec() + 1) : Ydb::Topic::CODEC_RAW,
+            .Data = std::move(*proto.MutableData()),
             .MessageMetaAttributes = std::move(messageMetaAttr),
             .SentTimestamp = TInstant::MilliSeconds(message.messagemeta().senttimestampmilliseconds()),
             .MessageGroupId = messageGroupId,

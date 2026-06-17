@@ -37,6 +37,7 @@ protected:
     const ui32                       NodeId;
     const TKikimrScopeId             ScopeId;
     const bool                       TinyMode;
+    const TBasicKikimrServicesMask   ServicesMask;
 
 public:
     IKikimrServicesInitializer(const TKikimrRunConfig& runConfig);

@@ -85,7 +85,7 @@ namespace NKikimr::NBlobDepot {
         auto request = std::make_unique<NWrappers::TEvExternalStorage::TEvGetObjectRequest>(
             Aws::S3::Model::GetObjectRequest()
                 .WithBucket(Agent.S3BackendSettings->GetSettings().GetBucket())
-                .WithKey(std::move(key))
+                .WithKey(key)
                 .WithRange(TStringBuilder() << "bytes=" << offset << '-' << offset + len - 1)
         );
         TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, actorId, request.release(), IEventHandle::FlagTrackDelivery));

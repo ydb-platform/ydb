@@ -7,6 +7,7 @@ namespace NKikimr::NPQ::NMLP {
 namespace {
 
 static constexpr ui64 CacheSubscribeCookie = 1;
+static constexpr ui64 MaxPendingMessagesSize = 100_MB;
 
 }
 
@@ -99,6 +100,11 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
         Queue.pop_front();
     }
 
+    if (Queue.empty()) {
+        return ReplySuccess();
+    }
+
+    Become(&TDLQMoverActor::StateWork);
     ProcessQueue();
 }
 
@@ -108,13 +114,11 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
 }
 
 void TDLQMoverActor::ProcessQueue() {
-    LOG_D("ProcessQueue");
-    Become(&TDLQMoverActor::StateRead);
-
-    if (Queue.empty()) {
-       return ReplySuccess();
+    if (PendingMessagesSize >= MaxPendingMessagesSize || Queue.empty()) {
+        return;
     }
 
+    LOG_D("ProcessQueue Size=" << Queue.size() << ", PendingMessagesSize=" << PendingMessagesSize);
     SendToPQTablet(MakeEvPQRead(Settings.ConsumerName, Settings.PartitionId, Queue.front().Offset, 1));
 }
 
@@ -128,6 +132,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
     AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
+    auto messageSize = result->GetData().size();
 
     LOG_D("Move message with offset " << result->GetOffset() << " seqNo " << Queue.front().SeqNo);
 
@@ -147,17 +152,17 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     Send(PartitionWriterActorId, std::move(writeRequest));
-    WaitWrite();
+
+    Pending.emplace_back(Queue.front(), messageSize);
+    Queue.pop_front();
+
+    PendingMessagesSize += messageSize;
+    ProcessQueue();
 }
 
 void TDLQMoverActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
     LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Source topic unavailable");
-}
-
-void TDLQMoverActor::WaitWrite() {
-    LOG_D("WaitWrite");
-    Become(&TDLQMoverActor::StateWrite);
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&) {
@@ -173,10 +178,27 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
-    Processed.emplace_back(Queue.front().Offset, Queue.front().SeqNo);
-    Queue.pop_front();
+    if (Pending.empty()) {
+        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: unexpected result");
+    }
 
-    ProcessQueue();
+    auto [message, messageSize] = Pending.front();
+    Processed.emplace_back(message.Offset, message.SeqNo);
+    Pending.pop_front();
+
+    LOG_D("Queue: " << Queue.size() << " Pending: " << Pending.size() << " Processed: " << Processed.size());
+    if (Queue.empty() && Pending.empty()) {
+        return ReplySuccess();
+    }
+
+    bool processingPaused = PendingMessagesSize >= MaxPendingMessagesSize;
+    AFL_ENSURE(PendingMessagesSize >= messageSize)
+        ("PendingMessagesSize", PendingMessagesSize)
+        ("messageSize", messageSize);
+    PendingMessagesSize -= messageSize;
+    if (processingPaused) {
+        ProcessQueue();
+    }
 }
 
 void TDLQMoverActor::ReplySuccess() {
@@ -220,28 +242,17 @@ STFUNC(TDLQMoverActor::StateInit) {
     }
 }
 
-STFUNC(TDLQMoverActor::StateRead) {
+STFUNC(TDLQMoverActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
-        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-        hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
-        sFunc(TEvents::TEvPoison, PassAway);
-        default:
-            LOG_E("Unexpected " << EventStr("StateRead", ev));
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateRead", ev));
-    }
-}
-
-STFUNC(TDLQMoverActor::StateWrite) {
-    switch (ev->GetTypeRewrite()) {
         hFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
         hFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWrite", ev));
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWrite", ev));
+            LOG_E("Unexpected " << EventStr("StateWork", ev));
+            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
     }
 }
 

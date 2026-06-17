@@ -120,7 +120,6 @@ struct TReaderSettings {
     std::optional<TDuration> WaitTime;
     std::optional<TDuration> ProcessingTimeout;
     ui32 MaxNumberOfMessage = 1;
-    bool UncompressMessages = false;
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };

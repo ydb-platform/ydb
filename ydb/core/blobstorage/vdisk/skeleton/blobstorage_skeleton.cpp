@@ -1610,6 +1610,11 @@ namespace NKikimr {
                 return;
             }
 
+            if (Config->EnableFreshSyncDataThrottling && !ProcessLocalSyncDataQueueWakeupScheduled) {
+                ProcessLocalSyncDataQueueWakeupScheduled = true;
+                ctx.Send(SelfId(), new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
+            }
+
 #ifdef UNPACK_LOCALSYNCDATA
             Y_VERIFY_S(ev->Get()->Extracted.IsReady(), VCtx->VDiskLogPrefix);
 #else
@@ -1648,7 +1653,12 @@ namespace NKikimr {
 
         void HandleProcessLocalSyncDataQueueWakeup(const TActorContext &ctx) {
             ProcessLocalSyncDataQueue(ctx);
-            ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
+
+            ProcessLocalSyncDataQueueWakeupScheduled = false;
+            if (Config->EnableFreshSyncDataThrottling) {
+                ProcessLocalSyncDataQueueWakeupScheduled = true;
+                ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
+            }
         }
 
         void ProcessLocalSyncData(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
@@ -2208,7 +2218,10 @@ namespace NKikimr {
                 StartScrubberActor(ctx, std::move(ev->Get()->ScrubEntrypoint), ev->Get()->ScrubEntrypointLsn);
             }
 
-            ctx.Send(ctx.SelfID, new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
+            if (Config->EnableFreshSyncDataThrottling) {
+                ProcessLocalSyncDataQueueWakeupScheduled = true;
+                ctx.Send(SelfId(), new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
+            }
 
             // create syncer actor
             if (Config->RunSyncer && !Config->BaseInfo.DonorMode) {
@@ -3298,6 +3311,7 @@ namespace NKikimr {
 
         std::queue<TEvLocalSyncData::TPtr> LocalSyncDataQueue;
         bool ProcessLocalSyncDataQueueScheduled = false;
+        bool ProcessLocalSyncDataQueueWakeupScheduled = false;
     };
 
     ////////////////////////////////////////////////////////////////////////////

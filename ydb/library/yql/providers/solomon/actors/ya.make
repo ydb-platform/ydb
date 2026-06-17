@@ -18,11 +18,8 @@ PEERDIR(
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/scheme
     ydb/library/yql/providers/solomon/solomon_accessor/client
-<<<<<<< HEAD
-=======
     ydb/library/yql/utils/actors
     ydb/library/yverify_stream
->>>>>>> b9480db9bef (YQ-5394 fixed internal error in solomon writer (#43570))
     ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/public/types
     yql/essentials/public/udf

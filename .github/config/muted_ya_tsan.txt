@@ -617,6 +617,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[99]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
 ydb/tests/functional/tpc/medium py3test.[test_clickbench.py */*] chunk
 ydb/tests/functional/tpc/medium py3test.[test_upload.py */*] chunk
+ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py */*] chunk
 ydb/tests/functional/tpc/medium test_clean.py.TestClean.test
 ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbench.test_clickbench[Query00]
 ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbench.test_clickbench[Query01]

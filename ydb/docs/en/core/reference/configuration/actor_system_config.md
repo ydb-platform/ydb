@@ -13,7 +13,7 @@ You might opt for manual configuration when a certain pool in your actor system 
 
 ## Automatic Configuring {#autoconfig}
 
-Regardless of the `node_type` parameter value, if one or more pools are starving (a shortage of compute resources), core redistribution follows the priority order below (highest to lowest):
+Regardless of the `node_type` parameter value, if one or more pools are starving (experiencing a shortage of compute resources), core redistribution follows the priority order below (highest to lowest):
 
 * `IC`
 * `System`

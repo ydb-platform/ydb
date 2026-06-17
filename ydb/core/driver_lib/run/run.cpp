@@ -2283,7 +2283,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
             THolder<TEvent> event = MakeHolder<TEvent>();
             event->Record.SetNodeId(nodeId);
 
-            NTabletPipe::SendData({}, nodeBrokerPipe, event.Release());
+            auto pipeEv = new IEventHandle(nodeBrokerPipe, TActorId(), event.Release());
+            pipeEv->Rewrite(TEvTabletPipe::EvSend, nodeBrokerPipe);
+            ActorSystem->Send(pipeEv);
         }
     }
 

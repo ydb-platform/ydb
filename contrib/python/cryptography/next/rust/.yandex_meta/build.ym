@@ -24,6 +24,7 @@ _rust
 _openssl
 {% endblock %}
 
+{% block rust_version %}nightly-2026-06-04{% endblock %}
 {% block current_version %}41.0.6{% endblock %}
 {% block current_url %}https://github.com/pyca/cryptography/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
 
@@ -48,11 +49,10 @@ cd src/rust
 {% for p in self.msan_platforms().strip().split('\n') %}
 export CC_{{p.replace('-', '_')}}=target-cc-msan
 {% endfor %}
-export RUSTFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -C target-feature=-crt-static"
-export RUSTC_BOOTSTRAP=1
+export RUSTFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -Ctarget-feature=-crt-static -Cunsafe-allow-abi-mismatch=sanitizer -Ccodegen-units=1"
 
 {% for arch in self.msan_platforms().strip().split('\n') %}
-cargo {{self.cargo_flags().strip()}} build {{self.cargo_build_flags().strip()}} --release --target {{arch}} {{self.binary_type().strip()}} --target-dir ${BUILD}-msan \
+LD_PRELOAD=${BIN}/getrandom.so cargo {{self.cargo_flags().strip()}} build {{self.cargo_build_flags().strip()}} --release --target {{arch}} {{self.binary_type().strip()}} --target-dir ${BUILD}-msan \
     {% if self.cargo_target() %}
 --package {{self.cargo_target().strip()}}
     {% endif %}

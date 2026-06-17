@@ -66,15 +66,10 @@ WHERE message LIKE '%timeout%';
 
 ## How to verify index effectiveness
 
-To check that the Bloom skip index actually reduces read volume, use `EXPLAIN ANALYZE` — it shows how much data was read and how many fragments were skipped:
+To check that the Bloom skip index actually reduces read volume, run the same selective query on a table with enough data and compare the statistics:
 
-```yql
-EXPLAIN ANALYZE SELECT id, message
-FROM events
-WHERE resource_id = "res-42";
-```
-
-You can also compare the `table.datashard.read.rows` metric (or similar in your monitoring system) before and after creating the index on a table with enough data. When using {{ ydb-short-name }} CLI, run the query with the `--stats full` flag to see detailed read statistics.
+* In {{ ydb-short-name }} CLI, add the `--stats full` flag to the `yql` or `table query execute` command — the output will show the number of rows and bytes read.
+* In your monitoring system, compare the `table.datashard.read.rows` metric before and after creating the index.
 
 Further reading:
 

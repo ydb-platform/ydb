@@ -121,7 +121,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue("1s")
         .Hidden()
         .StoreMappedResult(&Scenario.BatchFlushInterval, TDuration::Parse);
-    config.Opts->AddLongOption("batch-flush-size", "Max accumulated payload size before flushing one write batch. Not set means no size limit.")
+    config.Opts->AddLongOption("batch-flush-size", "Max accumulated payload size in bytes before flushing one write batch. Not set means no size limit.")
         .Optional()
         .Hidden()
         .StoreMappedResult(&Scenario.BatchFlushSizeBytes, &TCommandWorkloadTopicParams::StrToBytes);

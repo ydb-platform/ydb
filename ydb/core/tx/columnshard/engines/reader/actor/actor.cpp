@@ -1,7 +1,6 @@
 #include "actor.h"
 
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 
@@ -50,7 +49,6 @@ void TColumnShardScan::PassAway() {
     LWTRACK(ScanFinished, *ScanOrbit, PathId, TabletId, TxId, ScanId, duration, TotalRowsCount, TotalPartialSourcesCount, TotalBlobBytes,
         TotalRawBytes);
     Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
-    Send(ReadCoordinatorActorId, new TEvents::TEvPoisonPill);
     IActor::PassAway();
 }
 
@@ -96,11 +94,9 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(!ScanIterator);
     ResourceSubscribeActorId = ctx.Register(new NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
-    ReadCoordinatorActorId = ctx.Register(new NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
-    std::shared_ptr<TReadContext> context =
-        std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ColumnDataManager, ScanCountersPool, ReadMetadataRange, SelfId(),
-            ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId, CPULimits, ScanOrbit);
+    std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ColumnDataManager,
+        ScanCountersPool, ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ComputeShardingPolicy, ScanId, CPULimits, ScanOrbit);
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();

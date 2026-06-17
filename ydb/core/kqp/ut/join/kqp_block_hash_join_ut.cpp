@@ -383,7 +383,9 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 PRAGMA ydb.OptimizerHints=
                     '
                         Bytes(L # 10e9)
-                        Bytes(R # 10e12)
+                        Bytes(R # 10e20)
+                        Rows(L # 10e9)
+                        Rows(R # 10e20)
                     ';
             )";
             TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";

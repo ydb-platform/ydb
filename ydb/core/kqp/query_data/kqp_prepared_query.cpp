@@ -228,7 +228,13 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     tablesSet.insert(settings.GetTable().GetPath());
                     for (const auto& indexSettings : settings.GetIndexes()) {
-                        tablesSet.insert(indexSettings.GetTable().GetPath());
+                        if (!indexSettings.HasFulltextSettings()) {
+                            tablesSet.insert(indexSettings.GetTable().GetPath());
+                        } else {
+                            tablesSet.insert(indexSettings.GetDocsTable().GetPath());
+                            tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                            tablesSet.insert(indexSettings.GetStatsTable().GetPath());
+                        }
                     }
                 }
             }
@@ -238,7 +244,13 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     tablesSet.insert(settings.GetTable().GetPath());
                     for (const auto& indexSettings : settings.GetIndexes()) {
-                        tablesSet.insert(indexSettings.GetTable().GetPath());
+                        if (!indexSettings.HasFulltextSettings()) {
+                            tablesSet.insert(indexSettings.GetTable().GetPath());
+                        } else {
+                            tablesSet.insert(indexSettings.GetDocsTable().GetPath());
+                            tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                            tablesSet.insert(indexSettings.GetStatsTable().GetPath());
+                        }
                     }
                 }
             }
@@ -298,14 +310,26 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
 
                 if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                     auto& info = GetInfo(MakeTableId(settings.GetTable()));
-                    for (auto& column : settings.GetColumns()) {
+                    for (const auto& column : settings.GetColumns()) {
                         info->AddColumn(column.GetName());
                     }
 
                     for (const auto& indexSettings : settings.GetIndexes()) {
-                        auto& indexInfo = GetInfo(MakeTableId(indexSettings.GetTable()));
-                        for (auto& column : indexSettings.GetColumns()) {
-                            indexInfo->AddColumn(column.GetName());
+                        if (!indexSettings.HasFulltextSettings()) {
+                            auto& indexInfo = GetInfo(MakeTableId(indexSettings.GetTable()));
+                            for (const auto& column : indexSettings.GetColumns()) {
+                                indexInfo->AddColumn(column.GetName());
+                            }
+                        } else {
+                            auto fillColumns = [&](const auto& indexImplTable, const auto& indexImplColumns) {
+                                auto& indexInfo = GetInfo(MakeTableId(indexImplTable));
+                                for (const auto& column : indexImplColumns) {
+                                    indexInfo->AddColumn(column.GetName());
+                                }
+                            };
+                            fillColumns(indexSettings.GetDocsTable(), indexSettings.GetDocsColumns());
+                            fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                            fillColumns(indexSettings.GetStatsTable(), indexSettings.GetStatsColumns());
                         }
                     }
                 }
@@ -319,14 +343,26 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
 
                 AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
                 auto& info = GetInfo(MakeTableId(settings.GetTable()));
-                for (auto& column : settings.GetColumns()) {
+                for (const auto& column : settings.GetColumns()) {
                     info->AddColumn(column.GetName());
                 }
 
                 for (const auto& indexSettings : settings.GetIndexes()) {
-                    auto& indexInfo = GetInfo(MakeTableId(indexSettings.GetTable()));
-                    for (auto& column : indexSettings.GetColumns()) {
-                        indexInfo->AddColumn(column.GetName());
+                    if (!indexSettings.HasFulltextSettings()) {
+                        auto& indexInfo = GetInfo(MakeTableId(indexSettings.GetTable()));
+                        for (const auto& column : indexSettings.GetColumns()) {
+                            indexInfo->AddColumn(column.GetName());
+                        }
+                    } else {
+                        auto fillColumns = [&](const auto& indexImplTable, const auto& indexImplColumns) {
+                            auto& indexInfo = GetInfo(MakeTableId(indexImplTable));
+                            for (const auto& column : indexImplColumns) {
+                                indexInfo->AddColumn(column.GetName());
+                            }
+                        };
+                        fillColumns(indexSettings.GetDocsTable(), indexSettings.GetDocsColumns());
+                        fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                        fillColumns(indexSettings.GetStatsTable(), indexSettings.GetStatsColumns());
                     }
                 }
             }

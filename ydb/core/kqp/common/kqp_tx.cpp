@@ -89,7 +89,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                 AFL_ENSURE(intSink.GetSettings().UnpackTo(&sinkSettings));
 
 
-                AFL_ENSURE(tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
                 AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
                 if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                     hasInsert = true;

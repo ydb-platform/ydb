@@ -17,6 +17,7 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle_WithRestart
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
+ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobs
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsMultipleColumns
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithCompactingMiddleRows
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithSpecificKeys

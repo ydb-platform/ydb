@@ -507,8 +507,20 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             if (isChangeNotNullConstraint) {
                 auto notNullValue = col.GetNotNull();
+                // Set the NotNull flag to `true` without the Internal flag set is not possible
+                // through normal API channels. However, there is a known hack that allows
+                // sending an arbitrary ModifyScheme directly to SchemeShard:
+                //
+                //   ./ydbd --server ... db schema exec modify_scheme.txt
+                //
+                // Note that checking the Internal flag is NOT a protection against a
+                // deliberate action by a potential attacker. Rather, it is an extra
+                // guard to prevent accidental ModifyScheme sends that could corrupt
+                // the schema object state.
                 if (notNullValue && !isInternal) {
-                    errStr = Sprintf("You cannot set the notNull flag to true within the external ModifyScheme. Column '%s'.", colName.c_str());
+                    errStr = Sprintf("You cannot set the notNull flag to true within the external ModifyScheme without the Internal flag set. Column '%s'. "
+                                     "Note that you can change the flag value by additionally setting Internal = true. "
+                                     "However, this action is very dangerous — only do it if you know exactly what you are doing.", colName.c_str());
                     return nullptr;
                 }
 
@@ -516,8 +528,20 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             if (isChangeSetNotNullInProgress) {
+                // Changing the SetNotNullInProgress flag without the Internal flag set is not
+                // possible through normal API channels. However, there is a known hack that
+                // allows sending an arbitrary ModifyScheme directly to SchemeShard:
+                //
+                //   ./ydbd --server ... db schema exec modify_scheme.txt
+                //
+                // Note that checking the Internal flag is NOT a protection against a
+                // deliberate action by a potential attacker. Rather, it is an extra
+                // guard to prevent accidental ModifyScheme sends that could corrupt
+                // the schema object state.
                 if (!isInternal) {
-                    errStr = Sprintf("You cannot set the setNotNullInProgress flag within the external ModifyScheme. Column '%s'.", colName.c_str());
+                    errStr = Sprintf("You cannot set the setNotNullInProgress flag within the external ModifyScheme without the Internal flag set. Column '%s'. "
+                                     "Note that you can change the flag value by additionally setting Internal = true. "
+                                     "However, this action is very dangerous — only do it if you know exactly what you are doing.", colName.c_str());
                     return nullptr;
                 }
 

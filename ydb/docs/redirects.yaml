@@ -513,28 +513,8 @@ ru:
     to: /devops/configuration-management/configuration-v1/cluster-expansion.md
   - from: /concepts/topic.md
     to: /concepts/datamodel/topic.md
-  - from: /reference/ydb-sdk/recipes/debug.md
-    to: /reference/ydb-sdk/observability/index.md
-  - from: /reference/ydb-sdk/recipes/debug-logs.md
-    to: /reference/ydb-sdk/observability/logging/logging.md
-  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
-    to: /reference/ydb-sdk/observability/metrics/prometheus.md
-  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
-    to: /reference/ydb-sdk/observability/tracing/jaeger.md
-  - from: /recipes/ydb-sdk/debug.md
-    to: /reference/ydb-sdk/observability/index.md
-  - from: /recipes/ydb-sdk/debug-logs.md
-    to: /reference/ydb-sdk/observability/logging/logging.md
-  - from: /recipes/ydb-sdk/debug-logs-otel.md
-    to: /reference/ydb-sdk/observability/logging/opentelemetry.md
-  - from: /recipes/ydb-sdk/debug-prometheus.md
-    to: /reference/ydb-sdk/observability/metrics/prometheus.md
-  - from: /recipes/ydb-sdk/debug-otel-metrics.md
-    to: /reference/ydb-sdk/observability/metrics/opentelemetry.md
-  - from: /recipes/ydb-sdk/debug-jaeger.md
-    to: /reference/ydb-sdk/observability/tracing/jaeger.md
-  - from: /recipes/ydb-sdk/debug-otel-tracing.md
-    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
+  - from: /devops/backup-and-recovery/system-tablet-backup.md
+    to: /concepts/backup.md#system-tablet-backup
 
 en:
   - from: /reference/ydb-sdk/recipes/debug-jaeger.md

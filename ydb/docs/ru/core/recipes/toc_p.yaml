@@ -4,6 +4,11 @@ items:
   include:
     mode: link
     path: backup-collections/toc_p.yaml
+- name: Рецепты резервного копирования системных таблеток
+  href: system-tablet-backup/index.md
+  include:
+    mode: link
+    path: system-tablet-backup/toc_p.yaml
 - name: YDB SDK и фреймворки
   include:
     mode: link

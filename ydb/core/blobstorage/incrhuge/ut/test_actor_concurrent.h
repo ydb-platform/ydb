@@ -150,7 +150,8 @@ public:
             str << Sprintf("%016" PRIx64, item.first);
         }
         str << "]";
-        LOG_DEBUG(ctx, NActorsServices::TEST, "finished Init %s", str.Str().data());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Finished Init",
+            {"items", str.Str().data()});
 
         auto refIt = referenceItems.begin();
         auto it = msg->Items.begin();
@@ -206,11 +207,13 @@ public:
         const bool timeToDie = ActionsTaken >= NumActions;
         ui32 numRequests = timeToDie ? 50 : 8;
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "ActionsTaken# %" PRIu32, ActionsTaken);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Dump actionsTaken",
+            {"actionsTaken", ActionsTaken});
 
         while (GetNumRequestsInFlight() < numRequests) {
-            LOG_DEBUG(ctx, NActorsServices::TEST, "GetNumRequestsInFlight# %" PRIu32 " InFlightWritesSize# %zu",
-                    GetNumRequestsInFlight(), State.InFlightWrites.size());
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Dump getNumRequestsInFlight, inFlightWritesSize",
+                {"getNumRequestsInFlight", GetNumRequestsInFlight()},
+                {"inFlightWritesSize", State.InFlightWrites.size()});
 
             // do not allow more than 2 reads at once or when its time to die
             if (State.InFlightReads.size() >= 2 || timeToDie) {
@@ -291,8 +294,10 @@ public:
         // send request
         ctx.Send(KeeperId, new TEvIncrHugeWrite(Owner, lsn, meta, TString(data), std::make_unique<TPayload>(lsn, logoBlobId)));
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "sent Write LogoBlobId# %s Lsn# %" PRIu64 " NumReq# %" PRIu32,
-                logoBlobId.ToString().data(), lsn, GetNumRequestsInFlight());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Sent Write",
+            {"logoBlobId", logoBlobId},
+            {"lsn", lsn},
+            {"numReq", GetNumRequestsInFlight()});
 
         // register in-flight write
         TBlobInfo blobInfo{{}, lsn, logoBlobId};
@@ -304,8 +309,10 @@ public:
         TEvIncrHugeWriteResult *msg = ev->Get();
         TPayload *payload = static_cast<TPayload *>(msg->Payload.get());
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "finished Write Id# %016" PRIx64 " LogoBlobId# %s Lsn# %" PRIu64,
-                msg->Id, payload->LogoBlobId.ToString().data(), payload->Lsn);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Finished write",
+            {"id", msg->Id},
+            {"logoBlobId", payload->LogoBlobId},
+            {"lsn", payload->Lsn});
 
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK, "Status# %s", NKikimrProto::EReplyStatus_Name(msg->Status).data());
 
@@ -316,8 +323,10 @@ public:
         State.BytesWritten += it->second.LogoBlobId.BlobSize();
         TDuration delta = Now() - State.StartTime;
         double speed = State.BytesWritten * 1000 * 1000 / delta.GetValue() / 1048576.0;
-        LOG_INFO(ctx, NActorsServices::TEST, "BytesWritten# %" PRIu64 " MB ElapsedTime# %s Speed# %.2lf MB/s",
-                (State.BytesWritten + 512 * 1024) / 1048576, delta.ToString().data(), speed);
+        YDB_LOG_INFO_CTX_COMP(ctx, NActorsServices::TEST, "",
+            {"bytesWritten", (State.BytesWritten + 512 * 1024) / 1048576},
+            {"elapsedTime", delta},
+            {"speed", speed});
 
         // insert new entry into confirmed state
         Y_ABORT_UNLESS(!State.ConfirmedState.count(msg->Id));
@@ -344,7 +353,9 @@ public:
         // store request info
         State.InFlightReads.emplace(State.Lsn, it->second);
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "sent Read Id# %016" PRIx64 " Lsn# %" PRIu64, it->first, State.Lsn);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Sent Read",
+            {"id", it->first},
+            {"lsn", State.Lsn});
         ++State.Lsn;
 
         return true;
@@ -353,8 +364,9 @@ public:
     void Handle(TEvIncrHugeReadResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeReadResult *msg = ev->Get();
         ui64 lsn = ev->Cookie;
-        LOG_DEBUG(ctx, NActorsServices::TEST, "finished Read Status# %s Lsn# %" PRIu64,
-                NKikimrProto::EReplyStatus_Name(msg->Status).data(), lsn);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Finished Read",
+            {"status", NKikimrProto::EReplyStatus_Name(msg->Status).data()},
+            {"lsn", lsn});
 
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
@@ -377,8 +389,9 @@ public:
 
         // send request to keeper
         ctx.Send(KeeperId, new TEvIncrHugeDelete(Owner, State.Lsn++, {it->first}), 0, it->first);
-        LOG_DEBUG(ctx, NActorsServices::TEST, "sent Delete Id# %016" PRIx64 " NumReq# %" PRIu32, it->first,
-                GetNumRequestsInFlight());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Sent Delete",
+            {"id", it->first},
+            {"numReq", GetNumRequestsInFlight()});
 
         // move item from confirmed state into in-flight delete
         Y_ABORT_UNLESS(it != State.ConfirmedState.end());
@@ -393,8 +406,9 @@ public:
 
         TIncrHugeBlobId id = ev->Cookie;
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "finished Delete Status# %s Id# %016" PRIx64,
-                NKikimrProto::EReplyStatus_Name(msg->Status).data(), id);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Finished Delete",
+            {"status", NKikimrProto::EReplyStatus_Name(msg->Status).data()},
+            {"id", id});
 
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 

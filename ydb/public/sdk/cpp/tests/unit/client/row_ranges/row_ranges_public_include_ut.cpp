@@ -46,7 +46,8 @@ Y_UNIT_TEST_SUITE(TRowRangePublicIncludeTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(sum, 42);
 
-        for (auto [v] : range.Get<int32_t>({"v"})) {
+        TRowRange range2(NRowRangesTest::MakeSingleInt32ResultSet(42));
+        for (auto [v] : range2.Get<int32_t>({"v"})) {
             UNIT_ASSERT_VALUES_EQUAL(v, 42);
         }
     }

@@ -56,7 +56,11 @@ private:
     TResultSetParser& Parser_;
 };
 
+} // namespace NYdb::inline Dev
+
 #include "detail/rows_column_getter.h"
+
+namespace NYdb::inline Dev {
 
 //! Move-only, single-pass input iterator over rows.
 //! Valid while shared range state is alive. Not copyable and not multipass:

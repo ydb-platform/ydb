@@ -257,6 +257,42 @@ Y_UNIT_TEST_SUITE(TTableRangeErrorRetryTest) {
         UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
         UNIT_ASSERT_VALUES_EQUAL(sum, 5);
     }
+
+    Y_UNIT_TEST(RetryOperationAsyncWithoutSessionRetriesAfterRangeDrainFailure) {
+        TTableClientFixture fixture;
+        size_t attempts = 0;
+
+        auto status = fixture.Client->RetryOperation(
+            [&](NTable::TTableClient&) -> TAsyncStatus {
+                ++attempts;
+                if (attempts == 1) {
+                    SimulateScanDrainFailure();
+                }
+                return NThreading::MakeFuture(OkStatus());
+            },
+            FastRetrySettings()).GetValueSync();
+
+        UNIT_ASSERT(status.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
+    }
+
+    Y_UNIT_TEST(RetryOperationAsyncWithSessionRetriesAfterRangeDrainFailure) {
+        TTableClientFixture fixture;
+        size_t attempts = 0;
+
+        auto status = fixture.Client->RetryOperation(
+            [&](NTable::TSession) -> TAsyncStatus {
+                ++attempts;
+                if (attempts == 1) {
+                    SimulateScanDrainFailure();
+                }
+                return NThreading::MakeFuture(OkStatus());
+            },
+            FastRetrySettings()).GetValueSync();
+
+        UNIT_ASSERT(status.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TQueryRangeErrorRetryTest) {
@@ -302,5 +338,36 @@ Y_UNIT_TEST_SUITE(TQueryRangeErrorRetryTest) {
                 },
                 FastRetrySettings()),
             std::runtime_error);
+    }
+
+    Y_UNIT_TEST(RetryQueryAsyncRetriesAfterRangeDrainFailure) {
+        TQueryClientFixture fixture;
+        size_t attempts = 0;
+
+        auto status = fixture.Client->RetryQuery(
+            [&](NQuery::TSession) -> TAsyncStatus {
+                ++attempts;
+                if (attempts == 1) {
+                    SimulateScanDrainFailure();
+                }
+                return NThreading::MakeFuture(OkStatus());
+            },
+            FastRetrySettings()).GetValueSync();
+
+        UNIT_ASSERT(status.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
+    }
+
+    Y_UNIT_TEST(RetryQueryAsyncPropagatesYdbErrorException) {
+        TQueryClientFixture fixture;
+
+        UNIT_ASSERT_EXCEPTION(
+            fixture.Client->RetryQuery(
+                [&](NQuery::TSession) -> TAsyncStatus {
+                    throw TYdbErrorException(UnavailableStatus());
+                    return NThreading::MakeFuture(OkStatus());
+                },
+                FastRetrySettings()).GetValueSync(),
+            TYdbErrorException);
     }
 }

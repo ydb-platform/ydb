@@ -1,7 +1,8 @@
 #pragma once
 
 // Internal implementation for TRowRange::Get. Not a supported extension point.
-// Included from rows.h inside NYdb::Dev after TRowParser is complete.
+
+namespace NYdb::inline Dev {
 
 namespace NRowRangesDetail {
 
@@ -20,3 +21,5 @@ struct TRowColumnGetter<TValue> {
 };
 
 } // namespace NRowRangesDetail
+
+} // namespace NYdb::inline Dev

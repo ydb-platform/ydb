@@ -294,6 +294,11 @@ namespace NKikimr::NStorage {
 
         TControlWrapper EnableFreshSyncDataThrottling;
 
+        // retro-tracing controls
+        TControlWrapper EnableStorageRetroTraceGeneration;
+        TControlWrapper EnableStorageRetroTraceCollectionSlowRequests;
+        TControlWrapper RootRetroTraceBatchIntervalSec;
+
     public:
         struct TGroupRecord;
 

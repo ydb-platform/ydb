@@ -2,7 +2,7 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-This page describes the [basic query example](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples/basic) from the {{ ydb-short-name }} [Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk) (`ydb` crate on crates.io). It mirrors the Go sample `basic/native/query`: create `series`, `seasons`, and `episodes` tables, bulk-load sample TV-show data, and read series metadata via the Query Service.
+This page provides a detailed description of the code for a [test app](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples/basic) that uses the YDB [Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk).
 
 ## Downloading and starting {#download}
 
@@ -28,7 +28,7 @@ use ydb::{ClientBuilder, YdbResult};
 #[tokio::main]
 async fn main() -> YdbResult<()> {
     let connection_string = std::env::var("YDB_CONNECTION_STRING")
-        .unwrap_or_else(|_| "grpc://localhost:2136?database=local".to_string());
+        .unwrap_or_else(|_| "grpc://localhost:2136/local".to_string());
 
     let client = ClientBuilder::new_from_connection_string(connection_string)?.client()?;
     client.wait().await?;
@@ -39,7 +39,7 @@ async fn main() -> YdbResult<()> {
 }
 ```
 
-`ClientBuilder::new_from_connection_string` accepts a {{ ydb-short-name }} connection string (`grpc://host:port?database=/path`). `client.wait()` waits until the driver discovers cluster endpoints. `query_client()` is the entry point for the Query Service API.
+`ClientBuilder::new_from_connection_string` accepts a {{ ydb-short-name }} connection string (`grpc://host:port/database`). `client.wait()` waits until the driver discovers cluster endpoints. `query_client()` is the entry point for the Query Service API.
 
 By default, anonymous authentication is used for local Docker. For token auth, use [`ClientBuilder::with_credentials`](https://docs.rs/ydb/latest/ydb/struct.ClientBuilder.html) — see [authentication recipes](../../../recipes/ydb-sdk/auth.md).
 

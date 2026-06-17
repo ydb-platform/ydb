@@ -4,7 +4,7 @@
 
 ```bash
 ( export <auth_mode_var>="<auth_mode_value>" && \
-  export YDB_CONNECTION_STRING="<endpoint>?database=<database>" && \
+  export YDB_CONNECTION_STRING="<endpoint>/<database>" && \
   cd ydb-rs-sdk/ydb && cargo run --example basic )
 ```
 

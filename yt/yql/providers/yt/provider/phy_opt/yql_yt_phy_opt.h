@@ -182,4 +182,4 @@ private:
     const TYtState::TPtr State_;
 };
 
-}  // namespace NYql
+} // namespace NYql

@@ -1,8 +1,6 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_metrics.h>
-#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #undef IS_CTX_LOG_PRIORITY_ENABLED
@@ -77,8 +75,7 @@ Y_UNIT_TEST_SUITE(TComputeActorAsyncInputHelperTest) {
         TDummyAsyncInputHelper helper("MyPrefix", 13, NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED, TDuration::Max());
         helper.AsyncInput = &input;
         TDqComputeActorMetrics metrics{NMonitoring::TDynamicCounterPtr{}};
-        TDqComputeActorWatermarks watermarks("");
-        auto result = helper.PollAsyncInput(metrics, &watermarks, 20);
+        auto result = helper.PollAsyncInput(metrics, 20);
         UNIT_ASSERT(result && EResumeSource::CAPollAsync == *result);
     }
 }

@@ -3,12 +3,54 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <library/cpp/json/writer/json.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NChunks {
+
+namespace {
+
+class TChunkDetailsFetchLogic: public NCommon::IKernelFetchLogic {
+    using TBase = NCommon::IKernelFetchLogic;
+    std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>> SubFetchers;
+
+    virtual void DoStart(TReadActionsCollection& nextRead, NCommon::TFetchingResultContext& context) override {
+        for (auto& f : SubFetchers) {
+            f->Start(nextRead, context);
+        }
+    }
+
+    virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
+        for (auto& f : SubFetchers) {
+            f->OnDataReceived(nextRead, blobs);
+        }
+    }
+
+    virtual void DoOnDataCollected(NCommon::TFetchingResultContext& context) override {
+        for (auto& f : SubFetchers) {
+            f->OnDataCollected(context);
+        }
+    }
+
+public:
+    TChunkDetailsFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
+        : TBase(entityId, storagesManager)
+    {
+    }
+
+    void Add(std::shared_ptr<NCommon::IKernelFetchLogic> fetcher) {
+        SubFetchers.push_back(std::move(fetcher));
+    }
+
+    bool IsEmpty() const {
+        return SubFetchers.empty();
+    }
+};
+
+}   // namespace
 
 bool TSourceData::DoStartFetchingAccessor(
     const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
@@ -211,10 +253,10 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
             TString data;
-            if (i.HasBlobData()) {
+            if (auto* stringData = i.GetBlobDataOptional()) {
                 const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
                 if (indexMeta->GetClassName() == NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
-                    const auto json = indexMeta->SerializeDataToJson(i, Schema->GetIndexInfo());
+                    const auto json = indexMeta->SerializeDataToJson(*stringData, Schema->GetIndexInfo());
                     if (json.Has("data")) {
                         NJsonWriter::TBuf buf;
                         buf.BeginObject();
@@ -222,6 +264,23 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                         buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
                         buf.EndObject();
                         data = buf.Str();
+                    }
+                }
+            } else {
+                const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
+                if (indexMeta->GetClassName() == NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
+                    if (const auto* indexData = GetStageData().GetIndexes()->GetIndexDataOptional(i.GetEntityId())) {
+                        if (const auto* blobData = indexData->GetChunkDataOptional(i.GetChunkIdx(), std::nullopt)) {
+                            const auto json = indexMeta->SerializeDataToJson(*blobData, Schema->GetIndexInfo());
+                            if (json.Has("data")) {
+                                NJsonWriter::TBuf buf;
+                                buf.BeginObject();
+                                buf.WriteKey("min").WriteString(json["data"]["min"].GetStringRobust());
+                                buf.WriteKey("max").WriteString(json["data"]["max"].GetStringRobust());
+                                buf.EndObject();
+                                data = buf.Str();
+                            }
+                        }
                     }
                 }
             }
@@ -268,6 +327,9 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& /*context*/, const NArrow::NSSA::IDataSource::TDataAddress& addr) {
     if (addr.GetColumnId() == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
+        auto composite = std::make_shared<TChunkDetailsFetchLogic>(
+            NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId, GetContext()->GetCommonContext()->GetStoragesManager());
+
         THashSet<ui32> entityIds;
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
             if (!entityIds.emplace(i.GetEntityId()).second) {
@@ -275,10 +337,34 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
             }
             if (Schema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
                 NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-                return std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,
+                composite->Add(std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,
                     GetContext()->GetCommonContext()->GetStoragesManager(), GetPortionAccessor().GetPortionInfo().GetRecordsCount(),
-                    std::vector<TString>());
+                    std::vector<TString>()));
+                break;
             }
+        }
+
+        THashSet<ui32> indexIds;
+        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
+            const auto* blobRangeLink = i.GetBlobRangeOptional();
+            if (!blobRangeLink) {
+                continue;
+            }
+            if (!indexIds.emplace(i.GetEntityId()).second) {
+                continue;
+            }
+            const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
+            if (indexMeta->GetClassName() != NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
+                continue;
+            }
+            THashSet<NIndexes::NRequest::TOriginalDataAddress> dummyAddr;
+            dummyAddr.emplace(NIndexes::NRequest::TOriginalDataAddress(i.GetEntityId(), ""));
+            composite->Add(std::make_shared<NIndexes::TIndexFetcherLogic>(
+                dummyAddr, indexMeta.GetObjectPtr(), GetContext()->GetCommonContext()->GetStoragesManager()));
+        }
+
+        if (!composite->IsEmpty()) {
+            return composite;
         }
     }
     return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
@@ -287,12 +373,10 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
 void TSourceData::DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
         auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            if (auto fetcher = MutableStageData().ExtractFetcherOptional(i.GetEntityId())) {
-                AFL_VERIFY(OriginalData);
-                NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
-                fetcher->OnDataCollected(fetchContext);
-            }
+        if (auto fetcher = MutableStageData().ExtractFetcherOptional(NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId)) {
+            AFL_VERIFY(OriginalData);
+            NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+            fetcher->OnDataCollected(fetchContext);
         }
     }
     TBase::DoAssembleAccessor(context, columnId, subColumnName);

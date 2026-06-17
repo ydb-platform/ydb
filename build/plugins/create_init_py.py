@@ -1,7 +1,10 @@
 import os
 
+from ymake import macro, Unit
 
-def oncreate_init_py_structure(unit, *args):
+
+@macro
+def CREATE_INIT_PY_STRUCTURE(unit: Unit, *args: tuple[str, ...]):
     if unit.get('DISTBUILD') or unit.get('AUTOCHECK'):
         return
     target_dir = unit.get('PY_PROTOS_FOR_DIR')

@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     << csController->GetIndexesSkippingOnSelect().Val());
         }
     }
-    TString scriptChunkDetailsMinMax = R"(
+    TString scriptChunkDetailsMinMaxWithLocalDBStorage = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -203,11 +203,43 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
     )";
-    Y_UNIT_TEST(ChunkDetailsMinMax, ELocalIndexAsSchemeObject) {
+
+    Y_UNIT_TEST(ChunkDetailsMinMaxWithLocalDBStorage, ELocalIndexAsSchemeObject) {
         const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(settings);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithLocalDBStorage)).Execute(settings);
+    }   
+    
+    TString scriptChunkDetailsMinMaxWithBSStorage = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"storage_id": "__DEFAULT", "column_name" : "field"}`);
+        ------
+        ONE_ACTUALIZATION
+        ------
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[%true]]
+    )";
+    
+    Y_UNIT_TEST(ChunkDetailsMinMaxWithBSStorage, ELocalIndexAsSchemeObject) {
+        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
 

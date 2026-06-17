@@ -196,7 +196,8 @@ def is_py3(unit):
     return unit.get("PYTHON2") != "yes"
 
 
-def on_py_program(unit, *args):
+@ymake.macro
+def _PY_PROGRAM(unit: ymake.Unit, *args: tuple[str, ...]):
     py_program(unit, is_py3(unit))
 
 
@@ -225,7 +226,8 @@ def py_program(unit, py3):
         unit.onadd_check_py_imports()
 
 
-def onpy_srcs(unit, *args):
+@ymake.macro
+def PY_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
     """
     @usage PY_SRCS({| CYTHONIZE_PY} {| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
 
@@ -545,8 +547,8 @@ def onpy_srcs(unit, *args):
             prefix = path[: path.rfind('/') + 1] + mod.rsplit('.', 1)[-1]
             swg_py = '{}/{}/{}.py'.format('${ARCADIA_BUILD_ROOT}', upath, prefix)
             on_swig_python([path, prefix])
-            onpy_register(unit, mod + '_swg')
-            onpy_srcs(unit, swg_py + '=' + mod)
+            PY_REGISTER(unit, mod + '_swg')
+            PY_SRCS(unit, swg_py + '=' + mod)
 
     if pys:
         pys_seen = set()
@@ -685,7 +687,8 @@ def _check_test_srcs(*args):
         )
 
 
-def ontest_srcs(unit, *args):
+@ymake.macro
+def TEST_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
     _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
         namespace = "__tests__"
@@ -695,7 +698,8 @@ def ontest_srcs(unit, *args):
         unit.onpy_srcs(["NAMESPACE", namespace] + list(args))
 
 
-def onpy_doctests(unit, *args):
+@ymake.macro
+def PY_DOCTESTS(unit: ymake.Unit, *args: tuple[str, ...]):
     """
     @usage PY_DOCTESTS(Packages...)
 
@@ -713,7 +717,8 @@ def py_register(unit, func, py3):
         unit.on_py_register([func])
 
 
-def onpy_register(unit, *args):
+@ymake.macro
+def PY_REGISTER(unit: ymake.Unit, *args: tuple[str, ...]):
     """
     @usage: PY_REGISTER([package.]module_name)
 
@@ -759,7 +764,8 @@ def py_main(unit, arg):
     unit.onresource(['DONT_COMPRESS', '-', 'PY_MAIN={}'.format(arg)])
 
 
-def onpy_main(unit, arg):
+@ymake.macro
+def PY_MAIN(unit: ymake.Unit, arg: str):
     """
     @usage: PY_MAIN(package.module[:func])
 
@@ -781,7 +787,8 @@ def onpy_main(unit, arg):
     py_main(unit, arg)
 
 
-def onpy_constructor(unit, arg):
+@ymake.macro
+def PY_CONSTRUCTOR(unit: ymake.Unit, arg: str):
     """
     @usage: PY_CONSTRUCTOR(package.module[:func])
 
@@ -796,7 +803,8 @@ def onpy_constructor(unit, arg):
     unit.onresource(['DONT_COMPRESS', '-', 'py/constructors/{}'.format(arg)])
 
 
-def onpy_enums_serialization(unit, *args):
+@ymake.macro
+def PY_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: tuple[str, ...]):
     ns = ''
     args = iter(args)
     for arg in args:
@@ -808,12 +816,13 @@ def onpy_enums_serialization(unit, *args):
             unit.on_py_enum_serialization_to_py(arg)
             filename = arg.rsplit('.', 1)[0] + '.py'
             if len(ns) != 0:
-                onpy_srcs(unit, 'NAMESPACE', ns, filename)
+                PY_SRCS(unit, 'NAMESPACE', ns, filename)
             else:
-                onpy_srcs(unit, filename)
+                PY_SRCS(unit, filename)
 
 
-def oncpp_enums_serialization(unit, *args):
+@ymake.macro
+def CPP_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: tuple[str, ...]):
     args = iter(args)
     for arg in args:
         # Namespace directives.

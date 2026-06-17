@@ -4174,7 +4174,7 @@ bool EnsureDynamicLinearType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsurePersistable(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx)) {
+    if (HasAnyError(node.GetTypeAnn(), ctx)) {
         return false;
     }
 
@@ -4195,7 +4195,7 @@ bool EnsurePersistable(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsurePersistableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx)) {
+    if (HasAnyError(&type, ctx)) {
         return false;
     }
 
@@ -6095,6 +6095,16 @@ bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprC
     }
 
     return true;
+}
+
+bool HasAnyError(const TTypeAnnotationNode* type, TExprContext& ctx) {
+    if (type && type->HasErrors()) {
+        TErrorTypeVisitor errorVisitor(ctx);
+        type->Accept(errorVisitor);
+        return true;
+    }
+
+    return false;
 }
 
 bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx) {

@@ -283,7 +283,7 @@ def libffi_post_install(self):
                             ),
                             # fix only configure-stage for OS_NONE, see YMAKE-218, DEVTOOLSSUPPORT-46190
                             (
-                                "OS_NONE OR OS_FREERTOS",
+                                "OS_NONE OR OS_FREERTOS OR OS_ZEPHYR",
                                 Linkable(
                                     ADDINCL=[
                                         configs_dir + "/x86_64-unknown-linux-gnu",

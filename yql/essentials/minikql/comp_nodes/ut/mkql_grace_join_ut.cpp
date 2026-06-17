@@ -2,6 +2,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
@@ -855,27 +856,15 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(4);
-        const auto key4 = pb.NewDataLiteral<ui32>(4);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(4), TStringBuf("C")},
+                                                                    {ui32(4), TStringBuf("X")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3}),
-                                                  pb.NewTuple({key4, payload4})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceSelfJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -918,32 +907,15 @@ Y_UNIT_TEST_LLVM_SPILLING(TestDiffKeys) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(4);
-        const auto key4 = pb.NewDataLiteral<ui32>(4);
-        const auto key11 = pb.NewDataLiteral<ui32>(1);
-        const auto key21 = pb.NewDataLiteral<ui32>(1);
-        const auto key31 = pb.NewDataLiteral<ui32>(2);
-        const auto key41 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, ui32, TStringBuf>>{
+                                                                    {ui32(1), ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), ui32(1), TStringBuf("B")},
+                                                                    {ui32(4), ui32(2), TStringBuf("C")},
+                                                                    {ui32(4), ui32(3), TStringBuf("X")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, key11, payload1}),
-                                                  pb.NewTuple({key2, key21, payload2}),
-                                                  pb.NewTuple({key3, key31, payload3}),
-                                                  pb.NewTuple({key4, key41, payload4})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceSelfJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
@@ -987,30 +959,19 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(4);
-        const auto key4 = pb.NewDataLiteral<ui32>(4);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(4), TStringBuf("C")},
+                                                                });
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(4), TStringBuf("Y")},
+                                                                    {ui32(4), TStringBuf("Z")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1051,34 +1012,19 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerDoubleCondition1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(4);
-        const auto key4 = pb.NewDataLiteral<ui32>(4);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(4), TStringBuf("C")},
+                                                                });
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, ui32, TStringBuf>>{
+                                                                    {ui32(2), ui32(2), TStringBuf("X")},
+                                                                    {ui32(4), ui32(2), TStringBuf("Y")},
+                                                                    {ui32(4), ui32(1), TStringBuf("Z")},
+                                                                });
 
-        const auto tupleType1 = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                 pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto tupleType2 = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                 pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                 pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto list1 = pb.NewList(tupleType1, {pb.NewTuple({key1, payload1}),
-                                                   pb.NewTuple({key2, payload2}),
-                                                   pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType2, {pb.NewTuple({key2, key2, payload4}),
-                                                   pb.NewTuple({key3, key2, payload5}),
-                                                   pb.NewTuple({key4, key1, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1117,38 +1063,19 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerManyKeyStrings) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A1");
-        const auto key2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A2");
-        const auto key3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A3");
-        const auto key4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B1");
-        const auto key5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B2");
-        const auto key6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B3");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf, TStringBuf>>{
+                                                                    {TStringBuf("A1"), TStringBuf("B1"), TStringBuf("A")},
+                                                                    {TStringBuf("A2"), TStringBuf("B2"), TStringBuf("B")},
+                                                                    {TStringBuf("A3"), TStringBuf("B3"), TStringBuf("C")},
+                                                                });
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf, TStringBuf>>{
+                                                                    {TStringBuf("B1"), TStringBuf("A1"), TStringBuf("X")},
+                                                                    {TStringBuf("B2"), TStringBuf("A2"), TStringBuf("Y")},
+                                                                    {TStringBuf("B3"), TStringBuf("B3"), TStringBuf("Z")},
+                                                                });
 
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
-
-        const auto tupleType1 = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                 pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                 pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto tupleType2 = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                 pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                 pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto list1 = pb.NewList(tupleType1, {pb.NewTuple({key1, key4, payload1}),
-                                                   pb.NewTuple({key2, key5, payload2}),
-                                                   pb.NewTuple({key3, key6, payload3})});
-
-        const auto list2 = pb.NewList(tupleType2, {pb.NewTuple({key4, key1, payload4}),
-                                                   pb.NewTuple({key5, key2, payload5}),
-                                                   pb.NewTuple({key6, key6, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
@@ -1263,30 +1190,19 @@ Y_UNIT_TEST_LLVM_SPILLING(TestInnerStringKey1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("1");
-        const auto key2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("2");
-        const auto key3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("4");
-        const auto key4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("4");
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf>>{
+                                                                    {TStringBuf("1"), TStringBuf("A")},
+                                                                    {TStringBuf("2"), TStringBuf("B")},
+                                                                    {TStringBuf("4"), TStringBuf("C")},
+                                                                });
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf>>{
+                                                                    {TStringBuf("2"), TStringBuf("X")},
+                                                                    {TStringBuf("4"), TStringBuf("Y")},
+                                                                    {TStringBuf("4"), TStringBuf("Z")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1327,30 +1243,19 @@ Y_UNIT_TEST_LLVM_SPILLING(TMiniKQLGraceJoinTestInnerMulti1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1391,30 +1296,19 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeft1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(3);
-        const auto key4 = pb.NewDataLiteral<ui32>(4);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(3), TStringBuf("C")},
+                                                                });
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(3), TStringBuf("Y")},
+                                                                    {ui32(4), TStringBuf("Z")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
-
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1457,30 +1351,20 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftMulti1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1524,30 +1408,20 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemi1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1586,34 +1460,22 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnly1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto key5 = pb.NewDataLiteral<ui32>(4);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("D");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                    {ui32(3), TStringBuf("D")},
+                                                                    {ui32(4), TStringBuf("D")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3}),
-                                                  pb.NewTuple({key4, payload4}),
-                                                  pb.NewTuple({key5, payload4})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload5}),
-                                                  pb.NewTuple({key3, payload6}),
-                                                  pb.NewTuple({key4, payload7})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1652,33 +1514,22 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftSemiWithNullKey1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key0 = pb.NewEmptyOptional(pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
-        const auto key1 = pb.NewOptional(pb.NewDataLiteral<ui32>(1));
-        const auto key2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-        const auto key3 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-        const auto key4 = pb.NewOptional(pb.NewDataLiteral<ui32>(3));
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
+                                                                    {TMaybe<ui32>{}, TStringBuf("X")},
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id, true),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
+                                                                    {TMaybe<ui32>{}, TStringBuf("C")},
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key0, payload4}),
-                                                  pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key0, payload3}),
-                                                  pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1717,33 +1568,22 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnlyWithNullKey1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key0 = pb.NewEmptyOptional(pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
-        const auto key1 = pb.NewOptional(pb.NewDataLiteral<ui32>(1));
-        const auto key2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-        const auto key3 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-        const auto key4 = pb.NewOptional(pb.NewDataLiteral<ui32>(3));
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
+                                                                    {TMaybe<ui32>{}, TStringBuf("X")},
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id, true),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
+                                                                    {TMaybe<ui32>{}, TStringBuf("C")},
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key0, payload4}),
-                                                  pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key0, payload3}),
-                                                  pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1766,13 +1606,13 @@ Y_UNIT_TEST_LLVM_SPILLING(TestLeftOnlyWithNullKey1) {
         while (iterator.Next(tuple)) {
             auto t0 = tuple.GetElement(0);
             auto t1 = tuple.GetElement(1);
-            ++u[std::make_pair(TString(t0.AsStringRef()), t1 ? t1.Get<ui32>() : std::numeric_limits<ui64>::max())];
+            ++u[std::make_pair(TString(t0.AsStringRef()), t1 ? t1.Get<ui32>() : Max<ui64>())];
             // replace NULL with <ui64>::max()
         }
         UNIT_ASSERT(!iterator.Next(tuple));
 
         UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), 1)], 1);
-        UNIT_ASSERT_EQUAL(u[std::make_pair(TString("X"), std::numeric_limits<ui64>::max())], 1);
+        UNIT_ASSERT_EQUAL(u[std::make_pair(TString("X"), Max<ui64>())], 1);
         UNIT_ASSERT_EQUAL(u.size(), 2);
     }
 }
@@ -1782,30 +1622,20 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRight1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(3);
-        const auto key4 = pb.NewDataLiteral<ui32>(4);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(3), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(3), TStringBuf("Y")},
+                                                                    {ui32(4), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1846,30 +1676,20 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnly1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1906,30 +1726,20 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightSemi1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -1967,30 +1777,20 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightMulti1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -2033,33 +1833,22 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightSemiWithNullKey1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key0 = pb.NewEmptyOptional(pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
-        const auto key1 = pb.NewOptional(pb.NewDataLiteral<ui32>(1));
-        const auto key2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-        const auto key3 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-        const auto key4 = pb.NewOptional(pb.NewDataLiteral<ui32>(3));
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
+                                                                    {TMaybe<ui32>{}, TStringBuf("X")},
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id, true),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
+                                                                    {TMaybe<ui32>{}, TStringBuf("C")},
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key0, payload4}),
-                                                  pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key0, payload3}),
-                                                  pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -2097,33 +1886,22 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnlyWithNullKey1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key0 = pb.NewEmptyOptional(pb.NewDataType(NUdf::TDataType<ui32>::Id, true));
-        const auto key1 = pb.NewOptional(pb.NewDataLiteral<ui32>(1));
-        const auto key2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-        const auto key3 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-        const auto key4 = pb.NewOptional(pb.NewDataLiteral<ui32>(3));
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
+                                                                    {TMaybe<ui32>{}, TStringBuf("X")},
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id, true),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<ui32>, TStringBuf>>{
+                                                                    {TMaybe<ui32>{}, TStringBuf("C")},
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key0, payload4}),
-                                                  pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key0, payload3}),
-                                                  pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<ui32>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<ui32>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -2146,13 +1924,13 @@ Y_UNIT_TEST_LLVM_SPILLING(TestRightOnlyWithNullKey1) {
         while (iterator.Next(tuple)) {
             auto t0 = tuple.GetElement(0);
             auto t1 = tuple.GetElement(1);
-            ++u[std::make_pair(TString(t0.AsStringRef()), t1 ? t1.Get<ui32>() : std::numeric_limits<ui64>::max())];
+            ++u[std::make_pair(TString(t0.AsStringRef()), t1 ? t1.Get<ui32>() : Max<ui64>())];
             // replace NULL with <ui64>::max()
         }
         UNIT_ASSERT(!iterator.Next(tuple));
 
         UNIT_ASSERT_EQUAL(u[std::make_pair(TString("Z"), 3)], 1);
-        UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), std::numeric_limits<ui64>::max())], 1);
+        UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), Max<ui64>())], 1);
         UNIT_ASSERT_EQUAL(u.size(), 2);
     }
 }
@@ -2162,30 +1940,20 @@ Y_UNIT_TEST_LLVM_SPILLING(TestFull1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -2229,30 +1997,20 @@ Y_UNIT_TEST_LLVM_SPILLING(TestExclusion1) {
         TSetup<LLVM, SPILLING> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const auto key1 = pb.NewDataLiteral<ui32>(1);
-        const auto key2 = pb.NewDataLiteral<ui32>(2);
-        const auto key3 = pb.NewDataLiteral<ui32>(2);
-        const auto key4 = pb.NewDataLiteral<ui32>(3);
-        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-        const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-        const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-        const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-        const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-        const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
+        const auto list1 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(1), TStringBuf("A")},
+                                                                    {ui32(2), TStringBuf("B")},
+                                                                    {ui32(2), TStringBuf("C")},
+                                                                });
 
-        const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                pb.NewDataType(NUdf::TDataType<char*>::Id)});
+        const auto list2 = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui32, TStringBuf>>{
+                                                                    {ui32(2), TStringBuf("X")},
+                                                                    {ui32(2), TStringBuf("Y")},
+                                                                    {ui32(3), TStringBuf("Z")},
+                                                                });
 
-        const auto list1 = pb.NewList(tupleType, {pb.NewTuple({key1, payload1}),
-                                                  pb.NewTuple({key2, payload2}),
-                                                  pb.NewTuple({key3, payload3})});
-
-        const auto list2 = pb.NewList(tupleType, {pb.NewTuple({key2, payload4}),
-                                                  pb.NewTuple({key3, payload5}),
-                                                  pb.NewTuple({key4, payload6})});
-
-        const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                                pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                                NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
         const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
                                                            pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
@@ -2373,8 +2131,8 @@ TRuntimeNode MakeStream(TSetup<false>& setup, bool isRight) {
 
     TCallableBuilder callableBuilder(*setup.Env, isRight ? RightStreamName : LeftStreamName,
                                      pb.NewStreamType(
-                                         pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                          pb.NewDataType(NUdf::TDataType<char*>::Id)})));
+                                         pb.NewTupleType({NTest::ConvertToMinikqlType<ui32>(pb),
+                                                          NTest::ConvertToMinikqlType<TStringBuf>(pb)})));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -2411,8 +2169,8 @@ void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRig
     const auto leftStream = MakeStream(setup, false);
     const auto rightStream = MakeStream(setup, true);
 
-    const auto resultType = pb.NewFlowType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<char*>::Id),
-                                                            pb.NewDataType(NUdf::TDataType<char*>::Id)}));
+    const auto resultType = pb.NewFlowType(pb.NewMultiType({NTest::ConvertToMinikqlType<TStringBuf>(pb),
+                                                            NTest::ConvertToMinikqlType<TStringBuf>(pb)}));
 
     const auto joinFlow = pb.GraceJoin(
         pb.ExpandMap(pb.ToFlow(leftStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {

@@ -1030,4 +1030,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushPruneKeysIntoYtOper
         State_);
 }
 
-}  // namespace NYql
+} // namespace NYql

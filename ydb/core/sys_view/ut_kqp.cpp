@@ -1201,6 +1201,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     NodeId,
                     PDiskId,
                     Replicated,
+                    PhantomOnly,
                     State,
                     Status,
                     VDisk,
@@ -1220,7 +1221,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 15);
+        TYsonFieldChecker check(ysonString, 16);
 
         check.Uint64(0u, true); // AllocatedSize
         check.Uint64(0u, true); // AvailableSize
@@ -1233,6 +1234,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
         check.Null(); // Replicated
+        check.Bool(false); // PhantomOnly
         check.Null(); // State
         check.Null(); // Status
         check.Uint64(0u); // VDisk

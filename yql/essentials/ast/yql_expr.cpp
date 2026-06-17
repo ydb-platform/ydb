@@ -951,7 +951,10 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx);
 
 TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
     if (node.IsAtom()) {
-        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), node.GetFlags()));
+        ui32 flags = node.GetFlags();
+        flags &= ~TAstNodeFlags::UnstableFormat;
+
+        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), flags));
     } else {
         TExprNode::TListType children;
         children.reserve(node.GetChildrenCount());

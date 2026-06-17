@@ -1389,6 +1389,12 @@ public:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+
+        if (!LinkedPipeCache) {
+            CA_LOG_W("Ignoring TEvDeliveryProblem from tablet " << ev->Get()->TabletId << " after pipe unlink");
+            return;
+        }
+
         if (InconsistentTx) {
             RetryShard(ev->Get()->TabletId, std::nullopt);
             return;

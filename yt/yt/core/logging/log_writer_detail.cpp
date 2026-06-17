@@ -77,7 +77,7 @@ i64 TRateLimitCounter::GetAndResetLastSkippedEventsCount()
 
 TRateLimitingLogWriterBase::TRateLimitingLogWriterBase(
     std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-    TString name,
+    std::string name,
     TLogWriterConfigPtr config)
     : SystemEventProvider_(std::move(systemEventProvider))
     , Name_(std::move(name))
@@ -129,7 +129,7 @@ void TRateLimitingLogWriterBase::SetRateLimit(std::optional<i64> limit)
     RateLimit_.SetRateLimit(limit);
 }
 
-void TRateLimitingLogWriterBase::SetCategoryRateLimits(const THashMap<TString, i64>& categoryRateLimits)
+void TRateLimitingLogWriterBase::SetCategoryRateLimits(const THashMap<std::string, i64>& categoryRateLimits)
 {
     CategoryToRateLimit_.clear();
     for (const auto& it : categoryRateLimits) {
@@ -149,7 +149,7 @@ TRateLimitCounter* TRateLimitingLogWriterBase::GetCategoryRateLimitCounter(TStri
     auto it = CategoryToRateLimit_.find(category);
     if (it == CategoryToRateLimit_.end()) {
         auto categoryProfiler = Profiler_
-            .WithTag("category", TString{category}, -1);
+            .WithTag("category", std::string{category}, -1);
 
         // TODO(prime@): optimize sensor count
         it = CategoryToRateLimit_.insert({category, TRateLimitCounter(
@@ -165,7 +165,7 @@ TRateLimitCounter* TRateLimitingLogWriterBase::GetCategoryRateLimitCounter(TStri
 TStreamLogWriterBase::TStreamLogWriterBase(
     std::unique_ptr<ILogFormatter> formatter,
     std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-    TString name,
+    std::string name,
     TLogWriterConfigPtr config)
     : TRateLimitingLogWriterBase(
         std::move(systemEventProvider),

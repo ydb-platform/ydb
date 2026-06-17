@@ -762,6 +762,7 @@ TString TRowDispatcher::GetInternalState() {
     };
     str << "SelfId: " << SelfId().ToString() << "\n";
     str << "Consumers count: " << Consumers.size() << "\n";
+    str << "ConsumersByEventQueueId map size: " << ConsumersByEventQueueId.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
     str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
     str << "CpuMicrosec: " << toHuman(LastCpuTime) << "\n";

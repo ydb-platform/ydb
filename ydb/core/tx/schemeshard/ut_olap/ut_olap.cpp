@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -7,7 +8,6 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
-#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -132,6 +132,8 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
 
     return stats;
 }
+
+
 }}
 
 Y_UNIT_TEST_SUITE(TOlap) {
@@ -1043,15 +1045,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
         runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("tiling");
 
-        {
-            auto builder = CreateImmutableSnapshotRegistryBuilder();
-            auto holder = CreateImmutableSnapshotRegistryHolder();
-            holder->Set(std::move(*builder).Build());
-            appData.SnapshotRegistryHolder = holder;
-            appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
-        }
+        // No LongTxService keeps a live registry here, so install a stand-in whose OldestCollectionTime
+        // tracks the clock; otherwise the cleanup floor stays at 0 and deleted data is never collected.
+        NKikimr::NTxUT::InstallTimingBasedSnapshotRegistry(runtime);
 
         // apply config via reboot
         TActorId sender = runtime.AllocateEdgeActor();
@@ -2403,5 +2399,249 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Move to existing name without overwrite -> error
         TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key_renamed", "bloom_data", false,
             {NKikimrScheme::StatusSchemeError});
+    }
+
+    // Case 1: dropping the read-only copy (non-owner) leaves the source's
+    // shard alive and only removes the copy's PathId from SharedShards.
+    Y_UNIT_TEST(DropCopySharedShardCleanup) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        const auto srcTabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/ColumnTable");
+        UNIT_ASSERT_VALUES_UNEQUAL(srcTabletIds.size(), 0u);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto dstTabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/Copy");
+        UNIT_ASSERT_VALUES_EQUAL(dstTabletIds, srcTabletIds);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), srcTabletIds.size());
+
+        const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, srcTabletIds[0]);
+        UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+        const ui64 ownerBefore = GetShardOwnerLocalPathId(runtime, localShardIdx);
+
+        const ui32 shardsBefore = CountShardsTableRows(runtime);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathExist);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountShardsTableRows(runtime), shardsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+    }
+
+    // Case 2: dropping the standalone owner with no sharers deletes the shard
+    // and leaves the SharedShards table empty.
+    Y_UNIT_TEST(DropOwnerNoSharersSharedShardsEmpty) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        // Drop the owner directly.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+
+        // SharedShards table must remain empty: nothing to clean up.
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+    }
+
+    // Case 3: dropping the owner while a copy (sharer) still exists must
+    // transfer ownership to the next PathId in the shared set and remove the
+    // (new owner, shardIdx) entry from SharedShards.
+    Y_UNIT_TEST(DropOwnerWithSharersTransfersOwnership) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto srcTabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/ColumnTable");
+        const auto dstTabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/Copy");
+        UNIT_ASSERT_VALUES_UNEQUAL(srcTabletIds.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(srcTabletIds, dstTabletIds);
+
+        const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, srcTabletIds[0]);
+        UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+
+        const ui64 ownerBefore = GetShardOwnerLocalPathId(runtime, localShardIdx);
+
+        // Resolve the copy's local path id via DescribePath.
+        ui64 copyLocalPathId = 0;
+        {
+            auto copyDesc = DescribePath(runtime, "/MyRoot/MyDir/Copy");
+            copyLocalPathId = copyDesc.GetPathDescription().GetSelf().GetPathId();
+        }
+        UNIT_ASSERT_VALUES_UNEQUAL(copyLocalPathId, 0u);
+        UNIT_ASSERT_VALUES_UNEQUAL(copyLocalPathId, ownerBefore);
+
+        // Sanity: SharedShards has one entry per shard before drop.
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), srcTabletIds.size());
+
+        const ui32 shardsBefore = CountShardsTableRows(runtime);
+
+        // Drop the OWNER while the copy still exists.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::PathExist);
+
+        // Tablet was NOT deleted: shard is still in the Shards table.
+        UNIT_ASSERT_VALUES_EQUAL(CountShardsTableRows(runtime), shardsBefore);
+
+        // Ownership has been transferred to the copy.
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), copyLocalPathId);
+
+        // The (newOwner, shardIdx) pair must have been removed from
+        // SharedShards => no rows referencing this shard remain.
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime, localShardIdx), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        // Final drop: now the (former-copy) is the sole owner with no sharers.
+        // This must take the case-2 branch and delete the shard.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::PathNotExist);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+    }
+
+    // Chained sharers (1 owner + 2 copies). Sequentially dropping the copies
+    // must remove their entries from SharedShards but never delete shards.
+    // Dropping the owner last must then delete the shards.
+    Y_UNIT_TEST(DropAllSharersThenOwnerCleansAllSharedShards) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy1", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy2", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/ColumnTable");
+        UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+
+        // Each shard now has two sharers (Copy1 + Copy2).
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 2u * tabletIds.size());
+
+        const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+        UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+        const ui64 ownerBefore = GetShardOwnerLocalPathId(runtime, localShardIdx);
+
+        const ui32 shardsBefore = CountShardsTableRows(runtime);
+
+        // Drop Copy1 -> one sharer left per shard, owner unchanged.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy1");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountShardsTableRows(runtime), shardsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), tabletIds.size());
+
+        // Drop Copy2 -> no sharers left, owner unchanged, shards still alive.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy2");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountShardsTableRows(runtime), shardsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+
+        // Drop owner -> shards must be deleted now.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+        // Shards rows for the (now deleted) column shards must be gone.
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
+    }
+
+    // After reboot, SharedShards must be loaded back from the persisted table
+    // and the drop logic must still behave correctly.
+    Y_UNIT_TEST(DropCopyAfterRebootKeepsSharedShardsConsistent) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tabletIds = GetColumnShardTabletIds(runtime, "/MyRoot/MyDir/ColumnTable");
+        UNIT_ASSERT_VALUES_UNEQUAL(tabletIds.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), tabletIds.size());
+
+        const ui64 localShardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletIds[0]);
+        UNIT_ASSERT_VALUES_UNEQUAL(localShardIdx, 0u);
+        const ui64 ownerBefore = GetShardOwnerLocalPathId(runtime, localShardIdx);
+
+        // Reboot the SchemeShard - SharedShards map must be reloaded.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // After reboot, the persisted SharedShards entries must still be there.
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), tabletIds.size());
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+
+        // Drop the copy after reboot: must still correctly clean up.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), ownerBefore);
+
+        // Final drop of the owner must succeed normally.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
     }
 }

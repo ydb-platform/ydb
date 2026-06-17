@@ -3,6 +3,14 @@
 #include "defs.h"
 
 namespace NKikimr::NDDisk {
+
+    struct TPersistentBufferLocation {
+        ui32 ChunkIdx;
+        ui32 SectorIdx;
+
+        friend constexpr std::strong_ordering operator <=>(const TPersistentBufferLocation& x, const TPersistentBufferLocation& y) = default;
+    };
+
     struct TPersistentBufferSectorInfo {
         ui64 ChunkIdx : 32;
         ui64 SectorIdx : 16;
@@ -47,6 +55,13 @@ namespace NKikimr::NDDisk {
     struct hash<NKikimr::NDDisk::TPersistentBufferRecordId> {
         inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferRecordId& r) const {
             return MultiHash(r.TabletId, r.Generation, r.Lsn);
+        }
+    };
+
+    template <>
+    struct hash<NKikimr::NDDisk::TPersistentBufferLocation> {
+        inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferLocation& r) const {
+            return MultiHash(r.ChunkIdx, r.SectorIdx);
         }
     };
  }

@@ -105,7 +105,7 @@ void TLongTxServiceActor::HandlePoison() {
         SessionSubscribeActor = nullptr;
     }
     if (SnapshotsExchangeActorId) {
-        Send(SnapshotsExchangeActorId, new TKikimrEvents::TEvPoison());
+        Send(SnapshotsExchangeActorId, new TEvents::TEvPoison());
     }
     PassAway();
 }
@@ -1775,6 +1775,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
 
     auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
     registryBuilder->SetSnapshotBorder(RemoteSnapshotsStorage->GetBorder());
+    registryBuilder->SetOldestCollectionTime(RemoteSnapshotsStorage->GetOldestCollectionTime());
 
     size_t localSnapshotsCount = 0;
     for (const auto& snapshotInfo : LocalSnapshotsStorage->View()) {

@@ -119,7 +119,7 @@ protected:
     }
 
 private:
-    const TString Token_;
+    const std::string Token_;
 };
 
 IChannelPtr CreateTokenInjectingChannel(
@@ -158,8 +158,8 @@ protected:
     }
 
 private:
-    const TString SessionId_;
-    const TString SslSessionId_;
+    const std::string SessionId_;
+    const std::string SslSessionId_;
 };
 
 IChannelPtr CreateCookieInjectingChannel(
@@ -233,7 +233,7 @@ protected:
     }
 
 private:
-    const TString UserTicket_;
+    const std::string UserTicket_;
 };
 
 NRpc::IChannelPtr CreateUserTicketInjectingChannel(

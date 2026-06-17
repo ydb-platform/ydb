@@ -102,6 +102,9 @@ message TKqpPhyColumn {
     // operation.
     optional bool IsBuildInProgress = 7;
     optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
+    // flag that indicates that column is currently under the set not null
+    // operation.
+    optional bool SetNotNullInProgress = 9;
 }
 
 enum EKqpPhyTableKind {

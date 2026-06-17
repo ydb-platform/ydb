@@ -2020,17 +2020,16 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
         ExportWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
-<<<<<<< HEAD
     Y_UNIT_TEST_TWIN(ExportParquetWholeDatabase, IsOlap) {
         ExportParquetWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     Y_UNIT_TEST_TWIN(ExportParquetTableWithCompression, IsOlap) {
         ExportParquetTableWithCompressionImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
-=======
+    }
+
     Y_UNIT_TEST_TWIN(ExportWholeDatabaseByExplicitRootItem, IsOlap) {
         ExportWholeDatabaseByExplicitRootItemImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
->>>>>>> official/main
     }
 
     Y_UNIT_TEST_TWIN(ExportWholeDatabaseWithEncryption, IsOlap) {

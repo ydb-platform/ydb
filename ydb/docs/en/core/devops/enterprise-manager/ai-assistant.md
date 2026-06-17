@@ -1,6 +1,6 @@
-# Enabling AI Assistant in YDB EM
+# Enabling AI assistant in YDB EM
 
-This guide shows how to enable AI assistant in {{ ydb-short-name }} Enterprise Manager (YDB EM). After the setup, users will see the assistant in the YDB EM web interface. The assistant sends model requests through Gateway and can use MCP tools provided by Gateway.
+This guide shows how to enable AI assistant in {{ ydb-short-name }} Enterprise Manager (YDB EM). After the setup, users will see the assistant in the YDB EM web interface. The assistant sends model requests through Gateway and can use Model Context Protocol (MCP) tools provided by Gateway.
 
 ## Before you start {#before-start}
 
@@ -10,7 +10,7 @@ Make sure that you have:
 
 1. Access to the Ansible inventory used to deploy YDB EM.
 1. An OpenAI-compatible model endpoint that will be reachable from the Gateway host.
-1. A way to add a named model credential entry to the Gateway token file. The tokenator in Gateway reads this file and uses the entry whose `Name` equals `ydb_em_ai_model_token_name`, for example `model-token`, as the upstream `Authorization` header.
+1. A way to add a named model credential entry to the Gateway token file. The tokenator in Gateway reads this file and uses the `Token` value of the entry whose `Name` equals `ydb_em_ai_model_token_name`, for example `model-token`, as the upstream `Authorization` header.
 1. If you are updating an existing installation, access to the deployed Gateway host.
 
 {% note warning %}
@@ -56,7 +56,7 @@ Add the AI assistant variables to the YDB EM inventory, for example to `examples
 
 ```yaml
 ydb_em_ai_assistant_enabled: true
-ydb_em_ai_model_endpoint: "https://llm.example.com/"
+ydb_em_ai_model_endpoint: "https://llm.example.com"
 ydb_em_ai_model_token_name: "model-token"
 
 ydb_em_ai_assistant_client_runtime_config:
@@ -102,9 +102,9 @@ Parameter | Description
 `ydb_em_docs_search_embeddings_upstream_base_url` | OpenAI-compatible embeddings endpoint base URL.
 `ydb_em_docs_search_embeddings_token_name` | Tokenator entry name for embeddings requests.
 `ydb_em_docs_search_embeddings_model` | Embeddings model name.
-`ydb_em_docs_search_vector_size` | Expected vector size. Use `0` to skip the size check.
+`ydb_em_docs_search_vector_size` | Expected embedding vector dimension. Use `0` to skip the size check.
 `ydb_em_docs_search_limit` | Maximum number of documents returned.
-`ydb_em_docs_search_score` | Minimum search score from `0` to `1`.
+`ydb_em_docs_search_score` | Minimum similarity score from `0` to `1`. Documents with a lower score are filtered out.
 
 ## Apply the configuration {#apply-configuration}
 

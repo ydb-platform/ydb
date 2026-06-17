@@ -235,7 +235,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 ### Получение SID
 
-Успешная аутентификация по сертификату создаёт SID пользователя с суффиксом `@cert` (или другим значением параметра [`certificate_authentication_domain`](../reference/configuration/auth_config.md#certificate-auth-config) в секции `auth_config`). Имя формируется из всех атрибутов поля Subject сертификата в нотации `Имя=Значение,...@cert`. Порядок атрибутов соответствует порядку полей в сертификате. Пример:
+Успешная аутентификация по сертификату создаёт SID пользователя с суффиксом `@<domain>`, где `<domain>` — значение параметра [`certificate_authentication_domain`](../reference/configuration/auth_config.md#certificate-auth-config) в секции `auth_config` (по умолчанию: `cert`). Имя формируется из всех атрибутов поля Subject сертификата в нотации `Имя=Значение,...@<domain>`. Порядок атрибутов соответствует порядку полей в сертификате. Пример:
 
 ```text
 C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert

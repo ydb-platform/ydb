@@ -84,15 +84,17 @@ namespace NKikimr::NHttpProxy {
         if (DatabasePath == "/") {
            DatabasePath = "";
         }
-        auto params = TCgiParameters(Request->URL.After('?'));
-        if (auto it = params.Find("folderId"); it != params.end()) {
+        CgiParameters = TCgiParameters(Request->URL.After('?'));
+        if (auto it = CgiParameters.Find("folderId"); it != CgiParameters.end()) {
             FolderId = it->second;
         }
 
-        CgiParameters = Request->Method == "POST" ? TCgiParameters(Request->Body) : params;
-
         //TODO: find out databaseId
         ParseHeaders(Request->Headers);
+
+        if (Request->Method == "POST" && RawContentType == "application/x-www-form-urlencoded" && !Request->Body.empty()) {
+            CgiParameters = TCgiParameters(Request->Body);
+        }
 
         if (MethodName.empty() && ContentType == MIME_XML && !Request->Body.empty()) {
             auto it = CgiParameters.Find("Action");
@@ -201,8 +203,8 @@ namespace NKikimr::NHttpProxy {
                 ApiVersion = parts.size() > 0 ? parts[0] : "";
                 MethodName = parts.size() > 1 ? parts[1] : "";
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_CONTENT_TYPE_HEADER)) {
-                const TStringBuf contentType = StripString(TStringBuf(header.second).Before(';'));
-                if (AsciiEqualsIgnoreCase(contentType, "application/x-www-form-urlencoded")) {
+                RawContentType = StripString(TStringBuf(header.second).Before(';'));
+                if (AsciiEqualsIgnoreCase(RawContentType, "application/x-www-form-urlencoded")) {
                     ContentType = MIME_XML;
                 } else {
                     ContentType = mimeByStr(header.second);

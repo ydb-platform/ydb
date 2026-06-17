@@ -356,6 +356,21 @@ namespace NKikimr::NHttpProxy::NSQS {
                             XML_ELEM_CONT("RequestId", httpContext.RequestId);
                         }
                     }
+                } else if (name == "ListQueueTagsResult") {
+                    const auto* r = dynamic_cast<const Ydb::Ymq::V1::ListQueueTagsResult*>(&value);
+                    XML_ELEM("ListQueueTagsResponse") {
+                        XML_ELEM("ListQueueTagsResult") {
+                            for (const auto& [key, value] : r->tags()) {
+                                XML_ELEM("Tag") {
+                                    XML_ELEM_CONT("Key", key);
+                                    XML_ELEM_CONT("Value", value);
+                                }
+                            }
+                        }
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", httpContext.RequestId);
+                        }
+                    }
                 } else if (name == "PurgeQueueResult") {
                     XML_ELEM("PurgeQueueResponse") {
                         XML_ELEM("ResponseMetadata") {
@@ -457,6 +472,18 @@ namespace NKikimr::NHttpProxy::NSQS {
                             XML_ELEM_CONT("RequestId", httpContext.RequestId);
                         }
                     }
+                } else if (name == "TagQueueResult") {
+                    XML_ELEM("TagQueueResponse") {
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", httpContext.RequestId);
+                        }
+                    }
+                } else if (name == "UntagQueueResult") {
+                    XML_ELEM("UntagQueueResponse") {
+                        XML_ELEM("ResponseMetadata") {
+                            XML_ELEM_CONT("RequestId", httpContext.RequestId);
+                        }
+                    }
                 } else {
                     Y_VERIFY_DEBUG_S(false, name.c_str());
                 }
@@ -484,7 +511,7 @@ namespace NKikimr::NHttpProxy::NSQS {
     }
 
     // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
-    // https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#ErrorCodeList - list of error codes
+    // https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/CommonErrors.html - list of error codes
     TString Serialize(const THttpRequestContext& httpContext, const NProtoBuf::Message& value) {
         switch (httpContext.ContentType) {
         case MIME_XML:

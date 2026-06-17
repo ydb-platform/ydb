@@ -78,6 +78,7 @@ struct THttpRequestContext {
     TString SourceAddress;
     TString MethodName; // used once
     TString ApiVersion; // used once
+    TString RawContentType;
     MimeTypes ContentType{MIME_UNKNOWN};
     TString IamToken;
     TString SecurityToken;

@@ -1,7 +1,5 @@
 #pragma once
 
-//#include <ydb/core/protos/sqs.pb.h>
-
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>

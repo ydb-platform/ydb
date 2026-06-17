@@ -57,24 +57,6 @@ table_service_config:
       enable: true
 ```
 
-#### enable_query_service_spilling
-
-**Расположение:** `table_service_config.enable_query_service_spilling`
-**Тип:** `boolean`
-**По умолчанию:** `true`
-**Описание:** Глобальная опция, которая включает транспортный спиллинг при передаче данных между задачами.
-
-```yaml
-table_service_config:
-  enable_query_service_spilling: true
-```
-
-{% note info %}
-
-Эта настройка работает совместно с локальной конфигурацией сервиса спиллинга. При отключении (`false`) транспортный спиллинг не функционирует даже при включенном `spilling_service_config`.
-
-{% endnote %}
-
 ### Основные параметры конфигурации
 
 ```yaml
@@ -203,7 +185,6 @@ table_service_config:
 
 ```yaml
 table_service_config:
-  enable_query_service_spilling: true
   spilling_service_config:
     local_file_config:
       enable: true

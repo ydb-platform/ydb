@@ -57,32 +57,14 @@ table_service_config:
       enable: true
 ```
 
-#### enable_query_service_spilling
-
-**Location:** `table_service_config.enable_query_service_spilling`
-**Type:** `boolean`
-**Default:** `true`
-**Description:** Global option that enables transport spilling during data transfer between tasks.
-
-```yaml
-table_service_config:
-  enable_query_service_spilling: true
-```
-
-{% note info %}
-
-This setting works in conjunction with the local spilling service configuration. When disabled (`false`), transport spilling does not function even with enabled `spilling_service_config`.
-
-{% endnote %}
-
 ### Primary Configuration Parameters
 
 ```yaml
 table_service_config:
-    spilling_service_config:
-        local_file_config:
-            root: ""
-            max_total_size: 21474836480
+  spilling_service_config:
+    local_file_config:
+      root: ""
+      max_total_size: 21474836480
 ```
 
 ### Directory Configuration
@@ -203,7 +185,6 @@ table_service_config:
 
 ```yaml
 table_service_config:
-  enable_query_service_spilling: true
   spilling_service_config:
     local_file_config:
       enable: true

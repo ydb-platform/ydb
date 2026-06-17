@@ -307,6 +307,20 @@
             "uri": "https://{canondata_backend}/1937424/fdec47b84b4fdc9bcfbdb62d97078a9e82e64468/resource.tar.gz#test.test_Join-CommonJoinCoreSortedLeft-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Join-ListJoinCore-default.txt-Debug]": [
+        {
+            "checksum": "466e642640bbca7ecbbc277200d4ed33",
+            "size": 972,
+            "uri": "https://{canondata_backend}/1889210/d8cf4f29f3b12a7f532ef52c2e2d59bfeab373f0/resource.tar.gz#test.test_Join-ListJoinCore-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Join-ListJoinCore-default.txt-Results]": [
+        {
+            "checksum": "9a03ade521fdc05ee27759334fbc266b",
+            "size": 1048,
+            "uri": "https://{canondata_backend}/1889210/d8cf4f29f3b12a7f532ef52c2e2d59bfeab373f0/resource.tar.gz#test.test_Join-ListJoinCore-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Lib-Agg_Bit_Or-default.txt-Debug]": [
         {
             "checksum": "618a15bd97761ab6c236fa909736d69d",

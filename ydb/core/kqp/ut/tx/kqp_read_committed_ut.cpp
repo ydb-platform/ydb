@@ -494,6 +494,16 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(TMultiStatements) {
+        TReadCommittedTakesLocks tester(R"(
+            INSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted");
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted");
+            )", 1 + 0, 4 + 2, 2 + 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     class TpccPaymentReturningConflict : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {

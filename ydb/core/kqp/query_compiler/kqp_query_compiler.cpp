@@ -2964,6 +2964,11 @@ private:
                 const auto name = TString(item->GetName());
                 proto.AddColumns(name);
                 tablesMap[vectorIndexRead.Table().Path()].emplace(name);
+                // Covered index: the actor reads output columns straight from the
+                // posting table, so register them there too (not just main table).
+                if (postingTableMeta->Columns.contains(name)) {
+                    tablesMap[postingTablePath].emplace(name);
+                }
                 if (name == embeddingColumn) {
                     vectorColumnIndex = columnIndex;
                     hasEmbedding = true;

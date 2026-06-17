@@ -421,6 +421,13 @@ message TKqpVectorIndexReadSettings {
     // When set, the immutable index impl tables (level, posting) are read from
     // followers (stale-RO). The main table is always read from the leader.
     optional bool UseFollowers = 29;
+
+    // Covered index: the posting table already holds every output column
+    // (including the embedding used for ranking), so the main table read can be
+    // skipped. PostingOutputColumnIds gives, for each OutputColumns entry (same
+    // order), the column id of that column in the posting table.
+    optional bool PostingCovers = 30;
+    repeated uint32 PostingOutputColumnIds = 31;
 }
 
 message TKqpTaskInfo {

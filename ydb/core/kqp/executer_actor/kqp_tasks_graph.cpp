@@ -1173,6 +1173,22 @@ void TKqpTasksGraph::BuildVectorIndexReadChannels(const TStageInfo& stageInfo, u
         fillColumnMeta(settings->AddOutputColumns(), column, mainTableInfo->Columns.at(column));
     }
 
+    // Covered index: if the posting table holds every output column, the actor
+    // can build results straight from the posting scan and skip the main read.
+    bool postingCovers = true;
+    for (const auto& column : vectorIndexRead.GetColumns()) {
+        if (!postingTableInfo->Columns.contains(column)) {
+            postingCovers = false;
+            break;
+        }
+    }
+    if (postingCovers) {
+        settings->SetPostingCovers(true);
+        for (const auto& column : vectorIndexRead.GetColumns()) {
+            settings->AddPostingOutputColumnIds(postingTableInfo->Columns.at(column).Id);
+        }
+    }
+
     TTransform vectorIndexReadTransform;
     vectorIndexReadTransform.Type = "VectorIndexReadInputTransformer";
     vectorIndexReadTransform.InputType = vectorIndexRead.GetInputType();

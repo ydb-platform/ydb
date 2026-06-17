@@ -26,13 +26,16 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         UNIT_ASSERT_VALUES_EQUAL_C(iter->second, value, key);
     }
 
-    TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10, bool noTruncate = false) {
+    TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10, bool noTruncate = false, ui64 lastOffset = 0) {
         TStringBuilder url;
         CGIUnescape(topic);
         url << "/viewer/topic_data" << "?path=" << topic << "&partition=" << partition << "&offset=" << offset
             << "&limit=" << limit;
         if (noTruncate) {
             url << "&truncate=false";
+        }
+        if (lastOffset > 0) {
+            url << "&last_offset=" << lastOffset;
         }
         return url;
     }
@@ -251,7 +254,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         }
     }
 
-    void CheckReadKafkaBatchMessages(ui64 readFromOffset, ui32 limit = 6) {
+    void CheckReadKafkaBatchMessages(ui64 readFromOffset, ui32 limit = 6, ui64 lastOffset = 0, ui32 batchSize = 3) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -290,24 +293,26 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         const TString producerId = "viewer-kafka-batch-producer";
         constexpr size_t dataSize = 16;
         const TVector<std::tuple<ui64, ui32, char>> writes = {
-            {1, 3, 'a'},
-            {4, 3, 'b'},
+            {1, batchSize, 'a'},
+            {static_cast<ui64>(batchSize) + 1, batchSize, 'b'},
         };
-        NKikimr::NPQ::NTest::WriteKafkaBatchMessages(topicClient, topicPath, producerId, dataSize, 3, writes, false);
+        NKikimr::NPQ::NTest::WriteKafkaBatchMessages(topicClient, topicPath, producerId, dataSize, batchSize, writes, false);
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
 
         TJsonValue json;
-        auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, readFromOffset, limit), json);
+        auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, readFromOffset, limit, false, lastOffset), json);
         UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
 
         const auto& overallResponse = json.GetMap();
+        const ui64 totalMessages = 2 * static_cast<ui64>(batchSize);
+        const ui64 readUntilOffset = lastOffset > 0 ? lastOffset : totalMessages;
         CheckMapValue(overallResponse, "StartOffset", 0);
-        CheckMapValue(overallResponse, "EndOffset", 6);
+        CheckMapValue(overallResponse, "EndOffset", totalMessages);
 
         const auto& messages = overallResponse.find("Messages")->second.GetArray();
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), Min<ui64>(limit, 6 - readFromOffset));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), Min<ui64>(limit, readUntilOffset - readFromOffset));
 
         constexpr ui32 kafkaBatchCodec = static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1;
         for (ui64 i = 0; i < messages.size(); ++i) {
@@ -323,7 +328,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             UNIT_ASSERT(jsonMap.find("Message") != jsonMap.end());
             UNIT_ASSERT_VALUES_EQUAL(
                 Base64Decode(jsonMap.find("Message")->second.GetString()),
-                TString(dataSize, messageOffset < 3 ? 'a' : 'b'));
+                TString(dataSize, messageOffset < batchSize ? 'a' : 'b'));
             CheckMapValue(jsonMap, "CreateTimestamp", 1000 + messageOffset);
             UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
             UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
@@ -340,5 +345,9 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
 
     Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessagesRespectsLimit) {
         CheckReadKafkaBatchMessages(2, 2);
+    }
+
+    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessagesReadSingleFromLargeBatch) {
+        CheckReadKafkaBatchMessages(119, 1, 120, 100);
     }
 };

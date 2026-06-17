@@ -3130,10 +3130,7 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
 
                 if (decompressedMsg.Meta) {
                     const auto& recordMeta = *decompressedMsg.Meta;
-                    const ui64 batchBaseOffset = codecResult.BatchBaseOffset
-                        ? static_cast<ui64>(*codecResult.BatchBaseOffset)
-                        : static_cast<ui64>(messageData.offset());
-                    offset = batchBaseOffset + static_cast<ui64>(*recordMeta.OffsetDelta);
+                    offset = static_cast<ui64>(messageData.offset()) + static_cast<ui64>(*recordMeta.OffsetDelta);
                     if (offset < committedOffset) {
                         ++result.MessagesTaken;
                         ++recordsSkipped;

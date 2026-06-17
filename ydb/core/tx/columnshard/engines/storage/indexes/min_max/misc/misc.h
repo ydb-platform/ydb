@@ -24,10 +24,8 @@ TString IncorrectIndexColumnsErrorMessage(const auto& indexColumns) {
 inline const TString DisabledForRowTablesErrorMessage = "Local min_max index is supported only for column tables";
 
 inline TString UnknownIndexColumnNameErrorMessage(TStringBuf columnName, const auto& indexColumns) {
-    return TStringBuilder() << "Tried to apply min_max index to unknown column '" << columnName
-                            << "'. "
-                               "Table has these "
-                            << indexColumns.size() << " columns: [" << JoinStrings(indexColumns.begin(), indexColumns.end(), ", ") << "]";
+    return TStringBuilder() << "Tried to apply min_max index to unknown column '" << columnName << "'. Table has these " << indexColumns.size()
+                            << " columns: [" << JoinStrings(indexColumns.begin(), indexColumns.end(), ", ") << "]";
 }
 
 inline const TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableLocalMinMaxIndex feature flag";

@@ -300,19 +300,6 @@ private:
                         code = StatusIds::BAD_REQUEST;
                         return false;
                     }
-                    
-                    auto it = colNameToId.find(index.index_columns(0));
-                    if ( it == colNameToId.end()) {
-                        TVector<TString> tableColumnNames;
-                        for(auto& col: colNameToId) {
-                            tableColumnNames.push_back(col.first);
-                        }
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames));
-                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)));
-                        code = StatusIds::BAD_REQUEST;
-                        return false;
-                    }
-                    min_max->SetColumnId(it->second);
                     const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
 
                     for(auto& column: schema->GetColumns()) {
@@ -321,6 +308,20 @@ private:
                             break;
                         }
                     }
+
+                    if (!columnDesc) {
+                        TVector<TString> tableColumnNames;
+                        for(auto& col: schema->GetColumns()) {
+                            tableColumnNames.push_back(col.GetName());
+                        }
+                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames));
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+
+                    auto it = colNameToId.find(index.index_columns(0));
+                    min_max->SetColumnId(it->second);
                     if (columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
                         columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8) ) {
                         olapIndex->SetInheritPortionStorage(true);
@@ -329,7 +330,6 @@ private:
                         olapIndex->SetInheritPortionStorage(false);
                         olapIndex->SetStorageId("__LOCAL_METADATA");
                     }
-
                     break;
                 }                
                 case Ydb::Table::TableIndex::TYPE_NOT_SET:

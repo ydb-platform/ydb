@@ -316,9 +316,14 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact: {
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-            if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "JSON", error)) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                return false;
+            // __ydb_row_id opt-in: when the rowid mode has been enabled (ClassifyFulltextRowId /
+            // MaybeEnableFulltextRowIdMode), skip the single-integer-PK requirement - the doc_id is
+            // __ydb_row_id, not the PK. Mirrors the fulltext case above.
+            if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
+                if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "JSON", error)) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    return false;
+                }
             }
 
             if (indexKeys.KeyColumns.size() != 1) {

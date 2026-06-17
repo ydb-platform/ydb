@@ -1066,11 +1066,18 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                case NKikimrSchemeOp::EIndexTypeGlobalJson:
-                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                 case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                     // no specialized index description
                     Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                    // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                    if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexInfo->SpecializedIndexDescription)) {
+                        *operation->MutableFulltextIndexDescription() = *ft;
+                    } else {
+                        Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    }
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                     *operation->MutableVectorIndexKmeansTreeDescription() =

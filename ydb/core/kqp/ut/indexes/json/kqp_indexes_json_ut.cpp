@@ -7,6 +7,22 @@ namespace NKikimr::NKqp {
 using namespace NYdb::NQuery;
 using namespace NYdb;
 
+namespace {
+
+// A runner for the __ydb_row_id opt-in: JSON indexes plus the unique-index feature, so a JSON index
+// over a non-single-integer primary key can use __ydb_row_id as its doc_id and resolve it back to the
+// primary key through a unique secondary index (the mechanism shared with fulltext indexes).
+TKikimrRunner KikimrJsonRowId() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    return TKikimrRunner(settings);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST(AddJsonIndexJson) {
         TestAddJsonIndex("Json", true);
@@ -142,6 +158,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST(NonIntegerPk) {
+        // With the unique-index feature OFF (the default), a JSON index over a non-integer PK can neither
+        // use the PK as doc_id nor auto-provision the __ydb_row_id infrastructure, so it is rejected.
         auto kikimr = Kikimr();
         auto db = kikimr.GetQueryClient();
 
@@ -166,8 +184,86 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "Error: JSON index requires primary key column 'Key' to be of type 'Uint64', 'Int64', 'Uint32' or 'Int32' but got Utf8");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "requires the unique-index feature");
+        }
+    }
+
+    Y_UNIT_TEST(NonIntegerPkRowId) {
+        // End-to-end: a table keyed by a non-integer (Utf8) PK plus a __ydb_row_id Uint64 NOT NULL column
+        // and a unique secondary index on __ydb_row_id supports a JSON index. The JSON index uses
+        // __ydb_row_id as doc_id; the runtime resolves __ydb_row_id -> PK before reading the main table.
+        // Mirrors SelectWithFulltextMatch_RowIdOptIn_Plain in kqp_fulltext_search_ut.cpp.
+        auto kikimr = KikimrJsonRowId();
+        auto db = kikimr.GetQueryClient();
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Utf8 NOT NULL,
+                    Text Json,
+                    Data Utf8,
+                    __ydb_row_id Uint64 NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data, __ydb_row_id) VALUES
+                    ("a"u, Json('{"k1": 1}'),  "d1"u, 100),
+                    ("b"u, Json('{"k1": 2}'),  "d2"u, 200),
+                    ("c"u, Json('{"k2": 3}'),  "d3"u, 300),
+                    ("d"u, Json('{"k1": 10}'), "d4"u, 400);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // The __ydb_row_id column + Ready unique index already exist, so the JSON index build enables
+            // rowid mode through the "Reuse" classification.
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // Row "d" has k1 == 10; doc_id -> PK resolution must return its Utf8 key.
+            std::string query = R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_VALUE(Text, '$.k1' RETURNING Int64) == 10
+                ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+
+        {
+            std::string query = R"(
+                SELECT Key FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_EXISTS(Text, '$.k2')
+                ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
         }
     }
 
@@ -188,6 +284,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST(NoCompositePk) {
+        // With the unique-index feature OFF (the default), a composite-PK table cannot host a JSON index.
         auto kikimr = Kikimr();
         auto db = kikimr.GetQueryClient();
 
@@ -213,8 +310,71 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "Error: JSON index requires exactly one primary key column of type 'Uint64', 'Int64', 'Uint32' or 'Int32', but table has 2 primary key columns");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "requires the unique-index feature");
+        }
+    }
+
+    Y_UNIT_TEST(CompositePkRowId) {
+        // A composite-PK table with an explicit __ydb_row_id Uint64 NOT NULL column and a unique index on
+        // it supports a JSON index that resolves the synthetic doc_id back to the (Key1, Key2) primary key.
+        auto kikimr = KikimrJsonRowId();
+        auto db = kikimr.GetQueryClient();
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key1 Uint64 NOT NULL,
+                    Key2 Uint64 NOT NULL,
+                    Text Json,
+                    __ydb_row_id Uint64 NOT NULL,
+                    PRIMARY KEY (Key1, Key2)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/TestTable` (Key1, Key2, Text, __ydb_row_id) VALUES
+                    (1, 1, Json('{"k1": 1}'),  100),
+                    (1, 2, Json('{"k1": 2}'),  200),
+                    (2, 1, Json('{"k2": 3}'),  300),
+                    (2, 2, Json('{"k1": 10}'), 400);
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // Three rows have k1; doc_id -> (Key1, Key2) resolution must return all of them.
+            std::string query = R"(
+                SELECT Key1, Key2 FROM `/Root/TestTable` VIEW json_idx
+                WHERE JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key1, Key2;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
         }
     }
 

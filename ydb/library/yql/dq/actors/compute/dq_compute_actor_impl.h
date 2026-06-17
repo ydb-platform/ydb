@@ -828,21 +828,6 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
     // void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) is pure and must be overriden in a derived class
 
-    void ResumeInputsByWatermark(TInstant watermark) {
-        for (auto& [id, sourceInfo] : SourcesMap) {
-            if (sourceInfo.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED) {
-                continue;
-            }
-
-            const auto channelId = id;
-            CA_LOG_T("Resume source " << channelId << " by completed watermark");
-
-            sourceInfo.ResumeByWatermark(watermark);
-        }
-        // sources or input channels was unpaused, trigger new poll
-        ResumeExecution(EResumeSource::CAResumeByWatermark);
-    }
-
     void ResumeInputsByCheckpoint() override final {
         for (auto& [id, channelInfo] : InputChannelsMap) {
             if (channelInfo.PendingCheckpoint) {
@@ -1470,7 +1455,6 @@ protected:
             html << "<h4>Input Transform Id: " << id << "</h4>";
             DUMP(info, LogPrefix);
             DUMP(info, Type);
-            html << "PendingWatermark: " << !!info.PendingWatermark << " " << (!info.PendingWatermark ? TString{} : info.PendingWatermark->ToString()) << "<br />";
             html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
             html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
             auto buffer = info.Buffer;
@@ -1616,7 +1600,6 @@ protected:
             DUMP(info, LogPrefix);
             DUMP(info, Index);
             DUMP(info, Finished);
-            html << "IsPausedByWatermark: " << info.IsPausedByWatermark() << "<br />";
             html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
             if (info.AsyncInput) {
                 const auto& input = *info.AsyncInput;
@@ -2099,11 +2082,9 @@ protected:
             return pollResult;
         }
 
-        auto* watermarksTracker = std::is_same_v<TDerived, TDqAsyncComputeActor> ? &WatermarksTracker : nullptr;
-
         CA_LOG_T("Poll inputs");
         for (auto& [inputIndex, transform] : InputTransformsMap) {
-            if (auto resume = transform.PollAsyncInput(MetricsReporter, watermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
+            if (auto resume = transform.PollAsyncInput(MetricsReporter, RuntimeSettings.AsyncInputPushLimit)) {
                 if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
                     pollResult = resume;
                 }
@@ -2118,7 +2099,7 @@ protected:
 
         CA_LOG_T("Poll sources");
         for (auto& [inputIndex, source] : SourcesMap) {
-            if (auto resume =  source.PollAsyncInput(MetricsReporter, watermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
+            if (auto resume =  source.PollAsyncInput(MetricsReporter, RuntimeSettings.AsyncInputPushLimit)) {
                 if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
                     pollResult = resume;
                 }
@@ -2368,6 +2349,10 @@ protected:
 
 private:
     void InitializeWatermarks() {
+        if constexpr (std::is_same_v<TDerived, TDqAsyncComputeActor>) {
+            return;
+        }
+
         TInstant now = TInstant::Now();
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {

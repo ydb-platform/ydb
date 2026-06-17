@@ -1196,6 +1196,15 @@ TMultiTablePartitions THttpRawClient::GetTablePartitions(
     return result;
 }
 
+void THttpRawClient::CheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "check_cluster_liveness");
+    header.MergeParameters(NRawClient::SerializeParamsForCheckClusterLiveness(options));
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+}
+
 ui64 THttpRawClient::GenerateTimestamp()
 {
     TMutationId mutationId;

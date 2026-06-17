@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "bit_packing.h"
 #endif
-#undef BIT_PACKING_INL_H_
 
 namespace NYT {
 

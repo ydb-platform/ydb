@@ -261,7 +261,7 @@ namespace NKikimr::NDDisk {
         Owner.UpdateChunkInSortedQueue(ChunkIdx, FreeSpace, oldFreeSpace);
     }
 
-    void TPersistentBufferSpaceAllocator::Free(const std::vector<TPersistentBufferSectorInfo>& locations) {
+    void TPersistentBufferSpaceAllocator::Free(const std::span<TPersistentBufferSectorInfo> locations) {
         for (ui32 i = 1, startLoc = 0; i <= locations.size(); i++) {
             if (i == locations.size()
                 || locations[i].ChunkIdx != locations[startLoc].ChunkIdx
@@ -288,7 +288,7 @@ namespace NKikimr::NDDisk {
         Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
     }
 
-    void TPersistentBufferSpaceAllocator::MarkOccupied(const std::vector<TPersistentBufferSectorInfo>& locations) {
+    void TPersistentBufferSpaceAllocator::MarkOccupied(std::span<const TPersistentBufferSectorInfo> locations) {
         for (ui32 i = 1, startLoc = 0; i <= locations.size(); i++) {
             if (i == locations.size()
                 || locations[i].ChunkIdx != locations[startLoc].ChunkIdx

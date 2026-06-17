@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "nonblocking_batcher.h"
 #endif
-#undef NONBLOCKING_BATCHER_INL_H_
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 

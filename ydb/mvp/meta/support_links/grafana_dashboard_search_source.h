@@ -27,18 +27,13 @@ public:
     TGrafanaDashboardSearchActor(
         TSupportLinkEntryConfig config,
         TString grafanaEndpoint,
-        const THashMap<TString, TString>& clusterInfo,
-        TCgiParameters requestQueryParameters,
-        NActors::TActorId owner,
-        NActors::TActorId httpProxyId,
-        size_t place)
+        const ILinkSource::TLinkResolveInput& input,
+        const ILinkSource::TResolveContext& context)
         : Config(std::move(config))
         , GrafanaEndpoint(std::move(grafanaEndpoint))
-        , ClusterInfo(clusterInfo)
-        , RequestQueryParameters(std::move(requestQueryParameters))
-        , Owner(owner)
-        , HttpProxyId(httpProxyId)
-        , Place(place)
+        , ClusterInfo(input.ClusterInfo)
+        , RequestQueryParameters(BuildForwardedDashboardParameters(input.Identity, input.AdditionalRequestParams))
+        , Context(context)
     {}
 
     void Bootstrap() {
@@ -47,7 +42,7 @@ public:
         request->Set("Authorization", authHeaderValue);
 
         auto event = MakeHolder<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request);
-        Send(HttpProxyId, event.Release());
+        Send(Context.HttpProxyId, event.Release());
         Become(&TGrafanaDashboardSearchActor::StateWork);
     }
 
@@ -63,9 +58,7 @@ private:
     TString GrafanaEndpoint;
     THashMap<TString, TString> ClusterInfo;
     TCgiParameters RequestQueryParameters;
-    NActors::TActorId Owner;
-    NActors::TActorId HttpProxyId;
-    size_t Place = 0;
+    ILinkSource::TResolveContext Context;
     TVector<TResolvedLink> Links;
     TVector<TSupportError> Errors;
 
@@ -176,14 +169,14 @@ private:
     }
 
     void ReplyAndDie() {
-        Send(Owner, new TEvPrivate::TEvSourceResponse(Place, std::move(Links), std::move(Errors)));
+        Send(Context.Owner, new TEvPrivate::TEvSourceResponse(Context.Place, std::move(Links), std::move(Errors)));
         PassAway();
     }
 };
 
 } // namespace NMVP::NSupportLinks
 
-namespace NMVP {
+namespace NMVP::NSupportLinks {
 
 class TGrafanaDashboardSearchSource : public ILinkSource {
 public:
@@ -192,19 +185,16 @@ public:
         , GrafanaEndpoint(std::move(grafanaEndpoint))
     {}
 
-    TResolveOutput Resolve(const TLinkResolveInput& input, const TResolveContext& context) const override {
+    TResolveOutput Resolve(const ILinkSource::TLinkResolveInput& input, const ILinkSource::TResolveContext& context) const override {
         TResolveOutput result{
             .Name = Config.GetSource(),
         };
         result.Actor = NActors::TActivationContext::Register(
-            new NSupportLinks::TGrafanaDashboardSearchActor(
+            new TGrafanaDashboardSearchActor(
                 Config,
                 GrafanaEndpoint,
-                input.ClusterInfo,
-                NSupportLinks::BuildRequestQueryParameters(input.UrlParameters),
-                context.Owner,
-                context.HttpProxyId,
-                context.Place),
+                input,
+                context),
             context.Owner);
         return result;
     }
@@ -231,4 +221,4 @@ inline std::shared_ptr<ILinkSource> MakeGrafanaDashboardSearchSource(TSupportLin
     );
 }
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

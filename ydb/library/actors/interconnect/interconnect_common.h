@@ -77,6 +77,7 @@ namespace NActors {
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
+        ui32 RdmaPayloadCopySizeThreshold = 64 << 10;
         bool CollectSubscriptionStackTrace = false;
     };
 

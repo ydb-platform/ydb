@@ -1017,9 +1017,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::SESSION_MISMATCH);
 }
 
-// Write data to DDisk0, sync to DDisk1 via TEvSyncWithDDisk, then read and verify on DDisk1.
+// Write data to DDisk0, sync to DDisk1 via TEvSync, then read and verify on DDisk1.
 // segmentsPerSync controls how many non-overlapping segments each sync request carries.
-[[maybe_unused]] void TestSyncWithDDisk(ui32 numTablets, ui32 numVChunks, ui32 blocksPerVChunk,
+[[maybe_unused]] void TestSync(ui32 numTablets, ui32 numVChunks, ui32 blocksPerVChunk,
         ui32 segmentsPerSync, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR) {
     TTestContext ctx({}, ddiskLogPriority, 2);
     const ui32 baseTabletId = 401;
@@ -1062,8 +1062,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
             const ui32 totalBlocks = blocksPerVChunk;
             const ui32 blocksPerSegment = (totalBlocks + segmentsPerSync - 1) / segmentsPerSync;
 
-            auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
-                tablets[t].Dst, srcDDiskId, std::optional<ui64>(srcGuid));
+            auto syncEv = std::make_unique<NDDisk::TEvSync>(tablets[t].Dst);
 
             for (ui32 s = 0; s < segmentsPerSync; ++s) {
                 ui32 startBlock = s * blocksPerSegment;
@@ -1071,7 +1070,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
                 if (startBlock >= endBlock) {
                     break;
                 }
-                syncEv->AddSegment(NDDisk::TBlockSelector(v,
+                syncEv->AddSegmentFromDDisk(srcDDiskId, srcGuid, NDDisk::TBlockSelector(v,
                     startBlock * MinBlockSize, (endBlock - startBlock) * MinBlockSize));
             }
             ctx.SendTo(1, syncEv.release());
@@ -1079,8 +1078,8 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         }
     }
     for (ui32 i = 0; i < totalSyncs; ++i) {
-        auto syncResult = ctx.Grab<NDDisk::TEvSyncWithDDiskResult>();
-        AssertStatus<NDDisk::TEvSyncWithDDiskResult>(syncResult, TReplyStatus::OK);
+        auto syncResult = ctx.Grab<NDDisk::TEvSyncResult>();
+        AssertStatus<NDDisk::TEvSyncResult>(syncResult, TReplyStatus::OK);
     }
 
     // Phase 3: read from DDisk1 and verify

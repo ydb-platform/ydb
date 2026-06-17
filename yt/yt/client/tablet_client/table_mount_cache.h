@@ -259,7 +259,8 @@ struct ITableMountCache
     //! case |TableInfoUpdatedFromError| flag will be set.
     virtual TInvalidationResult InvalidateOnError(
         const TError& error,
-        bool forceRetry) = 0;
+        bool forceRetry,
+        TTabletId tabletIdHint = {}) = 0;
 
     virtual void Clear() = 0;
 

@@ -293,17 +293,109 @@ inline void CheckEqualsIgnoringVersion(NKikimrConfig::TAppConfig config1, NKikim
     UNIT_ASSERT_VALUES_EQUAL(config1.ShortDebugString(), config2.ShortDebugString());
 }
 
-inline void CheckReplaceConfig(TTenantTestRuntime &runtime,
-                               Ydb::StatusIds::StatusCode code,
-                               TString yamlConfig)
+inline void FetchMainConfigFromConsole(TTenantTestRuntime &runtime, TString &yamlConfig)
 {
-        TAutoPtr<IEventHandle> handle;
-        auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
-        event->Record.MutableRequest()->set_config(yamlConfig);
-        runtime.SendToConsole(event);
+    auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+    runtime.SendToConsole(event);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceYamlConfigResponse>(handle);
-        Y_UNUSED(code);
+    TAutoPtr<IEventHandle> handle;
+    //auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+    auto [response, error] = runtime.GrabEdgeEventsRethrow<
+        TEvConsole::TEvGetAllConfigsResponse,
+        TEvConsole::TEvGenericError>(handle, TDuration::Seconds(1));
+    UNIT_ASSERT_C(response != nullptr,
+        "error: " << (error ? error->Record.ShortDebugString() : TString("<no event>")));
+
+    UNIT_ASSERT_C(response->Record.GetResponse().config_size() == 1,
+        "expected exactly one config in response");
+    UNIT_ASSERT_C(response->Record.GetResponse().identity_size() == 1,
+        "expected exactly one identity in response");
+    UNIT_ASSERT_C(response->Record.GetResponse().identity(0).type_case() == Ydb::DynamicConfig::ConfigIdentity::kCluster,
+        "expected kCluster identity in response");
+
+    yamlConfig = response->Record.GetResponse().config(0);
+}
+
+inline void FetchDatabaseConfigFromConsole(TTenantTestRuntime &runtime, const TString &databasePath, TString &yamlConfig)
+{
+    auto *event = new TEvConsole::TEvGetAllConfigsRequest;
+    event->Record.SetIngressDatabase(databasePath);
+    runtime.SendToConsole(event);
+
+    TAutoPtr<IEventHandle> handle;
+    //auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+    auto [response, error] = runtime.GrabEdgeEventsRethrow<
+        TEvConsole::TEvGetAllConfigsResponse,
+        TEvConsole::TEvGenericError>(handle, TDuration::Seconds(1));
+    UNIT_ASSERT_C(response != nullptr,
+        "error: " << (error ? error->Record.ShortDebugString() : TString("<no event>")));
+
+    UNIT_ASSERT_C(response->Record.GetResponse().config_size() == 1,
+        "expected at least one config in response for database: " << databasePath);
+    UNIT_ASSERT_C(response->Record.GetResponse().identity_size() == 1,
+        "expected exactly one identity in response");
+    UNIT_ASSERT_C(response->Record.GetResponse().identity(0).type_case() == Ydb::DynamicConfig::ConfigIdentity::kDatabase,
+        "expected kDatabase identity in response");
+    UNIT_ASSERT_C(response->Record.GetResponse().identity(0).has_database(),
+        "kDatabase identity in response with no database set");
+    UNIT_ASSERT_EQUAL_C(response->Record.GetResponse().identity(0).database(), databasePath,
+        "database in response not match requested database");
+
+    yamlConfig = response->Record.GetResponse().config(0);
+}
+
+inline void CheckReplaceConfig(TTenantTestRuntime &runtime,
+                               Ydb::StatusIds::StatusCode expectedCode,
+                               const TString &yaml,
+                               const TString &expectedErrorSubstring = {},
+                               bool allowUnknownFields = false,
+                               bool allowAbsentDatabase = false)
+{
+    auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
+    event->Record.MutableRequest()->set_config(yaml);
+    if (allowUnknownFields) {
+        event->Record.MutableRequest()->set_allow_unknown_fields(true);
+    }
+    if (allowAbsentDatabase) {
+        event->Record.MutableRequest()->set_allow_absent_database(true);
+    }
+    runtime.SendToConsole(event);
+
+    TAutoPtr<IEventHandle> handle;
+    auto [success, error] = runtime.GrabEdgeEventsRethrow<
+        TEvConsole::TEvReplaceYamlConfigResponse,
+        TEvConsole::TEvGenericError>(handle, TDuration::Seconds(1));
+
+    if (expectedCode == Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT_C(success != nullptr,
+            "expected success but got error: " <<
+            (error ? error->Record.ShortDebugString() : TString("<no event>")));
+    } else {
+        UNIT_ASSERT_C(error != nullptr,
+            "expected error " << static_cast<int>(expectedCode) << " but got success");
+        UNIT_ASSERT_VALUES_EQUAL_C(error->Record.GetYdbStatus(), expectedCode, error->Record.ShortDebugString());
+        if (!expectedErrorSubstring.empty()) {
+            UNIT_ASSERT_STRING_CONTAINS(error->Record.ShortDebugString(), expectedErrorSubstring);
+        }
+    }
+}
+
+inline void CheckMainConfigReplacedWith(TTenantTestRuntime &runtime, TString replaceConfig)
+{
+    TString consoleConfig;
+    TString expectedConfig = NYamlConfig::UpgradeMainConfigVersion(replaceConfig);
+
+    FetchMainConfigFromConsole(runtime, consoleConfig);
+    UNIT_ASSERT_VALUES_EQUAL_C(consoleConfig, expectedConfig, "CONSOLE config version not match replace config version");
+}
+
+inline void CheckDatabaseConfigReplacedWith(TTenantTestRuntime &runtime, const TString& database, TString replaceConfig)
+{
+    TString consoleConfig;
+    TString expectedConfig = NYamlConfig::UpgradeDatabaseConfigVersion(replaceConfig);
+
+    FetchDatabaseConfigFromConsole(runtime, database, consoleConfig);
+    UNIT_ASSERT_VALUES_EQUAL_C(consoleConfig, expectedConfig, "CONSOLE config version not match replace config version");
 }
 
 inline void CheckDropConfig(TTenantTestRuntime &runtime,
@@ -357,21 +449,52 @@ inline void CheckRemoveVolatileConfig(TTenantTestRuntime &runtime,
 }
 
 inline void CheckReplaceDatabaseConfig(TTenantTestRuntime &runtime,
-                                       Ydb::StatusIds::StatusCode code,
-                                       TString yamlConfig,
-                                       bool allowNoDb = false)
+                                       Ydb::StatusIds::StatusCode expectedCode,
+                                       const TString &yaml,
+                                       const TString &expectedErrorSubstring = {},
+                                       bool allowUnknownFields = false)
 {
-        TAutoPtr<IEventHandle> handle;
-        auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
-        event->Record.MutableRequest()->set_config(yamlConfig);
-        if (allowNoDb) {
-            event->Record.MutableRequest()->set_allow_absent_database(true);
-        }
-        runtime.SendToConsole(event);
-
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceYamlConfigResponse>(handle);
-        Y_UNUSED(code);
+    CheckReplaceConfig(runtime, expectedCode, yaml, expectedErrorSubstring, allowUnknownFields, true);
 }
 
+inline void CheckForceReplaceConfig(TTenantTestRuntime &runtime,
+                                    Ydb::StatusIds::StatusCode expectedCode,
+                                    const TString &yaml,
+                                    const TString &expectedErrorSubstring = {},
+                                    bool allowAbsentDatabase = false)
+{
+    auto *event = new TEvConsole::TEvSetYamlConfigRequest;
+    event->Record.MutableRequest()->set_config(yaml);
+    if (allowAbsentDatabase) {
+        event->Record.MutableRequest()->set_allow_absent_database(true);
+    }
+    runtime.SendToConsole(event);
+
+    TAutoPtr<IEventHandle> handle;
+    auto [success, error] = runtime.GrabEdgeEventsRethrow<
+        TEvConsole::TEvSetYamlConfigResponse,
+        TEvConsole::TEvGenericError>(handle, TDuration::Seconds(1));
+
+    if (expectedCode == Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT_C(success != nullptr,
+            "expected success but got error: " <<
+            (error ? error->Record.ShortDebugString() : TString("<no event>")));
+    } else {
+        UNIT_ASSERT_C(error != nullptr,
+            "expected error " << static_cast<int>(expectedCode) << " but got success");
+        UNIT_ASSERT_VALUES_EQUAL_C(error->Record.GetYdbStatus(), expectedCode, error->Record.ShortDebugString());
+        if (!expectedErrorSubstring.empty()) {
+            UNIT_ASSERT_STRING_CONTAINS(error->Record.ShortDebugString(), expectedErrorSubstring);
+        }
+    }
+}
+
+inline void CheckForceReplaceDatabaseConfig(TTenantTestRuntime &runtime,
+                                            Ydb::StatusIds::StatusCode expectedCode,
+                                            const TString &yaml,
+                                            const TString &expectedErrorSubstring = {})
+{
+    CheckForceReplaceConfig(runtime, expectedCode, yaml, expectedErrorSubstring, true);
+}
 
 } // namesapce NKikimr::NConsole::NUT

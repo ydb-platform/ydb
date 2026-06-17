@@ -828,6 +828,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotBackupTable()
+                .NotReadOnlyColumnTable()
                 .NotAsyncReplicaTable()
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();

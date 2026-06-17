@@ -127,4 +127,4 @@ NNodes::TExprBase BuildMapForPruneKeys(
     TExprContext& ctx,
     const TYtState::TPtr& state);
 
-}  // namespace NYql::NPrivate
+} // namespace NYql::NPrivate

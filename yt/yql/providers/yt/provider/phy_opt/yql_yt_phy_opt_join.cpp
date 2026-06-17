@@ -546,4 +546,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBa
     return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
 }
 
-}  // namespace NYql
+} // namespace NYql

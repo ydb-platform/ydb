@@ -666,9 +666,11 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 if (InheritPortionStorage) {
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), DEFAULT_TIER_PATH);
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
+                    UNIT_ASSERT_VALUES_UNEQUAL(GetUtf8(row.at("ChunkDetails")), "");
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), "__DEFAULT");
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
+                    UNIT_ASSERT_VALUES_UNEQUAL(GetUtf8(row.at("ChunkDetails")), "");
                 }
             }
         }

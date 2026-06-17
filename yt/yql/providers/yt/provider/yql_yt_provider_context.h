@@ -75,4 +75,4 @@ private:
     ui32 Version_ = 0;
 };
 
-}  // namespace NYql
+} // namespace NYql

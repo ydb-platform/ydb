@@ -8,11 +8,19 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TSource>
+    requires (!std::same_as<
+        std::remove_cvref_t<TSource>,
+        TAbsoluteNormalizedPath
+    >)
 TAbsoluteNormalizedPath::TAbsoluteNormalizedPath(TSource&& path)
     : Path_(TryMakeAbsoluteNormalizedPath(std::filesystem::path(std::forward<TSource>(path))))
 { }
 
 template <class TSource>
+    requires (!std::same_as<
+        std::remove_cvref_t<TSource>,
+        TAbsoluteNormalizedPath
+    >)
 TAbsoluteNormalizedPath& TAbsoluteNormalizedPath::operator=(TSource&& path)
 {
     Path_ = TryMakeAbsoluteNormalizedPath(std::filesystem::path(std::forward<TSource>(path)));

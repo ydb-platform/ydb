@@ -189,6 +189,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
             executors[i],
+            VolumeConfig.GetDiskId(),
             TabletID(),
             Executor()->Generation(),   // generation
             i,                          // direct block group index

@@ -40,7 +40,7 @@ struct TCheckPermissionResult
 
     NSecurityClient::ESecurityAction Action;
     NObjectClient::TObjectId ObjectId;
-    std::optional<TString> ObjectName;
+    std::optional<std::string> ObjectName;
     NSecurityClient::TSubjectId SubjectId;
     std::optional<std::string> SubjectName;
 };
@@ -81,7 +81,7 @@ struct TSetUserPasswordOptions
 struct TIssueTokenOptions
     : public TTimeoutOptions
 {
-    TString Description;
+    std::string Description;
 };
 
 struct TIssueTemporaryTokenOptions
@@ -115,8 +115,8 @@ struct TListUserTokensOptions
 struct TListUserTokensResult
 {
     // Tokens are SHA256-encoded.
-    std::vector<TString> Tokens;
-    THashMap<TString, NYson::TYsonString> Metadata;
+    std::vector<std::string> Tokens;
+    THashMap<std::string, NYson::TYsonString> Metadata;
 };
 
 struct TGetCurrentUserOptions

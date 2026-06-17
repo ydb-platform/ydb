@@ -8685,13 +8685,18 @@ void TSchemeShard::ConfigureForcedCompactionQueue(
     ForcedCompactionPersistBatchSize = config.GetPersistBatchSize();
     ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(config.GetPersistBatchMaxTimeMs());
 
+    ForcedCompactionStoredOperationsLimit = config.GetStoredOperationsLimit();
+    ForcedCompactionAutoForgetOperations = config.GetAutoForgetOperations();
+
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "ForcedCompactionQueue configured: Timeout# " << compactionConfig.Timeout
                  << ", Rate# " << ForcedCompactionQueue->GetRate()
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
                  << ", InflightLimit# " << compactionConfig.InflightLimit
                  << ", ForcedCompactionPersistBatchSize# " << ForcedCompactionPersistBatchSize
-                 << ", ForcedCompactionPersistBatchMaxTime# " << ForcedCompactionPersistBatchMaxTime);
+                 << ", ForcedCompactionPersistBatchMaxTime# " << ForcedCompactionPersistBatchMaxTime
+                 << ", ForcedCompactionStoredOperationsLimit# " << ForcedCompactionStoredOperationsLimit
+                 << ", ForcedCompactionAutoForgetOperations# " << ForcedCompactionAutoForgetOperations);
 }
 
 void TSchemeShard::ConfigureBackgroundCleaningQueue(

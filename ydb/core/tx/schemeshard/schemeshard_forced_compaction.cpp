@@ -73,6 +73,48 @@ void TSchemeShard::PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TFor
     db.Table<Schema::ForcedCompactions>().Key(info.Id).Delete();
 }
 
+void TSchemeShard::ForgetForcedCompaction(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info) {
+    const ui64 id = info.Id;
+    const auto byTimeKey = std::make_pair(info.StartTime, id);
+
+    PersistForcedCompactionForget(db, info);
+    ForcedCompactionsByTime.erase(byTimeKey);
+    ForcedCompactions.erase(id);
+}
+
+bool TSchemeShard::TryFreeForcedCompactionSlot(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    const ui32 limit = ForcedCompactionStoredOperationsLimit;
+    if (limit == 0 || ForcedCompactions.size() < limit) {
+        return true;
+    }
+    if (!ForcedCompactionAutoForgetOperations) {
+        return false;
+    }
+
+    // need to free enough slots so that one more operation fits within the limit
+    const size_t needToFree = ForcedCompactions.size() - limit + 1;
+    TVector<ui64> toForget;
+    toForget.reserve(needToFree);
+    for (const auto& [_, id] : ForcedCompactionsByTime) { // oldest first
+        if (toForget.size() >= needToFree) {
+            break;
+        }
+        if (ForcedCompactions.at(id)->IsFinished()) {
+            toForget.push_back(id);
+        }
+    }
+
+    for (const ui64 id : toForget) {
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[ForcedCompaction] [AutoForget] Forgetting finished compaction# " << id
+            << " to make room for a new operation, limit# " << limit
+            << " at schemeshard " << TabletID());
+        ForgetForcedCompaction(db, *ForcedCompactions.at(id));
+    }
+
+    return toForget.size() >= needToFree;
+}
+
 void TSchemeShard::PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact) {
     for (const auto& [shardId, _] : shardsToCompact) {
         db.Table<Schema::WaitingForcedCompactionShards>().Key(shardId.GetOwnerId(), shardId.GetLocalId()).Update(

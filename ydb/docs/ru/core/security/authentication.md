@@ -216,7 +216,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 ## Аутентификация по клиентскому сертификату {#client-certificate}
 
-{{ ydb-short-name }} может аутентифицировать клиента по данным клиентского сертификата, полученного при установлении TLS-соединения. Проверка выполняется на уровне протокола приложения (gRPC, [Kafka API](../reference/kafka-api/auth.md#autentifikaciya-po-mtls) и др.), когда сервер уже принимает запросы по открытому соединению.
+{{ ydb-short-name }} может аутентифицировать клиента по данным клиентского сертификата, полученного при установлении TLS-соединения. Проверка выполняется на уровне протокола приложения (gRPC, [Kafka API](../reference/kafka-api/auth.md#mtls-auth) и др.), когда сервер уже принимает запросы по открытому соединению.
 
 Такой способ подходит, например, в корпоративных сценариях с централизованной выдачей сертификатов.
 
@@ -247,11 +247,7 @@ C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 
 ### Настройка сервера
 
-Правила проверки сертификатов и назначения групп задаются в секции [`client_certificate_authorization`](../reference/configuration/client_certificate_authorization.md) статической конфигурации кластера.
-
-Параметр `request_client_certificate: true` включает запрос и проверку клиентского сертификата на TLS-уровне для gRPC (`grpcs://`). Без этого параметра клиент может по-прежнему передавать сертификат добровольно, и он будет использован для аутентификации запросов, если токен не передан.
-
-Подробнее о параметрах — в разделе [{#T}](../reference/configuration/client_certificate_authorization.md).
+Правила проверки сертификатов и назначения групп задаются в секции [`client_certificate_authorization`](../reference/configuration/client_certificate_authorization.md) статической конфигурации кластера. Для включения на сервере запросов клиентского сертификата при TLS-handshake по gRPCs необходимо задать в этой секции параметр `request_client_certificate: true`. Подробнее о параметрах — в разделе [{#T}](../reference/configuration/client_certificate_authorization.md).
 
 ### Настройка клиента
 

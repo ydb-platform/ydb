@@ -410,9 +410,9 @@ private:
                         ui64 seqNo = event.seq_no();
                         TInstant createTime = NProtoInterop::CastFromProto(event.created_at());
                         if (decompressedMsg.Meta) {
-                            offset = static_cast<ui64>(event.offset()) + static_cast<ui64>(*decompressedMsg.Meta->OffsetDelta);
-                            seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(*decompressedMsg.Meta->SequenceDelta);
-                            createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + *decompressedMsg.Meta->TimestampDelta);
+                            offset = static_cast<ui64>(event.offset()) + static_cast<ui64>(decompressedMsg.Meta->OffsetDelta);
+                            seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(decompressedMsg.Meta->SequenceDelta);
+                            createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + decompressedMsg.Meta->TimestampDelta);
                         }
 
                         messagesSize += decompressedMsg.Data.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();

@@ -246,9 +246,9 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
                     ui64 seqNo = r.GetSeqNo();
                     i64 createTs = r.GetCreateTimestampMS();
                     if (msg.Meta) {
-                        offset = r.GetOffset() + static_cast<ui64>(*msg.Meta->OffsetDelta);
-                        seqNo = static_cast<ui64>(*decompressed.BatchBaseSequence) + static_cast<ui64>(*msg.Meta->SequenceDelta);
-                        createTs = *decompressed.BatchBaseTimestampMs + *msg.Meta->TimestampDelta;
+                        offset = r.GetOffset() + static_cast<ui64>(msg.Meta->OffsetDelta);
+                        seqNo = static_cast<ui64>(*decompressed.BatchBaseSequence) + static_cast<ui64>(msg.Meta->SequenceDelta);
+                        createTs = *decompressed.BatchBaseTimestampMs + msg.Meta->TimestampDelta;
                     }
 
                     if (offset < Offset) {

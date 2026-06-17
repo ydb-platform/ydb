@@ -205,6 +205,7 @@ void TKafkaBatchCodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
     ctx.Data = TBuffer(serialized.data(), serialized.size());
     ctx.Payloads.assign(1, std::string_view(ctx.Data.data(), ctx.Data.size()));
     ctx.CodecID = static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH);
+    ctx.Compressed = true;
 }
 
 class TCommonCodecsProvider {

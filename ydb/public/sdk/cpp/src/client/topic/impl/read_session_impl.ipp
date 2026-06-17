@@ -1387,10 +1387,12 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         }
         partitionStream->SetFirstNotReadOffset(desiredOffset);
 
+        const ui64 committedOffset = partitionStream->GetMaxCommittedOffset();
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<false>>(std::move(partitionData),
                                                                                  SelfContext,
                                                                                  Settings.Decompress_,
-                                                                                 serverBytesSize);
+                                                                                 serverBytesSize,
+                                                                                 committedOffset);
         // TODO (ildar-khisam@): share serverBytesSize between partitions data according to their actual sizes;
         //                       for now whole serverBytesSize goes with first (and only) partition data.
         serverBytesSize = 0;
@@ -2877,11 +2879,13 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
     TPartitionData<UseMigrationProtocol>&& msg,
     TCallbackContextPtr<UseMigrationProtocol> cbContext,
     bool doDecompress,
-    i64 serverBytesSize
+    i64 serverBytesSize,
+    ui64 committedOffset
 )
     : ServerMessage(std::move(msg))
     , CbContext(std::move(cbContext))
     , DoDecompress(doDecompress)
+    , CommittedOffset(committedOffset)
     , ServerBytesSize(serverBytesSize)
 {
     i64 compressedSize = 0;
@@ -3118,7 +3122,6 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
         const auto& messageMeta = GetMessageMeta(batchIndex, messageIndex);
 
         if (GetDoDecompress()) {
-            const ui64 committedOffset = partitionStream->GetMaxCommittedOffset();
             ui64 recordsSkipped = 0;
             result.MessagesTaken = 0;
 
@@ -3130,14 +3133,14 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
 
                 if (decompressedMsg.Meta) {
                     const auto& recordMeta = *decompressedMsg.Meta;
-                    offset = static_cast<ui64>(messageData.offset()) + static_cast<ui64>(*recordMeta.OffsetDelta);
-                    if (offset < committedOffset) {
+                    offset = static_cast<ui64>(messageData.offset()) + static_cast<ui64>(recordMeta.OffsetDelta);
+                    if (offset < CommittedOffset) {
                         ++result.MessagesTaken;
                         ++recordsSkipped;
                         continue;
                     }
-                    seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(*recordMeta.SequenceDelta);
-                    createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + *recordMeta.TimestampDelta);
+                    seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(recordMeta.SequenceDelta);
+                    createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + recordMeta.TimestampDelta);
                 }
 
                 TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(
@@ -3154,14 +3157,14 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
 
                 minOffset = Min(minOffset, static_cast<i64>(offset));
                 maxOffset = Max(maxOffset, static_cast<i64>(offset));
+                result.DataSize += decompressedMsg.Data.size();
 
                 result.Messages.emplace_back(
-                    decompressedMsg.Data,
+                    std::move(decompressedMsg.Data),
                     GetDecompressionError(batchIndex, messageIndex),
                     std::move(messageInfo),
                     partitionStream);
 
-                result.DataSize += decompressedMsg.Data.size();
                 ++result.MessagesTaken;
             }
 

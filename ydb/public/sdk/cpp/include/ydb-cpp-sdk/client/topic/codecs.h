@@ -54,9 +54,9 @@ struct TWriteBlockCompression {
 //! Per-record metadata extracted from codec payload (e.g. Kafka record batch).
 //! When not set, read path uses metadata from outer message_data.
 struct TDecompressedMessageMeta {
-    std::optional<i32> OffsetDelta;
-    std::optional<i64> SequenceDelta;
-    std::optional<i64> TimestampDelta;
+    i32 OffsetDelta;
+    i64 SequenceDelta;
+    i64 TimestampDelta;
 };
 
 struct TDecompressedMessage {

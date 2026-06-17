@@ -1316,7 +1316,7 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-mthumb')
 
         if target.is_arm_aml403:
-            self.c_flags_platform.append('-march=armv8-a -mthumb')
+            self.c_flags_platform.append('-march=armv8-a')
             self.setup_amlogic_rtos_sdk()
 
         if target.is_arm64_aml403:

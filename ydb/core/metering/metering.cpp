@@ -90,7 +90,7 @@ void TMeteringWriteActor::HandleUnexpectedEvent(STFUNC_SIG)
 {
     YDB_LOG_WARN("TMeteringWriteActor: unhandled event",
         {"type", ev->GetTypeRewrite()},
-        {"event", ev->ToString()});
+        {"ev", ev->ToString()});
 }
 
 }   // namespace

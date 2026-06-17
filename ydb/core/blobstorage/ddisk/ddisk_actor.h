@@ -721,16 +721,13 @@ namespace NKikimr::NDDisk {
                 TRope JoinData(ui32 sectorSize);
             };
 
-            bool BatchWrite = false;
-            bool BatchReady = false;
-            TPersistentBufferSectorInfo BatchHeaderSectorInfo;
             std::vector<TRecord> Records;
 
             absl::flat_hash_set<ui64> OperationCookies;
-
+            std::vector<TRope> SectorsToWrite;
             // map operationCookie to <lsn, generation> pairs that were erased by this operation
             std::unordered_map<ui64, std::vector<TEraseLsnId>> Erases;
-
+            TRope DataToWrite;
 
             std::vector<TPersistentBufferSectorInfo> OccupiedSectors;
             NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
@@ -789,7 +786,7 @@ namespace NKikimr::NDDisk {
 
         bool PreprocessPersistentBufferWrite(NActors::TEventHandle<TEvWritePersistentBuffer>& ev);
         void ProcessPersistentBufferWrite(TEvWritePersistentBuffer::TPtr ev);
-        void ProcessPersistentBufferBatchWriteData(TEvWritePersistentBuffer::TPtr ev);
+        bool ProcessPersistentBufferBatchWriteData(TEvWritePersistentBuffer::TPtr ev);
         void ProcessPersistentBufferBatchWrite();
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);

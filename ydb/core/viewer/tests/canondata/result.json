@@ -697,6 +697,10 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
+        "evict_vdisk_monitoring_force": {
+            "status_code": 403,
+            "text": "Administration access required when force=true"
+        },
         "restart_pdisk_database": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
@@ -704,6 +708,14 @@
         "restart_pdisk_database_force": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "restart_pdisk_empty_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "restart_pdisk_missing_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
         },
         "restart_pdisk_monitoring": {
             "debugMessage": "text",
@@ -725,6 +737,10 @@
             "debugMessage": "text",
             "result": true
         },
+        "restart_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
         "restart_pdisk_viewer": {
             "status_code": 403,
             "text": "Access denied"
@@ -732,6 +748,18 @@
         "restart_pdisk_viewer_force": {
             "status_code": 403,
             "text": "Access denied"
+        },
+        "status_pdisk_empty_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "status_pdisk_monitoring_force": {
+            "status_code": 403,
+            "text": "Administration access required when force=true"
+        },
+        "status_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
         },
         "storage_nodes_database": {
             "FieldsAvailable": "0000010000000110011000000110100000011",
@@ -1343,43 +1371,278 @@
     },
     "test.TestViewer.test_topic_data": {
         "both_offset_and_ts": {
-            "status_code": 401,
-            "text": "Access denied"
+            "status_code": 400,
+            "text": "Only read_timestamp or offset parameter may be specified, not both"
         },
         "no_partition": {
-            "status_code": 401,
-            "text": "Access denied"
+            "status_code": 400,
+            "text": "Parameter 'partition' is necessary"
         },
         "response_compressed": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
+                    "Offset": 11,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 12,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
+                    "Offset": 12,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 13,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
+                    "Offset": 13,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 14,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
+                    "Offset": 14,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 15,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
+                    "Offset": 15,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 16,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_last_offset": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_metadata": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZV93aXRoX21ldGE=",
+                    "MessageMetadata": [
+                        {
+                            "Key": "key1",
+                            "Value": "value1"
+                        },
+                        {
+                            "Key": "key2",
+                            "Value": "value2"
+                        }
+                    ],
+                    "Offset": 10,
+                    "OriginalSize": 17,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 11,
+                    "StorageSize": 37,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_not_truncated": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_read": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0z",
+                    "Offset": 3,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 4,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS00",
+                    "Offset": 4,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 5,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_truncated": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHI=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
         }
     },
     "test.TestViewer.test_topic_data_cdc": {
         "alter": null,
         "data": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 1,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "eyJ1cGRhdGUiOnsibmFtZSI6ImVsbGV2ZW4ifSwia2V5IjpbMTFdfQ==",
+                    "Offset": 0,
+                    "OriginalSize": 40,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 40,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "insert": {
             "status": "SUCCESS",
@@ -4783,7 +5046,6 @@
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
-                "EnableResourcePools": true,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
                 "EnableTopicTransfer": true
@@ -5831,7 +6093,6 @@
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
-                "EnableResourcePools": true,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
                 "EnableTopicTransfer": true
@@ -6879,7 +7140,6 @@
                 "EnableMvccSnapshotReads": true,
                 "EnablePersistentQueryStats": true,
                 "EnablePublicApiExternalBlobs": false,
-                "EnableResourcePools": true,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
                 "EnableTopicTransfer": true

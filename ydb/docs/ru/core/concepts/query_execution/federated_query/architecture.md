@@ -33,4 +33,4 @@
 
 {% include [!](_includes/supported_eds.md) %}
 
-Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) дополнительно поддерживается доступ к ряду экспериментальных внешних СУБД. Подробности см. в разделе [Федеративные запросы](index.md).
+Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) дополнительно поддерживается доступ к ряду экспериментальных внешних СУБД. Подробности см. в разделе [{#T}](index.md).

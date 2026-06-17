@@ -1,5 +1,7 @@
 #include "aggregator_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAckTimeout : public TTxBase {
@@ -10,12 +12,14 @@ struct TStatisticsAggregator::TTxAckTimeout : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_ACK_TIMEOUT; }
 
     bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAckTimeout::Execute");
+        YDB_LOG_DEBUG("TTxAckTimeout::Execute",
+            {"tabletId", Self->TabletID()});
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAckTimeout::Complete");
+        YDB_LOG_DEBUG("TTxAckTimeout::Complete",
+            {"tabletId", Self->TabletID()});
 
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvRequestDistribution);
     }

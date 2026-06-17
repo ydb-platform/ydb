@@ -4,6 +4,8 @@
 
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
@@ -21,7 +23,10 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. ReplyToActorId " << ReplyToActorId << " , Record " << Record());
+        YDB_LOG_DEBUG("TTxAnalyze::Execute. ReplyToActorId Record",
+            {"tabletId", Self->TabletID()},
+            {"replyToActorId", ReplyToActorId},
+            {"record", Record()});
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -37,11 +42,17 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         // update existing force traversal
         if (existingOperation) {
             if (existingOperation->ReplyToActorId == Event->Sender) {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Reattach to existing force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
+                YDB_LOG_DEBUG("TTxAnalyze::Execute. Reattach to existing force traversal. OperationId ReplyToActorId",
+                    {"tabletId", Self->TabletID()},
+                    {"operationId", operationId},
+                    {"replyToActorId", ReplyToActorId});
                 existingOperation->RequestingActorReattached = true;
                 return true;
             } else {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Delete broken force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
+                YDB_LOG_DEBUG("TTxAnalyze::Execute. Delete broken force traversal. OperationId ReplyToActorId",
+                    {"tabletId", Self->TabletID()},
+                    {"operationId", operationId},
+                    {"replyToActorId", ReplyToActorId});
                 Self->DeleteForceTraversalOperation(operationId, db);
             }
         }
@@ -49,10 +60,11 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         const TString types = JoinVectorIntoString(TVector<ui32>(Record().GetTypes().begin(), Record().GetTypes().end()), ",");
         const TString& databaseName = Record().GetDatabase();
 
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal operation"
-            << ", OperationId: " << operationId.Quote()
-            << ", DatabaseName: `" << databaseName << "'"
-            << ", Types: " << types);
+        YDB_LOG_DEBUG("TTxAnalyze::Execute. Create new force traversal operation DatabaseName: `",
+            {"tabletId", Self->TabletID()},
+            {"operationId", operationId},
+            {"databaseName", databaseName},
+            {"types", types});
 
         // create new force traversal
         auto createdAt = ctx.Now();
@@ -72,10 +84,11 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             const TString columnTagsStr = JoinVectorIntoString(columnTags, ",");
             const auto status = TForceTraversalTable::EStatus::None;
 
-            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal table"
-                << ", OperationId: " << operationId.Quote()
-                << ", PathId: " << pathId
-                << ", ColumnTags: " << columnTagsStr);
+            YDB_LOG_DEBUG("TTxAnalyze::Execute. Create new force traversal table",
+                {"tabletId", Self->TabletID()},
+                {"operationId", operationId},
+                {"pathId", pathId},
+                {"columnTags", columnTagsStr});
 
             // create new force traversal
             TForceTraversalTable operationTable {
@@ -109,7 +122,8 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Complete");
+        YDB_LOG_DEBUG("TTxAnalyze::Complete",
+            {"tabletId", Self->TabletID()});
 
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleTraversal());
     }

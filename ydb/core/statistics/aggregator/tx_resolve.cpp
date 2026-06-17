@@ -3,6 +3,8 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResolve : public TTxBase {
@@ -18,7 +20,8 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_RESOLVE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Execute");
+        YDB_LOG_DEBUG("TTxResolve::Execute",
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -68,7 +71,8 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Complete");
+        YDB_LOG_DEBUG("TTxResolve::Complete",
+            {"tabletId", Self->TabletID()});
 
         if (Cancelled) {
             return;

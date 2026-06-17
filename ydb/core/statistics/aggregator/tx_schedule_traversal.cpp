@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
@@ -14,8 +16,8 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
 
         if (!Self->EnableColumnStatistics) {
-            SA_LOG_T("[" << Self->TabletID() << "] Column statistics disabled"
-                << ", won't schedule traversals");
+            YDB_LOG_TRACE("Column statistics disabled won't schedule traversals",
+                {"tabletId", Self->TabletID()});
             return true;
         }
 
@@ -26,16 +28,20 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
         Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
 
         if (Self->TraversalPathId) {
-            SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTraversal::Execute. Traverse is in progress. PathId " << Self->TraversalPathId);
+            YDB_LOG_TRACE("TTxScheduleTraversal::Execute. Traverse is in progress. PathId",
+                {"tabletId", Self->TabletID()},
+                {"traversalPathId", Self->TraversalPathId});
             return true;
         }
 
         if (Self->ScheduleTraversals.empty()) {
-            SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTraversal. No info from schemeshard");
+            YDB_LOG_TRACE("TTxScheduleTraversal. No info from schemeshard",
+                {"tabletId", Self->TabletID()});
             return true;
         }
 
-        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTraversal::Execute");
+        YDB_LOG_TRACE("TTxScheduleTraversal::Execute",
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -51,7 +57,8 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTraversal::Complete");
+        YDB_LOG_TRACE("TTxScheduleTraversal::Complete",
+            {"tabletId", Self->TabletID()});
 
         Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
     }

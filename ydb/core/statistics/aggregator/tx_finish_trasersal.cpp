@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
@@ -30,7 +32,8 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_FINISH_TRAVERSAL; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Execute");
+        YDB_LOG_DEBUG("TTxFinishTraversal::Execute",
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         Self->FinishTraversal(
@@ -41,22 +44,29 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete " <<
-            Self->LastTraversalWasForceString() << " traversal for path " << PathId);
+        YDB_LOG_DEBUG("TTxFinishTraversal::Complete traversal for path",
+            {"tabletId", Self->TabletID()},
+            {"lastTraversalWasForce", Self->LastTraversalWasForceString()},
+            {"pathId", PathId});
 
         if (!ReplyToActorId) {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. No ActorId to send reply.");            
+            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. No ActorId to send reply",
+                {"tabletId", Self->TabletID()});
             return;
         }
 
-        auto forceTraversalRemained = Self->ForceTraversalOperation(OperationId);       
-        
+        auto forceTraversalRemained = Self->ForceTraversalOperation(OperationId);
+
         if (forceTraversalRemained) {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. " <<
-                "There are pending operations, OperationId " << OperationId.Quote() << " , ActorId=" << ReplyToActorId);
+            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. There are pending operations, OperationId",
+                {"tabletId", Self->TabletID()},
+                {"operationId", OperationId},
+                {"actorId", ReplyToActorId});
         } else {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. " <<
-                "Send TEvAnalyzeResponse, OperationId=" << OperationId.Quote() << ", ActorId=" << ReplyToActorId);
+            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Send TEvAnalyzeResponse,",
+                {"tabletId", Self->TabletID()},
+                {"operationId", OperationId},
+                {"actorId", ReplyToActorId});
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
             response->Record.SetOperationId(OperationId);
             response->Record.SetStatus(Status);

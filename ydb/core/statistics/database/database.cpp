@@ -1,11 +1,12 @@
 #include "database.h"
 
-#include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
 
@@ -219,9 +220,11 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
         const TString& database, const TPathId& pathId, EStatType statType, std::optional<ui32> columnTag) {
-    SA_LOG_D("[DispatchLoadStatisticsQuery] QueryId[ " << queryId
-        << " ], PathId[ " << pathId << " ], " << " StatType[ " << static_cast<ui32>(statType)
-        << " ], ColumnTag[ " << columnTag << " ]");
+    YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery] QueryId[ PathId[ StatType[ ColumnTag[",
+        {"queryId", queryId},
+        {"pathId", pathId},
+        {"statType", static_cast<ui32>(statType)},
+        {"columnTag", columnTag});
 
     const auto statisticsTablePath = CanonizePath(
         TStringBuilder() << database << '/' << STATISTICS_TABLE);
@@ -260,7 +263,8 @@ void DispatchLoadStatisticsQuery(
             Y_ABORT_UNLESS(rowsCount < 2);
 
             if (rowsCount == 0) {
-                SA_LOG_W("[ReadRowsResponse] QueryId[ " << queryId << " ], RowsCount[ 0 ]");
+                YDB_LOG_WARN("[ReadRowsResponse] QueryId[ RowsCount[ 0",
+                    {"queryId", queryId});
             }
 
             query_response->Success = rowsCount > 0;
@@ -273,8 +277,9 @@ void DispatchLoadStatisticsQuery(
                     : col.GetString();
                 }
         } else {
-            SA_LOG_E("[ReadRowsResponse] QueryId[ "
-                << queryId << " ] " << NYql::IssuesFromMessageAsString(response.issues()));
+            YDB_LOG_ERROR("[ReadRowsResponse] QueryId[",
+                {"queryId", queryId},
+                {"issues", NYql::IssuesFromMessageAsString(response.issues())});
             query_response->Success = false;
         }
 

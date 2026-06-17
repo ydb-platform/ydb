@@ -217,6 +217,9 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     const TTransactionId& transactionId,
     const TGetTablePartitionsOptions& options);
 
+NApi::TCheckClusterLivenessOptions SerializeOptionsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options);
+
 NApi::TDistributedWriteSessionStartOptions SerializeOptionsForStartDistributedTableSession(
     TMutationId& mutationId,
     const TTransactionId& transactionId,

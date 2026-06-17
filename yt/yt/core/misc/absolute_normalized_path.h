@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/core/misc/string_builder.h>
+
 #include <util/generic/hash.h>
 
 #include <filesystem>
@@ -16,12 +18,20 @@ public:
     explicit TAbsoluteNormalizedPath(TAbsoluteNormalizedPath&& path) noexcept = default;
 
     template <class TSource>
+    requires (!std::same_as<
+        std::remove_cvref_t<TSource>,
+        TAbsoluteNormalizedPath
+    >)
     explicit TAbsoluteNormalizedPath(TSource&& path);
 
     TAbsoluteNormalizedPath& operator=(const TAbsoluteNormalizedPath& path) = default;
     TAbsoluteNormalizedPath& operator=(TAbsoluteNormalizedPath&& path) noexcept = default;
 
     template <class TSource>
+    requires (!std::same_as<
+        std::remove_cvref_t<TSource>,
+        TAbsoluteNormalizedPath
+    >)
     TAbsoluteNormalizedPath& operator=(TSource&& path);
 
     void Clear() noexcept;
@@ -44,6 +54,10 @@ private:
     void ValidateDepthPath(const std::filesystem::path& path) const;
     std::filesystem::path TryMakeAbsoluteNormalizedPath(const std::filesystem::path& path) const;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FormatValue(TStringBuilderBase* builder, const TAbsoluteNormalizedPath& path, TStringBuf /*spec*/);
 
 ////////////////////////////////////////////////////////////////////////////////
 

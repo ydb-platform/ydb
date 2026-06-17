@@ -54,8 +54,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
     {
         Init();
 
-        auto writeRequest = CreateDirectReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::DirectPBuffersFilling);
         writeRequest->Run();
 
         UNIT_ASSERT_VALUES_EQUAL(false, WriteClient->Response.has_value());
@@ -74,8 +75,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
     {
         Init();
 
-        auto writeRequest = CreateDirectReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::DirectPBuffersFilling);
         writeRequest->Run();
 
         UNIT_ASSERT_VALUES_EQUAL(false, WriteClient->Response.has_value());
@@ -127,8 +129,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             return writePBufferPromises[hostIndex].GetFuture();
         };
 
-        auto writeRequest = CreateDirectReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::DirectPBuffersFilling);
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(3, writePBufferPromises.size());
 
@@ -189,8 +192,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             return writePBufferPromises[hostIndex].GetFuture();
         };
 
-        auto writeRequest = CreateDirectReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::DirectPBuffersFilling);
         writeRequest->Run();
 
         UNIT_ASSERT_VALUES_EQUAL(3, writePBufferPromises.size());
@@ -234,8 +238,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
             GetManyPBuffersHandlerWithImmediateOkResponse();
 
         // prepare and call main request
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
 
         writeRequest->Run();
 
@@ -261,8 +266,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         Init();
 
         // prepare and call main request
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -297,8 +303,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         Init();
 
         // prepare and call main request
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -333,8 +340,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         Init();
 
         // prepare and call main request
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -384,8 +392,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         Init();
 
         // prepare and call main request
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -432,8 +441,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         Init();
 
         // prepare and call main request
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
         writeRequest->Run();
 
         // as response is hanging, there is no results
@@ -481,8 +491,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
     {
         Init();
 
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
 
         writeRequest->Run();
 
@@ -505,8 +516,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
     {
         Init();
 
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
         writeRequest->Run();
 
         {
@@ -543,8 +555,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
     {
         Init();
 
-        auto writeRequest = CreatePBufferReplicationExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::PBufferReplication);
         writeRequest->Run();
 
         //  call hedge mechanism

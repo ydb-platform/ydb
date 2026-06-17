@@ -1165,4 +1165,4 @@ bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& 
     return true;
 }
 
-}  // namespace NYql
+} // namespace NYql

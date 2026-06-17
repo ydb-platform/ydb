@@ -73,9 +73,12 @@ namespace NKikimr::NDDisk {
                     << " dataSize# " << data.size()
                     << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
 
-                YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "Send reply",
-                    {"DDiskId", DDiskId},
-                    {"str", ss.Str()});
+                YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "Dump DDiskId: payload must be contiguous and aligned",
+                    {"sectorSize", DiskFormat->SectorSize},
+                    {"contiguousSize", dataIter.ContiguousSize()},
+                    {"dataSize", data.size()},
+                    {"aligned", (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0)},
+                    {"DDiskId", DDiskId});
 
                 SendReply(*ev, std::make_unique<TEvWriteResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
@@ -381,6 +384,10 @@ namespace NKikimr::NDDisk {
             }
             case EWakeupTag::WakeupCollectPbStats: {
                 CollectPbStatsSnapshot();
+                break;
+            }
+            case EWakeupTag::WakeupProcessPersistentBufferBatchWrite: {
+                ProcessPersistentBufferBatchWrite();
                 break;
             }
         }

@@ -11,12 +11,14 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_graph_saveload.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
+
 struct TInputItem {
     ui32 Key = 0;
     i64 Time = 0;
@@ -111,13 +113,13 @@ std::tuple<TType*, TEncoder, TDecoder> BuildInputType(TSetup<false>& setup) {
 
     auto structType = pgmBuilder.NewEmptyStructType();
     structType = pgmBuilder.NewStructType(structType, "key",
-                                          pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+                                          NTest::ConvertToMinikqlType<ui32>(pgmBuilder));
     structType = pgmBuilder.NewStructType(structType, "time",
                                           pgmBuilder.NewDataType(NUdf::TDataType<NUdf::TTimestamp>::Id));
     structType = pgmBuilder.NewStructType(structType, "sum",
-                                          pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
+                                          NTest::ConvertToMinikqlType<ui32>(pgmBuilder));
     structType = pgmBuilder.NewStructType(structType, "str",
-                                          pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id));
+                                          NTest::ConvertToMinikqlType<TStringBuf>(pgmBuilder));
     auto keyIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("key");
     auto timeIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("time");
     auto strIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("str");
@@ -189,10 +191,10 @@ THolder<IComputationGraph> BuildGraph(
                 pgmBuilder.AggrConcat(
                     pgmBuilder.AggrConcat(
                         pgmBuilder.Member(state, "str"),
-                        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(" ")),
+                        NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf(" "))),
                     pgmBuilder.ToString(
                         pgmBuilder.Member(item, "sum"))),
-                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(" Add"));
+                NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf(" Add")));
             std::vector<std::pair<std::string_view, TRuntimeNode>> members;
             members.emplace_back("str", add);
             return pgmBuilder.NewStruct(members);
@@ -210,9 +212,9 @@ THolder<IComputationGraph> BuildGraph(
                 pgmBuilder.AggrConcat(
                     pgmBuilder.AggrConcat(
                         pgmBuilder.Member(state1, "str"),
-                        pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(" ")),
+                        NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf(" "))),
                     pgmBuilder.Member(state2, "str")),
-                pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(" Merge"));
+                NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf(" Merge")));
             std::vector<std::pair<std::string_view, TRuntimeNode>> members;
             members.emplace_back("str", add);
             return pgmBuilder.NewStruct(members);
@@ -228,13 +230,13 @@ THolder<IComputationGraph> BuildGraph(
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&hop, sizeof(hop))),           // hop
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&interval, sizeof(interval))), // interval
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&delay, sizeof(delay))),       // delay
-        pgmBuilder.NewDataLiteral<bool>(dataWatermarks),
-        pgmBuilder.NewDataLiteral<bool>(watermarkMode),
+        NTest::ConvertValueToLiteralNode(pgmBuilder, bool(dataWatermarks)),
+        NTest::ConvertValueToLiteralNode(pgmBuilder, bool(watermarkMode)),
 #if MKQL_RUNTIME_VERSION >= 70U
-        farFutureSizeLimit == NYql::NHoppingWindow::TSettings{}.FarFutureSizeLimit ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui64>(farFutureSizeLimit),
-        farFutureTimeLimitUs == NYql::NHoppingWindow::TSettings{}.FarFutureTimeLimit.MicroSeconds() ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&farFutureTimeLimitUs, sizeof(farFutureTimeLimitUs))),
-        earlyPolicy == NYql::NHoppingWindow::TSettings{}.EarlyPolicy ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui32>((ui32)earlyPolicy),
-        latePolicy == NYql::NHoppingWindow::TSettings{}.LatePolicy ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui32>((ui32)latePolicy)
+        farFutureSizeLimit == NYql::NHoppingWindow::TSettings{}.FarFutureSizeLimit ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(farFutureSizeLimit)),
+        farFutureTimeLimitUs == NYql::NHoppingWindow::TSettings{}.FarFutureTimeLimit.MicroSeconds() ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&farFutureTimeLimitUs, sizeof(farFutureTimeLimitUs))),
+        earlyPolicy == NYql::NHoppingWindow::TSettings{}.EarlyPolicy ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(earlyPolicy)),
+        latePolicy == NYql::NHoppingWindow::TSettings{}.LatePolicy ? NTest::ConvertValueToLiteralNode(pgmBuilder, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(latePolicy))
 #else
         {}, // SizeLimit
         {}, // TimeLimit

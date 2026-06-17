@@ -36,7 +36,7 @@ namespace NKikimr::NDDisk {
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
 
-        YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::Handle(TEvConnect) sending OK",
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvConnect) sending OK",
             {"marker", "BSDD11"},
             {"DDiskId", DDiskId},
             {"recipient", ev->Sender},

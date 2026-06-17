@@ -1,0 +1,35 @@
+USE plato;
+PRAGMA config.flags('OptimizerFlags', 'PushdownFiltersOverWindow');
+
+
+SELECT
+    key,
+    subkey,
+    ROW_NUMBER() OVER (
+        PARTITION BY
+            key,
+            subkey
+        ORDER BY event_dt DESC
+        )                                 AS number,
+FROM (
+    SELECT
+        event_dt,
+        key,
+        subkey,
+        value,
+        ROW_NUMBER() OVER (
+            PARTITION BY
+                key,
+                subkey,
+                value IS NULL
+            ORDER BY event_dt DESC
+        )                                 AS number,
+        SUM(CAST(value IS NOT NULL AS INT8)) OVER(
+            PARTITION BY
+                key,
+                subkey
+        ) > 0                             AS better_variant
+    FROM Input
+)
+WHERE number = 1 AND ((better_variant = TRUE AND LENGTH(value) > 0) OR better_variant = false);
+

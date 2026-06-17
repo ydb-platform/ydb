@@ -3,7 +3,6 @@
 #include <util/generic/overloaded.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 #include <ydb/core/util/stlog.h>
-
 #include <ydb/library/actors/core/interconnect.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
@@ -206,7 +205,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
         const ui64 tabletId = creds.TabletId;
 
-        YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::Handle(TEvDeleteTabletChunks)",
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvDeleteTabletChunks)",
             {"marker", "BSDD51"},
             {"DDiskId", DDiskId},
             {"tabletId", tabletId});

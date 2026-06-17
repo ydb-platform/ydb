@@ -3666,9 +3666,14 @@ void TKqpTasksGraph::CountReadTasksFromSource(const TStageInfo& stageInfo, size_
     }
     MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
 
+    ui32 taskCountHint = stage.GetTaskCount();
+    if (!taskCountHint) {
+        taskCountHint = scheduledTaskCount;
+    }
+
     ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
-    if (scheduledTaskCount) {
-        taskCount = std::min<ui32>(taskCount, scheduledTaskCount);
+    if (taskCountHint) {
+        taskCount = std::min<ui32>(taskCount, taskCountHint);
     } else if (resourceSnapshotSize) {
         taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
     }

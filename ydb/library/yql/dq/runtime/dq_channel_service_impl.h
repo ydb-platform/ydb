@@ -973,22 +973,6 @@ public:
         return PausedByCheckpoint;
     }
 
-    void AddWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    void PauseByWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    void ResumeByWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    bool IsPausedByWatermark() const override {
-        Y_ENSURE(false);
-    }
-
 // IDqInputChannel
 
     ui64 GetChannelId() const override {
@@ -1282,4 +1266,3 @@ public:
 };
 
 }
-

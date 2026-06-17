@@ -476,7 +476,7 @@ namespace NKikimr {
                     Send(r.PersistentBufferId, infoReq.release(), 0, reqCookie);
                     YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send",
                         {"marker", "BSDD36"},
-                        {"r.PersistentBufferId", r.PersistentBufferId},
+                        {"persistentBufferId", r.PersistentBufferId},
                         {"reqCookie", reqCookie});
                 }
                 if (inflight.Requests.empty()) {

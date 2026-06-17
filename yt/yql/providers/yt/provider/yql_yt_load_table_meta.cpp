@@ -241,7 +241,8 @@ public:
                 const auto schemaAttrs = std::initializer_list<TStringBuf>{YqlRowSpecAttribute, SCHEMA_ATTR_NAME, READ_SCHEMA_ATTR_NAME, INFER_SCHEMA_ATTR_NAME};
                 if (AnyOf(schemaAttrs, [&tableDesc](TStringBuf attr) { return tableDesc.Meta->Attrs.contains(attr); })) {
                     auto rowSpec = MakeIntrusive<TYqlRowSpecInfo>();
-                    if (!rowSpec->Parse(tableDesc.Meta->Attrs, ctx)) {
+                    auto parseExpressionColumns = State_->Configuration->_ParseExpressionColumns.Get().GetOrElse(DEFAULT_PARSE_EXPRESSION_COLUMNS);
+                    if (!rowSpec->Parse(tableDesc.Meta->Attrs, parseExpressionColumns, ctx)) {
                         return TStatus::Error;
                     }
                     if (!State_->Configuration->UseNativeDescSort.Get().GetOrElse(false) && rowSpec->ClearNativeDescendingSort(ctx)) {

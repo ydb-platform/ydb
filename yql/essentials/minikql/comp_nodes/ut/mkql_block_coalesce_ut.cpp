@@ -283,37 +283,37 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
 Y_UNIT_TEST(TestStringType) {
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{Nothing(), TString("hello"), TString("world")},
+        TVector<TMaybe<TString>>{{}, "hello", "world"},
         TVector<TString>{"default1", "default2", "default3"},
         TVector<TString>{"default1", "hello", "world"});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{Nothing(), TString("hello"), TString("world")},
+        TVector<TMaybe<TString>>{{}, "hello", "world"},
         TString("default"),
         TVector<TString>{"default", "hello", "world"});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{TString("a"), TString("b"), TString("c")},
+        TVector<TMaybe<TString>>{"a", "b", "c"},
         TVector<TString>{"default1", "default2", "default3"},
         TVector<TString>{"a", "b", "c"});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{Nothing(), Nothing(), Nothing()},
+        TVector<TMaybe<TString>>{{}, {}, {}},
         TVector<TString>{"default1", "default2", "default3"},
         TVector<TString>{"default1", "default2", "default3"});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{Nothing(), TString("hello"), Nothing()},
-        TVector<TMaybe<TString>>{TString("default1"), Nothing(), Nothing()},
-        TVector<TMaybe<TString>>{TString("default1"), TString("hello"), Nothing()});
+        TVector<TMaybe<TString>>{{}, "hello", {}},
+        TVector<TMaybe<TString>>{"default1", {}, {}},
+        TVector<TMaybe<TString>>{"default1", "hello", {}});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
-        TMaybe<TString>{TString("constant")},
+        TMaybe<TString>{"constant"},
         TVector<TString>{"a", "b", "c"},
         TVector<TString>{"constant", "constant", "constant"});
 }

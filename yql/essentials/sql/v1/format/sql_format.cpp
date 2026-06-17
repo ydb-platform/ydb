@@ -902,10 +902,78 @@ private:
         }
     }
 
-    void VisitSelect(const TRule_select_stmt& msg) {
+    void VisitCTEWithClause(const TRule_cte_with_clause& msg) {
         NewLine();
-        Visit(msg.GetRule_select_stmt_intersect1());
-        for (const auto& block : msg.GetBlock2()) {
+        Visit(msg.GetToken1());
+
+        if (!msg.GetBlock3().empty()) {
+            PushCurrentIndent();
+            NewLine();
+            Visit(msg.GetRule_cte_binding2());
+            for (const auto& block : msg.GetBlock3()) {
+                Visit(block.GetToken1());
+                NewLine();
+                Visit(block.GetRule_cte_binding2());
+            }
+            PopCurrentIndent();
+        } else {
+            Visit(msg.GetRule_cte_binding2());
+        }
+
+        if (msg.HasBlock4()) {
+            Visit(msg.GetBlock4().GetToken1());
+        }
+
+        NewLine();
+    }
+
+    void VisitCTEBinding(const TRule_cte_binding& msg) {
+        if (msg.HasBlock1()) {
+            Visit(msg.GetBlock1().GetToken1());
+        }
+
+        Visit(msg.GetRule_cte_key2());
+        Visit(msg.GetToken3());
+        Visit(msg.GetToken4());
+        PushCurrentIndent();
+        NewLine();
+        Visit(msg.GetRule_cte_value5());
+        PopCurrentIndent();
+        Visit(msg.GetToken6());
+    }
+
+    void VisitCTEKey(const TRule_cte_key& msg) {
+        Visit(msg.GetRule_id_table_or_type1());
+        if (msg.HasBlock2()) {
+            Visit(msg.GetBlock2().GetRule_pure_column_list1());
+        }
+    }
+
+    void VisitCTEValue(const TRule_cte_value& msg) {
+        switch (msg.GetAltCase()) {
+            case TRule_cte_value::kAltCteValue1: {
+                Visit(msg.GetAlt_cte_value1().GetRule_select_stmt1());
+                break;
+            }
+            case TRule_cte_value::kAltCteValue2: {
+                Visit(msg.GetAlt_cte_value2().GetRule_values_stmt1());
+                break;
+            }
+            case TRule_cte_value::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
+    }
+
+    void VisitSelect(const TRule_select_stmt& msg) {
+        const auto& core = msg.GetRule_select_stmt_core2();
+
+        if (msg.HasBlock1()) {
+            Visit(msg.GetBlock1().GetRule_cte_with_clause1());
+        }
+
+        NewLine();
+        Visit(core.GetRule_select_stmt_intersect1());
+        for (const auto& block : core.GetBlock2()) {
             NewLine();
             Visit(block.GetRule_union_op1());
             NewLine();
@@ -940,9 +1008,35 @@ private:
         Visit(msg.GetToken3());
     }
 
+    void VisitNLPureColumnList(const TRule_pure_column_list& msg) {
+        Visit(msg.GetToken1());
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_an_id2());
+        for (const auto& block : msg.GetBlock3()) {
+            Visit(block.GetToken1());
+            NewLine();
+            Visit(block.GetRule_an_id2());
+        }
+
+        if (msg.HasBlock4()) {
+            Visit(msg.GetBlock4().GetToken1());
+        }
+
+        PopCurrentIndent();
+        NewLine();
+        Visit(msg.GetToken5());
+    }
+
     void VisitSelectSubExpr(const TRule_select_subexpr& msg) {
-        Visit(msg.GetRule_select_subexpr_intersect1());
-        for (const auto& block : msg.GetBlock2()) {
+        const auto& core = msg.GetRule_select_subexpr_core2();
+
+        if (msg.HasBlock1()) {
+            Visit(msg.GetBlock1().GetRule_cte_with_clause1());
+        }
+
+        Visit(core.GetRule_select_subexpr_intersect1());
+        for (const auto& block : core.GetBlock2()) {
             NewLine();
             Visit(block.GetRule_union_op1());
             NewLine();
@@ -961,9 +1055,15 @@ private:
     }
 
     void VisitSelectUnparenthesized(const TRule_select_unparenthesized_stmt& msg) {
+        const auto& core = msg.GetRule_select_unparenthesized_stmt_core2();
+
+        if (msg.HasBlock1()) {
+            Visit(msg.GetBlock1().GetRule_cte_with_clause1());
+        }
+
         NewLine();
-        Visit(msg.GetRule_select_unparenthesized_stmt_intersect1());
-        for (const auto& block : msg.GetBlock2()) {
+        Visit(core.GetRule_select_unparenthesized_stmt_intersect1());
+        for (const auto& block : core.GetBlock2()) {
             NewLine();
             Visit(block.GetRule_union_op1());
             NewLine();
@@ -1913,24 +2013,7 @@ private:
             case TRule_into_values_source::kAltIntoValuesSource1: {
                 const auto& alt = msg.GetAlt_into_values_source1();
                 if (alt.HasBlock1()) {
-                    const auto& columns = alt.GetBlock1().GetRule_pure_column_list1();
-                    Visit(columns.GetToken1());
-                    NewLine();
-                    PushCurrentIndent();
-                    Visit(columns.GetRule_an_id2());
-                    for (const auto& block : columns.GetBlock3()) {
-                        Visit(block.GetToken1());
-                        NewLine();
-                        Visit(block.GetRule_an_id2());
-                    }
-
-                    if (columns.HasBlock4()) {
-                        Visit(columns.GetBlock4().GetToken1());
-                    }
-
-                    PopCurrentIndent();
-                    NewLine();
-                    Visit(columns.GetToken5());
+                    VisitNLPureColumnList(alt.GetBlock1().GetRule_pure_column_list1());
                     NewLine();
                 }
 
@@ -2392,24 +2475,7 @@ private:
             const auto& block3 = msg.GetBlock3();
             Visit(block3.GetBlock1());
             if (block3.HasBlock2()) {
-                const auto& columns = block3.GetBlock2().GetRule_pure_column_list1();
-                Visit(columns.GetToken1());
-                NewLine();
-                PushCurrentIndent();
-                Visit(columns.GetRule_an_id2());
-                for (const auto& block : columns.GetBlock3()) {
-                    Visit(block.GetToken1());
-                    NewLine();
-                    Visit(block.GetRule_an_id2());
-                }
-
-                if (columns.HasBlock4()) {
-                    Visit(columns.GetBlock4().GetToken1());
-                }
-
-                NewLine();
-                PopCurrentIndent();
-                Visit(columns.GetToken5());
+                VisitNLPureColumnList(block3.GetBlock2().GetRule_pure_column_list1());
             }
         }
 
@@ -2475,24 +2541,7 @@ private:
             PushCurrentIndent();
             Visit(block2.GetToken1());
             Visit(block2.GetToken2());
-            const auto& columns = block2.GetRule_pure_column_list3();
-            Visit(columns.GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(columns.GetRule_an_id2());
-            for (const auto& block : columns.GetBlock3()) {
-                Visit(block.GetToken1());
-                NewLine();
-                Visit(block.GetRule_an_id2());
-            }
-
-            if (columns.HasBlock4()) {
-                Visit(columns.GetBlock4().GetToken1());
-            }
-
-            PopCurrentIndent();
-            NewLine();
-            Visit(columns.GetToken5());
+            VisitNLPureColumnList(block2.GetRule_pure_column_list3());
             PopCurrentIndent();
         }
     }
@@ -3286,6 +3335,10 @@ TStaticData::TStaticData()
           {TRule_shift_right::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShiftRight)},
 
           {TRule_pragma_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitPragma)},
+          {TRule_cte_with_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCTEWithClause)},
+          {TRule_cte_binding::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCTEBinding)},
+          {TRule_cte_key::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCTEKey)},
+          {TRule_cte_value::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCTEValue)},
           {TRule_select_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelect)},
           {TRule_select_stmt_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectIntersect)},
           {TRule_smart_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSmartParenthesis)},

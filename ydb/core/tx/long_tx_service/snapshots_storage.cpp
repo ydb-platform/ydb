@@ -44,8 +44,13 @@ TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View() const {
         now - TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds())};
 }
 
-void TRemoteSnapshotsStorage::Init(const TVector<TRemoteSnapshotInfo>& snapshots) {
+void TRemoteSnapshotsStorage::Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime) {
     AFL_ENSURE(NodeIdToState.empty());
+    // Seed collection times from the peer first, so freshness (GetOldestCollectionTime) is meaningful
+    // right after prefill instead of collapsing to Zero (which disables age-based cleanup).
+    for (const auto& [nodeId, collectionTime] : nodeIdToCollectionTime) {
+        NodeIdToState[nodeId].CollectionTime = collectionTime;
+    }
     for (const auto& snapshot : snapshots) {
         const auto nodeId = snapshot.SessionActorId.NodeId();
         NodeIdToState[nodeId].RemoteSnapshots.push_back(snapshot);
@@ -138,6 +143,23 @@ void TRemoteSnapshotsStorage::Clear() {
 
 TRowVersion TRemoteSnapshotsStorage::GetBorder() const {
     return SnapshotBorder;
+}
+
+TInstant TRemoteSnapshotsStorage::GetOldestCollectionTime() const {
+    TInstant oldest = AppData()->TimeProvider->Now();
+    for (const auto& [nodeId, state] : NodeIdToState) {
+        oldest = std::min(oldest, state.CollectionTime);
+    }
+    return oldest;
+}
+
+THashMap<ui32, TInstant> TRemoteSnapshotsStorage::GetNodeIdToCollectionTime() const {
+    THashMap<ui32, TInstant> result;
+    result.reserve(NodeIdToState.size());
+    for (const auto& [nodeId, state] : NodeIdToState) {
+        result[nodeId] = state.CollectionTime;
+    }
+    return result;
 }
 
 bool TRemoteSnapshotsStorage::IsReady() const {

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "invoker_pool.h"
 #endif
-#undef INVOKER_POOL_INL_H_
 
 namespace NYT {
 

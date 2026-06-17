@@ -5,8 +5,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
-
 namespace NKikimr::NDDisk {
 
     // Returns a new sorted vector containing all unique elements from sorted a and sorted b.
@@ -156,7 +154,8 @@ namespace NKikimr::NDDisk {
     void TPersistentBufferBarriersManager::RestoreBarriers(std::map<TPersistentBufferId, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
         for (ui32 pos = 0; pos < PersistentBufferBarriers.size(); pos++) {
             auto& b = PersistentBufferBarriers[pos];
-            allocator.MarkOccupied({{.ChunkIdx = b.ChunkIdx, .SectorIdx = b.SectorIdx}});
+            const TPersistentBufferSectorInfo barrierSector{.ChunkIdx = b.ChunkIdx, .SectorIdx = b.SectorIdx};
+            allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&barrierSector, 1));
             for (FreeBarrierPosition = 0; FreeBarrierPosition < TPersistentBufferBarriers::MaxBarriersPerHeader && b.Header.Barriers[FreeBarrierPosition].TabletId > 0; FreeBarrierPosition++) {
                 auto& barrier = b.Header.Barriers[FreeBarrierPosition];
                 auto it = persistentBuffers.lower_bound({barrier.TabletId, 0});
@@ -176,9 +175,9 @@ namespace NKikimr::NDDisk {
                         YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
                             {"marker", "BSDD38"},
                             {"tabletId", barrier.TabletId},
-                            {"barrier.Generation", barrier.Generation},
-                            {"oldBarrier.Generation", oldBarrier.Generation},
-                            {"barrier.Lsn", barrier.Lsn},
+                            {"barrierGeneration", barrier.Generation},
+                            {"oldBarrierGeneration", oldBarrier.Generation},
+                            {"barrierLsn", barrier.Lsn},
                             {"oldBarrier.Lsn", oldBarrier.Lsn});
                         if (barrier.Generation > oldBarrier.Generation
                             || (barrier.Generation == oldBarrier.Generation && barrier.Lsn > oldBarrier.Lsn)) {
@@ -367,8 +366,8 @@ namespace NKikimr::NDDisk {
             YDB_LOG_DEBUG("TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found",
                 {"marker", "BSDD30"},
                 {"tabletId", tabletId},
-                {"erase.HeaderLsn", erase.HeaderLsn},
-                {"header->RecordLsn", header->RecordLsn});
+                {"headerLsn", erase.HeaderLsn},
+                {"recordLsn", header->RecordLsn});
             return false;
         }
         erase.ChunkIdx = chunkIdx;
@@ -397,7 +396,8 @@ namespace NKikimr::NDDisk {
                 continue;
             }
 
-            allocator.MarkOccupied({{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx}});
+            const TPersistentBufferSectorInfo eraseSector{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx};
+            allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&eraseSector, 1));
 
             TPersistentBuffer& buffer = pbIt->second;
             for (ui64 lsn : erase.Lsns) {

@@ -209,6 +209,8 @@ public:
 
     private:
         mutable TAtomicCounter PreparationsStarted = 0;
+        bool NeedResendReplyFlag = false;
+        std::optional<bool> StartedAsync;
 
         friend class TTxController;
         virtual bool DoParse(TColumnShard& owner, const TString& data) = 0;
@@ -247,12 +249,13 @@ public:
         }
 
         void ResetStatusOnUpdate() {
+            if (Status && *Status == EStatus::ReplySent) {
+                NeedResendReplyFlag = true;
+            }
             Status = {};
         }
 
         virtual TString DoDebugString() const = 0;
-
-        std::optional<bool> StartedAsync;
 
     public:
         using TPtr = std::shared_ptr<ITransactionOperator>;
@@ -261,6 +264,10 @@ public:
 
         bool IsInProgress() const {
             return DoIsInProgress();
+        }
+
+        bool NeedResendReply() const {
+            return NeedResendReplyFlag;
         }
 
         bool PingTimeout(TColumnShard& owner, const TMonotonic now) {
@@ -419,6 +426,10 @@ public:
         }
 
         virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+
+        virtual void OnPlanStep(TColumnShard& /*owner*/, const ui64 /*planStep*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+        }
+
         virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) = 0;
 
         virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;

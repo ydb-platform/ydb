@@ -43,9 +43,9 @@ void TIssueTokenCommand::Register(TRegistrar registrar)
     registrar.Parameter("user", &TThis::User_);
     registrar.Parameter("password_sha256", &TThis::PasswordSha256_)
         .Default();
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "description",
-        [] (TThis* command) -> TString& {
+        [] (TThis* command) -> std::string& {
             return command->Options.Description;
         })
         .Optional();

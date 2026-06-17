@@ -12,7 +12,10 @@
 
 tasks.{{ task }}.configure {
 {%-         if javac_flags|length -%}
-{%-             for javac_flag in javac_flags %}
+{%-             if javac_flags|select('eq', '-parameters')|length %}
+    options.compilerArgs.add("-parameters")
+{%-             endif -%}
+{%-             for javac_flag in javac_flags|reject('eq', '-parameters') %}
     options.compilerArgs.add("{{ javac_flag }}")
 {%-             endfor -%}
 {%-         endif -%}

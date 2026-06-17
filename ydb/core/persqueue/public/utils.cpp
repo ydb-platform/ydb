@@ -265,6 +265,17 @@ TString TPartitionGraph::DebugString() const {
     return sb;
 }
 
+std::vector<ui32> TPartitionGraph::GetRootPartitions() const {
+    std::vector<ui32> rootPartitions;
+
+    for (auto& [id, n] : Partitions) {
+        if (n.IsRoot()) {
+            rootPartitions.push_back(id);
+        }
+    }
+    return rootPartitions;
+}
+
 template<typename TPartition>
 inline int GetPartitionId(TPartition p) {
     return p.GetPartitionId();

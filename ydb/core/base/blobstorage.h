@@ -793,6 +793,7 @@ struct TEvBlobStorage {
         EvStartupDataSyncDone,
         EvPhantomFlagExtractedFromChunk,
         EvSyncLogDiskOutOfSpace,
+        EvRecoveryLogCutDone,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

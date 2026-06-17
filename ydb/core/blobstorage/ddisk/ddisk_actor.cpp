@@ -10,13 +10,15 @@
 #if defined(__linux__)
 #include <unistd.h>
 
-#endif
-
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
+#endif
 
 namespace NKikimr::NDDisk {
 
 namespace {
+    const TVector<double> WriteBatchSizeBounds = {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 24, 32, 40, 48, 64, 128
+    };
 
     const TVector<double> NvmeLatencyHistBoundsMs = {
         0.01, 0.02, 0.03, 0.04, 0.05,                   // 10th us
@@ -180,6 +182,7 @@ namespace {
                 COUNTER(PersistentBuffer, TotalBytes, false)
                 COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
                 COUNTER(PersistentBuffer, InMemoryCacheSize, false)
+                HISTOGRAM(PersistentBuffer, WriteBatchSize, WriteBatchSizeBounds)
             },
         };
 
@@ -270,8 +273,7 @@ namespace {
             hFunc(TEvDisconnect, handleQuery)
             hFunc(TEvWrite, handleQuery)
             hFunc(TEvRead, handleQuery)
-            hFunc(TEvSyncWithPersistentBuffer, handleQuery)
-            hFunc(TEvSyncWithDDisk, handleQuery)
+            hFunc(TEvSync, handleQuery)
             hFunc(TEvDeleteTabletChunks, handleQuery)
             hFunc(TEvPrivate::TEvIssuePersistentBufferChunkAllocation, Handle)
 

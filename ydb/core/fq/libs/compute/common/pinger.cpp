@@ -351,7 +351,7 @@ private:
             YDB_LOG_TRACE("Ping response",
                 {"queryId", Id},
                 {"owner", OwnerId},
-                {"success", ev->Get()->Result});
+                {"result", ev->Get()->Result});
             StartLeaseTime = now;
             auto action = ev->Get()->Result.action();
             if (action != FederatedQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {

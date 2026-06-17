@@ -96,13 +96,13 @@ public:
     void Handle(const TEvYdbCompute::TEvCancelOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND && response.Status != NYdb::EStatus::PRECONDITION_FAILED) {
-            YDB_LOG_ERROR("[ydb] [Stopper] Can't cancel",
+            YDB_LOG_ERROR("[ydb] [Stopper] Can't cancel operation",
                 {"cloudId", Params.CloudId},
                 {"scope", Params.Scope},
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
-                {"operation", response.Issues.ToOneLineString()});
+                {"issues", response.Issues.ToOneLineString()});
             Failed(response.Status, response.Issues);
             return;
         }
@@ -124,20 +124,20 @@ public:
             {"queryId", Params.QueryId},
             {"jobId", Params.JobId},
             {"operationId", OperationId},
-            {"canceled", response.Status});
+            {"status", response.Status});
         Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), SelfId(), Connector, OperationId));
     }
 
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND) {
-            YDB_LOG_ERROR("[ydb] [Stopper] Can't get",
+            YDB_LOG_ERROR("[ydb] [Stopper] Can't get operation",
                 {"cloudId", Params.CloudId},
                 {"scope", Params.Scope},
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
-                {"operation", response.Issues.ToOneLineString()});
+                {"issues", response.Issues.ToOneLineString()});
             Failed(response.Status, response.Issues);
             return;
         }

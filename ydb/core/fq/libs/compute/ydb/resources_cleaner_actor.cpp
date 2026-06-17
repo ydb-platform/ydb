@@ -105,7 +105,7 @@ public:
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
-                {"operation", ev->Get()->Issues.ToOneLineString()});
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;

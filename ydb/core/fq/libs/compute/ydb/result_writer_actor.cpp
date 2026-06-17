@@ -105,7 +105,7 @@ public:
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
                 {"resultSetId", ResultSetId},
-                {"request", ev->Get()->Issues.ToOneLineString()});
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             FetchRowsLimit = 1000;
             SendFetchScriptResultRequest();
             return;
@@ -119,7 +119,7 @@ public:
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
                 {"resultSetId", ResultSetId},
-                {"result", ev->Get()->Issues.ToOneLineString()});
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
@@ -177,7 +177,7 @@ public:
     void Handle(const NFq::TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
         auto writeResultCounters = Counters.GetCounters(ERequestType::RT_WRITE_RESULT_SET);
         writeResultCounters->InFly->Dec();
-        
+
         auto cookie = ev->Cookie;
         auto it = WriterInflight.find(cookie);
         if (it == WriterInflight.end()) {
@@ -386,7 +386,7 @@ public:
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
-                {"operation", ev->Get()->Issues.ToOneLineString()});
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;
@@ -440,7 +440,7 @@ public:
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId},
                 {"operationId", OperationId},
-                {"result", ev->Get()->Issues.ToOneLineString()});
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;

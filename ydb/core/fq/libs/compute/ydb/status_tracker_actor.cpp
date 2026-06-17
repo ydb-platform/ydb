@@ -338,7 +338,7 @@ public:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         // Pinger may end (with ydb_run_actor); no one sends a poison pill to this status tracker.
         // Therefore we'll finish ourselves.
-        YDB_LOG_WARN("[ydb] [StatusTracker] TEvUndelivered, from, reason",
+        YDB_LOG_WARN("[ydb] [StatusTracker] TEvUndelivered",
             {"cloudId", Params.CloudId},
             {"scope", Params.Scope},
             {"queryId", Params.QueryId},

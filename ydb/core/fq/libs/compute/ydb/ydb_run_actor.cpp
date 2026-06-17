@@ -50,7 +50,7 @@ public:
     static constexpr char ActorName[] = "YDB_RUN_ACTOR";
 
     void Bootstrap() {
-        YDB_LOG_INFO("[ydb] Boostrap",
+        YDB_LOG_INFO("[ydb] Bootstrap",
             {"queryId", Params.QueryId},
             {"params", Params});
         Pinger = Register(ActorFactory->CreatePinger(SelfId()).release());
@@ -195,9 +195,9 @@ public:
     }
 
     void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
-        YDB_LOG_INFO("[ydb]",
+        YDB_LOG_INFO("[ydb] QueryActionResult",
             {"queryId", Params.QueryId},
-            {"queryActionResult", FederatedQuery::QueryAction_Name(ev->Get()->Action)});
+            {"action", FederatedQuery::QueryAction_Name(ev->Get()->Action)});
         // Start cancel operation only when StatusTracker or ResultWriter is running
         if (Params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED && !IsAborted && !FinalizationStarted) {
             IsAborted = true;

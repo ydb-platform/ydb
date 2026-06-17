@@ -118,7 +118,7 @@ public:
                 {"scope", Params.Scope},
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId},
-                {"script", ev->Get()->Issues.ToOneLineString()});
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvExecuterResponse(ev->Get()->Issues, response.Status));
             FailedAndPassAway();
             return;

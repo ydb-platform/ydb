@@ -91,7 +91,7 @@ public:
     void Handle(const TEvControlPlaneStorage::TEvDescribeDatabaseResponse::TPtr& ev) {
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
-                YDB_LOG_ERROR("[ydb] [SynchronizationService]: DescribeDatabaseResponse, scope",
+                YDB_LOG_ERROR("[ydb] [SynchronizationService]: DescribeDatabaseResponse",
                     {"scope", Scope},
                     {"issues", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error describe a database at the synchronization stage");
@@ -602,7 +602,7 @@ private:
         }
 
         if (BindingIds.empty()) {
-            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start create external data sources stage for the scope (bindigns list is empty)",
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start create external data sources stage for the scope (bindings list is empty)",
                 {"scope", Scope});
             Become(&TSynchronizeScopeActor::StateCreateExternalDataSourcesFunc);
             CreateExternalDataSources();

@@ -101,7 +101,7 @@ public:
         const auto& response = *ev.Get()->Get();
         if (response.Issues) {
             YDB_LOG_ERROR("[ydb] [ComputeDatabaseMonitoring]: CPU Load Request",
-                {"FAILED", response.Issues.ToOneLineString()});
+                {"issues", response.Issues.ToOneLineString()});
         }
         Counters.CpuLoadRequestLatencyMs->Collect((TInstant::Now() - StartCpuLoad).MilliSeconds());
 

@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/distributed_mutex.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/distributed_lock.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
@@ -67,57 +67,67 @@ struct TTestEnv {
     }
 };
 
-TDistributedMutex MakeMutex(TTestEnv& env, const char* name = SEMAPHORE_NAME) {
-    return TDistributedMutex(*env.Client, COORD_PATH, name, TEST_TIMEOUT);
+TDistributedLock MakeLock(TTestEnv& env, const char* name = SEMAPHORE_NAME) {
+    return TDistributedLock(*env.Client, COORD_PATH, name, TEST_TIMEOUT);
 }
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(DistributedMutex) {
+Y_UNIT_TEST_SUITE(DistributedLock) {
 
     Y_UNIT_TEST(LockUnlock) {
         TTestEnv env;
-        auto mutex = MakeMutex(env);
-        mutex.lock();
-        mutex.unlock();
+        auto lock = MakeLock(env);
+        lock.lock();
+        lock.unlock();
     }
 
     Y_UNIT_TEST(LockGuard) {
         TTestEnv env;
-        auto mutex = MakeMutex(env);
-        std::lock_guard guard(mutex);
+        auto lock = MakeLock(env);
+        std::lock_guard guard(lock);
     }
 
     Y_UNIT_TEST(TryLockSuccess) {
         TTestEnv env;
-        auto mutex = MakeMutex(env);
-        UNIT_ASSERT(mutex.try_lock());
-        mutex.unlock();
+        auto lock = MakeLock(env);
+        UNIT_ASSERT(lock.try_lock());
+        lock.unlock();
     }
 
     Y_UNIT_TEST(TryLockFailsWhenHeld) {
         TTestEnv env;
-        auto mutexA = MakeMutex(env);
-        auto mutexB = MakeMutex(env);
-        mutexA.lock();
-        UNIT_ASSERT(!mutexB.try_lock());
-        mutexA.unlock();
+        auto lockA = MakeLock(env);
+        auto lockB = MakeLock(env);
+        lockA.lock();
+        UNIT_ASSERT(!lockB.try_lock());
+        lockA.unlock();
     }
 
     Y_UNIT_TEST(LockThrowsOnAcquireFailure) {
         TTestEnv env;
         env.CoordinationService.FailNextAcquire.store(true);
-        auto mutex = MakeMutex(env);
-        UNIT_ASSERT_EXCEPTION(mutex.lock(), TYdbLockException);
-        UNIT_ASSERT(!mutex.getStopToken().stop_requested());
-        mutex.lock();
-        mutex.unlock();
+        auto lock = MakeLock(env);
+        UNIT_ASSERT_EXCEPTION(lock.lock(), TYdbLockException);
+        UNIT_ASSERT(!lock.getStopToken().stop_requested());
+        lock.lock();
+        lock.unlock();
+    }
+
+    Y_UNIT_TEST(UnlockFailureNotifiesStopToken) {
+        TTestEnv env;
+        auto lock = MakeLock(env);
+        auto token = lock.getStopToken();
+        lock.lock();
+        env.CoordinationService.FailNextRelease.store(true);
+        lock.unlock();
+        UNIT_ASSERT(token.stop_requested());
     }
 
     Y_UNIT_TEST(OwnerDataIsHostName) {
         TTestEnv env;
-        auto mutex = MakeMutex(env);
-        mutex.lock();
+        auto lock = MakeLock(env);
+        lock.lock();
 
         auto sessionResult = env.Client->StartSession(COORD_PATH).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
@@ -133,13 +143,13 @@ Y_UNIT_TEST_SUITE(DistributedMutex) {
         UNIT_ASSERT_VALUES_EQUAL(description.GetOwners().size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(description.GetOwners()[0].GetData(), FQDNHostName());
 
-        mutex.unlock();
+        lock.unlock();
     }
 
     Y_UNIT_TEST(GetStopTokenInitiallyValid) {
         TTestEnv env;
-        auto mutex = MakeMutex(env);
-        UNIT_ASSERT(!mutex.getStopToken().stop_requested());
+        auto lock = MakeLock(env);
+        UNIT_ASSERT(!lock.getStopToken().stop_requested());
     }
 
 }

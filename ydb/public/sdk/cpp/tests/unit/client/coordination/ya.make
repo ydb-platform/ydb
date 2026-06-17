@@ -17,7 +17,7 @@ PEERDIR(
 
 SRCS(
     coordination_ut.cpp
-    distributed_mutex_ut.cpp
+    distributed_lock_ut.cpp
 )
 
 END()

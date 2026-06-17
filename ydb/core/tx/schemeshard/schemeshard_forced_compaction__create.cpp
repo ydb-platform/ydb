@@ -158,8 +158,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         if (!Self->TryFreeForcedCompactionSlot(db, ctx)) {
             return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
                 << "Number of stored forced compaction operations reached the limit of "
-                << Self->ForcedCompactionStoredOperationsLimit
-                << "; forget finished operations or enable AutoForgetOperations");
+                << Self->ForcedCompactionStoredOperationsLimit);
         }
 
         Self->PersistForcedCompactionState(db, *info);

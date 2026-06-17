@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "parallel_runner.h"
 #endif
-#undef PARALLEL_RUNNER_INL_H_
 
 namespace NYT::NConcurrency {
 

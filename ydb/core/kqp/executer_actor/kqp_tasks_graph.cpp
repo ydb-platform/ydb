@@ -729,6 +729,20 @@ void TKqpTasksGraph::FillStages() {
                         meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
                         meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
                         meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                        if (indexSettings.GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
+                            meta.IndexMetas.emplace_back();
+                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDocsTable());
+                            meta.IndexMetas.back().TablePath = indexSettings.GetDocsTable().GetPath();
+                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                            meta.IndexMetas.emplace_back();
+                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDictTable());
+                            meta.IndexMetas.back().TablePath = indexSettings.GetDictTable().GetPath();
+                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                            meta.IndexMetas.emplace_back();
+                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetStatsTable());
+                            meta.IndexMetas.back().TablePath = indexSettings.GetStatsTable().GetPath();
+                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                        }
                     }
                 }
             };
@@ -2559,6 +2573,14 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         indexTableProto->MutableColumns()->CopyFrom(indexTable.GetColumns());
     }
 
+    if (fullTextSource.HasUniqueIndexImplTable()) {
+        const auto& uniqueIdx = fullTextSource.GetUniqueIndexImplTable();
+        auto* uniqueProto = settings->MutableUniqueIndexImplTable();
+        uniqueProto->MutableTable()->CopyFrom(uniqueIdx.GetTable());
+        uniqueProto->MutableKeyColumns()->CopyFrom(uniqueIdx.GetKeyColumns());
+        uniqueProto->MutableColumns()->CopyFrom(uniqueIdx.GetColumns());
+    }
+
     settings->MutableKeyColumns()->CopyFrom(fullTextSource.GetKeyColumns());
     settings->MutableColumns()->CopyFrom(fullTextSource.GetColumns());
     if (GetMeta().Snapshot.IsValid()) {
@@ -3644,9 +3666,14 @@ void TKqpTasksGraph::CountReadTasksFromSource(const TStageInfo& stageInfo, size_
     }
     MaxTasksGraph.AddStage(stageId, TMaxTasksGraph::ANY, inputs);
 
+    ui32 taskCountHint = stage.GetTaskCount();
+    if (!taskCountHint) {
+        taskCountHint = scheduledTaskCount;
+    }
+
     ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
-    if (scheduledTaskCount) {
-        taskCount = std::min<ui32>(taskCount, scheduledTaskCount);
+    if (taskCountHint) {
+        taskCount = std::min<ui32>(taskCount, taskCountHint);
     } else if (resourceSnapshotSize) {
         taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
     }

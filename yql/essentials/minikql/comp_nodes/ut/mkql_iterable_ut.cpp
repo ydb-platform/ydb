@@ -1,4 +1,5 @@
 #include "mkql_computation_node_ut.h"
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -17,7 +18,7 @@ Y_UNIT_TEST_LLVM(TestEmptyIterable) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const TProgramBuilder::TZeroLambda lambda = [&pb]() {
-        return pb.EmptyIterator(pb.NewStreamType(pb.NewStructType({{"a", pb.NewDataType(NUdf::EDataSlot::Uint64)}})));
+        return pb.EmptyIterator(pb.NewStreamType(NTest::ConvertToMinikqlType<NTest::TStructType<NTest::TStructMember<"a", ui64>>>(pb)));
     };
     const auto root = pb.SqueezeToHashedDict(
         pb.ToFlow(pb.Iterable(lambda)),

@@ -4,6 +4,7 @@
 #include <ydb/mvp/core/core_ydb_impl.h>
 #include <ydb/mvp/meta/meta_cluster_info.h>
 #include <ydb/mvp/meta/mvp.h>
+#include <ydb/mvp/meta/support_links/entity.h>
 #include <ydb/mvp/meta/support_links/events.h>
 #include <ydb/mvp/meta/support_links/response.h>
 #include <ydb/mvp/meta/support_links/source.h>
@@ -34,19 +35,19 @@ inline constexpr TDuration SUPPORT_LINKS_REQUEST_TIMEOUT = TDuration::Seconds(10
 class TMetaSupportLinksGetHandlerActor : private THandlerActorYdb, public NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor> {
 public:
     using TBase = NActors::TActorBootstrapped<TMetaSupportLinksGetHandlerActor>;
-    using EEntityType = TSupportLinksResolver::EEntityType;
 
 protected:
     NActors::TActorId HttpProxyId;
     const TYdbLocation& Location;
     const TMetaSettings Settings;
     TRequest Request;
-    EEntityType EntityType = EEntityType::Cluster;
+    TVector<NSupportLinks::TEntityIdentity> EntityIdentities;
+    TCgiParameters AdditionalRequestParams;
     THashMap<TString, TString> ClusterInfo;
 
 private:
     TMaybe<NYdb::NTable::TSession> Session;
-    std::unique_ptr<TSupportLinksResolver> SupportLinksResolver;
+    std::unique_ptr<NSupportLinks::TSupportLinksResolver> SupportLinksResolver;
     TVector<NSupportLinks::TSupportError> PendingErrors;
 
 public:
@@ -65,7 +66,7 @@ public:
     void Bootstrap() {
         Become(&TMetaSupportLinksGetHandlerActor::StateWork, GetTimeout(Request, SUPPORT_LINKS_REQUEST_TIMEOUT), new NActors::TEvents::TEvWakeup());
 
-        if (!ValidateAndInitEntityType()) {
+        if (!ValidateAndInitRequestContext()) {
             ReplyBadRequestAndDie();
             return;
         }
@@ -73,15 +74,13 @@ public:
         RequestClusterInfo();
     }
 
-    bool ValidateAndInitEntityType() {
-        const TString cluster = Request.Parameters["cluster"];
-        const TString database = Request.Parameters["database"];
-
-        if (cluster.empty()) {
-            AddCommonError("Invalid identity parameters. Supported entities: cluster requires 'cluster'; database requires 'cluster' and 'database'.");
+    bool ValidateAndInitRequestContext() {
+        TString errorMessage;
+        if (!NSupportLinks::TryBuildRequestIdentities(Request.Parameters.UrlParameters, EntityIdentities, errorMessage)) {
+            AddCommonError(std::move(errorMessage));
             return false;
         }
-        EntityType = database.empty() ? EEntityType::Cluster : EEntityType::Database;
+        AdditionalRequestParams = NSupportLinks::BuildAdditionalRequestParameters(Request.Parameters.UrlParameters);
         return true;
     }
 
@@ -163,19 +162,21 @@ public:
         Become(&TMetaSupportLinksGetHandlerActor::StateResolveSources);
     }
 
-    TSupportLinksResolver::TParams BuildSupportLinksResolverParams() const {
-        return TSupportLinksResolver::TParams{
-            .EntityType = EntityType,
+    NSupportLinks::TSupportLinksResolver::TParams BuildSupportLinksResolverParams() const {
+        return NSupportLinks::TSupportLinksResolver::TParams{
             .Settings = &Settings,
-            .ClusterInfo = ClusterInfo,
-            .UrlParameters = Request.Parameters.UrlParameters,
+            .RequestContext = {
+                .Identities = EntityIdentities,
+                .ClusterInfo = ClusterInfo,
+                .AdditionalRequestParams = AdditionalRequestParams,
+            },
             .Owner = SelfId(),
             .HttpProxyId = HttpProxyId,
         };
     }
 
-    virtual std::unique_ptr<TSupportLinksResolver> CreateSupportLinksResolver() {
-        return std::make_unique<TSupportLinksResolver>(BuildSupportLinksResolverParams());
+    virtual std::unique_ptr<NSupportLinks::TSupportLinksResolver> CreateSupportLinksResolver() {
+        return std::make_unique<NSupportLinks::TSupportLinksResolver>(BuildSupportLinksResolverParams());
     }
 
     bool TryReplyResolvedSupportLinks() {

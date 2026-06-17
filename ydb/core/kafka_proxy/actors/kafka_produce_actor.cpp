@@ -1,6 +1,7 @@
 #include "kafka_produce_actor.h"
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
+#include <ydb/library/kafka/kafka_records.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
@@ -355,17 +356,11 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         }
 
         // set seqno
-        if (enableKafkaDeduplication) {
-            if (batch->BaseSequence >= 0) {
-                // Handle int32 overflow.
-                w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1));
-            } else {
-                KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << batch->BaseSequence);
-                return {EKafkaErrors::INVALID_RECORD, nullptr};
-            }
-        } else {
-            w->SetSeqNo(batch->BaseOffset + record.OffsetDelta);
+        if (enableKafkaDeduplication && batch->BaseSequence < 0) {
+            KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << batch->BaseSequence);
+            return {EKafkaErrors::INVALID_RECORD, nullptr};
         }
+        w->SetSeqNo(GetRecordSeqNo(*batch, batchIndex, record));
 
         w->SetData(str);
         ui64 createTime = batch->BaseTimestamp + record.TimestampDelta;

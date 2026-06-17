@@ -245,38 +245,34 @@ message TSegmentResult {
     optional string ErrorReason = 2;
 }
 
-message TEvSyncWithPersistentBuffer {
+message TEvSync {
     message TSegment {
+        message TDDiskSegment {
+        }
+
+        message TPersistentBufferSegment {
+            uint64 Lsn = 1;
+            uint32 Generation = 2;
+        }
+
         TBlockSelector Selector = 1;
-        uint64 Lsn = 2;
-        uint32 Generation = 3;
+        oneof SourceSegment {
+            TDDiskSegment DDiskSegment = 2;
+            TPersistentBufferSegment PersistentBufferSegment = 3;
+        }
+    }
+
+    message TSource {
+        TDDiskId DDiskId = 1;
+        fixed64 DDiskInstanceGuid = 2;
+        repeated TSegment Segments = 3;
     }
 
     TQueryCredentials Credentials = 1;
-    repeated TSegment Segments = 2;
-    TDDiskId DDiskId = 3;
-    fixed64 DDiskInstanceGuid = 4;
+    repeated TSource Sources = 2;
 }
 
-message TEvSyncWithPersistentBufferResult {
-    TReplyStatus.E Status = 1;
-    optional string ErrorReason = 2;
-
-    repeated TSegmentResult SegmentResults = 3;
-}
-
-message TEvSyncWithDDisk {
-    message TSegment {
-        TBlockSelector Selector = 1;
-    }
-
-    TQueryCredentials Credentials = 1;
-    repeated TSegment Segments = 2;
-    TDDiskId DDiskId = 3;
-    fixed64 DDiskInstanceGuid = 4;
-}
-
-message TEvSyncWithDDiskResult {
+message TEvSyncResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
 

@@ -38,7 +38,7 @@ DECLARE_REFCOUNTED_STRUCT(TQueueStaticExportDestinationConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_STRONG_TYPEDEF(TQueueProducerSessionId, TString);
+YT_DEFINE_STRONG_TYPEDEF(TQueueProducerSessionId, std::string);
 YT_DEFINE_STRONG_TYPEDEF(TQueueProducerEpoch, i64);
 YT_DEFINE_STRONG_TYPEDEF(TQueueProducerSequenceNumber, i64);
 

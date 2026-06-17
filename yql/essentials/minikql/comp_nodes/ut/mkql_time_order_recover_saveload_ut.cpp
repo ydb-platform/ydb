@@ -1,4 +1,5 @@
 #include "../mkql_time_order_recover.h"
+#include "mkql_program_builder_test_utils.h"
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -65,19 +66,19 @@ using TTestData = std::vector<std::tuple<ui32, i64, ui32>>;
 THolder<IComputationGraph> BuildGraph(TSetup& setup, const TTestData& input) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    auto structType = pgmBuilder.NewStructType({{"key", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)},
-                                                {"time", pgmBuilder.NewDataType(NUdf::TDataType<i64>::Id)},
-                                                {"sum", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)}});
+    auto structType = NTest::ConvertToMinikqlType<NTest::TStructType<
+        NTest::TStructMember<"key", ui32>,
+        NTest::TStructMember<"sum", ui32>,
+        NTest::TStructMember<"time", i64>>>(pgmBuilder);
 
     TVector<TRuntimeNode> items;
     for (size_t i = 0; i < input.size(); ++i)
     {
-        auto key = pgmBuilder.NewDataLiteral<ui32>(std::get<0>(input[i]));
-        auto time = pgmBuilder.NewDataLiteral<i64>(std::get<1>(input[i]));
-        auto sum = pgmBuilder.NewDataLiteral<ui32>(std::get<2>(input[i]));
-
-        auto item = pgmBuilder.NewStruct(structType,
-                                         {{"key", key}, {"time", time}, {"sum", sum}});
+        auto item = pgmBuilder.NewStruct(structType, {
+                                                         {"key", NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(std::get<0>(input[i])))},
+                                                         {"time", NTest::ConvertValueToLiteralNode(pgmBuilder, i64(std::get<1>(input[i])))},
+                                                         {"sum", NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(std::get<2>(input[i])))},
+                                                     });
         items.push_back(std::move(item));
     }
 

@@ -3,7 +3,8 @@ import ymake
 import os
 
 
-def onios_assets(unit, *args):
+@ymake.macro
+def IOS_ASSETS(unit: ymake.Unit, *args: tuple[str, ...]):
     _, kv = common.sort_by_keywords({'ROOT': 1, 'CONTENTS': -1, 'FLAGS': -1}, args)
     if not kv.get('ROOT', []) and kv.get('CONTENTS', []):
         ymake.report_configure_error('Please specify ROOT directory for assets')

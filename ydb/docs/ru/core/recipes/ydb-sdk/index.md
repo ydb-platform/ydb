@@ -38,7 +38,7 @@
   - [Включить логирование](debug-logs.md)
   - [Экспорт логов в OpenTelemetry](debug-logs-otel.md)
   - [Подключить метрики в Prometheus](debug-prometheus.md)
-  - [Трассировка с OpenTelemetry](debug-otel.md)
+  - [Трассировка с OpenTelemetry](debug-otel-tracing.md)
 
 Смотрите также:
 

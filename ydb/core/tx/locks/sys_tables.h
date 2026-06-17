@@ -32,6 +32,7 @@ struct TSysTables {
         Ydb::TypedValue DefaultFromLiteral;
         bool IsBuildInProgress = false;
         bool IsNotNullColumn = false; //maybe move into TTypeInfo?
+        bool SetNotNullInProgress = false;
 
         TTableColumnInfo() = default;
 

@@ -16,12 +16,20 @@ namespace NMVP::NSupportLinks {
 
 inline constexpr TStringBuf GRAFANA_LOGGING_DEFAULT_URL = "/explore";
 
-inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(const NHttp::TUrlParameters& requestQueryParameters) {
+inline TVector<std::pair<TString, TString>> BuildGrafanaLoggingBindings(const TEntityIdentity& entityIdentity) {
     TVector<std::pair<TString, TString>> bindings;
 
-    const TString database = requestQueryParameters["database"];
-    if (!database.empty()) {
-        bindings.emplace_back("database", database);
+    if (!entityIdentity.Cluster.empty()) {
+        bindings.emplace_back("cluster", entityIdentity.Cluster);
+    }
+    if (entityIdentity.Database && !entityIdentity.Database->empty()) {
+        bindings.emplace_back("database", *entityIdentity.Database);
+    }
+    if (entityIdentity.Node && !entityIdentity.Node->empty()) {
+        bindings.emplace_back("node", *entityIdentity.Node);
+    }
+    if (entityIdentity.Host && !entityIdentity.Host->empty()) {
+        bindings.emplace_back("host", *entityIdentity.Host);
     }
 
     return bindings;
@@ -65,8 +73,7 @@ inline NJson::TJsonValue BuildGrafanaLoggingPanesJson(const TString& datasource,
 inline bool TryBuildGrafanaLoggingUrl(
     TStringBuf grafanaEndpoint,
     TStringBuf url,
-    const THashMap<TString, TString>& clusterInfo,
-    const NHttp::TUrlParameters& requestQueryParameters,
+    const ILinkSource::TLinkResolveInput& input,
     TString& resolvedUrl,
     TString& errorMessage)
 {
@@ -78,13 +85,13 @@ inline bool TryBuildGrafanaLoggingUrl(
         return false;
     }
 
-    const auto datasourceIt = clusterInfo.find("datasource_logging");
-    if (datasourceIt == clusterInfo.end() || datasourceIt->second.empty()) {
+    const auto datasourceIt = input.ClusterInfo.find("datasource_logging");
+    if (datasourceIt == input.ClusterInfo.end() || datasourceIt->second.empty()) {
         errorMessage = "datasource_logging is required in cluster info for source=grafana/logging";
         return false;
     }
 
-    TVector<std::pair<TString, TString>> bindings = BuildGrafanaLoggingBindings(requestQueryParameters);
+    TVector<std::pair<TString, TString>> bindings = BuildGrafanaLoggingBindings(input.Identity);
 
     TCgiParameters queryParameters;
     queryParameters.InsertUnescaped("schemaVersion", "1");
@@ -99,7 +106,7 @@ inline bool TryBuildGrafanaLoggingUrl(
 
 } // namespace NMVP::NSupportLinks
 
-namespace NMVP {
+namespace NMVP::NSupportLinks {
 
 class TGrafanaLoggingSource : public ILinkSource {
 public:
@@ -110,29 +117,28 @@ public:
         , GrafanaEndpoint(std::move(grafanaEndpoint))
     {}
 
-    TResolveOutput Resolve(const TLinkResolveInput& input, const TResolveContext&) const override {
+    TResolveOutput Resolve(const ILinkSource::TLinkResolveInput& input, const ILinkSource::TResolveContext&) const override {
         TResolveOutput result{
             .Name = SourceName,
         };
 
         TString resolvedUrl;
         TString errorMessage;
-        if (!NSupportLinks::TryBuildGrafanaLoggingUrl(
+        if (!TryBuildGrafanaLoggingUrl(
                 GrafanaEndpoint,
                 Url,
-                input.ClusterInfo,
-                input.UrlParameters,
+                input,
                 resolvedUrl,
                 errorMessage))
         {
-            result.Errors.emplace_back(NSupportLinks::TSupportError{
+            result.Errors.emplace_back(TSupportError{
                 .Source = SourceName,
                 .Message = std::move(errorMessage),
             });
             return result;
         }
 
-        result.Links.emplace_back(NSupportLinks::TResolvedLink{
+        result.Links.emplace_back(TResolvedLink{
             .Title = Title,
             .Url = std::move(resolvedUrl),
         });
@@ -148,12 +154,12 @@ private:
 
 inline void ValidateGrafanaLoggingSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings) {
     const TStringBuf url = config.GetUrl().empty()
-        ? NSupportLinks::GRAFANA_LOGGING_DEFAULT_URL
+        ? GRAFANA_LOGGING_DEFAULT_URL
         : TStringBuf(config.GetUrl());
     if (url.Contains('?')) {
         ythrow yexception() << "query parameters are not supported in url for source=" << config.GetSource();
     }
-    if (!NSupportLinks::IsAbsoluteUrl(url) && metaSettings.SupportLinks.GrafanaEndpoint.empty()) {
+    if (!IsAbsoluteUrl(url) && metaSettings.SupportLinks.GrafanaEndpoint.empty()) {
         ythrow yexception() << "grafana.endpoint is required for relative url";
     }
 }
@@ -168,4 +174,4 @@ inline std::shared_ptr<ILinkSource> MakeGrafanaLoggingSource(TSupportLinkEntryCo
     );
 }
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

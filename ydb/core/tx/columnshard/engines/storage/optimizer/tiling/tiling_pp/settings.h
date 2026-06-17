@@ -6,8 +6,8 @@ namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 struct TAgingSettings {
     bool Enabled = true;
-    TDuration PromoteTime = TDuration::Minutes(3);
-    ui64 MaxPortionPromotion = 100;
+    TDuration PromoteTime = TDuration::Minutes(30);
+    ui64 MaxPortionPromotion = 10;
 };
 
 struct TLastLevelSettings {
@@ -17,7 +17,7 @@ struct TLastLevelSettings {
     };
 
     TLimit Compaction{ 1'000, 64ULL * 1024 * 1024 };
-    ui64 CandidatePortionsOverload = 10;
+    ui64 CandidatePortionsOverload = 100;
 };
 
 struct TAccumulatorSettings {
@@ -29,8 +29,8 @@ struct TAccumulatorSettings {
     std::optional<TDuration> IgnoreTriggerTime = TDuration::Minutes(1);
 
     TLimit Compaction{ 1'000, 64ULL * 1024 * 1024 };
-    TLimit Trigger{ 1'000, 2ULL * 1024 * 1024 };
-    TLimit Overload{ 10'000, 256ULL * 1024 * 1024 };
+    TLimit Trigger{ 1'000, 64ULL * 1024 * 1024 };
+    ui64 OverloadPortions = 10'000;
 };
 
 struct TMiddleLevelSettings {
@@ -47,6 +47,7 @@ struct TTilingSettings {
     ui8 K = 10;
     /// Exclusive upper bound on middle-level index (allowed middle indices: 2 .. MiddleLevelCount - 1).
     ui64 MiddleLevelCount = TILING_LAYERS_COUNT;
+    bool EnableCompatibilityMode = true;
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

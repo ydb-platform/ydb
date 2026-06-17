@@ -341,7 +341,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
         std::optional<NKikimrBlobStorage::EVDiskStatus> status, NKikimrBlobStorage::TVDiskKind::EVDiskKind kind,
-        bool isBeingDeleted)
+        bool isBeingDeleted, bool phantomOnly)
 {
     pb->SetGroupId(vdiskId.GroupID.GetRawId());
     pb->SetGroupGeneration(vdiskId.GroupGeneration);
@@ -376,12 +376,13 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     if (isBeingDeleted) {
         pb->SetIsBeingDeleted(true);
     }
+    pb->SetPhantomOnly(phantomOnly);
 }
 
 void CopyInfo(NKikimrSysView::TVSlotInfo* info, const THolder<TBlobStorageController::TVSlotInfo>& vSlotInfo,
         const TBlobStorageController::TGroupInfo::TGroupFinder& /*finder*/, const TBridgeInfo* /*bridgeInfo*/) {
     SerializeVSlotInfo(info, vSlotInfo->GetVDiskId(), vSlotInfo->Metrics, vSlotInfo->VDiskStatus,
-        vSlotInfo->Kind, vSlotInfo->IsBeingDeleted());
+        vSlotInfo->Kind, vSlotInfo->IsBeingDeleted(), vSlotInfo->IsReplicatingWithPhantomsOnly());
 }
 
 void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageController::TGroupInfo>& groupInfo,
@@ -474,12 +475,14 @@ void TBlobStorageController::UpdateSystemViews() {
     for (auto& [key, value] : VSlots) {
         if (!value->VDiskStatus && value->VDiskStatusTimestamp + expiration <= now) {
             value->VDiskStatus = NKikimrBlobStorage::ERROR;
+            value->OnlyPhantomsRemain = false;
             SysViewChangedVSlots.insert(key);
         }
     }
     for (auto& [key, value] : StaticVSlots) {
         if (!value.VDiskStatus && value.VDiskStatusTimestamp + expiration <= now) {
             value.VDiskStatus = NKikimrBlobStorage::ERROR;
+            value.OnlyPhantomsRemain = false;
             SysViewChangedVSlots.insert(key);
         }
         if (SysViewChangedPDisks.contains(key.ComprisingPDiskId())) { // PDisk under static VSlot has been changed
@@ -573,7 +576,7 @@ void TBlobStorageController::UpdateSystemViews() {
             if (SysViewChangedVSlots.count(vslotId)) {
                 static const NKikimrBlobStorage::TVDiskMetrics zero;
                 SerializeVSlotInfo(&state.VSlots[vslotId], vslot.VDiskId, vslot.VDiskMetrics ? *vslot.VDiskMetrics : zero,
-                    vslot.VDiskStatus, vslot.VDiskKind, false);
+                    vslot.VDiskStatus, vslot.VDiskKind, false, vslot.IsReplicatingWithPhantomsOnly());
             }
         }
         TStaticGroupInfo::TStaticGroupFinder staticFinder = [this](TGroupId groupId) {

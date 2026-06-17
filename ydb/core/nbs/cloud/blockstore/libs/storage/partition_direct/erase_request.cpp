@@ -52,6 +52,13 @@ void TEraseRequestExecutor::Run()
         });
 }
 
+TString TEraseRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << "TEraseRequestExecutor";
+    return result;
+}
+
 NThreading::TFuture<TEraseRequestExecutor::TResponse>
 TEraseRequestExecutor::GetFuture() const
 {

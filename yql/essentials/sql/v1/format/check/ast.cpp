@@ -9,7 +9,7 @@ namespace NSQLFormat {
 namespace {
 
 bool IsUnstable(const NYql::TAstNode* x) {
-    return x->IsAtom() && (x->GetFlags() & NYql::TAstNodeFlags::IgnoredContent) != 0;
+    return x->IsAtom() && (x->GetFlags() & NYql::TAstNodeFlags::UnstableFormat) != 0;
 }
 
 } // namespace

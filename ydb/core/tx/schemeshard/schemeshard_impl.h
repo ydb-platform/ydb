@@ -344,7 +344,7 @@ public:
 
     ui64 NextLocalShardIdx = 0;
     THashMap<TShardIdx, TShardInfo> ShardInfos;
-    THashMap<TShardIdx, THashSet<TPathId>> SharedShards; // Maps shard to all paths that share it
+    THashMap<TShardIdx, THashMap<TPathId, TTxId>> SharedShards; // Maps shard to all paths that share it, with per-entry LastTxId
     THashMap<TShardIdx, TAdoptedShard> AdoptedShards;
     THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
     THashMap<TShardIdx, TVector<TActorId>> ShardDeletionSubscribers; // for tests
@@ -881,6 +881,7 @@ public:
     void PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
     void PersistAddSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
     void PersistRemoveSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
+    void PersistSharedShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId, TTxId txId);
 
     void PersistSnapshotTable(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId);
     void PersistSnapshotStepId(NIceDb::TNiceDb& db, const TTxId snapshotId, const TStepId stepId);
@@ -1845,6 +1846,13 @@ public:
     void PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexAlterMainTableTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexAlterMainTableTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
+    void PersistBuildIndexCreateBuildSequenceTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexCreateBuildSequenceTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexCreateBuildSequenceTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
+    // Persists the fulltext rowid auto-provisioning intent + child-build linkage fields together.
+    void PersistBuildIndexFulltextProvisioning(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexInitiateTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);

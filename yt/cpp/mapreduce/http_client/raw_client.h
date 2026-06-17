@@ -400,6 +400,9 @@ public:
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) override;
 
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = {}) override;
+
     ui64 GenerateTimestamp() override;
 
     IRawBatchRequestPtr CreateRawBatchRequest() override;

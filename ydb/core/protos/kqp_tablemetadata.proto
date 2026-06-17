@@ -53,4 +53,10 @@ message TKqpColumnMetadataProto {
     optional TKqpPathIdProto DefaultFromSequencePathId = 12;
     optional TCompression Compression = 13;
     repeated TEncoding Encoding = 14;
+    // When set, the value returned by the sequence allocator must be bit-reversed
+    // before being placed into the row. Used for `__ydb_row_id` columns of tables with
+    // fulltext indexes in `UseRowIdAsDocId` mode so that monotonic sequence values
+    // spread across partitions instead of concentrating on the last shard.
+    optional bool BitReverseSequenceValue = 15 [default = false];
+    optional bool SetNotNullInProgress = 16 [default = false];
 };

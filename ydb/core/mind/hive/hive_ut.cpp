@@ -9459,6 +9459,91 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             TestShrinkStoragePool(runtime, activeZone);
         });
     }
+
+    Y_UNIT_TEST(TestLockedTabletMetricsAfterHiveRestart) {
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMetricsWindowSize(1);
+            app.HiveConfig.SetLockedTabletsSendMetrics(true);
+        });
+
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+
+        const auto getTabletsCounter = [&]() {
+            return GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_METRICS_CPU);
+        };
+
+        const auto sendMetrics = [&runtime, &hiveTablet](const TActorId& sender, std::vector<std::pair<ui64, ui32>> tabletsIdCpu) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            for (const auto& info : tabletsIdCpu) {
+                NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+                metric->SetTabletID(info.first);
+                metric->MutableResourceUsage()->SetCPU(info.second);
+            }
+            runtime.SendToPipe(hiveTablet, sender, metrics.Release());
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetricsAck>(handle);
+        };
+
+        const auto tabletState = [&runtime, &hiveTablet](ui64 tabletId) {
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true));
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                if (tabletId == tablet.GetTabletID()) {
+                    return (int)tablet.GetVolatileState();
+                }
+            }
+            return -1;
+        };
+
+        // Create a normal tablet
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // Create an external-boot tablet
+        THolder<TEvHive::TEvCreateTablet> evExt(new TEvHive::TEvCreateTablet(testerTablet, 1, tabletType, BINDED_CHANNELS));
+        evExt->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+        const ui64 tabletIdExt = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(evExt), 0, false);
+        MakeSureTabletIsDown(runtime, tabletIdExt, 0);
+
+        TActorId owner = runtime.AllocateEdgeActor(0);
+        // Lock the external tablet with a large reconnect timeout so the lock
+        // survives hive restart (ScheduleUnlockTabletExecution defers the unlock
+        // by LockedReconnectTimeout).
+        SendLockTabletExecution(runtime, hiveTablet, tabletIdExt, 0, NKikimrProto::OK, owner, 60000);
+        UNIT_ASSERT_EQUAL(NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_UNKNOWN, tabletState(tabletIdExt));
+
+        // Send metrics for both tablets
+        sendMetrics(runtime.AllocateEdgeActor(0), { std::make_pair(tabletId, 50) });
+        sendMetrics(owner, { std::make_pair(tabletIdExt, 70) });
+        const ui64 cpuBeforeRestart = getTabletsCounter();
+        UNIT_ASSERT_VALUES_EQUAL(120, cpuBeforeRestart);
+
+        // Reboot the Hive tablet — triggers TTxLoadEverything, then
+        // ScheduleUnlockTabletExecution (deferred by 60s reconnect timeout).
+        RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
+
+        // Reconnect the lock before the 60s timeout fires.
+        SendLockTabletExecution(runtime, hiveTablet, tabletIdExt, 0, NKikimrProto::OK, owner, 60000, true);
+
+        // After restart + reconnect, the locked tablet must be in UNKNOWN state
+        // so that its metrics are tracked on the node.
+        UNIT_ASSERT_EQUAL(NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_UNKNOWN, tabletState(tabletIdExt));
+
+        // Send fresh metrics and verify the counter accounts for both tablets.
+        sendMetrics(runtime.AllocateEdgeActor(0), { std::make_pair(tabletId, 50) });
+        sendMetrics(owner, { std::make_pair(tabletIdExt, 70) });
+        UNIT_ASSERT_VALUES_EQUAL(120, getTabletsCounter());
+    }
 }
 
 Y_UNIT_TEST_SUITE(THeavyPerfTest) {

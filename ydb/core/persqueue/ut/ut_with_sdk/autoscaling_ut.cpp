@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         SimpleTest(SdkVersion::PQv1, false);
     }
 
-    void ReadingAfterSplitTest(SdkVersion sdk, bool autoscaleAwareSDK, bool autoCommit) {
+    void ReadingAfterSplitTest(SdkVersion sdk, bool autoscaleAwareSDK, bool autoCommit, bool withoutConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -86,11 +86,14 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = autoCommit, .AutoPartitioningSupport = autoscaleAwareSDK });
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = autoCommit, .AutoPartitioningSupport = autoscaleAwareSDK, .WithoutConsumer = withoutConsumer });
         readSession->Run();
         readSession->WaitAllMessages();
 
+        std::vector<ui32> expectedPartionsOrder{0, 2, 4};
+        auto expectedNextPartionId = expectedPartionsOrder.begin();
         for(const auto& info : readSession->GetReceivedMessages()) {
+            UNIT_ASSERT_VALUES_EQUAL(*expectedNextPartionId++, info.PartitionId);
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
@@ -110,22 +113,26 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest(SdkVersion::Topic, false, true);
+        ReadingAfterSplitTest(SdkVersion::Topic, false, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, false);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, false, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, true);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PQv1) {
-        ReadingAfterSplitTest(SdkVersion::PQv1, false, true);
+        ReadingAfterSplitTest(SdkVersion::PQv1, false, true, false);
     }
 
-    void ReadingAfterSplitTest_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
+    Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_WithoutConsumer) {
+        ReadingAfterSplitTest(SdkVersion::Topic, true, false, true);
+    }
+
+    void ReadingAfterSplitTest_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK, bool withoutConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -144,7 +151,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK, .Partitions= {2}, .AutoPartitioningSupport = autoscaleAwareSDK });
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK, .Partitions= {2}, .AutoPartitioningSupport = autoscaleAwareSDK, .WithoutConsumer = withoutConsumer });
         readSession->Run();
         readSession->WaitAllMessages();
 
@@ -164,15 +171,19 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, false);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, false, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_PQv1) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::PQv1, false);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::PQv1, false, false);
+    }
+
+    Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK_ReadWithoutConsumer) {
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true, true);
     }
 
     void PartitionSplit_oldSDK(SdkVersion sdk) {

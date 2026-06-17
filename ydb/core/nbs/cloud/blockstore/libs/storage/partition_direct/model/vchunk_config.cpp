@@ -130,9 +130,8 @@ TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
     PromoteHost(to);
     Y_ABORT_UNLESS(EnabledHosts.Get(to) == true);
 
-    return TStringBuilder()
-           << "Host " << PrintHostIndex(hostIndex) << " demoted, host "
-           << PrintHostIndex(to) << " promoted";
+    return TStringBuilder() << PrintHostIndex(hostIndex) << " demoted, "
+                            << PrintHostIndex(to) << " promoted";
 }
 
 TString TVChunkConfig::DemoteHost(THostIndex hostIndex)

@@ -14,6 +14,7 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -496,6 +497,7 @@ private:
                     Self.Metrics.AlreadyWritten->Inc();
                 }
 
+                Y_VALIDATE(!Self.WaitingAcks.empty(), "Got unexpected ack with seq no: " << it->SeqNo);
                 const auto& ackInfo = Self.WaitingAcks.front();
                 Self.Metrics.LastAckLatency->Set((TInstant::Now() - ackInfo.StartTime).MilliSeconds());
                 Self.Metrics.InFlyData->Dec();

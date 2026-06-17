@@ -141,7 +141,7 @@ namespace NKikimr::NKqp {
     }
 
 
-    void RandomizeJoinTypes(TRNG rng, std::shared_ptr<IBaseOptimizerNode> joinTree,
+    void RandomizeJoinTypes(TRNG& rng, std::shared_ptr<IBaseOptimizerNode> joinTree,
                             const std::map<EJoinKind, double>& probabilities) {
 
         auto join = std::dynamic_pointer_cast<TJoinOptimizerNode>(joinTree);

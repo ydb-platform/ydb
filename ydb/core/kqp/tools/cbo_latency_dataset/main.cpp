@@ -780,45 +780,45 @@ void PrintUsage(IOutputStream& os) {
 
                 ui32 degreePreservingVariants = params.GetValue<ui32>("mcmc-degree", 0);
                 ui32 edgePreservingVariants = params.GetValue<ui32>("mcmc-edge", 0);
-                bool runBase = params.GetValue<ui32>("run-base", true);
+                bool runBase = params.GetValue<bool>("run-base", true);
 
                 if (runBase) {
                     ProcessSingleGraph(rng, queryIdx, params, baseGraph, "BASE", baseTopology.GenerationProcess);
                 }
 
                 auto pyConfig = GetPitmanYor(params);
-                TRelationGraph graphDP = baseGraph;
                 for (ui32 i = 1; i <= degreePreservingVariants; ++i) {
                     if (IsKnownTimeout(label, n)) {
                         ++ SkippedGraphs_;
                         break;
                     }
 
+                    TRelationGraph graphDP = baseGraph;
                     rng.Mark(1); // <= MCMC state
                     auto explainMCMC = MCMCRandomizeDegreePreserving(rng, graphDP, pyConfig, TMCMCConfig::Perturbation(), debug);
 
                     NJson::TJsonValue generation;
-                    generation.InsertValue("source-query-idx", NJson::TJsonValue(queryIdx + i - 1));
+                    generation.InsertValue("source-query-idx", NJson::TJsonValue(queryIdx));
                     generation.InsertValue("mcmc-explain", explainMCMC.Serialize());
-                    generation.InsertValue("type", "mcmc-edge-preserving");
+                    generation.InsertValue("type", "mcmc-degree-preserving");
 
                     auto reproArgs = "run-base=false; mcmc-degree=1; ";
                     ui32 variant = i;
                     ProcessSingleGraph(rng, queryIdx + variant, params, graphDP, "IK#" + std::to_string(i), generation, reproArgs);
                 }
 
-                TRelationGraph graphEP = baseGraph;
                 for (ui32 i = 1; i <= edgePreservingVariants; ++i) {
                     if (IsKnownTimeout(label, n)) {
                         ++ SkippedGraphs_;
                         break;
                     }
 
+                    TRelationGraph graphEP = baseGraph;
                     rng.Mark(1); // <= MCMC state
                     auto explainMCMC = MCMCRandomizeEdgePreserving(rng, graphEP, pyConfig, TMCMCConfig::Perturbation(), debug);
 
                     NJson::TJsonValue generation;
-                    generation.InsertValue("source-query-idx", NJson::TJsonValue(queryIdx + i - 1));
+                    generation.InsertValue("source-query-idx", NJson::TJsonValue(queryIdx));
                     generation.InsertValue("mcmc-explain", explainMCMC.Serialize());
                     generation.InsertValue("type", "mcmc-edge-preserving");
 

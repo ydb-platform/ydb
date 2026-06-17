@@ -1016,7 +1016,8 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
               Name: "Table"
               Columns { Name: "value" NotNull: true }
         )", {{NKikimrScheme::StatusInvalidParameter,
-              "You cannot set the notNull flag to true within the external ModifyScheme without the Internal flag set. Column 'value'. Note that you can change the flag value by additionally setting Internal = true. However, this action is very dangerous — only do it if you know exactly what you are doing."}});
+              "Cannot set NotNull to true on column 'value' in a ModifyScheme request — Internal flag is not set. "
+              "To override, set Internal = true. This is dangerous: only do this if you know what you are doing"}});
     }
 
     Y_UNIT_TEST(DirectModifySchemeSetNotNullInProgressRejected) {
@@ -1037,7 +1038,8 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
               Name: "Table"
               Columns { Name: "value" SetNotNullInProgress: true }
         )", {{NKikimrScheme::StatusInvalidParameter,
-              "You cannot set the setNotNullInProgress flag within the external ModifyScheme without the Internal flag set. Column 'value'. Note that you can change the flag value by additionally setting Internal = true. However, this action is very dangerous — only do it if you know exactly what you are doing."}});
+              "Cannot set NotNullInProgress on column 'value' in a ModifyScheme request — Internal flag is not set. "
+              "To override, set Internal = true. This is dangerous: only do this if you know what you are doing"}});
     }
 
     Y_UNIT_TEST(DirectModifySchemeSetNotNullOnSerialColumnRejected) {

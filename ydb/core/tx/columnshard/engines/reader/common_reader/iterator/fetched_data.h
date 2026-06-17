@@ -32,6 +32,7 @@ private:
     YDB_READONLY(bool, Aborted, false);
 
     THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
+    THashSet<ui32> DictionaryOnlyFetchColumns;
 
 public:
     bool HasTable() const {
@@ -186,6 +187,18 @@ public:
     void AddFilter(const NArrow::TColumnFilter& filter) {
         MutableTable().AddFilter(filter);
     }
+
+    void MarkDictionaryOnlyFetch(const ui32 columnId) {
+        DictionaryOnlyFetchColumns.insert(columnId);
+    }
+
+    bool IsDictionaryOnlyFetch(const ui32 columnId) const {
+        return DictionaryOnlyFetchColumns.contains(columnId);
+    }
+
+    const THashSet<ui32>& GetDictionaryOnlyFetchColumns() const {
+        return DictionaryOnlyFetchColumns;
+    }
 };
 
 class TSourceChunkToReply {
@@ -221,6 +234,7 @@ class TFetchedResult {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+    THashSet<ui32> DictionaryOnlyFetchColumns;
     std::optional<std::deque<TPortionDataAccessor::TReadPage>> PagesToResult;
     std::optional<TSourceChunkToReply> ChunkToReply;
 
@@ -235,13 +249,19 @@ public:
         std::unique_ptr<TFetchedData>&& data, const std::optional<std::set<ui32>>& columnIds, const NArrow::NSSA::IColumnResolver& resolver)
         : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, columnIds, false))
         , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter())
+        , DictionaryOnlyFetchColumns(data->GetDictionaryOnlyFetchColumns())
     {
     }
 
     TFetchedResult(std::unique_ptr<TFetchedData>&& data, const NArrow::NSSA::IColumnResolver& resolver)
         : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, {}, false))
         , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter())
+        , DictionaryOnlyFetchColumns(data->GetDictionaryOnlyFetchColumns())
     {
+    }
+
+    bool IsDictionaryOnlyFetch(const ui32 columnId) const {
+        return DictionaryOnlyFetchColumns.contains(columnId);
     }
 
     void SetNotAppliedFilter(std::shared_ptr<NArrow::TColumnFilter>&& filter) {

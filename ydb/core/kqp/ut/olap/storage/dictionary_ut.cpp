@@ -727,8 +727,16 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "4"; SELECT DISTINCT message FROM `/Root/ColumnTable` LIMIT 4;
         EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
         ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable`;
         EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
     )";
     Y_UNIT_TEST(DistinctDictionaryOverlappingPortions) {
         auto settings = GetDictionarySettings();
@@ -789,14 +797,26 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "4"; SELECT DISTINCT message FROM `/Root/ColumnTable` LIMIT 4;
         EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
         ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
         DATA:
         DELETE FROM `/Root/ColumnTable` WHERE pk IN (1u, 2u, 5u, 9u, 13u);
         ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "4"; SELECT DISTINCT message FROM `/Root/ColumnTable` LIMIT 4;
         EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
         ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
         READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable`;
         EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
     )";
     Y_UNIT_TEST(DistinctDictionaryOverlappingPortionsLarge) {
         auto settings = GetDictionarySettings();

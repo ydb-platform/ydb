@@ -48,9 +48,14 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
 
     const auto existing = source->GetStageResult().GetNotAppliedFilter();
     const bool hasRowFilter = existing && !existing->IsTotalAllowFilter();
+    const bool isDictionaryOnlyFetch = sr.IsDictionaryOnlyFetch(KeyColumnId);
     bool applyRowFilter = false;
     std::optional<NArrow::TColumnFilter::TIterator> filterIterator;
-    if (hasRowFilter && existing->GetRecordsCountVerified() == recordsCount) {
+    if (isDictionaryOnlyFetch) {
+        // Dictionary accessor is indexed by dict entries; portion-row deny filters are incompatible.
+        AFL_VERIFY(!hasRowFilter);
+    } else if (hasRowFilter) {
+        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount);
         applyRowFilter = true;
         filterIterator.emplace(existing->GetBegin(false, recordsCount));
     }

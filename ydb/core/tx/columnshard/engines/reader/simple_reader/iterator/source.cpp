@@ -361,10 +361,13 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
 
     const NArrow::TColumnFilter& columnFilter =
         GetStageData().HasTable() ? GetStageData().GetTable().GetFilter() : context.GetResources().GetFilter();
+    const auto portionState = GetContext()->GetPortionStateAtScanStart(*Portion);
+    const auto readContext = std::static_pointer_cast<TSpecialReadContext>(GetContext());
     const bool canUseDictionaryOnly = addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
                                       GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
                                           NArrow::NAccessor::IChunkedArray::EType::Dictionary &&
-                                      UsageClass == TPKRangeFilter::EUsageClass::FullUsage &&
+                                      UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !portionState.Conflicting &&
+                                      readContext->GetDuplicateFilterPortionCount() <= 1 &&
                                       NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
     if (canUseDictionaryOnly) {
         GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();

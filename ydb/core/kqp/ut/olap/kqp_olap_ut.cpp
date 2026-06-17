@@ -1872,6 +1872,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 b Uint32 NOT NULL,
                 c Timestamp NOT NULL,
                 d Utf8,
+                e Utf8,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1911,6 +1912,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     `/Root/t1` as t1
                 WHERE
                     t1.d is not distinct from "some_str";
+            )",
+            R"(
+                SELECT
+                    d, b, e
+                FROM
+                    `/Root/t1` as t1
+                WHERE
+                    t1.e in ["some_str_0", "some_str_1", "some_str_2"] and t1.d is not distinct from "some_str";
             )",
         };
 

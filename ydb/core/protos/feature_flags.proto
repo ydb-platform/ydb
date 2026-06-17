@@ -289,5 +289,6 @@ message TFeatureFlags {
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = false];
     optional bool DisableOnlineRO = 263 [default = false];
+    optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
     optional bool EnableKqpConstraintsTransformer = 277 [default = false];
 }

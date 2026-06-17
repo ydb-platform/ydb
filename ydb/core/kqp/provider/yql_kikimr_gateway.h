@@ -202,6 +202,8 @@ public:
                 // is enabled, so that UseRowIdAsDocId survives downstream into the query compiler.
                 if (index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription) {
                     SpecializedIndexDescription = index.GetFulltextIndexDescription();
+                } else {
+                    YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 }
                 break;
             case EType::LocalBloomFilter:
@@ -246,6 +248,8 @@ public:
                 // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
                 if (message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::kFulltextIndexDescription) {
                     SpecializedIndexDescription = message->GetFulltextIndexDescription();
+                } else {
+                    YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 }
                 break;
             case EType::GlobalSyncVectorKMeansTree:

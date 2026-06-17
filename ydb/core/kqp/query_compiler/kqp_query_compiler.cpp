@@ -1449,7 +1449,7 @@ private:
                 // index type was already set from the switch above (handles Compact variants too).
                 fullTextProto.MutableIndexDescription()->CopyFrom(*desc);
             } else if (isDescriptionRequired) {
-                YQL_ENSURE(false, "Fulltext index description is required for index type " << index->Type);
+                YQL_ENSURE(false, "Index description is required for index type " << index->Type);
             }
 
             auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {

@@ -33,8 +33,7 @@ public:
     }
 
     virtual void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
-        PromiseHandedOff = true;
-        Callback(Promise, std::move(*ev->Get()));
+        Callback(std::move(Promise), std::move(*ev->Get()));
         this->Die(ctx);
     }
 
@@ -70,7 +69,7 @@ public:
     }
 
     ~TRequestHandlerBase() override {
-        if (!PromiseHandedOff && !Promise.IsReady()) {
+        if (Promise.Initialized() && !Promise.IsReady()) {
             Promise.TrySetValue(NYql::NCommon::ResultFromIssues<TResult>(
                 NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
                 "Shutting down.", {}));
@@ -81,7 +80,6 @@ protected:
     THolder<TRequest> Request;
     NThreading::TPromise<TResult> Promise;
     TCallbackFunc Callback;
-    bool PromiseHandedOff = false;
 };
 
 template<typename TRequest, typename TResponse, typename TResult>

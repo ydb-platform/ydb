@@ -4,6 +4,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
+#include <ydb/public/api/protos/ydb_export.pb.h>
+
 namespace NYdb::inline Dev {
 namespace NExport {
 
@@ -30,6 +32,24 @@ struct TEncryptionAlgorithm {
     static const std::string AES_128_GCM;
     static const std::string AES_256_GCM;
     static const std::string CHACHA_20_POLY_1305;
+};
+
+struct TYdbDumpFormat {
+    void Serialize(Ydb::Export::YdbDumpFormat&) const {
+    }
+};
+
+struct TParquetFormat {
+    void Serialize(Ydb::Export::ParquetFormat& proto) const {
+        proto.set_row_group_size(RowGroupSize);
+    }
+
+    TParquetFormat& WithRowGroupSize(uint32_t rowGroupSize) {
+        RowGroupSize = rowGroupSize;
+        return *this;
+    }
+
+    uint32_t RowGroupSize = 1000;
 };
 
 /// YT
@@ -104,15 +124,7 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
     
-    // Format settings following ExportToS3Settings pattern
-    enum class EFormat {
-        UNSPECIFIED = 0,
-        YDB_DUMP = 1,
-        PARQUET = 2,
-    };
-    
-    FLUENT_SETTING_DEFAULT(EFormat, Format, EFormat::YDB_DUMP);
-    FLUENT_SETTING_OPTIONAL(uint32_t, ParquetRowGroupSize);
+    std::variant<TYdbDumpFormat, TParquetFormat> Format;
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
         EncryptionAlgorithm_ = algorithm;

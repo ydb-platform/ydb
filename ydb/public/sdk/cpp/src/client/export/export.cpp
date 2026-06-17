@@ -15,6 +15,8 @@
 
 #include <util/stream/str.h>
 
+#include <variant>
+
 namespace NYdb::inline Dev {
 namespace NExport {
 
@@ -27,6 +29,10 @@ const std::string TEncryptionAlgorithm::CHACHA_20_POLY_1305 = "ChaCha20-Poly1305
 
 /// Common
 namespace {
+
+// helper type for the visitor
+template<class... Ts>
+struct overloads : Ts... { using Ts::operator()...; };
 
 std::vector<TExportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<ExportItemProgress>& proto) {
     std::vector<TExportItemProgress> result;
@@ -226,22 +232,16 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     request.mutable_settings()->set_access_key(TStringType{settings.AccessKey_});
     request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
 
-    // Set format based on the new format field
-    switch (settings.Format_) {
-        case TExportToS3Settings::EFormat::PARQUET:
-            {
-                auto& parquet = *request.mutable_settings()->mutable_parquet();
-                if (settings.ParquetRowGroupSize_) {
-                    parquet.set_row_group_size(settings.ParquetRowGroupSize_.value());
-                }
-            }
-            break;
-        case TExportToS3Settings::EFormat::YDB_DUMP:
-        case TExportToS3Settings::EFormat::UNSPECIFIED:
-            // YdbDump format - empty message
+    // Set format based on the Format_ field
+    std::visit(overloads{
+        [&request](const TYdbDumpFormat&) {
             request.mutable_settings()->mutable_ydb_dump();
-            break;
-    }
+        },
+        [&request](const TParquetFormat& format) {
+            auto parquet = request.mutable_settings()->mutable_parquet();
+            parquet->set_row_group_size(format.RowGroupSize);
+        }
+    }, settings.Format);
 
     for (const auto& item : settings.Item_) {
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();

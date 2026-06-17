@@ -520,7 +520,7 @@ private:
         }
 
         if (execvp(PortoCtl.c_str(), ExecArgs.data()) == -1) {
-            ythrow TSystemError() << "Cannot execl";
+            ythrow TSystemError() << "Cannot execvp: " << PortoCtl;
         }
     }
 

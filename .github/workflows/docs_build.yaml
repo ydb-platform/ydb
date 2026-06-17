@@ -55,7 +55,7 @@ jobs:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
           cli-version: stable
-          use-ya-opensource: ${{ github.base_ref == 'main' && 'true' || 'false' }}
+          use-ya-opensource: true
 
       # docs-build-action writes github.event.number to inputs/pr-number.
       # For workflow_dispatch this field is empty, so patch the artifact.

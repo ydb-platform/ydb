@@ -311,6 +311,14 @@
             },
             "formula": "build/external_resources/yexport/public.resources.json"
         },
+        "yfm-docs": {
+            "executable": {
+                "yfm-docs": [
+                    "yfm-docs"
+                ]
+            },
+            "formula": "build/platform/yfm/resources.json"
+        },
         "ymake": {
             "executable": {
                 "ymake": [
@@ -2250,6 +2258,34 @@
                 }
             }
         },
+        "yfm-docs": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "yfm-docs": {
+                    "bottle": "yfm-docs",
+                    "executable": "yfm-docs"
+                }
+            }
+        },
         "ymake": {
             "platforms": [
                 {
@@ -2429,6 +2465,9 @@
         "yexport": {
             "description": "Run yexport",
             "visible": false
+        },
+        "yfm-docs": {
+            "description": "YFM-extended markdown processor for Cloud deploy (v3)"
         },
         "ymake": {
             "description": "Run ymake",

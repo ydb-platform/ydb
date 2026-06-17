@@ -8,6 +8,8 @@
 
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
+
 namespace NKikimr {
 
 class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
@@ -55,7 +57,8 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
 
         switch (msg->Status) {
         case NKikimrProto::OK:
-            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false));
+            YDB_LOG_DEBUG_CTX(ctx, "Put",
+                {"result", msg->Print(false)});
 
             GroupWrittenBytes[std::make_pair(channel, msg->GroupId)] += msg->Id.BlobSize();
             GroupWrittenOps[std::make_pair(channel, msg->GroupId)] += 1;

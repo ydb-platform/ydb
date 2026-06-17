@@ -335,6 +335,7 @@ namespace NKikimr::NHttpProxy {
                     {NYmq::V1::USER_SID, UserSid},
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                     {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
+                    {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
                 };
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                         std::move(Request),
@@ -1428,15 +1429,15 @@ namespace NKikimr::NHttpProxy {
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
                 ReportInputCounters(ctx);
-                if (!HttpContext.IamToken.empty() || Signature) {
-                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
-                        ctx.SelfID, HttpContext, std::move(Signature)));
-                } else if (!HttpContext.SecurityToken.empty()) {
+                if (!HttpContext.SecurityToken.empty()) {
                     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                         .Ticket = HttpContext.SecurityToken,
                         .Database = HttpContext.DatabasePath,
                         .PeerName = HttpContext.SourceAddress,
                     }));
+                } else if (!HttpContext.IamToken.empty() || Signature) {
+                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
+                        ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                         return ReplyWithMessageQueueError(

@@ -31,7 +31,7 @@ public:
         : PartitionSession(partitionSession)
         , ReadSourceDatabase(std::move(db))
         , TopicOriginDatabase(originDb ? std::move(originDb) : ReadSourceDatabase)
-        , TopicOriginPath(!originPath.empty() ? std::move(originPath) : PartitionSession->GetTopicPath())
+        , TopicOriginPath(!originPath.empty() ? originPath : PartitionSession->GetTopicPath())
         {
             Y_ABORT_UNLESS(ReadSourceDatabase);
         }

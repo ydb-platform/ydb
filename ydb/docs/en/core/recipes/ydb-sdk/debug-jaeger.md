@@ -155,4 +155,8 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
 
   This functionality is not currently supported.
 
+- Python
+
+  This functionality is not currently supported.
+
 {% endlist %}

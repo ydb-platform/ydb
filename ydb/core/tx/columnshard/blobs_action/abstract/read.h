@@ -171,6 +171,7 @@ protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
 
     virtual void DoRetryRead(const TBlobRange& range) {
+        Y_UNUSED(range);
         AFL_VERIFY(false)("error", "DoRetryRead not implemented for this storage");
     }
 

@@ -162,9 +162,7 @@ public:
                 }
                 const_cast<TGroupInfo&>(*Group).CalculateGroupStatus();
             }
-            if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
-                OnlyPhantomsRemain = onlyPhantomsRemain;
-            }
+            OnlyPhantomsRemain = status == NKikimrBlobStorage::EVDiskStatus::REPLICATING && onlyPhantomsRemain;
         }
 
         NKikimrBlobStorage::EVDiskStatus GetStatus() const {
@@ -2367,7 +2365,12 @@ public:
         std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
         TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
+<<<<<<< HEAD
         bool MetricsDirty = false;
+=======
+        bool OnlyPhantomsRemain = false;
+        bool MetricsCommitted = false;
+>>>>>>> dcc5f7eaf56 (Pass OnlyPhantomsRemain VDisk flag from BSC to sys_view (#43329))
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
                 std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
@@ -2382,9 +2385,14 @@ public:
                 VDiskStatus = item.VDiskStatus;
                 VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
+                OnlyPhantomsRemain = item.OnlyPhantomsRemain;
             } else {
                 VDiskStatusTimestamp = mono;
             }
+        }
+
+        bool IsReplicatingWithPhantomsOnly() const {
+            return VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING && OnlyPhantomsRemain;
         }
     };
 

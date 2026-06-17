@@ -133,8 +133,7 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
                 portionsToDuplicateFilter.emplace_back(std::move(info));
             }
         });
-        AFL_VERIFY(portionsToDuplicateFilter.size() <= Max<ui32>());
-        DuplicateFilterPortionCount = static_cast<ui32>(portionsToDuplicateFilter.size());
+        DuplicateFilterPortionCount = portionsToDuplicateFilter.size();
         DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
     }
 }

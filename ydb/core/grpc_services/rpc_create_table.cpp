@@ -301,14 +301,35 @@ private:
                         return false;
                     }
                     
-                    if (auto it = colNameToId.find(index.index_columns(0)); it == colNameToId.end()) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0)));
-                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0))));
+                    auto it = colNameToId.find(index.index_columns(0));
+                    if ( it == colNameToId.end()) {
+                        TVector<TString> tableColumnNames;
+                        for(auto& col: colNameToId) {
+                            tableColumnNames.push_back(col.first);
+                        }
+                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames));
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)));
                         code = StatusIds::BAD_REQUEST;
                         return false;
-                    } else {
-                        min_max->SetColumnId(it->second);
                     }
+                    min_max->SetColumnId(it->second);
+                    const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+
+                    for(auto& column: schema->GetColumns()) {
+                        if (column.GetName() == index.index_columns(0)){
+                            columnDesc = &column;
+                            break;
+                        }
+                    }
+                    if (columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
+                        columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8) ) {
+                        olapIndex->SetInheritPortionStorage(true);
+                        olapIndex->SetStorageId("__DEFAULT");        
+                    } else {
+                        olapIndex->SetInheritPortionStorage(false);
+                        olapIndex->SetStorageId("__LOCAL_METADATA");
+                    }
+
                     break;
                 }                
                 case Ydb::Table::TableIndex::TYPE_NOT_SET:

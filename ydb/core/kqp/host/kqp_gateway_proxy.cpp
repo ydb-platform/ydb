@@ -642,9 +642,20 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                     return false;
                 }
                 auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
-                if (columnIdIt == columnIdsByName.end()) {
+                const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+                for(auto& column: tableDesc.GetSchema().GetColumns()) {
+                    if (column.GetName() == index.KeyColumns.front()) {
+                        columnDesc = &column;
+                        break;
+                    }
+                }
+                if (!columnDesc) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
+                    TVector<TString> tableColumnNames;
+                    for(auto& col: tableDesc.GetSchema().GetColumns()) {
+                        tableColumnNames.push_back(col.GetName());
+                    }
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front(), tableColumnNames);
                     return false;
                 }
 
@@ -654,6 +665,14 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                 upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
+                if (columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
+                    columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8) ) {
+                    upsert->SetInheritPortionStorage(true);
+                    upsert->SetStorageId("__DEFAULT");        
+                } else {
+                    upsert->SetInheritPortionStorage(false);
+                    upsert->SetStorageId("__LOCAL_METADATA");
+                }
 
                 break;
             }
@@ -2436,33 +2455,77 @@ public:
         CHECK_PREPARED_DDL(AlterColumnTable);
 
         try {
+
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
+            auto promise = NewPromise<TGenericResult>();
 
-            NKikimrSchemeOp::TModifyScheme schemeTx;
+            auto future = LoadTableMetadata(cluster, req.path(), TLoadTableMetadataSettings());
 
-            Ydb::StatusIds::StatusCode code;
-            TString error;
-            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
-                IKqpGateway::TGenericResult errResult;
-                errResult.AddIssue(NYql::TIssue(error));
-                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-                return MakeFuture(errResult);
-            }
+            future.Subscribe( [this, req, promise] (const TFuture<TTableMetadataResult> &future) mutable {
+                if (!future.HasValue()) {
+                    IKqpGateway::TGenericResult errResult;
+                    // errResult.AddIssue();
+                    errResult.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
+                    promise.SetValue(errResult);
+                }
+                auto meta = future.GetValue();
+                NKikimrSchemeOp::TModifyScheme schemeTx;
 
-            if (IsPrepare()) {
-                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-                auto& phyTx = *phyQuery.AddTransactions();
-                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-                phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, meta.Metadata, code, error)) {
+                    IKqpGateway::TGenericResult errResult;
+                    errResult.AddIssue(NYql::TIssue(error));
+                    errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                    promise.SetValue(errResult);
+                    return;
+                }
 
-                TGenericResult result;
-                result.SetSuccess();
-                return MakeFuture(result);
-            } else {
-                return Gateway->ModifyScheme(std::move(schemeTx));
-            }
+                if (IsPrepare()) {
+                    auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                    auto& phyTx = *phyQuery.AddTransactions();
+                    phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                    phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
+
+                    TGenericResult result;
+                    result.SetSuccess();
+                    promise.SetValue(result);
+                } else {
+                    auto modifyFuture = Gateway->ModifyScheme(std::move(schemeTx));
+                    modifyFuture.Subscribe([promise](const TFuture<TGenericResult>& res) mutable {
+                        promise.SetValue(res.GetValue());
+                    });
+                }
+
+            });
+
+            return promise.GetFuture();
+
+            // NKikimrSchemeOp::TModifyScheme schemeTx;
+
+            // Ydb::StatusIds::StatusCode code;
+            // TString error;
+            // if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
+            //     IKqpGateway::TGenericResult errResult;
+            //     errResult.AddIssue(NYql::TIssue(error));
+            //     errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+            //     return MakeFuture(errResult);
+            // }
+
+            // if (IsPrepare()) {
+            //     auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            //     auto& phyTx = *phyQuery.AddTransactions();
+            //     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            //     phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
+
+            //     TGenericResult result;
+            //     result.SetSuccess();
+            //     return MakeFuture(result);
+            // } else {
+            //     return Gateway->ModifyScheme(std::move(schemeTx));
+            // }
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));

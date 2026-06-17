@@ -75,7 +75,7 @@ private:
     TString Path;
 };
 
-std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, const TString& database, const TString& defaultTablePath,TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
+std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, const TString& database, const TString& defaultTablePath, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
     return std::make_unique<TRowTableState>(selfId, database, defaultTablePath, result);
 }
 

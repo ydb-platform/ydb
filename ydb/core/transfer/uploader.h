@@ -46,11 +46,11 @@ private:
 
     IActor* CreateUploaderInternal(const TString& database, const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie);
 
-    void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data, bool defaultTablePath) {
+    void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data, bool useDefaultTablePath) {
         auto cookie = ++Cookie;
 
         auto actorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            CreateUploaderInternal(Database, defaultTablePath ? DefaultTablePath : tablePath, data, cookie)
+            CreateUploaderInternal(Database, useDefaultTablePath ? DefaultTablePath : tablePath, data, cookie)
         );
         CookieMapping[cookie] = {tablePath, actorId};
     }
@@ -106,6 +106,7 @@ private:
             retry.SchemeCount = 0;
 
             TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath, true));
+            CookieMapping.erase(ev->Cookie);
             return;
         }
 

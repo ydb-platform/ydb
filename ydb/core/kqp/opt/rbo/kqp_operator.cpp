@@ -415,7 +415,6 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
 
 // Both a := b and a <- b let a inherit key, shuffle, and lineage properties from b.
 // a := b keeps b visible, while a <- b removes the old b binding from Map output.
-// Pg FromPg/ToPg wrappers over a column are treated the same for property propagation.
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetPropertyPreservingMappings(TPlanProps& props) const {
     Y_UNUSED(props);
     TVector<std::pair<TInfoUnit, TInfoUnit>> result;
@@ -431,18 +430,6 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetPropertyPreservingMappings(T
                 "Non-rename Map element must not preserve a column under the same name: " << mapElement.GetElementName().GetFullName());
             result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetColumnAccess()));
             continue;
-        }
-
-        auto expr = mapElement.GetExpression();
-        auto node = expr.Node;
-
-        if (node->IsCallable("ToPg") || node->IsCallable("FromPg")) {
-            if (node->ChildPtr(0)->IsCallable("Member")) {
-                auto transformIUs = expr.GetInputIUs();
-                if (transformIUs.size() == 1) {
-                    addNonRenameMapping(mapElement.GetElementName(), transformIUs[0]);
-                }
-            }
         }
     }
 

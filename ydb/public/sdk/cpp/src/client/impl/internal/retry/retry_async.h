@@ -126,16 +126,14 @@ protected:
                     try {
                         HandleStatusAsync(self, result.GetValue());
                     } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
-                        TStatus status = e.GetStatus();
-                        HandleStatusAsync(self, TStatusType(std::move(status)));
+                        HandleStatusAsync(self, MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus())));
                     } catch (...) {
                         HandleExceptionAsync(self, std::current_exception());
                     }
                 }
             );
         } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
-            TStatus status = e.GetStatus();
-            HandleStatusAsync(self, TStatusType(std::move(status)));
+            HandleStatusAsync(self, MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus())));
         } catch (...) {
             HandleExceptionAsync(self, std::current_exception());
         }
@@ -229,7 +227,8 @@ public:
                     try {
                         auto& result = resultFuture.GetValue();
                         if (!result.IsSuccess()) {
-                            return TRetryContextAsync::HandleStatusAsync(self, TStatusType(TStatus(result)));
+                            return TRetryContextAsync::HandleStatusAsync(
+                                self, MakeRetryResultFromStatus<TStatusType>(TStatus(result)));
                         }
 
                         self->Session_ = result.GetSession();

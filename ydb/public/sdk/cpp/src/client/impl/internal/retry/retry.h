@@ -136,13 +136,17 @@ protected:
     }
 };
 
+template <typename TStatusType>
+TStatusType MakeRetryResultFromStatus(TStatus&& status) {
+    return TStatusType(TStatus(std::move(status)));
+}
+
 template <typename TStatusType, typename F>
 TStatusType InvokeWithRangeErrorCatch(F&& f) {
     try {
         return f();
     } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
-        TStatus status = e.GetStatus();
-        return TStatusType(std::move(status));
+        return MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus()));
     }
 }
 

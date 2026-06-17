@@ -13,6 +13,7 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -4211,6 +4212,11 @@ TMetricsSettings::EMetricsLevel TMetricsSettings::GetMetricsLevel() const {
 
 TBulkUpsertResult::TBulkUpsertResult(TStatus&& status)
     : TStatus(std::move(status))
+{}
+
+TReadRowsResult::TReadRowsResult(TStatus&& status)
+    : TStatus(std::move(status))
+    , ResultSet(Ydb::ResultSet{})
 {}
 
 TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)

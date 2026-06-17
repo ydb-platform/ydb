@@ -2739,6 +2739,7 @@ class TReadRowsResult : public TStatus {
     TResultSet ResultSet;
 
   public:
+    explicit TReadRowsResult(TStatus&& status);
     explicit TReadRowsResult(TStatus&& status, TResultSet&& resultSet);
 
     TResultSet GetResultSet() {

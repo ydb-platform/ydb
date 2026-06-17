@@ -130,7 +130,7 @@ protected:
     }
 
     TStatusType RunOperation() override {
-        return InvokeWithOptionalCatch<TStatusType>(this->Settings_.CatchYdbExceptions_, [&]() -> TStatusType {
+        return InvokeWithRangeErrorCatch<TStatusType>([&]() -> TStatusType {
             TInRetryOperationContextClientGuard guard(this->Client_);
             if constexpr (TFunctionArgs<TOperation>::Length == 1) {
                 return Operation_(this->Client_);
@@ -172,7 +172,7 @@ protected:
                 Session_ = sessionResult.GetSession();
                 TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);
             }
-            status = TStatusType(TStatus(sessionResult));
+            status = MakeRetryResultFromStatus<TStatusType>(TStatus(sessionResult));
         }
 
         if (Session_) {
@@ -183,7 +183,7 @@ protected:
     }
 
     TStatusType RunOperation() override {
-        return InvokeWithOptionalCatch<TStatusType>(this->Settings_.CatchYdbExceptions_, [&]() -> TStatusType {
+        return InvokeWithRangeErrorCatch<TStatusType>([&]() -> TStatusType {
             TInRetryOperationContextClientGuard guard(this->Client_);
             if constexpr (TFunctionArgs<TOperation>::Length == 1) {
                 return Operation_(this->Session_.value());

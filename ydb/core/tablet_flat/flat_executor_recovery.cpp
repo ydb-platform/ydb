@@ -191,14 +191,6 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
         }
     }
 
-    for (size_t i = 0; i < key.size(); ++i) {
-        if (key[i].IsEmpty()) {
-            ui32 keyColId = table->KeyColumns.at(i);
-            const auto& col = table->Columns.at(keyColId);
-            throw yexception() << "Key column " << col.Name << " is missing in table " << table->Name;
-        }
-    }
-
     try {
         if (!dryRun) {
             txc.DB.Update(table->Id, *op, key, ops);

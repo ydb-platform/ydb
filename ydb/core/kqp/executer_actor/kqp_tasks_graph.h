@@ -318,17 +318,9 @@ struct TTaskMeta {
     //   set inside ScanTasksFromSource only.
     // - NodeId is set if it's local node id, otherwise set ShardId
 
-    enum ETaskType : ui32 {
-        Unknown = 0,
-        Compute = 1,
-        Scan = 2,
-    };
-
-    ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
-    ui64 NodeId = 0;  // only in case of scans over persistent snapshots
+    std::optional<ui64> ExpectedNodeId;
     bool ScanTask = false;
     TActorId ExecuterId;
-    ETaskType Type = Unknown;
 
     TActorId ResultChannelActorId;
     bool Completed = false;

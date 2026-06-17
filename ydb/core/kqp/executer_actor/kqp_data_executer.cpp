@@ -644,7 +644,7 @@ private:
 
         for (const auto& task : TasksGraph.GetTasks()) {
             const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-            if (stageInfo.Meta.IsSysView() || !task.Meta.ShardId) {
+            if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);
             }
         }
@@ -897,8 +897,9 @@ private:
         TasksGraph.GetMeta().MayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
 
         bool isSubmitSuccessful = BuildPlannerAndSubmitTasks();
-        if (!isSubmitSuccessful)
+        if (!isSubmitSuccessful) {
             return;
+        }
 
         KQP_STLOG_I(KQPDATA, "Total tasks",
             (total_tasks, TasksGraph.GetTasks().size()),
@@ -915,8 +916,9 @@ private:
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {
             const auto& task = TasksGraph.GetTask(taskId);
-            if (task.ComputeActorId)
+            if (task.ComputeActorId) {
                 Planner->CollectTaskChannelsUpdates(task, updates);
+            }
         }
         Planner->PropagateChannelsUpdates(updates);
     }
@@ -1005,7 +1007,7 @@ private:
 
         for (const auto& task : TasksGraph.GetTasks()) {
             // TODO: is Meta.NodeId assigned real NodeId where task is executed?
-            if (task.Meta.NodeId == nodeId && !task.Meta.Completed) {
+            if (task.Meta.ExpectedNodeId == nodeId && !task.Meta.Completed) {
                 if (task.ComputeActorId) {
                     Planner->CompletedCA(task.Id, task.ComputeActorId);
                 } else {
@@ -1161,7 +1163,7 @@ private:
                 NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
                 ui64 deferredVictimSpanId = info.HasDeferredVictimQuerySpanId()
                     ? info.GetDeferredVictimQuerySpanId() : 0;
-                for (auto& lock : info.GetLocks()) {
+                for (const auto& lock : info.GetLocks()) {
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
@@ -1195,7 +1197,7 @@ private:
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
-                for (auto& lock : info.GetLocks()) {
+                for (const auto& lock : info.GetLocks()) {
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);

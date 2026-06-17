@@ -226,11 +226,8 @@ void FillReadTaskFromSource(TTask& task, const TString& sourceName, const TStrin
         task.Meta.SecureParams.emplace(sourceName, structuredToken);
     }
 
-    if (resourceSnapshot.empty()) {
-        task.Meta.Type = TTaskMeta::ETaskType::Compute;
-    } else {
-        task.Meta.NodeId = resourceSnapshot[nodeOffset % resourceSnapshot.size()].GetNodeId();
-        task.Meta.Type = TTaskMeta::ETaskType::Scan;
+    if (!resourceSnapshot.empty()) {
+        task.Meta.ExpectedNodeId = resourceSnapshot[nodeOffset % resourceSnapshot.size()].GetNodeId();
     }
 }
 
@@ -1708,11 +1705,7 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
 
     for (const auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
-        if (task.Meta.ShardId) {
-            dqParams[paramName] = stageInfo.Meta.Tx.Params->GetShardParam(task.Meta.ShardId, paramName);
-        } else {
-            dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
-        }
+        dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
     }
 
     for (const auto& [taskParam, actorId] : stageInfo.Meta.ControlPlaneActors) {
@@ -1832,7 +1825,6 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         newTask.SetUseLlvm(taskInfo.GetUseLlvm());
         newTask.Meta.TaskParams.insert(taskInfo.GetTaskParams().begin(), taskInfo.GetTaskParams().end());
         newTask.Meta.ReadRanges.assign(taskInfo.GetReadRanges().begin(), taskInfo.GetReadRanges().end());
-        newTask.Meta.Type = TTaskMeta::ETaskType::Compute;
         newTask.Meta.ExecuterId = GetMeta().ExecuterId;
 
         if (taskInfo.HasMetaId()) {
@@ -2117,7 +2109,6 @@ void TKqpTasksGraph::BuildSysViewScanTasks(TStageInfo& stageInfo) {
         task.Meta.Reads.ConstructInPlace();
         task.Meta.Reads->emplace_back(std::move(readInfo));
         task.Meta.ReadInfo.SetSorting(readSettings.GetSorting());
-        task.Meta.Type = TTaskMeta::ETaskType::Compute;
     }
 }
 
@@ -2151,8 +2142,7 @@ void TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo) {
 
     auto tasksCount = MaxTasksGraph.GetStageTasksCount(stageId);
     for (ui32 i = 0; i < tasksCount; ++i) {
-        auto& task = AddTask(stageInfo, TTaskType::UNKNOWN);
-        task.Meta.Type = TTaskMeta::ETaskType::Compute;
+        AddTask(stageInfo, TTaskType::UNKNOWN);
     }
 }
 
@@ -2257,9 +2247,8 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             for (auto& [nodeId, shardsInfo] : nodeShards) {
                 for (auto& shardInfo : shardsInfo) {
                     auto& task = AddTask(stageInfo, TTaskType::OLAP_SORT_SCAN);
-                    task.Meta.NodeId = nodeId;
+                    task.Meta.ExpectedNodeId = nodeId;
                     task.Meta.ScanTask = true;
-                    task.Meta.Type = TTaskMeta::ETaskType::Scan;
                     MergeReadInfoToTaskMeta(task.Meta, shardInfo.ShardId, shardInfo.KeyReadRanges,
                         readSettings, columns, op, /*isPersistentScan*/ true);
                 }
@@ -2273,9 +2262,8 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 taskIds.reserve(tasksPerNode);
                 for (ui32 t = 0; t < tasksPerNode; ++t) {
                     auto& task = AddTask(stageInfo, TTaskType::DEFAULT_SHARD_SCAN);
-                    task.Meta.NodeId = nodeId;
+                    task.Meta.ExpectedNodeId = nodeId;
                     task.Meta.ScanTask = true;
-                    task.Meta.Type = TTaskMeta::ETaskType::Scan;
                     taskIds.push_back(task.Id);
                 }
 
@@ -2332,9 +2320,8 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 auto& task = AddTask(stageInfo, TTaskType::SHUFFLE_ELIMINATE_SCAN);
                 task.Meta = metas[t];
                 task.Meta.SetEnableShardsSequentialScan(false);
-                task.Meta.NodeId = nodeId;
+                task.Meta.ExpectedNodeId = nodeId;
                 task.Meta.ScanTask = true;
-                task.Meta.Type = TTaskMeta::ETaskType::Scan;
                 task.SetMetaId(t);
 
                 for (const auto& readInfo: *task.Meta.Reads) {
@@ -2362,9 +2349,8 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 auto& task = AddTask(stageInfo, TTaskType::DEFAULT_SHARD_SCAN);
                 task.Meta = meta;
                 task.Meta.SetEnableShardsSequentialScan(false);
-                task.Meta.NodeId = nodeId;
+                task.Meta.ExpectedNodeId = nodeId;
                 task.Meta.ScanTask = true;
-                task.Meta.Type = TTaskMeta::ETaskType::Scan;
                 task.SetMetaId(metaGlueingId);
             }
         }
@@ -2478,8 +2464,7 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     YQL_ENSURE(MaxTasksGraph.GetStageTasksCount(stageId) == 1);
 
     auto& task = AddTask(stageInfo, TTaskType::DEFAULT_SOURCE_READ);
-    task.Meta.Type = TTaskMeta::ETaskType::Scan;
-    task.Meta.NodeId = GetMeta().ExecuterId.NodeId();
+    task.Meta.ExpectedNodeId = GetMeta().ExecuterId.NodeId();
     const auto& stageSource = stage.GetSources(0);
     auto& input = task.Inputs.at(stageSource.GetInputIndex());
     input.SourceType = NYql::KqpFullTextSourceName;
@@ -2614,8 +2599,7 @@ void TKqpTasksGraph::BuildSysViewTasksFromSource(TStageInfo& stageInfo) {
     YQL_ENSURE(MaxTasksGraph.GetStageTasksCount(stageId) == 1);
 
     auto& task = AddTask(stageInfo, TTaskType::DEFAULT_SOURCE_READ);
-    task.Meta.Type = TTaskMeta::ETaskType::Compute;
-    task.Meta.NodeId = GetMeta().ExecuterId.NodeId();
+    task.Meta.ExpectedNodeId = GetMeta().ExecuterId.NodeId();
 
     const auto& stageSource = stage.GetSources(0);
     auto& input = task.Inputs.at(stageSource.GetInputIndex());
@@ -2749,8 +2733,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
 
     auto createNewTask = [&](ui64 nodeId, TMaybe<ui64> maxInFlightShards) -> TTask& {
         auto& task = AddTask(stageInfo, TTaskType::UNKNOWN);
-        task.Meta.Type = TTaskMeta::ETaskType::Scan;
-        task.Meta.NodeId = nodeId;
+        task.Meta.ExpectedNodeId = nodeId;
 
         const auto& stageSource = stage.GetSources(0);
         auto& input = task.Inputs.at(stageSource.GetInputIndex());
@@ -3866,7 +3849,7 @@ void TKqpTasksGraph::CountScanTasksFromShards(const TStageInfo& stageInfo, bool 
 
 TString TTaskMeta::ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const {
     TStringBuilder sb;
-    sb << "TTaskMeta{ ShardId: " << ShardId << ", Reads: { ";
+    sb << "TTaskMeta{ Reads: { ";
 
     if (Reads) {
         for (ui64 i = 0; i < Reads->size(); ++i) {

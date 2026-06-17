@@ -193,7 +193,7 @@ private:
         for (const auto& task : TasksGraph.GetTasks()) {
             const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
 
-            if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
+            if (task.Meta.ExpectedNodeId || stageInfo.Meta.IsSysView()) {
                 // TODO: YQL_ENSURE(task.Meta.Type == TTaskMeta::TTaskType::Scan);
                 // Task with source
                 if (!task.Meta.Reads) {
@@ -255,10 +255,11 @@ public:
 private:
     void ExecuteScanTx() {
 
-        if (!BuildPlannerAndSubmitTasks())
+        if (!BuildPlannerAndSubmitTasks()) {
             return;
+        }
 
-        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, Planner->GetnComputeTasks(), Planner->GetnComputeTasks());
+        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, Planner->GetUnassignedTasksCount(), Planner->GetUnassignedTasksCount());
     }
 
 private:

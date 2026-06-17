@@ -989,7 +989,7 @@ protected:
                                 TABLED() {str << task.StageId.TxId;}
                                 TABLED() {str << task.StageId.StageId;}
                                 TABLED() {str << task.Id;}
-                                TABLED() {str << task.Meta.NodeId;}
+                                TABLED() {str << task.Meta.ExpectedNodeId.value_or(0);}
                                 TABLED() {
                                     if (task.ComputeActorId) {
                                         HREF(TStringBuilder() << "/node/" << task.ComputeActorId.NodeId() << "/actors/kqp_node?ca=" << task.ComputeActorId)  {

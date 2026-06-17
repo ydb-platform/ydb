@@ -2596,7 +2596,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);
     static void Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id);
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotInfo& vslot);
-    static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId);
+    static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId, std::optional<ui64> pdiskGuid = std::nullopt);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot, const TVSlotFinder& finder);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
         const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo);

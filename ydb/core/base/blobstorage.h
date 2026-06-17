@@ -1086,6 +1086,7 @@ struct TEvBlobStorage {
         const ETactic Tactic;
         const bool IssueKeepFlag = false;
         const bool IgnoreBlock = false;
+        const bool FailOnSlowDown = false; // when set, fail the request with ERROR/"SlowDown" instead of retrying
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
@@ -1098,6 +1099,7 @@ struct TEvBlobStorage {
             ETactic Tactic = TacticDefault;
             bool IssueKeepFlag = false;
             bool IgnoreBlock = false;
+            bool FailOnSlowDown = false;
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
@@ -1109,6 +1111,7 @@ struct TEvBlobStorage {
             , Tactic(origin.Tactic)
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
+            , FailOnSlowDown(origin.FailOnSlowDown)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
             , ExternalRelevanceWatcher(origin.ExternalRelevanceWatcher)
         {}
@@ -1121,6 +1124,7 @@ struct TEvBlobStorage {
             , Tactic(parameters.Tactic)
             , IssueKeepFlag(parameters.IssueKeepFlag)
             , IgnoreBlock(parameters.IgnoreBlock)
+            , FailOnSlowDown(parameters.FailOnSlowDown)
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());

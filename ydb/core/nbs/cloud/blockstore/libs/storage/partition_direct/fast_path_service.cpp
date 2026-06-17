@@ -219,12 +219,11 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
 
-    if (regionIndex >= Regions.size()) {
-        ythrow yexception()
-            << "Region index out of bound: Regions.size() = " << Regions.size()
-            << ", regionIndex = " << regionIndex
-            << ", range = " << request -> Headers.Range;
-    }
+    Y_ABORT_UNLESS(
+        regionIndex < Regions.size(),
+        "Region index out of bound: %" PRISZT " >= %" PRISZT,
+        regionIndex,
+        Regions.size());
 
     auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
@@ -269,12 +268,11 @@ TFastPathService::WriteBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
 
-    if (regionIndex >= Regions.size()) {
-        ythrow yexception()
-            << "Region index out of bound: Regions.size() = " << Regions.size()
-            << ", regionIndex = " << regionIndex
-            << ", range = " << request -> Headers.Range;
-    }
+    Y_ABORT_UNLESS(
+        regionIndex < Regions.size(),
+        "Region index out of bound: %" PRISZT " >= %" PRISZT,
+        regionIndex,
+        Regions.size());
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),

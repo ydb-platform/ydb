@@ -114,6 +114,24 @@ class Workload():
                 except Exception:
                     pass
 
+            direct_level = "error" if random.choice([True, False]) else "warn"
+            direct_message = f'{{"time": {int(time.time() * 1000000)}, "level": "{direct_level}"}}'
+            try:
+                self.pool.execute_with_retries(
+                    f"INSERT INTO `{self.input_topic}` SELECT @@{direct_message}@@;"
+                )
+            except Exception as e:
+                logger.error(f"Failed to write into local topic: {e}")
+
+            external_level = "error" if random.choice([True, False]) else "warn"
+            external_message = f'{{"time": {int(time.time() * 1000000)}, "level": "{external_level}"}}'
+            try:
+                self.pool.execute_with_retries(
+                    f"INSERT INTO `{self.prefix}/source_name`.`{self.input_topic}` SELECT @@{external_message}@@;"
+                )
+            except Exception as e:
+                logger.error(f"Failed to write into external topic: {e}")
+
         for writer in writers:
             writer.close(flush=False)
 

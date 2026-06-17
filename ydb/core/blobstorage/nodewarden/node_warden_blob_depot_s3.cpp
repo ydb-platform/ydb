@@ -10,7 +10,7 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TAutoPtr<TEventHandle<TEvNodeWardenAcquireBlobDepotS3Router>> ev) {
         auto& msg = *ev->Get();
         const ui64 tabletId = msg.TabletId;
-        YDB_LOG_COMP_DEBUG(BS_NODE, "TEvNodeWardenAcquireBlobDepotS3Router",
+        YDB_LOG_DEBUG_COMP(BS_NODE, "TEvNodeWardenAcquireBlobDepotS3Router",
             {"Marker", "NW70"},
             {"TabletId", tabletId},
             {"Sender", ev->Sender});
@@ -23,12 +23,12 @@ namespace NKikimr::NStorage {
             IActor* routerActor = NBlobDepot::CreateBlobDepotS3Router(msg.Settings);
             rec.Router = Register(routerActor, TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
             as->RegisterLocalService(MakeBlobDepotS3RouterID(tabletId), rec.Router);
-            YDB_LOG_COMP_INFO(BS_NODE, "BlobDepotS3Router created",
+            YDB_LOG_INFO_COMP(BS_NODE, "BlobDepotS3Router created",
                 {"Marker", "NW71"},
                 {"TabletId", tabletId},
                 {"Router", rec.Router});
         } else {
-            YDB_LOG_COMP_DEBUG(BS_NODE, "BlobDepotS3Router reused",
+            YDB_LOG_DEBUG_COMP(BS_NODE, "BlobDepotS3Router reused",
                 {"Marker", "NW72"},
                 {"TabletId", tabletId},
                 {"Router", rec.Router});
@@ -40,7 +40,7 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TAutoPtr<TEventHandle<TEvNodeWardenReleaseBlobDepotS3Router>> ev) {
         auto& msg = *ev->Get();
         const ui64 tabletId = msg.TabletId;
-        YDB_LOG_COMP_DEBUG(BS_NODE, "TEvNodeWardenReleaseBlobDepotS3Router",
+        YDB_LOG_DEBUG_COMP(BS_NODE, "TEvNodeWardenReleaseBlobDepotS3Router",
             {"Marker", "NW73"},
             {"TabletId", tabletId},
             {"Sender", ev->Sender});
@@ -53,7 +53,7 @@ namespace NKikimr::NStorage {
         auto& rec = it->second;
         rec.Consumers.erase(ev->Sender);
         if (rec.Consumers.empty()) {
-            YDB_LOG_COMP_INFO(BS_NODE, "BlobDepotS3Router terminating",
+            YDB_LOG_INFO_COMP(BS_NODE, "BlobDepotS3Router terminating",
                 {"Marker", "NW74"},
                 {"TabletId", tabletId},
                 {"Router", rec.Router});

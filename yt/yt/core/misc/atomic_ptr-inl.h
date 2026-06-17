@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "atomic_ptr.h"
 #endif
-#undef ATOMIC_PTR_INL_H_
 
 #include "private.h"
 

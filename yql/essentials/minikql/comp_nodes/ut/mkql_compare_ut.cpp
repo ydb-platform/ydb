@@ -1,5 +1,7 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -19,24 +21,25 @@ Y_UNIT_TEST_LLVM(SqlString) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto data0 = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id);
-    auto data1 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("010"));
-    auto data2 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("020"));
+    using TOptStr = TMaybe<TStringBuf>;
+    using TRow = std::tuple<TOptStr, TOptStr>;
+    using TResult = std::tuple<TMaybe<bool>, TMaybe<bool>, TMaybe<bool>, TMaybe<bool>, TMaybe<bool>, TMaybe<bool>>;
 
-    auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    auto optionalType = pb.NewOptionalType(dataType);
-    auto pairType = pb.NewTupleType({optionalType, optionalType});
-    auto list = pb.NewList(pairType, {pb.NewTuple({data0, data0}),
-                                      pb.NewTuple({data0, data1}),
-                                      pb.NewTuple({data0, data2}),
+    const TOptStr null{};
+    const TOptStr s010{TStringBuf("010")};
+    const TOptStr s020{TStringBuf("020")};
 
-                                      pb.NewTuple({data1, data0}),
-                                      pb.NewTuple({data1, data1}),
-                                      pb.NewTuple({data1, data2}),
-
-                                      pb.NewTuple({data2, data0}),
-                                      pb.NewTuple({data2, data1}),
-                                      pb.NewTuple({data2, data2})});
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                         {null, null},
+                                                         {null, s010},
+                                                         {null, s020},
+                                                         {s010, null},
+                                                         {s010, s010},
+                                                         {s010, s020},
+                                                         {s020, null},
+                                                         {s020, s010},
+                                                         {s020, s020},
+                                                     });
 
     auto pgmReturn = pb.Map(list,
                             [&](TRuntimeNode item) {
@@ -49,107 +52,42 @@ Y_UNIT_TEST_LLVM(SqlString) {
                             });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TResult>{
+                                                          {{}, {}, {}, {}, {}, {}},                // null, null
+                                                          {{}, {}, {}, {}, {}, {}},                // null, "010"
+                                                          {{}, {}, {}, {}, {}, {}},                // null, "020"
+                                                          {{}, {}, {}, {}, {}, {}},                // "010", null
+                                                          {true, false, false, true, false, true}, // "010", "010"
+                                                          {false, true, true, true, false, false}, // "010", "020"
+                                                          {{}, {}, {}, {}, {}, {}},                // "020", null
+                                                          {false, true, false, false, true, true}, // "020", "010"
+                                                          {true, false, false, true, false, true}, // "020", "020"
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(AggrString) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto data0 = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id);
-    auto data1 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("010"));
-    auto data2 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("020"));
+    using TOptStr = TMaybe<TStringBuf>;
+    using TRow = std::tuple<TOptStr, TOptStr>;
+    using TResult = std::tuple<bool, bool, bool, bool, bool, bool>;
 
-    auto dataType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    auto optionalType = pb.NewOptionalType(dataType);
-    auto pairType = pb.NewTupleType({optionalType, optionalType});
-    auto list = pb.NewList(pairType, {pb.NewTuple({data0, data0}),
-                                      pb.NewTuple({data0, data1}),
-                                      pb.NewTuple({data0, data2}),
+    const TOptStr null{};
+    const TOptStr s010{TStringBuf("010")};
+    const TOptStr s020{TStringBuf("020")};
 
-                                      pb.NewTuple({data1, data0}),
-                                      pb.NewTuple({data1, data1}),
-                                      pb.NewTuple({data1, data2}),
-
-                                      pb.NewTuple({data2, data0}),
-                                      pb.NewTuple({data2, data1}),
-                                      pb.NewTuple({data2, data2})});
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                         {null, null},
+                                                         {null, s010},
+                                                         {null, s020},
+                                                         {s010, null},
+                                                         {s010, s010},
+                                                         {s010, s020},
+                                                         {s020, null},
+                                                         {s020, s010},
+                                                         {s020, s020},
+                                                     });
 
     auto pgmReturn = pb.Map(list,
                             [&](TRuntimeNode item) {
@@ -162,110 +100,41 @@ Y_UNIT_TEST_LLVM(AggrString) {
                             });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TResult>{
+                                                          {true, false, false, true, false, true}, // null, null  (aggr treats null as min)
+                                                          {false, true, true, true, false, false}, // null, "010"
+                                                          {false, true, true, true, false, false}, // null, "020"
+                                                          {false, true, false, false, true, true}, // "010", null
+                                                          {true, false, false, true, false, true}, // "010", "010"
+                                                          {false, true, true, true, false, false}, // "010", "020"
+                                                          {false, true, false, false, true, true}, // "020", null
+                                                          {false, true, false, false, true, true}, // "020", "010"
+                                                          {true, false, false, true, false, true}, // "020", "020"
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(SqlFloats) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto data1 = pb.NewDataLiteral<float>(-7.0f);
-    auto data2 = pb.NewDataLiteral<float>(3.0f);
-    auto data3 = pb.NewDataLiteral<float>(0.0f * HUGE_VALF);
-    auto data4 = pb.NewDataLiteral<double>(-7.0);
-    auto data5 = pb.NewDataLiteral<double>(3.0);
-    auto data6 = pb.NewDataLiteral<double>(0.0 * HUGE_VAL);
+    using TRow = std::tuple<float, double>;
+    using TResult = std::tuple<bool, bool, bool, bool, bool, bool>;
 
-    auto pairType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<float>::Id), pb.NewDataType(NUdf::TDataType<double>::Id)});
-    auto list = pb.NewList(pairType, {
-                                         pb.NewTuple({data1, data4}),
-                                         pb.NewTuple({data1, data5}),
-                                         pb.NewTuple({data1, data6}),
+    // NaN comparisons: SQL treats NaN != NaN, and all order comparisons with NaN are false
+    const float nanF = 0.0f * HUGE_VALF;
+    const double nanD = 0.0 * HUGE_VAL;
 
-                                         pb.NewTuple({data2, data4}),
-                                         pb.NewTuple({data2, data5}),
-                                         pb.NewTuple({data2, data6}),
-
-                                         pb.NewTuple({data3, data4}),
-                                         pb.NewTuple({data3, data5}),
-                                         pb.NewTuple({data3, data6}),
-                                     });
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                         {-7.0f, -7.0},
+                                                         {-7.0f, 3.0},
+                                                         {-7.0f, nanD},
+                                                         {3.0f, -7.0},
+                                                         {3.0f, 3.0},
+                                                         {3.0f, nanD},
+                                                         {nanF, -7.0},
+                                                         {nanF, 3.0},
+                                                         {nanF, nanD},
+                                                     });
 
     auto pgmReturn = pb.Map(list,
                             [&](TRuntimeNode item) {
@@ -278,107 +147,39 @@ Y_UNIT_TEST_LLVM(SqlFloats) {
                             });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TResult>{
+                                                          {true, false, false, true, false, true},   // -7f == -7d
+                                                          {false, true, true, true, false, false},   // -7f < 3d
+                                                          {false, true, false, false, false, false}, // -7f vs NaN
+                                                          {false, true, false, false, true, true},   // 3f > -7d
+                                                          {true, false, false, true, false, true},   // 3f == 3d
+                                                          {false, true, false, false, false, false}, // 3f vs NaN
+                                                          {false, true, false, false, false, false}, // NaN vs -7d
+                                                          {false, true, false, false, false, false}, // NaN vs 3d
+                                                          {false, true, false, false, false, false}, // NaN vs NaN
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(AggrFloats) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto data1 = pb.NewDataLiteral<float>(-7.0f);
-    auto data2 = pb.NewDataLiteral<float>(3.0f);
-    auto data3 = pb.NewDataLiteral<float>(0.0f * HUGE_VALF);
+    using TRow = std::tuple<float, float>;
+    using TResult = std::tuple<bool, bool, bool, bool, bool, bool>;
 
-    auto pairType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<float>::Id), pb.NewDataType(NUdf::TDataType<float>::Id)});
-    auto list = pb.NewList(pairType, {
-                                         pb.NewTuple({data1, data1}),
-                                         pb.NewTuple({data1, data2}),
-                                         pb.NewTuple({data1, data3}),
+    const float nanF = 0.0f * HUGE_VALF;
 
-                                         pb.NewTuple({data2, data1}),
-                                         pb.NewTuple({data2, data2}),
-                                         pb.NewTuple({data2, data3}),
-
-                                         pb.NewTuple({data3, data1}),
-                                         pb.NewTuple({data3, data2}),
-                                         pb.NewTuple({data3, data3}),
-                                     });
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                         {-7.0f, -7.0f},
+                                                         {-7.0f, 3.0f},
+                                                         {-7.0f, nanF},
+                                                         {3.0f, -7.0f},
+                                                         {3.0f, 3.0f},
+                                                         {3.0f, nanF},
+                                                         {nanF, -7.0f},
+                                                         {nanF, 3.0f},
+                                                         {nanF, nanF},
+                                                     });
 
     auto pgmReturn = pb.Map(list,
                             [&](TRuntimeNode item) {
@@ -391,100 +192,32 @@ Y_UNIT_TEST_LLVM(AggrFloats) {
                             });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TResult>{
+                                                          {true, false, false, true, false, true}, // -7 == -7
+                                                          {false, true, true, true, false, false}, // -7 < 3
+                                                          {false, true, true, true, false, false}, // -7 < NaN (NaN is max in aggr)
+                                                          {false, true, false, false, true, true}, // 3 > -7
+                                                          {true, false, false, true, false, true}, // 3 == 3
+                                                          {false, true, true, true, false, false}, // 3 < NaN
+                                                          {false, true, false, false, true, true}, // NaN > -7
+                                                          {false, true, false, false, true, true}, // NaN > 3
+                                                          {true, false, false, true, false, true}, // NaN == NaN
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(SqlSigned) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto data1 = pb.NewDataLiteral<i16>(-1);
-    auto data2 = pb.NewDataLiteral<i16>(+1);
-    auto data3 = pb.NewDataLiteral<i32>(-1);
-    auto data4 = pb.NewDataLiteral<i32>(+1);
+    using TRow = std::tuple<i16, i32>;
+    using TResult = std::tuple<bool, bool, bool, bool, bool, bool>;
 
-    auto pairType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<i16>::Id), pb.NewDataType(NUdf::TDataType<i32>::Id)});
-    auto list = pb.NewList(pairType, {pb.NewTuple({data1, data3}),
-                                      pb.NewTuple({data1, data4}),
-
-                                      pb.NewTuple({data2, data3}),
-                                      pb.NewTuple({data2, data4})});
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                         {i16(-1), i32(-1)},
+                                                         {i16(-1), i32(+1)},
+                                                         {i16(+1), i32(-1)},
+                                                         {i16(+1), i32(+1)},
+                                                     });
 
     auto pgmReturn = pb.Map(list,
                             [&](TRuntimeNode item) {
@@ -497,60 +230,27 @@ Y_UNIT_TEST_LLVM(SqlSigned) {
                             });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TResult>{
+                                                          {true, false, false, true, false, true}, // -1 == -1
+                                                          {false, true, true, true, false, false}, // -1 < +1
+                                                          {false, true, false, false, true, true}, // +1 > -1
+                                                          {true, false, false, true, false, true}, // +1 == +1
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(SqlSignedAndUnsigned) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto data1 = pb.NewDataLiteral<i8>(-1);
-    auto data2 = pb.NewDataLiteral<i8>(127);
-    auto data3 = pb.NewDataLiteral<ui8>(0xFF);
-    auto data4 = pb.NewDataLiteral<ui8>(127);
+    using TRow = std::tuple<i8, ui8>;
+    using TResult = std::tuple<bool, bool, bool, bool, bool, bool>;
 
-    auto pairType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<i8>::Id), pb.NewDataType(NUdf::TDataType<ui8>::Id)});
-    auto list = pb.NewList(pairType, {pb.NewTuple({data1, data3}),
-                                      pb.NewTuple({data1, data4}),
-
-                                      pb.NewTuple({data2, data3}),
-                                      pb.NewTuple({data2, data4})});
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                         {i8(-1), ui8(0xFF)},
+                                                         {i8(-1), ui8(127)},
+                                                         {i8(127), ui8(0xFF)},
+                                                         {i8(127), ui8(127)},
+                                                     });
 
     auto pgmReturn = pb.Map(list,
                             [&](TRuntimeNode item) {
@@ -563,60 +263,27 @@ Y_UNIT_TEST_LLVM(SqlSignedAndUnsigned) {
                             });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TResult>{
+                                                          {false, true, true, true, false, false}, // -1 < 0xFF (255)
+                                                          {false, true, true, true, false, false}, // -1 < 127
+                                                          {false, true, true, true, false, false}, // 127 < 0xFF (255)
+                                                          {true, false, false, true, false, true}, // 127 == 127
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(SqlUnsignedAndSigned) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto data1 = pb.NewDataLiteral<ui16>(0);
-    auto data2 = pb.NewDataLiteral<ui16>(0xFFFF);
-    auto data3 = pb.NewDataLiteral<i64>(-1);
-    auto data4 = pb.NewDataLiteral<i64>(0xFFFF);
+    using TRow = std::tuple<ui16, i64>;
+    using TResult = std::tuple<bool, bool, bool, bool, bool, bool>;
 
-    auto pairType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui16>::Id), pb.NewDataType(NUdf::TDataType<i64>::Id)});
-    auto list = pb.NewList(pairType, {pb.NewTuple({data1, data3}),
-                                      pb.NewTuple({data1, data4}),
-
-                                      pb.NewTuple({data2, data3}),
-                                      pb.NewTuple({data2, data4})});
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                         {ui16(0), i64(-1)},
+                                                         {ui16(0), i64(0xFFFF)},
+                                                         {ui16(0xFFFF), i64(-1)},
+                                                         {ui16(0xFFFF), i64(0xFFFF)},
+                                                     });
 
     auto pgmReturn = pb.Map(list,
                             [&](TRuntimeNode item) {
@@ -629,53 +296,22 @@ Y_UNIT_TEST_LLVM(SqlUnsignedAndSigned) {
                             });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TResult>{
+                                                          {false, true, false, false, true, true}, // 0 > -1 (0 as ui16 is > -1 as i64)
+                                                          {false, true, true, true, false, false}, // 0 < 65535
+                                                          {false, true, false, false, true, true}, // 65535 > -1
+                                                          {true, false, false, true, false, true}, // 65535 == 65535
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(SimpleSqlString) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto opt1 = pb.NewOptional(pb.NewDataLiteral<ui32>(1));
-    auto opt2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
-    auto optEmpty = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-    auto pgmReturn = pb.NewEmptyList(pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<bool>::Id)));
+    auto opt1 = NTest::ConvertValueToLiteralNode(pb, TMaybe<ui32>{1});
+    auto opt2 = NTest::ConvertValueToLiteralNode(pb, TMaybe<ui32>{2});
+    auto optEmpty = NTest::ConvertValueToLiteralNode(pb, TMaybe<ui32>{});
+    auto pgmReturn = pb.NewEmptyList(NTest::ConvertToMinikqlType<TMaybe<bool>>(pb));
 
     pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1, opt1));
     pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1, opt2));
@@ -717,9 +353,9 @@ Y_UNIT_TEST_LLVM(SimpleSqlString) {
     pgmReturn = pb.Append(pgmReturn, pb.GreaterOrEqual(optEmpty, opt2));
     pgmReturn = pb.Append(pgmReturn, pb.GreaterOrEqual(optEmpty, optEmpty));
 
-    auto opt1s = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("A"));
-    auto opt2s = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("B"));
-    auto optEmptys = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id);
+    auto opt1s = NTest::ConvertValueToLiteralNode(pb, TMaybe<TStringBuf>{"A"});
+    auto opt2s = NTest::ConvertValueToLiteralNode(pb, TMaybe<TStringBuf>{"B"});
+    auto optEmptys = NTest::ConvertValueToLiteralNode(pb, TMaybe<TStringBuf>{});
 
     pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1s, opt1s));
     pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1s, opt2s));
@@ -734,129 +370,58 @@ Y_UNIT_TEST_LLVM(SimpleSqlString) {
     pgmReturn = pb.Append(pgmReturn, pb.NotEquals(optEmptys, optEmptys));
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
 
-    // equals
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    // not equals
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    // less
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    // less or equal
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    // greater
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    // greater or equal
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    // equals - string
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    // not equals - string
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using MB = TMaybe<bool>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<MB>{
+                                                          // equals ui32
+                                                          true, false,
+                                                          {},
+                                                          {},
+                                                          {},
+                                                          // not equals ui32
+                                                          false, true,
+                                                          {},
+                                                          {},
+                                                          {},
+                                                          // less ui32
+                                                          false, true, false,
+                                                          {},
+                                                          {},
+                                                          {},
+                                                          // less or equal ui32
+                                                          true, true, false,
+                                                          {},
+                                                          {},
+                                                          {},
+                                                          // greater ui32
+                                                          false, false, true,
+                                                          {},
+                                                          {},
+                                                          {},
+                                                          // greater or equal ui32
+                                                          true, false, true,
+                                                          {},
+                                                          {},
+                                                          {},
+                                                          // equals string
+                                                          true, false,
+                                                          {},
+                                                          {},
+                                                          {},
+                                                          // not equals string
+                                                          false, true,
+                                                          {},
+                                                          {},
+                                                          {},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TzMin) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui16>(1ULL);
-    const auto data2 = pb.NewDataLiteral<ui16>(7ULL);
-
-    const auto data3 = pb.NewDataLiteral<ui32>(1ULL);
-    const auto data4 = pb.NewDataLiteral<ui32>(7ULL);
-
-    const auto zones = pb.ListFromRange(data1, data2, data1);
-    const auto dates = pb.ListFromRange(data3, data4, data3);
+    const auto zones = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui16(1ULL)), NTest::ConvertValueToLiteralNode(pb, ui16(7ULL)), NTest::ConvertValueToLiteralNode(pb, ui16(1ULL)));
+    const auto dates = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui32(1ULL)), NTest::ConvertValueToLiteralNode(pb, ui32(7ULL)), NTest::ConvertValueToLiteralNode(pb, ui32(1ULL)));
 
     const auto source = pb.Map(pb.Zip({pb.Reverse(dates), zones}),
                                [&](TRuntimeNode item) {
@@ -865,25 +430,19 @@ Y_UNIT_TEST_LLVM(TzMin) {
 
     const auto pgmReturn = pb.ToString(pb.Unwrap(pb.Fold1(source,
                                                           [&](TRuntimeNode item) { return item; },
-                                                          [&](TRuntimeNode item, TRuntimeNode state) { return pb.Min(item, state); }), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), __FILE__, __LINE__, 0));
+                                                          [&](TRuntimeNode item, TRuntimeNode state) { return pb.Min(item, state); }), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), __FILE__, __LINE__, 0));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto result = graph->GetValue();
-    UNBOXED_VALUE_STR_EQUAL(result, "1970-01-01T03:00:01,Africa/Asmara");
+    AssertUnboxedValueElementEqual(result, TStringBuf("1970-01-01T03:00:01,Africa/Asmara"));
 }
 
 Y_UNIT_TEST_LLVM(TzMax) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui16>(1ULL);
-    const auto data2 = pb.NewDataLiteral<ui16>(7ULL);
-
-    const auto data3 = pb.NewDataLiteral<ui32>(1ULL);
-    const auto data4 = pb.NewDataLiteral<ui32>(7ULL);
-
-    const auto zones = pb.ListFromRange(data1, data2, data1);
-    const auto dates = pb.ListFromRange(data3, data4, data3);
+    const auto zones = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui16(1ULL)), NTest::ConvertValueToLiteralNode(pb, ui16(7ULL)), NTest::ConvertValueToLiteralNode(pb, ui16(1ULL)));
+    const auto dates = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui32(1ULL)), NTest::ConvertValueToLiteralNode(pb, ui32(7ULL)), NTest::ConvertValueToLiteralNode(pb, ui32(1ULL)));
 
     const auto source = pb.Map(pb.Zip({dates, pb.Reverse(zones)}),
                                [&](TRuntimeNode item) {
@@ -892,25 +451,19 @@ Y_UNIT_TEST_LLVM(TzMax) {
 
     const auto pgmReturn = pb.ToString(pb.Unwrap(pb.Fold1(source,
                                                           [&](TRuntimeNode item) { return item; },
-                                                          [&](TRuntimeNode item, TRuntimeNode state) { return pb.Max(item, state); }), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), __FILE__, __LINE__, 0));
+                                                          [&](TRuntimeNode item, TRuntimeNode state) { return pb.Max(item, state); }), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), __FILE__, __LINE__, 0));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto result = graph->GetValue();
-    UNBOXED_VALUE_STR_EQUAL(result, "1970-01-01T03:00:06,Europe/Moscow");
+    AssertUnboxedValueElementEqual(result, TStringBuf("1970-01-01T03:00:06,Europe/Moscow"));
 }
 
 Y_UNIT_TEST_LLVM(TzAggrMin) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui16>(1ULL);
-    const auto data2 = pb.NewDataLiteral<ui16>(7ULL);
-
-    const auto data3 = pb.NewDataLiteral<ui32>(1ULL);
-    const auto data4 = pb.NewDataLiteral<ui32>(7ULL);
-
-    const auto zones = pb.ListFromRange(data1, data2, data1);
-    const auto dates = pb.ListFromRange(data3, data4, data3);
+    const auto zones = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui16(1ULL)), NTest::ConvertValueToLiteralNode(pb, ui16(7ULL)), NTest::ConvertValueToLiteralNode(pb, ui16(1ULL)));
+    const auto dates = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui32(1ULL)), NTest::ConvertValueToLiteralNode(pb, ui32(7ULL)), NTest::ConvertValueToLiteralNode(pb, ui32(1ULL)));
 
     const auto source = pb.FlatMap(zones,
                                    [&](TRuntimeNode zone) {
@@ -922,25 +475,19 @@ Y_UNIT_TEST_LLVM(TzAggrMin) {
 
     const auto pgmReturn = pb.ToString(pb.Unwrap(pb.Fold1(source,
                                                           [&](TRuntimeNode item) { return item; },
-                                                          [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrMin(item, state); }), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), __FILE__, __LINE__, 0));
+                                                          [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrMin(item, state); }), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), __FILE__, __LINE__, 0));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto result = graph->GetValue();
-    UNBOXED_VALUE_STR_EQUAL(result, "1970-01-01T03:00:01,Europe/Moscow");
+    AssertUnboxedValueElementEqual(result, TStringBuf("1970-01-01T03:00:01,Europe/Moscow"));
 }
 
 Y_UNIT_TEST_LLVM(TzAggrMax) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui16>(1ULL);
-    const auto data2 = pb.NewDataLiteral<ui16>(7ULL);
-
-    const auto data3 = pb.NewDataLiteral<ui32>(1ULL);
-    const auto data4 = pb.NewDataLiteral<ui32>(7ULL);
-
-    const auto zones = pb.ListFromRange(data1, data2, data1);
-    const auto dates = pb.ListFromRange(data3, data4, data3);
+    const auto zones = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui16(1ULL)), NTest::ConvertValueToLiteralNode(pb, ui16(7ULL)), NTest::ConvertValueToLiteralNode(pb, ui16(1ULL)));
+    const auto dates = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, ui32(1ULL)), NTest::ConvertValueToLiteralNode(pb, ui32(7ULL)), NTest::ConvertValueToLiteralNode(pb, ui32(1ULL)));
 
     const auto source = pb.FlatMap(dates,
                                    [&](TRuntimeNode date) {
@@ -952,24 +499,18 @@ Y_UNIT_TEST_LLVM(TzAggrMax) {
 
     const auto pgmReturn = pb.ToString(pb.Unwrap(pb.Fold1(source,
                                                           [&](TRuntimeNode item) { return item; },
-                                                          [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrMax(item, state); }), pb.NewDataLiteral<NUdf::EDataSlot::String>(""), __FILE__, __LINE__, 0));
+                                                          [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrMax(item, state); }), NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), __FILE__, __LINE__, 0));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto result = graph->GetValue();
-    UNBOXED_VALUE_STR_EQUAL(result, "1970-01-01T03:00:06,Africa/Asmara");
+    AssertUnboxedValueElementEqual(result, TStringBuf("1970-01-01T03:00:06,Africa/Asmara"));
 }
 
 Y_UNIT_TEST_LLVM(TestAggrMinMaxFloats) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<float>(0.0f * HUGE_VALF);
-    const auto data2 = pb.NewDataLiteral<float>(HUGE_VALF);
-    const auto data3 = pb.NewDataLiteral<float>(3.14f);
-    const auto data4 = pb.NewDataLiteral<float>(-2.13f);
-    const auto data5 = pb.NewDataLiteral<float>(-HUGE_VALF);
-    const auto dataType = pb.NewDataType(NUdf::TDataType<float>::Id);
-    const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<float>{0.0f * HUGE_VALF, HUGE_VALF, 3.14f, -2.13f, -HUGE_VALF});
     const auto pgmReturn = pb.FlatMap(list,
                                       [&](TRuntimeNode left) {
                                           return pb.Map(list,

@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -63,7 +62,7 @@ public:
     }
 
     virtual ~TKqpVectorResolveActor() {
-        if (Input.HasValue() && Alloc) {
+        if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
 
@@ -89,6 +88,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvNewAsyncInputDataArrived, HandleRead);
                 hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+                cFunc(TEvents::TEvPoison::EventType, PassAway);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -352,10 +352,10 @@ private:
         }
         TMaybe<TInstant> watermark;
         ui64 freeSpace = 32*1024*1024; // FIXME The value doesn't really matter, but where to take it from?
-        NKikimr::NMiniKQL::TUnboxedValueBatch rows;
         bool finished = false;
         {
             auto guard = BindAllocator();
+            NKikimr::NMiniKQL::TUnboxedValueBatch rows;
             ReadActorInput->GetAsyncInputData(rows, watermark, finished, freeSpace);
             rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
                 NTableIndex::NKMeans::TClusterId parent = value.GetElement(0).Get<ui64>();
@@ -383,12 +383,9 @@ private:
             ReadingChildClusters = false;
             // Convert to NKikimr::NKMeans::TClusters
             if (!Failed) {
+                auto guard = BindAllocator();
                 ParseFetchedClusters();
             }
-        }
-        {
-            auto guard = BindAllocator();
-            rows.clear();
         }
     }
 
@@ -468,8 +465,9 @@ private:
             }
             for (size_t i = 0; i < Settings.CopyColumnIndexesSize(); i++) {
                 auto colIdx = Settings.GetCopyColumnIndexes(i);
-                *rowItems++ = row.GetElement(colIdx);
-                rowSize += NMiniKQL::GetUnboxedValueSize(row.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
+                auto elem = row.GetElement(colIdx);
+                rowSize += NMiniKQL::GetUnboxedValueSize(elem, ColumnTypeInfos[colIdx]).AllocatedBytes;
+                *rowItems++ = std::move(elem);
                 if (Settings.GetClusterColumnOutPos() == i+1) {
                     // We support inserting cluster ID column into any position to maintain alphabetical order of columns
                     *rowItems++ = NUdf::TUnboxedValuePod((ui64)rowClusters[rowClusters.size()-1].first);

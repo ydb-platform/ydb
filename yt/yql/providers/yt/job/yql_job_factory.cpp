@@ -26,7 +26,7 @@ TComputationNodeFactory GetJobFactory(NYql::NCommon::TCodecContext& codecCtx, co
                 return WrapYtTableContent(codecCtx, ctx.Mutables, callable, optLLVM, {} /*empty pathPrefix inside job*/);
             }
             if (name == "BlockTableContent") {
-                return WrapYtBlockTableContent(codecCtx, ctx.Mutables, callable, {} /*empty pathPrefix inside job*/);
+                return WrapYtBlockTableContent(codecCtx, ctx.Mutables, callable, {} /*empty pathPrefix inside job*/, specs->DatumValidationMode_);
             }
             if (name == "Input") {
                 YQL_ENSURE(reader);

@@ -40,7 +40,6 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
         const NWilson::TTraceId& traceId);
 
 private:

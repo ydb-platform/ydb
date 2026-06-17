@@ -19,7 +19,7 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
 
     auto map = CastOperator<TOpMap>(filter->GetInput());
 
-    if (map->Project) {
+    if (map->HasRenames()) {
         return input;
     }
 

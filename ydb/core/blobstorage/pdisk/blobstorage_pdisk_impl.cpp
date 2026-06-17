@@ -522,12 +522,12 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
                 << "Unexpected ownerId# " << ui32(state.OwnerId));
         state.CommitState = TChunkState::FREE;
         state.OwnerId = OwnerUnallocated;
-        Mon.LogChunks->Dec();
 
         auto curr = it;
         ++it;
         LogChunks.erase(curr);
     }
+    *Mon.LogChunks = LogChunks.size();
     if (it != LogChunks.end()) {
         if (gapStart) {
             if (!chunksToRelease.empty()) {

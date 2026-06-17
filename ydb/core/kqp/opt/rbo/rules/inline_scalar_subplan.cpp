@@ -25,7 +25,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     auto scalarIU = scalarIUs[0];
     auto subplanEntry = props.Subplans.PlanMap.at(scalarIU);
     auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
-    auto subplanResIU = subplan->GetOutputIUs()[0];
+    auto subplanResIU = GetSubplanResultIUs(subplan)[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);
 
     Y_ENSURE(MatchOperator<IUnaryOperator>(input));
@@ -36,20 +36,35 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     // Check whether this is a correlated subplan with filter pushed up
     // FIXME: if the filter got stuck we will crash later in the optimizer
     if (subplan->Kind == EOperator::Filter && CastOperator<TOpFilter>(subplan)->GetInput()->Kind == EOperator::AddDependencies) {
-        auto filter = CastOperator<TOpFilter>(subplan);
-        auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
+        auto subplanFilter = CastOperator<TOpFilter>(subplan);
+        auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         auto uncorrSubplan = addDeps->GetInput();
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         TVector<TExpression> joinFilters;
-
-        TVector<TMapElement> mappings;
-        mappings.push_back(TMapElement(subplanResIU, subplanResIU, filter->Pos, &ctx.ExprCtx, &props));
+        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> subplanOutputRenames;
 
         auto leftIUs = child->GetOutputIUs();
-        bool conflictsWithLeft = false;
+        auto rightIUs = uncorrSubplan->GetOutputIUs();
+        THashSet<TInfoUnit, TInfoUnit::THashFunction> usedIUs;
+        usedIUs.insert(leftIUs.begin(), leftIUs.end());
+        usedIUs.insert(rightIUs.begin(), rightIUs.end());
+        auto makeInternalIU = [&]() {
+            for (;;) {
+                auto iu = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
+                if (usedIUs.insert(iu).second) {
+                    return iu;
+                }
+            }
+        };
 
-        auto conjuncts = filter->FilterExpr.SplitConjunct();
+        for (const auto& iu : rightIUs) {
+            if (ContainsInfoUnit(leftIUs, iu) && !subplanOutputRenames.contains(iu)) {
+                subplanOutputRenames.emplace(iu, makeInternalIU());
+            }
+        }
+
+        auto conjuncts = subplanFilter->FilterExpr.SplitConjunct();
 
         for (const auto & conj : conjuncts) {
             if (!conj.MaybeEquiJoinCondition()) {
@@ -67,28 +82,52 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
                 Y_ENSURE(false, "Correlated filter missing join condition");
             }
 
-            if (std::find(leftIUs.begin(), leftIUs.end(), rightKey) != leftIUs.end()) {
-                auto newKey = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
-                mappings.push_back(TMapElement(newKey, rightKey, filter->Pos, &ctx.ExprCtx, &props));
-                rightKey = newKey;
-                conflictsWithLeft = true;
-            } else {
-                mappings.push_back(TMapElement(rightKey, rightKey, filter->Pos, &ctx.ExprCtx, &props));
+            if (ContainsInfoUnit(leftIUs, rightKey)) {
+                const auto renameIt = subplanOutputRenames.find(rightKey);
+                if (renameIt != subplanOutputRenames.end()) {
+                    rightKey = renameIt->second;
+                } else {
+                    auto newKey = makeInternalIU();
+                    subplanOutputRenames.emplace(rightKey, newKey);
+                    rightKey = newKey;
+                }
             }
 
             joinKeys.push_back(std::make_pair(leftKey, rightKey));
         }
 
-        if (conflictsWithLeft) {
-            uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, uncorrSubplan->Pos, mappings, true);
+        if (!subplanOutputRenames.empty()) {
+            TVector<TMapElement> renameElements;
+            renameElements.reserve(subplanOutputRenames.size());
+            for (const auto& [from, to] : subplanOutputRenames) {
+                renameElements.emplace_back(to, from, subplan->Pos, &ctx.ExprCtx, &props);
+            }
+            uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, subplan->Pos, renameElements);
+
+            // Non-equi conjuncts were captured before the output rename; rewrite
+            // them too, otherwise they keep references to hidden right-side IUs.
+            for (auto& joinFilter : joinFilters) {
+                joinFilter = joinFilter.ApplyRenames(subplanOutputRenames);
+            }
+        }
+
+        auto joinedSubplanResIU = subplanResIU;
+        if (const auto renameIt = subplanOutputRenames.find(joinedSubplanResIU); renameIt != subplanOutputRenames.end()) {
+            joinedSubplanResIU = renameIt->second;
         }
 
         auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters);
 
-        TVector<TMapElement> renameElements;
-        renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
-        auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements, false);
-        unaryOp->SetInput(rename);
+        if (input->Kind == EOperator::Filter) {
+            auto outerFilter = CastOperator<TOpFilter>(input);
+            outerFilter->FilterExpr = outerFilter->FilterExpr.ApplyRenames({{scalarIU, joinedSubplanResIU}});
+            outerFilter->SetInput(leftJoin);
+        } else {
+            TVector<TMapElement> renameElements;
+            renameElements.emplace_back(scalarIU, joinedSubplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
+            auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements);
+            unaryOp->SetInput(rename);
+        }
     }
 
     // If its a correlated subplan where filter pull up didn't succeed, throw an exception
@@ -106,11 +145,11 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         // FIXME: This works only for postgres types, because they are null-compatible
         // For YQL types we will need to handle optionality
         mapElements.emplace_back(scalarIU, MakeNothing(subplan->Pos, subplanResType, &ctx.ExprCtx));
-        auto map = MakeIntrusive<TOpMap>(emptySource, subplan->Pos, mapElements, true);
+        auto map = MakeIntrusive<TOpMap>(emptySource, subplan->Pos, mapElements);
 
         TVector<TMapElement> renameElements;
         renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
-        auto rename = MakeIntrusive<TOpMap>(subplan, subplan->Pos, renameElements, true);
+        auto rename = MakeIntrusive<TOpMap>(subplan, subplan->Pos, renameElements);
         rename->Props.EnsureAtMostOne = true;
 
         auto unionAll = MakeIntrusive<TOpUnionAll>(rename, map, subplan->Pos, true);

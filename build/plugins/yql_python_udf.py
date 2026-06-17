@@ -8,7 +8,8 @@ def get_or_default(kv, name, default):
     return default
 
 
-def onregister_yql_python_udf(unit, *args):
+@ymake.macro
+def REGISTER_YQL_PYTHON_UDF(unit: ymake.Unit, *args: tuple[str, ...]):
     flat, kv = sort_by_keywords({'NAME': 1, 'RESOURCE_NAME': 1, 'ADD_LIBRA_MODULES': 1}, args)
     assert len(flat) == 0
     name = get_or_default(kv, 'NAME', 'CustomPython')

@@ -3938,6 +3938,9 @@ message TReqStartShuffle
     // Currently this field is required only when use_push_based_shuffle is set.
     // COMPAT(apollo1321): Make this field required for both push and pull shuffle modes in 26.3.
     optional TTableSchema schema = 7;
+
+    // YSON-serialized TPushShuffleConfig; push-based only.
+    optional bytes push_config = 8;
 }
 
 message TRspStartShuffle

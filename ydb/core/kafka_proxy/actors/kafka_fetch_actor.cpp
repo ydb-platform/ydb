@@ -10,6 +10,8 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
+#include <ydb/library/kafka/kafka.h>
+
 #include "actors.h"
 #include "kafka_fetch_actor.h"
 
@@ -19,6 +21,20 @@ namespace NKafka {
 static constexpr size_t SizeOfZeroVarint = 1;
 static constexpr size_t BatchFirstTwoFieldsSize = 12;
 static constexpr size_t KafkaMagic = 2;
+
+void FillRecordFromDataChunk(TKafkaRecord& record, const NKikimrPQClient::TDataChunk& dataChunk) {
+    for (const auto& metadata : dataChunk.GetMessageMeta()) {
+        if (metadata.key() == "__key") {
+            record.SetKey(metadata.value());
+        } else {
+            record.AddHeader(metadata.key(), metadata.value());
+        }
+    }
+
+    if (dataChunk.HasData()) {
+        record.SetValue(dataChunk.GetData());
+    }
+}
 
 NActors::IActor* CreateKafkaFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFetchRequestData>& message) {
     return new TKafkaFetchActor(context, correlationId, message);
@@ -183,50 +199,34 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         auto& record = recordsBatch.Records[recordIndex];
 
-        record.DataChunk = NKikimr::GetDeserializedData(result.GetData());
-        if (record.DataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
+        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue;
         }
 
-        for (auto& metadata : record.DataChunk.GetMessageMeta()) {
-            if (metadata.key() == "__key") {
-                record.Key = metadata.value();
-            } else {
-                TKafkaHeader header;
-                header.Key = metadata.key();
-                header.Value = metadata.value();
-                record.Headers.push_back(header);
-            }
-        }
+        FillRecordFromDataChunk(record, dataChunk);
 
-        TKafkaHeader header;
-        header.CodecKeyStr = "__codec";
-        header.Key = header.CodecKeyStr;
-
-        NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(record.DataChunk.GetCodec() + 1);
+        NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(dataChunk.GetCodec() + 1);
+        TString codecValue;
         switch (codec) {
             case NYdb::NTopic::ECodec::RAW:
-                header.CodecValueStr = "RAW";
+                codecValue = "RAW";
                 break;
             case NYdb::NTopic::ECodec::GZIP:
-                header.CodecValueStr = "GZIP";
+                codecValue = "GZIP";
                 break;
             case NYdb::NTopic::ECodec::LZOP:
-                header.CodecValueStr = "LZOP";
+                codecValue = "LZOP";
                 break;
             case NYdb::NTopic::ECodec::ZSTD:
-                header.CodecValueStr = "ZSTD";
+                codecValue = "ZSTD";
                 break;
             default:
-                header.CodecValueStr = std::to_string(static_cast<uint32_t>(codec));
+                codecValue = std::to_string(static_cast<uint32_t>(codec));
         }
 
-        header.Value = header.CodecValueStr;
-        record.Headers.push_back(header);
+        record.AddHeader("__codec", std::move(codecValue));
 
-        if (record.DataChunk.HasData()) {
-            record.Value = record.DataChunk.GetData();
-        }
         record.OffsetDelta = lastOffset - baseOffset;
         record.TimestampDelta = lastTimestamp - baseTimestamp;
 

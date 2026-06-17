@@ -486,6 +486,49 @@ Y_UNIT_TEST_SUITE(Transfer)
         CheckCommittedOffset(false);
     }
 
+    void CheckCommittedOffsetEmptyBatch(bool local)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    $json = CAST($x._data AS JSON);
+                    return IF (JSON_EXISTS($json, "$.update"), [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ], []);
+                };
+        )", MainTestCase::CreateTransferSettings::WithLocalTopic(local));
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckCommittedOffset(0, 1);
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(CheckCommittedOffsetEmptyBatch_Local) {
+        CheckCommittedOffsetEmptyBatch(true);
+    }
+
+    Y_UNIT_TEST(CheckCommittedOffsetEmptyBatch_Remote) {
+        CheckCommittedOffsetEmptyBatch(false);
+    }
+
     Y_UNIT_TEST(DropTransfer)
     {
         MainTestCase testCase;
@@ -1822,5 +1865,60 @@ Y_UNIT_TEST_SUITE(Transfer)
         MessageField_Partition("ROW", true);
     }
 
-}
+    Y_UNIT_TEST(CheckCurrentDateTime) {
+        MainTestCase testCase(std::nullopt, "ROW");
 
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message DateTime,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:$x._offset,
+                            Message: CurrentUtcDatetime($x._partition, $x._offset)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+        testCase.CheckResult({
+            {_C("Key", ui64(0))},
+        });
+        Sleep(TDuration::Seconds(1)); // move current time forward
+        testCase.Write({"Message-2"});
+
+        struct TValueChecker : public IChecker {
+            void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+                Cerr << (TStringBuilder() <<value.ShortDebugString() << Endl);
+                if (!First) {
+                    First = value.uint32_value();
+                    return;
+                }
+
+                auto second = value.uint32_value();
+                UNIT_ASSERT_LT_C(*First, second, TStringBuilder() << msg << " Message timestamp is not increasing: " << *First << " < " << second);
+            }
+
+            std::optional<ui32> First;
+        };
+
+        auto checker = std::make_shared<TValueChecker>();
+        testCase.CheckResult({
+            {{"Message", checker}},
+            {{"Message", checker}},
+        });
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+}

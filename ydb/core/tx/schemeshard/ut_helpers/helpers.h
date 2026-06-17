@@ -212,11 +212,15 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(CreateExternalTable);
     GENERIC_HELPERS(DropExternalTable);
     DROP_BY_PATH_ID_HELPERS(DropExternalTable);
+    void AsyncCreateExternalTableOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme);
+    void TestCreateExternalTableOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults);
 
     // external data source
     GENERIC_HELPERS(CreateExternalDataSource);
     GENERIC_HELPERS(DropExternalDataSource);
     DROP_BY_PATH_ID_HELPERS(DropExternalDataSource);
+    void AsyncCreateExternalDataSourceOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme);
+    void TestCreateExternalDataSourceOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults);
 
     // backup & restore
     GENERIC_HELPERS(Backup);

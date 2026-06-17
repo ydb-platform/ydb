@@ -41,7 +41,7 @@ constinit const auto Logger = NodeTrackerClientLogger;
 
 const std::string& NullNodeAddress()
 {
-    static const TString Result("<null>");
+    static const std::string Result("<null>");
     return Result;
 }
 

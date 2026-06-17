@@ -7436,6 +7436,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -13663,7 +13664,7 @@ END DO)",
         for (ui64 i = 0; i < PARALLEL_QUERIES; ++i) {
             results.emplace_back(db.ExecuteQuery(R"(
                 DROP STREAMING QUERY `MyFolder/MyStreamingQuery`;)",
-                NQuery::TTxControl::NoTx()));
+                NQuery::TTxControl::NoTx(), NoRetryExecuteQuerySettings()));
         }
 
         ui64 successCount = 0;
@@ -14703,6 +14704,107 @@ END DO)",
             ythrow yexception() << "Unexpected status of compaction operation: " << op->Status().GetStatus() << ": " << op->Status().GetIssues().ToString();
         }
     }
+
+    Y_UNIT_TEST_TWIN(AlterTableCompactAccessDenied, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+
+        auto rootSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto rootQueryClient = kikimr.GetQueryClient();
+        {
+            auto result = ExecuteGeneric<UseQueryService>(rootQueryClient, rootSession, R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )sql");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = rootSession.ExecuteDataQuery(R"sql(
+                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES (1, "a"), (2, "b");
+            )sql", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+
+        // grant only read-only (describe) access, not ALTER
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/TestTable",
+                NYdb::NScheme::TModifyPermissionsSettings()
+                    .AddGrantPermissions(NYdb::NScheme::TPermissions(
+                        "user@builtin", {"ydb.granular.describe_schema"}))
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto userSession = kikimr.GetTableClient(
+            NYdb::NTable::TClientSettings().AuthToken("user@builtin"))
+            .CreateSession().GetValueSync().GetSession();
+        auto userQueryClient = kikimr.GetQueryClient(NQuery::TClientSettings().AuthToken("user@builtin"));
+        {
+            auto result = ExecuteGeneric<UseQueryService>(userQueryClient, userSession, R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = true);
+            )sql");
+            if constexpr (UseQueryService) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            } else {
+                // TODO: should be UNAUTHORIZED?
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unauthorized", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableCompactNotPositiveParallel, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )sql");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // SQL level
+        {
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = -4);
+            )sql");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "extraneous input '-'", result.GetIssues().ToString());
+        }
+        {
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 0);
+            )sql");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "positive", result.GetIssues().ToString());
+        }
+
+        // public API level
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings().Compact(TCompact(false, 0));
+            auto result = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::BAD_REQUEST, result.Status().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.Status().GetIssues().ToString(), "MAX_SHARDS_IN_FLIGHT",
+                result.Status().GetIssues().ToString());
+        }
+    }
 }
 
 namespace {
@@ -14881,6 +14983,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -15555,6 +15658,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -15854,6 +15958,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -15891,6 +15996,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

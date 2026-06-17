@@ -83,6 +83,20 @@
             "uri": "https://{canondata_backend}/1847551/58f37c8e1b8c74f66657e94c231b8acc11b82bf5/resource.tar.gz#test.test_agg_phases-bool_or_opt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-bottom_null-default.txt-Debug]": [
+        {
+            "checksum": "09f3406749909994fea6bc0142eb7c21",
+            "size": 2030,
+            "uri": "https://{canondata_backend}/1784117/d163d697962f00b709779dee3f7e6bcaa3a2cd08/resource.tar.gz#test.test_agg_phases-bottom_null-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-bottom_null-default.txt-Results]": [
+        {
+            "checksum": "cb207e83d980cfb837e20843b7f944f9",
+            "size": 5756,
+            "uri": "https://{canondata_backend}/1784117/d163d697962f00b709779dee3f7e6bcaa3a2cd08/resource.tar.gz#test.test_agg_phases-bottom_null-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-covar-default.txt-Debug]": [
         {
             "checksum": "41296c935490a3e7f6a0ed5d2b57535c",
@@ -109,6 +123,20 @@
             "checksum": "d8105534062a8f585d4858967c048bc6",
             "size": 9407,
             "uri": "https://{canondata_backend}/1847551/58f37c8e1b8c74f66657e94c231b8acc11b82bf5/resource.tar.gz#test.test_agg_phases-min_by_opt-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[agg_phases-random_sample_null-default.txt-Debug]": [
+        {
+            "checksum": "03cdbddc65e9ef22d87fde9783762a36",
+            "size": 2066,
+            "uri": "https://{canondata_backend}/1817427/7af54543e74fe90bf3938847d9c7f3aa49ee2dc9/resource.tar.gz#test.test_agg_phases-random_sample_null-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-random_sample_null-default.txt-Results]": [
+        {
+            "checksum": "cb207e83d980cfb837e20843b7f944f9",
+            "size": 5756,
+            "uri": "https://{canondata_backend}/1817427/7af54543e74fe90bf3938847d9c7f3aa49ee2dc9/resource.tar.gz#test.test_agg_phases-random_sample_null-default.txt-Results_/results.txt"
         }
     ],
     "test.test[agg_phases-stddev_opt-default.txt-Debug]": [

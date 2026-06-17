@@ -54,6 +54,7 @@ public:
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapProjections));
         AddHandler(0, &TCoTake::Match, HNDL(DisableOlapBlocks));
+        AddHandler(0, &TKqpStreamEnumerate::Match, HNDL(PushStreamEnumerateToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TDqPhyHashCombine::Match, HNDL(PushOlapDistinct));
@@ -334,6 +335,36 @@ protected:
         TExprBase output = DqPushAggregateCombineToStage(node, ctx, optCtx, *getParents(), false);
         DumpAppliedRule("PushAggregateCombineToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
+    }
+
+    // KqpStreamEnumerate over a connection cannot live in the outer program; push it into the branch's
+    // (single-partition) producing stage so it becomes part of that stage and yields a connection. The
+    // downstream Map/Extend/Aggregate then stage normally. Used by hybrid search to rank each branch's
+    // ordered stream without first materializing it via TDqPrecompute.
+    TMaybeNode<TExprBase> PushStreamEnumerateToStage(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        Y_UNUSED(getParents);
+        auto streamEnumerate = node.Cast<TKqpStreamEnumerate>();
+        auto maybeConn = streamEnumerate.Input().Maybe<TDqConnection>();
+        if (!maybeConn) {
+            return node;  // input not yet lowered to a connection; retry on a later pass
+        }
+
+        auto arg = Build<TCoArgument>(ctx, node.Pos()).Name("stream").Done();
+        auto lambda = Build<TCoLambda>(ctx, node.Pos())
+            .Args({arg})
+            .Body<TKqpStreamEnumerate>()
+                .Input(arg)
+                .Build()
+            .Done();
+
+        auto pushed = DqPushLambdaToStageUnionAll(maybeConn.Cast(), lambda, {}, ctx, optCtx);
+        if (!pushed) {
+            return node;
+        }
+        DumpAppliedRule("PushStreamEnumerateToStage", node.Ptr(), pushed.Cast().Ptr(), ctx);
+        return pushed.Cast();
     }
 
     TMaybeNode<TExprBase> PushdownOlapGroupByKeys(TExprBase node, TExprContext& ctx) {

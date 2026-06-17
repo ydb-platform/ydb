@@ -303,7 +303,7 @@ class YQLRun(object):
             cmd += '--sql '
 
         for name, value in self.secure_params.items():
-            cmd += '--secure-param=%s@%s ' % (name, value)
+            cmd += '--custom-tokens %s=%s ' % (name, value)
 
         if parameters:
             parameters_file = res_file_path('params.yson')

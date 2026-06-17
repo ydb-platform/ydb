@@ -56,6 +56,13 @@ void TFlushRequestExecutor::Run()
         });
 }
 
+TString TFlushRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << "TFlushRequestExecutor";
+    return result;
+}
+
 NThreading::TFuture<TFlushRequestExecutor::TResponse>
 TFlushRequestExecutor::GetFuture() const
 {

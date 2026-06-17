@@ -119,7 +119,7 @@ namespace NKikimr::NStorage {
             // find group containing VDisk being started
             const auto it = Groups.find(vdisk.GetGroupId());
             if (it == Groups.end()) {
-                YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "group not found while starting VDisk actor",
+                YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "group not found while starting VDisk actor",
                     {"marker", "NW09"},
                     {"GroupId", vdisk.GetGroupId()},
                     {"VDiskId", vdiskId},
@@ -130,7 +130,7 @@ namespace NKikimr::NStorage {
 
             // ensure the group has correctly filled protobuf (in case when there is no relevant info pointer)
             if (!group.Group) {
-                YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "group configuration does not contain protobuf to start VDisk",
+                YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "group configuration does not contain protobuf to start VDisk",
                     {"marker", "NW13"},
                     {"GroupId", it->first},
                     {"VDiskId", vdiskId},
@@ -249,6 +249,12 @@ namespace NKikimr::NStorage {
                 }
                 if (Cfg->PBufferConfig->HasEnableFastErases()) {
                     pbufferFormat.EnableFastErases = Cfg->PBufferConfig->GetEnableFastErases();
+                }
+                if (Cfg->PBufferConfig->HasWritesBatchingPeriodMicroseconds()) {
+                    pbufferFormat.WritesBatchingPeriodMicroseconds = Cfg->PBufferConfig->GetWritesBatchingPeriodMicroseconds();
+                }
+                if (Cfg->PBufferConfig->HasEnableWritesBatching()) {
+                    pbufferFormat.EnableWritesBatching = Cfg->PBufferConfig->GetEnableWritesBatching();
                 }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
@@ -436,7 +442,7 @@ namespace NKikimr::NStorage {
         // of a VDisk in the occupied slot.
 
         if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
-            YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "weird VDisk configuration",
+            YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "weird VDisk configuration",
                 {"marker", "NW30"},
                 {"Record", vdisk});
             return;
@@ -445,7 +451,7 @@ namespace NKikimr::NStorage {
         const auto& loc = vdisk.GetVDiskLocation();
         if (loc.GetNodeID() != LocalNodeId) {
             if (TGroupID(vdisk.GetVDiskID().GetGroupID()).ConfigurationType() != EGroupConfigurationType::Static) {
-                YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "incorrect NodeId in VDisk configuration",
+                YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "incorrect NodeId in VDisk configuration",
                     {"marker", "NW31"},
                     {"Record", vdisk},
                     {"NodeId", LocalNodeId});

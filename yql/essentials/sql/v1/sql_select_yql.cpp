@@ -24,11 +24,25 @@ public:
     }
 
     TNodeResult Build(const TRule_select_stmt& rule) {
-        return Finalize(BuildUnion(rule, TYqlSelectArgs()));
+        if (rule.HasBlock1()) {
+            Token(rule.GetBlock1().GetRule_cte_with_clause1().GetToken1());
+            Ctx_.Error() << "WITH CTE is not implemented yet";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        const auto& core = rule.GetRule_select_stmt_core2();
+        return Finalize(BuildUnion(core, TYqlSelectArgs()));
     }
 
     TNodeResult Build(const TRule_select_unparenthesized_stmt& rule) {
-        return Finalize(BuildUnion(rule, TYqlSelectArgs()));
+        if (rule.HasBlock1()) {
+            Token(rule.GetBlock1().GetRule_cte_with_clause1().GetToken1());
+            Ctx_.Error() << "WITH CTE is not implemented yet";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        const auto& core = rule.GetRule_select_unparenthesized_stmt_core2();
+        return Finalize(BuildUnion(core, TYqlSelectArgs()));
     }
 
     TNodeResult Build(const TRule_values_stmt& rule) {
@@ -59,12 +73,20 @@ public:
         EColumnRefState state,
         ESmartParenthesis smartParenthesis)
     {
-        if (!IsOnlySubExpr(rule)) {
-            return Finalize(BuildUnion(rule, TYqlSelectArgs()));
+        if (rule.HasBlock1()) {
+            Token(rule.GetBlock1().GetRule_cte_with_clause1().GetToken1());
+            Ctx_.Error() << "WITH CTE is not implemented yet";
+            return std::unexpected(ESQLError::Basic);
         }
 
-        const auto& intersect = rule.GetRule_select_subexpr_intersect1();
-        YQL_ENSURE(rule.GetBlock2().empty(), "Unexpected (union_op select_subexpr_intersect)*");
+        const auto& core = rule.GetRule_select_subexpr_core2();
+
+        if (!IsOnlySubExpr(rule)) {
+            return Finalize(BuildUnion(core, TYqlSelectArgs()));
+        }
+
+        const auto& intersect = core.GetRule_select_subexpr_intersect1();
+        YQL_ENSURE(core.GetBlock2().empty(), "Unexpected (union_op select_subexpr_intersect)*");
 
         const auto& select_or_expr = intersect.GetRule_select_or_expr1();
         YQL_ENSURE(intersect.GetBlock2().empty(), "Unexpected (intersect_op select_or_expr)*");
@@ -82,15 +104,15 @@ private:
     const auto& GetFirstArgument(const auto& rule) {
         using T = std::decay_t<decltype(rule)>;
 
-        if constexpr (std::is_same_v<T, TRule_select_stmt>) {
+        if constexpr (std::is_same_v<T, TRule_select_stmt_core>) {
             return rule.GetRule_select_stmt_intersect1();
         } else if constexpr (std::is_same_v<T, TRule_select_stmt_intersect>) {
             return rule.GetRule_select_kind_parenthesis1();
-        } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt>) {
+        } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_core>) {
             return rule.GetRule_select_unparenthesized_stmt_intersect1();
         } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_intersect>) {
             return rule.GetRule_select_kind_partial1();
-        } else if constexpr (std::is_same_v<T, TRule_select_subexpr>) {
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr_core>) {
             return rule.GetRule_select_subexpr_intersect1();
         } else if constexpr (std::is_same_v<T, TRule_select_subexpr_intersect>) {
             return rule.GetRule_select_or_expr1();
@@ -102,15 +124,15 @@ private:
     const auto& GetNextArgument(const auto& block) {
         using T = std::decay_t<decltype(block)>;
 
-        if constexpr (std::is_same_v<T, TRule_select_stmt::TBlock2>) {
+        if constexpr (std::is_same_v<T, TRule_select_stmt_core::TBlock2>) {
             return block.GetRule_select_stmt_intersect2();
         } else if constexpr (std::is_same_v<T, TRule_select_stmt_intersect::TBlock2>) {
             return block.GetRule_select_kind_parenthesis2();
-        } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt::TBlock2>) {
+        } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_core::TBlock2>) {
             return block.GetRule_select_stmt_intersect2();
         } else if constexpr (std::is_same_v<T, TRule_select_unparenthesized_stmt_intersect::TBlock2>) {
             return block.GetRule_select_kind_parenthesis2();
-        } else if constexpr (std::is_same_v<T, TRule_select_subexpr::TBlock2>) {
+        } else if constexpr (std::is_same_v<T, TRule_select_subexpr_core::TBlock2>) {
             return block.GetRule_select_subexpr_intersect2();
         } else if constexpr (std::is_same_v<T, TRule_select_subexpr_intersect::TBlock2>) {
             return block.GetRule_select_or_expr2();
@@ -120,9 +142,9 @@ private:
     }
 
     template <class TRule>
-        requires std::is_same_v<TRule, TRule_select_stmt> ||
-                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt> ||
-                 std::is_same_v<TRule, TRule_select_subexpr>
+        requires std::is_same_v<TRule, TRule_select_stmt_core> ||
+                 std::is_same_v<TRule, TRule_select_unparenthesized_stmt_core> ||
+                 std::is_same_v<TRule, TRule_select_subexpr_core>
     TSQLResult<TYqlSelectArgs>
     BuildUnion(const TRule& rule, TYqlSelectArgs&& select) {
         {
@@ -764,7 +786,7 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_named_single_source& rule) {
-        TSQLResult<TYqlSource> source = Build(rule.GetRule_single_source1());
+        TSQLResult<TYqlSource> source = Build(rule.GetRule_hinted_single_source1());
         if (!source) {
             return std::unexpected(source.error());
         }
@@ -796,6 +818,16 @@ private:
         return source;
     }
 
+    TSQLResult<TYqlSource> Build(const TRule_hinted_single_source& rule) {
+        const auto result = Build(rule.GetRule_single_source1());
+
+        if (rule.HasBlock2()) {
+            return Unsupported("table_hints");
+        }
+
+        return result;
+    }
+
     TSQLResult<TYqlSource> Build(const TRule_single_source& rule) {
         switch (rule.GetAltCase()) {
             case NSQLv1Generated::TRule_single_source::kAltSingleSource1:
@@ -825,10 +857,6 @@ private:
         }
 
         const bool isAnonymous = rule.HasBlock2();
-
-        if (rule.HasBlock4()) {
-            return Unsupported("table_hints");
-        }
 
         return Build(
             rule.GetBlock3(),

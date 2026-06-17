@@ -321,6 +321,76 @@ Y_UNIT_TEST(SelectWithFulltextMatchEmpty) {
     }
 }
 
+// Regression: a cached fulltext query plan pins the index impl-table schema version at
+// compile time. When that impl table's schema version advances (e.g. a build/finalize or
+// a partitioning alter) WITHOUT the main table's version changing, the cached plan keeps
+// requesting the old version and the datashard rejects the read with SCHEME_ERROR
+// (surfaced to the client as ABORTED, "Read request aborted, status: SCHEME_ERROR").
+//
+// The session actor's cached-plan version check (TKqpQueryState::FillTables) only registers
+// the fulltext MAIN table for a kFullTextSource read -- not the impl tables -- so it never
+// detects the impl-table skew and never invalidates the stale plan. (A normal secondary
+// index reads via kReadRangesSource, whose impl table IS registered, which is why the
+// analogous multishard test YqWorksFineAfterAlterIndexTableDirectly passes.)
+//
+// Before the fix this test fails on the second execution (ABORTED); after registering the
+// fulltext impl tables in FillTables it recompiles transparently and succeeds.
+Y_UNIT_TEST(SelectAfterImplTableSchemaVersionBump) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndex(db); // plain fulltext index "fulltext_idx" over Text -> posting "indexImplTable"
+
+    const auto querySettings = NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30));
+    const TString sql = R"sql(
+        SELECT `Key`, `Text`
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(`Text`, "cats")
+        ORDER BY `Key`;
+    )sql";
+
+    // 1. Execute once to populate the compile cache; the plan now pins the current
+    //    indexImplTable schema version.
+    TString expected;
+    {
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        expected = NYdb::FormatResultSetYson(result.GetResultSet(0));
+        UNIT_ASSERT_STRING_CONTAINS(expected, "Cats"); // sanity: the query actually matched rows
+    }
+
+    // 2. Bump ONLY the impl table's schema version, leaving the main table untouched.
+    //    Regular users may alter an indexImplTable's PartitionConfig; the AlterTable
+    //    increments the impl table's AlterVersion/TableSchemaVersion.
+    {
+        Tests::TClient& client = kikimr.GetTestClient();
+        const TString scheme = R"(
+            Name: "indexImplTable"
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                    SizeToSplit: 100500
+                }
+            }
+        )";
+        auto result = client.AlterTable("/Root/Texts/fulltext_idx", scheme, {});
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK,
+            result->Record.ShortDebugString());
+    }
+
+    // 3. Re-execute the same query. It hits the compile cache; the cached plan still pins
+    //    the old impl-table version. The fulltext impl tables are not in the version-check
+    //    set, so without the fix the stale plan is replayed and the read fails. With the fix
+    //    the skew is detected, the query recompiles, and it succeeds with identical results.
+    {
+        auto result = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(expected, NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST(SelectWithFulltextMatchUnsupportedQueries) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
@@ -1057,8 +1127,8 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
-    auto kikimr = Kikimr();
+Y_UNIT_TEST_TWIN(SelectWithFulltextMatchAndSnowball, Compact) {
+    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -1076,7 +1146,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexSnowball(db, "english");
+    AddIndexSnowball(db, "english", "fulltext_plain");
 
     {
         TString query = R"sql(
@@ -1138,7 +1208,6 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
     }
 
     DropIndex(db);
-    AddIndexSnowball(db, "russian");
 
     {
         TString query = R"sql(
@@ -1148,6 +1217,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+
+    AddIndexSnowball(db, "russian", "fulltext_plain");
 
     {
         TString query = R"sql(
@@ -2672,7 +2743,10 @@ Y_UNIT_TEST(FullTextReadResultStatusAbort) {
             ORDER BY Relevance DESC
             LIMIT 10
         )sql";
-        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        return db.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            NoRetryExecuteQuerySettings()).ExtractValueSync();
     });
 
     UNIT_ASSERT(errorInjected);
@@ -2913,6 +2987,478 @@ Y_UNIT_TEST(ExplainHybridFulltextVectorQuery) {
 
     auto itemsLimit = FindPlanNodeByKv(readFullTextIndex, "ItemsLimit", "\"50\"");
     UNIT_ASSERT_C(itemsLimit.IsDefined(), "Pushed limit (ItemsLimit) not found on ReadFullTextIndex node");
+}
+
+// __ydb_row_id opt-in: tests for fulltext search over a table with non-integer PK,
+// using a __ydb_row_id Uint64 NOT NULL column plus a unique secondary index on __ydb_row_id.
+// The runtime actor must resolve __ydb_row_id -> PK via the unique index before reading the main table.
+
+namespace {
+
+TKikimrRunner KikimrRowIdOptIn() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableUniqConstraint(true);
+    // EnableAddUniqueIndex gates `ALTER TABLE ADD INDEX ... GLOBAL UNIQUE`. The unique index over
+    // __ydb_row_id is added after the table exists, so this flag must be on.
+    featureFlags.SetEnableAddUniqueIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()
+        ->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    return TKikimrRunner(settings);
+}
+
+void CreateRowIdTable(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        CREATE TABLE `/Root/RowIdTexts` (
+            Pk Utf8 NOT NULL,
+            Text Utf8,
+            Data Utf8,
+            __ydb_row_id Uint64 NOT NULL,
+            PRIMARY KEY (Pk)
+        );
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void AddUniqueRowIdIndex(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        ALTER TABLE `/Root/RowIdTexts` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void UpsertRowIdData(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        UPSERT INTO `/Root/RowIdTexts` (Pk, Text, Data, __ydb_row_id) VALUES
+            ("pk-100"u, "cats love cats"u,         "cats data"u,    100),
+            ("pk-200"u, "dogs chase small cats"u,  "dogs data"u,    200),
+            ("pk-300"u, "foxes love dogs"u,        "foxes data"u,   300),
+            ("pk-400"u, "small birds"u,            "birds data"u,   400);
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void AddFulltextIndexPlain(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        ALTER TABLE `/Root/RowIdTexts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext_plain
+            ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void AddFulltextIndexRelevance(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        ALTER TABLE `/Root/RowIdTexts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext_relevance
+            ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+} // anonymous namespace
+
+Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_Plain) {
+    // End-to-end: a table keyed by string PK plus __ydb_row_id Uint64 NOT NULL and a unique secondary
+    // index on __ydb_row_id must support fulltext search. The runtime must resolve __ydb_row_id -> PK before
+    // reading the main table and surface the original PK + text to the caller.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+    AddFulltextIndexPlain(db);
+
+    // Query exactly one term that matches three rows (100, 200, 300) and not the fourth (400).
+    TString query = R"sql(
+        SELECT Pk, Text FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(Text, "cats")
+        ORDER BY Pk;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+    NYdb::TResultSetParser parser(resultSet);
+    THashSet<TString> seenPks;
+    while (parser.TryNextRow()) {
+        // Pk is Utf8 NOT NULL — Primitive, not Optional.
+        seenPks.emplace(TString{parser.ColumnParser("Pk").GetUtf8()});
+    }
+    UNIT_ASSERT(seenPks.contains("pk-100"));
+    UNIT_ASSERT(seenPks.contains("pk-200"));
+    UNIT_ASSERT(!seenPks.contains("pk-300"));
+    UNIT_ASSERT(!seenPks.contains("pk-400"));
+}
+
+Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CoveredAvoidsResolve) {
+    // When the fulltext index covers all requested columns, the runtime must NOT resolve through
+    // the unique index — the index alone has the data. Sanity check that a covered query still
+    // returns rows (the covered shortcut is documented in TFullTextSource::FetchDocumentDetails).
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/RowIdTexts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text) COVER (Data)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // Project only the covered column (Data). With covered shortcut, runtime must not need PK.
+    TString query = R"sql(
+        SELECT Data FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(Text, "cats")
+        ORDER BY Data;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+}
+
+Y_UNIT_TEST(SelectWithFulltextRelevance_RowIdOptIn_TopK) {
+    // Relevance variant with ORDER BY score LIMIT N must work over __ydb_row_id opt-in. Once the TopK
+    // is selected the runtime resolves __ydb_row_id -> PK only for the final N rows.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+    AddFulltextIndexRelevance(db);
+
+    TString query = R"sql(
+        SELECT Pk, Text, FulltextScore(Text, "cats") as Relevance
+        FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+        WHERE FulltextScore(Text, "cats") > 0
+        ORDER BY Relevance DESC
+        LIMIT 5;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+    NYdb::TResultSetParser parser(resultSet);
+    double prev = std::numeric_limits<double>::infinity();
+    while (parser.TryNextRow()) {
+        double rel = parser.ColumnParser("Relevance").GetDouble();
+        UNIT_ASSERT_C(rel <= prev + 1e-9, "Relevance must be descending");
+        prev = rel;
+        // Pk is Utf8 NOT NULL — Primitive, not Optional.
+        TString pk{parser.ColumnParser("Pk").GetUtf8()};
+        UNIT_ASSERT_C(pk.StartsWith("pk-"), "Resolved PK must look like a main-table PK");
+    }
+}
+
+Y_UNIT_TEST(InsertWithFulltextRowIdSequenceBitReversed) {
+    // When __ydb_row_id is fed from the auto-bound sequence on a table with a fulltext UseRowIdAsDocId
+    // index, the sequencer actor must bit-reverse the monotonic sequence value before placing it
+    // in the row. This keeps consecutive INSERTs from concentrating on the same posting impl-shard.
+    // We verify the salting by inserting a few rows without specifying __ydb_row_id and asserting that
+    // adjacent rows do not get adjacent __ydb_row_id values (the hallmark of bit-reversal).
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    AddFulltextIndexPlain(db);
+
+    {
+        TString query = R"sql(
+            INSERT INTO `/Root/RowIdTexts` (Pk, Text, Data) VALUES
+                ("pk-a"u, "alpha alpha"u, "data a"u),
+                ("pk-b"u, "beta beta"u,   "data b"u),
+                ("pk-c"u, "gamma gamma"u, "data c"u),
+                ("pk-d"u, "delta delta"u, "data d"u);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            SELECT Pk, __ydb_row_id FROM `/Root/RowIdTexts` ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+
+        NYdb::TResultSetParser parser(resultSet);
+        TVector<ui64> rowIds;
+        while (parser.TryNextRow()) {
+            rowIds.push_back(parser.ColumnParser("__ydb_row_id").GetUint64());
+        }
+        // Bit-reversed values of consecutive small ints land in the high bits — they all become
+        // very large numbers and no two are adjacent. Plain monotonic 1,2,3,4 would fail this.
+        for (ui64 v : rowIds) {
+            UNIT_ASSERT_C(v > (ui64{1} << 60),
+                "Expected bit-reversed __ydb_row_id, got " << v << " — sequence value was not salted");
+        }
+    }
+
+    {
+        // Fulltext search must still surface the rows by their resolved PKs.
+        TString query = R"sql(
+            SELECT Pk FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "alpha")
+            ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(TString{parser.ColumnParser("Pk").GetUtf8()}, "pk-a");
+    }
+}
+
+Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
+    // Edge case: explicit __ydb_row_id in INSERT/UPSERT must NOT be bit-reversed — the salting only
+    // applies inside the sequencer path. A user who writes __ydb_row_id = 100 must see 100 back.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+    AddFulltextIndexPlain(db);
+
+    TString query = R"sql(
+        SELECT Pk, __ydb_row_id FROM `/Root/RowIdTexts` ORDER BY __ydb_row_id;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+
+    NYdb::TResultSetParser parser(resultSet);
+    TVector<ui64> rowIds;
+    while (parser.TryNextRow()) {
+        rowIds.push_back(parser.ColumnParser("__ydb_row_id").GetUint64());
+    }
+    // UpsertRowIdData() writes 100, 200, 300, 400 — values must come back unchanged.
+    UNIT_ASSERT_VALUES_EQUAL(rowIds[0], 100u);
+    UNIT_ASSERT_VALUES_EQUAL(rowIds[1], 200u);
+    UNIT_ASSERT_VALUES_EQUAL(rowIds[2], 300u);
+    UNIT_ASSERT_VALUES_EQUAL(rowIds[3], 400u);
+}
+
+Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
+    // ALTER TABLE t ADD COLUMN __ydb_row_id Uint64 NOT NULL on a table without a sequence default
+    // must be accepted: schemeshard creates a sequence, the column-build scan backfills every
+    // existing row from that sequence, and each value is bit-reversed for hot-shard mitigation.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Articles` (
+                Pk Utf8 NOT NULL,
+                Text Utf8,
+                PRIMARY KEY (Pk)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Articles` (Pk, Text) VALUES
+                ("pk-a"u, "alpha alpha"u),
+                ("pk-b"u, "beta beta"u),
+                ("pk-c"u, "gamma gamma"u),
+                ("pk-d"u, "delta delta"u);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        // Without an explicit DEFAULT this would normally fail with "Cannot add not null column
+        // without default value". The autobind for __ydb_row_id Uint64 NOT NULL must accept it.
+        TString query = R"sql(
+            ALTER TABLE `/Root/Articles` ADD COLUMN __ydb_row_id Uint64 NOT NULL;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            SELECT Pk, __ydb_row_id FROM `/Root/Articles` ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+
+        NYdb::TResultSetParser parser(resultSet);
+        TVector<ui64> rowIds;
+        while (parser.TryNextRow()) {
+            rowIds.push_back(parser.ColumnParser("__ydb_row_id").GetUint64());
+        }
+        // Bit-reversal of small monotonic counter values produces values dominated by the high
+        // bits — plain 1,2,3,4 would all land below 1<<60, the salted versions land above it.
+        for (ui64 v : rowIds) {
+            UNIT_ASSERT_C(v > (ui64{1} << 60),
+                "Backfilled __ydb_row_id must be bit-reversed; saw raw value " << v);
+        }
+        std::sort(rowIds.begin(), rowIds.end());
+        for (size_t i = 1; i < rowIds.size(); ++i) {
+            UNIT_ASSERT_C(rowIds[i] != rowIds[i - 1],
+                "Backfilled __ydb_row_id values must be unique across rows");
+        }
+    }
+
+    {
+        // The unique index + fulltext index over the now-populated __ydb_row_id column must work.
+        TString query = R"sql(
+            ALTER TABLE `/Root/Articles` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__ydb_row_id);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Articles` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            SELECT Pk FROM `/Root/Articles` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "alpha")
+            ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(TString{parser.ColumnParser("Pk").GetUtf8()}, "pk-a");
+    }
+}
+
+Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
+    // End-to-end: adding a fulltext index to a table with a custom (Utf8) PK and NO __ydb_row_id column /
+    // unique index must auto-provision both transparently, backfill existing rows, and serve search.
+    // A second fulltext index must reuse the same __ydb_row_id + unique index.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/AutoTexts` (
+                Pk Utf8 NOT NULL,
+                Text Utf8,
+                Data Utf8,
+                PRIMARY KEY (Pk)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/AutoTexts` (Pk, Text, Data) VALUES
+                ("pk-100"u, "cats love cats"u,        "cats data"u),
+                ("pk-200"u, "dogs chase small cats"u, "dogs data"u),
+                ("pk-300"u, "foxes love dogs"u,       "foxes data"u),
+                ("pk-400"u, "small birds"u,           "birds data"u);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        // No manual __ydb_row_id column / unique index - this single statement auto-provisions both.
+        TString query = R"sql(
+            ALTER TABLE `/Root/AutoTexts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        // Backfilled rows are searchable and resolve back to their original PK.
+        TString query = R"sql(
+            SELECT Pk FROM `/Root/AutoTexts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "cats")
+            ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+        NYdb::TResultSetParser parser(resultSet);
+        THashSet<TString> seenPks;
+        while (parser.TryNextRow()) {
+            seenPks.emplace(TString{parser.ColumnParser("Pk").GetUtf8()});
+        }
+        UNIT_ASSERT(seenPks.contains("pk-100"));
+        UNIT_ASSERT(seenPks.contains("pk-200"));
+    }
+    {
+        // A second fulltext index reuses the existing __ydb_row_id + unique index.
+        TString query = R"sql(
+            ALTER TABLE `/Root/AutoTexts` ADD INDEX fulltext_data_idx
+                GLOBAL USING fulltext_plain
+                ON (Data)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            SELECT Pk FROM `/Root/AutoTexts` VIEW `fulltext_data_idx`
+            WHERE FulltextMatch(Data, "foxes")
+            ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(TString{parser.ColumnParser("Pk").GetUtf8()}, "pk-300");
+    }
 }
 
 }

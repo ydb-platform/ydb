@@ -23,7 +23,7 @@ constexpr double MakeImmutableProbability = 0.5;
 constexpr int MaxOffsetShift = 64;
 
 std::shared_ptr<arrow::ArrayData> ValidateDatumAfterFuzzing(std::shared_ptr<arrow::ArrayData> input) {
-    ValidateDatum(arrow::Datum(input), Nothing(), nullptr, NYql::NUdf::EValidateDatumMode::Cheap);
+    ValidateDatum(arrow::Datum(input), Nothing(), nullptr, NYql::EDatumValidationMode::Cheap);
     return input;
 }
 
@@ -71,7 +71,7 @@ public:
     virtual std::shared_ptr<arrow::ArrayData> FuzzArray(const arrow::ArrayData& array,
                                                         arrow::MemoryPool& memoryPool,
                                                         IRandomProvider& randomProvider) const {
-        ValidateDatum(arrow::Datum(array.Copy()), Nothing(), nullptr, NYql::NUdf::EValidateDatumMode::Cheap);
+        ValidateDatum(arrow::Datum(array.Copy()), Nothing(), nullptr, NYql::EDatumValidationMode::Cheap);
         return ValidateDatumAfterFuzzing(DoFuzzArray(array, memoryPool, randomProvider));
     };
 
@@ -301,7 +301,7 @@ public:
     arrow::Datum Fuzz(const arrow::ArrayData& input,
                       arrow::MemoryPool& memoryPool,
                       IRandomProvider& randomProvider) const final {
-        ValidateDatum(input, Nothing(), nullptr, NYql::NUdf::EValidateDatumMode::Cheap);
+        ValidateDatum(input, Nothing(), nullptr, NYql::EDatumValidationMode::Cheap);
         return DoFuzz(input, memoryPool, randomProvider);
     };
 
@@ -440,7 +440,7 @@ NYql::NUdf::TUnboxedValue TFuzzerHolder::ApplyFuzzers(NYql::NUdf::TUnboxedValue 
         for (const auto& fuzzer : it->second) {
             fuzzedDatum = fuzzer->Fuzz(*fuzzedDatum.array(), memoryPool, randomProvider);
         }
-        return holderFactory.CreateArrowBlock(arrow::Datum(fuzzedDatum));
+        return holderFactory.CreateArrowBlock(arrow::Datum(fuzzedDatum), NYql::DefaultDatumTestValidationMode);
     } else if (datum.is_arraylike()) {
         TVector<std::shared_ptr<arrow::ArrayData>> fuzzedChunks;
         for (const auto& chunk : datum.chunked_array()->chunks()) {
@@ -452,7 +452,7 @@ NYql::NUdf::TUnboxedValue TFuzzerHolder::ApplyFuzzers(NYql::NUdf::TUnboxedValue 
             }
             fuzzedChunks.push_back(chunkFuzzed);
         }
-        return holderFactory.CreateArrowBlock(NYql::NUdf::MakeArray(fuzzedChunks));
+        return holderFactory.CreateArrowBlock(NYql::NUdf::MakeArray(fuzzedChunks), NYql::DefaultDatumTestValidationMode);
     } else {
         MKQL_ENSURE(datum.is_scalar(), "Expected scalar");
     }

@@ -26,7 +26,12 @@ public:
     i64 Count() const;
 
 private:
-    T Sum_{}, Min_{}, Max_{}, Last_{};
+    T Sum_{}, Min_{}, Max_{};
+
+    // Last value recorded into this snapshot. When snapshots are merged via Add,
+    // the right-hand non-empty snapshot is considered newer and its Last_ wins.
+    T Last_{};
+
     i64 Count_ = 0;
 };
 

@@ -27,7 +27,6 @@ enum class EResumeSource : ui32 {
     CADataSent,
     CAPendingOutput,
     CATaskRunnerCreated,
-    CAResumeByWatermark,
     CAWatermarkIdleness,
     CAWakeupCallback,
     CAResumeByCheckpoint,

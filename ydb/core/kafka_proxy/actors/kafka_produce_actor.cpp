@@ -1,6 +1,7 @@
 #include "kafka_produce_actor.h"
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
+#include <ydb/library/kafka/kafka_records.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
@@ -20,6 +21,33 @@ static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
 
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
+}
+
+NKikimrPQClient::TDataChunk MakeDataChunk(const TKafkaRecord& record) {
+    NKikimrPQClient::TDataChunk proto;
+    proto.set_codec(NPersQueueCommon::RAW);
+
+    for (const auto& header : record.Headers) {
+        auto meta = proto.AddMessageMeta();
+        if (header.Key) {
+            meta->set_key(static_cast<const char*>(header.Key->data()), header.Key->size());
+        }
+        if (header.Value) {
+            meta->set_value(static_cast<const char*>(header.Value->data()), header.Value->size());
+        }
+    }
+
+    if (record.Key) {
+        auto meta = proto.AddMessageMeta();
+        meta->set_key("__key");
+        meta->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
+    }
+
+    if (record.Value) {
+        proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
+    }
+
+    return proto;
 }
 
 TString TKafkaProduceActor::LogPrefix() {
@@ -307,26 +335,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
     for (ui64 batchIndex = 0; batchIndex < batch->Records.size(); ++batchIndex) {
         const auto& record = batch->Records[batchIndex];
 
-        NKikimrPQClient::TDataChunk proto;
-        proto.set_codec(NPersQueueCommon::RAW);
-        for(auto& h : record.Headers) {
-            auto res = proto.AddMessageMeta();
-            if (h.Key) {
-                res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
-            }
-            if (h.Value) {
-                res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
-            }
-        }
-
-        if (record.Key) {
-            auto res = proto.AddMessageMeta();
-            res->set_key("__key");
-            res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
-        }
-        if (record.Value) {
-            proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
-        }
+        NKikimrPQClient::TDataChunk proto = MakeDataChunk(record);
 
         TString str;
         bool res = proto.SerializeToString(&str);
@@ -347,17 +356,11 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         }
 
         // set seqno
-        if (enableKafkaDeduplication) {
-            if (batch->BaseSequence >= 0) {
-                // Handle int32 overflow.
-                w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1));
-            } else {
-                KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << batch->BaseSequence);
-                return {EKafkaErrors::INVALID_RECORD, nullptr};
-            }
-        } else {
-            w->SetSeqNo(batch->BaseOffset + record.OffsetDelta);
+        if (enableKafkaDeduplication && batch->BaseSequence < 0) {
+            KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << batch->BaseSequence);
+            return {EKafkaErrors::INVALID_RECORD, nullptr};
         }
+        w->SetSeqNo(GetRecordSeqNo(*batch, batchIndex, record));
 
         w->SetData(str);
         ui64 createTime = batch->BaseTimestamp + record.TimestampDelta;

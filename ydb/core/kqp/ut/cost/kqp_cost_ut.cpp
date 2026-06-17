@@ -2571,9 +2571,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST_TWIN(BatchOperation_SecondaryIndex, EnableIndexStreamWrite) {
-        if (EnableIndexStreamWrite) { // TODO
-            return;
-        }
         auto appConfig = GetAppConfig(false, false);
         appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
         appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
@@ -2626,9 +2623,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST_TWIN(WriteRowWithIndex, EnableIndexStreamWrite) {
-        if (EnableIndexStreamWrite) {
-            return;
-        }
         auto appConfig = GetAppConfig(false, false);
         appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
         appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
@@ -2668,11 +2662,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 FromProto(stats),
                 TTotalStats{
                     .Writes = 8,
-                    .Reads = EnableIndexStreamWrite ? 8 : 4,
+                    .Reads = 4,
                     .Deletes = 4,
 
                     .WriteBytes = 128,
-                    .ReadBytes = EnableIndexStreamWrite ? 224 : 64,
+                    .ReadBytes = 64,
                     .DeleteBytes = 0,
                 });
         }
@@ -2715,19 +2709,19 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), EnableIndexStreamWrite ? 8 : 4);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), EnableIndexStreamWrite ? 284 : 92);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 92);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 4);
 
             Check(
                 FromProto(stats),
                 TTotalStats{
                     .Writes = 0,
-                    .Reads = EnableIndexStreamWrite ? 8 : 4,
+                    .Reads = 4,
                     .Deletes = 8,
 
                     .WriteBytes = 0,
-                    .ReadBytes = EnableIndexStreamWrite ? 284 : 92,
+                    .ReadBytes = 92,
                     .DeleteBytes = 0,
                 });
         }
@@ -2777,7 +2771,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 0,
 
                     .WriteBytes = 20,
-                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .ReadBytes = 16,
                     .DeleteBytes = 0,
                 });
         }
@@ -2802,7 +2796,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 1,
 
                     .WriteBytes = 36,
-                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .ReadBytes = 16,
                     .DeleteBytes = 0,
                 });
         }
@@ -2852,7 +2846,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 0,
 
                     .WriteBytes = 20,
-                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .ReadBytes = 16,
                     .DeleteBytes = 0,
                 });
         }
@@ -2877,7 +2871,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 1,
 
                     .WriteBytes = 36,
-                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .ReadBytes = 16,
                     .DeleteBytes = 0,
                 });
         }

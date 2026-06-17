@@ -92,7 +92,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
-        auto planIUs = uncorrSubplan->GetOutputIUs();
+        auto planIUs = GetSubplanResultIUs(uncorrSubplan);
 
         for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
             joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
@@ -111,7 +111,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
         TVector<TMapElement> countMapElements;
         auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
         countMapElements.emplace_back(countResult, zero);
-        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements, true);
+        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements);
 
         TOpAggregationTraits aggFunction(countResult, "count", countResult);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
@@ -124,7 +124,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
         TVector<TMapElement> mapElements;
         auto compareResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         mapElements.emplace_back(compareResult, comparePredicate);
-        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, true);
+        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         join = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys, joinFilters);

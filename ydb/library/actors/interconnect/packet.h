@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/event_load.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/interconnect/retro_tracing/spans.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/prof/tag.h>
@@ -98,7 +99,7 @@ struct TEventHolder : TNonCopyable {
     ui32 EventSerializedSize;
     ui32 EventActuallySerialized;
     mutable NLWTrace::TOrbit Orbit;
-    NWilson::TSpan Span;
+    NActors::TPacketSpan::TUniversal Span;
     ui32 ZcTransferId; //id of zero copy transfer. In case of RDMA it is a place where some internal handle can be stored to identify events
     TInstant EnqueueTime;
 
@@ -120,7 +121,11 @@ struct TEventHolder : TNonCopyable {
         const TActorId& r = d.Recipient;
         const TActorId& s = d.Sender;
         const TActorId *f = ForwardRecipient ? &ForwardRecipient : nullptr;
-        Span.EndError("nondelivery");
+        if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+            wilsonSpan->EndError("nondelivery");
+        } else if (NActors::TPacketSpan* retroSpan = Span.GetRetroSpanPtr()) {
+            retroSpan->EndError();
+        }
         auto ev = Event
             ? std::make_unique<IEventHandle>(r, s, Event.Release(), d.Flags, d.Cookie, f, Span.GetTraceId())
             : std::make_unique<IEventHandle>(d.Type, d.Flags, r, s, std::move(Buffer), d.Cookie, f, Span.GetTraceId());

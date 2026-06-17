@@ -1052,8 +1052,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         }
     }
 
-    Y_UNIT_TEST(UpdateConditional) {
+    Y_UNIT_TEST_TWIN(UpdateConditional, UseStreamIndex) {
         TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1066,8 +1067,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
-
-        Cerr << plan << Endl;
+        NJson::WriteJson(&Cerr, &plan, true);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 1);
@@ -1091,6 +1091,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], upsertsCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 0);
     }
 
     Y_UNIT_TEST(UpdateConditionalKey) {
@@ -1193,7 +1194,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        Cerr << plan << Endl;
+        NJson::WriteJson(&Cerr, &plan, true);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
@@ -1222,9 +1223,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 0);
         }
 
-        if (!UseStreamIndex) {
+        {
             const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[1].GetMapSafe();
             UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys/Index/indexImplTable");
 
@@ -1288,7 +1290,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], fullScansCount);
-            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], (UseStreamIndex ? 1 : 0)); // TODO: 0
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 0);
         }
 
         {

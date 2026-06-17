@@ -1,6 +1,7 @@
 import os
+import re
 import zoneinfo
-from datetime import datetime, timezone, tzinfo
+from datetime import datetime, timedelta, timezone, tzinfo
 
 tzlocal = None
 try:
@@ -44,17 +45,37 @@ UTC_EQUIVALENTS = (
 # extra to get the IANA zone data.
 TZDATA_HINT = "install the tzdata package (e.g. `pip install clickhouse-connect[tzdata]`) if no system zoneinfo database is available"
 
+# ClickHouse servers without an IANA tz database report Fixed/UTC+HH:MM:SS
+# or Fixed/UTC-HH:MM:SS for any non-UTC
+# timezone (in column types, X-ClickHouse-Timezone, and SELECT timezone()). Hours, minutes,
+# and seconds are always zero-padded to two digits; the server rejects single-digit forms
+# like `Fixed/UTC+5:30:00`. Range validation is done in resolve_zone() rather than in the
+# regex because the server also accepts the boundary value +/-24:00:00, which Python's
+# datetime.timezone cannot represent as a non-UTC offset and must not be silently collapsed to UTC.
+_FIXED_TZ_RE = re.compile(r"^Fixed/UTC([+-])(\d{2}):(\d{2}):(\d{2})$")
+
 
 def resolve_zone(tz_name: str) -> tzinfo:
     """Resolve an IANA timezone name to a tzinfo.
 
     Short-circuits UTC-equivalent names to datetime.timezone.utc so that representing UTC
-    does not require an IANA zoneinfo database to be available on the host. Other names are
-    resolved via zoneinfo.ZoneInfo and will raise ZoneInfoNotFoundError if the host has
-    no system zoneinfo and the tzdata package is not installed.
+    does not require an IANA zoneinfo database to be available on the host. Also recognizes
+    ClickHouse's Fixed/UTC+HH:MM:SS and Fixed/UTC-HH:MM:SS offset format
+    (emitted by servers without IANA tz data) and returns a stdlib datetime.timezone.
+    Other names are resolved via zoneinfo.ZoneInfo and will raise ZoneInfoNotFoundError
+    if the host has no system zoneinfo and the tzdata package is not installed.
     """
     if tz_name in UTC_EQUIVALENTS:
         return timezone.utc
+    fixed = _FIXED_TZ_RE.match(tz_name)
+    if fixed:
+        sign, hh, mm, ss = fixed.groups()
+        h, m, s = int(hh), int(mm), int(ss)
+        if h < 24 and m < 60 and s < 60:
+            offset = timedelta(hours=h, minutes=m, seconds=s)
+            if sign == "-":
+                offset = -offset
+            return timezone.utc if offset == timedelta(0) else timezone(offset)
     try:
         return zoneinfo.ZoneInfo(tz_name)
     except ValueError as ex:
@@ -63,11 +84,23 @@ def resolve_zone(tz_name: str) -> tzinfo:
         raise zoneinfo.ZoneInfoNotFoundError(str(ex)) from ex
 
 
-def normalize_timezone(tz: tzinfo) -> tuple[tzinfo, bool]:
+def normalize_timezone(tz: tzinfo, trust_fixed_offset: bool = False) -> tuple[tzinfo, bool]:
+    # Server-init paths pass trust_fixed_offset=True for tzs derived from a ClickHouse-reported
+    # Fixed/UTC+HH:MM:SS or Fixed/UTC-HH:MM:SS string. Those are self-describing and
+    # DST-safe by definition, but their tzname(None) (e.g. "UTC+05:30") is not an IANA
+    # key and would otherwise fall through to the unsafe branch, silently dropping the
+    # server tz under tz_source="auto".
+    #
+    # The local-init path (bottom of this module) deliberately does NOT set this flag because
+    # a stdlib datetime.timezone returned from datetime.now().astimezone().tzinfo is the current
+    # local offset (e.g. PDT), and we want the tzlocal-recovery branch below to upgrade it to
+    # a real IANA zone so the local time tracks across DST.
+    if trust_fixed_offset and isinstance(tz, timezone):
+        return tz, True
+
     # ZoneInfo exposes the IANA key on `.key`; fall back to tzname(None) for other tzinfo
-    # subclasses (datetime.timezone, fixed offsets). pytz used to return the IANA name from
-    # tzname(None), but ZoneInfo returns None, which would collapse every named zone into the
-    # "unsafe" fallback branch.
+    # subclasses. pytz used to return the IANA name from tzname(None), but ZoneInfo returns
+    # None, which would collapse every named zone into the "unsafe" fallback branch.
     tz_key = getattr(tz, "key", None) or tz.tzname(None)
 
     if tz_key in UTC_EQUIVALENTS:

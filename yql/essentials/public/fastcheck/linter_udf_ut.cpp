@@ -449,6 +449,12 @@ Y_UNIT_TEST(TypeCheckDateTimeToSecondsFromIntervalNewFail) {
     )sql", false, MakeLangVersion(2025, 3));
 }
 
+Y_UNIT_TEST(AvoidMatchOverUniversalArgs) {
+    RunTypeCheck(R"sql(
+        select DateTime::MakeDate(DateTime::StartOfWeek(EvaluateExpr(null)))
+    )sql", true);
+}
+
 } // Y_UNIT_TEST_SUITE(TLinterUdfTests)
 
 } // namespace NYql::NFastCheck

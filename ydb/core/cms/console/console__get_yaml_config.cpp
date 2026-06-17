@@ -39,6 +39,9 @@ public:
         identity.set_version(Self->YamlVersion);
         Response->Record.MutableResponse()->add_config(Self->MainYamlConfig);
 
+        // Unknown/deprecated fields of the main config, cached at upload time.
+        *Response->Record.MutableMainConfigUnknownFields() = Self->MainYamlConfigUnknownFields.GetFields();
+
         for (const auto& [database, config] : Self->DatabaseYamlConfigs) {
             auto& dbIdentity = *Response->Record.MutableResponse()->add_identity();
             dbIdentity.set_database(database);

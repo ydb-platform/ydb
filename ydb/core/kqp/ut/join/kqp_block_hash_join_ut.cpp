@@ -27,7 +27,7 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
 
     spilling->SetRoot("./spilling/");
     if (limitFileSize) {
-        spilling->SetMaxFileSize(1);
+        spilling->SetMaxTotalSize(1);
     }
 
     return appCfg;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/raw_socket/sock_impl.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>

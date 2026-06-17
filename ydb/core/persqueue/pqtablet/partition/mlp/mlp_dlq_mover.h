@@ -35,13 +35,10 @@ private:
 
     void ProcessQueue();
     void Handle(TEvPersQueue::TEvResponse::TPtr&);
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
-    STFUNC(StateRead);
-
-    void WaitWrite();
     void Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&);
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr&);
-    STFUNC(StateWrite);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+    STFUNC(StateWork);
 
     void ReplySuccess();
     void ReplyError(Ydb::StatusIds::StatusCode status, TString&& error);
@@ -58,6 +55,8 @@ private:
 
     TString ProducerId;
     std::deque<TDLQMessage> Queue;
+    std::deque<std::pair<TDLQMessage, ui64>> Pending;
+    ui64 PendingMessagesSize = 0;
 
     Ydb::StatusIds::StatusCode ResponseStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     TString Error;

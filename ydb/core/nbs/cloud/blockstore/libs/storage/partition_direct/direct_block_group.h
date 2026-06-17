@@ -188,11 +188,20 @@ public:
         const NWilson::TTraceId& traceId) = 0;
 
     // Batch operation to erase a list of PBuffer entries.
-    virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+    virtual NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) = 0;
+
+    virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;
+
+    // The lowest lsn that must be preserved across all vchunks of this
+    // DirectBlockGroup (records below it are safe to erase). Used to compute
+    // the tablet-wide cleanup watermark. Resolves on the executor thread.
+    // nullopt means nothing is inflight here.
+    virtual NThreading::TFuture<std::optional<ui64>>
+    GatherSafeBarrierForErase() = 0;
 
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(

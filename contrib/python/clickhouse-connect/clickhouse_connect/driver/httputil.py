@@ -52,6 +52,12 @@ def close_managers():
         manager.clear()
 
 
+def resolve_ca_cert(ca_cert: str | None) -> str | None:
+    if ca_cert == "certifi":
+        return certifi.where()
+    return ca_cert
+
+
 def get_pool_manager_options(
     keep_interval: int = DEFAULT_KEEP_INTERVAL,
     keep_count: int = DEFAULT_KEEP_COUNT,
@@ -73,8 +79,7 @@ def get_pool_manager_options(
         socket_options.append((SOCKET_TCP, getattr(socket, "TCP_KEEPALIVE", 0x10), keep_interval))
     options["maxsize"] = options.get("maxsize", 8)
     options["retries"] = options.get("retries", 1)
-    if ca_cert == "certifi":
-        ca_cert = certifi.where()
+    ca_cert = resolve_ca_cert(ca_cert)
     options["cert_reqs"] = "CERT_REQUIRED" if verify else "CERT_NONE"
     if ca_cert:
         options["ca_certs"] = ca_cert

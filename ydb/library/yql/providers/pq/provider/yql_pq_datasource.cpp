@@ -1,7 +1,8 @@
 #include "yql_pq_datasource_constraints.h"
+#include "yql_pq_helpers.h"
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_topic_key_parser.h"
-#include "yql_pq_helpers.h"
+#include "yql_pq_settings.h"
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>

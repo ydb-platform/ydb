@@ -1,3 +1,7 @@
+* Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
+
+## v3.19.0
+
 * Added metric buffer for batched metric writes to reduce OpenTelemetry hot-path overhead.
 
 * Added a helper to detect specific issue codes within a TStatus (including nested sub-issues) and introduces the CONSTRAINT_VIOLATION issue code constant, intended to make it easier for SDK users to detect primary key / unique index conflicts.

@@ -58,6 +58,9 @@ namespace NKikimr {
             CHECK_PDISK_RESPONSE(LogCutterCtx.VCtx, ev, ctx);
 
             WriteInProgress = false;
+            if (LogCutterCtx.NotifyId) {
+                ctx.Send(LogCutterCtx.NotifyId, new TEvRecoveryLogCutDone(FirstLsnToKeepLastWritten));
+            }
             Process(ctx);
         }
 

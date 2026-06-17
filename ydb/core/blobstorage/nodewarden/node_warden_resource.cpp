@@ -76,7 +76,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     for (auto& [vslotId, vdisk] : LocalVDisks) {
         if (vdisk.UnderlyingPDiskDestroyed) {
             auto& tempVSlotId = vslotId;
-            YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "UnderlyingPDiskDestroyed escaped",
+            YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "UnderlyingPDiskDestroyed escaped",
                 {"marker", "NW37"},
                 {"VSlotId", tempVSlotId});
             vdisk.UnderlyingPDiskDestroyed = false;
@@ -128,7 +128,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         ui64 mainConfigYamlVersion;
         auto error = DecomposeConfig(StorageConfig->GetConfigComposite(), &mainConfigYaml, &mainConfigYamlVersion, nullptr);
         if (error) {
-            YDB_LOG_COMP_DEBUG_FAIL(BS_NODE, "failed to decompose yaml configuration",
+            YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "failed to decompose yaml configuration",
                 {"marker", "NW49"},
                 {"Error", error});
         } else if (mainConfigYaml) {

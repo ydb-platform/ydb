@@ -147,11 +147,47 @@ class KiKiMRClusterInterface(object):
         response.Response.operation.result.Unpack(result)
         return result
 
-    def wait_tenant_up(self, database_name, token=None):
+    def wait_tenant_up(self, database_name, token=None, endpoints_timeout_seconds=240):
         self.__wait_tenant_up(
             database_name,
             expected_computational_units=1,
             token=token,
+        )
+        # CMS marks tenant RUNNING before the dyn node publishes gRPC endpoints
+        # (further delayed by compile-cache warmup gating publication). Also
+        # covers serverless routing via hostel endpoints. Driver wait() is the
+        # only check that captures all of these uniformly.
+        self._wait_tenant_usable(
+            database_name, timeout_seconds=endpoints_timeout_seconds, token=token,
+        )
+
+    def _wait_tenant_usable(self, database_name, timeout_seconds=240, token=None):
+        entry_node = self.nodes[1]
+        driver_config = ydb.DriverConfig(
+            "%s:%d" % (entry_node.host, entry_node.grpc_port),
+            database_name,
+            auth_token=token,
+        )
+
+        deadline = time.time() + timeout_seconds
+        last_error = None
+        while time.time() < deadline:
+            driver = ydb.Driver(driver_config)
+            try:
+                try:
+                    # fail_fast=True: propagate real error instead of opaque timeout.
+                    driver.wait(timeout=5, fail_fast=True)
+                    return
+                except Exception as exc:
+                    last_error = exc
+            finally:
+                driver.stop()
+            time.sleep(0.5)
+
+        raise AssertionError(
+            "Tenant {} did not become usable within {}s; last error: {!r}".format(
+                database_name, timeout_seconds, last_error,
+            )
         )
 
     def __wait_tenant_up(

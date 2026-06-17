@@ -32,7 +32,7 @@ void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
 // TODO: We can also push to row storage stage, but it requires an implementation on physical plan generation.
 void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPlanProps& props) {
     const auto readStageId = *read->Props.StageId;
-    if (!read->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
+    if (!op->IsSingleConsumer() || !read->IsSingleConsumer() || read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
         const auto newStageId = props.StageGraph.AddStage();
         op->Props.StageId = newStageId;
         props.StageGraph.Connect(readStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(readStageId)));

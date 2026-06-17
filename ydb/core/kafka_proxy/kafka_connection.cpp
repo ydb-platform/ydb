@@ -11,7 +11,7 @@
 #include "actors/actors.h"
 #include "kafka_connection.h"
 #include "kafka_events.h"
-#include "kafka_log_impl.h"
+#include <ydb/library/kafka/kafka_log_impl.h>
 #include "kafka_metrics.h"
 
 namespace NKafka {
@@ -689,12 +689,17 @@ protected:
         responseHeader.CorrelationId = header->CorrelationId;
 
         TKafkaInt32 size = responseHeader.Size(headerVersion) + reply->Size(version);
-        TKafkaWritable writable(BufferedWriter);
         SendResponseMetrics(method, requestStartTime, size, errorCode, ctx);
         try {
+            TKafkaWriteBuffer replyBuffer(Context->Config.GetPacketSize());
+            TKafkaWritable writable(replyBuffer);
             writable << size;
             responseHeader.Write(writable, headerVersion);
             reply->Write(writable, version);
+
+            for (auto it = replyBuffer.GetBuffersDeque().rbegin(); it != replyBuffer.GetBuffersDeque().rend(); ++it) {
+                BufferedWriter.write(it->Data(), it->Size());
+            }
 
             ssize_t res = BufferedWriter.flush();
             // if we got EAGAIN or EWOULDBLOCK it means that socket is busy and we need to wait for PollerReady event to proceed
@@ -858,6 +863,7 @@ protected:
                         }
 
                         TKafkaReadable readable(*Request->Buffer);
+                        readable.SetAllowCompressed(AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);

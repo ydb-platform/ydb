@@ -3503,7 +3503,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             subscribtion.Topics.push_back(topic);
         }
         TKafkaVersion version = 3;
-        TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+        TKafkaWriteBuffer buf(subscribtion.Size(version) + sizeof(version));
         TKafkaWritable writable(buf);
         writable << version;
         subscribtion.Write(writable, version);
@@ -3805,7 +3805,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             subscribtion.Topics.push_back(topic);
         }
         TKafkaVersion version = 3;
-        TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+        TKafkaWriteBuffer buf( subscribtion.Size(version) + sizeof(version));
         TKafkaWritable writable(buf);
         writable << version;
         subscribtion.Write(writable, version);
@@ -4115,7 +4115,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             subscribtion.Topics.push_back(topic);
         }
         TKafkaVersion version = 3;
-        TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+        TKafkaWriteBuffer buf( subscribtion.Size(version) + sizeof(version));
         TKafkaWritable writable(buf);
         writable << version;
         subscribtion.Write(writable, version);
@@ -4216,7 +4216,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 subscribtion.Topics.push_back(topic);
             }
             TKafkaVersion version = 3;
-            TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+            TKafkaWriteBuffer buf( subscribtion.Size(version) + sizeof(version));
             TKafkaWritable writable(buf);
             writable << version;
             subscribtion.Write(writable, version);

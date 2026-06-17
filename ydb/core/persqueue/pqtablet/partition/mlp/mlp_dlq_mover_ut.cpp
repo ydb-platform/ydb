@@ -70,7 +70,6 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1-dlq",
             .Consumer = "mlp-consumer",
-            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         if (i < 9 && response->Messages.empty()) {
@@ -149,7 +148,6 @@ Y_UNIT_TEST(MoveToDLQ_ManyMessages) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .MaxNumberOfMessage = 3,
-            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
@@ -185,7 +183,6 @@ Y_UNIT_TEST(MoveToDLQ_ManyMessages) {
             .TopicName = "/Root/topic1-dlq",
             .Consumer = "mlp-consumer",
             .MaxNumberOfMessage = 10,
-            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         if (i < 9 && response->Messages.size() != 3) {
@@ -262,7 +259,6 @@ Y_UNIT_TEST(MoveToDLQ_TopicNotExists) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
@@ -299,7 +295,6 @@ Y_UNIT_TEST(MoveToDLQ_TopicNotExists) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);

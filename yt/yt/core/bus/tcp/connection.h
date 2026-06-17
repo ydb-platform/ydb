@@ -192,8 +192,8 @@ private:
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
     const std::optional<std::string> EndpointAddress_;
-    const std::optional<TString> UnixDomainSocketPath_;
-    const std::optional<TString> AbstractUnixDomainSocketName_;
+    const std::optional<std::string> UnixDomainSocketPath_;
+    const std::optional<std::string> AbstractUnixDomainSocketName_;
     const IMessageHandlerPtr Handler_;
     const NConcurrency::IPollerPtr Poller_;
 
@@ -202,9 +202,9 @@ private:
 
     const TPromise<void> ReadyPromise_ = NewPromise<void>();
 
-    TString NetworkName_;
+    std::string NetworkName_;
     // Endpoint host name is used for peer's certificate verification.
-    TString EndpointHostName_;
+    std::string EndpointHostName_;
 
     TBusNetworkCounters BusCounters_;
     TBusNetworkCounters BusCountersDelta_;

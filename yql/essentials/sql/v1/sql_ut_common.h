@@ -176,6 +176,82 @@ Y_UNIT_TEST(TableHints) {
     UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEMA)").IsOk());
 }
 
+Y_UNIT_TEST(TableHintsTableRef) {
+    ExpectFailWithError(
+        R"sql(
+            $input = SELECT 1 AS ts;
+            SELECT * FROM $input WITH XLOCK;
+        )sql",
+        "<main>:3:20: Error: Hint 'XLOCK' requires a table\n");
+
+    auto res = SqlToYql("$input = SELECT 1 AS ts; SELECT * FROM $input WITH WATERMARK = ts");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(TableHintsSelect) {
+    ExpectFailWithError(
+        R"sql(
+            SELECT * FROM (SELECT 1 AS ts) WITH XLOCK;
+        )sql",
+        "<main>:2:20: Error: Hint 'XLOCK' requires a table\n");
+
+    auto res = SqlToYql("SELECT * FROM (SELECT 1 AS ts) WITH WATERMARK = ts");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(TableHintsValues) {
+    ExpectFailWithError(
+        R"sql(
+            SELECT * FROM (VALUES (1)) WITH XLOCK;
+        )sql",
+        "<main>:2:45: Error: Hint 'XLOCK' requires a table\n");
+
+    auto res = SqlToYql("SELECT * FROM (VALUES (1)) WITH WATERMARK = ts");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(TableRefAnonymousTableHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            USE plato;
+            $input = SELECT 1 AS value;
+            SELECT * FROM @$input WITH XLOCK;
+        )sql",
+        "<main>:4:40: Error: Hints are not supported for anonymous tables\n");
+}
+
+Y_UNIT_TEST(TableRefSubqueryHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            $input = SELECT 1 AS value;
+            SELECT * FROM $input WITH XLOCK;
+        )sql",
+        "<main>:3:20: Error: Hint 'XLOCK' requires a table\n");
+}
+
+Y_UNIT_TEST(AsTableHintsRejected) {
+    ExpectFailWithError(
+        R"sql(
+            SELECT * FROM AS_TABLE([<|value:1|>]) WITH XLOCK;
+        )sql",
+        "<main>:2:56: Error: Hint 'XLOCK' requires a table\n");
+}
+
 Y_UNIT_TEST(InNoHints) {
     TString query = "SELECT * FROM plato.Input WHERE key IN (1,2,3)";
 
@@ -6270,7 +6346,6 @@ Y_UNIT_TEST(WarnForAggregationBySelectAlias) {
 
 Y_UNIT_TEST(WarnForAggregationBySelectAliasAsErrorStrict) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.Flags.emplace("StrictWarningAsError");
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
             PRAGMA Warning("error", "*");
@@ -6603,7 +6678,7 @@ Y_UNIT_TEST(AsteriskWithSomethingBefore) {
 Y_UNIT_TEST(DuplicatedQualifiedAsterisk) {
     NYql::TAstParseResult res = SqlToYql("select in.*, key, in.* from plato.Input as in;");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unable to use twice same quialified asterisk. Invalid source: in\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unable to use twice same qualified asterisk. Invalid source: in\n");
 }
 
 Y_UNIT_TEST(BrokenLabel) {
@@ -8781,7 +8856,7 @@ Y_UNIT_TEST(MultilineComments) {
 #if ANTLR_VER == 3
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token '*' : cannot match to any predicted input...\n\n");
 #else
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES, WITH}\n");
 #endif
     res = SqlToYqlWithAnsiLexer(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -11698,6 +11773,7 @@ Y_UNIT_TEST(DeduplicationSameSource) {
 } // Y_UNIT_TEST_SUITE(Aggregation)
 
 Y_UNIT_TEST_SUITE(AggregationPhases) {
+
 Y_UNIT_TEST(TwoArg) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::AggPhases.MinLangVer;
@@ -11713,7 +11789,7 @@ Y_UNIT_TEST(TwoArg) {
 
 Y_UNIT_TEST(SingleArg) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::NFeature::AggPhases.MaxLangVer;
+    settings.LangVer = NYql::NFeature::AggPhases.MinLangVer;
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         SELECT AvgIf(a) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k WITH CombineState;
@@ -11722,6 +11798,18 @@ Y_UNIT_TEST(SingleArg) {
 
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
+
+Y_UNIT_TEST(Distinct) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::AggPhases.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Avg(DISTINCT a) FROM (SELECT 1 AS k, 2 AS a) GROUP BY k WITH CombineState;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Distinct is not supported with aggregation phases");
+}
+
 } // Y_UNIT_TEST_SUITE(AggregationPhases)
 
 Y_UNIT_TEST_SUITE(Watermarks) {
@@ -14853,7 +14941,155 @@ Y_UNIT_TEST(AnsiCurrentRow) {
     check("", /*      */ "rows", "up", "uf", {"AnsiCurrentRow"});
 }
 
+Y_UNIT_TEST(PragmaSupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiCurrentRow;
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(PragmaUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA SimpleColumns;
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: Pragma 'simplecolumns'");
+}
+
+Y_UNIT_TEST(PragmaUnsupportedBefore) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA SimpleColumns;
+        PRAGMA YqlSelect = 'force';
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: Pragma 'simplecolumns'");
+}
+
+Y_UNIT_TEST(PragmaUnsupportedAuto) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        PRAGMA SimpleColumns;
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
+
+Y_UNIT_TEST_SUITE(YqlSelectWithCTE) {
+
+void Parse(TString query) {
+    NYql::TAstParseResult r = SqlToYql(query);
+    TString e = Err2Str(r);
+    UNIT_ASSERT_C(!e.contains("Fatal"), e);
+    UNIT_ASSERT_C(!e.contains("ambiguity"), e);
+    UNIT_ASSERT_C(!e.contains("extraneous input"), e);
+    UNIT_ASSERT_C(!e.contains("mismatched input"), e);
+}
+
+Y_UNIT_TEST(NoSyntaxAmbiguity) {
+    Parse(R"sql(
+        WITH x AS (SELECT 1) SELECT * FROM x;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (VALUES (1)) SELECT * FROM x;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (SELECT 1), y AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH x(a) AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH x(a,b) AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH
+            RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            ),
+            RECURSIVE b(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM b
+                WHERE n < 5
+            )
+        SELECT * FROM a UNION SELECT * FROM b;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (SELECT 1), SELECT * FROM x;
+        WITH x AS (SELECT 1), y AS (SELECT 1), SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        $x =
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        ;
+    )sql");
+    Parse(R"sql(
+        $x = (
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        );
+    )sql");
+    Parse(R"sql(
+        SELECT (
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        );
+    )sql");
+    Parse(R"sql(
+        INSERT INTO x (b)
+        WITH RECURSIVE a(n) AS (
+            SELECT 1
+            UNION ALL
+            SELECT n + 1 FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql");
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelectWithCTE)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {
 

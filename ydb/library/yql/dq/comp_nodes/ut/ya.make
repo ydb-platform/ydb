@@ -28,6 +28,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     dq_hash_combine_ut.cpp
     dq_hash_join_ut.cpp
+    dq_rh_hash_ut.cpp
 )
 
 END()

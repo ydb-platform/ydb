@@ -348,8 +348,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto res = schemaClient.ListDirectory("/Root/LogStore/log1").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto children = res.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(children[0].Name, ".sys");
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 0);
         }
 
         {

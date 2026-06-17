@@ -22,18 +22,19 @@ def wait_for_undetermined_ok(action, timeout_seconds=60, step_seconds=1):
 class TestRenameTableRestart(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-
         if min(self.versions) < (25, 1):
             pytest.skip("Only available since 25-1")
 
-        yield from self.setup_cluster(table_service_config={
-            "enable_olap_sink": True,
-        }, extra_feature_flags={
-            "enable_move_column_table": True,
-        }, column_shard_config={
-            "disabled_on_scheme_shard": False,
-            "generate_internal_path_id": True
-        })
+        yield from self.setup_cluster(
+            table_service_config={
+                "enable_olap_sink": True,
+            },
+            extra_feature_flags=["enable_move_column_table"],
+            column_shard_config={
+                "disabled_on_scheme_shard": False,
+                "generate_internal_path_id": True
+            }
+        )
 
     def _create_table(self, name):
         with ydb.QuerySessionPool(self.driver) as session_pool:

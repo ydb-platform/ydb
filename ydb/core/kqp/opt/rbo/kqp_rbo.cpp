@@ -1,10 +1,24 @@
 #include "kqp_rbo.h"
-#include "kqp_plan_conversion_utils.h"
+#include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
 namespace NKqp {
+
+namespace {
+
+void ValidateNoDuplicateOutputIUs(TOpRoot& root) {
+    for (const auto& iter : root) {
+        THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
+        for (const auto& iu : iter.Current->GetOutputIUs()) {
+            Y_ENSURE(!seen.contains(iu), "Duplicate visible column " << iu.GetFullName() << " after " << iter.Current->GetExplainName());
+            seen.insert(iu);
+        }
+    }
+}
+
+} // anonymous namespace
 
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
@@ -41,6 +55,15 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString s
     }
     if (props & ERuleProperties::RequireStatistics) {
         root.ComputePlanStatistics(ctx);
+    }
+    if (props & ERuleProperties::RequireLiveness) {
+        ComputePlanLiveness(root);
+    }
+    if (props & ERuleProperties::RequireNameConstraints) {
+        ComputePlanNameConstraints(root);
+    }
+    if (props & ERuleProperties::RequireAliases) {
+        ComputePlanAliases(root);
     }
 }
 
@@ -92,7 +115,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                         YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
-                    ComputeRequiredProps(root, Props | ERuleProperties::RequireTypes, ctx, StageName);
+                    ComputeRequiredProps(root, Props, ctx, StageName);
                     ++numMatches;
                     break;
                 }
@@ -122,6 +145,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
         }
         stage->RunStage(root, rboCtx);
+        ValidateNoDuplicateOutputIUs(root);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
         }

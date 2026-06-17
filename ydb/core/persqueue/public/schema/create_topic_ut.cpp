@@ -29,7 +29,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     return setup;
 }
 
-THolder<TEvCreateTopicResponse> DoRequest(NActors::TTestActorRuntime& runtime, Ydb::Topic::CreateTopicRequest request) {
+THolder<TEvSchemaResponse> DoRequest(NActors::TTestActorRuntime& runtime, Ydb::Topic::CreateTopicRequest request) {
     auto edge = runtime.AllocateEdgeActor();
     runtime.Register(CreateCreateTopicActor(edge, {
         .Database = "/Root",
@@ -40,7 +40,7 @@ THolder<TEvCreateTopicResponse> DoRequest(NActors::TTestActorRuntime& runtime, Y
         .Cookie = 0,
     }));
 
-    return runtime.GrabEdgeEvent<TEvCreateTopicResponse>(TDuration::Seconds(5));
+    return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(5));
 }
 
     

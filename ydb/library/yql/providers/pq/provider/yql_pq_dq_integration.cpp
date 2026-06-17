@@ -1,4 +1,5 @@
 #include "yql_pq_dq_integration.h"
+#include "yql_pq_settings.h"
 #include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
 #include "yql_pq_topic_key_parser.h"
@@ -29,6 +30,8 @@
 #include <string_view>
 
 namespace NYql {
+
+namespace {
 
 using namespace NNodes;
 using namespace std::literals::string_view_literals;
@@ -1005,6 +1008,8 @@ public:
 private:
     TPqState* State_; // State owns dq integration, so back reference must be not smart.
 };
+
+} // anonymous namespace
 
 THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) {
     return MakeHolder<TPqDqIntegration>(state);

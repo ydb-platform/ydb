@@ -19,7 +19,7 @@ class TProcessExitProfiler
 public:
     TProcessExitProfiler(
         const NProfiling::TProfiler& parent,
-        const TString& prefix);
+        const std::string& prefix);
 
     void OnProcessExit(
         const TError& error,
@@ -42,7 +42,7 @@ private:
 
     NProfiling::TCounter MakeSignalExitCounter(int signal);
 
-    static TString GetSignalName(int signal);
+    static std::string GetSignalName(int signal);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

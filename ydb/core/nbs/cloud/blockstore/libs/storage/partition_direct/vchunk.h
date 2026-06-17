@@ -5,7 +5,7 @@
 #include "ddisk_data_copier.h"
 #include "erase_request.h"
 #include "flush_request.h"
-#include "write_request.h"
+#include "write_request_bundle.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
@@ -28,7 +28,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TVChunk: public std::enable_shared_from_this<TVChunk>
+class TVChunk
+    : public IWriteClient
+    , public std::enable_shared_from_this<TVChunk>
 {
 public:
     TVChunk(
@@ -40,7 +42,7 @@ public:
         ui64 vChunkSize,
         NMonitoring::TDynamicCounterPtr counters);
 
-    ~TVChunk();
+    ~TVChunk() override;
 
     void Start();
     NThreading::TFuture<void> Stop();
@@ -53,7 +55,6 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
         const NWilson::TTraceId& traceId);
 
     void SetHostState(THostIndex hostIndex, EHostState state);
@@ -61,6 +62,19 @@ public:
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
+
+    // This vchunk's contribution to the tablet-wide cleanup watermark: the
+    // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
+    // Must run on the executor thread.
+    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
+
+    // IWriteClient implementation
+    void OnWriteBlocksResponse(
+        std::shared_ptr<TWriteRequestBundle> bundle,
+        const TWriteRequestResponse& response) override;
+    void OnBelatedWriteBlocksResponse(
+        std::shared_ptr<TWriteRequestBundle> bundle,
+        THostMask completedWrites) override;
 
 private:
     friend struct TBaseFixture;
@@ -88,23 +102,7 @@ private:
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
 
-    void DoWriteBlocksLocal(
-        TTracedPromise<TWriteBlocksLocalResponse> promise,
-        TBlockRange64 vchunkRange,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
-        std::shared_ptr<NWilson::TSpan> span);
-    void OnWriteBlocksResponse(
-        TTracedPromise<TWriteBlocksLocalResponse> promise,
-        TBlockRange64 vchunkRange,
-        const TBaseWriteRequestExecutor::TResponse& response,
-        std::shared_ptr<NWilson::TSpan> span);
-    void OnWriteBlocksNotifyBelated(
-        TBlockRange64 range,
-        THostMask completedWrites,
-        ui64 lsn);
-
+    void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle);
     void DoFlush(bool force);
     void OnFlushResponse(const TFlushRequestExecutor::TResponse& response);
 
@@ -131,7 +129,12 @@ private:
         EHostState state) const;
     void ApplyConfig();
 
+    void OnCopierStopped(
+        THostIndex hostIndex,
+        TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+
+    [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
@@ -152,6 +155,8 @@ private:
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+
+    TVector<IRequestExecutorWeakPtr> Inflight;
 
     TVChunkCounters Counters;
 

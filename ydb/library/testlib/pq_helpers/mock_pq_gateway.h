@@ -1,9 +1,21 @@
 #pragma once
 
-#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
 
+#include <util/system/types.h>
+
+#include <functional>
+#include <memory>
 #include <optional>
+#include <vector>
+
+namespace NActors {
+
+class TTestActorRuntimeBase;
+
+} //namespace NActors
 
 namespace NTestUtils {
 

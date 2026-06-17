@@ -11,6 +11,26 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+// GetSafeBarrierForErase asserts it runs on the vchunk's executor thread, so
+// hop onto the executor and bring the value back.
+std::optional<ui64> GetSafeBarrierOnExecutor(
+    TBaseFixture& fixture,
+    TVChunk& vchunk)
+{
+    auto promise = NThreading::NewPromise<std::optional<ui64>>();
+    auto future = promise.GetFuture();
+    fixture.DirectBlockGroup->GetExecutor()->ExecuteSimple(
+        [promise = std::move(promise), &vchunk]() mutable
+        { promise.SetValue(vchunk.GetSafeBarrierForErase()); });
+    return future.GetValue(TDuration::Seconds(10));
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 Y_UNIT_TEST_SUITE(TVChunkTest)
 {
     Y_UNIT_TEST_F(ShouldScheduleCleanup, TBaseFixture)
@@ -40,11 +60,8 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Start();
 
         // Run write request
-        auto future = vchunk->WriteBlocksLocal(
-            callContext,
-            request,
-            1000,
-            NWilson::TTraceId());
+        auto future =
+            vchunk->WriteBlocksLocal(callContext, request, NWilson::TTraceId());
 
         // Wait for three PBuffers write requests.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -104,6 +121,66 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST_F(ShouldHoldSafeBarrierForInflightWrite, TBaseFixture)
+    {
+        Init();
+
+        const TBlockRange64 range = TBlockRange64::WithLength(10, 1);
+        ExpectedRange = range;
+        RangeData = GenerateRandomString(BlockSize * range.Size());
+
+        // Force the next generated lsn to be 123 (LsnGenerator pre-increments).
+        PartitionDirectService->LsnGenerator = 122;
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        // No write yet -> no safe barrier.
+        UNIT_ASSERT(!GetSafeBarrierOnExecutor(*this, *vchunk).has_value());
+
+        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+        auto request =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = range});
+        request->Sglist = MakeSgList();
+
+        auto future =
+            vchunk->WriteBlocksLocal(callContext, request, NWilson::TTraceId());
+
+        // GenerateLsn + RegisterInflightWrite happen as the write is
+        // dispatched, so the safe barrier is held at the generated lsn (123)
+        // right away.
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitWriteRequests(3, TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            123,
+            *GetSafeBarrierOnExecutor(*this, *vchunk));
+
+        // Acknowledging the PBuffer writes does not release the barrier: the
+        // entry stays inflight until it is flushed and erased.
+        SetWriteResult(TDBGWriteBlocksResponse{.Error = MakeError(S_OK)}, true);
+        const auto& result = future.GetValue(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            result.Error.GetCode(),
+            FormatError(result.Error));
+        UNIT_ASSERT_VALUES_EQUAL(
+            123,
+            *GetSafeBarrierOnExecutor(*this, *vchunk));
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
     Y_UNIT_TEST_F(ShouldSwitchHostToTemporaryOfflineAndBack, TBaseFixture)

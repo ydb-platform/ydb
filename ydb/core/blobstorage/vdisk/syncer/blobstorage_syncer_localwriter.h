@@ -85,6 +85,7 @@ namespace NKikimr {
     // CreateLocalSyncDataCutter
     ///////////////////////////////////////////////////////////////////////////////////////////////
     IActor* CreateLocalSyncDataCutter(const TIntrusivePtr<TVDiskConfig>& vconfig, const TIntrusivePtr<TVDiskContext>& vctx,
-        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev);
+        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev,
+        const TSyncState& oldSyncState);
 
 } // NKikimr

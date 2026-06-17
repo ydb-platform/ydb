@@ -1,7 +1,5 @@
 #include "yql_yt_fmr.h"
 
-#include <thread>
-
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
@@ -26,6 +24,8 @@
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_user_data.h>
+#include <yql/essentials/providers/common/mkql_simple_file/mkql_simple_file.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yt/yql/providers/yt/lib/res_pull/res_or_pull.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -34,7 +34,10 @@
 
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
+#include <util/system/condvar.h>
 #include <util/thread/pool.h>
+
+#include <thread>
 
 using namespace NThreading;
 using namespace NYql::NNodes;
@@ -148,6 +151,7 @@ public:
         CoordinatorPingInterval_(settings.CoordinatorPingInterval),
         MaxDirectPullBytes_(settings.MaxDirectPullBytes),
         MaxDirectPullRows_(settings.MaxDirectPullRows),
+        Local_(settings.Local),
         FmrServices_(fmrServices),
         MkqlCompiler_(MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>()),
         YtJobService_(fmrServices->YtJobService)
@@ -207,74 +211,164 @@ public:
                     }
                 }
 
-                // Phase 2: query coordinator and process results without lock
+                // Phase 2: long-poll for any operation finishing, then fetch full details for finalized ones
                 std::vector<TCompletedOperation> completedOperations;
-                for (const auto& op : operationsToCheck) {
-                    YQL_CLOG(TRACE, FastMapReduce) << "Sending get operation request to coordinator with operationId: " << op.OperationId;
-                    TGetOperationResponse getOperationResult;
-                    try {
-                        getOperationResult = Coordinator_->GetOperation({op.OperationId}).GetValueSync();
-                    } catch (...) {
-                        YQL_CLOG(ERROR, FastMapReduce) << "Failed to get operation status for " << op.OperationId << ": " << CurrentExceptionMessage();
-                        TCompletedOperation completed;
-                        completed.OperationId = op.OperationId;
-                        completed.SessionId = op.SessionId;
-                        completed.Result.Errors.emplace_back(TFmrError{
-                            .Component = EFmrComponent::Gateway,
-                            .Reason = EFmrErrorReason::FallbackOperation,
-                            .ErrorMessage = TStringBuilder() << "FMR Coordinator is unavailable for operation, fallback to native gateway"
-                        });
-                        completedOperations.push_back(std::move(completed));
-                        continue;
-                    }
 
-                    auto status = getOperationResult.Status;
-                    bool operationCompleted = status != EOperationStatus::Accepted && status != EOperationStatus::InProgress;
-                    if (!operationCompleted) {
-                        with_lock(Mutex_) {
-                            InProgressCounters_[op.OperationId] = getOperationResult.JobCounters;
-                        }
-                        continue;
-                    }
-
-                    TCompletedOperation completed;
-                    completed.OperationId = op.OperationId;
-                    completed.SessionId = op.SessionId;
-                    completed.Result.TablesStats = getOperationResult.OutputTablesStats;
-                    completed.Result.Errors = getOperationResult.ErrorMessages;
-                    completed.JobCounters = getOperationResult.JobCounters;
-                    bool hasCompletedSuccessfully = (status == EOperationStatus::Completed);
-                    if (hasCompletedSuccessfully) {
-                        completed.Result.SetSuccess();
-                    }
-
+                if (operationsToCheck.empty()) {
+                    YQL_CLOG(TRACE, FastMapReduce) << "No operations to track, waiting for new operations";
                     with_lock(Mutex_) {
-                        if (Sessions_.contains(op.SessionId)) {
-                            auto& session = Sessions_[op.SessionId];
-                            completed.IsSortedUpload = session->OperationStates.SortedUploadOperations.contains(op.OperationId);
-                            if (completed.IsSortedUpload && hasCompletedSuccessfully) {
-                                completed.FragmentResultsYson = getOperationResult.OperationResultsYson;
+                        TrackingCondVar_.WaitI(Mutex_);
+                    }
+                }
+
+                if (!operationsToCheck.empty()) {
+                    std::vector<TString> operationIds;
+                    operationIds.reserve(operationsToCheck.size());
+                    for (const auto& op : operationsToCheck) {
+                        operationIds.push_back(op.OperationId);
+                    }
+
+                    // Build a fast lookup: operationId -> sessionId
+                    std::unordered_map<TString, TString> operationSessionIds;
+                    for (const auto& op : operationsToCheck) {
+                        operationSessionIds[op.OperationId] = op.SessionId;
+                    }
+
+                    struct TFinalizedOp {
+                        TString OperationId;
+                        TString SessionId;
+                        TGetOperationResponse GetOpResponse;
+                    };
+                    std::vector<TFinalizedOp> finalizedOps;
+                    try {
+                        YQL_CLOG(TRACE, FastMapReduce) << "Sending WaitForOperations request for " << operationIds.size() << " operations";
+                        with_lock(Mutex_) {
+                            WaitFutureReady_ = false;
+                        }
+                        auto waitFuture = Coordinator_->WaitForOperations({
+                            .OperationIds = operationIds,
+                            .Timeout = TimeToSleepBetweenGetOperationRequests_,
+                        });
+                        waitFuture.Subscribe([this](const NThreading::TFuture<TWaitForOperationsResponse>&) {
+                            with_lock(Mutex_) {
+                                WaitFutureReady_ = true;
+                                TrackingCondVar_.Signal();
                             }
-                            completed.IsPull = session->OperationStates.PullOperations.contains(op.OperationId);
-                            if (completed.IsPull && hasCompletedSuccessfully && !getOperationResult.OperationResultsYson.empty()) {
-                                completed.PullData = getOperationResult.OperationResultsYson[0];
+                        });
+                        with_lock(Mutex_) {
+                            TrackingCondVar_.WaitI(Mutex_, [&] { return WaitFutureReady_ || StopFmrGateway_.load(); });
+                        }
+                        // If the future is ready (value or exception), process it now.
+                        // GetValue() rethrows on exception — caught below, fails all tracked ops.
+                        // If not ready (woken by a new op arriving), skip and loop to restart
+                        // WaitForOperations with the updated op list.
+                        std::unordered_set<TString> finalizedIds;
+                        if (waitFuture.IsReady()) {
+                            for (const auto& opStatus : waitFuture.GetValue().FinalizedOperations) {
+                                YQL_CLOG(TRACE, FastMapReduce) << "Sending get operation request to coordinator with operationId: " << opStatus.OperationId;
+                                auto getOperationResult = Coordinator_->GetOperation({opStatus.OperationId}).GetValueSync();
+                                finalizedIds.insert(opStatus.OperationId);
+                                finalizedOps.push_back(TFinalizedOp{
+                                    .OperationId = opStatus.OperationId,
+                                    .SessionId = operationSessionIds[opStatus.OperationId],
+                                    .GetOpResponse = std::move(getOperationResult),
+                                });
                             }
                         }
-                    }
 
-                    if (completed.IsSortedUpload && hasCompletedSuccessfully) {
-                        YQL_CLOG(TRACE, FastMapReduce) << "Finalizing sorted upload operation " << op.OperationId;
-                        FinalizeSortedUploadOperation(op.OperationId, op.SessionId, completed.FragmentResultsYson);
-                    }
-
-                    YQL_CLOG(TRACE, FastMapReduce) << "Sending delete operation request to coordinator with operationId: " << op.OperationId;
-                    try {
-                        Coordinator_->DeleteOperation({op.OperationId});
+                        // Update progress counters for ops still running.
+                        // If GetOperation returns a terminal status, promote to finalized
+                        // immediately rather than waiting for the next WaitForOperations cycle.
+                        for (const auto& op : operationsToCheck) {
+                            if (finalizedIds.contains(op.OperationId)) {
+                                continue;
+                            }
+                            try {
+                                auto getOperationResult = Coordinator_->GetOperation({op.OperationId}).GetValueSync();
+                                auto status = getOperationResult.Status;
+                                bool isTerminal = (status == EOperationStatus::Completed
+                                    || status == EOperationStatus::Failed
+                                    || status == EOperationStatus::Aborted
+                                    || status == EOperationStatus::NotFound);
+                                if (isTerminal) {
+                                    YQL_CLOG(TRACE, FastMapReduce) << "Operation " << op.OperationId
+                                        << " reached terminal status " << status << " during progress update; promoting to finalized";
+                                    finalizedIds.insert(op.OperationId);
+                                    finalizedOps.push_back(TFinalizedOp{
+                                        .OperationId = op.OperationId,
+                                        .SessionId = operationSessionIds[op.OperationId],
+                                        .GetOpResponse = std::move(getOperationResult),
+                                    });
+                                } else {
+                                    with_lock(Mutex_) {
+                                        InProgressCounters_[op.OperationId] = getOperationResult.JobCounters;
+                                    }
+                                }
+                            } catch (...) {
+                                YQL_CLOG(ERROR, FastMapReduce) << "Failed to get progress for operation " << op.OperationId << ": " << CurrentExceptionMessage();
+                            }
+                        }
                     } catch (...) {
-                        YQL_CLOG(ERROR, FastMapReduce) << "Failed to delete operation " << op.OperationId << ": " << CurrentExceptionMessage();
+                        YQL_CLOG(ERROR, FastMapReduce) << "WaitForOperations failed: " << CurrentExceptionMessage();
+                        // Treat all watched operations as failed with coordinator unavailable error.
+                        for (const auto& op : operationsToCheck) {
+                            TCompletedOperation completed;
+                            completed.OperationId = op.OperationId;
+                            completed.SessionId = op.SessionId;
+                            completed.Result.Errors.emplace_back(TFmrError{
+                                .Component = EFmrComponent::Gateway,
+                                .Reason = EFmrErrorReason::FallbackOperation,
+                                .ErrorMessage = "FMR Coordinator is unavailable for operation, fallback to native gateway"
+                            });
+                            completedOperations.push_back(std::move(completed));
+                        }
+                        finalizedOps.clear();
                     }
 
-                    completedOperations.push_back(std::move(completed));
+                    for (auto& finalized : finalizedOps) {
+                        const TString& operationId = finalized.OperationId;
+                        const TString& sessionId = finalized.SessionId;
+                        const auto& getOperationResult = finalized.GetOpResponse;
+                        auto status = getOperationResult.Status;
+                        TCompletedOperation completed;
+                        completed.OperationId = operationId;
+                        completed.SessionId = sessionId;
+                        completed.Result.TablesStats = getOperationResult.OutputTablesStats;
+                        completed.Result.Errors = getOperationResult.ErrorMessages;
+                        completed.JobCounters = getOperationResult.JobCounters;
+                        bool hasCompletedSuccessfully = (status == EOperationStatus::Completed);
+                        if (hasCompletedSuccessfully) {
+                            completed.Result.SetSuccess();
+                        }
+
+                        with_lock(Mutex_) {
+                            if (Sessions_.contains(sessionId)) {
+                                auto& session = Sessions_[sessionId];
+                                completed.IsSortedUpload = session->OperationStates.SortedUploadOperations.contains(operationId);
+                                if (completed.IsSortedUpload && hasCompletedSuccessfully) {
+                                    completed.FragmentResultsYson = getOperationResult.OperationResultsYson;
+                                }
+                                completed.IsPull = session->OperationStates.PullOperations.contains(operationId);
+                                if (completed.IsPull && hasCompletedSuccessfully && !getOperationResult.OperationResultsYson.empty()) {
+                                    completed.PullData = getOperationResult.OperationResultsYson[0];
+                                }
+                            }
+                        }
+
+                        if (completed.IsSortedUpload && hasCompletedSuccessfully) {
+                            YQL_CLOG(TRACE, FastMapReduce) << "Finalizing sorted upload operation " << operationId;
+                            FinalizeSortedUploadOperation(operationId, sessionId, completed.FragmentResultsYson);
+                        }
+
+                        YQL_CLOG(TRACE, FastMapReduce) << "Sending delete operation request to coordinator with operationId: " << operationId;
+                        try {
+                            Coordinator_->DeleteOperation({operationId});
+                        } catch (...) {
+                            YQL_CLOG(ERROR, FastMapReduce) << "Failed to delete operation " << operationId << ": " << CurrentExceptionMessage();
+                        }
+
+                        completedOperations.push_back(std::move(completed));
+                    }
                 }
 
                 for (const auto& abortOp : operationsToAbort) {
@@ -420,8 +514,6 @@ public:
                 for (auto& [promise, result] : promisesToResolve) {
                     promise.SetValue(std::move(result));
                 }
-
-                Sleep(TimeToSleepBetweenGetOperationRequests_);
             }
         };
         GetOperationStatusesThread_ = std::thread(getOperationStatusesFunc);
@@ -470,7 +562,9 @@ public:
                 } catch (...) {
                     YQL_CLOG(ERROR, FastMapReduce) << "Unexpected exception in ping thread: " << CurrentExceptionMessage();
                 }
-                Sleep(CoordinatorPingInterval_);
+                with_lock(PingMutex_) {
+                    PingCondVar_.WaitD(PingMutex_, TInstant::Now() + CoordinatorPingInterval_);
+                }
             }
         };
         PingSessionThread_ = std::thread(pingGatewaySessionFunc);
@@ -478,6 +572,8 @@ public:
 
     ~TFmrYtGateway() {
         StopFmrGateway_ = true;
+        TrackingCondVar_.BroadCast();
+        PingCondVar_.BroadCast();
         GetOperationStatusesThread_.join();
         PingSessionThread_.join();
     }
@@ -991,7 +1087,14 @@ public:
         }
 
         if (!outputTablesByCluster.empty()) {
-            return UploadSeveralFmrTablesToYt<TPublishResult, TPublishOptions>(outputTablesByCluster, std::move(options), nodePos);
+            return UploadSeveralFmrTablesToYt<TPublishResult, TPublishOptions>(outputTablesByCluster, TPublishOptions(options), nodePos)
+                .Apply([this, node, &ctx, options = std::move(options)] (const auto& f) mutable {
+                    auto uploadResult = f.GetValue();
+                    if (!uploadResult.Success()) {
+                        return MakeFuture(std::move(uploadResult));
+                    }
+                    return Slave_->Publish(node, ctx, std::move(options));
+                });
         }
         return Slave_->Publish(node, ctx, std::move(options));
     }
@@ -1973,6 +2076,7 @@ private:
                 YQL_ENSURE(!operationStatuses.contains(operationId));
                 operationStatuses[operationId] = promise;
                 operationStates.OperationPublicIds[operationId] = publicId;
+                TrackingCondVar_.Signal();
 
                 if (distributedWriteSession.Defined()) {
                     operationStates.SortedUploadOperations.emplace(operationId, *distributedWriteSession);
@@ -2026,6 +2130,7 @@ private:
                 auto& operationStatuses = operationStates.OperationStatuses;
                 YQL_ENSURE(!operationStatuses.contains(operationId));
                 operationStatuses[operationId] = promise;
+                TrackingCondVar_.Signal();
 
                 if (startOperationRequest.OperationType == EOperationType::SortedUpload) {
                     auto params = std::get<TSortedUploadOperationParams>(startOperationRequest.OperationParams);
@@ -2703,8 +2808,28 @@ private:
         std::vector<TYtResourceInfo>& ytResources,
         std::vector<TFmrResourceOperationInfo>& fmrResources
     ) {
+        if (Local_) {
+            // Embedded/local mode: resolve FilePath/FileContent callables to literals directly
+            // from the user data blocks, matching the file gateway's behavior.
+            const auto& userDataBlocks = execCtx->Options_.UserDataBlocks();
+            bool hasUserFiles = AnyOf(userDataBlocks, [](const auto& kv) {
+                return kv.second.Usage.Test(EUserDataBlockUsage::Path) ||
+                       kv.second.Usage.Test(EUserDataBlockUsage::Content);
+            });
+            if (hasUserFiles) {
+                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
+                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc, nullptr,
+                    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
+                size_t nodeCount = 0;
+                builder.UpdateLambdaCode(lambdaCode, nodeCount,
+                    TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks));
+                fmrJob->SetLambdaCode(lambdaCode);
+            }
+            return;
+        }
+
         if (!Clusters_ || !UrlMapper_) {
-            // No gateway config (unit-test setup) — nothing to transform/upload.
             return;
         }
 
@@ -3356,6 +3481,10 @@ private:
     std::unordered_map<TFmrTableId, TFuture<TFmrOperationResult>> InFlightUploads_;
     THashMap<TString, TFuture<void>> InFlightFileUploads_;
     TMutex Mutex_;
+    TCondVar TrackingCondVar_;
+    TMutex PingMutex_;
+    TCondVar PingCondVar_;
+    bool WaitFutureReady_ = false;  // set under Mutex_ by subscribe callback, read in WaitI predicate
     std::unordered_map<TString, TFmrSession::TPtr> Sessions_;
     std::unordered_map<TString, TJobCounters> InProgressCounters_; // operationId -> latest job counters
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
@@ -3364,6 +3493,7 @@ private:
     TDuration CoordinatorPingInterval_;
     ui64 MaxDirectPullBytes_;
     ui64 MaxDirectPullRows_;
+    bool Local_;
     std::thread GetOperationStatusesThread_;
     std::thread PingSessionThread_;
     std::atomic<bool> StopFmrGateway_;

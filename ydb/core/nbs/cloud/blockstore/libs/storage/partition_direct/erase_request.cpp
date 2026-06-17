@@ -38,7 +38,7 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
 
 void TEraseRequestExecutor::Run()
 {
-    auto future = DirectBlockGroup->EraseFromPBuffer(
+    auto future = DirectBlockGroup->BatchEraseFromPBuffer(
         VChunkConfig.GetVChunkIndex(),
         Host,
         Hint.Segments,
@@ -50,6 +50,13 @@ void TEraseRequestExecutor::Run()
             //
             self->OnEraseResponse(f.GetValue());
         });
+}
+
+TString TEraseRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << "TEraseRequestExecutor";
+    return result;
 }
 
 NThreading::TFuture<TEraseRequestExecutor::TResponse>

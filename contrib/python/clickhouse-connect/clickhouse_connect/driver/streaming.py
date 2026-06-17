@@ -46,6 +46,11 @@ class StreamingResponseSource(Closable):
         self._producer_error: Exception | None = None
         self._producer_completed = False
 
+    def _release_lease(self):
+        release = getattr(self.response, "_lease_release", None)
+        if release is not None:
+            release()
+
     async def start_producer(self, loop: asyncio.AbstractEventLoop):
         """Start the async producer task.
         Must be called from the event loop thread before consuming.
@@ -78,6 +83,7 @@ class StreamingResponseSource(Closable):
 
             finally:
                 self.queue.shutdown()
+                self._release_lease()
 
         self._producer_task = loop.create_task(producer())
         self._producer_started.set()
@@ -179,6 +185,7 @@ class StreamingResponseSource(Closable):
             if not self._producer_completed:
                 self.response.close()
                 await asyncio.sleep(0.05)
+        self._release_lease()
 
     def close(self):
         """Synchronous cleanup resources"""
@@ -190,6 +197,7 @@ class StreamingResponseSource(Closable):
         if self.response and not self.response.closed:
             if not self._producer_completed:
                 self.response.close()
+        self._release_lease()
 
 
 class StreamingFileAdapter:

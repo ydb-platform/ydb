@@ -34,6 +34,7 @@ public:
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
+        const TString& diskId,
         ui64 tabletId,
         ui32 generation,
         size_t directBlockGroupIndex,
@@ -106,11 +107,16 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+    NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
+
+    void BarrierEraseFromPBuffer(ui64 lsn) override;
+
+    NThreading::TFuture<std::optional<ui64>>
+    GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
@@ -128,8 +134,7 @@ public:
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
 private:
-    using TEvSyncWithPersistentBufferResult =
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+    using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
@@ -166,8 +171,13 @@ private:
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(
-        const TEvSyncWithPersistentBufferResult& response,
+        const TEvSyncResult& response,
         size_t segmentCount);
+
+    void DoBarrierEraseFromPBuffer(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,

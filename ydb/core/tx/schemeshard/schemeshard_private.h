@@ -56,6 +56,7 @@ namespace TEvPrivate {
         EvRunForcedCompaction,
         EvProgressTablePartitionsFormatSweep,
         EvFullBackupItemDone,
+        EvProgressForcedCompaction,
         EvEnd
     };
 
@@ -399,6 +400,11 @@ namespace TEvPrivate {
         const ui64 FullBackupId;
         const TPathId DstPathId;
         const bool Success;
+    };
+
+    struct TEvProgressForcedCompaction : TEventLocal<TEvProgressForcedCompaction, EvProgressForcedCompaction> {
+        TEvProgressForcedCompaction()
+        {}
     };
 
 }; // TEvPrivate

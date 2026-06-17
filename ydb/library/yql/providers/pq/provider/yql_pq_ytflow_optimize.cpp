@@ -1,14 +1,18 @@
 #include "yql_pq_ytflow_optimize.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 #include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
 class TPqYtflowOptimization : public TEmptyYtflowOptimization {
 public:
-    TPqYtflowOptimization(const TPqState::TPtr& state)
+    explicit TPqYtflowOptimization(const TPqState::TPtr& state)
         : State_(state.Get())
     {
     }
@@ -97,6 +101,8 @@ public:
 private:
     TPqState* State_;
 };
+
+} // anonymous namespace
 
 THolder<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state) {
     YQL_ENSURE(state);

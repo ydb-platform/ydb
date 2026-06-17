@@ -5,6 +5,8 @@
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/finally.h>
 
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/threading/at_fork.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
@@ -136,7 +138,7 @@ public:
         void* reclaimPtr,
         THazardPtrReclaimer reclaimer);
 
-    void ReclaimHazardPointers(bool flush);
+    bool ReclaimHazardPointers(bool flush);
 
 private:
     std::atomic<int> ThreadCount_ = 0;
@@ -245,13 +247,19 @@ bool THazardPointerManager::TryReclaimHazardPointers()
         std::ssize(threadState->RetireList) > threadCount;
 }
 
-void THazardPointerManager::ReclaimHazardPointers(bool flush)
+bool THazardPointerManager::ReclaimHazardPointers(bool flush)
 {
     if (flush) {
         while (TryReclaimHazardPointers());
     } else {
         TryReclaimHazardPointers();
     }
+
+    // Report whether some retired pointers are still pending on this thread.
+    // They could not be reclaimed because they are currently protected; the
+    // caller must retry maintenance later rather than park indefinitely.
+    auto* threadState = HazardThreadState();
+    return threadState && !threadState->RetireList.empty();
 }
 
 void THazardPointerManager::InitThreadState()
@@ -288,7 +296,7 @@ YT_PREVENT_TLS_CACHING THazardThreadState* THazardPointerManager::AllocateThread
     if (auto* logFile = TryGetShutdownLogFile()) {
         ::fprintf(logFile, "%s\t*** Hazard Pointer Manager thread state allocated (ThreadId: %" PRISZT ")\n",
             GetInstant().ToString().c_str(),
-            GetCurrentThreadId());
+            GetSystemThreadId());
     }
 
     return threadState;
@@ -370,7 +378,7 @@ void THazardPointerManager::DestroyThreadState(THazardThreadState* threadState)
     if (auto* logFile = TryGetShutdownLogFile()) {
         ::fprintf(logFile, "%s\t*** Hazard Pointer Manager thread state destroyed (ThreadId: %" PRISZT ", RetiredPtrCount: %d)\n",
             GetInstant().ToString().c_str(),
-            GetCurrentThreadId(),
+            GetSystemThreadId(),
             count);
     }
 
@@ -425,9 +433,9 @@ void RetireHazardPointer(
         reclaimer);
 }
 
-void ReclaimHazardPointers(bool flush)
+bool ReclaimHazardPointers(bool flush)
 {
-    NYT::NDetail::THazardPointerManager::Get()->ReclaimHazardPointers(flush);
+    return NYT::NDetail::THazardPointerManager::Get()->ReclaimHazardPointers(flush);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

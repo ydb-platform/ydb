@@ -19,6 +19,7 @@ PEERDIR(
     contrib/libs/fmt
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/core/kqp/ut/indexes/common
     ydb/core/kqp/ut/indexes/json/common
     yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/adapters/issue

@@ -15,12 +15,12 @@ namespace {
 
 NUdf::TUnboxedValuePod SliceSkipBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
     const auto& datum = TArrowBlock::From(block).GetDatum();
-    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(*datum.array(), offset, datum.array()->length - offset));
+    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(*datum.array(), offset, datum.array()->length - offset), NYql::EDatumValidationMode::None);
 }
 
 NUdf::TUnboxedValuePod SliceTakeBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
     const auto& datum = TArrowBlock::From(block).GetDatum();
-    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(*datum.array(), 0ULL, offset));
+    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(*datum.array(), 0ULL, offset), NYql::EDatumValidationMode::None);
 }
 
 template <bool Skip>
@@ -38,7 +38,8 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       std::move(Stream->GetValue(ctx)),
-                                                      Count->GetValue(ctx).Get<ui64>());
+                                                      Count->GetValue(ctx).Get<ui64>(),
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -46,11 +47,12 @@ private:
         using TBase = TComputationValue<TStreamValue>;
 
     public:
-        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, ui64 count)
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, ui64 count, NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , HolderFactory(holderFactory)
             , Stream(std::move(stream))
             , Count(count)
+            , ValidationMode(validationMode)
         {
         }
 
@@ -69,7 +71,7 @@ private:
 
             if (const auto result = Stream.WideFetch(output, width); NUdf::EFetchStatus::Ok == result) {
                 if (const auto blockSize = GetBlockCount(output[width - 1]); Count < blockSize) {
-                    output[width - 1] = MakeBlockCount(HolderFactory, Count);
+                    output[width - 1] = MakeBlockCount(HolderFactory, Count, ValidationMode);
                     for (auto i = 0U; i < width - 1; ++i) {
                         output[i] = SliceTakeBlock(HolderFactory, output[i], Count);
                     }
@@ -93,7 +95,7 @@ private:
                 }
 
                 if (const auto blockSize = GetBlockCount(output[width - 1]); Count < blockSize) {
-                    output[width - 1] = MakeBlockCount(HolderFactory, blockSize - Count);
+                    output[width - 1] = MakeBlockCount(HolderFactory, blockSize - Count, ValidationMode);
                     for (auto i = 0U; i < width - 1; ++i) {
                         output[i] = SliceSkipBlock(HolderFactory, output[i], Count);
                     }
@@ -111,6 +113,7 @@ private:
         const THolderFactory& HolderFactory;
         NYql::NUdf::TUnboxedValue Stream;
         ui64 Count;
+        const NYql::EDatumValidationMode ValidationMode;
     };
 
     void RegisterDependencies() const final {

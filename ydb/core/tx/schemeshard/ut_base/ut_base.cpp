@@ -3138,6 +3138,48 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::ChildrenCount(3)});
     }
 
+    // https://github.com/ydb-platform/ydb/issues/41037, drop during copy
+    Y_UNIT_TEST(CopyTableSourceDropRejectedWhileWaitingForProposedParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 123;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvSchemaChanged::EventType);
+
+        TestCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table", NKikimrScheme::StatusAccepted);
+        const ui64 copyTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 1, prevObserver);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusMultipleModifications});
+        const ui64 dropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {copyTxId, dropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Copy"), {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+    }
+
     Y_UNIT_TEST(CopyTableAndConcurrentChanges) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

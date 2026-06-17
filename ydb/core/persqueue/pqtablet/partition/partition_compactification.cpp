@@ -10,18 +10,19 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, ui64 nextRequ
         nextRequestCookie,
         startOffset,
         lastOffset,
-        nextPartNo.GetOrElse(0),
-        std::numeric_limits<ui32>::max(),
-        TString{},
-        CLIENTID_COMPACTION_CONSUMER,
-        3000,
-        std::numeric_limits<ui32>::max(),
-        0,
-        0,
-        "unknown",
-        false,
-        TActorId{},
-        selfId
+        nextPartNo.GetOrElse(0), // partNo
+        std::numeric_limits<ui32>::max(), // count
+        TString{}, // sessionId
+        CLIENTID_COMPACTION_CONSUMER, // clientId
+        3000, // timeout
+        std::numeric_limits<ui32>::max(), // size
+        false, // readToBlobEnd
+        0, // maxTimeLagMs
+        0, // readTimestampMs
+        "unknown", // clientDC
+        false, // externalOperation
+        TActorId{}, // pipeClient
+        selfId // replyTo
     );
     return evRead;
 }

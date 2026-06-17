@@ -3,6 +3,7 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <queue>
 #include <thread>
+#include <util/system/condvar.h>
 #include <util/system/mutex.h>
 #include <util/system/rusage.h>
 #include <yql/essentials/utils/log/log.h>
@@ -94,6 +95,19 @@ struct TFmrWorkerState {
 };
 
 
+// Shared wakeup notifier for the heartbeat loop. Shared via shared_ptr so async
+// callbacks (job completion, WaitForTasks) can safely signal it after TFmrWorker is gone.
+struct THeartbeatLoopNotifier: public TThrRefBase {
+    TMutex Mutex;
+    TCondVar CondVar;
+
+    void Signal() {
+        with_lock(Mutex) {
+            CondVar.Signal();
+        }
+    }
+};
+
 class TFmrWorker: public IFmrWorker {
 public:
     TFmrWorker(
@@ -111,7 +125,9 @@ public:
         RandomProvider_(settings.RandomProvider),
         WorkerId_(settings.WorkerId),
         TimeToSleepBetweenRequests_(settings.TimeToSleepBetweenRequests),
-        MemoryLimitBytes_(settings.MemoryLimitBytes)
+        MemoryLimitBytes_(settings.MemoryLimitBytes),
+        HeartbeatLoopNotifier_(MakeIntrusive<THeartbeatLoopNotifier>()),
+        TaskProcessingLoopNotifier_(MakeIntrusive<THeartbeatLoopNotifier>())
 {
     YQL_ENSURE(Coordinator_ && RandomProvider_ && JobPreparer_);
     GenerateVolatileId();
@@ -124,16 +140,9 @@ public:
     void Start() override {
         WorkerState_->State = EFmrWorkerRuntimeState::Running;
 
-        HeartbeatInFlight_ = std::make_shared<std::atomic<bool>>(false);
-
         auto heartbeatThreadFunc = [&] () {
             while (!StopWorker_) {
                 try {
-                    if (NeedToRestart_.load() || HeartbeatInFlight_->load()) {
-                        Sleep(TimeToSleepBetweenRequests_);
-                        continue;
-                    }
-
                     if (MemoryLimitBytes_ > 0) {
                         ui64 currentRss = TRusage::GetCurrentRSS();
                         if (currentRss > MemoryLimitBytes_) {
@@ -191,53 +200,56 @@ public:
                     );
 
                     YQL_CLOG(TRACE, FastMapReduce) << "Worker " << WorkerId_ << " sending heartbeat request to coordinator";
-                    HeartbeatInFlight_->store(true);
-                    Coordinator_->SendHeartbeatResponse(heartbeatRequest).Subscribe(
-                        [this, weakState = std::weak_ptr(WorkerState_), heartbeatInFlight = HeartbeatInFlight_](const auto& f) {
-                            try {
-                                auto heartbeatResponse = f.GetValue();
+                    auto heartbeatResponse = Coordinator_->SendHeartbeatResponse(heartbeatRequest).GetValueSync();
 
-                                if (heartbeatResponse.NeedToRestart) {
-                                    NeedToRestart_.store(true);
-                                    heartbeatInFlight->store(false);
-                                    return;
-                                }
+                    if (heartbeatResponse.NeedToRestart) {
+                        NeedToRestart_.store(true);
+                        TaskProcessingLoopNotifier_->Signal();
+                        continue;
+                    }
 
-                                std::shared_ptr<TFmrWorkerState> state = weakState.lock();
-                                if (!state) {
-                                    heartbeatInFlight->store(false);
-                                    return;
-                                }
-
-                                with_lock(state->Mutex) {
-                                    for (auto& taskToDeleteId: heartbeatResponse.TaskToDeleteIds) {
-                                        if (TasksCancelStatus_.contains(taskToDeleteId)) {
-                                            TasksCancelStatus_[taskToDeleteId]->store(true);
-                                        }
-                                    }
-
-                                    for (auto task: heartbeatResponse.TasksToRun) {
-                                        auto taskId = task->TaskId;
-                                        if (state->TaskStatuses.contains(taskId)) {
-                                            YQL_CLOG(WARN, FastMapReduce) << "Task " << taskId << " already in TaskStatuses, skipping";
-                                            continue;
-                                        }
-                                        state->TaskStatuses[taskId] = MakeTaskState(ETaskStatus::InProgress, taskId);
-                                        TasksCancelStatus_[taskId] = std::make_shared<std::atomic<bool>>(false);
-                                        PendingTasks_.push(task);
-                                    }
-                                }
-                            } catch (...) {
-                                YQL_CLOG(ERROR, FastMapReduce) << "Error processing heartbeat response: " << CurrentExceptionMessage();
+                    with_lock(WorkerState_->Mutex) {
+                        for (auto& taskToDeleteId: heartbeatResponse.TaskToDeleteIds) {
+                            if (TasksCancelStatus_.contains(taskToDeleteId)) {
+                                TasksCancelStatus_[taskToDeleteId]->store(true);
                             }
-                            heartbeatInFlight->store(false);
                         }
-                    );
+
+                        for (auto task: heartbeatResponse.TasksToRun) {
+                            auto taskId = task->TaskId;
+                            if (WorkerState_->TaskStatuses.contains(taskId)) {
+                                YQL_CLOG(WARN, FastMapReduce) << "Task " << taskId << " already in TaskStatuses, skipping";
+                                continue;
+                            }
+                            WorkerState_->TaskStatuses[taskId] = MakeTaskState(ETaskStatus::InProgress, taskId);
+                            TasksCancelStatus_[taskId] = std::make_shared<std::atomic<bool>>(false);
+                            PendingTasks_.push(task);
+                        }
+                    }
+
+                    if (!heartbeatResponse.TasksToRun.empty()) {
+                        TaskProcessingLoopNotifier_->Signal();
+                    }
+
+                    // Between heartbeats: subscribe to coordinator task availability notification.
+                    // Wake conditions: new tasks in coordinator (2), job completion (3), shutdown (1).
+                    if (availableSlots > 0) {
+                        YQL_CLOG(TRACE, FastMapReduce) << "Worker " << WorkerId_ << " waiting for tasks with " << availableSlots << " available slots";
+                        Coordinator_->WaitForTasks({.AvailableSlots = availableSlots, .Timeout = TimeToSleepBetweenRequests_}).Subscribe(
+                            [notifier = HeartbeatLoopNotifier_](const auto&) {
+                                notifier->Signal();
+                            }
+                        );
+                    }
+
                 } catch (...) {
-                    HeartbeatInFlight_->store(false);
                     YQL_CLOG(ERROR, FastMapReduce) << "Error in heartbeat thread: " << CurrentExceptionMessage();
                 }
-                Sleep(TimeToSleepBetweenRequests_);
+                with_lock(HeartbeatLoopNotifier_->Mutex) {
+                    HeartbeatLoopNotifier_->CondVar.WaitD(
+                        HeartbeatLoopNotifier_->Mutex,
+                        TInstant::Now() + TimeToSleepBetweenRequests_);
+                }
             }
         };
 
@@ -304,7 +316,8 @@ public:
                             allDownloadResourceFutures.emplace_back(resource.DownloadFuture.IgnoreResult());
                         }
 
-                        NThreading::WaitExceptionOrAll(allDownloadResourceFutures).Subscribe([weakState = std::weak_ptr(WorkerState_), taskId, downloadResourcesQueue] (const auto& f) {
+                        NThreading::WaitExceptionOrAll(allDownloadResourceFutures).Subscribe([weakState = std::weak_ptr(WorkerState_), taskId, downloadResourcesQueue,
+                                                                                                  notifier = TaskProcessingLoopNotifier_] (const auto& f) {
                             std::shared_ptr<TFmrWorkerState> state = weakState.lock();
                             if (state) {
                                 try {
@@ -333,11 +346,13 @@ public:
                                     state->HandleTaskException(taskId, CurrentExceptionMessage(), EFmrErrorReason::RestartOperation);
                                 }
                             }
+                            notifier->Signal();
                         });
                     }
 
                     for (auto& [taskId, future]: runningJobFutures) {
-                        future.Subscribe([weakState = std::weak_ptr(WorkerState_), taskId](const auto& jobFuture) {
+                        future.Subscribe([weakState = std::weak_ptr(WorkerState_), taskId,
+                                          notifier = HeartbeatLoopNotifier_](const auto& jobFuture) {
                             std::shared_ptr<TFmrWorkerState> state = weakState.lock();
                             if (state) {
                                 try {
@@ -359,12 +374,16 @@ public:
                                     state->HandleTaskException(taskId, msg, ParseFmrReasonFromErrorMessage(msg));
                                 }
                             }
+                            // Wake heartbeat loop: a task finished (condition 3).
+                            notifier->Signal();
                         });
                     }
                 } catch (...) {
                     YQL_CLOG(ERROR, FastMapReduce) << "Error in task processing thread: " << CurrentExceptionMessage();
                 }
-                Sleep(TDuration::MilliSeconds(100));
+                with_lock(TaskProcessingLoopNotifier_->Mutex) {
+                    TaskProcessingLoopNotifier_->CondVar.WaitI(TaskProcessingLoopNotifier_->Mutex);
+                }
             }
         };
 
@@ -374,15 +393,11 @@ public:
 
     void Stop() override {
         StopWorker_ = true;
+        HeartbeatLoopNotifier_->Signal();
+        TaskProcessingLoopNotifier_->Signal();
 
         if (HeartbeatThread_.joinable()) {
             HeartbeatThread_.join();
-        }
-
-        if (HeartbeatInFlight_) {
-            while (HeartbeatInFlight_->load()) {
-                Sleep(TDuration::MilliSeconds(10));
-            }
         }
 
         with_lock(WorkerState_->Mutex) {
@@ -493,10 +508,11 @@ private:
     TString VolatileId_;
     std::thread HeartbeatThread_;
     std::thread TaskProcessingThread_;
-    std::shared_ptr<std::atomic<bool>> HeartbeatInFlight_;
     std::queue<TTask::TPtr> PendingTasks_;
     const TDuration TimeToSleepBetweenRequests_;
     const ui64 MemoryLimitBytes_;
+    TIntrusivePtr<THeartbeatLoopNotifier> HeartbeatLoopNotifier_;
+    TIntrusivePtr<THeartbeatLoopNotifier> TaskProcessingLoopNotifier_;
 };
 
 } // namespace

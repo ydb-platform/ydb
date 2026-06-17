@@ -1,15 +1,16 @@
 #pragma once
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <util/generic/size_literals.h>
 
+#include <memory>
 
 namespace NYql {
 
@@ -77,6 +78,7 @@ public:
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, Static> OptDisableTopSort;
+    NCommon::TConfSetting<bool, Static> OptDisableAutoIndexSelection;
     NCommon::TConfSetting<bool, Static> OptDisableSqlInToJoin;
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
@@ -113,6 +115,8 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
+    NCommon::TConfSetting<ui64, Static> HybridSearchFactor;
+    NCommon::TConfSetting<double, Static> HybridSearchK;
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
@@ -227,17 +231,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         }
     }
 
-    void ApplyServiceConfig(const TTableServiceConfig& serviceConfig) {
-        if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
-            _ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
-        }
-
-        CopyFrom(serviceConfig);
-
-        if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
-            _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
-        }
-    }
+    void ApplyServiceConfig(const TTableServiceConfig& serviceConfig);
 
     TKikimrSettings::TConstPtr Snapshot() const;
 
@@ -257,6 +251,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
     bool GetUseKqpTasksGraphV2() const;
+    bool IsAutoIndexSelectionDisabled() const;
 };
 
 } // namespace NYql

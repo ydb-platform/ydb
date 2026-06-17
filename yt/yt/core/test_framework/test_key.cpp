@@ -8,9 +8,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetTestKeyContent(TStringBuf name)
+std::string GetTestKeyContent(TStringBuf name)
 {
-    return NResource::Find(TString("/testdata/") + name);
+    return NResource::Find(std::string("/testdata/") + std::string(name));
 }
 
 NCrypto::TPemBlobConfigPtr CreateTestKeyBlob(TStringBuf name)
@@ -22,7 +22,7 @@ NCrypto::TPemBlobConfigPtr CreateTestKeyBlob(TStringBuf name)
 
 NCrypto::TPemBlobConfigPtr CreateTestKeyFile(TStringBuf name)
 {
-    auto fileName = TString("testdata_") + name;
+    auto fileName = std::string("testdata_") + std::string(name);
     auto output = TFileOutput(fileName);
     output.Write(GetTestKeyContent(name));
     output.Finish();

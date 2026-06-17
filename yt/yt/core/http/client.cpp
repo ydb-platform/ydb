@@ -272,7 +272,7 @@ private:
             requestData.Request->SetHeaders(headers);
         }
 
-        auto urlPath = TString(urlRef.Path);
+        auto urlPath = std::string(urlRef.Path);
         if (urlPath.empty()) {
             urlPath = "/";
         }

@@ -741,7 +741,7 @@ enum class ESampleMode {
 class TDeferredAtom {
 public:
     TDeferredAtom();
-    TDeferredAtom(TPosition pos, const TString& str);
+    TDeferredAtom(TPosition pos, const TString& str, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent);
     TDeferredAtom(TNodePtr node, TContext& ctx);
     const TString* GetLiteral() const;
     bool GetLiteral(TString& value, TContext& ctx) const;
@@ -1107,7 +1107,13 @@ private:
 protected:
     IAggregation(TPosition pos, TString name, TString func, EAggregateMode mode);
     TAstNode* Translate(TContext& ctx) const override;
+
+    TStringBuf GetGroupByPhase(ISource* src) const;
+    bool IsOverStatePhase(ISource* src) const;
+    bool IsManyPhase(ISource* src) const;
+    bool IsFinalizingPhase(ISource* src) const;
     TNodePtr WrapIfOverState(const TNodePtr& input, bool overState, bool many, TContext& ctx) const;
+
     TNodePtr GetExtractor(bool many, TContext& ctx) const;
 
     // `YqlSelect` aggregation needs a lambda without a `row` parameter
@@ -1229,7 +1235,7 @@ struct TStringContent {
     TString Content;
     NYql::NUdf::EDataSlot Type = NYql::NUdf::EDataSlot::String;
     TMaybe<TString> PgType;
-    ui32 Flags = NYql::TNodeFlags::Default;
+    ui32 Flags = NYql::TAstNodeFlags::Default;
 };
 
 TMaybe<TStringContent> StringContent(TContext& ctx, TPosition pos, const TString& input);
@@ -1609,9 +1615,9 @@ TString TypeByAlias(const TString& alias, bool normalize = true);
 
 TNodePtr BuildList(TPosition pos, TVector<TNodePtr> nodes = {});
 TNodePtr BuildQuote(TPosition pos, TNodePtr expr);
-TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent,
+TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent,
                    bool isOptionalArg = false);
-TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent);
+TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TAstNodeFlags::ArbitraryContent);
 
 TNodePtr BuildLiteralNull(TPosition pos);
 TNodePtr BuildLiteralVoid(TPosition pos);

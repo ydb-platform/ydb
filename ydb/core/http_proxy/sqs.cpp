@@ -424,15 +424,15 @@ namespace NKikimr::NHttpProxy {
                               "stream '" << MaybeGetQueueUrl<TProtoRequest>(Request) << "'");
 
                 ReportInputCounters(ctx);
-                if (!HttpContext.IamToken.empty() || Signature) {
-                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
-                        ctx.SelfID, HttpContext, std::move(Signature)));
-                } else if (!HttpContext.SecurityToken.empty()) {
+                if (!HttpContext.SecurityToken.empty()) {
                     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                         .Ticket = HttpContext.SecurityToken,
                         .Database = HttpContext.DatabasePath,
                         .PeerName = HttpContext.SourceAddress,
                     }));
+                } else if (!HttpContext.IamToken.empty() || Signature) {
+                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
+                        ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                         return ReplyWithMessageQueueError(

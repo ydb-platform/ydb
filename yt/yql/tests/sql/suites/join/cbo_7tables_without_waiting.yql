@@ -7,6 +7,7 @@ pragma yt.LookupJoinLimit="1000";
 pragma yt.LookupJoinMaxRows="100";
 pragma yt.ExtendedStatsMaxChunkCount="0";
 pragma yt.JoinMergeTablesLimit="100";
+pragma yt.OptimizeFor="scan";
 
 $s = (SELECT InputG.g3 AS g3, COUNT(*) AS cnt FROM
     InputG

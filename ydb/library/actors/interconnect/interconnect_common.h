@@ -41,6 +41,7 @@ namespace NActors {
         bool MergePerPeerCounters = false;
         bool MergePerHostCounters = false;
         bool MergePerDataCenterCounters = false;
+        bool MergePerScopeClassCounters = false;
         ui32 TCPSocketBufferSize = 0;
         TDuration PingPeriod = TDuration::Seconds(3);
         TDuration ForceConfirmPeriod = TDuration::Seconds(1);
@@ -76,6 +77,7 @@ namespace NActors {
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
+        ui32 RdmaPayloadCopySizeThreshold = 64 << 10;
         bool CollectSubscriptionStackTrace = false;
     };
 
@@ -156,7 +158,7 @@ namespace NActors {
         double CalculateNetworkUtilization();
         void AddSessionWithDataInQueue();
         void RemoveSessionWithDataInQueue();
-        TActorId HostMetricsAggregatorId;
+        TActorId MetricsAggregatorId;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

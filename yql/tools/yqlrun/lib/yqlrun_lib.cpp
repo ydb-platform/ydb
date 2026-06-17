@@ -50,6 +50,7 @@ TYqlRunTool::TYqlRunTool()
     GetRunOptions().ResultsFormat = NYson::EYsonFormat::Pretty;
     GetRunOptions().CustomTests = true;
     GetRunOptions().EnableLineage = true;
+    GetRunOptions().EnableCredentials = true;
 
     GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption('t', "table", "Table mapping").RequiredArgument("table@file")
@@ -92,13 +93,6 @@ TYqlRunTool::TYqlRunTool()
                 });
             });
         opts.AddLongOption("tmp-dir", "Directory for temporary tables").RequiredArgument("DIR").StoreResult(&TmpDir_);
-        opts.AddLongOption("secure-param", "Secure parameter").RequiredArgument("name@value")
-            .KVHandler([&](TString name, TString value) {
-                if (name.empty() || value.empty()) {
-                    throw yexception() << "Incorrect secure parameter, expected form name@value, e.g. secret_key@my_secret_value";
-                }
-                SecureParams_[name] = value;
-            }, '@');
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
@@ -124,7 +118,7 @@ TYqlRunTool::TYqlRunTool()
 }
 
 IYtGateway::TPtr TYqlRunTool::CreateYtGateway() {
-    auto yqlNativeServices = NFile::TYtFileServices::Make(GetFuncRegistry().Get(), TablesMapping_, GetFileStorage(), TmpDir_, KeepTemp_, TablesDirMapping_, SecureParams_);
+    auto yqlNativeServices = NFile::TYtFileServices::Make(GetFuncRegistry().Get(), TablesMapping_, GetFileStorage(), TmpDir_, KeepTemp_, TablesDirMapping_);
     return CreateYtFileGateway(yqlNativeServices);
 }
 

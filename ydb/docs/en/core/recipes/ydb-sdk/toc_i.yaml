@@ -61,9 +61,11 @@ items:
     href: debug.md
   - name: Enable logging
     href: debug-logs.md
+  - name: Export logs to OpenTelemetry
+    href: debug-logs-otel.md
   - name: Enable metrics in Prometheus
     href: debug-prometheus.md
-  - name: Tracing with OpenTelemetry
+  - name: Enable tracing in OpenTelemetry
     href: debug-otel.md
   - name: Enable tracing in Jaeger
     href: debug-jaeger.md

@@ -7,6 +7,96 @@ namespace NKikimr::NFulltext {
 
 Y_UNIT_TEST_SUITE(NFulltext) {
 
+    Y_UNIT_TEST(MultiDeltaReader1) {
+        TDeltaWriter wr;
+        wr.Reset(false, false);
+        for (ui64 i = 1; i <= 100; i++) {
+            wr.Add(i, 1);
+        }
+        TDeltaWriter wr2;
+        for (ui64 i = 5; i <= 25; i += 2) {
+            wr2.Add(i, 1);
+        }
+        TMultiDeltaReader rdr;
+        rdr.Reset(false, false);
+        rdr.Add(true, wr.GetBuf());
+        rdr.Add(false, wr2.GetBuf());
+        rdr.Start();
+        ui64 docId;
+        ui32 freq;
+        for (ui64 i = 1; i <= 100; i++) {
+            if (i >= 5 && i <= 25 && !((i - 5) % 2)) {
+                continue;
+            }
+            UNIT_ASSERT(rdr.Read(docId, freq));
+            UNIT_ASSERT_VALUES_EQUAL(docId, i);
+            UNIT_ASSERT_VALUES_EQUAL(freq, 1);
+        }
+        UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
+
+    Y_UNIT_TEST(MultiDeltaReader2) {
+        TDeltaReader r1(TConstArrayRef<ui8>((const ui8*)"2\x0A", 2), false, false);
+        r1.SetMaxId(203);
+        TMultiDeltaReader rdr;
+        rdr.Reset(false, false);
+        rdr.Add(true, &r1);
+        rdr.Add(false, TConstArrayRef<ui8>((const ui8*)"dd", 2));
+        rdr.Add(true, TConstArrayRef<ui8>((const ui8*)"\x0A\x0A\x0A", 3));
+        rdr.Add(true, TConstArrayRef<ui8>((const ui8*)"dd\x01\x02", 4));
+        rdr.Start();
+        ui64 docId;
+        ui32 freq;
+        auto check = [&](ui64 expectedDoc) {
+            UNIT_ASSERT(rdr.Read(docId, freq));
+            Cerr << "Read: " << docId << " == " << expectedDoc << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(docId, expectedDoc);
+            UNIT_ASSERT_VALUES_EQUAL(freq, 1);
+        };
+        check(10);
+        check(20);
+        check(30);
+        check(50);
+        check(60);
+        check(201);
+        check(203);
+        UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
+
+    Y_UNIT_TEST(SignedDelta) {
+        TDeltaWriter wr;
+        wr.Reset(false, true);
+        wr.Add(-1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(wr.GetBuf().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(wr.GetBuf()[0], 1);
+        wr.Reset(true, true);
+        for (i64 i = -50; i <= 50; i++) {
+            wr.Add(i, 1 + ((i + 50) % 3));
+        }
+        TDeltaWriter wr2;
+        wr2.Reset(true, true);
+        for (i64 i = -25; i <= 25; i += 2) {
+            wr2.Add(i, 1 + ((i + 50) % 3));
+        }
+        TMultiDeltaReader rdr;
+        rdr.Reset(true, true);
+        rdr.Add(true, wr.GetBuf());
+        rdr.Add(false, wr2.GetBuf());
+        rdr.Start();
+        ui64 docId;
+        ui32 freq;
+        for (i64 i = -50; i <= 50; i++) {
+            if (i >= -25 && i <= 25 && !((i + 25) % 2)) {
+                continue;
+            }
+            UNIT_ASSERT(rdr.Read(docId, freq));
+            Cerr << "Read: " << (i64)docId << " " << freq << "\n";
+            UNIT_ASSERT_VALUES_EQUAL((i64)docId, i);
+            UNIT_ASSERT_VALUES_EQUAL(freq, 1 + ((i + 50) % 3));
+        }
+        UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
+
     Y_UNIT_TEST(ValidateColumnsMatches) {
         TString error;
         

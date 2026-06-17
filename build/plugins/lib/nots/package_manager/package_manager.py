@@ -351,6 +351,7 @@ class PackageManager(object):
                 node_modules_path=self._nm_path(),
                 peers=ws.get_paths(base_path=self.module_path, ignore_self=True),
                 bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
+                inject_peers=self.inject_peers,
             )
 
     """

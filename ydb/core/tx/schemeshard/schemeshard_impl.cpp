@@ -1,9 +1,11 @@
 #include "schemeshard_impl.h"
+#include "schemeshard__local_index_migration.h"
 #include "schemeshard_login_helper.h"
 #include "schemeshard_svp_migration.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
+#include "olap/operations/local_index_helpers.h"
 #include "schemeshard.h"
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
@@ -185,6 +187,75 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     }
 }
 
+void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
+    if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+        return;
+    }
+
+    TVector<TLocalIndexMigrationItem> items;
+
+    for (const auto& tablePathId : ColumnTables.GetAllPathIds()) {
+        const auto tableInfo = ColumnTables.GetVerifiedPtr(tablePathId);
+        if (!tableInfo->IsStandalone()) {
+            continue;
+        }
+
+        const auto& schema = tableInfo->Description.GetSchema();
+        if (schema.IndexesSize() == 0) {
+            continue;
+        }
+
+        const TPathElement::TPtr tablePath = PathsById.at(tablePathId);
+        const auto columnIdToName = NOlap::BuildColumnIdToNameMap(schema);
+        const TString workingDir = TPath::Init(tablePathId, this).PathString();
+
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "LocalIndexMigrator: processing table " << workingDir
+            << " with " << schema.IndexesSize() << " index(es)");
+
+        for (const auto& indexProto : schema.GetIndexes()) {
+            const TString& indexName = indexProto.GetName();
+
+            // Skip indexes that already exist as live scheme-object children.
+            if (const TPathId* childId = tablePath->FindChild(indexName)) {
+                const auto& child = PathsById.at(*childId);
+                if (child->IsTableIndex() && !child->Dropped()) {
+                    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "LocalIndexMigrator: skipping index " << indexName
+                        << " (already exists as scheme object)");
+                    continue;
+                }
+            }
+
+            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+            if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "LocalIndexMigrator skip index: failed to build creation config"
+                    << ", table: " << workingDir << ", index: " << indexName);
+                continue;
+            }
+
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "LocalIndexMigrator: adding index " << indexName << " from table " << workingDir);
+            items.emplace_back(TLocalIndexMigrationItem{
+                .WorkingDir = workingDir,
+                .IndexConfig = std::move(indexConfig),
+            });
+        }
+    }
+
+    if (items.empty()) {
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "LocalIndexMigrator: no indexes to migrate");
+        return;
+    }
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "LocalIndexMigrator: starting migrator for " << items.size() << " index(es)");
+
+    LocalIndexMigratorId = ctx.RegisterWithSameMailbox(CreateLocalIndexMigrator(static_cast<TTabletId>(TabletID()), SelfId(), this, std::move(items)).Release());
+}
+
 void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts) {
     TPathId subDomainPathId = GetCurrentSubDomainPathId();
     TSubDomainInfo::TPtr domainPtr = ResolveDomainInfo(subDomainPathId);
@@ -240,6 +311,17 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     StartStopShred();
 
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
+
+    // Start local index migration if feature flag is enabled
+    // This ensures migration starts even if we don't receive a new TEvAllocateResult
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "ActivateAfterInitialization: checking local index migration"
+        << ", feature flag: " << AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()
+        << ", LocalIndexMigrationStarted: " << LocalIndexMigrationStarted);
+    if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject() && !LocalIndexMigrationStarted) {
+        LocalIndexMigrationStarted = true;
+        CollectLocalIndexMigrations(ctx);
+    }
 
     InitializeStatistics(ctx);
 
@@ -1749,6 +1831,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSolomonVolume:
     case TTxState::TxCreateRtmrVolume:
     case TTxState::TxCreateTableIndex:
+    case TTxState::TxCreateLocalIndex:
     case TTxState::TxCreateOlapStore:
     case TTxState::TxCreateColumnTable:
     case TTxState::TxCreateCdcStream:
@@ -1783,6 +1866,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateLock:
     case TTxState::TxDropLock:
     case TTxState::TxAlterTableIndex:
+    case TTxState::TxAlterLocalIndex:
     case TTxState::TxAlterSolomonVolume:
     case TTxState::TxDropTableIndexAtMainTable:
     case TTxState::TxAlterOlapStore:
@@ -1822,6 +1906,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropKesus:
     case TTxState::TxDropSolomonVolume:
     case TTxState::TxDropTableIndex:
+    case TTxState::TxDropLocalIndex:
     case TTxState::TxDropOlapStore:
     case TTxState::TxDropColumnTable:
     case TTxState::TxDropCdcStream:
@@ -1861,6 +1946,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
         Y_UNREACHABLE();
     case TTxState::TxMoveTable:
     case TTxState::TxMoveTableIndex:
+    case TTxState::TxMoveLocalIndex:
     case TTxState::TxMoveSequence:
     case TTxState::TxRotateCdcStream:
         return TPathElement::EPathState::EPathStateCreate;
@@ -3263,7 +3349,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::Columns::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::Columns::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull),
-                NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+                NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress),
+                NIceDb::TUpdate<Schema::Columns::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
 
             db.Table<Schema::ColumnAlters>().Key(pathId.LocalPathId, colId).Delete();
         } else {
@@ -3278,7 +3365,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull),
-                NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+                NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress),
+                NIceDb::TUpdate<Schema::MigratedColumns::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
         }
         db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Delete();
     }
@@ -3323,7 +3411,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
                 NIceDb::TUpdate<Schema::ColumnAlters::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::ColumnAlters::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::ColumnAlters::NotNull>(cinfo.NotNull),
-                NIceDb::TUpdate<Schema::ColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress));
+                NIceDb::TUpdate<Schema::ColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress),
+                NIceDb::TUpdate<Schema::ColumnAlters::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
         } else {
             db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::ColName>(cinfo.Name),
@@ -3336,7 +3425,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::NotNull>(cinfo.NotNull),
-                NIceDb::TUpdate<Schema::MigratedColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress));
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress),
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
         }
     }
 }
@@ -3452,6 +3542,15 @@ void TSchemeShard::PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const 
     }
 }
 
+void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ExternalTables.find(pathId);
+    Y_ABORT_UNLESS(it != ExternalTables.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistExternalTable(db, pathId, info);
+}
+
 void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTableInfo) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -3481,7 +3580,8 @@ void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, con
             NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(cinfo.DefaultKind),
             NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue),
             NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull),
-            NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+            NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress),
+            NIceDb::TUpdate<Schema::MigratedColumns::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
     }
 }
 
@@ -3501,6 +3601,15 @@ void TSchemeShard::PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathI
     }
 
     db.Table<Schema::ExternalTable>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ExternalDataSources.find(pathId);
+    Y_ABORT_UNLESS(it != ExternalDataSources.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistExternalDataSource(db, pathId, info);
 }
 
 void TSchemeShard::PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId, const TExternalDataSourceInfo::TPtr externalDataSourceInfo) {
@@ -3605,6 +3714,15 @@ void TSchemeShard::PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId) {
     }
 
     db.Table<Schema::SysView>().Key(pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto it = ResourcePools.find(pathId);
+    Y_ABORT_UNLESS(it != ResourcePools.end());
+    const auto info = it->second;
+    Y_ABORT_UNLESS(info);
+    PersistResourcePool(db, pathId, info);
 }
 
 void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool) {
@@ -3960,6 +4078,11 @@ void TSchemeShard::PersistAddSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx
 
 void TSchemeShard::PersistRemoveSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId) {
     db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistSharedShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId, TTxId txId) {
+    db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::SharedShards::LastTxId>(ui64(txId)));
 }
 
 void TSchemeShard::PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx) {
@@ -4349,7 +4472,8 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
         db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::ColumnTables::AlterVersion>(tableInfo.AlterVersion),
             NIceDb::TUpdate<Schema::ColumnTables::Description>(serialized),
-            NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding));
+            NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding),
+            NIceDb::TUpdate<Schema::ColumnTables::IsReadOnly>(tableInfo.IsReadOnly));
         if (tableInfo.StandaloneSharding) {
             TString serializedOwnedShards;
             Y_ABORT_UNLESS(tableInfo.StandaloneSharding->SerializeToString(&serializedOwnedShards));
@@ -5339,6 +5463,9 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
+    if (LocalIndexMigratorId) {
+        ctx.Send(LocalIndexMigratorId, new TEvents::TEvPoisonPill());
+    }
     for (TActorId schemeUploader : RunningExportSchemeUploaders) {
         ctx.Send(schemeUploader, new TEvents::TEvPoisonPill());
     }
@@ -5353,6 +5480,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     }
 
     IndexBuildPipes.Shutdown(ctx);
+    SetColumnConstraintPipes.Shutdown(ctx);
     IncrementalRestorePipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
     ShardDeleter.Shutdown(ctx);
@@ -5416,6 +5544,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
+    EnableCompactFulltextIndex = appData->FeatureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
@@ -5709,6 +5838,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
 
         //namespace NIndexBuilder {
+        HFuncTraced(TEvSetColumnConstraint::TEvCreateRequest, Handle);
+        HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCancelRequest, Handle);
@@ -5734,6 +5865,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvForcedCompaction::TEvCancelRequest, Handle);
         HFuncTraced(TEvForcedCompaction::TEvForgetRequest, Handle);
         HFuncTraced(TEvForcedCompaction::TEvListRequest, Handle);
+        HFuncTraced(TEvPrivate::TEvProgressForcedCompaction, Handle);
         // } // NForcedCompaction
 
         //namespace NCdcStreamScan {
@@ -6488,6 +6620,11 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
         return;
     }
 
+    if (SetColumnConstraintPipes.Has(clientId)) {
+        Execute(CreatePipeRetrySetColumnConstraint(SetColumnConstraintPipes.GetOwnerId(clientId), SetColumnConstraintPipes.GetTabletId(clientId)), ctx);
+        return;
+    }
+
     if (IncrementalRestorePipes.Has(clientId)) {
         RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
                                     IncrementalRestorePipes.GetTabletId(clientId), ctx);
@@ -6550,6 +6687,11 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
 
     if (IndexBuildPipes.Has(clientId)) {
         Execute(CreatePipeRetry(IndexBuildPipes.GetOwnerId(clientId), IndexBuildPipes.GetTabletId(clientId)), ctx);
+        return;
+    }
+
+    if (SetColumnConstraintPipes.Has(clientId)) {
+        Execute(CreatePipeRetrySetColumnConstraint(SetColumnConstraintPipes.GetOwnerId(clientId), SetColumnConstraintPipes.GetTabletId(clientId)), ctx);
         return;
     }
 
@@ -7575,6 +7717,11 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
             CollectSysViewUpdates(ctx);
         }
 
+        if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject() && !LocalIndexMigrationStarted) {
+            LocalIndexMigrationStarted = true;
+            CollectLocalIndexMigrations(ctx);
+        }
+
         return;
     } else if (Exports.contains(id)) {
         return Execute(CreateTxProgressExport(ev), ctx);
@@ -7584,6 +7731,8 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
         return Execute(CreateTxProgressIncrementalRestoreAllocateResult(ev), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);
+    } else if (SetColumnConstraintOperations.contains(TIndexBuildId(id))) {
+        return Execute(CreateTxReplyAllocateSetColumnConstraint(ev), ctx);
     }
 
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -7610,6 +7759,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressIncrementalRestore(ev, ctx), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
+    } else if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+        return Execute(CreateTxReplyModifySetColumnConstraint(ev), ctx);
     } else if (BackgroundCleaningTxToDirPathId.contains(txId)) {
         return HandleBackgroundCleaningTransactionResult(ev);
     }
@@ -7673,6 +7824,9 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
     if (FullBackups.contains(ui64(txId))) {
         // Control op completed; finalize the tracked record.
         Execute(CreateTxFullBackupProgress(ui64(txId)), ctx);
+    }
+    if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+        Execute(CreateTxReplyCompletedSetColumnConstraint(txId), ctx);
         executed = true;
     }
     if (BackgroundCleaningTxToDirPathId.contains(txId)) {
@@ -7780,6 +7934,8 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
                 *descr->MutableTypeInfo() = *columnType.TypeInfo;
             }
             descr->SetFamily(colInfo.Family);
+            descr->SetNotNull(colInfo.NotNull);
+            descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
         }
     }
 
@@ -8368,6 +8524,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
+    EnableCompactFulltextIndex = featureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = featureFlags.GetEnableJsonIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();

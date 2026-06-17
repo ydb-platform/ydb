@@ -11,11 +11,11 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   ydbdoc-review:
-    if: |
-      github.event.label.name == 'doc_translate' 
+    if: github.event.label.name == 'doc_translate'
     runs-on: ubuntu-latest
     concurrency:
       group: ydbdoc-review-${{ github.event.pull_request.number }}
@@ -46,14 +46,19 @@ jobs:
           YDBDOC_MODEL_CHECK: ${{ vars.YDBDOC_MODEL_CHECK }}
           YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_PUSH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}  # секрет YDBDOC_PUSH_PAT → env для приложения
           YDBDOC_REPO_PATH: ${{ github.workspace }}
 
-      - name: Trigger docs rebuild for translation PR
-        if: ${{ !cancelled() }}
+  trigger-translation-ci:
+    needs: ydbdoc-review
+    if: ${{ !cancelled() && needs.ydbdoc-review.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger PR-check and docs rebuild on translation PR
         uses: actions/github-script@v8
         with:
-          github-token: ${{ secrets.YDBDOC_PUSH_PAT }}
+          # PAT only here (no checkout): cascades into PR-check/docs rebuild without
+          # exposing YDBOT_TOKEN next to untrusted fork PR code.
+          github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -61,7 +66,6 @@ jobs:
             const head = `${owner}:ydbdoc-review/pr-${sourcePr}`;
             let translationPr = null;
 
-            // Translation PR creation can lag a bit right after doc_translate push.
             for (let attempt = 1; attempt <= 6; attempt++) {
               const { data: pulls } = await github.rest.pulls.list({
                 owner,
@@ -83,14 +87,19 @@ jobs:
             }
 
             if (!translationPr) {
-              core.warning(`Open translation PR not found for head ${head}. rebuild_docs was not added; rebuild can be triggered manually.`);
+              core.warning(
+                `Open translation PR not found for head ${head}. Labels were not added; CI can be triggered manually.`
+              );
               return;
             }
+
             await github.rest.issues.addLabels({
               owner,
               repo,
               issue_number: translationPr.number,
-              labels: ['rebuild_docs'],
+              labels: ['rebuild_docs', 'ok-to-test'],
             });
 
-            core.info(`Added rebuild_docs to PR #${translationPr.number}`);
+            core.info(
+              `Added rebuild_docs and ok-to-test to translation PR #${translationPr.number}`
+            );

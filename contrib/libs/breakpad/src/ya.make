@@ -4,6 +4,7 @@ LIBRARY()
 
 LICENSE(
     APSL-2.0 AND
+    Apache-2.0 AND
     BSD-2-Clause AND
     BSD-3-Clause AND
     BSD-4-Clause-UC AND
@@ -14,13 +15,12 @@ LICENSE(
     MIT-Nagy AND
     Public-Domain AND
     Unicode AND
-    Unicode-Mappings AND
     curl
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2022.07.12)
+VERSION(2023.01.27)
 
 ADDINCL(
     GLOBAL contrib/libs/breakpad/src
@@ -41,6 +41,7 @@ SRCS(
     processor/call_stack.cc
     processor/cfi_frame_info.cc
     processor/convert_old_arm64_context.cc
+    processor/disassembler_objdump.cc
     processor/disassembler_x86.cc
     processor/dump_context.cc
     processor/dump_object.cc
@@ -71,6 +72,8 @@ SRCS(
     processor/stackwalker_mips.cc
     processor/stackwalker_ppc.cc
     processor/stackwalker_ppc64.cc
+    processor/stackwalker_riscv.cc
+    processor/stackwalker_riscv64.cc
     processor/stackwalker_sparc.cc
     processor/stackwalker_x86.cc
     processor/symbolic_constants_win.cc

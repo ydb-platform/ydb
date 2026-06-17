@@ -20,16 +20,16 @@ TSharedRefArray CreateMessage(int partCount, int partSize)
     return TSharedRefArray(std::move(parts), TSharedRefArray::TMoveParts{});
 }
 
-TSharedRefArray Serialize(TString str)
+TSharedRefArray Serialize(std::string str)
 {
     return TSharedRefArray(TSharedRef::FromString(std::move(str)));
 }
 
-TString Deserialize(TSharedRefArray message)
+std::string Deserialize(TSharedRefArray message)
 {
     YT_VERIFY(message.Size() == 1);
     const auto& part = message[0];
-    return TString(part.Begin(), part.Size());
+    return std::string(part.Begin(), part.Size());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

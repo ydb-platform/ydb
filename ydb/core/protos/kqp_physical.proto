@@ -102,6 +102,9 @@ message TKqpPhyColumn {
     // operation.
     optional bool IsBuildInProgress = 7;
     optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
+    // flag that indicates that column is currently under the set not null
+    // operation.
+    optional bool SetNotNullInProgress = 9;
 }
 
 enum EKqpPhyTableKind {
@@ -406,6 +409,9 @@ enum EKqpFullTextIndexType {
     EKqpFullTextPlain = 0;
     EKqpFullTextRelevance = 1;
     EKqpFullTextJson = 2;
+    EKqpFullTextCompact = 3;
+    EKqpFullTextCompactRelevance = 4;
+    EKqpFullTextJsonCompact = 5;
 }
 
 message TKqpFullTextSource {
@@ -449,6 +455,10 @@ message TKqpFullTextSource {
     TKqpPhyValue Mode = 14;
 
     optional EKqpFullTextIndexType IndexType = 15;
+
+    // When fulltext index uses __ydb_row_id as doc_id, this is the unique secondary index impl table
+    // (keyed by __ydb_row_id, value = main-table PK columns) used to resolve __ydb_row_id -> PK at read time.
+    optional TIndexTable UniqueIndexImplTable = 16;
 }
 
 message TKqpReadRangesSource {

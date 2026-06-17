@@ -329,7 +329,7 @@ public:
         const TKillProcessOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TString>, WriteCoreDump, (
+    MOCK_METHOD(TFuture<std::string>, WriteCoreDump, (
         const std::string& address,
         const TWriteCoreDumpOptions& options),
         (override));
@@ -339,7 +339,7 @@ public:
         const TWriteLogBarrierOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TString>, WriteOperationControllerCoreDump, (
+    MOCK_METHOD(TFuture<std::string>, WriteOperationControllerCoreDump, (
         NJobTrackerClient::TOperationId operationId,
         const TWriteOperationControllerCoreDumpOptions& options),
         (override));
@@ -388,7 +388,7 @@ public:
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options),
         (override));
 
@@ -581,13 +581,13 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (
-        const TString& md5,
+        const std::string& md5,
         const TGetFileFromCacheOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const TPutFileToCacheOptions& options),
         (override));
 
@@ -765,7 +765,7 @@ public:
 
     MOCK_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (
         NJobTrackerClient::TJobId jobId,
-        const std::optional<TString>& shellName,
+        const std::optional<std::string>& shellName,
         const NYson::TYsonString& parameters,
         const TPollJobShellOptions& options),
         (override));
@@ -823,33 +823,33 @@ public:
 
     MOCK_METHOD(TFuture<void>, SetUserPassword, (
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RevokeToken, (
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (
         NQueryTrackerClient::EQueryEngine engine,
-        const TString& query,
+        const std::string& query,
         const TStartQueryOptions& options),
         (override));
 

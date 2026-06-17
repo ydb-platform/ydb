@@ -227,6 +227,10 @@ protected:
     TDuration AmountRequestsTime;
     ui32 NumberRequests = 0;
 
+    // Opt-in: forward TEvStreamQueryResultPart issues to Finish() on SUCCESS.
+    bool ForwardStreamIssuesOnSuccess = false;
+    NYql::TIssues AccumulatedStreamIssues;
+
 private:
     TQueryResultHandler QueryResultHandler = &TQueryBase::CallOnQueryResult;
     TStreamResultHandler StreamResultHandler = &TQueryBase::CallOnStreamResult;

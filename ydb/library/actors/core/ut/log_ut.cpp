@@ -385,15 +385,15 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_ALERT(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_CRIT(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_ERROR(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_WARN(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_NOTICE(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_INFO(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_DEBUG(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_TRACE(env, 1, "Test message");
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_ALERT_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_CRIT_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_ERROR_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_WARN_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_NOTICE_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_INFO_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_DEBUG_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_TRACE_CTX_COMP(env, 1, "Test message");
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                          R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR",)"
@@ -428,9 +428,9 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-        YDB_LOG_CTX_COMP_EMERG(env, 1000, "Test message");
-        YDB_LOG_CTX_COMP_EMERG(env, 1001, "Test message");
-        YDB_LOG_CTX_COMP_EMERG(env, 1002, "Test message");
+        YDB_LOG_EMERG_CTX_COMP(env, 1000, "Test message");
+        YDB_LOG_EMERG_CTX_COMP(env, 1001, "Test message");
+        YDB_LOG_EMERG_CTX_COMP(env, 1002, "Test message");
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"","cluster":"",)"
                          R"("database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"A","tag":"KIKIMR","revision":-1,)"
@@ -448,15 +448,15 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
 #define YDB_LOG_THIS_FILE_COMPONENT 1000
-        YDB_LOG_CTX_EMERG(env, "Test message");
+        YDB_LOG_EMERG_CTX(env, "Test message");
 #undef YDB_LOG_THIS_FILE_COMPONENT
 
 #define YDB_LOG_THIS_FILE_COMPONENT 1001
-        YDB_LOG_CTX_EMERG(env, "Test message");
+        YDB_LOG_EMERG_CTX(env, "Test message");
 #undef YDB_LOG_THIS_FILE_COMPONENT
 
 #define YDB_LOG_THIS_FILE_COMPONENT 1002
-        YDB_LOG_CTX_EMERG(env, "Test message");
+        YDB_LOG_EMERG_CTX(env, "Test message");
 #undef YDB_LOG_THIS_FILE_COMPONENT
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
@@ -479,8 +479,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         {
             TLogStack::TLogGuard g;
             YDB_LOG_UPDATE_CONTEXT({"context", 1});
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
             env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                              R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -493,8 +493,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         {
             TLogStack::TLogGuard g;
             YDB_LOG_UPDATE_CONTEXT({"context", 2});
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
             env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                              R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -505,8 +505,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
             {
                 TLogStack::TLogGuard g2;
                 YDB_LOG_UPDATE_CONTEXT({"context", 3}, {"subcontext", 4});
-                YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-                YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+                YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+                YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
                 env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                                  R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -516,8 +516,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
                                  R"("location":"log_ut.cpp:509","message":"Test message","context":"3","subcontext":"4","value":"100"})");
             }
 
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
             env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                              R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -527,8 +527,8 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
                              R"("location":"log_ut.cpp:520","message":"Test message","context":"2","value":"100"})");
         }
 
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                          R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -542,11 +542,11 @@ Y_UNIT_TEST_SUITE(TWriteJsonLogTest) {
         TFixture env{NoBufferSettings()};
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json");
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1});
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1}, {"value2", 2});
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"value1", 1}, {"value2", 2}, {"value3", 3});
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message with json", {"component", "MY"});
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message with json");
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message with json", {"value1", 1});
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message with json", {"value1", 1}, {"value2", 2});
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message with json", {"value1", 1}, {"value2", 2}, {"value3", 3});
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message with json", {"component", "MY"});
 
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
             R"("cluster":"","database":"static","node_id":0,"priority":"EMERG","npriority":0,"component":"FAKE","tag":"KIKIMR","revision":-1,)"
@@ -611,8 +611,8 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
         {
             TLogStack::TLogGuard g;
             YDB_LOG_UPDATE_CONTEXT({"context", 1});
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
             env.FetchMeta({{"meta.context", "1"}});
             env.FetchMeta({{"meta.context", "1"}, {"meta.value", "100"}});
@@ -621,30 +621,30 @@ Y_UNIT_TEST_SUITE(TWriteMetaLogTest) {
         {
             TLogStack::TLogGuard g;
             YDB_LOG_UPDATE_CONTEXT({"context", 2});
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
             env.FetchMeta({{"meta.context", "2"}});
             env.FetchMeta({{"meta.context", "2"}, {"meta.value", "100"}});
             {
                 TLogStack::TLogGuard g2;
                 YDB_LOG_UPDATE_CONTEXT({"context", 3}, {"subcontext", 4});
-                YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-                YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+                YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+                YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
                 env.FetchMeta({{"meta.context", "3"}, {"meta.subcontext", "4"}});
                 env.FetchMeta({{"meta.context", "3"}, {"meta.subcontext", "4"}, {"meta.value", "100"}});
             }
 
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-            YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+            YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
             env.FetchMeta({{"meta.context", "2"}});
             env.FetchMeta({{"meta.context", "2"}, {"meta.value", "100"}});
         }
 
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message");
-        YDB_LOG_CTX_COMP_EMERG(env, 1, "Test message", {"value", 100});
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message");
+        YDB_LOG_EMERG_CTX_COMP(env, 1, "Test message", {"value", 100});
 
         env.FetchMeta({});
         env.FetchMeta({{"meta.value", "100"}});

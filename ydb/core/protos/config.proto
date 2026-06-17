@@ -466,6 +466,7 @@ message TInterconnectConfig {
         PER_DATA_CENTER = 2;
         NO_MERGE = 3;
         PER_HOST = 4;
+        PER_SCOPE_CLASS = 5;
     }
 
     enum EEncryptionMode {
@@ -525,6 +526,7 @@ message TInterconnectConfig {
     optional uint32 RdmaMemPoolSizeLimitMb = 56 [default = 4096];
     optional bool UseKernelKeepAlive = 58 [default = false];
     optional bool CollectSubscriptionStackTrace = 59 [default = false];
+    optional uint32 RdmaPayloadCopySizeThreshold = 60 [default = 65536]; // 0 disables copying RDMA payload to regular memory
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -2118,6 +2120,12 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0
         }];
+        optional uint64 RejectNonExistentStorageChannel = 4 [(ControlOptions) = {
+            Description: "Return error on write/getstatus to non-existent storage channel instead of fallback to MAIN",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
     }
 
     message TKQPSessionControls {
@@ -3139,6 +3147,13 @@ message TTliConfig {
     repeated string IgnoredTableRegexes = 1;
 }
 
+// Opaque (NMarkers.OpaqueConfig), end-node-owned configuration.
+// Authored as a nested YAML map under config.<opaque_config>.
+// See NMarkers.OpaqueConfig comments
+message TOpaqueConfig {
+    // Empty
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3228,6 +3243,7 @@ message TAppConfig {
     optional TBridgeConfig BridgeConfig = 91;
     optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
     optional TBlockstoreConfig BlockstoreConfig = 93;
+    optional TOpaqueConfig PrivateDatabaseConfig = 94 [(NMarkers.AllowInDatabaseConfig) = true, (NMarkers.OpaqueConfig) = true];
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

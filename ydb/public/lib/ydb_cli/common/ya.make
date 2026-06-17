@@ -25,6 +25,7 @@ SRCS(
     interruptable.cpp
     lazy_driver.cpp
     local_paths.cpp
+    markdown.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp
@@ -47,6 +48,7 @@ SRCS(
     scheme_printers.cpp
     sys.cpp
     tabbed_table.cpp
+    utf8_utils.cpp
     waiting_bar.cpp
     ydb_path.cpp
     ydb_updater.cpp

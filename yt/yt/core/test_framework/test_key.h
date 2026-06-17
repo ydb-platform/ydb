@@ -6,7 +6,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetTestKeyContent(TStringBuf name);
+std::string GetTestKeyContent(TStringBuf name);
 NCrypto::TPemBlobConfigPtr CreateTestKeyBlob(TStringBuf name);
 NCrypto::TPemBlobConfigPtr CreateTestKeyFile(TStringBuf name);
 

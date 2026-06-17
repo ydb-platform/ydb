@@ -147,6 +147,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 }
                 UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
                 UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
             }
         }
         // Test 2 - uncompressed data with limit and start offset
@@ -178,6 +179,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 }
                 UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
                 UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
             }
         }
         // Test 3 - large messages
@@ -214,6 +216,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 }
                 UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
                 UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
             }
         }
         // large message with no truncate

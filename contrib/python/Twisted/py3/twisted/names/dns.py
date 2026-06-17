@@ -11,13 +11,16 @@ Future Plans:
 from __future__ import annotations
 
 # System imports
+import contextvars
 import inspect
 import random
 import socket
 import struct
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
 from io import BytesIO
 from itertools import chain
-from typing import Optional, Sequence, SupportsInt, Union, overload
+from typing import SupportsInt, overload
 
 from zope.interface import Attribute, Interface, implementer
 
@@ -126,6 +129,7 @@ __all__ = [
     "OP_UPDATE",
     "PORT",
     "AuthoritativeDomainError",
+    "DNSDecodeError",
     "DNSQueryTimeoutError",
     "DomainError",
 ]
@@ -402,7 +406,7 @@ def _str2time(s: str) -> int:
 
 
 @overload
-def str2time(s: Union[str, bytes, int]) -> int:
+def str2time(s: str | bytes | int) -> int:
     ...
 
 
@@ -411,7 +415,7 @@ def str2time(s: None) -> None:
     ...
 
 
-def str2time(s: Union[str, bytes, int, None]) -> Union[int, None]:
+def str2time(s: str | bytes | int | None) -> int | None:
     """
     Parse a string description of an interval into an integer number of seconds.
 
@@ -442,6 +446,87 @@ def readPrecisely(file, l):
     if len(buff) < l:
         raise EOFError
     return buff
+
+
+class DNSDecodeError(ValueError):
+    """
+    Raised when a DNS message cannot be decoded because it violates a
+    protocol-level safety limit.
+    """
+
+
+class _DecodeContext:
+    """
+    Mutable state shared between the L{IEncodable} decoders invoked while
+    reading a single DNS message.
+
+    The primary purpose is to bound the total number of compression-pointer
+    jumps taken across every name in the message, defending against packets
+    that fan out thousands of records pointing to deeply chained pointers.
+
+    This class is private.  External callers must not rely on it; the
+    per-message scope is installed and torn down by L{Message.decode}
+    through L{_decodeContextVar}.
+
+    @ivar jumps: The number of compression pointers followed so far.
+    @ivar maxJumps: The inclusive upper bound on L{jumps}.  Exceeding it
+        causes L{registerJump} to raise L{DNSDecodeError}.
+    """
+
+    __slots__ = ("jumps", "maxJumps")
+
+    def __init__(self, maxJumps: int = 1000) -> None:
+        self.jumps = 0
+        self.maxJumps = maxJumps
+
+    def registerJump(self) -> None:
+        """
+        Record that a compression pointer has been followed.
+
+        The check is performed before any further bytes are read so the
+        caller fails fast as soon as the aggregate limit is breached, even
+        if additional records remain in the buffer.
+
+        @raise DNSDecodeError: if the cumulative number of jumps exceeds
+            L{maxJumps}.
+        """
+        self.jumps += 1
+        if self.jumps > self.maxJumps:
+            raise DNSDecodeError(
+                "Too many compression pointers while decoding DNS message "
+                f"(limit is {self.maxJumps})"
+            )
+
+
+# Private module-level L{contextvars.ContextVar} used to share a single
+# L{_DecodeContext} across the re-entrant calls performed while decoding one
+# DNS message.  L{contextvars} (rather than a plain module attribute) is used
+# on purpose: although Twisted's reactor is single-threaded, message decoding
+# is re-entrant across many records in a single pass and L{ContextVar}
+# guarantees the scope is restored correctly on exit -- and remains isolated
+# per-task should a future caller decode messages from multiple
+# L{asyncio}-style contexts concurrently.
+_decodeContextVar: contextvars.ContextVar[
+    _DecodeContext | None
+] = contextvars.ContextVar("_dnsDecodeContext", default=None)
+
+
+@contextmanager
+def _installDecodeContext(context: _DecodeContext) -> Generator[_DecodeContext]:
+    """
+    Install C{context} on L{_decodeContextVar} for the duration of the
+    C{with} block and restore the previous value on exit.
+
+    This wraps the L{contextvars.ContextVar.set} / L{contextvars.ContextVar.reset}
+    token dance so call sites can use a plain C{with} statement.
+
+    @param context: The L{_DecodeContext} to install as the active context.
+    """
+    token = _decodeContextVar.set(context)
+    try:
+        yield context
+    finally:
+        _decodeContextVar.reset(token)
 
 
 class IEncodable(Interface):
@@ -549,7 +634,16 @@ class Name:
 
     @ivar name: A byte string giving the name.
     @type name: L{bytes}
+
+    @ivar maxCompressionPointers: Per-message cap on the total number of
+        compression-pointer dereferences L{decode} will follow before
+        raising L{DNSDecodeError}.  Defaults to C{1000}.  Override it on
+        a subclass or individual instance to tune the trade-off between
+        tolerance for legitimately verbose messages and resistance to
+        denial-of-service attacks.
     """
+
+    maxCompressionPointers: int = 1000
 
     def __init__(self, name: bytes | str = b""):
         """
@@ -595,16 +689,33 @@ class Name:
         """
         Decode a byte string into this Name.
 
+        When invoked from L{Message.decode}, a shared compression-pointer
+        counter is picked up transparently from the private
+        L{_decodeContextVar}.  Standalone callers get a fresh per-call
+        counter seeded from L{maxCompressionPointers}, so existing code
+        keeps working unchanged while still being protected against
+        pathological inputs.
+
         @type strio: file
         @param strio: Bytes will be read from this file until the full Name
-        is decoded.
+            is decoded.
+
+        @type length: L{int} or L{None}
+        @param length: Present for compatibility with the L{IEncodable}
+            interface; ignored by this decoder.
 
         @raise EOFError: Raised when there are not enough bytes available
-        from C{strio}.
+            from C{strio}.
 
-        @raise ValueError: Raised when the name cannot be decoded (for example,
-            because it contains a loop).
+        @raise ValueError: Raised when the name cannot be decoded because
+            it contains a compression loop.
+
+        @raise DNSDecodeError: Raised when the cumulative number of
+            compression-pointer jumps exceeds the configured limit.
         """
+        context = _decodeContextVar.get()
+        if context is None:
+            context = _DecodeContext(maxJumps=self.maxCompressionPointers)
         visited = set()
         self.name = b""
         off = 0
@@ -616,6 +727,7 @@ class Name:
                 return
             if (l >> 6) == 3:
                 new_off = (l & 63) << 8 | ord(readPrecisely(strio, 1))
+                context.registerJump()
                 if new_off in visited:
                     raise ValueError("Compression loop in encoded name")
                 visited.add(new_off)
@@ -660,7 +772,7 @@ class Query:
     @type cls: L{int}
     """
 
-    def __init__(self, name: Union[bytes, str] = b"", type: int = A, cls: int = IN):
+    def __init__(self, name: bytes | str = b"", type: int = A, cls: int = IN):
         """
         @type name: L{bytes} or L{str}
         @param name: See L{Query.name}
@@ -989,11 +1101,11 @@ class RRHeader(tputil.FancyEqMixin):
 
     def __init__(
         self,
-        name: Union[bytes, str] = b"",
+        name: bytes | str = b"",
         type: int = A,
         cls: int = IN,
         ttl: SupportsInt = 0,
-        payload: Optional[IEncodableRecord] = None,
+        payload: IEncodableRecord | None = None,
         auth: bool = False,
     ):
         """
@@ -1093,7 +1205,7 @@ class SimpleRecord(tputil.FancyStrMixin, tputil.FancyEqMixin):
     showAttributes = (("name", "name", "%s"), "ttl")
     compareAttributes = ("name", "ttl")
 
-    TYPE: Optional[int] = None
+    TYPE: int | None = None
     name = None
 
     def __init__(self, name=b"", ttl=None):
@@ -1568,7 +1680,7 @@ class Record_A6(tputil.FancyStrMixin, tputil.FancyEqMixin):
         prefixLen: int = 0,
         suffix: bytes | str = "::",
         prefix: bytes | str = b"",
-        ttl: Union[str, bytes, int, None] = None,
+        ttl: str | bytes | int | None = None,
     ):
         """
         @param suffix: An IPv6 address suffix in in RFC 2373 format.
@@ -1943,7 +2055,7 @@ class Record_HINFO(tputil.FancyStrMixin, tputil.FancyEqMixin):
         self,
         cpu: bytes = b"",
         os: bytes = b"",
-        ttl: Union[str, bytes, int, None] = None,
+        ttl: str | bytes | int | None = None,
     ):
         self.cpu, self.os = cpu, os
         self.ttl = str2time(ttl)
@@ -2488,7 +2600,16 @@ class Message(tputil.FancyEqMixin):
         header fields.
     @ivar _sectionNames: The names of attributes representing the record
         sections of this message.
+
+    @ivar maxCompressionPointers: Per-message cap on the total number of
+        compression-pointer dereferences L{decode} will follow across every
+        name in the message before raising L{DNSDecodeError}.  Defaults to
+        C{1000}.  Override it on a subclass or individual instance to tune
+        the trade-off between tolerance for legitimately verbose messages
+        and resistance to denial-of-service attacks.
     """
+
+    maxCompressionPointers: int = 1000
 
     compareAttributes = (
         "id",
@@ -2704,19 +2825,29 @@ class Message(tputil.FancyEqMixin):
         self.checkingDisabled = (byte4 >> 4) & 1
         self.rCode = byte4 & 0xF
 
-        self.queries = []
-        for i in range(nqueries):
-            q = Query()
-            try:
-                q.decode(strio)
-            except EOFError:
-                return
-            self.queries.append(q)
+        # A single shared counter bounds the total compression-pointer work
+        # performed across every name in this message.  It is installed on
+        # the private context variable so nested record decoders pick it up
+        # without needing to thread it through each signature.
+        decodeContext = _DecodeContext(maxJumps=self.maxCompressionPointers)
+        with _installDecodeContext(decodeContext):
+            self.queries = []
+            for i in range(nqueries):
+                q = Query()
+                try:
+                    q.decode(strio)
+                except EOFError:
+                    return
+                self.queries.append(q)
 
-        items = ((self.answers, nans), (self.authority, nns), (self.additional, nadd))
+            items = (
+                (self.answers, nans),
+                (self.authority, nns),
+                (self.additional, nadd),
+            )
 
-        for l, n in items:
-            self.parseRecords(l, n, strio)
+            for l, n in items:
+                self.parseRecords(l, n, strio)
 
     def parseRecords(self, list, num, strio):
         for i in range(num):

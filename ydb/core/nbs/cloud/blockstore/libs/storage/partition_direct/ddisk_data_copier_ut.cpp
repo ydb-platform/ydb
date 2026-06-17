@@ -355,16 +355,19 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         // Mark DDisk#1 completely fresh.
         DirtyMap.MarkFresh(FreshDDisk, 0);
 
+        DirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
         DirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),   // #0
             MakePrimariesMask(),
             MakePrimariesMask());
+        DirtyMap.RegisterInflightWrite(124, TBlockRange64::WithLength(250, 10));
         DirtyMap.WriteFinished(
             124,
             TBlockRange64::WithLength(250, 10),   // #0 + #1
             MakePrimariesMask(),
             MakePrimariesMask());
+        DirtyMap.RegisterInflightWrite(125, TBlockRange64::WithLength(260, 10));
         DirtyMap.WriteFinished(
             125,
             TBlockRange64::WithLength(260, 10),   // #1

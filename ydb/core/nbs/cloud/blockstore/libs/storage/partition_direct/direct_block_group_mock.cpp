@@ -107,9 +107,9 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set SyncWithPBufferHandler");
         return NThreading::TFuture<TDBGFlushResponse>();
     };
-    EraseFromPBufferHandler = [](const auto&...)
+    BatchEraseFromPBufferHandler = [](const auto&...)
     {
-        Y_ABORT_UNLESS(false, "Should set EraseFromPBufferHandler");
+        Y_ABORT_UNLESS(false, "Should set BatchEraseFromPBufferHandler");
         return NThreading::TFuture<TDBGEraseResponse>();
     };
     RestoreDBGPBuffersHandler = [](const auto&...)
@@ -269,13 +269,29 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
         traceId);
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroupMock::EraseFromPBuffer(
+NThreading::TFuture<TDBGEraseResponse>
+TDirectBlockGroupMock::BatchEraseFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     const TVector<TPBufferSegment>& segments,
     const NWilson::TTraceId& traceId)
 {
-    return EraseFromPBufferHandler(vChunkIndex, hostIndex, segments, traceId);
+    return BatchEraseFromPBufferHandler(
+        vChunkIndex,
+        hostIndex,
+        segments,
+        traceId);
+}
+
+void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
+{
+    Y_UNUSED(lsn);
+}
+
+NThreading::TFuture<std::optional<ui64>>
+TDirectBlockGroupMock::GatherSafeBarrierForErase()
+{
+    return NThreading::MakeFuture<std::optional<ui64>>(std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>

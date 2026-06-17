@@ -40,6 +40,7 @@ TStorageConfig::TStorageConfig(
     xxx(DirtyMapDebugPrintInterval,         TDuration, TDuration::Seconds(0)  )\
     xxx(VhostThreadsCount,                  ui32,     4                       )\
     xxx(VhostQueuesCount,                   ui32,     4                       )\
+    xxx(PBufferCleanupLsnStep,              ui64,     0                       )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

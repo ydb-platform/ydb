@@ -114,6 +114,17 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
 
     if (copyAlter.HasDetailedMetricsSettings()) {
+        // Do not allow changing detailed metrics settings without the feature flag
+        if (!AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+            errStr =
+                "The detailed metrics settings are specified in the request, "
+                "but the detailed metrics feature is disabled by the corresponding "
+                "feature flag (EnableDataShardDetailedMetrics)";
+
+            status = NKikimrScheme::StatusInvalidParameter;
+            return nullptr;
+        }
+
         // New detailed metrics settings are specified in the request,
         // make sure the detailed metrics settings are valid (correct metrics level etc)
         if (!ValidateTableDetailedMetricsSettings(
@@ -128,14 +139,23 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     // Ignore column ids if they were passed by user!
     for (auto& col : *copyAlter.MutableColumns()) {
-        bool hasDefault = col.HasDefaultFromLiteral();
-        if (hasDefault && !context.SS->EnableAddColumsWithDefaults) {
+        const bool hasLiteralDefault = col.HasDefaultFromLiteral();
+        const bool hasSequenceDefault = col.HasDefaultFromSequence();
+        const bool hasDefault = hasLiteralDefault || hasSequenceDefault;
+        if (hasLiteralDefault && !context.SS->EnableAddColumsWithDefaults) {
             errStr = Sprintf("Adding columns with defaults is disabled");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
-        if (col.GetNotNull() && !hasDefault) {
+        auto colId = table->GetColumnIdByNameSlow(col.GetName());
+        bool altersExistingColumn = (colId != TTableInfo::InvalidColumnId);
+
+        // Adding a new NOT NULL column to an existing table requires a default,
+        // otherwise pre-existing rows would have no value for that column and
+        // would violate the constraint immediately. Altering an existing column (SET NOT NULL way)
+        // is handled separately and may validate existing data instead.
+        if (col.GetNotNull() && !hasDefault && !altersExistingColumn) {
             errStr = Sprintf("Not null columns without defaults are not supported.");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
@@ -159,6 +179,30 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
+    if (copyAlter.HasTTLSettings() && copyAlter.GetTTLSettings().HasEnabled()) {
+        for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
+            if (!context.SS->PathsById.contains(childPathId)) {
+                continue;
+            }
+
+            auto childPath = context.SS->PathsById.at(childPathId);
+            if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                continue;
+            }
+
+            if (!context.SS->Indexes.contains(childPathId)) {
+                continue;
+            }
+
+            const TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(childPathId);
+            if (!DoesIndexSupportTTL(indexInfo->Type)) {
+                errStr = TStringBuilder() << "Table with " << indexInfo->Type << " index doesn't support TTL";
+                status = NKikimrScheme::StatusInvalidParameter;
+                return nullptr;
+            }
+        }
+    }
+
     const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
@@ -175,7 +219,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
-        .EnableSetColumnConstraint = AppData()->FeatureFlags.GetEnableSetColumnConstraint(),
+        .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
     };
 
 
@@ -735,6 +779,63 @@ ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState:
     return obj.Release();
 }
 
+// For each column being dropped that is backed by a sequence owned by this table (the
+// sequence lives as a child path, as created for SERIAL columns and for the synthetic
+// __ydb_row_id column), append a DropSequence sub-operation so the backing sequence is
+// removed together with the column. Sequences that live outside the table (an explicit
+// user-created sequence referenced as a column default) are left untouched.
+static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOperationId id,
+        const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    if (alter.DropColumnsSize() == 0) {
+        return;
+    }
+
+    Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+    TTableInfo::TPtr tableInfo = context.SS->Tables.at(tablePath.Base()->PathId);
+
+    for (const auto& dropColumn : alter.GetDropColumns()) {
+        const TString& colName = dropColumn.GetName();
+
+        const TTableInfo::TColumn* column = nullptr;
+        for (const auto& [_, col] : tableInfo->Columns) {
+            if (col.Name == colName && !col.IsDropped()) {
+                column = &col;
+                break;
+            }
+        }
+        if (!column || column->DefaultKind != ETableColumnDefaultKind::FromSequence) {
+            continue;
+        }
+
+        // DefaultValue holds either a bare sequence leaf name (SERIAL columns) or a full
+        // path (the index-built __ydb_row_id column). The backing sequence lives under the
+        // table as a child named by that leaf.
+        TString seqLeaf = column->DefaultValue;
+        if (auto pos = seqLeaf.rfind('/'); pos != TString::npos) {
+            seqLeaf = seqLeaf.substr(pos + 1);
+        }
+
+        TPath seqPath = tablePath.Child(seqLeaf);
+        if (!seqPath.IsResolved() || seqPath.IsDeleted() || !seqPath.IsSequence()) {
+            // Not an owned child sequence (external reference, or already gone): the column
+            // is dropped but the sequence is left as is.
+            continue;
+        }
+        // If DefaultValue was a full path, make sure it actually points at this child and
+        // not at a same-named sequence elsewhere.
+        if (column->DefaultValue.find('/') != TString::npos && column->DefaultValue != seqPath.PathString()) {
+            continue;
+        }
+
+        auto dropSequence = TransactionTemplate(tablePath.PathString(),
+            NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
+        dropSequence.MutableDrop()->SetName(seqLeaf);
+        result.push_back(CreateDropSequence(NextPartId(id, result), dropSequence));
+    }
+}
+
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
@@ -765,7 +866,10 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     }
 
     if (path.IsCommonSensePath()) {
-        return {CreateAlterTable(id, tx)};
+        TVector<ISubOperation::TPtr> result;
+        result.push_back(CreateAlterTable(NextPartId(id, result), tx));
+        AppendOwnedSequenceDrops(result, id, tx, path, context);
+        return result;
     }
 
     if (path.IsBackupTable()) {

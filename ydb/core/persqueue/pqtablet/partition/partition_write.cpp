@@ -569,7 +569,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAvgWriteBytes(WriteNewSize, now);
     UpdateAvgWriteBytes(WriteNewSizeFromSupportivePartitions, now);
 
-    AvgQuotaMessages.Update(MessagesQuotaSize, now);
+    AvgQuotaMessages.Update(WriteNewMessages, now);
+    AvgQuotaMessages.Update(WriteNewMessagesFromSupportivePartitions, now);
 
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
@@ -578,7 +579,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     LOG_D("TPartition::HandleWriteResponse " <<
              "writeNewSize# " << WriteNewSize <<
-             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions);
+             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions <<
+             " WriteNewMessagesFromSupportivePartitions# " << WriteNewMessagesFromSupportivePartitions);
 
     if (SupportivePartitionTimeLag) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
@@ -595,6 +597,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     BlobQuotaSize = 0;
     MessagesQuotaSize = 0;
     WriteNewSizeFromSupportivePartitions = 0;
+    WriteNewMessagesFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
 
     AnswerCurrentWrites(ctx);

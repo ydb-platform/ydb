@@ -4,3 +4,4 @@ SqlExternalFunctionWrapper
 UnsafeTimestampCastWrapper
 TakeWrapper
 WatermarkGeneratorWrapper
+HybridRankBuiltinWrapper

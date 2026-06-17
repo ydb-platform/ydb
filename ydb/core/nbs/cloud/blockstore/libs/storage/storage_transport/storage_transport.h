@@ -42,8 +42,7 @@ public:
     using TEvWriteToManyPersistentBuffersResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
     using TEvWriteResult = NKikimrBlobStorage::NDDisk::TEvWriteResult;
-    using TEvSyncWithPersistentBufferResult =
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+    using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using TEvErasePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
     using TEvListPersistentBufferResult =
@@ -107,8 +106,7 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) = 0;
 
-    virtual NThreading::TFuture<TEvSyncWithPersistentBufferResult>
-    SyncWithPBuffer(
+    virtual NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
@@ -116,10 +114,16 @@ public:
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>
-    EraseFromPBuffer(
+    BatchEraseFromPBuffer(
         const THostConnection& connection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
+        NWilson::TSpan* span) = 0;
+
+    virtual NThreading::TFuture<TEvErasePersistentBufferResult>
+    BarrierEraseFromPBuffer(
+        const THostConnection& connection,
+        ui64 lsn,
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvListPersistentBufferResult>

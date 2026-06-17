@@ -19,7 +19,7 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
         self.rows_count = 640
 
         yield from self.setup_cluster(
-            extra_feature_flags={"enable_cs_dictionary_encoding": True},
+            extra_feature_flags=["enable_cs_dictionary_encoding"],
             column_shard_config={
                 "disabled_on_scheme_shard": False,
                 "alter_object_enabled": True,

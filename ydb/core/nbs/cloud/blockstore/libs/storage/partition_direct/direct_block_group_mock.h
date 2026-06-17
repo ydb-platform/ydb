@@ -94,7 +94,7 @@ public:
             THostIndex ddiskHostIndex,
             const TVector<TPBufferSegment>& segments,
             const NWilson::TTraceId& traceId)>;
-    using TEraseFromPBufferHandler =
+    using TBatchEraseFromPBufferHandler =
         std::function<NThreading::TFuture<TDBGEraseResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
@@ -119,7 +119,7 @@ public:
     TWriteBlocksToPBufferHandler WriteBlocksToPBufferHandler;
     TWriteBlocksToManyPBuffersHandler WriteBlocksToManyPBuffersHandler;
     TSyncWithPBufferHandler SyncWithPBufferHandler;
-    TEraseFromPBufferHandler EraseFromPBufferHandler;
+    TBatchEraseFromPBufferHandler BatchEraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
@@ -189,11 +189,16 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+    NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
+
+    void BarrierEraseFromPBuffer(ui64 lsn) override;
+
+    NThreading::TFuture<std::optional<ui64>>
+    GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;

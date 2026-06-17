@@ -77,7 +77,7 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
 
         if (callable.GetType()->GetName() == "YtBlockTableContentJob") {
             YQL_ENSURE(codecCtx);
-            return WrapYtBlockTableContent(*codecCtx, ctx.Mutables, callable, filePrefix);
+            return WrapYtBlockTableContent(*codecCtx, ctx.Mutables, callable, filePrefix, ctx.RuntimeSettings->DatumValidation.Get());
         }
 
         if (!exprContextObject) {

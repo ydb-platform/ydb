@@ -26,6 +26,7 @@
 #include <ydb/library/http_proxy/error/error.h>
 
 #include <ydb/services/sqs_topic/sqs_topic_proxy.h>
+#include <ydb/core/ymq/base/helpers.h>
 
 #include <ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h>
 
@@ -40,6 +41,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -126,7 +128,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 .WaitTime = waitTime,
                 .ProcessingTimeout = visibilityTimeout,
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
-                .UncompressMessages = true,
                 .UserToken = this->Request_->GetInternalToken(),
             };
             return settings;
@@ -148,8 +149,29 @@ namespace NKikimr::NSqsTopic::V1 {
         Ydb::Ymq::V1::Message ConvertMessage(NKikimr::NPQ::NMLP::TEvReadResponse::TMessage&& message, const TActorContext& ctx) const {
             Ydb::Ymq::V1::Message result;
 
-            result.set_body(std::move(message.Data));
-            AFL_ENSURE(message.Codec == Ydb::Topic::Codec::CODEC_RAW)("codec", Ydb::Topic::Codec_Name(message.Codec));
+            TString errorDescription;
+            if (message.Codec == Ydb::Topic::CODEC_RAW && NKikimr::NSQS::ValidateMessageBody(message.Data, errorDescription)) {
+                result.set_body(std::move(message.Data));
+            } else {
+                result.set_body(Base64Encode(message.Data));
+
+                auto codecName = [](Ydb::Topic::Codec codec) -> TString {
+                    switch (codec) {
+                        case Ydb::Topic::CODEC_RAW:
+                            return "base64";
+                        case Ydb::Topic::CODEC_GZIP:
+                            return "gzip";
+                        case Ydb::Topic::CODEC_LZOP:
+                            return "lzop";
+                        case Ydb::Topic::CODEC_ZSTD:
+                            return "zstd";
+                        default:
+                            return TStringBuilder() << static_cast<int>(codec);
+                    }
+                };
+                result.mutable_attributes()->emplace("BodyEncoding", codecName(message.Codec));
+            }
+
             result.set_m_d_5_of_body(MD5::Calc(result.body()));
 
             if (message.ApproximateFirstReceiveTimestamp) {

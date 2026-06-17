@@ -11,6 +11,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/base/feature_flags.h>
@@ -161,9 +162,8 @@ inline void FillChunkDataFromReq(
     const auto& msg = writeRequest.messages(messageIndex);
     proto.SetSeqNo(msg.seq_no());
     proto.SetCreateTime(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
-    // TODO (ildar-khisam@): refactor codec enum convert
     if (writeRequest.codec() > 0) {
-        proto.SetCodec(static_cast<NPersQueueCommon::ECodec>(writeRequest.codec() - 1));
+        proto.SetCodec(static_cast<NPersQueueCommon::ECodec>(FromTopicCodec(static_cast<NYdb::NTopic::ECodec>(writeRequest.codec()))));
     }
     proto.SetData(msg.data());
     auto* msgMeta = proto.MutableMessageMeta();
@@ -1555,7 +1555,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
             const ui32 codecID = data.codec();
             const bool isKafkaBatch = codecID == static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH);
             TString error = "unspecified (id 0)";
-            if (codecID == 0 || (!isKafkaBatch && !ValidateWriteWithCodec(InitialPQTabletConfig, codecID - 1, error))) {
+            if (codecID == 0 || (!isKafkaBatch && !ValidateWriteWithCodec(InitialPQTabletConfig, FromTopicCodec(static_cast<NYdb::NTopic::ECodec>(codecID)), error))) {
                 CloseSession(TStringBuilder() << "bad write request - codec is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx);
                 return false;
             }

@@ -56,6 +56,49 @@ class BackportResult:
         return len(self.conflict_files) > 0
 
 
+class BranchBackportSkipped(Exception):
+    """Raised when every commit is already present in the target branch."""
+
+    def __init__(self, target_branch: str, skipped_lines: List[str], cherry_pick_logs: List[str]):
+        self.target_branch = target_branch
+        self.skipped_lines = skipped_lines
+        self.cherry_pick_logs = cherry_pick_logs
+        super().__init__(f"all commits already present in `{target_branch}`")
+
+
+def describe_commit(commit_sha: str, sources: List[Source]) -> str:
+    for source in sources:
+        if commit_sha in source.commit_shas:
+            return source.title
+    return f"commit {commit_sha[:7]}"
+
+
+def is_empty_cherry_pick_output(output: str) -> bool:
+    lowered = output.lower()
+    return (
+        "cherry-pick is now empty" in lowered
+        or "nothing to commit" in lowered
+    )
+
+
+def write_already_present_summary(
+    summary_path: Optional[str],
+    target_branch: str,
+    skipped_lines: List[str],
+    cherry_pick_logs: List[str],
+) -> None:
+    if not summary_path:
+        return
+
+    summary = f"### Branch `{target_branch}`: all commits already present\n\n"
+    for line in skipped_lines:
+        summary += f"- {line}\n"
+    if cherry_pick_logs:
+        summary += "\n**Git Cherry-Pick Log:**\n\n```\n" + '\n'.join(cherry_pick_logs) + "```\n\n"
+    with open(summary_path, 'a') as f:
+        f.write(f"{summary}\n")
+
+
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
     """Run git command"""
     result = subprocess.run(
@@ -477,6 +520,8 @@ def process_branch(
     """Processes single branch"""
     all_conflict_files = []
     cherry_pick_logs = []
+    skipped_commit_shas: List[str] = []
+    skipped_lines: List[str] = []
     
     # Prepare branch
     run_git(repo_path, ['fetch', 'origin', target_branch], logger)
@@ -486,7 +531,8 @@ def process_branch(
     
     # Cherry-pick each commit
     for commit_sha in commit_shas:
-        logger.info("Cherry-picking commit: %s", commit_sha[:7])
+        commit_label = describe_commit(commit_sha, sources)
+        logger.info("Cherry-picking %s (%s)", commit_sha[:7], commit_label)
         # Fetch commit to ensure it's available locally (needed for unmerged PRs)
         run_git(repo_path, ['fetch', 'origin', commit_sha], logger, check=False)
         try:
@@ -494,6 +540,15 @@ def process_branch(
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             
             if result.returncode != 0:
+                if is_empty_cherry_pick_output(output):
+                    run_git(repo_path, ['cherry-pick', '--skip'], logger, check=False)
+                    skip_msg = f"{commit_label} ({commit_sha[:7]}) already present in `{target_branch}`, skipped"
+                    logger.warning("ALREADY_PRESENT: %s", skip_msg)
+                    cherry_pick_logs.append(f"=== Skipped {commit_sha[:7]} ===\n{skip_msg}\n")
+                    skipped_commit_shas.append(commit_sha)
+                    skipped_lines.append(skip_msg)
+                    continue
+
                 if "conflict" in output.lower():
                     conflicts = detect_conflicts(repo_path, logger)
                     if conflicts:
@@ -502,14 +557,21 @@ def process_branch(
                         all_conflict_files.extend(conflicts)
                     else:
                         run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)
-                        raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}")
+                        raise RuntimeError(
+                            f"Cherry-pick failed for {commit_label} ({commit_sha[:7]}): "
+                            f"git reported a conflict but no conflicted files were detected.\n{output.strip()}"
+                        )
                 else:
-                    raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {output}")
+                    raise RuntimeError(f"Cherry-pick failed for {commit_label} ({commit_sha[:7]}): {output}")
             
             if output:
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{output}")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}")
+            raise RuntimeError(f"Cherry-pick failed for {commit_label} ({commit_sha[:7]}): {e}")
+
+    if len(skipped_commit_shas) == len(commit_shas):
+        write_already_present_summary(summary_path, target_branch, skipped_lines, cherry_pick_logs)
+        raise BranchBackportSkipped(target_branch, skipped_lines, cherry_pick_logs)
     
     # Push branch
     run_git(repo_path, ['push', '--set-upstream', 'origin', dev_branch_name], logger)
@@ -563,6 +625,11 @@ def process_branch(
         summary += f"**CONFLICT** Draft PR {pr.html_url}\n\n" if has_conflicts else f"PR {pr.html_url}\n\n"
         if cherry_pick_logs:
             summary += "**Git Cherry-Pick Log:**\n\n```\n" + '\n'.join(cherry_pick_logs) + "```\n\n"
+        if skipped_lines:
+            summary += "**Already present (skipped):**\n\n"
+            for line in skipped_lines:
+                summary += f"- {line}\n"
+            summary += "\n"
         if has_conflicts and all_conflict_files:
             summary += "**Files with conflicts:**\n\n"
             for conflict in all_conflict_files:
@@ -781,6 +848,9 @@ def main():
                     repo_name, repo, token, sources, workflow_triggerer, workflow_url, summary_path, logger
                 )
                 results.append(result)
+            except BranchBackportSkipped as e:
+                logger.info("Branch %s skipped: %s", target_branch, e)
+                skipped_branches.append((target_branch, "all commits already present"))
             except Exception as e:
                 has_errors = True
                 error_msg = f"UNEXPECTED_ERROR: Branch {target_branch} - {type(e).__name__}: {e}"
@@ -801,6 +871,13 @@ def main():
                 with open(summary_path, 'a') as f:
                     f.write(f'{error_msg}\n\n')
             sys.exit(1)
+
+        if not results and skipped_branches:
+            logger.info("WORKFLOW_SUCCESS: Nothing to backport — all commits are already present in target branch(es).")
+            if summary_path:
+                with open(summary_path, 'a') as f:
+                    f.write("Nothing to backport — all commits were already present.\n\n")
+            return
         
         logger.info("WORKFLOW_SUCCESS: All cherry-pick operations completed successfully")
         if summary_path:

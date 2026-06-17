@@ -34,9 +34,8 @@ namespace NKikimr {
                         AtomicParameter() {
                             store(false);
                         }
-                    } ExtraBlockChecksSupport, Checksumming;
+                    } ExtraBlockChecksSupport, Checksumming, IsConnected;
                     std::shared_ptr<const TCostModel> CostModel = nullptr;
-                    volatile bool IsConnected = false;
                 };
                 TQueue PutTabletLog;
                 TQueue PutAsyncBlob;

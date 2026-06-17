@@ -144,7 +144,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
             q.CostModel = nullptr;
         }
     }
-    q.IsConnected = connected;
+    q.IsConnected.store(connected);
 
     if (updated) {
         auto iterate = [](auto& currentCostModel, const auto& next) {

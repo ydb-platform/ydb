@@ -1,10 +1,12 @@
 name: Ya-Build-Test-Coverage
 inputs:
-  secs:
+  bazel_remote_uri:
     type: string
-  vars:
+    default: ""
+  bazel_remote_username:
     type: string
-  pull_number:
+    default: ""
+  bazel_remote_password:
     type: string
     default: ""
   test_threads:
@@ -28,16 +30,27 @@ runs:
       run: |
         set -ex
 
+        BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
+
         run_sdk_coverage() {
           local out_dir="$1"
           mkdir -p "$out_dir"
-          ./ya make -tA --build profile \
-            --clang-coverage --coverage-report \
-            -DCOVERAGE_TARGET_REGEXP=ydb/public/sdk/cpp \
-            --test-threads "${{ inputs.test_threads }}" \
-            --link-threads "${{ inputs.link_threads }}" \
-            --output "$out_dir" \
-            ydb/public/sdk/cpp
+          local params=(
+            -tA --build profile
+            --clang-coverage --coverage-report
+            -DCOVERAGE_TARGET_REGEXP=ydb/public/sdk/cpp
+            --test-threads "${{ inputs.test_threads }}"
+            --link-threads "${{ inputs.link_threads }}"
+            --output "$out_dir"
+          )
+          if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
+            params+=(--bazel-remote-store --bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+            params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+            params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+            params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
+          fi
+          ./ya make "${params[@]}" ydb/public/sdk/cpp
         }
 
         MERGE_HEAD=$(git rev-parse HEAD)

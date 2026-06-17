@@ -254,10 +254,13 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
  * Compute metadata for Filter
  */
 void TOpFilter::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
-    IUnaryOperator::ComputeMetadata(ctx, planProps);
-    if (!Props.Metadata.has_value()) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    if (!GetInput()->Props.Metadata.has_value()) {
         return;
     }
+
+    Props.Metadata = GetInput()->Props.Metadata;
 
     auto newCard = Props.Metadata->LogicalCard;
 

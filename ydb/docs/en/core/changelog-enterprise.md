@@ -34,7 +34,7 @@ The following changes were ported from version 26.1 into supported stable versio
 * Implemented a set of fixes in index access (StreamIndexLookup) that eliminates the possibility of rare situations where executed queries could hang, and reduces RAM consumption during query execution.
 * Added an optimization that reduces memory consumption when processing queries with the TopSort operation (`SELECT ... ORDER BY x LIMIT n`).
 * Added support for index materialization during backup and restore.
-* TLI (Transaction Logs Invalidated) error messages now always include either an identifier or the path of the affected table.
+* TLI (Transaction Locks Invalidated) error messages now always include either an identifier or the path of the affected table.
 * Lock metrics have been added to query statistics provided through the `.sys/query_metrics_*` system tables.
 * Invalid views can now be restored from a backup. This allows restoring backups created from databases containing such views without additional actions from the administrator.
 

@@ -84,7 +84,7 @@ Gateway добавляет путь из `/proxy/model/...` к `ydb_em_ai_model_
 
 ## Настройте поиск по документации {#configure-docs-search}
 
-Этот шаг необязателен. Включайте его только если ассистенту нужен MCP-инструмент `search_docs`. Для этого инструмента Gateway вызывает OpenAI-compatible embeddings endpoint и добавляет `/embeddings` к настроенному base URL, если suffix отсутствует. Отдельный browser endpoint для discovery tools настраивать не нужно: ассистент получает `search_docs` через настроенный `/meta/mcp` server.
+Этот шаг необязателен. Включайте его только если ассистенту нужен MCP-инструмент `search_docs`. Для этого инструмента Gateway вызывает OpenAI-compatible embeddings endpoint и добавляет `/embeddings` к настроенному base URL, если suffix отсутствует. Когда поиск по документации включён, ассистент получает `search_docs` через настроенный MCP-сервер `/meta/mcp`.
 
 ```yaml
 ydb_em_docs_search_enabled: true

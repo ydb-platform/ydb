@@ -84,7 +84,7 @@ Gateway appends the request suffix from `/proxy/model/...` to `ydb_em_ai_model_e
 
 ## Configure documentation search {#configure-docs-search}
 
-This step is optional. Enable it only if the assistant should have the `search_docs` MCP tool. Gateway calls an OpenAI-compatible embeddings endpoint for this tool and appends `/embeddings` to the configured base URL when the suffix is missing. No separate browser tool-discovery endpoint needs to be configured: the assistant gets `search_docs` through the configured `/meta/mcp` server.
+This step is optional. Enable it only if the assistant should have the `search_docs` MCP tool. Gateway calls an OpenAI-compatible embeddings endpoint for this tool and appends `/embeddings` to the configured base URL when the suffix is missing. When documentation search is enabled, the assistant gets `search_docs` through the configured `/meta/mcp` server.
 
 ```yaml
 ydb_em_docs_search_enabled: true

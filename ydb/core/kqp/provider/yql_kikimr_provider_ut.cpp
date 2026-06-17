@@ -76,7 +76,9 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
         const auto* partitionColumn = schemeColumns.FindPtr(NKikimr::YqlPartitionColumnName);
         UNIT_ASSERT(partitionColumn);
-        UNIT_ASSERT_VALUES_EQUAL(partitionColumn->ColumnId, NKikimr::TKeyDesc::EColumnIdDataShard);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<ui32>(partitionColumn->ColumnId),
+            static_cast<ui32>(NKikimr::TKeyDesc::EColumnIdDataShard));
     }
 
     Y_UNIT_TEST(TestFillAuthPropertiesNone) {

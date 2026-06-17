@@ -46,6 +46,7 @@ public:
 class TMockCoordinationService : public Ydb::Coordination::V1::CoordinationService::Service {
 public:
     std::atomic<bool> FailNextAcquire{false};
+    std::atomic<bool> FailNextRelease{false};
     // Zero means unlimited pong responses; set to a positive value to stop responding
     // after N pings (used by SessionPingTimeout).
     std::atomic<size_t> MaxPingResponses{0};
@@ -116,6 +117,10 @@ public:
                 Ydb::Coordination::SessionResponse response;
                 auto* result = response.mutable_release_semaphore_result();
                 result->set_req_id(release.req_id());
+                if (FailNextRelease.exchange(false)) {
+                    result->set_status(Ydb::StatusIds::BAD_REQUEST);
+                    result->set_released(false);
+                } else {
                 std::lock_guard guard(SemaphoreLock_);
                 auto it = Semaphores_.find(release.name());
                 if (it != Semaphores_.end() && it->second.Held && it->second.OwnerSessionId == sessionId) {
@@ -127,6 +132,7 @@ public:
                 } else {
                     result->set_status(Ydb::StatusIds::SUCCESS);
                     result->set_released(false);
+                }
                 }
                 stream->Write(response);
             } else if (request.has_describe_semaphore()) {

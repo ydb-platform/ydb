@@ -3,7 +3,7 @@ LIBRARY()
 SRCS(
     coordination.cpp
     proto_accessor.cpp
-    distributed_mutex.cpp
+    distributed_lock.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h)

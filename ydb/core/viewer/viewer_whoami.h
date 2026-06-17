@@ -24,7 +24,7 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap() {
+    void Bootstrap() override {
         if (TBase::NeedToRedirect(false/* don't check database auth for whoami */)) {
             return;
         }

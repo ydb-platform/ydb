@@ -27,6 +27,27 @@ _WARDEN_POLL_TIMEOUT_S = 1200
 # Default orchestrator port (must match deploy.py _NEMESIS_ORCHESTRATOR_PORT)
 _NEMESIS_ORCHESTRATOR_PORT = 31434
 
+# Severity ordering used when merging the same check across multiple hosts.
+_STATUS_SEVERITY = {
+    'ok': 0,
+    'pending': 1,
+    'running': 1,
+    'error': 2,
+    'violation': 3,
+}
+
+
+def _merge_status(existing: str, incoming: str) -> str:
+    """Return the more severe of two warden check statuses.
+
+    Used when aggregating a single check across hosts so that a genuine
+    'violation' is not overwritten by a later 'error' (or any lower-priority
+    status). Ties keep the incoming status.
+    """
+    if _STATUS_SEVERITY.get(incoming, -1) >= _STATUS_SEVERITY.get(existing, -1):
+        return incoming
+    return existing
+
 
 class WardenCheckResult:
     """Represents a single warden check result from the nemesis orchestrator.
@@ -364,7 +385,7 @@ class AgentErrorsCollector:
                         # Merge with existing check
                         existing = checks[name]
                         if status != 'ok':
-                            existing.status = status
+                            existing.status = _merge_status(existing.status, status)
                             if host:
                                 existing.affected_hosts.add(host)
                         existing.affected_hosts.update(explicit_affected)

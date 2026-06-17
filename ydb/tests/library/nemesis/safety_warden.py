@@ -420,7 +420,7 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
                 "ulimit -n 100500 2>/dev/null; "
                 "unified_agent select -S '{start}' -U '{end}' -s kikimr-start 2>/dev/null | "
                 "grep -iE -A {lines} --no-group-separator '{pattern}' | "
-                "sed '/{pattern}/i --'"
+                "sed -E '/{pattern}/i --'"
             ).format(start=start_str, end=end_str, lines=self.LINES_AFTER_MATCH, pattern=verify_pattern)
             sample_result = subprocess.run(
                 sample_cmd, shell=True, capture_output=True, text=True, timeout=1200  # 20 minutes

@@ -104,7 +104,7 @@ class TRemoteSnapshotsStorage : public TThrRefBase {
     };
 
 public:
-    void Init(const TVector<TRemoteSnapshotInfo>& snapshots);
+    void Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime);
     void UpdateAndCleanExpired(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& updatedNodeIdToCollectionTime);
     void UpdateBorder(const TRowVersion& border);
     void Clear();
@@ -130,6 +130,13 @@ public:
 
     TView View() const;
     TRowVersion GetBorder() const;
+
+    // Oldest collection time across all contributing nodes, including the local node (counted
+    // as now since its snapshots are collected right now). With no remote nodes this is now.
+    TInstant GetOldestCollectionTime() const;
+
+    // Per-node collection times, used to seed a peer's registry freshness during prefill.
+    THashMap<ui32, TInstant> GetNodeIdToCollectionTime() const;
 
     bool IsReady() const;
 

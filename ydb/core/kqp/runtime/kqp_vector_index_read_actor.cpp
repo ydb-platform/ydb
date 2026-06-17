@@ -68,6 +68,7 @@ public:
         , LevelTop(std::max<ui32>(1, Settings.GetLevelTop()))
         , OverlapClusters(Settings.GetOverlapClusters() > 0 ? Settings.GetOverlapClusters() : 1)
         , OverlapRatio(Settings.GetOverlapRatio())
+        , PostingCovers(Settings.GetPostingCovers())
         , LogPrefix(TStringBuilder() << "VectorIndexReadActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
         , Input(input)
@@ -95,6 +96,35 @@ public:
         MainKeyTypeInfos.reserve(Settings.MainTableKeyColumnsSize());
         for (const auto& pk : Settings.GetMainTableKeyColumns()) {
             MainKeyTypeInfos.push_back(NScheme::TypeInfoFromProto(pk.GetType(), pk.GetTypeInfo()));
+        }
+
+        if (PostingCovers) {
+            BuildCoveredPostingColumns();
+        }
+    }
+
+    // Plan the covered-path posting read row: output columns occupy positions
+    // 0..N-1 (distinct, matching VectorColumnIndex and the result row layout);
+    // each PK column reuses its output position if it is also an output column,
+    // else is appended (recorded in CoveredExtraPkIndices). A column id must not
+    // be requested twice or the datashard read rejects it. StartPostingRead emits
+    // the columns straight from the proto using this plan.
+    void BuildCoveredPostingColumns() {
+        YQL_ENSURE(Settings.PostingOutputColumnIdsSize() == Settings.OutputColumnsSize());
+        THashMap<ui32, ui32> idToPos;
+        for (size_t i = 0; i < Settings.PostingOutputColumnIdsSize(); ++i) {
+            idToPos.emplace(Settings.GetPostingOutputColumnIds(i), i);
+        }
+        CoveredPkPositions.resize(Settings.MainTableKeyColumnsSize());
+        ui32 nextPos = Settings.OutputColumnsSize();
+        for (size_t j = 0; j < Settings.MainTableKeyColumnsSize(); ++j) {
+            ui32 id = Settings.GetPostingTableKeyColumnIds(j + 1);
+            auto [it, inserted] = idToPos.emplace(id, nextPos);
+            if (inserted) {
+                CoveredExtraPkIndices.push_back(j);
+                ++nextPos;
+            }
+            CoveredPkPositions[j] = it->second;
         }
     }
 
@@ -290,6 +320,13 @@ private:
     }
 
     void OnPostingDone() {
+        if (PostingCovers) {
+            // Covered index: candidate rows were built straight from the posting
+            // scan (no main read needed), so finalize the TopK now.
+            CA_LOG_D("Posting done (covered): candidateRows=" << Candidates.size());
+            FinalizeResults();
+            return;
+        }
         CA_LOG_D("Posting done: candidatePKs=" << PostingKeys.size());
         if (PostingKeys.empty()) {
             Phase = EPhase::Done;
@@ -301,7 +338,11 @@ private:
 
     void OnMainDone() {
         CA_LOG_D("Main done: candidateRows=" << Candidates.size() << " topK=" << TopK);
-        // Keep the TopK nearest rows by distance.
+        FinalizeResults();
+    }
+
+    // Keep the TopK nearest candidate rows by distance and hand them off.
+    void FinalizeResults() {
         auto guard = BindAllocator();
         const size_t keep = std::min<size_t>(TopK, Candidates.size());
         std::partial_sort(Candidates.begin(), Candidates.begin() + keep, Candidates.end(),
@@ -466,12 +507,29 @@ private:
             AddColumnMetaKeyColumnType(src, pk);
         }
 
-        // Read just the PK columns (using posting table column ids).
         YQL_ENSURE(Settings.PostingTableKeyColumnIdsSize() == Settings.MainTableKeyColumnsSize() + 1);
-        for (size_t i = 0; i < Settings.MainTableKeyColumnsSize(); ++i) {
-            const auto& pk = Settings.GetMainTableKeyColumns(i);
-            const NKikimrProto::TTypeInfo* ti = pk.HasTypeInfo() ? &pk.GetTypeInfo() : nullptr;
-            AddColumn(src, Settings.GetPostingTableKeyColumnIds(i + 1), pk.GetName(), pk.GetType(), ti, pk.GetNotNull());
+        if (PostingCovers) {
+            // Covered index: read output columns (with their posting-table ids)
+            // plus any PK columns not already among them for per-row dedup; see
+            // BuildCoveredPostingColumns.
+            for (size_t i = 0; i < Settings.OutputColumnsSize(); ++i) {
+                const auto& col = Settings.GetOutputColumns(i);
+                const NKikimrProto::TTypeInfo* ti = col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr;
+                AddColumn(src, Settings.GetPostingOutputColumnIds(i), col.GetName(), col.GetType(), ti, col.GetNotNull());
+            }
+            for (ui32 j : CoveredExtraPkIndices) {
+                const auto& pk = Settings.GetMainTableKeyColumns(j);
+                const NKikimrProto::TTypeInfo* ti = pk.HasTypeInfo() ? &pk.GetTypeInfo() : nullptr;
+                AddColumn(src, Settings.GetPostingTableKeyColumnIds(j + 1), pk.GetName(), pk.GetType(), ti, pk.GetNotNull());
+            }
+        } else {
+            // Read just the PK columns (using posting table column ids) to feed
+            // the main table read.
+            for (size_t i = 0; i < Settings.MainTableKeyColumnsSize(); ++i) {
+                const auto& pk = Settings.GetMainTableKeyColumns(i);
+                const NKikimrProto::TTypeInfo* ti = pk.HasTypeInfo() ? &pk.GetTypeInfo() : nullptr;
+                AddColumn(src, Settings.GetPostingTableKeyColumnIds(i + 1), pk.GetName(), pk.GetType(), ti, pk.GetNotNull());
+            }
         }
 
         ReadingParent = parent;
@@ -619,36 +677,57 @@ private:
                 break;
             }
             case EPhase::Posting: {
-                // Build a serialized PK cell vec from the read PK columns.
-                const ui32 n = MainKeyTypeInfos.size();
-                TVector<TCell> cells(n);
-                for (ui32 i = 0; i < n; ++i) {
-                    cells[i] = NMiniKQL::MakeCell(MainKeyTypeInfos[i], value.GetElement(i), TypeEnv, /* copy */ true);
+                // Dedup rows that appear in overlapping clusters by their PK. In
+                // the covered path the PK columns sit at CoveredPkPositions and the
+                // output columns occupy the first positions (so AddCandidate reads
+                // them directly); otherwise the read row is just the PK columns.
+                TString serialized = SerializePostingPk(value);
+                if (!SeenKeys.insert(serialized).second) {
+                    break;
                 }
-                TString serialized = TSerializedCellVec::Serialize(cells);
-                if (SeenKeys.insert(serialized).second) {
+                if (PostingCovers) {
+                    AddCandidate(value);
+                } else {
                     PostingKeys.push_back(std::move(serialized));
                 }
                 break;
             }
             case EPhase::Main: {
-                auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
-                double distance = std::numeric_limits<double>::max();
-                if (embedding.IsString() || embedding.IsEmbedded()) {
-                    distance = RankClusters->CalcDistance(TargetVector, embedding.AsStringRef());
-                }
-                // Build a fresh output struct holder in OutputColumns order.
-                NUdf::TUnboxedValue* items = nullptr;
-                auto row = HolderFactory.CreateDirectArrayHolder(Settings.OutputColumnsSize(), items);
-                for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
-                    items[i] = value.GetElement(i);
-                }
-                Candidates.push_back(TCandidate{distance, std::move(row)});
+                AddCandidate(value);
                 break;
             }
             default:
                 break;
         }
+    }
+
+    // Serialize the PK cell vec of a posting row for dedup. The PK columns are
+    // read at CoveredPkPositions in the covered path, else at positions 0..N-1.
+    TString SerializePostingPk(NUdf::TUnboxedValue& value) {
+        const ui32 n = MainKeyTypeInfos.size();
+        PkCellsScratch.resize(n);
+        for (ui32 i = 0; i < n; ++i) {
+            const ui32 pos = PostingCovers ? CoveredPkPositions[i] : i;
+            PkCellsScratch[i] = NMiniKQL::MakeCell(MainKeyTypeInfos[i], value.GetElement(pos), TypeEnv, /* copy */ true);
+        }
+        return TSerializedCellVec::Serialize(PkCellsScratch);
+    }
+
+    // Build a candidate (output row + distance to the target) from a read row
+    // whose first OutputColumns elements are the output columns in order.
+    void AddCandidate(NUdf::TUnboxedValue& value) {
+        auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
+        double distance = std::numeric_limits<double>::max();
+        if (embedding.IsString() || embedding.IsEmbedded()) {
+            distance = RankClusters->CalcDistance(TargetVector, embedding.AsStringRef());
+        }
+        // Build a fresh output struct holder in OutputColumns order.
+        NUdf::TUnboxedValue* items = nullptr;
+        auto row = HolderFactory.CreateDirectArrayHolder(Settings.OutputColumnsSize(), items);
+        for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
+            items[i] = value.GetElement(i);
+        }
+        Candidates.push_back(TCandidate{distance, std::move(row)});
     }
 
     void CollectLocks() {
@@ -752,6 +831,7 @@ private:
     const ui32 LevelTop;
     const ui32 OverlapClusters;
     const double OverlapRatio;
+    const bool PostingCovers;
     const TString LogPrefix;
     const ui64 InputIndex;
     NUdf::TUnboxedValue Input;
@@ -772,6 +852,17 @@ private:
     TString TargetVector;
     TVector<NScheme::TTypeInfo> MainKeyTypeInfos;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RankClusters;
+
+    // Reusable scratch for serializing a posting row's PK during dedup.
+    TVector<TCell> PkCellsScratch;
+
+    // Covered-index posting read: the read row holds the output columns at
+    // positions 0..N-1, then any PK columns not already among them (the indices
+    // of those extra PKs into MainTableKeyColumns are CoveredExtraPkIndices).
+    // CoveredPkPositions gives the read-row position of each PK column, used to
+    // dedup rows that appear in overlapping clusters.
+    TVector<ui32> CoveredPkPositions;
+    TVector<ui32> CoveredExtraPkIndices;
 
     ui32 LevelsRemaining = 0;
     TVector<TClusterId> CurrentParents;

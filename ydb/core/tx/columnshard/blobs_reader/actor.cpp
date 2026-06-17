@@ -5,52 +5,14 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 TAtomicCounter TActor::WaitingBlobsCount = 0;
 
-std::optional<TDuration> TActor::GetNextRetryDelay(const TBlobRange& range, bool isRetriable) {
-    if (!isRetriable) {
-        return std::nullopt;
-    }
-    auto it = RetryStates.find(range);
-    if (it == RetryStates.end()) {
-        it = RetryStates.emplace(range, RetryPolicy->CreateRetryState()).first;
-    }
-    if (auto delay = it->second->GetNextRetryDelay()) {
-        return *delay;
-    }
-    return std::nullopt;
-}
-
-void TActor::ScheduleNextRetry() {
-    if (PendingRetries.empty()) {
-        return;
-    }
-    TMonotonic earliest = TMonotonic::Max();
-    for (const auto& [_, entry] : PendingRetries) {
-        earliest = Min(earliest, entry.DueTime);
-    }
-    if (!ScheduledWakeup || earliest < *ScheduledWakeup) {
-        auto now = TActivationContext::Monotonic();
-        auto delay = (earliest > now) ? (earliest - now) : TDuration::Zero();
-        Schedule(delay, new TEvents::TEvWakeup());
-        ScheduledWakeup = earliest;
-    }
-}
-
 void TActor::HandleRetryTimer() {
-    ScheduledWakeup = std::nullopt;
-    if (!Task || PendingRetries.empty()) {
+    RetryState.OnWakeup();
+    if (!Task || !RetryState.HasPendingRetries()) {
         return;
     }
 
     auto now = TActivationContext::Monotonic();
-    std::vector<TPendingRetry> ready;
-    for (auto it = PendingRetries.begin(); it != PendingRetries.end();) {
-        if (it->second.DueTime <= now) {
-            ready.push_back(std::move(it->second));
-            it = PendingRetries.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    auto ready = RetryState.ExtractReadyRetries(now);
 
     for (auto&& pending : ready) {
         auto action = Task->GetAgents().FindByStorageId(pending.StorageId);
@@ -69,7 +31,9 @@ void TActor::HandleRetryTimer() {
         }
     }
 
-    ScheduleNextRetry();
+    if (auto delay = RetryState.NeedsReschedule(now)) {
+        Schedule(*delay, new TEvents::TEvWakeup());
+    }
 }
 
 void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) {
@@ -82,13 +46,15 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
 
     bool aborted = false;
     if (event.Status != NKikimrProto::EReplyStatus::OK) {
-        auto delay = GetNextRetryDelay(event.BlobRange, event.IsRetriable);
+        auto delay = RetryState.GetNextRetryDelay(event.BlobRange, event.IsRetriable);
         if (delay) {
             ACFL_WARN("event", "S3ReadRetriableError")("blob_range", event.BlobRange)("storage_id", event.DataSourceId)(
                 "error", event.DetailedError)("delay_ms", delay->MilliSeconds());
-            auto dueTime = TActivationContext::Monotonic() + *delay;
-            if (PendingRetries.emplace(event.BlobRange, TPendingRetry{ event.BlobRange, event.DataSourceId, dueTime }).second) {
-                ScheduleNextRetry();
+            auto now = TActivationContext::Monotonic();
+            if (RetryState.EnqueueRetry(event.BlobRange, event.DataSourceId, now + *delay)) {
+                if (auto d = RetryState.NeedsReschedule(now)) {
+                    Schedule(*d, new TEvents::TEvWakeup());
+                }
             }
             return;
         }
@@ -105,7 +71,7 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
         }
     } else {
         WaitingBlobsCount.Dec();
-        RetryStates.erase(event.BlobRange);
+        RetryState.ClearRetryState(event.BlobRange);
         Task->AddData(event.DataSourceId, event.BlobRange, event.Data);
     }
     if (aborted || Task->IsFinished()) {
@@ -116,7 +82,7 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
 
 TActor::TActor(const std::shared_ptr<ITask>& task)
     : Task(task)
-    , RetryPolicy(MakeReadRetryPolicy())
+    , RetryState(MakeReadRetryPolicy())
 {
 }
 

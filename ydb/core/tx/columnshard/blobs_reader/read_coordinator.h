@@ -1,6 +1,7 @@
 #pragma once
 
 #include "events.h"
+#include "retry_state.h"
 #include "task.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
@@ -10,8 +11,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/log.h>
-
-#include <library/cpp/retry/retry_policy.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
@@ -80,26 +79,12 @@ public:
 
 class TReadCoordinatorActor: public NActors::TActorBootstrapped<TReadCoordinatorActor> {
 private:
-    using IRetryPolicy = IRetryPolicy<>;
-
-    struct TPendingRetry {
-        TBlobRange Range;
-        TString StorageId;
-        TMonotonic DueTime;
-    };
-
     ui64 TabletId;
     NActors::TActorId Parent;
     TBlobsForRead BlobTasks;
-
-    IRetryPolicy::TPtr RetryPolicy;
-    THashMap<TBlobRange, IRetryPolicy::IRetryState::TPtr> RetryStates;
-    THashMap<TBlobRange, TPendingRetry> PendingRetries;
-    std::optional<TMonotonic> ScheduledWakeup;
+    TRetryState RetryState;
 
     void HandleRetryTimer();
-    void ScheduleNextRetry();
-    std::optional<TDuration> GetNextRetryDelay(const TBlobRange& range, bool isRetriable);
 
 public:
     TReadCoordinatorActor(ui64 tabletId, const TActorId& parent);

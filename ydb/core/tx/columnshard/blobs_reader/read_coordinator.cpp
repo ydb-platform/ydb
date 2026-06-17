@@ -3,52 +3,14 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
-std::optional<TDuration> TReadCoordinatorActor::GetNextRetryDelay(const TBlobRange& range, bool isRetriable) {
-    if (!isRetriable) {
-        return std::nullopt;
-    }
-    auto it = RetryStates.find(range);
-    if (it == RetryStates.end()) {
-        it = RetryStates.emplace(range, RetryPolicy->CreateRetryState()).first;
-    }
-    if (auto delay = it->second->GetNextRetryDelay()) {
-        return *delay;
-    }
-    return std::nullopt;
-}
-
-void TReadCoordinatorActor::ScheduleNextRetry() {
-    if (PendingRetries.empty()) {
-        return;
-    }
-    TMonotonic earliest = TMonotonic::Max();
-    for (const auto& [_, entry] : PendingRetries) {
-        earliest = Min(earliest, entry.DueTime);
-    }
-    if (!ScheduledWakeup || earliest < *ScheduledWakeup) {
-        auto now = TActivationContext::Monotonic();
-        auto delay = (earliest > now) ? (earliest - now) : TDuration::Zero();
-        Schedule(delay, new TEvents::TEvWakeup());
-        ScheduledWakeup = earliest;
-    }
-}
-
 void TReadCoordinatorActor::HandleRetryTimer() {
-    ScheduledWakeup = std::nullopt;
-    if (PendingRetries.empty()) {
+    RetryState.OnWakeup();
+    if (!RetryState.HasPendingRetries()) {
         return;
     }
 
     auto now = TActivationContext::Monotonic();
-    std::vector<TPendingRetry> ready;
-    for (auto it = PendingRetries.begin(); it != PendingRetries.end();) {
-        if (it->second.DueTime <= now) {
-            ready.push_back(std::move(it->second));
-            it = PendingRetries.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    auto ready = RetryState.ExtractReadyRetries(now);
 
     for (auto&& pending : ready) {
         if (!BlobTasks.Contains(pending.StorageId, pending.Range)) {
@@ -68,7 +30,9 @@ void TReadCoordinatorActor::HandleRetryTimer() {
         }
     }
 
-    ScheduleNextRetry();
+    if (auto delay = RetryState.NeedsReschedule(now)) {
+        Schedule(*delay, new TEvents::TEvWakeup());
+    }
 }
 
 void TReadCoordinatorActor::Handle(TEvStartReadTask::TPtr& ev) {
@@ -86,13 +50,15 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
     auto& event = *ev->Get();
 
     if (event.Status != NKikimrProto::EReplyStatus::OK) {
-        auto delay = GetNextRetryDelay(event.BlobRange, event.IsRetriable);
+        auto delay = RetryState.GetNextRetryDelay(event.BlobRange, event.IsRetriable);
         if (delay) {
             ACFL_WARN("event", "S3ReadRetriableError")("blob_range", event.BlobRange)("storage_id", event.DataSourceId)(
                 "error", event.DetailedError)("delay_ms", delay->MilliSeconds());
-            auto dueTime = TActivationContext::Monotonic() + *delay;
-            if (PendingRetries.emplace(event.BlobRange, TPendingRetry{ event.BlobRange, event.DataSourceId, dueTime }).second) {
-                ScheduleNextRetry();
+            auto now = TActivationContext::Monotonic();
+            if (RetryState.EnqueueRetry(event.BlobRange, event.DataSourceId, now + *delay)) {
+                if (auto d = RetryState.NeedsReschedule(now)) {
+                    Schedule(*d, new TEvents::TEvWakeup());
+                }
             }
             return;
         }
@@ -108,7 +74,7 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
             i->AddError(event.DataSourceId, event.BlobRange,
                 IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob, detailed error: " + event.DetailedError));
         } else {
-            RetryStates.erase(event.BlobRange);
+            RetryState.ClearRetryState(event.BlobRange);
             i->AddData(event.DataSourceId, event.BlobRange, event.Data);
         }
     }
@@ -117,7 +83,7 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
 TReadCoordinatorActor::TReadCoordinatorActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
     , Parent(parent)
-    , RetryPolicy(MakeReadRetryPolicy())
+    , RetryState(MakeReadRetryPolicy())
 {
 }
 

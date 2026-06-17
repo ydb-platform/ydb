@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_logreader.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
 
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -77,9 +78,9 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
                 Mon.CommitedDataChunks->Dec();
                 YDB_LOG_P_LOG(PRI_DEBUG, "CommitedDataChunks is decremented",
                     {"marker", "BPD01"},
-                    {"CommitedDataChunks", Mon.CommitedDataChunks->Val()},
-                    {"ChunkIdx", chunkIdx},
-                    {"PrevOwnerId", (ui32)state.OwnerId});
+                    {"commitedDataChunks", Mon.CommitedDataChunks->Val()},
+                    {"chunkIdx", chunkIdx},
+                    {"prevOwnerId", (ui32)state.OwnerId});
             }
             state.OwnerId = ownerId;
             state.Nonce = chunkNonce;
@@ -89,9 +90,9 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
                     Mon.CommitedDataChunks->Inc();
                     YDB_LOG_P_LOG(PRI_DEBUG, "CommitedDataChunks is incremented",
                         {"marker", "BPD01"},
-                        {"CommitedDataChunks", Mon.CommitedDataChunks->Val()},
-                        {"ChunkIdx", chunkIdx},
-                        {"PrevOwnerId", (ui32)state.OwnerId});
+                        {"commitedDataChunks", Mon.CommitedDataChunks->Val()},
+                        {"chunkIdx", chunkIdx},
+                        {"prevOwnerId", (ui32)state.OwnerId});
                 }
             } else {
                 state.CommitState = TChunkState::FREE;
@@ -143,9 +144,9 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                         if (ownerData.CurrentFirstLsnToKeep < firstLsnToKeep) {
                             YDB_LOG_P_LOG(PRI_INFO, "ProcessReadLogRecord set new FirstLsnToKeep for Owner caused by Lsn",
                                 {"marker", "BPD01"},
-                                {"OwnerId", (ui32)header.OwnerId},
-                                {"FirstLsnToKeep", firstLsnToKeep},
-                                {"Lsn", header.OwnerLsn});
+                                {"ownerId", (ui32)header.OwnerId},
+                                {"firstLsnToKeep", firstLsnToKeep},
+                                {"lsn", header.OwnerLsn});
                             ownerData.CurrentFirstLsnToKeep = firstLsnToKeep;
                         }
                         ownerData.LogRecordsInitiallyRead++;
@@ -383,7 +384,7 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
 
     YDB_LOG_P_LOG(PRI_INFO, SelfInfo(),
         {"marker", "BPD01"},
-        {"ChunksToRead", printChunks()});
+        {"chunksToRead", printChunks()});
 }
 
 TLogReader::~TLogReader() {
@@ -430,9 +431,9 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
                 if (IsInitial) {
                     YDB_LOG_P_LOG(PRI_NOTICE, "In case ELogReaderState::NewLogChunk got new chunk",
                         {"marker", "LR014"},
-                        {"SelfInfo", SelfInfo()},
-                        {"ChunkIdx", ChunkIdx},
-                        {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
+                        {"selfInfo", SelfInfo()},
+                        {"chunkIdx", ChunkIdx},
+                        {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
                 } else {
                     Y_FAIL_S(SelfInfo() << " File# " << __FILE__ << " Line# " << __LINE__);
                 }
@@ -451,9 +452,9 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
                     if (!last->DesiredPrevChunkLastNonce) {
                         YDB_LOG_P_LOG(PRI_INFO, "In case ELogReaderState::NewLogChunk strange. changing",
                             {"marker", "LR015"},
-                            {"SelfInfo", SelfInfo()},
-                            {"last->DesiredPrevChunkLastNonce", last->DesiredPrevChunkLastNonce},
-                            {"to_std::next(last)->LastNonce", std::next(last)->LastNonce});
+                            {"selfInfo", SelfInfo()},
+                            {"desiredPrevChunkLastNonce", last->DesiredPrevChunkLastNonce},
+                            {"nextChunkLastNonce", std::next(last)->LastNonce});
                         last->DesiredPrevChunkLastNonce = std::next(last)->LastNonce;
                     }
                 }
@@ -574,7 +575,7 @@ void TLogReader::NotifyError(ui64 offsetRead, TString& errorReason) {
 
     YDB_LOG_P_LOG(PRI_ERROR, "Error reading log",
         {"marker", "BPD01"},
-        {"Offset", offsetRead});
+        {"offset", offsetRead});
 
     ReplyError();
 }
@@ -628,7 +629,7 @@ bool TLogReader::PrepareToRead() {
             }
             ChunksToRead.erase(ChunksToRead.begin(), keepIt);
             if (ChunksToRead.size() == 0) {
-                YDB_LOG_P_LOG(PRI_ERROR, "No chunks to read log from",
+                YDB_LOG_P_LOG(PRI_ERROR, "No chunks to read log",
                     {"marker", "BPD01"});
                 ReplyError();
                 return true;
@@ -721,12 +722,12 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
         const ui64 headerPrevNonce = ReadUnaligned<ui64>(&nonceJumpLogPageHeader2->PreviousNonce);
 
         if (SectorIdx == 0) {
-            YDB_LOG_P_LOG(PRI_WARN, "nonce jump2",
+            YDB_LOG_P_LOG(PRI_WARN, "Nonce jump2",
                 {"marker", "LR016"},
-                {"SelfInfo", SelfInfo()},
-                {"IsEndOfSplice", ChunkInfo->IsEndOfSplice},
-                {"ChunkInfo->DesiredPrevChunkLastNonce", ChunkInfo->DesiredPrevChunkLastNonce},
-                {"nonceJumpLogPageHeader2->PreviousNonce", headerPrevNonce});
+                {"selfInfo", SelfInfo()},
+                {"isEndOfSplice", ChunkInfo->IsEndOfSplice},
+                {"replacing", ChunkInfo->DesiredPrevChunkLastNonce},
+                {"with", headerPrevNonce});
 
 
             if (ChunkInfo->IsEndOfSplice) {
@@ -743,12 +744,12 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
             // We just came across an outdated nonce jump. This means the end of the log.
             YDB_LOG_P_LOG(PRI_WARN, "ReplyOk",
                 {"marker", "LR001"},
-                {"SelfInfo", SelfInfo()},
+                {"selfInfo", SelfInfo()},
                 {"currentSectorIdx", SectorIdx},
                 {"previousNonce", previousNonce},
                 {"previousDataNonce", previousDataNonce},
-                {"nonceJumpLogPageHeader2->PreviousNonce", headerPrevNonce},
-                {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
+                {"headerPreviousNonce", headerPrevNonce},
+                {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
             ReplyOk();
             return;
         } else if (previousNonce < headerPrevNonce && previousDataNonce < headerPrevNonce) {
@@ -768,9 +769,9 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
     } else if (ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx) {
         YDB_LOG_P_LOG(PRI_DEBUG, "ReplyOk, marker LR003",
             {"marker", "BPD01"},
-            {"SelfInfo", SelfInfo()},
-            {"LogEndChunkIdx", LogEndChunkIdx},
-            {"LogEndSectorId", LogEndSectorIdx});
+            {"selfInfo", SelfInfo()},
+            {"logEndChunkIdx", LogEndChunkIdx},
+            {"logEndSectorId", LogEndSectorIdx});
         ReplyOk();
         return;
     }
@@ -789,10 +790,10 @@ void TLogReader::ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce) {
             // We just came across an outdated nonce jump. This means the end of the log.
             YDB_LOG_P_LOG(PRI_NOTICE, "In ProcessLogPageNonceJump1 got previousNonce > nonceJumpLogPageHeader1->PreviousNonce",
                 {"marker", "LR017"},
-                {"SelfInfo", SelfInfo()},
+                {"selfInfo", SelfInfo()},
                 {"previousNonce", previousNonce},
-                {"nonceJumpLogPageHeader1->PreviousNonce", nonceJumpLogPageHeader1->PreviousNonce},
-                {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
+                {"headerPreviousNonce", nonceJumpLogPageHeader1->PreviousNonce},
+                {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
             ReplyOk();
             return;
         }
@@ -828,8 +829,8 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         if (IsInitial) {
             YDB_LOG_P_LOG(PRI_NOTICE, "In ProcessSectorSet got !restorator.GoodSectorFlags",
                 {"marker", "LR018"},
-                {"SelfInfo", SelfInfo()},
-                {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
+                {"selfInfo", SelfInfo()},
+                {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
         } else {
             bool outsideLogEnd = ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx;
 
@@ -841,9 +842,9 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                 if (ownerData.OnQuarantine) {
                     YDB_LOG_P_LOG(PRI_WARN, "In ProcessSectorSet got !restorator.GoodSectorFlags with owner on quarantine",
                         {"marker", "LR019"},
-                        {"SelfInfo", SelfInfo()},
-                        {"LogEndChunkIdx", LogEndChunkIdx},
-                        {"LogEndSectorIdx", LogEndSectorIdx});
+                        {"selfInfo", SelfInfo()},
+                        {"logEndChunkIdx", LogEndChunkIdx},
+                        {"logEndSectorIdx", LogEndSectorIdx});
                     ReplyOk();
                     return true;
                 }
@@ -859,9 +860,9 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                 // It's ok.
                 YDB_LOG_P_LOG(PRI_WARN, "In ProcessSectorSet got !restorator.GoodSectorFlags outside the LogEndSector",
                     {"marker", "LR004"},
-                    {"SelfInfo", SelfInfo()},
-                    {"LogEndChunkIdx", LogEndChunkIdx},
-                    {"LogEndSectorIdx", LogEndSectorIdx});
+                    {"selfInfo", SelfInfo()},
+                    {"logEndChunkIdx", LogEndChunkIdx},
+                    {"logEndSectorIdx", LogEndSectorIdx});
             }
         }
 
@@ -874,9 +875,9 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
             if (IsInitial) {
                 YDB_LOG_P_LOG(PRI_NOTICE, "In ProcessSectorSet got !(restorator.GoodSectorFlags & 1)",
                     {"marker", "LR005"},
-                    {"SelfInfo", SelfInfo()},
-                    {"restorator.GoodSectorFlags", restorator.GoodSectorFlags},
-                    {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
+                    {"selfInfo", SelfInfo()},
+                    {"goodSectorFlags", restorator.GoodSectorFlags},
+                    {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
             } else {
                 Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
                         << " LogEndChunkIdx# " << LogEndChunkIdx
@@ -893,7 +894,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         YDB_LOG_P_LOG(PRI_DEBUG, SelfInfo(),
             {"marker", "LR020"},
             {"currentSectorIdx", SectorIdx},
-            {"sectorFooter->Nonce", sectorFooter->Nonce});
+            {"sectorNonce", sectorFooter->Nonce});
 
         ui64 previousNonce = std::exchange(LastNonce, sectorFooter->Nonce);
         ui64 previousDataNonce = std::exchange(LastDataNonce, sectorFooter->Nonce);
@@ -933,26 +934,26 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                 if (IsInitial) {
                     YDB_LOG_P_LOG(PRI_INFO, "In ProcessSectorSet saw LogPageNonceJump2, before processing",
                         {"marker", "LR006"},
-                        {"SelfInfo", SelfInfo()},
-                        {"LastNonce", LastNonce},
-                        {"LastDataNonce", LastDataNonce},
+                        {"selfInfo", SelfInfo()},
+                        {"lastNonce", LastNonce},
+                        {"lastDataNonce", LastDataNonce},
                         {"previousNonce", previousNonce},
                         {"previousDataNonce", previousDataNonce},
-                        {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition},
-                        {"ChunkInfo->LastNonce", ChunkInfo->LastNonce});
+                        {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition},
+                        {"chunkLastNonce", ChunkInfo->LastNonce});
                 }
 
                 ProcessLogPageNonceJump2(data + OffsetInSector, previousNonce, previousDataNonce);
                 if (IsInitial) {
                     YDB_LOG_P_LOG(PRI_INFO, "In ProcessSectorSet saw LogPageNonceJump2, afer processing",
                         {"marker", "LR007"},
-                        {"SelfInfo", SelfInfo()},
-                        {"LastNonce", LastNonce},
-                        {"LastDataNonce", LastDataNonce},
+                        {"selfInfo", SelfInfo()},
+                        {"lastNonce", LastNonce},
+                        {"lastDataNonce", LastDataNonce},
                         {"previousNonce", previousNonce},
                         {"previousDataNonce", previousDataNonce},
-                        {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition},
-                        {"ChunkInfo->LastNonce", ChunkInfo->LastNonce});
+                        {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition},
+                        {"chunkLastNonce", ChunkInfo->LastNonce});
                 }
                 if (IsReplied.load()) {
                     return true;
@@ -977,11 +978,11 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     if (LastNonce != previousNonce + 1) {
                         YDB_LOG_P_LOG(PRI_NOTICE, "In ProcessSectorSet got LastNonce != previousNonce + 1",
                             {"marker", "LR008"},
-                            {"SelfInfo", SelfInfo()},
-                            {"LastNonce", LastNonce},
+                            {"selfInfo", SelfInfo()},
+                            {"lastNonce", LastNonce},
                             {"previousNonce", previousNonce},
-                            {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition},
-                            {"ChunkInfo->IsEndOfSplice", ChunkInfo->IsEndOfSplice});
+                            {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition},
+                            {"chunkIsEndOfSplice", ChunkInfo->IsEndOfSplice});
 
                         Y_VERIFY_S(!ChunkInfo->IsEndOfSplice, SelfInfo() <<
                                 " Unexpectedly got LastNonce != previosNonce + 1 at Sector0 at the EndOfSplice"
@@ -998,11 +999,11 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     if (LastNonce != previousNonce + 1) {
                         YDB_LOG_P_LOG(PRI_NOTICE, "In ProcessSectorSet got LastNonce != previousNonce + 1",
                             {"marker", "LR010"},
-                            {"SelfInfo", SelfInfo()},
-                            {"LastNonce", LastNonce},
+                            {"selfInfo", SelfInfo()},
+                            {"lastNonce", LastNonce},
                             {"previousNonce", previousNonce},
-                            {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition},
-                            {"ChunkInfo->IsEndOfSplice", ChunkInfo->IsEndOfSplice});
+                            {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition},
+                            {"chunkIsEndOfSplice", ChunkInfo->IsEndOfSplice});
 
                         Y_VERIFY_S(!ChunkInfo->IsEndOfSplice, SelfInfo() <<
                                 " Unexpectedly got LastNonce != previosNonce + 1 at the EndOfSplice"
@@ -1037,13 +1038,16 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                             if (ownerData.LogStartPosition == TLogPosition{0, 0}) {
                                 ownerData.LogStartPosition = PDisk->LogPosition(ChunkIdx, SectorIdx,
                                     OffsetInSector - sizeof(TFirstLogPageHeader));
-
-                                YDB_LOG_P_LOG(PRI_DEBUG, "",
+                                TStringStream str;
+                                str << "(B) Initial ownerId# " << (ui32)recordOwnerId
+                                    << " set LogStartPosition# " << ownerData.LogStartPosition
+                                    << " FirstNonceToKeep# " << FirstNonceToKeep << Endl;
+                                YDB_LOG_P_LOG(PRI_DEBUG, "(B) Initial",
                                     {"marker", "BPD01"},
-                                    {"SelfInfo", SelfInfo()},
+                                    {"selfInfo", SelfInfo()},
                                     {"ownerId", (ui32)recordOwnerId},
-                                    {"LogStartPosition", ownerData.LogStartPosition},
-                                    {"FirstNonceToKeep", FirstNonceToKeep});
+                                    {"logStartPosition", ownerData.LogStartPosition},
+                                    {"firstNonceToKeep", FirstNonceToKeep});
                             }
                         }
                     }
@@ -1217,8 +1221,8 @@ void TLogReader::Reply() {
     }
     YDB_LOG_P_LOG(PRI_NOTICE, "Reply to owner",
         {"marker", "BPD01"},
-        {"OwnerId", (ui32)Owner},
-        {"Result", Result->ToString()});
+        {"ownerId", (ui32)Owner},
+        {"result", Result->ToString()});
     PCtx->ActorSystem->Send(ReplyTo, Result.Release());
     if (!IsInitial) {
         PDisk->Mon.LogRead.CountResponse(ResultSize);
@@ -1240,7 +1244,7 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
             Owner);
     YDB_LOG_P_LOG(PRI_DEBUG, "ProcessNextChunkReference",
         {"marker", "BPD01"},
-        {"SelfInfo", SelfInfo()});
+        {"selfInfo", SelfInfo()});
 
     if (restorator.LastGoodIdx < ReplicationFactor) {
         ui8* const rawSector = sector.GetData() + restorator.LastGoodIdx * format.SectorSize;
@@ -1249,10 +1253,10 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         if (sectorFooter->Nonce < LastNonce) {
             YDB_LOG_P_LOG(PRI_NOTICE, "ProcessNextChunkReference, Nonce reordering",
                 {"marker", "LR012"},
-                {"SelfInfo", SelfInfo()},
-                {"sectorFooter->Nonce", sectorFooter->Nonce},
-                {"LastNonce", LastNonce},
-                {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
+                {"selfInfo", SelfInfo()},
+                {"sectorNonce", sectorFooter->Nonce},
+                {"lastNonce", LastNonce},
+                {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
             // This one came unexpectedly out of the blue!
             // TODO(cthulhu): Write a unit-test that hits this line.
             // Steps to reproduce:
@@ -1294,12 +1298,12 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
                 OnEndOfSplice = true;
 
                 if (IsInitial) {
-                    YDB_LOG_P_LOG(PRI_INFO, "ProcessNextChunkReference contains NextChunkFirstNonce.",
+                    YDB_LOG_P_LOG(PRI_INFO, "ProcessNextChunkReference contains NextChunkFirstNonce",
                         {"marker", "BPD01"},
-                        {"SelfInfo", SelfInfo()},
-                        {"nextRef->NextChunkFirstNonce", nextRef->NextChunkFirstNonce},
-                        {"sectorFooter->Nonce", sectorFooter->Nonce},
-                        {"LastNonce", LastNonce});
+                        {"selfInfo", SelfInfo()},
+                        {"nextChunkFirstNonce", nextRef->NextChunkFirstNonce},
+                        {"sectorNonce", sectorFooter->Nonce},
+                        {"lastNonce", LastNonce});
                 }
             } else {
                 LastNonce = sectorFooter->Nonce;
@@ -1323,11 +1327,11 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         ui32 prevChunkIdx = ChunkIdx;
         YDB_LOG_P_LOG(PRI_DEBUG, "ProcessNextChunkReference, record is valid",
             {"marker", "BPD01"},
-            {"SelfInfo", SelfInfo()},
+            {"selfInfo", SelfInfo()},
             {"prevChunkIdx", prevChunkIdx},
             {"nextChunkIdx", nextLogChunkReference->NextChunk},
-            {"LastNonce", LastNonce},
-            {"OnEndOfSplice", OnEndOfSplice});
+            {"lastNonce", LastNonce},
+            {"onEndOfSplice", OnEndOfSplice});
         SwitchToChunk(nextLogChunkReference->NextChunk);
         if (IsInitial) {
             UpdateNewChunkInfo(ChunkIdx, prevChunkIdx);
@@ -1337,10 +1341,10 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         // As we always write next chunk reference, the situation we are in is impossible.
         YDB_LOG_P_LOG(PRI_NOTICE, "ProcessNextChunkReference, nextLogChunkReference not in a valid state !(restorator.LastGoodIdx < ReplicationFactor)",
             {"marker", "LR013"},
-            {"SelfInfo", SelfInfo()},
-            {"restorator.LastGoodIdx", restorator.LastGoodIdx},
-            {"ReplicationFactor", ReplicationFactor},
-            {"LastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
+            {"selfInfo", SelfInfo()},
+            {"lastGoodIdx", restorator.LastGoodIdx},
+            {"replicationFactor", ReplicationFactor},
+            {"lastGoodToWriteLogPosition", LastGoodToWriteLogPosition});
         ReplyOk();
         return true;
     }
@@ -1357,16 +1361,16 @@ void TLogReader::UpdateNewChunkInfo(ui32 currChunk, const TMaybe<ui32> prevChunk
 
     TChunkState& state = PDisk->ChunkState[currChunk];
     if (IsOwnerUser(state.OwnerId)) {
-        YDB_LOG_P_LOG(PRI_WARN, "chunk will be treated as log chunk, but in ChunkState is marked as owned by user",
+        YDB_LOG_P_LOG(PRI_WARN, "Chunk will be treated as log chunk, but in ChunkState is marked as owned by user",
             {"marker", "BPD01"},
-            {"SelfInfo", SelfInfo()},
-            {"ChunkState", state.ToString()});
+            {"selfInfo", SelfInfo()},
+            {"chunkState", state});
     }
     state.CommitState = TChunkState::LOG_RESERVED;
     state.IsDirty = true;
-    YDB_LOG_P_LOG(PRI_INFO, "chunk is the next log chunk",
+    YDB_LOG_P_LOG(PRI_INFO, "Chunk is the next log chunk",
         {"marker", "BPD01"},
-        {"SelfInfo", SelfInfo()},
+        {"selfInfo", SelfInfo()},
         {"prevOwnerId", ui32(state.OwnerId)},
         {"newOwnerId", ui32(OwnerSystem)});
     state.OwnerId = OwnerSystem;

@@ -46,16 +46,16 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
         bool isCrcOk = hasher.CheckSectorHash(sectorOffset, magic, sectorData, Format.SectorSize, sectorFooter->Hash, BlobId);
         if (!isCrcOk) {
             if (PCtx) {
-                YDB_LOG_P_LOG(PRI_INFO, " Bad hash",
+                YDB_LOG_P_LOG(PRI_INFO, "Bad hash",
                     {"marker", "BPD01"},
-                    {"OwnerId", owner},
-                    {"IsErasureEncode", IsErasureEncode},
-                    {"ErasureDataParts", ErasureDataParts},
-                    {"Sector", i},
-                    {"ReadHash", sectorFooter->Hash},
-                    {"CalculatedOldHash", hasher.OldHashSector(sectorOffset, magic, sectorData, Format.SectorSize)},
-                    {"CalculatedT1ha0NoAvxHash", hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sectorData, Format.SectorSize)},
-                    {"SectorOffset", sectorOffset},
+                    {"ownerId", owner},
+                    {"isErasureEncode", IsErasureEncode},
+                    {"erasureDataParts", ErasureDataParts},
+                    {"sector", i},
+                    {"readHash", sectorFooter->Hash},
+                    {"calculatedOldHash", hasher.OldHashSector(sectorOffset, magic, sectorData, Format.SectorSize)},
+                    {"calculatedT1ha0NoAvxHash", hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sectorData, Format.SectorSize)},
+                    {"sectorOffset", sectorOffset},
                     {"chunkIdx", sectorOffset / (ui64)Format.ChunkSize},
                     {"sectorIdx", (sectorOffset % (ui64)Format.ChunkSize) / (ui64)Format.SectorSize});
             }
@@ -79,13 +79,13 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                 if (PCtx) {
                     YDB_LOG_P_LOG(PRI_WARN, "Sector nonce reordering",
                         {"marker", "BPD01"},
-                        {"OwnerId", owner},
-                        {"IsErasureEncode", IsErasureEncode},
-                        {"ErasureDataParts", ErasureDataParts},
-                        {"Sector", i},
-                        {"ReadNonce", sectorFooterNonce},
-                        {"LastNonce", lastNonce},
-                        {"MaxNonce", maxNonce},
+                        {"ownerId", owner},
+                        {"isErasureEncode", IsErasureEncode},
+                        {"erasureDataParts", ErasureDataParts},
+                        {"sector", i},
+                        {"readNonce", sectorFooterNonce},
+                        {"lastNonce", lastNonce},
+                        {"maxNonce", maxNonce},
                         {"sectorOffset", sectorOffset});
                 }
                 // Consider decreasing nonces to be a sign of write reordering, restore sectors
@@ -105,10 +105,10 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
             if (PCtx) {
                 YDB_LOG_P_LOG(PRI_WARN, "Restoring a sector",
                     {"marker", "BPD01"},
-                    {"OwnerId", owner},
-                    {"ErasureDataParts", ErasureDataParts},
-                    {"LastBadIdx", LastBadIdx},
-                    {"SectorOffset", offset + (ui64)LastBadIdx * (ui64)Format.SectorSize});
+                    {"ownerId", owner},
+                    {"erasureDataParts", ErasureDataParts},
+                    {"lastBadIdx", LastBadIdx},
+                    {"sectorOffset", offset + (ui64)LastBadIdx * (ui64)Format.SectorSize});
             }
             for (ui32 i = 0; i < Format.SectorSize / sizeof(ui64) - 1; ++i) {
                 ui64 restored = 0;
@@ -163,10 +163,10 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                     if (PCtx) {
                         YDB_LOG_P_LOG(PRI_WARN, "Restoring trippleCopy sector",
                             {"marker", "BPD01"},
-                            {"Sector", i},
-                            {"OwnerId", owner},
-                            {"GoodSectorCount", GoodSectorCount},
-                            {"ReplicationFactor", ReplicationFactor},
+                            {"sector", i},
+                            {"ownerId", owner},
+                            {"goodSectorCount", GoodSectorCount},
+                            {"replicationFactor", ReplicationFactor},
                             {"sectorOffset", sectorOffset});
                     }
                     // Y_ABORT("RESTORE");

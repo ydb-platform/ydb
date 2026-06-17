@@ -320,9 +320,9 @@ void TSysLogReader::FindTheBestRecord() {
     }
     YDB_LOG_P_LOG(PRI_INFO, "SysLogReader found the best record",
         {"marker", "BPD01"},
-        {"BestRecordFirstOffset", BestRecordFirstOffset},
-        {"BestRecordLastOffset", BestRecordLastOffset},
-        {"BestNonce", BestNonce});
+        {"bestRecordFirstOffset", BestRecordFirstOffset},
+        {"bestRecordLastOffset", BestRecordLastOffset},
+        {"bestNonce", BestNonce});
     VerboseCheck(BestNonce > 0, "No best record found! Marker# BPS06");
     // Can become replied at this point
 }
@@ -407,7 +407,7 @@ bool TSysLogReader::VerboseCheck(bool condition, const char *desctiption) {
             Result->ErrorReason = str.Str();
             YDB_LOG_P_LOG(PRI_ERROR, "SysLogRead check failed",
                 {"marker", "BPD01"},
-                {"Result", Result->ToString()});
+                {"result", Result->ToString()});
             Reply();
         }
     }

@@ -201,13 +201,14 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
             endBadUserOffset = beginUserOffset + userSectorSize;
         } else {
             if (beginBadUserOffset != 0xffffffff) {
-                YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for due to multiple sectors with incorrect hashes. Marker# BPC001",
+                YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for due to multiple sectors with incorrect hashes",
                     {"PDiskId", PDisk->PCtx->PDiskId},
                     {"reqId", Read->ReqId},
                     {"chunkIdx", Read->ChunkIdx},
                     {"owner", Read->Owner},
                     {"beginBadUserOffet", beginBadUserOffset},
-                    {"endBadUserOffset", endBadUserOffset});
+                    {"endBadUserOffset", endBadUserOffset},
+                    {"marker", "BPC001"});
                 CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
                 beginBadUserOffset = 0xffffffff;
                 endBadUserOffset = 0xffffffff;
@@ -223,14 +224,15 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
             TDataSectorFooter *footer = (TDataSectorFooter*) (source + format.SectorSize - sizeof(TDataSectorFooter));
             if (footer->Nonce != ChunkNonce + sectorIdx) {
                 ui32 userOffset = sectorIdx * userSectorSize;
-                YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for nonce mismatch: for ! Marker# BPC002",
+                YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for nonce mismatch: for !",
                     {"PDiskId", PDisk->PCtx->PDiskId},
                     {"reqId", Read->ReqId},
                     {"chunkIdx", Read->ChunkIdx},
                     {"owner", Read->Owner},
                     {"expected", (ui64)(ChunkNonce + sectorIdx)},
-                    {"on-disk", (ui64)footer->Nonce},
-                    {"userOffset", userOffset});
+                    {"onDiskNonce", (ui64)footer->Nonce},
+                    {"userOffset", userOffset},
+                    {"marker", "BPC002"});
                 if (beginBadUserOffset == 0xffffffff) {
                     beginBadUserOffset = userOffset;
                 }
@@ -266,13 +268,14 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
         ++sectorIdx;
     }
     if (beginBadUserOffset != 0xffffffff) {
-        YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for due to multiple sectors with incorrect hashes/nonces. Marker# BPC003",
+        YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for due to multiple sectors with incorrect hashes/nonces",
             {"PDiskId", PDisk->PCtx->PDiskId},
             {"reqId", Read->ReqId},
             {"chunkIdx", Read->ChunkIdx},
             {"owner", Read->Owner},
             {"beginBadUserOffet", beginBadUserOffset},
-            {"endBadUserOffset", endBadUserOffset});
+            {"endBadUserOffset", endBadUserOffset},
+            {"marker", "BPC003"});
         CumulativeCompletion->AddGap(beginBadUserOffset, endBadUserOffset);
         beginBadUserOffset = 0xffffffff;
         endBadUserOffset = 0xffffffff;
@@ -375,7 +378,7 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Reply from TCompletionChunkRead,",
         {"PDiskId", PDisk->PCtx->PDiskId},
         {"reqId", Read->ReqId.Id},
-        {"result", result->ToString()},
+        {"resultString", result->ToString()},
         {"to", Read->Sender.LocalId()});
 
     double responseTimeMs = HPMilliSecondsFloat(HPNow() - Read->CreationTime);
@@ -432,7 +435,7 @@ void TCompletionEventSender::Exec(TActorSystem *actorSystem) {
     if (actorSystem) {
         if (Event) {
             YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "TCompletionEventSender",
-                {"event", Event->ToString()});
+                {"eventString", Event->ToString()});
         } else {
             YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "TCompletionEventSender no event");
         }

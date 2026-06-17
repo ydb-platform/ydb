@@ -268,10 +268,10 @@ class TRealBlockDevice : public IBlockDevice {
                         YDB_LOG_P_LOG(PRI_WARN, "Exceed 1 second deadline in SubmitThreadQueue",
                             {"marker", "BPD01"},
                             {"PDiskId", Device.PCtx->PDiskId},
-                            {"Path", Device.Path},
-                            {"TotalTimeInWaitingSec", NHPTimer::GetSeconds(HPNow() - start)},
-                            {"SubmitInFlightBytes", AtomicGet(SubmitInFlightBytes)},
-                            {"SubmitInFlightBytesMax", SubmitInFlightBytesMax});
+                            {"path", Device.Path},
+                            {"totalTimeInWaitingSec", NHPTimer::GetSeconds(HPNow() - start)},
+                            {"submitInFlightBytes", AtomicGet(SubmitInFlightBytes)},
+                            {"submitInFlightBytesMax", SubmitInFlightBytesMax});
                     }
                 }
             }
@@ -449,7 +449,7 @@ class TRealBlockDevice : public IBlockDevice {
                         << " Result# " << result);
                 YDB_LOG_P_LOG(PRI_ERROR, "IAsyncIoOperation error",
                     {"marker", "BPD01"},
-                    {"Reason", action->ErrorReason});
+                    {"reason", action->ErrorReason});
                 ++*Device.Mon.DeviceIoErrors;
             }
         }
@@ -506,12 +506,12 @@ class TRealBlockDevice : public IBlockDevice {
                     Device.Mon.DeviceWriteDuration.Increment(duration);
                     LWPROBE(PDiskDeviceWriteDuration, Device.GetPDiskId(), duration, opSize);
                 }
-                YDB_LOG_P_LOG(PRI_TRACE, "iop is done",
+                YDB_LOG_P_LOG(PRI_TRACE, "Iop is done",
                     {"marker", "BPD01"},
-                    {"Type", op->GetType()},
-                    {"Duration", duration},
-                    {"Offset", op->GetOffset()},
-                    {"Size", opSize});
+                    {"type", op->GetType()},
+                    {"duration", duration},
+                    {"offset", op->GetOffset()},
+                    {"size", opSize});
                 if (completionAction->FlushAction) {
                     ui64 idx = completionAction->FlushAction->OperationIdx;
                     Y_VERIFY_S(WaitingNoops[idx % MaxWaitingNoops] == nullptr, PCtx->PDiskLogPrefix);
@@ -783,13 +783,13 @@ class TRealBlockDevice : public IBlockDevice {
                             Device.Mon.DeviceTrimDuration.Increment(duration);
                             *Device.Mon.DeviceEstimatedCostNs += completion->CostNs;
                             if (Device.PCtx->ActorSystem && Device.IsTrimEnabled) {
-                                YDB_LOG_P_LOG(PRI_DEBUG, "trim is done",
+                                YDB_LOG_P_LOG(PRI_DEBUG, "Trim is done",
                                     {"marker", "BPD01"},
-                                    {"ReqId", op->GetReqId()},
-                                    {"TrimDurationMs", HPMilliSeconds(endTime - startTime)},
-                                    {"Path", Device.Path},
-                                    {"Offset", op->GetOffset()},
-                                    {"Size", op->GetSize()});
+                                    {"reqId", op->GetReqId()},
+                                    {"trimDurationMs", HPMilliSeconds(endTime - startTime)},
+                                    {"path", Device.Path},
+                                    {"offset", op->GetOffset()},
+                                    {"size", op->GetSize()});
                             }
                             LWPROBE(PDiskDeviceTrimDuration, Device.GetPDiskId(), duration, op->GetOffset());
                         }
@@ -1167,12 +1167,12 @@ protected:
             if (DriveData = ::NKikimr::NPDisk::GetDriveData(Path, &details)) {
                 YDB_LOG_P_LOG(PRI_NOTICE, "Gathered DriveData",
                     {"marker", "BPD01"},
-                    {"Data", DriveData->ToString(false)},
-                    {"Details", details.Str()});
+                    {"data", DriveData->ToString(false)},
+                    {"details", details.Str()});
             } else {
                 YDB_LOG_P_LOG(PRI_WARN, "Error on gathering DriveData",
                     {"marker", "BPD01"},
-                    {"Details", details.Str()});
+                    {"details", details.Str()});
             }
         }
         return DriveData.value_or(TDriveData());
@@ -1185,7 +1185,7 @@ protected:
             if (res != WriteCacheResultOk) {
                 YDB_LOG_P_LOG(PRI_WARN, "Error on setting write cache",
                     {"marker", "BPD01"},
-                    {"Details", details.Str()});
+                    {"details", details.Str()});
             }
         }
     }

@@ -143,12 +143,12 @@ void TPDisk::InitLogChunksInfo() {
                     it->CurrentUserCount--;
                     YDB_LOG_P_LOG(PRI_INFO, "InitLogChunksInfo, chunk is dereferenced by owner",
                         {"marker", "BPD01"},
-                        {"ChunkIdx", it->ChunkIdx},
-                        {"LsnRange", TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")},
-                        {"PresentNonces", TString(TStringBuilder() << "[" << it->FirstNonce << ", " << it->LastNonce << "]")},
-                        {"OwnerId", ui32(owner)},
-                        {"CurrentFirstLsnToKeep", OwnerData[owner].CurrentFirstLsnToKeep},
-                        {"CurrentUserCount", it->CurrentUserCount});
+                        {"chunkIdx", it->ChunkIdx},
+                        {"lsnRange", TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")},
+                        {"presentNonces", TString(TStringBuilder() << "[" << it->FirstNonce << ", " << it->LastNonce << "]")},
+                        {"ownerId", ui32(owner)},
+                        {"currentFirstLsnToKeep", OwnerData[owner].CurrentFirstLsnToKeep},
+                        {"currentUserCount", it->CurrentUserCount});
                 }
             }
         }
@@ -157,7 +157,7 @@ void TPDisk::InitLogChunksInfo() {
     for (auto info : LogChunks) {
         YDB_LOG_P_LOG(PRI_INFO, "InitLogChunksInfo state",
             {"marker", "BPD01"},
-            {"LogChunk", info});
+            {"logChunk", info});
     }
 
     PrintLogChunksInfo("startup");
@@ -193,7 +193,7 @@ void TPDisk::PrintLogChunksInfo(const TString& msg) {
     YDB_LOG_P_LOG(PRI_DEBUG, "PrintLogChunksInfo",
         {"marker", "BPD01"},
         {"msg", msg},
-        {"LogChunks", debugPrint()});
+        {"logChunks", debugPrint()});
 }
 
 bool TPDisk::LogNonceJump(ui64 previousNonce) {
@@ -213,10 +213,10 @@ bool TPDisk::LogNonceJump(ui64 previousNonce) {
 
     YDB_LOG_P_LOG(PRI_INFO, "LogNonceJump",
         {"marker", "BPD01"},
-        {"ChunkIdx", CommonLogger->ChunkIdx},
+        {"chunkIdx", CommonLogger->ChunkIdx},
         {"previousNonce", previousNonce},
-        {"Nonce", CommonLogger->Nonce},
-        {"NonceJump", nonceJump.ToString(false)});
+        {"nonce", CommonLogger->Nonce},
+        {"nonceJump", nonceJump.ToString(false)});
 
     CommonLogger->RecordBytesLeft = sizeof(TNonceJumpLogPageHeader2);
     CommonLogger->Write(&nonceJump, sizeof(TNonceJumpLogPageHeader2), TReqId(TReqId::LogNonceJumpWriteHeader2, 0), {});
@@ -282,9 +282,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
     TSysLogRecord *sysLogRecord = (TSysLogRecord*)(lastSysLogRecord.data());
 
     if (sysLogRecord->Version < PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000) {
-        YDB_LOG_P_LOG(PRI_DEBUG, "reading sys log",
+        YDB_LOG_P_LOG(PRI_DEBUG, "Reading sys log",
             {"marker", "BPD49"},
-            {"SysLogRecord", sysLogRecord->ToString()});
+            {"sysLogRecord", sysLogRecord->ToString()});
     } else {
         errorReason = TStringBuilder() << "Error while parsing sys log at booting state: Incompatible SysLogRecord Version# "
                 << sysLogRecord->Version;
@@ -295,7 +295,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
     }
     YDB_LOG_P_LOG(PRI_NOTICE, "SysLogRecord is read",
         {"marker", "BPD01"},
-        {"Record", sysLogRecord->ToString()});
+        {"record", sysLogRecord->ToString()});
 
     SysLogLsn = lastLsn + 1;
 
@@ -341,9 +341,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             << " lastLsn# " << lastLsn
             << " readLogResult# " << readLogResult.ToString();
 
-        YDB_LOG_P_LOG(PRI_ERROR, "error while reading sys log",
+        YDB_LOG_P_LOG(PRI_ERROR, "Error while reading sys log",
             {"marker", "BPD51"},
-            {"ErrorReason", errorReason});
+            {"errorReason", errorReason});
         return false;
     }
 
@@ -386,9 +386,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
                 Mon.CommitedDataChunks->Inc();
                 YDB_LOG_P_LOG(PRI_DEBUG, "CommitedDataChunks is incremented",
                     {"marker", "BPD01"},
-                    {"CommitedDataChunks", Mon.CommitedDataChunks->Val()},
-                    {"ChunkIdx", i},
-                    {"OwnerId", (ui32)owner});
+                    {"commitedDataChunks", Mon.CommitedDataChunks->Val()},
+                    {"chunkIdx", i},
+                    {"ownerId", (ui32)owner});
             } else {
                 ChunkState[i].CommitState = TChunkState::LOG_COMMITTED;
                 if (TPDisk::IS_SHRED_ENABLED) {
@@ -430,16 +430,16 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         Mon.CommitedDataChunks->Dec();
         YDB_LOG_P_LOG(PRI_DEBUG, "CommitedDataChunks is decremented",
             {"marker", "BPD01"},
-            {"CommitedDataChunks", Mon.CommitedDataChunks->Val()},
-            {"LogHeadChunkIdx", SysLogRecord.LogHeadChunkIdx},
-            {"PrevOwner", ChunkState[SysLogRecord.LogHeadChunkIdx].OwnerId});
+            {"commitedDataChunks", Mon.CommitedDataChunks->Val()},
+            {"logHeadChunkIdx", SysLogRecord.LogHeadChunkIdx},
+            {"prevOwner", ChunkState[SysLogRecord.LogHeadChunkIdx].OwnerId});
     }
 
     // might come and go. But make sure each coming chunk goes away!
     YDB_LOG_P_LOG(PRI_DEBUG, "Forcing log head owner to system",
         {"marker", "BPD52"},
-        {"ChunkIdx", SysLogRecord.LogHeadChunkIdx},
-        {"PrevOwner", (ui32)ChunkState[SysLogRecord.LogHeadChunkIdx].OwnerId});
+        {"chunkIdx", SysLogRecord.LogHeadChunkIdx},
+        {"prevOwner", (ui32)ChunkState[SysLogRecord.LogHeadChunkIdx].OwnerId});
     ChunkState[SysLogRecord.LogHeadChunkIdx].OwnerId = OwnerSystem;
     ChunkState[SysLogRecord.LogHeadChunkIdx].CommitState = TChunkState::DATA_COMMITTED;
     ChunkState[SysLogRecord.LogHeadChunkIdx].PreviousNonce = SysLogRecord.LogHeadChunkPreviousNonce;
@@ -456,8 +456,8 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         if (lastSysLogRecord.size() == noneSize) {
             YDB_LOG_P_LOG(PRI_WARN, "SysLogRecord size=noneSize",
                 {"marker", "BPD53"},
-                {"SysLogRecordSize", lastSysLogRecord.size()},
-                {"NoneSize", noneSize});
+                {"sysLogRecordSize", lastSysLogRecord.size()},
+                {"noneSize", noneSize});
             SysLogFirstNoncesToKeep.Clear();
         } else {
             ui64 minSize = noneSize + sizeof(TSysLogFirstNoncesToKeep);
@@ -538,7 +538,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             if (!isCompatible) {
                 YDB_LOG_P_LOG(PRI_ERROR, "Incompatible version",
                     {"marker", "BPD01"},
-                    {"ErrorReason", errorReason});
+                    {"errorReason", errorReason});
                 return false;
             }
         }
@@ -551,7 +551,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         if (!isCompatible) {
             YDB_LOG_P_LOG(PRI_ERROR, "Stored compatibility info is absent, current version is incompatible with the default stored version of PDisk",
                 {"marker", "BPD01"},
-                {"ErrorReason", errorReason});
+                {"errorReason", errorReason});
             return false;
         }
     }
@@ -707,8 +707,8 @@ void TPDisk::ProcessLogReadQueue() {
                 YDB_LOG_P_LOG(PRI_INFO, "Going to read log for owner",
                     {"marker", "BPD01"},
                     {"ownerId", logRead.Owner},
-                    {"FirstLsnToKeep", firstLsnToKeep},
-                    {"FirstNonceToKeep", firstNonceToKeep});
+                    {"firstLsnToKeep", firstLsnToKeep},
+                    {"firstNonceToKeep", firstNonceToKeep});
             }
 
             ui32 endLogChunkIdx;
@@ -872,12 +872,12 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 
     YDB_LOG_P_LOG(PRI_DEBUG, "WriteSysLogRestorePoint",
         {"marker", "BPD69"},
-        {"FirstLogChunkToParseCommits", FirstLogChunkToParseCommits},
-        {"CommonLogger", TString(TStringBuilder() << (void*)CommonLogger.Get())},
-        {"LogChunks.size()", LogChunks.size()},
-        {"LogChunks.front().ChunkIdx", (LogChunks.empty() ? -1 : (i64)LogChunks.front().ChunkIdx)},
-        {"BeginSectorIdx", beginSectorIdx},
-        {"EndSectorIdx", endSectorIdx});
+        {"firstLogChunkToParseCommits", FirstLogChunkToParseCommits},
+        {"commonLogger", TString(TStringBuilder() << (void*)CommonLogger.Get())},
+        {"logChunks", LogChunks.size()},
+        {"chunkIdx", (LogChunks.empty() ? -1 : (i64)LogChunks.front().ChunkIdx)},
+        {"beginSectorIdx", beginSectorIdx},
+        {"endSectorIdx", endSectorIdx});
     ++SysLogLsn;
 }
 
@@ -1038,10 +1038,10 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
         }
         YDB_LOG_P_LOG(PRI_INFO, "AllocateLogChunks for owner",
             {"marker", "BPD01"},
-            {"OwnerId", (ui32)owner},
-            {"Lsn", lsn},
-            {"ChunkIdx", chunkIdx},
-            {"LogChunksSize", LogChunks.size()});
+            {"ownerId", (ui32)owner},
+            {"lsn", lsn},
+            {"chunkIdx", chunkIdx},
+            {"logChunksSize", LogChunks.size()});
         ChunkState[chunkIdx].OwnerId = OwnerSystem;
         ChunkState[chunkIdx].PreviousNonce = lastNonce + noncesPerChunk * (ui64)i;
         // Mark newly allocated log chunks as chunks containing this owners record
@@ -1218,9 +1218,9 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
             Mon.CommitedDataChunks->Inc();
             YDB_LOG_P_LOG(PRI_INFO, "Commit Data Chunk",
                 {"marker", "BPD01"},
-                {"CommitedDataChunks", Mon.CommitedDataChunks->Val()},
-                {"ChunkIdx", chunkIdx},
-                {"OwnerId", (ui32)ChunkState[chunkIdx].OwnerId});
+                {"commitedDataChunks", Mon.CommitedDataChunks->Val()},
+                {"chunkIdx", chunkIdx},
+                {"ownerId", (ui32)ChunkState[chunkIdx].OwnerId});
         }
         ++ChunkState[chunkIdx].CommitsInProgress;
     }
@@ -1243,7 +1243,7 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                     YDB_LOG_DEBUG_CTX(*PCtx->ActorSystem, "Marked as dirty",
                         {"PDiskLogPrefix", PCtx->PDiskLogPrefix},
                         {"chunkIdx", chunkIdx},
-                        {"chunk.ShredGeneration", ChunkState[chunkIdx].ShredGeneration},
+                        {"chunkShredGeneration", ChunkState[chunkIdx].ShredGeneration},
                         {"shredGeneration", ShredGeneration});
                 }
             }
@@ -1289,8 +1289,8 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                     Mon.CommitedDataChunks->Dec();
                     YDB_LOG_P_LOG(PRI_DEBUG, "Remove commited data chunks",
                         {"marker", "BPD10"},
-                        {"CommitedDataChunks", Mon.CommitedDataChunks->Val()},
-                        {"ChunkIdx", chunkIdx});
+                        {"commitedDataChunks", Mon.CommitedDataChunks->Val()},
+                        {"chunkIdx", chunkIdx});
                     state.CommitState = TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE;
                     break;
                 default:
@@ -1302,9 +1302,9 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                 QuarantineChunks.push_back(chunkIdx);
                 YDB_LOG_P_LOG(PRI_INFO, "Push chunk on QuarantineChunks because it has operations in flight",
                     {"marker", "BPD78"},
-                    {"ChunkIdx", chunkIdx},
-                    {"OwnerId", logWrite.Owner},
-                    {"State", state.ToString()});
+                    {"chunkIdx", chunkIdx},
+                    {"ownerId", logWrite.Owner},
+                    {"state", state});
             } else if (state.CommitState == TChunkState::DATA_RESERVED) {
                 Mon.UncommitedDataChunks->Dec();
                 state.CommitState = TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS;
@@ -1427,8 +1427,8 @@ bool TPDisk::ValidateDeleteChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
     }
     YDB_LOG_P_LOG(PRI_INFO, "Deletion of chunk is validated",
         {"marker", "BPD01"},
-        {"ChunkIdx", chunkIdx},
-        {"OwnerId", (ui32)owner});
+        {"chunkIdx", chunkIdx},
+        {"ownerId", (ui32)owner});
     return true;
 }
 
@@ -1448,9 +1448,9 @@ void TPDisk::DeleteChunk(ui32 chunkIdx, TOwner owner) {
                 << " chunkIdx# " << chunkIdx << " state# " << state.ToString());
         YDB_LOG_P_LOG(PRI_INFO, "Chunk is deleted",
             {"marker", "BPD01"},
-            {"ChunkIdx", chunkIdx},
-            {"OldOwner", (ui32)state.OwnerId},
-            {"NewOwner", (ui32)OwnerUnallocated});
+            {"chunkIdx", chunkIdx},
+            {"oldOwner", (ui32)state.OwnerId},
+            {"newOwner", (ui32)OwnerUnallocated});
         Y_VERIFY_S(state.OwnerId == owner, PCtx->PDiskLogPrefix); // TODO DELETE
         state.OwnerId = OwnerUnallocated;
         state.CommitState = TChunkState::FREE;
@@ -1498,10 +1498,10 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
     if (req.Lsn <= ownerData.LastWrittenCommitLsn) {
         YDB_LOG_P_LOG(PRI_NOTICE, "Got EvLog with lsn <= LastWrittenCommitLsn",
             {"marker", "BPD01"},
-            {"OwnerId", req.OwnerId},
+            {"ownerId", req.OwnerId},
             {"VDiskId", ownerData.VDiskId.ToStringWOGeneration()},
-            {"Lsn", req.Lsn},
-            {"LastWrittenCommitLsn", ownerData.LastWrittenCommitLsn});
+            {"lsn", req.Lsn},
+            {"lastWrittenCommitLsn", ownerData.LastWrittenCommitLsn});
     }
     ownerData.LastWrittenCommitLsn = req.Lsn;
     while (it != LogChunks.end() && it->OwnerLsnRange.size() > req.OwnerId) {
@@ -1510,12 +1510,12 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
             //Y_VERIFY_S(range.FirstLsn != range.LastLsn, PCtx->PDiskLogPrefix);
             YDB_LOG_P_LOG(PRI_INFO, "Log chunk is dereferenced by owner",
                 {"marker", "BPD27"},
-                {"ChunkIdx", it->ChunkIdx},
-                {"LsnRange", TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")},
+                {"chunkIdx", it->ChunkIdx},
+                {"lsnRange", TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")},
                 {"ownerId", (ui32)req.OwnerId},
-                {"CurrentLsnToKeep", currentFirstLsnToKeep},
-                {"CausedbyLsn", req.Lsn},
-                {"PreviousCurrentUserCount", it->CurrentUserCount});
+                {"currentLsnToKeep", currentFirstLsnToKeep},
+                {"causedbyLsn", req.Lsn},
+                {"previousCurrentUserCount", it->CurrentUserCount});
             range.IsPresent = false;
             Y_VERIFY_S(it->CurrentUserCount > 0, PCtx->PDiskLogPrefix);
             it->CurrentUserCount--;
@@ -1585,10 +1585,10 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
 
         req.GapEnd->IsEndOfSplice = true;
         writer.WriteNextChunkReference(req.GapEnd->ChunkIdx, expectedNonce, flushAction.Release(), {}, {});
-        YDB_LOG_P_LOG(PRI_INFO, "write nextChunkReference",
+        YDB_LOG_P_LOG(PRI_INFO, "Write nextChunkReference",
             {"marker", "BPD81"},
-            {"GapStartChunkIdx", req.GapStart->ChunkIdx},
-            {"GapEnd", *req.GapEnd});
+            {"gapStartChunkIdx", req.GapStart->ChunkIdx},
+            {"gapEnd", *req.GapEnd});
     } else {
         for (const auto& chunkIdx : req.ChunksToRelease) {
             Keeper.PushFreeOwnerChunk(OwnerSystem, chunkIdx);
@@ -1619,8 +1619,8 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
     if (evReadLogResult.Status != NKikimrProto::OK) {
         YDB_LOG_P_LOG(PRI_ERROR, "Error on log read",
             {"marker", "BPD01"},
-            {"evReadLogResult", evReadLogResult.ToString()},
-            {"InitPhase", InitPhase.load()});
+            {"evReadLogResult", evReadLogResult},
+            {"initPhase", InitPhase.load()});
         switch (InitPhase) {
             case EInitPhase::ReadingSysLog:
                 *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogReadError;
@@ -1826,9 +1826,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             // Output the fully initialized state for each owner and each chunk.
             YDB_LOG_P_LOG(PRI_NOTICE, "PDisk have successfully started",
                 {"marker", "BPD01"});
-            YDB_LOG_P_LOG(PRI_INFO, "",
-                {"marker", "BPD01"},
-                {"StartupOwnerInfo", StartupOwnerInfo()});
+            YDB_LOG_P_LOG(PRI_INFO, StartupOwnerInfo());
 
             return;
         }

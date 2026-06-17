@@ -160,12 +160,12 @@ public:
             }
         }
 
-        YDB_LOG_P_LOG(PRI_DEBUG, "is created",
+        YDB_LOG_P_LOG(PRI_DEBUG, "Is created",
             {"marker", "BPD01"},
-            {"SelfInfo", SelfInfo()},
-            {"ChunkIdx", ChunkIdx},
-            {"SectorIdx", SectorIdx},
-            {"Buffered", buffer ? " WithBuffer" : " NoBuffer"});
+            {"selfInfo", SelfInfo()},
+            {"chunkIdx", ChunkIdx},
+            {"sectorIdx", SectorIdx},
+            {"buffered", buffer ? " WithBuffer" : " NoBuffer"});
     }
 
     const TString SelfInfo() {
@@ -182,10 +182,10 @@ public:
 
         YDB_LOG_P_LOG(PRI_INFO, "WriteNextChunkReference",
             {"marker", "BPD01"},
-            {"SelfInfo", SelfInfo()},
-            {"CurrentChunkIdx", ChunkIdx},
+            {"selfInfo", SelfInfo()},
+            {"currentChunkIdx", ChunkIdx},
             {"nextChunkIdx", nextChunk},
-            {"Nonce", Nonce});
+            {"nonce", Nonce});
 
         ui64 sectorOffset = Format.Offset(ChunkIdx, SectorIdx);
         ui8* sector = BufferedWriter->Seek(sectorOffset, ReplicationFactor, ReplicationFactor, reqId, traceId,
@@ -254,10 +254,10 @@ public:
             OnNewChunk = false;
             YDB_LOG_P_LOG(PRI_DEBUG, "NextSector on new chunk",
                 {"marker", "BPD01"},
-                {"SelfInfo", SelfInfo()},
-                {"CurrentChunkIdx", ChunkIdx},
-                {"SectorIdx", SectorIdx},
-                {"Nonce", Nonce});
+                {"selfInfo", SelfInfo()},
+                {"currentChunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"nonce", Nonce});
         }
         ui32 reserve = 1;
         if (IsSysLog) {
@@ -328,10 +328,10 @@ public:
         if (!IsLog) {
             YDB_LOG_P_LOG(PRI_TRACE, "PrepareParitySectorFooter",
                 {"marker", "BPD01"},
-                {"SelfInfo", SelfInfo()},
-                {"SectorOffset", sectorOffset},
-                {"Nonce", Nonce},
-                {"Hash", sectorFooter.Hash});
+                {"selfInfo", SelfInfo()},
+                {"sectorOffset", sectorOffset},
+                {"nonce", Nonce},
+                {"hash", sectorFooter.Hash});
         }
         BufferedWriter->MarkDirty();
         ++Nonce;
@@ -379,19 +379,19 @@ public:
         if (SectorBytesFree == 0 || SectorBytesFree == Format.SectorPayloadSize()) {
             YDB_LOG_P_LOG(PRI_DEBUG, "TerminateLog Sector is full or free",
                 {"marker", "BPD63"},
-                {"SelfInfo", SelfInfo()},
-                {"SectorBytesFree", SectorBytesFree},
-                {"ChunkIdx", ChunkIdx},
-                {"SectorIdx", SectorIdx},
-                {"SectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
+                {"selfInfo", SelfInfo()},
+                {"sectorBytesFree", SectorBytesFree},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"sectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
         } else if (SectorBytesFree <= sizeof(TFirstLogPageHeader)) {
             YDB_LOG_P_LOG(PRI_DEBUG, "TerminateLog small",
                 {"marker", "BPD65"},
-                {"SelfInfo", SelfInfo()},
-                {"SectorBytesFree", SectorBytesFree},
-                {"ChunkIdx", ChunkIdx},
-                {"SectorIdx", SectorIdx},
-                {"SectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
+                {"selfInfo", SelfInfo()},
+                {"sectorBytesFree", SectorBytesFree},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"sectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
             TFirstLogPageHeader terminator(LogPageTerminator, 0, 0, 0, 0, 0);
             if (IsSysLog) {
                 *Mon.BandwidthPSysLogPadding += SectorBytesFree;
@@ -403,11 +403,11 @@ public:
         } else {
             YDB_LOG_P_LOG(PRI_DEBUG, "TerminateLog large",
                 {"marker", "BPD66"},
-                {"SelfInfo", SelfInfo()},
-                {"SectorBytesFree", SectorBytesFree},
-                {"ChunkIdx", ChunkIdx},
-                {"SectorIdx", SectorIdx},
-                {"SectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
+                {"selfInfo", SelfInfo()},
+                {"sectorBytesFree", SectorBytesFree},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"sectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
             ui32 availableSize = SectorBytesFree - sizeof(TFirstLogPageHeader);
             TFirstLogPageHeader header(LogPageTerminator, availableSize, availableSize, 0, 0, 0);
             if (IsSysLog) {
@@ -437,10 +437,10 @@ public:
             isTornOffHeader = (SectorBytesFree == sizeof(TFirstLogPageHeader) && !isWhole);
             YDB_LOG_P_LOG(PRI_DEBUG, "LogPageHeader",
                 {"marker", "BPD60"},
-                {"SelfInfo", SelfInfo()},
-                {"ChunkIdx", ChunkIdx},
-                {"SectorIdx", SectorIdx},
-                {"Nonce", Nonce});
+                {"selfInfo", SelfInfo()},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"nonce", Nonce});
             Write(&header, sizeof(TFirstLogPageHeader), reqId, traceId);
         }
         if (isTornOffHeader) {
@@ -456,10 +456,10 @@ public:
             }
             YDB_LOG_P_LOG(PRI_DEBUG, "LogPageHeader",
                 {"marker", "BPD61"},
-                {"SelfInfo", SelfInfo()},
-                {"ChunkIdx", ChunkIdx},
-                {"SectorIdx", SectorIdx},
-                {"Nonce", Nonce});
+                {"selfInfo", SelfInfo()},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"nonce", Nonce});
             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
         }
     }
@@ -487,8 +487,8 @@ public:
             }
             YDB_LOG_P_LOG(PRI_DEBUG, "LogPageHeader writing",
                 {"marker", "BPD62"},
-                {"ChunkIdx", ChunkIdx},
-                {"SectorIdx", SectorIdx});
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx});
             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
         }
         Write(data, size, reqId, traceId);

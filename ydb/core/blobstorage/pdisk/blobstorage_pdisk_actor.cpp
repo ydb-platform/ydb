@@ -592,7 +592,7 @@ public:
                 SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
                 YDB_LOG_P_LOG(PRI_NOTICE, "Successfully read format record",
                     {"marker", "BSP01"},
-                    {"Format", PDisk->Format.ToString()});
+                    {"format", PDisk->Format});
                 TString info;
                 if (!PDisk->CheckGuid(&info)) {
                     *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
@@ -854,8 +854,8 @@ public:
 
         YDB_LOG_P_LOG(PRI_DEBUG, "ReplyErrror",
             {"marker", "BSY02"},
-            {"Result", result->ToString()},
-            {"To", ev->Sender.LocalId()});
+            {"result", result->ToString()},
+            {"to", ev->Sender.LocalId()});
         Send(ev->Sender, result.Release());
         PDisk->Mon.GetReadCounter(evChunkRead.PriorityClass)->CountResponse();
     }
@@ -1006,7 +1006,7 @@ public:
     void Handle(NPDisk::TEvReadLog::TPtr &ev) {
         YDB_LOG_P_LOG(PRI_DEBUG, "Got TEvReadLog",
             {"marker", "BSY01"},
-            {"Event", ev->Get()->ToString()});
+            {"event", ev->Get()->ToString()});
         double burstMs;
         auto* request = PDisk->ReqCreator.CreateFromEvPtr<TLogRead>(ev, &burstMs);
         PDisk->InputRequest(request);
@@ -1108,7 +1108,7 @@ public:
     void Handle(NPDisk::TEvConfigureScheduler::TPtr &ev) {
         YDB_LOG_P_LOG(PRI_INFO, "Got TEvConfigureScheduler",
             {"marker", "BSP01"},
-            {"Event", ev->Get()->ToString()});
+            {"event", ev->Get()->ToString()});
         PDisk->Mon.YardConfigureScheduler.CountRequest();
         // Configure forseti scheduler weights
         auto* request = PDisk->ReqCreator.CreateFromEv<TConfigureScheduler>(*ev->Get(), ev->Sender);
@@ -1261,9 +1261,9 @@ public:
     void Handle(NPDisk::TEvWhiteboardReportResult::TPtr &ev) {
         NPDisk::TEvWhiteboardReportResult *result = ev->Get();
         Send(NodeWhiteboardServiceId, result->PDiskState.Release());
-        YDB_LOG_P_LOG(PRI_TRACE, "handle TEvWhiteboardReportResult",
+        YDB_LOG_P_LOG(PRI_TRACE, "Handle TEvWhiteboardReportResult",
             {"marker", "BSP01"},
-            {"Event", result->ToString()});
+            {"event", result->ToString()});
         for (auto& p : result->VDiskStateVect) {
             Send(std::get<0>(p),
                     new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(std::move(std::get<1>(p))));
@@ -1285,7 +1285,7 @@ public:
     void Handle(NPDisk::TEvDeviceError::TPtr &ev) {
         YDB_LOG_P_LOG(PRI_ERROR, "Actor recieved device error",
             {"marker", "BSP01"},
-            {"Details", ev->Get()->Info});
+            {"details", ev->Get()->Info});
         *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::DeviceIoError;
         *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
         *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorDeviceIoError;

@@ -83,10 +83,14 @@ graph TD
         R3B["Реплика 2"]
         R3C["Реплика 3"]
     end
-    Record["Запись X\n(выборка из 3 колец)"]
-    Record --> R1A
-    Record --> R2C
-    Record --> R3B
+    Record1["Запись X\n(выборка из 3 колец)"]
+    Record2["Запись Y\n(выборка из 3 колец)"]
+    Record1 --> R1A
+    Record1 --> R2C
+    Record1 --> R3B
+    Record2 --> R1B
+    Record2 --> R2A
+    Record2 --> R3B
 ```
 
 ### Группа колец {#ring-group}

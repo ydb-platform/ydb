@@ -144,6 +144,18 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         }
     }
 
+    void ForEachUsed(std::invocable<TSingleTuple> auto consume) const {
+        MKQL_ENSURE(TrackUsed_, "ForEachUsed called but not tracking used tuples");
+        for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
+            if (Used_[i]) {
+                consume(TSingleTuple{
+                    BuildData_.PackedTuples.data() + i * RowWidth_,
+                    BuildData_.Overflow.data()
+                });
+            }
+        }
+    }
+
   private:
     IBlockLayoutConverter::TPackResult BuildData_;
     NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;

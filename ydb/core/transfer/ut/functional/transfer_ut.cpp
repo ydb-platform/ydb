@@ -1890,12 +1890,13 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.Write({"Message-1"});
-        Sleep(TDuration::Seconds(2));
+        testCase.CheckResult({
+            {_C("Key", ui64(0))},
+        });
+        Sleep(TDuration::Seconds(1)); // move current time forward
         testCase.Write({"Message-2"});
 
-
         struct TValueChecker : public IChecker {
-
             void Assert(const std::string& msg, const ::Ydb::Value& value) override {
                 Cerr << (TStringBuilder() <<value.ShortDebugString() << Endl);
                 if (!First) {
@@ -1911,7 +1912,6 @@ Y_UNIT_TEST_SUITE(Transfer)
         };
 
         auto checker = std::make_shared<TValueChecker>();
-
         testCase.CheckResult({
             {{"Message", checker}},
             {{"Message", checker}},
@@ -1921,6 +1921,4 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTable();
         testCase.DropTopic();
     }
-
 }
-

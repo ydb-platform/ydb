@@ -2,7 +2,6 @@ UNITTEST()
 
 SRCS(
     queue_id_ut.cpp
-    params_ut.cpp
 )
 
 PEERDIR(

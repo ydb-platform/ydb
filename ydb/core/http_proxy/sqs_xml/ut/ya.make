@@ -7,6 +7,7 @@ PEERDIR(
 )
 
 SRCS(
+    params_ut.cpp
     xml_builder_ut.cpp
 )
 

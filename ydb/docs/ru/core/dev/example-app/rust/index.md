@@ -88,7 +88,7 @@ qc.exec("REPLACE INTO ... FROM AS_TABLE($seriesData);")
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Потоковое чтение в режиме snapshot read-only:
+Потоковое чтение в режиме изоляции snapshot read-only:
 
 ```rust
 use ydb::QueryTxMode;

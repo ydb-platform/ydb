@@ -6,7 +6,6 @@
 #include <ydb/core/base/id_wrapper.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <util/generic/overloaded.h>
 #include <util/generic/maybe.h>
 
 #include <google/protobuf/descriptor.h>

@@ -38,8 +38,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXTERNAL_IDP_PROVIDER
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXTERNAL_IDP_PROVIDER
-
 namespace NKikimr {
 
 namespace {

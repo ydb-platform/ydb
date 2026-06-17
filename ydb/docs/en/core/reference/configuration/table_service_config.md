@@ -37,7 +37,7 @@ table_service_config:
 
 ### Enable {#enable}
 
-Spilling is enabled by default. The following parameters control the enabling and disabling of various spilling types.
+Spilling is enabled by default. The following parameter controls enabling and disabling the spilling service.
 
 #### local_file_config.enable {#local-file-config-enable}
 

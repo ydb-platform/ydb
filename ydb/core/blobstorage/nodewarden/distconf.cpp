@@ -74,7 +74,7 @@ namespace NKikimr::NStorage {
             StorageConfigLoaded = true;
         }
 
-        if (const auto& icb = AppData()->Icb) {
+        if (const TIntrusivePtr<NKikimr::TControlBoard>& icb = AppData()->Icb) {
             TControlBoard::RegisterSharedControl(RootRetroTraceBatchIntervalSec,
                     icb->RetroTracingControls.RootBatchIntervalSec);
         }

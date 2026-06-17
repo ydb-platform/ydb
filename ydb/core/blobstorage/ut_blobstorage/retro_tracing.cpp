@@ -66,12 +66,64 @@ Y_UNIT_TEST_SUITE(BlobStorageRetroTracing) {
             UNIT_ASSERT_VALUES_UNEQUAL_C(backpressureSpans1, backpressureSpans2, uploader->PrintTraces());
             UNIT_ASSERT_VALUES_UNEQUAL_C(vdiskSpans1, vdiskSpans2, uploader->PrintTraces());
         }
+
+        ui32 CountDSProxySpans() {
+            ui32 count = 0;
+            for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+                NWilson::TFakeWilsonUploader* uploader = Env->FakeWilsonUploaders[nodeId];
+                if (!uploader) {
+                    continue;
+                }
+                for (const auto& span : uploader->Spans) {
+                    if (span.name().find("DSProxy") != std::string::npos) {
+                        ++count;
+                    }
+                }
+            }
+            return count;
+        }
+
+        void DoPlainPut(ui64 cookie) {
+            TString data = MakeData(1_MB);
+            TLogoBlobID blobId(1, 1, 1, 1, data.size(), cookie);
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max()), 0);
+            });
+            auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(Edge, false, TInstant::Max());
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        }
+
+        void DemandAllTracesAndCollect() {
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                NRetroTracing::DemandAllTraces();
+            });
+            Env->Sim(TDuration::Seconds(10));
+        }
     };
 
     Y_UNIT_TEST(Basics) {
         TTestCtx ctx;
         ctx.Initialize();
         ctx.Run();
+    }
+
+    Y_UNIT_TEST(StorageGenerationControl) {
+        TTestCtx ctx;
+        ctx.Initialize();
+
+        ctx.DoPlainPut(1);
+        ctx.DemandAllTracesAndCollect();
+        UNIT_ASSERT_VALUES_EQUAL_C(ctx.CountDSProxySpans(), 0u,
+                "Expected no DSProxy retro spans while storage generation is disabled");
+
+        ctx.Env->SetIcbControl(0, "RetroTracingControls.EnableStorageGeneration", 1);
+        ctx.Env->Sim(TDuration::Seconds(20));
+
+        ctx.DoPlainPut(2);
+        ctx.DemandAllTracesAndCollect();
+        UNIT_ASSERT_GT_C(ctx.CountDSProxySpans(), 0u,
+                "Expected DSProxy retro spans after enabling storage generation");
     }
 
     ////////////////////////////////////////////////////////////////////////////

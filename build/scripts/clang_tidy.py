@@ -12,6 +12,10 @@ from collections import defaultdict
 
 load_yaml = None
 
+BUILD_VOLUME_PROFILE_KEY = "build_volume"
+BUILD_VOLUME_STATISTICS_KEY = "source-manager.NumFileBytesInTranslationUnit"
+CLANG_TIDY_STATS_FILE = "clang-tidy-stats.json"
+
 
 def setup_script(args):
     global tidy_config_validation
@@ -38,6 +42,7 @@ def parse_args():
     parser.add_argument("--export-fixes", required=True)
     parser.add_argument("--checks", required=False, default="")
     parser.add_argument("--header-filter", required=False, default=None)
+    parser.add_argument("--collect-build-volume", action="store_true")
     return parser.parse_known_args()
 
 
@@ -57,17 +62,34 @@ def generate_compilation_database(clang_cmd, source_root, filename, path):
 
 def load_profile(path):
     if os.path.exists(path):
-        files = os.listdir(path)
-        if len(files) == 1:
-            with open(os.path.join(path, files[0])) as afile:
+        profile_files = [f for f in os.listdir(path) if f != CLANG_TIDY_STATS_FILE]
+        if len(profile_files) == 1:
+            with open(os.path.join(path, profile_files[0])) as afile:
                 return json.load(afile)["profile"]
-        elif len(files) > 1:
+        elif len(profile_files) > 1:
             return {
-                "error": "found several profile files: {}".format(files),
+                "error": "found several profile files: {}".format(profile_files),
             }
     return {
         "error": "profile file is missing",
     }
+
+
+def load_build_volume(path):
+    if not os.path.exists(path):
+        return None
+
+    try:
+        with open(path) as afile:
+            statistics = json.load(afile)
+    except (IOError, ValueError):
+        return None
+
+    build_volume = statistics.get(BUILD_VOLUME_STATISTICS_KEY)
+    if type(build_volume) is not int:
+        return None
+
+    return build_volume
 
 
 def load_fixes(path):
@@ -172,6 +194,10 @@ def main():
 
     profile_tmpdir = ensure_clean_dir("profile_tmpdir")
     db_tmpdir = ensure_clean_dir("db_tmpdir")
+    statistics_file = None
+    if args.collect_build_volume:
+        statistics_file = os.path.join(profile_tmpdir, CLANG_TIDY_STATS_FILE)
+        clang_cmd += ["-Xclang", "-stats-file={}".format(statistics_file)]
     fixes_file = "fixes.txt"
     config_dir = ensure_clean_dir("config_dir")
     result_config_file = args.default_config_file
@@ -189,6 +215,10 @@ def main():
 
     cmd = [
         clang_tidy_bin,
+    ]
+    if args.collect_build_volume:
+        cmd += ["--stats"]
+    cmd += [
         args.testing_src,
         "-p",
         compile_command_path,
@@ -225,6 +255,10 @@ def main():
                 exit_code = 1
     out = out.replace(args.source_root, "$(SOURCE_ROOT)")
     profile = load_profile(profile_tmpdir)
+    if statistics_file is not None:
+        build_volume = load_build_volume(statistics_file)
+        if build_volume is not None:
+            profile[BUILD_VOLUME_PROFILE_KEY] = build_volume
     testing_src = os.path.relpath(args.testing_src, args.source_root)
     tidy_fixes = load_fixes(fixes_file)
 

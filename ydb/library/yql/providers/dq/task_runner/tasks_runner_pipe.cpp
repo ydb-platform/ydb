@@ -1741,7 +1741,7 @@ public:
         const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx,
         TDqComputeActorWatermarks* watermarksTracker,
-        TDqSourceWatermarkTracker<TPartitionKey>* sourceWatermarksTracker
+        TDqWatermarkGeneratorTracker* sourceWatermarksTracker
     ) override {
         Y_UNUSED(execCtx);
         Y_UNUSED(watermarksTracker);

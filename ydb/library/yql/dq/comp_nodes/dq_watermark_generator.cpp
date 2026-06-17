@@ -1,6 +1,6 @@
 #include "dq_watermark_generator.h"
 
-#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
 #include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -19,9 +19,6 @@ namespace {
 
 const TStatKey WatermarkGenerator_EmptyTimeCount("WatermarkGenerator_EmptyTimeCount", true);
 
-using NYql::NDq::TPartitionKey;
-using TDqSourceWatermarkTracker = NYql::NDq::TDqSourceWatermarkTracker<TPartitionKey>;
-
 class TDqWatermarkGenerator : public TStatefulSourceComputationNode<TDqWatermarkGenerator/* , true */> {
     using TSelf = TDqWatermarkGenerator;
     using TBaseComputation = TStatefulSourceComputationNode<TSelf/* , true */>;
@@ -34,7 +31,7 @@ public:
             TMemoryUsageInfo* memInfo,
             NUdf::TUnboxedValue&& stream,
             const TSelf* self,
-            std::vector<TPartitionKey> partitionKeys,
+            std::vector<NYql::NDq::TPartitionKey> partitionKeys,
             TComputationContext& ctx
         )
             : TBase(memInfo)
@@ -61,11 +58,9 @@ public:
             const auto status = Stream_.Fetch(value);
             const auto now = TInstant::Now();
             if (Self_->WatermarkTracker_) {
-                Self_->WatermarkTracker_->ProcessIdlenessCheck(now);
                 if (const auto idleWatermark = Self_->WatermarkTracker_->HandleIdleness(now)) {
                     Self_->Watermark_.WatermarkIn = idleWatermark;
                 }
-                [[maybe_unused]] const auto nextIdleCheckAt = Self_->WatermarkTracker_->PrepareIdlenessCheck(now);
             }
 
             if (status != NUdf::EFetchStatus::Ok) {
@@ -89,7 +84,7 @@ public:
                 const auto partitionIdValue = partitionKeyValue.GetElement(1);
                 const auto partitionId = partitionIdValue.Get<ui64>();
 
-                const auto partitionKey = TPartitionKey{
+                const auto partitionKey = NYql::NDq::TPartitionKey{
                     .Cluster = cluster,
                     .PartitionId = partitionId,
                 };
@@ -125,7 +120,7 @@ public:
         TDuration idleTimeout,
         std::vector<std::string> clusters,
         TWatermark& watermark,
-        TDqSourceWatermarkTracker* watermarkTracker
+        NYql::NDq::TDqWatermarkGeneratorTracker* watermarkTracker
     )
         : TBaseComputation(mutables)
         , Input_(input)
@@ -181,8 +176,8 @@ private:
         );
     }
 
-    [[nodiscard]] std::vector<TPartitionKey> ExtractPartitions(NUdf::TUnboxedValue partitionsValue) const {
-        std::vector<TPartitionKey> partitionKeys;
+    [[nodiscard]] std::vector<NYql::NDq::TPartitionKey> ExtractPartitions(NUdf::TUnboxedValue partitionsValue) const {
+        std::vector<NYql::NDq::TPartitionKey> partitionKeys;
 
         for (const auto& cluster : Clusters_) {
             auto partitionsIterator = partitionsValue.GetListIterator();
@@ -207,7 +202,7 @@ private:
     TDuration IdleTimeout_;
     std::vector<std::string> Clusters_;
     TWatermark& Watermark_;
-    TDqSourceWatermarkTracker* WatermarkTracker_;
+    NYql::NDq::TDqWatermarkGeneratorTracker* WatermarkTracker_;
 };
 
 } // anonymous namespace
@@ -216,7 +211,7 @@ IComputationNode* WrapDqWatermarkGenerator(
     TCallable& callable,
     const TComputationNodeFactoryContext& ctx,
     TWatermark& watermark,
-    TDqSourceWatermarkTracker* watermarkTracker
+    NYql::NDq::TDqWatermarkGeneratorTracker* watermarkTracker
 ) {
     auto streamType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(streamType->IsStream(), "Expected stream");

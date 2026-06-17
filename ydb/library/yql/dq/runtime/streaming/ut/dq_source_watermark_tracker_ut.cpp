@@ -203,31 +203,22 @@ Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
 
     Y_UNIT_TEST(IdleNextCheckAt) {
         auto tracker = InitTrackerWithIdleness();
-        std::vector<TInstant> scheduledChecks;
-        tracker.SetNotifyHandler([&](TInstant checkTime) {
-            scheduledChecks.push_back(checkTime);
-        });
 
         UNIT_ASSERT(tracker.RegisterPartition(0, TInstant::Seconds(10)));
         UNIT_ASSERT(tracker.RegisterPartition(1, TInstant::Seconds(10)));
-        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(10'500)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(20'500)));
 
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(20), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(30), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
-        UNIT_ASSERT_VALUES_EQUAL(std::vector<TInstant>{TInstant::Seconds(20)}, scheduledChecks);
 
-        UNIT_ASSERT(!tracker.ProcessIdlenessCheck(TInstant::MilliSeconds(19'999)));
-        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::MilliSeconds(19'999)));
+        UNIT_ASSERT(!tracker.ProcessIdlenessCheck(TInstant::MilliSeconds(29'999)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::MilliSeconds(29'999)));
 
-        UNIT_ASSERT(tracker.ProcessIdlenessCheck(TInstant::Seconds(20)));
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(20)));
+        UNIT_ASSERT(tracker.ProcessIdlenessCheck(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(30)));
 
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::MilliSeconds(20'500), tracker.PrepareIdlenessCheck(TInstant::Seconds(20)));
-        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(20)));
-        UNIT_ASSERT_VALUES_EQUAL(
-            std::vector<TInstant>({TInstant::Seconds(20), TInstant::MilliSeconds(20'500)}),
-            scheduledChecks
-        );
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(40), tracker.PrepareIdlenessCheck(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(30)));
     }
 
     Y_UNIT_TEST(ActivityExtendsOnlyActivePartitionDeadline) {
@@ -237,12 +228,12 @@ Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
         UNIT_ASSERT(tracker.RegisterPartition(1, TInstant::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(
             Nothing(),
-            tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(10'500))
+            tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(20'500))
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(20)));
-        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::MilliSeconds(20'499)));
-        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::MilliSeconds(20'500)));
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::MilliSeconds(34'999)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::Seconds(35)));
     }
 }
 

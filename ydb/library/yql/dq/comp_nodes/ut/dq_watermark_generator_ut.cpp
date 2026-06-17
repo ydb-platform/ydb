@@ -3,8 +3,7 @@
 
 #include <ydb/library/yql/dq/comp_nodes/dq_watermark_generator.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
-#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
-#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -113,7 +112,7 @@ void TestImpl(
     const std::vector<TOutputItem>& expected
 ) {
     TWatermark watermark;
-    NYql::NDq::TDqSourceWatermarkTracker<NYql::NDq::TPartitionKey> watermarkTracker("Test ");
+    NYql::NDq::TDqWatermarkGeneratorTracker watermarkTracker("Test ");
 
     TDqSetup<false> setup(GetDqNodeFactory([&](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         if (callable.GetType()->GetName() == "DqWatermarkGenerator"sv) {

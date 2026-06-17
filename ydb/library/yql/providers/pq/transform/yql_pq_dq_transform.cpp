@@ -1,6 +1,5 @@
 #include "yql_pq_dq_transform.h"
 
-#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/common/pq_partitions.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 

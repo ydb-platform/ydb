@@ -1,9 +1,7 @@
 #pragma once
 
 namespace NYql::NDq {
-struct TPartitionKey;
-template <typename TPartitionKey>
-class TDqSourceWatermarkTracker;
+class TDqWatermarkGeneratorTracker;
 } // namespace NYql::NDq
 
 namespace NKikimr::NMiniKQL {
@@ -17,7 +15,7 @@ IComputationNode* WrapDqWatermarkGenerator(
     TCallable& callable,
     const TComputationNodeFactoryContext& ctx,
     TWatermark& watermark,
-    NYql::NDq::TDqSourceWatermarkTracker<NYql::NDq::TPartitionKey>* watermarkTracker
+    NYql::NDq::TDqWatermarkGeneratorTracker* watermarkTracker
 );
 
 } // namespace NKikimr::NMiniKQL

@@ -1,9 +1,8 @@
 #pragma once
 
-#include "pq_partition_key.h"
-
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 
 #include <vector>

@@ -50,6 +50,11 @@ class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
         return self._first_item_as_path_if_multipath(self.site_data_dir)
 
     @property
+    def site_config_path(self) -> Path:
+        """:returns: config path shared by users. Only return the first item, even if ``multipath`` is set to ``True``"""
+        return self._first_item_as_path_if_multipath(self.site_config_dir)
+
+    @property
     def user_config_dir(self) -> str:
         """:returns: config directory tied to the user, same as `user_data_dir`"""
         return self._base_user_app_support_dir()
@@ -128,6 +133,31 @@ class _MacOSDefaults(PlatformDirsABC):  # noqa: PLR0904
     def user_desktop_dir(self) -> str:
         """:returns: desktop directory tied to the user, e.g. ``~/Desktop``"""
         return os.path.expanduser("~/Desktop")  # noqa: PTH111
+
+    @property
+    def user_projects_dir(self) -> str:
+        """:returns: projects directory tied to the user, e.g. ``~/Projects``"""
+        return os.path.expanduser("~/Projects")  # noqa: PTH111
+
+    @property
+    def user_publicshare_dir(self) -> str:
+        """:returns: public share directory tied to the user, e.g. ``~/Public``"""
+        return os.path.expanduser("~/Public")  # noqa: PTH111  # API returns str, not Path
+
+    @property
+    def user_templates_dir(self) -> str:
+        """:returns: templates directory tied to the user, e.g. ``~/Templates``"""
+        return os.path.expanduser("~/Templates")  # noqa: PTH111  # API returns str, not Path
+
+    @property
+    def user_fonts_dir(self) -> str:
+        """:returns: fonts directory tied to the user, e.g. ``~/Library/Fonts``"""
+        return os.path.expanduser("~/Library/Fonts")  # noqa: PTH111  # API returns str, not Path
+
+    @property
+    def user_preference_dir(self) -> str:
+        """:returns: preference directory tied to the user, e.g. ``~/Library/Preferences/AppName``"""
+        return self._append_app_name_and_version(os.path.expanduser("~/Library/Preferences"))  # noqa: PTH111  # API returns str, not Path
 
     @property
     def user_bin_dir(self) -> str:

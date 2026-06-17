@@ -24,6 +24,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/protobuf/json/util.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -77,6 +78,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::BlockstoreConfigItem,
     (ui32)NKikimrConsole::TConfigItem::StatisticsConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TliConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -180,6 +182,19 @@ public:
     TDynBitMap FilterKinds(const TDynBitMap& in);
 
     void UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
+
+    struct TParsedOpaqueConfig {
+        // Raw JSON section text used for cheap equality between updates.
+        // !empty() (empty strings aka "section present but empty" treated as absent config and not stored)
+        TString RawJson;
+        // May be null in the cache (parser produced nothing), but null
+        // never placed into an outgoing event — see PopulateWithOpaqueConfigs.
+        std::shared_ptr<const ::google::protobuf::Message> Parsed;
+    };
+
+    THashMap<ui32, TParsedOpaqueConfig> ParseOpaqueConfigs() const;
+
+    void PopulateWithOpaqueConfigs(TEvConsole::TEvConfigNotificationRequest& ev, const TDynBitMap& kinds) const;
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
@@ -340,6 +355,15 @@ private:
     NKikimrConsole::TYamlConfigUnknownFields ResolvedConfigUnknownFields;
     std::optional<TString> ConfigurationVersion;
 
+    // Per-kind parsers for opaque config sections, injected by a client that
+    // reuses the dispatcher. The dispatcher has no schema for these sections; it
+    // just calls the parser and attaches the result to the node-local notification.
+    THashMap<ui32, TOpaqueConfigParser> OpaqueConfigParsers;
+
+    // Parsed opaque-config view, refreshed on every console notification.
+    // Used to detect opaque-only changes and to populate outgoing subscriber
+    // notifications without re-parsing per subscriber.
+    THashMap<ui32, TParsedOpaqueConfig> CurrentOpaqueConfigs;
 };
 
 TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo)
@@ -354,6 +378,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , RecordedInitialConfiguratorDeps(std::move(initInfo.RecordedInitialConfiguratorDeps))
         , Args(initInfo.Args)
         , NextRequestCookie(Now().GetValue())
+        , OpaqueConfigParsers(initInfo.OpaqueConfigParsers)
 {}
 
 void TConfigsDispatcher::Bootstrap()
@@ -416,6 +441,8 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
 
     auto notification = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
+    // Parsed once when UpdateInProcess was built; share the (read-only) result.
+    notification->OpaqueConfigs = subscription->UpdateInProcess->OpaqueConfigs;
 
     BLOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
                 << ": " << notification->Record.ShortDebugString());
@@ -1141,6 +1168,67 @@ catch (...) {
     *StartupConfigChanged = 1;
 }
 
+THashMap<ui32, TConfigsDispatcher::TParsedOpaqueConfig> TConfigsDispatcher::ParseOpaqueConfigs() const
+{
+    THashMap<ui32, TParsedOpaqueConfig> result;
+    if (!YamlConfigEnabled || OpaqueConfigParsers.empty() || ResolvedJsonConfig.empty()) {
+        return result;
+    }
+    // The opaque carrier proto is empty by design — its content lives in the
+    // resolved YAML. Pull each kind's section out and pass it to the end-node
+    // parser that owns the real schema.
+    NJson::TJsonValue resolved;
+    if (!NJson::ReadJsonTree(ResolvedJsonConfig, &resolved)) {
+        return result;
+    }
+    const NJson::TJsonValue* configSection = &resolved;
+    if (const NJson::TJsonValue* c = nullptr; resolved.GetValuePointer("config", &c)) {
+        configSection = c;
+    }
+    const auto* desc = NKikimrConfig::TAppConfig::descriptor();
+    for (const auto& [kind, parser] : OpaqueConfigParsers) {
+        const auto* field = desc->FindFieldByNumber(kind);
+        if (!field) {
+            continue;
+        }
+        TString name = field->name();
+        NProtobufJson::ToSnakeCaseDense(&name);
+        const NJson::TJsonValue* section = nullptr;
+        if (!configSection->GetValuePointer(name, &section)) {
+            continue;   // section absent — no config
+        }
+        TParsedOpaqueConfig entry;
+        entry.RawJson = NJson::WriteJson(section, /*formatOutput=*/ false);
+        if (entry.RawJson.empty()) {
+            continue;   // empty section — treated as "no config"
+        }
+        try {
+            entry.Parsed = parser(entry.RawJson);
+        }
+        catch (const std::exception& e) {
+            BLOG_ERROR("Error parsing opaque config [#" << kind << ":" << name << "]: " << e.what());
+        }
+        catch (...) {
+            BLOG_ERROR("Error parsing opaque config [#" << kind << ":" << name << "]: unknown exception");
+        }
+        result.emplace(kind, std::move(entry));
+    }
+    return result;
+}
+
+void TConfigsDispatcher::PopulateWithOpaqueConfigs(
+    TEvConsole::TEvConfigNotificationRequest& ev,
+    const TDynBitMap& kinds) const
+{
+    Y_FOR_EACH_BIT(kind, kinds) {
+        auto it = CurrentOpaqueConfigs.find(kind);
+        if (it == CurrentOpaqueConfigs.end() || !it->second.Parsed) {
+            continue;   // absent OR empty/reset — never emit a null payload
+        }
+        ev.OpaqueConfigs[kind] = it->second.Parsed;
+    }
+}
+
 void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 {
     auto &rec = ev->Get()->Record;
@@ -1205,12 +1293,40 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         affectedKinds.insert(kind);
     }
 
+    // Re-parse opaque configs from the resolved JSON and fold any add /
+    // remove / mutation / empty<->non-empty transition into affectedKinds.
+    // Opaque sections are invisible to AffectedKinds and to the proto diff,
+    // so without this an opaque-only update never reaches subscribers.
+    THashSet<ui32> affectedOpaqueKinds;
+    if (isYamlChanged) {
+        auto newOpaqueConfigs = ParseOpaqueConfigs();
+        for (const auto& [kind, parsed] : newOpaqueConfigs) {
+            auto it = CurrentOpaqueConfigs.find(kind);
+            if (it == CurrentOpaqueConfigs.end() || it->second.RawJson != parsed.RawJson) {
+                // config was added or changed
+                affectedOpaqueKinds.insert(kind);
+            }
+        }
+        for (const auto& [kind, _] : CurrentOpaqueConfigs) {
+            if (!newOpaqueConfigs.contains(kind)) {
+                // config was removed
+                affectedOpaqueKinds.insert(kind);
+            }
+        }
+        CurrentOpaqueConfigs = std::move(newOpaqueConfigs);
+    }
+
     for (auto &[kinds, subscription] : SubscriptionsByKinds) {
         NKikimrConfig::TAppConfig trunc;
 
         bool hasAffectedKinds = false;
 
         if (subscription->Yaml && YamlConfigEnabled) {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
+                if (affectedOpaqueKinds.contains(kind)) {
+                    hasAffectedKinds = true;
+                }
+            }
             if (!isYamlChanged && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
                 continue;
             }
@@ -1225,7 +1341,6 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                     hasAffectedKinds = true;
                 }
             }
-
             // we try resend all configs if yaml config was turned off
             if (!hasAffectedKinds && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
                 continue;
@@ -1245,6 +1360,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
+            PopulateWithOpaqueConfigs(*subscription->UpdateInProcess, FilterKinds(kinds));
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), FilterKinds(kinds));
 
@@ -1389,6 +1505,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             Y_FOR_EACH_BIT(kind, kinds) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
+            PopulateWithOpaqueConfigs(*subscription->UpdateInProcess, FilterKinds(kinds));
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(CurrentConfig.GetVersion(), kinds);
         }

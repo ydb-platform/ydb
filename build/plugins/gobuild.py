@@ -90,7 +90,8 @@ def need_lint(path):
     return not path.startswith('$S/vendor/') and not path.startswith('$S/contrib/')
 
 
-def on_go_process_srcs(unit):
+@ymake.macro
+def _GO_PROCESS_SRCS(unit: ymake.Unit):
     """
     _GO_PROCESS_SRCS() macro processes only 'CGO' files. All remaining *.go files
     and other input files are currently processed by a link command of the
@@ -317,7 +318,8 @@ def on_go_process_srcs(unit):
         unit.on_go_compile_cgo2(args)
 
 
-def on_go_resource(unit, *args):
+@ymake.macro
+def _GO_RESOURCE(unit: ymake.Unit, *args: tuple[str, ...]):
     args = list(args)
     files = args[::2]
     keys = args[1::2]

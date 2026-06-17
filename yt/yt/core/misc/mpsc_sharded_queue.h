@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 

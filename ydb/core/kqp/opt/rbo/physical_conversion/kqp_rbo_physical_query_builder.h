@@ -40,6 +40,7 @@ private:
     NYql::TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
     NYql::TKqpPhyTxSettings GetPhysicalTxSettings() const;
     NYql::TExprNode::TPtr GetFinalStage(const NYql::TExprNode::TPtr& stage) const;
+    bool NeedFinalNarrowing();
     NYql::TExprNode::TPtr BuildFinalNarrowStage(const NYql::TExprNode::TPtr& stage) const;
     TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(const TVector<NYql::TExprNode::TPtr>& physicalStages);
     NYql::TExprNode::TPtr BuildMaterialize(NYql::TExprNode::TPtr ranges);

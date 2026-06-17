@@ -1,8 +1,10 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <util/random/shuffle.h>
 #include <map>
@@ -72,17 +74,16 @@ Y_UNIT_TEST_LLVM(TestCompactUtf8Set) {
 
     TVector<TRuntimeNode> items;
     for (auto s : data) {
-        items.push_back(pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(s));
+        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
     }
     Shuffle(items.begin(), items.end());
-    auto dataType = pb.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+    auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
     auto list = pb.NewList(dataType, items);
-    auto dict = pb.ToHashedDict(list, false, [](TRuntimeNode n) { return n; }, [&pb](TRuntimeNode /*n*/) { return pb.NewVoid(); }, true);
+    auto dict = pb.ToHashedDict(list, false, [](TRuntimeNode n) { return n; }, [&pb](TRuntimeNode /*n*/) { return NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, true);
     auto pgmReturn = pb.Contains(dict, items.front());
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto res = graph->GetValue().template Get<bool>();
-    UNIT_ASSERT_VALUES_EQUAL(res, true);
+    AssertUnboxedValueElementEqual(graph->GetValue(), true);
 }
 
 Y_UNIT_TEST_LLVM(TestUtf8Set) {
@@ -91,17 +92,16 @@ Y_UNIT_TEST_LLVM(TestUtf8Set) {
 
     TVector<TRuntimeNode> items;
     for (auto s : data) {
-        items.push_back(pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(s));
+        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
     }
     Shuffle(items.begin(), items.end());
-    auto dataType = pb.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+    auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
     auto list = pb.NewList(dataType, items);
-    auto dict = pb.ToHashedDict(list, false, [](TRuntimeNode n) { return n; }, [&pb](TRuntimeNode /*n*/) { return pb.NewVoid(); }, false);
+    auto dict = pb.ToHashedDict(list, false, [](TRuntimeNode n) { return n; }, [&pb](TRuntimeNode /*n*/) { return NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, false);
     auto pgmReturn = pb.Contains(dict, items.front());
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto res = graph->GetValue().template Get<bool>();
-    UNIT_ASSERT_VALUES_EQUAL(res, true);
+    AssertUnboxedValueElementEqual(graph->GetValue(), true);
 }
 
 Y_UNIT_TEST_LLVM(TestSqueezeToDict) {
@@ -115,18 +115,18 @@ Y_UNIT_TEST_LLVM(TestSqueezeToDict) {
 
         TVector<TRuntimeNode> items;
         for (auto s : data) {
-            items.push_back(pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(s));
+            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
         }
         Shuffle(items.begin(), items.end());
 
-        auto dataType = pb.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+        auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
         auto list = pb.NewList(dataType, items);
         auto input = stream ? pb.Iterator(list, items) : pb.ToFlow(list);
         auto pgmReturn = hashed
                              ? pb.SqueezeToHashedDict(input, multi, [](TRuntimeNode n) { return n; },
-                                                      [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : pb.NewVoid(); }, compact)
+                                                      [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, compact)
                              : pb.SqueezeToSortedDict(input, multi, [](TRuntimeNode n) { return n; },
-                                                      [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : pb.NewVoid(); }, compact);
+                                                      [&pb, withPayload](TRuntimeNode n) { return withPayload ? n : NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, compact);
         if (!stream) {
             pgmReturn = pb.FromFlow(pgmReturn);
         }
@@ -175,18 +175,18 @@ Y_UNIT_TEST_LLVM(TestNarrowSqueezeToDict) {
 
         TVector<TRuntimeNode> items;
         for (auto s : data) {
-            items.push_back(pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(s));
+            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
         }
         Shuffle(items.begin(), items.end());
 
-        auto dataType = pb.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+        auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
         auto list = pb.NewList(dataType, items);
         auto input = pb.ExpandMap(pb.ToFlow(list), [](TRuntimeNode n) -> TRuntimeNode::TList { return {n}; });
         auto pgmReturn = hashed
                              ? pb.NarrowSqueezeToHashedDict(input, multi, [](TRuntimeNode::TList n) { return n.front(); },
-                                                            [&pb, withPayload](TRuntimeNode::TList n) { return withPayload ? n.back() : pb.NewVoid(); }, compact)
+                                                            [&pb, withPayload](TRuntimeNode::TList n) { return withPayload ? n.back() : NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, compact)
                              : pb.NarrowSqueezeToSortedDict(input, multi, [](TRuntimeNode::TList n) { return n.front(); },
-                                                            [&pb, withPayload](TRuntimeNode::TList n) { return withPayload ? n.back() : pb.NewVoid(); }, compact);
+                                                            [&pb, withPayload](TRuntimeNode::TList n) { return withPayload ? n.back() : NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, compact);
         pgmReturn = pb.FromFlow(pgmReturn);
 
         auto graph = setup.BuildGraph(pgmReturn);
@@ -227,26 +227,23 @@ static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, 
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     TType* keyType = pb.NewDataType(NUdf::EDataSlot::Int32, optionalKey);
-    TType* valueType = pb.NewDataType(NUdf::EDataSlot::Int32, false);
+    TType* valueType = NTest::ConvertToMinikqlType<i32>(pb);
     TType* tupleType = pb.NewTupleType({keyType, valueType});
     TVector<TRuntimeNode> items;
     TVector<TRuntimeNode> keys;
     if (withNull) {
         UNIT_ASSERT(optionalKey);
-        keys.push_back(pb.NewEmptyOptional(keyType));
+        keys.push_back(NTest::ConvertValueToLiteralNode(pb, TMaybe<i32>{}));
         for (size_t k = 0; k < 1 + multi; ++k) {
-            items.push_back(pb.NewTuple(tupleType, {keys.back(), pb.NewDataLiteral((i32)items.size())}));
+            items.push_back(pb.NewTuple(tupleType, {keys.back(), NTest::ConvertValueToLiteralNode(pb, i32(items.size()))}));
         }
     }
     if (withData) {
         for (i32 i = 0; i < 2; ++i) {
-            auto key = pb.NewDataLiteral(i);
-            if (optionalKey) {
-                key = pb.NewOptional(key);
-            }
+            auto key = optionalKey ? NTest::ConvertValueToLiteralNode(pb, TMaybe<i32>{i}) : NTest::ConvertValueToLiteralNode(pb, i32(i));
             keys.push_back(key);
             for (size_t k = 0; k < 1 + multi; ++k) {
-                items.push_back(pb.NewTuple(tupleType, {key, pb.NewDataLiteral((i32)items.size())}));
+                items.push_back(pb.NewTuple(tupleType, {key, NTest::ConvertValueToLiteralNode(pb, i32(items.size()))}));
             }
         }
     }
@@ -280,12 +277,12 @@ static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, 
     // Check Dict has items
     results.push_back(pb.AggrEquals(
         pb.HasItems(dict),
-        pb.NewDataLiteral(withNull || withData)));
+        NTest::ConvertValueToLiteralNode(pb, bool(withNull || withData))));
 
     // Check Dict length
     results.push_back(pb.AggrEquals(
         pb.Length(dict),
-        pb.NewDataLiteral((ui64)keys.size())));
+        NTest::ConvertValueToLiteralNode(pb, ui64(keys.size()))));
 
     // Check Dict Contains
     results.push_back(pb.AllOf(
@@ -301,18 +298,18 @@ static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, 
                                            pb.Map(
                                                keyList,
                                                [&](TRuntimeNode key) {
-                                                   return pb.Unwrap(pb.Lookup(dict, key), pb.NewDataLiteral<NUdf::EDataSlot::String>("Lookup failed"), "", 0, 0);
+                                                   return pb.Unwrap(pb.Lookup(dict, key), NTest::ConvertValueToLiteralNode(pb, TStringBuf("Lookup failed")), "", 0, 0);
                                                }),
                                            [&](TRuntimeNode item) {
                                                return multi ? item : pb.NewOptional(item);
                                            }),
-                                       pb.NewDataLiteral(true),
+                                       NTest::ConvertValueToLiteralNode(pb, true),
                                        [&](TRuntimeNode item) { return item; }),
                                    pb.Sort(
                                        pb.Map(list, [&](TRuntimeNode tuple) {
                                            return pb.Nth(tuple, 1);
                                        }),
-                                       pb.NewDataLiteral(true),
+                                       NTest::ConvertValueToLiteralNode(pb, true),
                                        [&](TRuntimeNode item) { return item; })));
 
     // Check Dict items iterator
@@ -331,7 +328,7 @@ static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, 
                                                    return pb.NewOptional(pair);
                                                }
                                            }),
-                                       pb.NewTuple({pb.NewDataLiteral(true), pb.NewDataLiteral(true)}),
+                                       NTest::ConvertValueToLiteralNode(pb, std::tuple<bool, bool>{true, true}),
                                        [&](TRuntimeNode item) { return item; }),
                                    list));
 
@@ -343,7 +340,7 @@ static void TestDictWithDataKeyImpl(bool optionalKey, bool multi, bool compact, 
                                            [&](TRuntimeNode item) {
                                                return multi ? item : pb.NewOptional(item);
                                            }),
-                                       pb.NewDataLiteral(true),
+                                       NTest::ConvertValueToLiteralNode(pb, true),
                                        [&](TRuntimeNode item) { return item; }),
                                    pb.Map(
                                        list,
@@ -419,19 +416,16 @@ static void TestSetWithDataKeyImpl(bool optionalKey, bool compact, bool withNull
     TVector<TRuntimeNode> keys;
     if (withNull) {
         UNIT_ASSERT(optionalKey);
-        keys.push_back(pb.NewEmptyOptional(keyType));
+        keys.push_back(NTest::ConvertValueToLiteralNode(pb, TMaybe<i32>{}));
     }
     if (withData) {
         for (i32 i = 0; i < 2; ++i) {
-            auto key = pb.NewDataLiteral(i);
-            if (optionalKey) {
-                key = pb.NewOptional(key);
-            }
+            auto key = optionalKey ? NTest::ConvertValueToLiteralNode(pb, TMaybe<i32>{i}) : NTest::ConvertValueToLiteralNode(pb, i32(i));
             keys.push_back(key);
         }
     }
     auto keyList = pb.NewList(keyType, keys);
-    auto set = pb.ToHashedDict(keyList, false, [&](TRuntimeNode key) { return key; }, [&pb](TRuntimeNode) { return pb.NewVoid(); }, compact);
+    auto set = pb.ToHashedDict(keyList, false, [&](TRuntimeNode key) { return key; }, [&pb](TRuntimeNode) { return NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}); }, compact);
 
     auto compareLists = [&](TRuntimeNode list1, TRuntimeNode list2) {
         return pb.And({pb.Equals(
@@ -452,12 +446,12 @@ static void TestSetWithDataKeyImpl(bool optionalKey, bool compact, bool withNull
     // Check Set has items
     results.push_back(pb.AggrEquals(
         pb.HasItems(set),
-        pb.NewDataLiteral(withNull || withData)));
+        NTest::ConvertValueToLiteralNode(pb, bool(withNull || withData))));
 
     // Check Set length
     results.push_back(pb.AggrEquals(
         pb.Length(set),
-        pb.NewDataLiteral((ui64)keys.size())));
+        NTest::ConvertValueToLiteralNode(pb, ui64(keys.size()))));
 
     // Check Set Contains
     results.push_back(pb.AllOf(
@@ -477,7 +471,7 @@ static void TestSetWithDataKeyImpl(bool optionalKey, bool compact, bool withNull
     results.push_back(compareLists(
         pb.Sort(
             pb.DictKeys(set),
-            pb.NewDataLiteral(true),
+            NTest::ConvertValueToLiteralNode(pb, true),
             [&](TRuntimeNode item) { return item; }),
         keyList));
 

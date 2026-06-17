@@ -16166,6 +16166,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CommonJoinCore"] = &CommonJoinCoreWrapper;
         Functions["GraceJoinCore"] = &GraceJoinCoreWrapper;
         Functions["GraceSelfJoinCore"] = &GraceSelfJoinCoreWrapper;
+        Functions["ListJoinCore"] = &ListJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
         Functions["EquiJoin"] = &EquiJoinWrapper;

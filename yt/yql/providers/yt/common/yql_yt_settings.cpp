@@ -640,6 +640,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _SecureTmpWaitForAclMaxAttempts);
     REGISTER_SETTING(*this, _SecureTmpAttributes).Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); });
     REGISTER_SETTING(*this, TmpSecurity).Parser([](const TString& v) { return FromString<ETmpSecurityMode>(v); });
+    REGISTER_SETTING(*this, _ParseExpressionColumns);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

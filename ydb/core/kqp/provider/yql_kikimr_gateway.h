@@ -562,6 +562,7 @@ struct TKikimrColumnMetadata {
     ui32 Id = 0;
     TString Type;
     bool NotNull = false;
+    bool SetNotNullInProgress = false;
     NKikimr::NScheme::TTypeInfo TypeInfo;
     TString TypeMod;
     TVector<TString> Families;
@@ -578,11 +579,12 @@ struct TKikimrColumnMetadata {
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         const TKikimrPathId& defaultFromSequencePathId = {}, NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
-        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false)
+        const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false, bool setNotNullInProgress = false)
         : Name(name)
         , Id(id)
         , Type(type)
         , NotNull(notNull)
+        , SetNotNullInProgress(setNotNullInProgress)
         , TypeInfo(typeInfo)
         , TypeMod(typeMod)
         , DefaultKind(defaultKind)
@@ -597,6 +599,7 @@ struct TKikimrColumnMetadata {
         , Id(message->GetId())
         , Type(message->GetType())
         , NotNull(message->GetNotNull())
+        , SetNotNullInProgress(message->GetSetNotNullInProgress())
         , Families(message->GetFamily().begin(), message->GetFamily().end())
         , DefaultKind(message->GetDefaultKind())
         , DefaultFromSequence(message->GetDefaultFromSequence())
@@ -662,6 +665,7 @@ struct TKikimrColumnMetadata {
         message->SetId(Id);
         message->SetType(Type);
         message->SetNotNull(NotNull);
+        message->SetSetNotNullInProgress(SetNotNullInProgress);
         auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(TypeInfo, TypeMod);
         message->SetTypeId(columnType.TypeId);
         message->SetDefaultFromSequence(DefaultFromSequence);
@@ -861,14 +865,17 @@ struct TKikimrTableMetadata : public TThrRefBase {
         auto it = message->GetSecondaryGlobalIndexMetadata().begin();
         ImplTables.reserve(indexesCount);
         for(int i = 0; i < indexesCount; ++i) {
-            decltype(ImplTables)::value_type* implTable = nullptr;
+            // Local indexes (e.g. column-store bloom / bloom-ngram / min-max) have no impl
+            // tables. Keep a null slot for them so that ImplTables stays index-aligned with
+            // Indexes (ImplTables.size() == Indexes.size()).
+            decltype(ImplTables)::value_type* implTable = &ImplTables.emplace_back(nullptr);
             for (const auto& _ : Indexes[i].GetImplTables()) {
                 YQL_ENSURE(it != message->GetSecondaryGlobalIndexMetadata().end());
-                if (implTable) {
+                if (*implTable) {
                     (*implTable)->Next = MakeIntrusive<TKikimrTableMetadata>(&*it++);
                     implTable = &(*implTable)->Next;
                 } else {
-                    implTable = &ImplTables.emplace_back(MakeIntrusive<TKikimrTableMetadata>(&*it++));
+                    *implTable = MakeIntrusive<TKikimrTableMetadata>(&*it++);
                 }
             }
         }
@@ -940,11 +947,13 @@ struct TKikimrTableMetadata : public TThrRefBase {
         }
 
         for(auto implTable: ImplTables) {
-            YQL_ENSURE(implTable);
-            do {
+            // Local indexes (e.g. column-store bloom / bloom-ngram / min-max) have no impl
+            // table, so their slot is null. FromMessage reconstructs the null slot from the
+            // (empty) GetImplTables() of the corresponding index, so we simply skip it here.
+            while (implTable) {
                 implTable->ToMessage(message->AddSecondaryGlobalIndexMetadata());
                 implTable = implTable->Next;
-            } while (implTable);
+            }
         }
 
     }
@@ -960,9 +969,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
         YQL_ENSURE(Indexes.size() == ImplTables.size(), "index metadata has not been loaded yet");
         for (size_t i = 0; i < Indexes.size(); i++) {
             if (Indexes[i].Name == indexName) {
-                auto implTable = ImplTables[i];
-                YQL_ENSURE(implTable, "unexpected empty metadata for index " << indexName);
-                return {std::move(implTable), &Indexes[i]};
+                // Local indexes (bloom filter, bloom-ngram, min-max) have no impl table — their slot is null.
+                return {ImplTables[i], &Indexes[i]};
             }
         }
         return {nullptr, nullptr};

@@ -35,8 +35,11 @@ public:
 
     ~TReadSingleLocationRequestExecutor() override;
 
+    // Implementation of IRequestExecutor
     void Run() override;
+    TString Print() override;
 
+    // Implementation of IReadRequestExecutor
     [[nodiscard]] NThreading::TFuture<TResponse> GetFuture() const override;
 
 private:

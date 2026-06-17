@@ -8,6 +8,8 @@ import sys
 
 import subprocess
 
+from collections import defaultdict
+
 load_yaml = None
 
 
@@ -93,9 +95,10 @@ def filter_configs(result_config, filtered_config):
     # suddenly enable more checks.
 
     input_config = load_yaml(result_config, remove_comments=False)
-    result_config = tidy_config_validation.filter_config(input_config)
+    result_config, filtered_out = tidy_config_validation.filter_config(input_config, return_filtered_out=True)
     with open(filtered_config, 'w') as afile:
         json.dump(result_config, afile)
+    return filtered_out
 
 
 def filter_cmd(cmd):
@@ -121,6 +124,25 @@ def find_header(p, h):
             return os.path.dirname(x)
 
     raise Exception('can not find inc dir')
+
+
+def compact_profile(profile):
+    PREFIX = 'time.clang-tidy.'
+    SUFFIX = '.wall'
+
+    # Metrics look like:
+    # 'time.clang-tidy.performance-implicit-conversion-in-loop.wall': 1.9073486328125e-06,
+    # 'time.clang-tidy.performance-implicit-conversion-in-loop.user': 1.0000000000001327e-06
+    # So (1), leave just wall, (2) sum by 1st word of name, and (3) round to 3 digits after '.'
+    grouped_sums = defaultdict(float)
+    for key, value in profile.items():
+        if key.startswith(PREFIX) and key.endswith(SUFFIX):
+            metric_full_name = key[len(PREFIX) : -len(SUFFIX)]
+            group_name = metric_full_name.split('-')[0]
+            group_key = f"{PREFIX}{group_name}{SUFFIX}"
+            grouped_sums[group_key] += value
+
+    return {k: round(v, 3) for k, v in grouped_sums.items()}
 
 
 def main():
@@ -153,10 +175,11 @@ def main():
     fixes_file = "fixes.txt"
     config_dir = ensure_clean_dir("config_dir")
     result_config_file = args.default_config_file
+    filtered_out = None
     if args.project_config_file != args.default_config_file:
         result_config = os.path.join(config_dir, "result_tidy_config.yaml")
         filtered_config = os.path.join(config_dir, "filtered_tidy_config.yaml")
-        filter_configs(args.project_config_file, filtered_config)
+        filtered_out = filter_configs(args.project_config_file, filtered_config)
         result_config_file = tidy_config_validation.merge_tidy_configs(
             base_config_path=args.default_config_file,
             additional_config_path=filtered_config,
@@ -188,6 +211,18 @@ def main():
     print("cmd: {}".format(' '.join(cmd)))
     res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     out, err = res.communicate()
+    exit_code = res.returncode
+    if filtered_out and exit_code in (0, 1):
+        for check in filtered_out["Checks"]:
+            abs_check = check.lstrip('-')
+            if abs_check in tidy_config_validation.BANNED_CHECKS:
+                reason = tidy_config_validation.BANNED_CHECKS[abs_check]
+                out += (
+                    f'\n\nCheck {check} is banned by global tidy configuration '
+                    f'and must be removed from config {args.project_config_file}. '
+                    f'Ban reason: {reason}'
+                )
+                exit_code = 1
     out = out.replace(args.source_root, "$(SOURCE_ROOT)")
     profile = load_profile(profile_tmpdir)
     testing_src = os.path.relpath(args.testing_src, args.source_root)
@@ -197,8 +232,8 @@ def main():
         json.dump(
             {
                 "file": testing_src,
-                "exit_code": res.returncode,
-                "profile": profile,
+                "exit_code": exit_code,
+                "profile": compact_profile(profile),
                 "stderr": err,
                 "stdout": out,
                 "fixes": tidy_fixes,

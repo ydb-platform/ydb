@@ -40,4 +40,9 @@ message TPBufferConfig
 
     // default true
     optional bool EnableFastErases = 9;
+
+    optional uint32 WritesBatchingPeriodMicroseconds = 10;
+
+    // default true
+    optional bool EnableWritesBatching = 11;
 }

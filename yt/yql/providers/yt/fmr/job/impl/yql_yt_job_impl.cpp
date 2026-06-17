@@ -516,61 +516,6 @@ IFmrJob::TPtr MakeFmrJob(
     return MakeIntrusive<TFmrJob>(std::move(discovery), std::move(vanillaInfo), ytJobService, jobLauncher, settings, workerTvmSettings);
 }
 
-TJobResult RunJob(
-    TTask::TPtr task,
-    ITableDataServiceDiscovery::TPtr discovery,
-    TMaybe<TVanillaInfo> vanillaInfo,
-    IYtJobService::TPtr ytJobService,
-    TFmrUserJobLauncher::TPtr jobLauncher,
-    std::shared_ptr<std::atomic<bool>> cancelFlag,
-    const TMaybe<TFmrTvmJobSettings>& tvmSettings
-) {
-    TFmrJobSettings jobSettings = GetJobSettingsFromTask(task);
-    IFmrJob::TPtr job = MakeFmrJob(std::move(discovery), std::move(vanillaInfo), ytJobService, jobLauncher, jobSettings, tvmSettings);
-
-    auto processTask = [job, task, cancelFlag] (auto&& taskParams) {
-        using T = std::decay_t<decltype(taskParams)>;
-
-        if constexpr (std::is_same_v<T, TUploadTaskParams>) {
-            return job->Upload(taskParams, task->ClusterConnections, cancelFlag);
-        } else if constexpr (std::is_same_v<T, TDownloadTaskParams>) {
-            return job->Download(taskParams, task->ClusterConnections, cancelFlag);
-        } else if constexpr (std::is_same_v<T, TMergeTaskParams>) {
-            return job->Merge(taskParams, task->ClusterConnections, cancelFlag);
-        } else if constexpr (std::is_same_v<T, TMapTaskParams>) {
-            return job->Map(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
-        } else if constexpr (std::is_same_v<T, TSortedUploadTaskParams>) {
-            return job->SortedUpload(taskParams, task->ClusterConnections, cancelFlag);
-        } else if constexpr (std::is_same_v<T, TSortedMergeTaskParams>) {
-            return job->SortedMerge(taskParams, task->ClusterConnections, cancelFlag);
-        } else if constexpr (std::is_same_v<T, TLocalSortTaskParams>) {
-            return job->LocalSort(taskParams, task->ClusterConnections, cancelFlag);
-        } else if constexpr (std::is_same_v<T, TReduceTaskParams>) {
-            return job->Reduce(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
-        } else if constexpr (std::is_same_v<T, TFillTaskParams>) {
-            return job->Fill(taskParams, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
-        } else if constexpr (std::is_same_v<T, TPullTaskParams>) {
-            auto pullResult = job->Pull(taskParams, cancelFlag);
-            if (auto* err = std::get_if<TFmrError>(&pullResult)) {
-                return std::variant<TFmrError, TStatistics>{*err};
-            }
-            TStatistics stats;
-            stats.TaskResult = TTaskPullResult{.Data = std::move(std::get<TString>(pullResult))};
-            return std::variant<TFmrError, TStatistics>{std::move(stats)};
-        } else {
-            ythrow yexception() << "Unsupported task type";
-        }
-    };
-
-    std::variant<TFmrError, TStatistics> taskOutput = std::visit(processTask, task->TaskParams);
-    auto err = std::get_if<TFmrError>(&taskOutput);
-    if (err) {
-        return TJobResult{.TaskStatus = ETaskStatus::Failed, .Error = *err};
-    }
-    auto statistics = std::get_if<TStatistics>(&taskOutput);
-    return {ETaskStatus::Completed, *statistics};
-};
-
 IFmrJob::TPtr MakeFmrJob(
     ITableDataService::TPtr tableDataService,
     IYtJobService::TPtr ytJobService,
@@ -580,15 +525,38 @@ IFmrJob::TPtr MakeFmrJob(
     return MakeIntrusive<TFmrJob>(std::move(tableDataService), ytJobService, jobLauncher, settings);
 }
 
-TJobResult RunJob(
+namespace {
+
+// Encapsulates the two job-creation modes so RunJobImpl can be written once.
+struct TDiscoveryJobSource {
+    ITableDataServiceDiscovery::TPtr Discovery;
+    TMaybe<TVanillaInfo> VanillaInfo;
+    TMaybe<TFmrTvmJobSettings> TvmSettings;
+};
+
+struct TDirectTdsJobSource {
+    ITableDataService::TPtr TableDataService;
+};
+
+using TJobSource = std::variant<TDiscoveryJobSource, TDirectTdsJobSource>;
+
+TJobResult RunJobImpl(
     TTask::TPtr task,
-    ITableDataService::TPtr tableDataService,
     IYtJobService::TPtr ytJobService,
     TFmrUserJobLauncher::TPtr jobLauncher,
-    std::shared_ptr<std::atomic<bool>> cancelFlag
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    TJobSource jobSource
 ) {
     TFmrJobSettings jobSettings = GetJobSettingsFromTask(task);
-    IFmrJob::TPtr job = MakeFmrJob(std::move(tableDataService), ytJobService, jobLauncher, jobSettings);
+
+    IFmrJob::TPtr job = std::visit([&](auto&& source) -> IFmrJob::TPtr {
+        using T = std::decay_t<decltype(source)>;
+        if constexpr (std::is_same_v<T, TDiscoveryJobSource>) {
+            return MakeFmrJob(std::move(source.Discovery), std::move(source.VanillaInfo), ytJobService, jobLauncher, jobSettings, source.TvmSettings);
+        } else {
+            return MakeFmrJob(std::move(source.TableDataService), ytJobService, jobLauncher, jobSettings);
+        }
+    }, std::move(jobSource));
 
     auto processTask = [job, task, cancelFlag] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;
@@ -617,7 +585,7 @@ TJobResult RunJob(
                 return std::variant<TFmrError, TStatistics>{*err};
             }
             TStatistics stats;
-            stats.TaskResult = TTaskPullResult{.Data = std::move(std::get<TString>(pullResult))};
+            stats.TaskResult = TTaskPullResult{.Data = std::get<TString>(pullResult)};
             return std::variant<TFmrError, TStatistics>{std::move(stats)};
         } else {
             ythrow yexception() << "Unsupported task type";
@@ -631,6 +599,32 @@ TJobResult RunJob(
     }
     auto statistics = std::get_if<TStatistics>(&taskOutput);
     return {ETaskStatus::Completed, *statistics};
+}
+
+} // namespace
+
+TJobResult RunJob(
+    TTask::TPtr task,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TMaybe<TFmrTvmJobSettings>& tvmSettings
+) {
+    return RunJobImpl(task, ytJobService, jobLauncher, cancelFlag,
+        TDiscoveryJobSource{std::move(discovery), std::move(vanillaInfo), tvmSettings});
+}
+
+TJobResult RunJob(
+    TTask::TPtr task,
+    ITableDataService::TPtr tableDataService,
+    IYtJobService::TPtr ytJobService,
+    TFmrUserJobLauncher::TPtr jobLauncher,
+    std::shared_ptr<std::atomic<bool>> cancelFlag
+) {
+    return RunJobImpl(task, ytJobService, jobLauncher, cancelFlag,
+        TDirectTdsJobSource{std::move(tableDataService)});
 }
 
 void FillMapFmrJob(

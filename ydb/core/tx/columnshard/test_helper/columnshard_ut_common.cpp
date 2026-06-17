@@ -1,6 +1,7 @@
 #include "columnshard_ut_common.h"
 #include "shard_reader.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/protos/data_events.pb.h>
@@ -24,6 +25,35 @@ namespace NKikimr::NTxUT {
 
 using namespace NColumnShard;
 using namespace Tests;
+
+namespace {
+
+// The basic tablet test runtime has no LongTxService to keep a registry fresh, but cleanup that goes
+// through TRegistryScanSnapshotGuard needs a freshness marker (OldestCollectionTime) that advances
+// with the clock. This stand-in is an always-empty registry (border = Max, no snapshots) whose
+// OldestCollectionTime is the live "now", mirroring a single-node cluster where the local node's
+// collection time is always current. A frozen value (e.g. the default TInstant::Zero()) would
+// collapse the cleanup floor to 0 and nothing would ever be collected.
+class TLiveEmptySnapshotRegistry: public IImmutableSnapshotRegistry {
+public:
+    bool HasSnapshot(const NKikimr::TTableId&, const TRowVersion&) const override {
+        return false;
+    }
+
+    TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId&) const override {
+        return {};
+    }
+
+    TRowVersion GetBorder() const override {
+        return TRowVersion::Max();
+    }
+
+    TInstant GetOldestCollectionTime() const override {
+        return AppData()->TimeProvider->Now();
+    }
+};
+
+}   // namespace
 
 void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
@@ -51,27 +81,31 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     app.AddDomain(domain.Release());
     SetupTabletServices(runtime, &app);
 
-    // No LongTxService actor is created in this basic test runtime, so we initialize the
-    // SnapshotRegistryHolder with an empty registry (border = TRowVersion::Max, no active scans).
-    // This makes TRegistryScanSnapshotGuard use purely timing-based MinSnapshotForNewReads.
-    // Short LongTxServiceConfig delays (1+1+1+10 = 13s) ensure cleanup can run within test timeouts.
-    // Tests that specifically test the registry path (ut_scan_snapshot_guard_integration.cpp)
-    // override these settings after calling Setup().
-    {
-        auto builder = CreateImmutableSnapshotRegistryBuilder();
-        // Leave border at the default TRowVersion::Max and add no snapshots → empty registry.
-        auto holder = CreateImmutableSnapshotRegistryHolder();
-        holder->Set(std::move(*builder).Build());
-        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            auto& appData = runtime.GetAppData(nodeIndex);
-            appData.SnapshotRegistryHolder = holder;
-            appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
-        }
-    }
+    // No LongTxService actor is created in this basic test runtime, so install a stand-in registry with a
+    // live OldestCollectionTime; otherwise TRegistryScanSnapshotGuard sees a frozen Zero freshness and
+    // never advances the cleanup floor. Tests that specifically test the registry path
+    // (ut_scan_snapshot_guard_integration.cpp) override these settings after calling Setup().
+    InstallTimingBasedSnapshotRegistry(runtime);
 
     runtime.UpdateCurrentTime(TInstant::Now());
+}
+
+void InstallTimingBasedSnapshotRegistry(TTestActorRuntime& runtime) {
+    // margin = LocalSnapshotPromotionTimeSeconds + MaxClockSkewMs = 1s + 12s = the old ~13s cleanup window,
+    // so TRegistryScanSnapshotGuard yields MinSnapshotForNewReads = now - 13s (see TLiveEmptySnapshotRegistry).
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        auto& appData = runtime.GetAppData(nodeIndex);
+        auto holder = CreateImmutableSnapshotRegistryHolder();
+        holder->Set(std::make_unique<TLiveEmptySnapshotRegistry>());
+        appData.SnapshotRegistryHolder = holder;
+        appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        appData.LongTxServiceConfig.SetMaxClockSkewMs(12000);
+        // If a real LongTxService is present (e.g. TTestEnv), it may take over this holder once its remote
+        // storage is ready. Keep its exchange/rebuild cadence short so the registry it publishes keeps a
+        // fresh OldestCollectionTime; harmless in runtimes that have no LongTxService.
+        appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
+        appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+    }
 }
 
 void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {

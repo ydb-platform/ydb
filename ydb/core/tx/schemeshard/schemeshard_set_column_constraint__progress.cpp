@@ -26,10 +26,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWrites
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
 
-    for (const auto& columnName : operationInfo.NotNullColumns) {
+    for (const auto& columnName : operationInfo.SetNotNullColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         col->SetName(TString(columnName));
-        col->SetNotNull(true);
+        col->SetSetNotNullInProgress(true);
     }
 
     *propose->Record.AddTransaction() = modifyScheme;
@@ -47,10 +47,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWrit
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
 
-    for (const auto& columnName : operationInfo.NotNullColumns) {
+    for (const auto& columnName : operationInfo.SetNotNullColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         col->SetName(TString(columnName));
-        col->SetNotNull(false);
+        col->SetSetNotNullInProgress(false);
+
+        if (!operationInfo.ValidationFailed) {
+            col->SetNotNull(true);
+        }
     }
 
     *propose->Record.AddTransaction() = modifyScheme;
@@ -563,7 +567,7 @@ private:
         record.SetSeqNoGeneration(Self->Generation());
         record.SetSeqNoRound(++shardStatus.SeqNoRound);
 
-        for (const auto& columnName : operationInfo.NotNullColumns) {
+        for (const auto& columnName : operationInfo.SetNotNullColumns) {
             record.AddNotNullColumns(TString(columnName));
         }
 
@@ -653,11 +657,7 @@ public:
             }
             case TSetColumnConstraintOperationInfo::EOperationState::Validating: {
                 if (DriveToSendMessageToPartOfShards(txc, operationInfo)) {
-                    if (operationInfo.ValidationFailed) {
-                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
-                    } else {
-                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Unlocking);
-                    }
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);
                 }
 

@@ -1433,6 +1433,11 @@ namespace Tests {
                     Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
                     actorSystemPtr,
                     FederatedQuerySetupDriver_);
+
+                federatedQuerySetupFactory->SetScriptExecutionSettings({
+                        .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
+                        .LeaseCheckStartupTimeout = TDuration::Zero(),
+                        });
             }
 
             const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
@@ -1440,13 +1445,6 @@ namespace Tests {
                 if (!allExternalSourcesTypes.contains(source)) {
                     ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
                 }
-            }
-
-            if (federatedQuerySetupFactory) {
-                federatedQuerySetupFactory->SetScriptExecutionSettings({
-                    .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
-                    .LeaseCheckStartupTimeout = TDuration::Zero(),
-                });
             }
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();

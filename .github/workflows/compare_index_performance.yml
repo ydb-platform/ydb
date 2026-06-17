@@ -1,0 +1,56 @@
+name: Regression-compare_performance
+
+on:
+  schedule:
+    - cron: "0 23 * * *"  # At 23:00 every day
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Duration of each workload run in seconds'
+        required: false
+        default: '600'
+      build_preset:
+        description: 'Build preset (must match S3 prebuilt binary)'
+        required: false
+        type: choice
+        options:
+          - relwithdebinfo
+          - release
+        default: relwithdebinfo
+      ref:
+        description: 'S3 ref to compare against (e.g. main, stable-26-1-1)'
+        required: false
+        default: 'main'
+
+jobs:
+  compare:
+    name: Compare performance (${{ inputs.ref || 'main' }} vs current)
+    runs-on: [ self-hosted, auto-provisioned, "build-preset-relwithdebinfo" ]
+    timeout-minutes: 1200
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run performance comparison
+        run: |
+          ./ydb/tests/stress/compare_index_performance.sh \
+            --duration ${{ inputs.duration || '600' }} \
+            --build-preset ${{ inputs.build_preset || 'relwithdebinfo' }} \
+            --ref ${{ inputs.ref || 'main' }}
+
+      - name: Post results to job summary
+        if: always()
+        run: |
+          if [[ -f benchmark_results/report.md ]]; then
+            cat benchmark_results/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload benchmark logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark_results/
+          retention-days: 30

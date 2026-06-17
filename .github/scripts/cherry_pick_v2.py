@@ -696,7 +696,6 @@ def format_source_branch_status(
     failure: Optional[BranchBackportFailure],
     sources: List[Source],
 ) -> str:
-    source_shas = set(source.commit_shas)
     already_present = set(preflight.already_present_shas if preflight else [])
 
     if preflight and all(sha in already_present for sha in source.commit_shas):
@@ -704,7 +703,7 @@ def format_source_branch_status(
 
     if failure and failure.target_branch == target_branch:
         progress = failure.progress
-        if progress.failed_commit_sha in source_shas:
+        if progress.failed_commit_sha in source.commit_shas:
             return f"`{target_branch}`: failed ({failure.error})"
 
         failed_idx = (

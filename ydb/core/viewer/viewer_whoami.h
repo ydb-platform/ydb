@@ -25,7 +25,7 @@ public:
     {}
 
     void Bootstrap() {
-        if (NeedToRedirect()) {
+        if (NeedToRedirect(false)) {
             return;
         }
         ReplyAndPassAway();

@@ -39,25 +39,3 @@ ydb [global options...] admin cluster diagnostics collect \
 * Запросы к таблицам раздела кластера `/Root/.sys` и их ответы.
 * Текущую конфигурацию подсистем кластера.
 * Текущее состояние узлов кластера.
-
-## Визуализация данных
-
-Для визуализации собранных данных используйте утилиту:
-
-```bash
-tools/cluster_diagnostics_view/cluster_diagnostics_view.py \
-  --results-file=diagnostics.tar \
-  --solomon-token-file=token.txt \
-  --cluster=some_external_cluster \
-  --output=view.html
-```
-
-### Параметры утилиты
-
-* `--results-file` — путь и имя файла с результатами диагностики.
-* `--solomon-token-file` — путь и имя файла с токеном для доступа к Solomon.
-* `--cluster` — имя кластера, под которым данные метрик будут загружены в мониторинг.
-* `--output` — путь и имя файла для вывода результатов в формате HTML.
-
-В результате будет создан файл `view.html` с визуализацией данных и ссылками на дашборды метрик, собранных с кластера на предыдущем этапе.
-

@@ -74,6 +74,15 @@ void TWriteRequestExecutor::Run()
     }
 }
 
+TString TWriteRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime() << " " << ExtendedDebugState() << " "
+           << (IsReplied ? "Replied" : "Not replied");
+
+    return result;
+}
+
 void TWriteRequestExecutor::SendIndirectWriteRequest()
 {
     RequestedIndirectWrites = VChunkConfig.GetDesiredPBuffers();
@@ -509,7 +518,8 @@ TString TWriteRequestExecutor::ExtendedDebugState() const
 {
     TStringBuilder result;
     result << "dr:" << RequestedDirectWrites.Print();
-    result << " ir:" << RequestedIndirectWrites.Print();
+    result << " ir:" << IndirectCoordinator.Print()
+           << RequestedIndirectWrites.Print();
     result << " c:" << CompletedWrites.Print();
     result << " f:" << FailedWrites.Print();
     return result;

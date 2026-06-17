@@ -195,7 +195,7 @@ IF (OS_WINDOWS)
     )
 ENDIF()
 
-IF (OS_FREERTOS)
+IF (OS_FREERTOS OR OS_ZEPHYR)
     SRCS(
         stubs/failure_signal_handler.cc
     )

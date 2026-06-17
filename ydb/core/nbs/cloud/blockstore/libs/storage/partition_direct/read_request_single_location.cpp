@@ -78,10 +78,10 @@ void TReadSingleLocationRequestExecutor::Run()
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Will read from %s of host %zu",
+        "%s Will read from %s of %s",
         LogTitle.GetWithTime().c_str(),
         fromDDisk ? "DDisk" : "PBuffer",
-        static_cast<size_t>(*host));
+        PrintHostIndex(*host).c_str());
 
     auto onReadResponse = [self = shared_from_this()]   //
         (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
@@ -103,6 +103,14 @@ void TReadSingleLocationRequestExecutor::Run()
                                   Request->Sglist,
                                   TraceId);
     future.Subscribe(std::move(onReadResponse));
+}
+
+TString TReadSingleLocationRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+
+    return result;
 }
 
 NThreading::TFuture<IReadRequestExecutor::TResponse>

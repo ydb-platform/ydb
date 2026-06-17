@@ -25,7 +25,6 @@ struct TComputeActorAsyncInputHelper {
     const NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
     const TDuration WatermarksIdleTimeout = TDuration::Max();
     const NKikimr::NMiniKQL::TType* ValueType = nullptr;
-    TMaybe<TInstant> PendingWatermark = Nothing();
     TMaybe<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
 public:
     TComputeActorAsyncInputHelper(
@@ -40,32 +39,12 @@ public:
         , WatermarksIdleTimeout(watermarksIdleTimeout)
     {}
 
-    bool IsPausedByWatermark() const {
-        return PendingWatermark.Defined();
-    }
-
-    void Pause(TInstant watermark) {
-        YQL_ENSURE(WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
-        PendingWatermark = watermark;
-    }
-
-    void ResumeByWatermark(TInstant watermark) {
-        if (watermark >= PendingWatermark) {
-            PendingWatermark = Nothing();
-        }
-    }
-
     virtual i64 GetFreeSpace() const = 0;
     virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) = 0;
 
-    TMaybe<EResumeSource> PollAsyncInput(TDqComputeActorMetrics& metricsReporter, TDqComputeActorWatermarks* watermarksTracker, i64 asyncInputPushLimit) {
+    TMaybe<EResumeSource> PollAsyncInput(TDqComputeActorMetrics& metricsReporter, i64 asyncInputPushLimit) {
         if (Finished) {
             CA_LOG_T("Skip polling async input[" << Index << "]: finished");
-            return {};
-        }
-
-        if (IsPausedByWatermark()) {
-            CA_LOG_T("Skip polling async input[" << Index << "]: paused");
             return {};
         }
 
@@ -82,21 +61,6 @@ public:
                 << batch.RowCount() << " rows, finished: " << finished);
 
             metricsReporter.ReportAsyncInputData(Index, batch.RowCount(), space, watermark);
-
-            // async ca only
-            if (watermarksTracker && watermark && !finished) {
-                const auto inputWatermarkChanged = watermarksTracker->NotifyAsyncInputWatermarkReceived(
-                    Index,
-                    *watermark);
-
-                if (inputWatermarkChanged) {
-                    CA_LOG_T("Pause async input " << Index << " because of watermark " << *watermark);
-                    Pause(*watermark);
-                }
-
-                // do not push watermark to IDqAsyncInputBuffer for async ca
-                watermark.Clear();
-            }
 
             const bool emptyBatch = batch.empty();
             AsyncInputPush(std::move(batch), watermark, space, finished);

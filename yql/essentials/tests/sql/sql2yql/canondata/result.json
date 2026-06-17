@@ -12116,6 +12116,13 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_window-win_range_wrong_bound_decimal_sign_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-win_rename_overwrite]": [
+        {
+            "checksum": "8dc83a75173a80ae4ce5ff89e9f15251",
+            "size": 4326,
+            "uri": "https://{canondata_backend}/1936947/a187affd5313bd1a22cebaa8e61c41103a7b5f01/resource.tar.gz#test_sql2yql.test_window-win_rename_overwrite_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[window-win_rows_pg_numeric_full]": [
         {
             "checksum": "58532a3acc459447b655bff27de92064",
@@ -19324,6 +19331,11 @@
     "test_sql_format.test[window-win_range_wrong_bound_decimal_sign]": [
         {
             "uri": "file://test_sql_format.test_window-win_range_wrong_bound_decimal_sign_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-win_rename_overwrite]": [
+        {
+            "uri": "file://test_sql_format.test_window-win_rename_overwrite_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-win_rows_pg_numeric_full]": [

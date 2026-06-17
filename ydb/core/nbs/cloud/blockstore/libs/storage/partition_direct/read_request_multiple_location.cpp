@@ -95,6 +95,13 @@ void TReadMultipleLocationRequestExecutor::Run()
     }
 }
 
+TString TReadMultipleLocationRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    return result;
+}
+
 NThreading::TFuture<IReadRequestExecutor::TResponse>
 TReadMultipleLocationRequestExecutor::GetFuture() const
 {

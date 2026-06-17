@@ -1,3 +1,5 @@
+* Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
+
 ## v3.19.0
 
 * Added metric buffer for batched metric writes to reduce OpenTelemetry hot-path overhead.

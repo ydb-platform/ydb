@@ -1403,7 +1403,7 @@ bool TDictLogicalType::IsNullable() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTaggedLogicalType::TTaggedLogicalType(TString tag, TLogicalTypePtr element)
+TTaggedLogicalType::TTaggedLogicalType(std::string tag, TLogicalTypePtr element)
     : TLogicalType(ELogicalMetatype::Tagged)
     , Tag_(std::move(tag))
     , Element_(std::move(element))
@@ -1778,7 +1778,7 @@ void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLo
         case NProto::TLogicalType::TypeCase::kTagged: {
             TLogicalTypePtr element;
             FromProto(&element, protoLogicalType.tagged().element());
-            *logicalType = TaggedLogicalType(FromProto<TString>(protoLogicalType.tagged().tag()), std::move(element));
+            *logicalType = TaggedLogicalType(FromProto<std::string>(protoLogicalType.tagged().tag()), std::move(element));
             return;
         }
         case NProto::TLogicalType::TypeCase::TYPE_NOT_SET:
@@ -2016,7 +2016,7 @@ void Deserialize(TLogicalTypePtr& logicalType, NYTree::INodePtr node)
         }
         case ELogicalMetatype::Tagged: {
             auto tagNode = mapNode->GetChildOrThrow("tag");
-            auto tag = NYTree::ConvertTo<TString>(tagNode);
+            auto tag = NYTree::ConvertTo<std::string>(tagNode);
             auto elementNode = mapNode->GetChildOrThrow("element");
             auto element = NYTree::ConvertTo<TLogicalTypePtr>(elementNode);
             logicalType = TaggedLogicalType(std::move(tag), std::move(element));
@@ -2514,7 +2514,7 @@ void Deserialize(TTypeV3LogicalTypeWrapper& wrapper, NYTree::INodePtr node)
                 }
                 case ELogicalMetatype::Tagged: {
                     auto tagNode = mapNode->GetChildOrThrow("tag");
-                    auto tag = NYTree::ConvertTo<TString>(tagNode);
+                    auto tag = NYTree::ConvertTo<std::string>(tagNode);
                     auto elementNode = mapNode->GetChildOrThrow("item");
                     auto element = NYTree::ConvertTo<TTypeV3LogicalTypeWrapper>(elementNode);
                     wrapper.LogicalType = TaggedLogicalType(std::move(tag), std::move(element.LogicalType));
@@ -2561,7 +2561,7 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
     std::optional<std::vector<TLogicalTypePtr>> elements;
     TLogicalTypePtr item, keyType, valueType;
     std::optional<i64> precision, scale;
-    std::optional<TString> tag;
+    std::optional<std::string> tag;
 
     cursor->ParseMap([&] (TYsonPullParserCursor* cursor) {
         EnsureYsonToken("logical type attribute key", *cursor, EYsonItemType::StringValue);
@@ -2674,7 +2674,7 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
             DeserializeV3Impl(valueType, cursor, depth + 1);
         } else if (key == "tag") {
             cursor->Next();
-            tag = ExtractTo<TString>(cursor);
+            tag = ExtractTo<std::string>(cursor);
         } else {
             cursor->Next();
             cursor->SkipComplexValue();
@@ -2897,7 +2897,7 @@ TLogicalTypePtr DictLogicalType(TLogicalTypePtr key, TLogicalTypePtr value)
     return New<TDictLogicalType>(std::move(key), std::move(value));
 }
 
-TLogicalTypePtr TaggedLogicalType(TString tag, TLogicalTypePtr element)
+TLogicalTypePtr TaggedLogicalType(std::string tag, TLogicalTypePtr element)
 {
     return New<TTaggedLogicalType>(std::move(tag), std::move(element));
 }
@@ -2985,7 +2985,7 @@ size_t THash<NYT::NTableClient::TLogicalType>::operator()(
                     (*this)(*logicalType.AsDictTypeRef().GetValue()));
             case ELogicalMetatype::Tagged:
                 return CombineHashes(
-                    THash<TString>()(logicalType.AsTaggedTypeRef().GetTag()),
+                    THash<std::string>()(logicalType.AsTaggedTypeRef().GetTag()),
                     (*this)(*logicalType.AsTaggedTypeRef().GetElement()));
         }
         YT_ABORT();

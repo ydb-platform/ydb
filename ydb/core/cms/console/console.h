@@ -10,6 +10,10 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
+#include <util/generic/hash.h>
+
+#include <memory>
+
 namespace NKikimr::NConsole {
 
 namespace TEvConsole {
@@ -300,6 +304,11 @@ namespace TEvConsole {
 
     struct TEvConfigNotificationRequest : public TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest> {
         const NKikimrConfig::TAppConfig& GetConfig() const { return Record.GetConfig(); }
+
+        // Node-local only: parsed forms of opaque config sections (kind -> message),
+        // produced by the configs dispatcher via an injected OpaqueConfigParser.
+        // .second != nullptr - config either not empty and present or not added into map
+        THashMap<ui32, std::shared_ptr<const ::google::protobuf::Message>> OpaqueConfigs;
     };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {

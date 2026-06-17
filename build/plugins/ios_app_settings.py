@@ -2,7 +2,8 @@ import _common as common
 import ymake
 
 
-def onios_app_settings(unit, *args):
+@ymake.macro
+def IOS_APP_SETTINGS(unit: ymake.Unit, *args: tuple[str, ...]):
     tail, kv = common.sort_by_keywords({'OS_VERSION': 1, 'DEVICES': -1}, args)
     if tail:
         ymake.report_configure_error('Bad IOS_COMMON_SETTINGS usage - unknown data: ' + str(tail))

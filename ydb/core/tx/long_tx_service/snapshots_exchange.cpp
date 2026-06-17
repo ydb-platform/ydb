@@ -442,6 +442,8 @@ public:
         switch (ev->GetTypeRewrite()) {    
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+
+            sFunc(TEvents::TEvPoison, HandlePoison);
         }
     }
 
@@ -456,11 +458,13 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandlePrefill);
             hFunc(TEvents::TEvUndelivered, HandlePrefill);
             hFunc(TEvPrivate::TEvPrefillTimeout, HandlePrefill);
+
+            sFunc(TEvents::TEvPoison, HandlePoison);
         }
     }
 
     STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {    
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvCollectSnapshots, Handle);
             hFunc(TEvLongTxService::TEvCollectSnapshotsResult, Handle);
             hFunc(TEvLongTxService::TEvPropagateSnapshots, Handle);
@@ -478,6 +482,8 @@ public:
             IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
             IgnoreFunc(TEvents::TEvUndelivered);
             IgnoreFunc(TEvPrivate::TEvPrefillTimeout);
+
+            sFunc(TEvents::TEvPoison, HandlePoison);
         }
     }
 
@@ -866,6 +872,10 @@ private:
             auto* childActorId = tree->AddChildrenActorIds();
             ActorIdToProto(actorId, childActorId);
         }
+    }
+
+    void HandlePoison() {
+        PassAway();
     }
 
 private:

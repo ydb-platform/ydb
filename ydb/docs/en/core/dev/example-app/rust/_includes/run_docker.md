@@ -2,5 +2,5 @@ To connect to a locally deployed {{ ydb-short-name }} database according to the 
 
 ```bash
 ( export YDB_CONNECTION_STRING=grpc://localhost:2136/local && \
-  cd ydb-rs-sdk/ydb && cargo run --example basic_query_series )
+  cd ydb-rs-sdk/ydb && cargo run --example basic )
 ```

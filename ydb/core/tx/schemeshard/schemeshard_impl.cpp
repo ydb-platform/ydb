@@ -18,7 +18,6 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
@@ -31,6 +30,7 @@
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
@@ -286,7 +286,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             bool alreadyExists = false;
             for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
                 const auto& child = PathsById.at(childPathId);
-                if (!child->IsTableIndex() || child->Dropped()) {
+                if (child->Dropped() || !child->IsTableIndex()) {
                     continue;
                 }
                 auto indexIt = Indexes.find(childPathId);

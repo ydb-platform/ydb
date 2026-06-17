@@ -166,7 +166,17 @@ private:
             modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
             auto& alterTable = *modifyScheme.MutableAlterTable();
             alterTable.SetName(tableName);
-            *alterTable.AddAddLocalIndexes() = item.IndexConfig;
+            const auto& cfg = item.IndexConfig;
+            auto& indexDesc = *alterTable.AddTableIndexes();
+            indexDesc.SetName(cfg.GetName());
+            indexDesc.SetType(cfg.GetType());
+            indexDesc.SetState(cfg.GetState());
+            for (const auto& col : cfg.GetKeyColumnNames()) {
+                indexDesc.AddKeyColumnNames(col);
+            }
+            if (cfg.HasBloomFilterDescription()) {
+                *indexDesc.MutableBloomFilterDescription() = cfg.GetBloomFilterDescription();
+            }
         }
 
         AwaitingRequests.emplace(txId, std::move(item));

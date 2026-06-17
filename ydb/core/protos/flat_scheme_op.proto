@@ -465,9 +465,6 @@ message TTableDescription {
 
     // For fulltext indexes - to determine if the table is an impl table of an index
     optional EIndexType IndexImplType = 52;
-
-    // ALTER-only, transient: local indexes to create, decomposed into sub-operations.
-    repeated TIndexCreationConfig AddLocalIndexes = 53;
 }
 
 message TCompressionOptions {

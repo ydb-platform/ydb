@@ -841,7 +841,7 @@ static TVector<TString> CollectLocalBloomIndexNames(const TPath& path, TOperatio
     TVector<TString> names;
     for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
         const auto& child = context.SS->PathsById.at(childPathId);
-        if (!child->IsTableIndex() || child->Dropped()) {
+        if (child->Dropped() || !child->IsTableIndex()) {
             continue;
         }
         auto it = context.SS->Indexes.find(childPathId);
@@ -879,23 +879,39 @@ static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilter
     return result;
 }
 
-// Decompose ADD INDEX for row-table prefix bloom filters into a table alter
-// (if there are table-level changes) plus one CreateNewTableIndex sub-op per index.
+// Builds a TIndexCreationConfig for the generic create-index sub-op from a TIndexDescription
+// carried in the alter (the same field Describe uses for indexes).
+static NKikimrSchemeOp::TIndexCreationConfig ToIndexCreationConfig(const NKikimrSchemeOp::TIndexDescription& desc) {
+    NKikimrSchemeOp::TIndexCreationConfig config;
+    config.SetName(desc.GetName());
+    config.SetType(desc.GetType());
+    config.SetState(desc.GetState());
+    for (const auto& col : desc.GetKeyColumnNames()) {
+        config.AddKeyColumnNames(col);
+    }
+    if (desc.HasBloomFilterDescription()) {
+        *config.MutableBloomFilterDescription() = desc.GetBloomFilterDescription();
+    }
+    return config;
+}
+
+// Decompose ADD INDEX for row-table prefix bloom filters into a table alter (if there are
+// table-level changes) plus one CreateNewTableIndex sub-op per index.
 static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
     TOperationId id, const TTxTransaction& tx, const TPath& path, const TString& name, TOperationContext& context)
 {
     const auto& alter = tx.GetAlterTable();
-    if (alter.AddLocalIndexesSize() == 0) {
+    if (alter.TableIndexesSize() == 0) {
         return std::nullopt;
     }
 
     // Duplicate-column-set prevention: reject if a local bloom index over the same columns
     // already exists on the table.
-    for (const auto& indexConfig : alter.GetAddLocalIndexes()) {
-        const TVector<TString> newKeys(indexConfig.GetKeyColumnNames().begin(), indexConfig.GetKeyColumnNames().end());
+    for (const auto& indexDesc : alter.GetTableIndexes()) {
+        const TVector<TString> newKeys(indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end());
         for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
             const auto& child = context.SS->PathsById.at(childPathId);
-            if (!child->IsTableIndex() || child->Dropped()) {
+            if (child->Dropped() || !child->IsTableIndex()) {
                 continue;
             }
             auto it = context.SS->Indexes.find(childPathId);
@@ -910,20 +926,20 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
 
     TVector<ISubOperation::TPtr> result;
     if (alter.HasPartitionConfig()) {
-        // Forward a copy with the transient, decomposition-only field cleared so the base
-        // alter sub-op never observes AddLocalIndexes (it is handled here, not downstream).
+        // Forward a copy with the transient index list cleared so the base alter sub-op never
+        // observes it (the indexes are handled here, not downstream).
         TTxTransaction baseTx = tx;
-        baseTx.MutableAlterTable()->ClearAddLocalIndexes();
+        baseTx.MutableAlterTable()->ClearTableIndexes();
         result.push_back(CreateAlterTable(NextPartId(id, result), baseTx));
     }
 
-    for (const auto& indexConfig : alter.GetAddLocalIndexes()) {
+    for (const auto& indexDesc : alter.GetTableIndexes()) {
         auto scheme = TransactionTemplate(path.PathString(),
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
         scheme.SetFailOnExist(tx.GetFailOnExist());
         // Internal so the generic create-index op accepts a steady/under-alter parent table.
         scheme.SetInternal(true);
-        *scheme.MutableCreateTableIndex() = indexConfig;
+        *scheme.MutableCreateTableIndex() = ToIndexCreationConfig(indexDesc);
         result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
     }
 

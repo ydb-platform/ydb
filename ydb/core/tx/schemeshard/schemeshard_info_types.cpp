@@ -1175,9 +1175,9 @@ bool TPartitionConfigMerger::ApplyChanges(
         TSet<ui32> toRemove(changes.GetDropByKeyFilterPrefixLengths().begin(),
                             changes.GetDropByKeyFilterPrefixLengths().end());
         google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TByKeyFilterPrefix> kept;
-        for (const auto& p : result.GetByKeyFilterPrefixes()) {
+        for (auto& p : *result.MutableByKeyFilterPrefixes()) {
             if (!toRemove.contains(p.GetPrefixLength())) {
-                *kept.Add() = p;
+                kept.Add()->Swap(&p);
             }
         }
         result.MutableByKeyFilterPrefixes()->Swap(&kept);

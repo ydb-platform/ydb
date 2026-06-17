@@ -38,6 +38,14 @@ namespace NKikimr {
         }
     };
 
+    struct TEvRecoveryLogCutDone : public TEventLocal<TEvRecoveryLogCutDone, TEvBlobStorage::EvRecoveryLogCutDone> {
+        const ui64 FirstLsnToKeep;
+
+        explicit TEvRecoveryLogCutDone(ui64 firstLsnToKeep)
+            : FirstLsnToKeep(firstLsnToKeep)
+        {}
+    };
+
     class TVDiskContext;
     class TPDiskCtx;
     class TLsnMngr;
@@ -48,6 +56,7 @@ namespace NKikimr {
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TIntrusivePtr<TVDiskConfig> Config;
         TActorId LoggerId;
+        TActorId NotifyId;
     };
 
     IActor* CreateRecoveryLogCutter(TLogCutterCtx &&logCutterCtx);

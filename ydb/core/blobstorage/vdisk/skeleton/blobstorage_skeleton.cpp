@@ -1959,6 +1959,19 @@ namespace NKikimr {
             LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON LOCAL RECOVERY SUCCEEDED"
                     << " Marker# BSVS29");
 
+            const bool waitForLocalSyncDataCut =
+                AppData(ctx)->FeatureFlags.GetEnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay();
+            const ui64 recoveredLocalSyncDataLsn = LocalRecovInfo->GetRecoveredLocalSyncDataLsn();
+            StartupDataSyncBlockedUntilCutLsn =
+                waitForLocalSyncDataCut && recoveredLocalSyncDataLsn ? recoveredLocalSyncDataLsn + 1 : 0;
+            if (StartupDataSyncBlockedUntilCutLsn) {
+                LOG_DEBUG_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix
+                    << "Startup data sync will wait until replayed LocalSyncData is cut"
+                    << " recoveredLocalSyncDataLsn# " << recoveredLocalSyncDataLsn
+                    << " blockedUntilCutLsn# " << StartupDataSyncBlockedUntilCutLsn
+                    << " Marker# BSVS38");
+            }
+
             // run logger forwarder
             auto logWriter = CreateRecoveryLogWriter(PDiskCtx->PDiskId, Db->SkeletonID,
                     PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, Db->LsnMngr->GetStartLsn(),
@@ -1973,7 +1986,7 @@ namespace NKikimr {
 
             // run LogCutter in the same mailbox
             TLogCutterCtx logCutterCtx = {VCtx, PDiskCtx, Db->LsnMngr, Config,
-                    (TActorId)(Db->LoggerID)};
+                    (TActorId)(Db->LoggerID), ctx.SelfID};
             Db->LogCutterID.Set(ctx.RegisterWithSameMailbox(CreateRecoveryLogCutter(std::move(logCutterCtx))));
             ActiveActors.Insert(Db->LogCutterID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
@@ -2103,7 +2116,8 @@ namespace NKikimr {
                     Db->LoggerID,
                     Db->LogCutterID,
                     Db->SyncLogID,
-                    Config);
+                    Config,
+                    StartupDataSyncBlockedUntilCutLsn);
                 // syncer performes sync recovery
                 Db->SyncerID.Set(ctx.Register(CreateSyncerActor(sc, GInfo, ev->Get()->SyncerData)));
                 ActiveActors.Insert(Db->SyncerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
@@ -2383,6 +2397,12 @@ namespace NKikimr {
                         << " DELAYED actorid# " << ctx.SelfID.ToString()
                         << " Marker# BSVS34");
                 CutLogDelayedMsg = std::move(msg);
+            }
+        }
+
+        void Handle(TEvRecoveryLogCutDone::TPtr &ev, const TActorContext &ctx) {
+            if (Db->SyncerID) {
+                ctx.Send(ev->Forward(Db->SyncerID));
             }
         }
 
@@ -2862,6 +2882,7 @@ namespace NKikimr {
             HFunc(TEvVDiskStatRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(NPDisk::TEvCutLog, Handle)
+            IgnoreFunc(TEvRecoveryLogCutDone)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
@@ -2915,6 +2936,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
+            HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
@@ -2987,6 +3009,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
+            HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
@@ -3116,6 +3139,7 @@ namespace NKikimr {
         TActiveActors ActiveActors;
         // fields for handling NPDisk::TEvCutLog
         std::unique_ptr<NPDisk::TEvCutLog> CutLogDelayedMsg;
+        ui64 StartupDataSyncBlockedUntilCutLsn = 0;
         bool LocalDbInitialized = false;
         std::shared_ptr<TRopeArena> Arena;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;

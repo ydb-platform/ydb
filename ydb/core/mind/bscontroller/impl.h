@@ -175,9 +175,7 @@ public:
                     }
                 }
             }
-            if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
-                OnlyPhantomsRemain = onlyPhantomsRemain;
-            }
+            OnlyPhantomsRemain = status == NKikimrBlobStorage::EVDiskStatus::REPLICATING && onlyPhantomsRemain;
         }
 
         NKikimrBlobStorage::EVDiskStatus GetStatus() const {
@@ -1549,7 +1547,7 @@ private:
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TSelfHealSettings SelfHealSettings;
-    
+
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;
@@ -2466,6 +2464,7 @@ public:
         TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
         bool MetricsDirty = false;
+        bool OnlyPhantomsRemain = false;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
                 const std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
@@ -2480,9 +2479,14 @@ public:
                 VDiskStatus = item.VDiskStatus;
                 VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
+                OnlyPhantomsRemain = item.OnlyPhantomsRemain;
             } else {
                 VDiskStatusTimestamp = mono;
             }
+        }
+
+        bool IsReplicatingWithPhantomsOnly() const {
+            return VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING && OnlyPhantomsRemain;
         }
     };
 

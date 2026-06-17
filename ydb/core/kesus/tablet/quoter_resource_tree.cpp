@@ -1,8 +1,10 @@
 #include "quoter_resource_tree.h"
 
 #include "probes.h"
+#include "public_counters.h"
 #include "quoter_constants.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 
 #include <util/string/builder.h>
@@ -163,6 +165,9 @@ public:
     void CalcParameters() override;
     void CalcParametersForAccounting();
     void CalcParametersForReplication();
+
+    void SetupTotalCounters();
+    void ReportConsumedTotal(double consumed);
 
     THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) override;
 
@@ -840,6 +845,43 @@ void THierarchicalDRRQuoterResourceTree::CalcParametersForAccounting() {
         RateAccounting->Stop();
         RateAccounting.Destroy();
     }
+
+    SetupTotalCounters();
+}
+
+void THierarchicalDRRQuoterResourceTree::SetupTotalCounters() {
+    const auto& accCfg = EffectiveProps.GetAccountingConfig();
+    const auto& metric = accCfg.GetOnDemand();
+    THierarchicalDRRQuoterResourceTree* const parent = GetParent();
+
+    // Reported for non-root resources whose billing metric is published (same gate as the per-category limit/consumed).
+    if (accCfg.GetEnabled() && parent && !parent->GetParent() && IsPublicMetric(metric)) {
+        auto counters = GetPublicCounters(metric, AppData()->Counters);
+        Counters.LimitTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.limit_total", false);
+        Counters.ConsumedTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.consumed_total", true);
+
+        *Counters.LimitTotal = parent->GetMaxUnitsPerSecond();
+    } else {
+        Counters.LimitTotal.Reset();
+        Counters.ConsumedTotal.Reset();
+    }
+}
+
+void THierarchicalDRRQuoterResourceTree::ReportConsumedTotal(double consumed) {
+    THierarchicalDRRQuoterResourceTree* parent = GetParent();
+    while (parent && parent->GetParent()) {
+        parent = parent->GetParent();
+    }
+    if (!parent) {
+        return;
+    }
+
+    for (TQuoterResourceTree* childBase : parent->GetChildren()) {
+        auto* child = static_cast<THierarchicalDRRQuoterResourceTree*>(childBase);
+        if (child->Counters.ConsumedTotal) {
+            *child->Counters.ConsumedTotal += consumed;
+        }
+    }
 }
 
 void THierarchicalDRRQuoterResourceTree::CalcParametersForReplication() {
@@ -1001,7 +1043,11 @@ TInstant THierarchicalDRRQuoterResourceTree::Report(
 
 void THierarchicalDRRQuoterResourceTree::RunAccounting() {
     if (RateAccounting) {
-        ActiveAccounting = RateAccounting->RunAccounting();
+        double accountedConsumed = 0.0;
+        ActiveAccounting = RateAccounting->RunAccounting(accountedConsumed);
+        if (accountedConsumed > 0.0) {
+            ReportConsumedTotal(accountedConsumed);
+        }
     } else {
         ActiveAccounting = false;
     }

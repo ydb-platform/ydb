@@ -224,30 +224,26 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 1. Клиент устанавливает TLS-соединение с сервером {{ ydb-short-name }}, передавая клиентский сертификат (и цепочку доверия).
 2. При обработке запроса сервер извлекает сертификат из TLS-контекста.
-3. Если в запросе нет [аутентификационного токена](../concepts/glossary.md#auth-token), сервер использует сертификат для аутентификации: проверяет его по правилам секции [`client_certificate_authorization`](../reference/configuration/client_certificate_authorization.md) и формирует [SID](authorization.md#sid) пользователя.
-4. Далее выполняется обычная [авторизация](authorization.md) — проверка прав доступа и уровней доступа для полученного SID и назначенных групп.
+3. Если в запросе нет [аутентификационного токена](../concepts/glossary.md#auth-token), сервер использует сертификат для аутентификации и проверяет его по правилам секции [`client_certificate_authorization`](../reference/configuration/client_certificate_authorization.md).
+4. В итоге успешной проверки клиенту назначается идентификатор защиты [SID](../concepts/glossary.md#access-sid), который обладает всеми назначенными соответствующему идентификатору [правами](../concepts/glossary.md#access-right). Далее выполняется обычная [авторизация](authorization.md) — проверка, достаточно ли этих прав для выполнения запроса.
 
 ### Приоритет аутентификационного токена
 
-Если клиент передаёт и TLS-сертификат, и аутентификационный токен, используется только токен. Сертификат при этом игнорируется.
+Если клиент передаёт и TLS-сертификат, и аутентификационный токен, используется только токен. Сертификат при этом не используется для аутентификации (на TLS он всё равно уходит).
 
 Чтобы аутентифицироваться по сертификату, клиент не должен передавать токен: ни в заголовке `Authorization` (HTTP), ни через механизмы SDK/CLI для IAM, логина и пароля и т.п.
 
-### Получение групп
+### Получение SID
 
-Если в секции [`client_certificate_authorization`](../reference/configuration/client_certificate_authorization.md) заданы блоки `client_certificate_definitions`, сертификат принимается при соответствии хотя бы одному из них. Для каждого подходящего блока клиент включается в группы из `member_groups`. Если `member_groups` не указан, используется группа по умолчанию — `default_group` (значение по умолчанию: `DefaultClientAuth@cert`).
-
-### Получение имени учётной записи
-
-Успешная аутентификация по сертификату создаёт SID с суффиксом `@cert` (или другим значением параметра [`certificate_authentication_domain`](../reference/configuration/auth_config.md#certificate-auth-domain) в секции `auth_config`).
-
-Имя формируется из всех атрибутов поля Subject сертификата в нотации `Имя=Значение,...@cert`. Пример:
+Успешная аутентификация по сертификату создаёт SID пользователя с суффиксом `@cert` (или другим значением параметра [`certificate_authentication_domain`](../reference/configuration/auth_config.md#certificate-auth-domain) в секции `auth_config`). Имя формируется из всех атрибутов поля Subject сертификата в нотации `Имя=Значение,...@cert`. Порядок атрибутов соответствует порядку полей в сертификате. Пример:
 
 ```text
 C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 ```
 
-Порядок атрибутов соответствует порядку полей в сертификате.
+### Получение групп
+
+Если в секции [`client_certificate_authorization`](../reference/configuration/client_certificate_authorization.md) заданы блоки `client_certificate_definitions`, сертификат принимается при соответствии хотя бы одному из них. Для каждого подходящего блока клиент включается в группы из `member_groups`. Если `member_groups` не указан, используется группа по умолчанию — `default_group` (значение по умолчанию: `DefaultClientAuth@cert`).
 
 ### Настройка сервера
 
@@ -259,7 +255,7 @@ C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 
 ### Настройка клиента
 
-Подробнее о настройке [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — в разделе [{#T}](../reference/ydb-cli/connect.md#command-line-pars).
+Подробнее о настройке [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — в разделе [Параметры TLS-соединения](../reference/ydb-cli/connect.md#tls).
 
 ## Аутентификация с использованием стороннего IAM-провайдера {#iam}
 

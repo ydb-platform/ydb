@@ -40,7 +40,7 @@ client_certificate_authorization:
 
 ## Примеры
 
-Следующий фрагмент конфигурации требует клиентский сертификат с компонентом `O=YDB` в поле "Subject". При успешной аутентификации подключению будет присвоен субъект доступа `user@cert`.
+Следующий фрагмент конфигурации требует клиентский сертификат с компонентом `O=YDB` в поле "Subject". Для сертификата с Subject `O=YDB` будет сформирован SID пользователя `O=YDB@cert`, и этот SID включится в группу `user@cert`:
 
 ```yaml
 client_certificate_authorization:
@@ -52,7 +52,7 @@ client_certificate_authorization:
         values: ["YDB"]
 ```
 
-Следующий фрагмент конфигурации требует клиентский сертификат с компонентами `OU=cluster1` и `O=YDB` в поле "Subject". Дополнительно проверяется, что поле "Subject Alternative Name" содержит имя хоста, заканчивающееся на суффикс `.cluster1.ydb.company.net`. При успешной аутентификации подключению будет присвоен субъект доступа `admin@cert`.
+Следующий фрагмент конфигурации требует клиентский сертификат с компонентами `OU=cluster1` и `O=YDB` в поле "Subject". Дополнительно проверяется, что поле "Subject Alternative Name" содержит имя хоста, заканчивающееся на суффикс `.cluster1.ydb.company.net`. Для сертификата с Subject `OU=cluster1, O=YDB` будет сформирован SID пользователя `OU=cluster1,O=YDB@cert`, , и этот SID включится в группу `admin@cert`:
 
 ```yaml
 client_certificate_authorization:

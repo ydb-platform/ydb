@@ -302,7 +302,7 @@ protected:
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                    if(!record.GetResponse().GetYdbResults().empty()) {
+                    if (!record.GetResponse().GetYdbResults().empty()) {
                         YDB_LOG_ERROR("Record.GetResponse().GetYdbResults() is empty");
                     }
 

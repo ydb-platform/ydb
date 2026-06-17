@@ -372,6 +372,15 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
 
+        // Once the registry is materialized, OldestCollectionTime must be a real, recent instant:
+        // the local node counts as now, remote nodes contribute their propagated collection times.
+        const auto assertFreshOldestCollectionTime = [&](const auto& registry) {
+            const TInstant oldest = registry->GetOldestCollectionTime();
+            UNIT_ASSERT(oldest > TInstant::Zero());
+            UNIT_ASSERT(oldest <= runtime.GetCurrentTime());
+            return oldest;
+        };
+
         // Sleep a little, so there's at least one plan step generated
         SimulateSleep(runtime, TDuration::Seconds(1));
 
@@ -421,9 +430,11 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         SimulateSleep(runtime, TDuration::Seconds(10));
 
         // snapshots have been promoted
+        TVector<TInstant> oldestAfterPromotion(nodesCount);
         for (size_t node = 0; node < nodesCount; ++node) {
             const auto& registry = runtime.GetAppData(node).SnapshotRegistryHolder->Get();
             UNIT_ASSERT(registry);
+            oldestAfterPromotion[node] = assertFreshOldestCollectionTime(registry);
             if (manySnapshots) {
                 const TRowVersion expectedBorder = *std::min_element(snapshots.begin(), snapshots.end());
                 UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), expectedBorder);
@@ -459,6 +470,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         for (size_t node = 0; node < nodesCount; ++node) {
             const auto& registry = runtime.GetAppData(node).SnapshotRegistryHolder->Get();
             UNIT_ASSERT(registry);
+            // Freshness keeps advancing as exchange rounds continue, even after snapshots are gone.
+            UNIT_ASSERT(assertFreshOldestCollectionTime(registry) > oldestAfterPromotion[node]);
             UNIT_ASSERT_VALUES_EQUAL(registry->GetBorder(), TRowVersion::Max());
             UNIT_ASSERT(registry->GetActiveSnapshots(table).empty());
             UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSchema).empty());
@@ -887,6 +900,112 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
             UNIT_ASSERT(registry.get());
             UNIT_ASSERT(!registry->HasSnapshot(table, snapshot2));
+        }
+    }
+
+    // Prefill must not let a node re-adopt its OWN snapshots that a peer still remembers. Both nodes take
+    // a snapshot and exchange, so node 0 ends up holding node 1's snapshot. Node 1 is then "restarted" (its
+    // local snapshot is gone) and prefills from node 0, whose response still echoes node 1's old snapshot
+    // back. Node 1 must drop it (RemoteSnapshotsStorage tracks other nodes only) and keep a real freshness.
+    // A broken filter would store node 1's own snapshot under its own node id with a Zero collection time,
+    // which both resurrects the snapshot and collapses OldestCollectionTime to Zero.
+    Y_UNIT_TEST(PrefillSkipsSelfSnapshots) {
+        const ui32 nodesCount = 2;
+        // Per-node tables: HasSnapshot keys off (table, version), so giving each node its own table lets us
+        // tell node 1's own snapshot apart from node 0's even when both land on the same coordinator step.
+        const ::NKikimr::TTableId table0(0, 1);
+        const ::NKikimr::TTableId table1(0, 2);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetMaxRemoteSnapshots(10);
+        // Keep node 0's copy of node 1's snapshot alive across node 1's brief restart.
+        appConfig.MutableLongTxServiceConfig()->SetUnavailableNodeSnapshotsExpirationTimeSeconds(1000);
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        bool blockPropagation = false;
+        bool prefillNotEmpty = false;
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvLongTxService::TEvCollectSnapshots::EventType:
+                case TEvLongTxService::TEvPropagateSnapshots::EventType:
+                    if (blockPropagation && ev->Sender.NodeId() != ev->Recipient.NodeId()) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                case TEvLongTxService::TEvRemoteSnapshotsPrefillResult::EventType:
+                    if (ev->Get<TEvLongTxService::TEvRemoteSnapshotsPrefillResult>()->Record.GetSnapshots().SnapshotsSize() > 0) {
+                        prefillNotEmpty = true;
+                    }
+                    break;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(observer);
+        Y_DEFER {
+            runtime.SetObserverFunc(saveObserver);
+        };
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // Acquire a snapshot on each node, each against its own table.
+        const auto acquire = [&](ui32 nodeIdx, const ::NKikimr::TTableId& tableId) {
+            const auto sender = runtime.AllocateEdgeActor(nodeIdx);
+            const auto service = MakeLongTxServiceID(runtime.GetNodeId(nodeIdx));
+            runtime.Send(
+                new IEventHandle(service, sender,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {tableId})),
+                nodeIdx, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+            return std::make_pair(std::move(msg->SnapshotHandle), msg->Snapshot);
+        };
+        auto [handle0, snapshot0] = acquire(0, table0);
+        auto [handle1, snapshot1] = acquire(1, table1);
+
+        // Let both nodes promote and exchange, so node 0's RemoteSnapshotsStorage learns node 1's snapshot.
+        SimulateSleep(runtime, TDuration::Seconds(5));
+        for (ui32 node = 0; node < nodesCount; ++node) {
+            const auto& registry = runtime.GetAppData(node).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(registry->HasSnapshot(table0, snapshot0));
+            UNIT_ASSERT(registry->HasSnapshot(table1, snapshot1));
+        }
+
+        // From now on prefill is the only channel for node 1, so the self-filter we test is prefill's own.
+        blockPropagation = true;
+        prefillNotEmpty = false;
+
+        // Restart node 1's snapshot subsystem via the feature flag: disabling clears its storages and
+        // poisons its exchanger, re-enabling spawns a fresh one that (with propagation blocked) can only
+        // repopulate via prefill from node 0.
+        runtime.GetAppData(1).FeatureFlags.SetEnableSnapshotsLocking(false);
+        SimulateSleep(runtime, TDuration::Seconds(2));
+        UNIT_ASSERT(!runtime.GetAppData(1).SnapshotRegistryHolder->Get().get());
+        // Sanity: node 0 still remembers node 1's snapshot, so it will echo it back during prefill.
+        UNIT_ASSERT(runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table1, snapshot1));
+
+        runtime.GetAppData(1).FeatureFlags.SetEnableSnapshotsLocking(true);
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        {
+            const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(prefillNotEmpty);
+            // node 0's snapshot is genuinely remote to node 1 => kept.
+            UNIT_ASSERT(registry->HasSnapshot(table0, snapshot0));
+            // node 1's own snapshot, echoed back by node 0's stale copy, must be filtered out: its local
+            // copy is gone after the restart and RemoteSnapshotsStorage only tracks other nodes.
+            UNIT_ASSERT(!registry->HasSnapshot(table1, snapshot1));
+            // And freshness stays a real instant; a broken self-filter would collapse it to Zero.
+            UNIT_ASSERT(registry->GetOldestCollectionTime() > TInstant::Zero());
         }
     }
 

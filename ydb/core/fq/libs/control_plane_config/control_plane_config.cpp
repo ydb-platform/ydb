@@ -57,8 +57,8 @@ public:
     static constexpr char ActorName[] = "FQ_CONTROL_PLANE_CONFIG";
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("Dump STARTING",
-            {"STARTING", SelfId()});
+        YDB_LOG_DEBUG("Starting",
+            {"selfId", SelfId()});
         Become(&TControlPlaneConfigActor::StateFunc);
         if (Config.GetUseDbMapping()) {
             YdbConnection = NewYdbConnection(Config.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
@@ -71,7 +71,7 @@ public:
             for (const auto& scopeToTenant : mapping.GetScopeToTenantName()) {
                 auto [_, isInserted] = TenantInfo->SubjectMapping[SUBJECT_TYPE_SCOPE].emplace(scopeToTenant.GetKey(), scopeToTenant.GetValue());
                 if (!isInserted) {
-                    YDB_LOG_ERROR("Invalid configuation, the scope with the name already exists",
+                    YDB_LOG_ERROR("Invalid configuration, the scope with the name already exists",
                         {"scope", scopeToTenant.GetKey()});
                 }
                 TenantInfo->TenantMapping.emplace(scopeToTenant.GetValue(), scopeToTenant.GetValue());
@@ -79,7 +79,7 @@ public:
             for (const auto& cloudToTenant : mapping.GetCloudIdToTenantName()) {
                 auto [_, isInserted] = TenantInfo->SubjectMapping[SUBJECT_TYPE_CLOUD].emplace(cloudToTenant.GetKey(), cloudToTenant.GetValue());
                 if (!isInserted) {
-                    YDB_LOG_ERROR("Invalid configuation, the cloud with the name already exists",
+                    YDB_LOG_ERROR("Invalid configuration, the cloud with the name already exists",
                         {"cloudId", cloudToTenant.GetKey()});
                 }
                 TenantInfo->TenantMapping.emplace(cloudToTenant.GetValue(), cloudToTenant.GetValue());

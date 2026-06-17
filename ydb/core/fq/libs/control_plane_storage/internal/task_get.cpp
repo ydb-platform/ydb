@@ -355,7 +355,7 @@ static TSet<ui64> ParseNodeIds(NActors::TActorSystem* actorSystem, const TString
                 auto beginStr = StripString(item.substr(0, it - item.begin()));
                 auto endStr = StripString(item.substr(it - item.begin() + 1));
                 if (beginStr.empty() || endStr.empty()) {
-                    YDB_LOG_ERROR_CTX(*actorSystem, "Failed to parse mapping nodes: db value, empty token",
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Failed to parse mapping nodes (db value, empty token)",
                         {"nodes", nodes});
                     break;
                 }
@@ -369,7 +369,7 @@ static TSet<ui64> ParseNodeIds(NActors::TActorSystem* actorSystem, const TString
             result.insert(FromString<ui64>(StripString(item)));
         }
     } catch (...) {
-        YDB_LOG_ERROR_CTX(*actorSystem, "Failed to parse mapping nodes (db value",
+        YDB_LOG_ERROR_CTX(*actorSystem, "Failed to parse mapping nodes (db value)",
             {"nodes", nodes},
             {"ex", CurrentExceptionMessage()});
     }

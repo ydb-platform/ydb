@@ -737,7 +737,7 @@ void TControlPlaneStorageBase::Handle(TEvControlPlaneStorage::TEvFinalStatusRepo
     Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->IncByStatus(event.Status);
 
     // TStatistics statistics{event.Statistics};
-    YDB_LOG_COMP_INFO(::NKikimrServices::YQ_AUDIT, "FinalStatus: cloud id: [ ], scope: [ ], query id: [ ], job id: [ ], query type: [ ],",
+    YDB_LOG_COMP_INFO(::NKikimrServices::YQ_AUDIT, "FinalStatus",
         {"cloudId", event.CloudId},
         {"scope", event.Scope},
         {"queryId", event.QueryId},

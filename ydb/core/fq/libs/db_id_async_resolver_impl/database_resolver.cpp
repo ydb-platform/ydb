@@ -144,7 +144,7 @@ private:
             const TString msg = TStringBuilder() << "error while response processing, params "
                 << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
                 << ", details: " << CurrentExceptionMessage();
-            YDB_LOG_ERROR("ResponseProccessor::Handle(TEvHttpIncomingResponse)",
+            YDB_LOG_ERROR("ResponseProccesor::Handle(TEvHttpIncomingResponse)",
                 {"traceId", TraceId},
                 {"msg", msg});
             Issues.AddIssue(msg);
@@ -548,7 +548,7 @@ private:
         bool success = true,
         const TString& errorMessage = "")
     {
-        YDB_LOG_DEBUG("ResponseProccessor::SendResponse",
+        YDB_LOG_DEBUG("ResponseProcessor::SendResponse",
             {"traceId", TraceId},
             {"success", success},
             {"errors", (errorMessage ? errorMessage : "no")});
@@ -583,7 +583,7 @@ private:
             if (Cache.Get(key, &cacheVal)) {
                 switch(cacheVal->index()) {
                     case 0U: {
-                        YDB_LOG_TRACE("ResponseProccessor::Handle(EndpointRequest): obtained description from cache",
+                        YDB_LOG_TRACE("ResponseProcessor::Handle(EndpointRequest): obtained description from cache",
                             {"traceId", TraceId},
                             {"databaseId", std::get<0>(key)},
                             {"databaseType", std::get<1>(key)},
@@ -592,7 +592,7 @@ private:
                         break;
                     }
                     case 1U: {
-                        YDB_LOG_TRACE("ResponseProccessor::Handle(EndpointRequest): obtained error from cache",
+                        YDB_LOG_TRACE("ResponseProcessor::Handle(EndpointRequest): obtained error from cache",
                             {"traceId", TraceId},
                             {"databaseId", std::get<0>(key)},
                             {"databaseType", std::get<1>(key)},
@@ -601,13 +601,13 @@ private:
                         return;
                     }
                     default: {
-                        YDB_LOG_ERROR("ResponseProccessor::Handle(EndpointRequest): unsupported cache value type",
+                        YDB_LOG_ERROR("ResponseProcessor::Handle(EndpointRequest): unsupported cache value type",
                             {"traceId", TraceId});
                     }
                 }
                 continue;
             } else {
-                YDB_LOG_TRACE("ResponseProccessor::Handle(EndpointRequest): key is missing in cache",
+                YDB_LOG_TRACE("ResponseProcessor::Handle(EndpointRequest): key is missing in cache",
                     {"traceId", TraceId},
                     {"databaseId", std::get<0>(key)},
                     {"databaseType", std::get<1>(key)});
@@ -644,7 +644,7 @@ private:
                     httpRequest->Set("Authorization", token);
                 }
 
-                YDB_LOG_DEBUG("ResponseProccessor::Handle(EndpointRequest): start GET request",
+                YDB_LOG_DEBUG("ResponseProcessor::Handle(EndpointRequest): start GET request",
                     {"traceId", TraceId},
                     {"url", httpRequest->URL});
 
@@ -652,7 +652,7 @@ private:
             } catch (const std::exception& e) {
                 const TString msg = TStringBuilder() << "error while preparing to resolve database id: " << databaseId
                                                      << ", details: " << e.what();
-                YDB_LOG_ERROR("ResponseProccessor::Handle(EndpointRequest): put error",
+                YDB_LOG_ERROR("ResponseProcessor::Handle(EndpointRequest): put error",
                     {"traceId", TraceId},
                     {"inCache", msg});
                 Cache.Put(key, msg);

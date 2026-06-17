@@ -18,6 +18,7 @@
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
+#include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
@@ -82,6 +83,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , LangVer_(options.LangVer)
     , RuntimeSettings_(::GetRuntimeSettings())
     , IssueReportTarget_(options.IssueReportTarget)
+    , RemoveUnsupportedPragmas_(options.RemoveUnsupportedPragmas)
 {
     HandleInternalSettings(options.InternalSettings);
 
@@ -368,7 +370,27 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
                  "ReplaceTableReads", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Replace reads from tables");
     pipeline.AddServiceTransformers();
-    pipeline.AddPreTypeAnnotation();
+    if (RemoveUnsupportedPragmas_) {
+        pipeline.Add(CreateFunctorTransformer(
+                         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                             return OptimizeExpr(input, output, [typeContext](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                                 if (node->IsCallable(ConfigureName)) {
+                                     if (!EnsureMinArgsCount(*node, 2, ctx)) {
+                                         return nullptr;
+                                     }
+                                     if (!EnsureMinArgsCount(*node->Child(1), 1, ctx)) {
+                                         return nullptr;
+                                     }
+                                     if (!typeContext->DataSourceMap.contains(node->Child(1)->Head().Content())) {
+                                         return node->HeadPtr();
+                                     }
+                                 }
+                                 return node;
+                             }, ctx, TOptimizeExprSettings(nullptr));
+                         }), "Unsupported pragmas", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                     "Unsupported pragmas optimizations");
+    }
+    pipeline.AddPreTypeAnnotation(/*expandCons=*/false);
     pipeline.AddExpressionEvaluation(*FuncRegistry_, calcTransformer.Get());
     pipeline.AddIOAnnotation();
     pipeline.AddTypeAnnotationTransformer();
@@ -388,6 +410,9 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
                          return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
                              if (node->IsCallable("Right!") && node->Head().IsCallable("Cons!")) {
                                  return node->Head().ChildPtr(1);
+                             }
+                             if (node->IsCallable("Left!") && node->Head().IsCallable("Cons!")) {
+                                 return node->Head().ChildPtr(0);
                              }
 
                              return node;

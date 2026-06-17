@@ -93,7 +93,8 @@ IPullStreamWorkerFactoryPtr TProgramFactory::MakePullStreamWorkerFactory(
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
         Options_.InternalSettings,
-        Options_.IssueReportTarget));
+        Options_.IssueReportTarget,
+        Options_.RemoveUnsupportedPragmas));
 }
 
 IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
@@ -123,7 +124,8 @@ IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
         Options_.InternalSettings,
-        Options_.IssueReportTarget));
+        Options_.IssueReportTarget,
+        Options_.RemoveUnsupportedPragmas));
 }
 
 IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
@@ -157,5 +159,6 @@ IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
         Options_.InternalSettings,
-        Options_.IssueReportTarget));
+        Options_.IssueReportTarget,
+        Options_.RemoveUnsupportedPragmas));
 }

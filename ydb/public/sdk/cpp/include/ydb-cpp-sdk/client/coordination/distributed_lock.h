@@ -19,12 +19,19 @@ namespace NCoordination {
         // Throws TYdbLockException on session start failure, acquire timeout, transport
         // error, or contention timeout (timeout bounds the acquire wait).
         void lock();
+
+
+        // Same as lock()
+        void Acquire();
+
         // noexcept. Undefined behavior if called when the lock is not held (same as std::mutex).
         void unlock() noexcept;
+
+        // Same as unlock()
+        void Release() noexcept;
         // noexcept. Returns false on any failure without throwing.
         bool try_lock() noexcept;
-        // Becomes stopped when the distributed lock is lost (session expiry, or failed release
-        // while holding the lock). Once stopped, remains stopped for the lifetime of this object.
+        // Signals lock loss for the current hold; refreshed on successful acquire — call again after re-lock.
         std::stop_token getStopToken() const;
     private:
         struct TImpl;

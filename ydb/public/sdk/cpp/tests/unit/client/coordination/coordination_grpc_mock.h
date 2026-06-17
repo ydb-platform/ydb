@@ -163,6 +163,15 @@ public:
             request.Clear();
         }
 
+        {
+            std::lock_guard guard(SemaphoreLock_);
+            for (auto& [name, sem] : Semaphores_) {
+                if (sem.OwnerSessionId == sessionId) {
+                    sem = {};
+                }
+            }
+        }
+
         return grpc::Status::OK;
     }
 

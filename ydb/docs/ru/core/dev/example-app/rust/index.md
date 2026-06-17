@@ -61,10 +61,10 @@ async fn main() -> YdbResult<()> {
 qc.exec(format!(
     "CREATE TABLE IF NOT EXISTS `{}` (
         series_id Bytes,
-        title Utf8,
-        series_info Utf8,
+        title Text,
+        series_info Text,
         release_date Date,
-        comment Utf8,
+        comment Text,
         PRIMARY KEY(series_id)
     )",
     "native/query/series"

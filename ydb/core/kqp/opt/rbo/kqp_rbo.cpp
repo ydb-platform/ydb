@@ -73,7 +73,7 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString s
  * Currently we obtain an iterator to the operators, match the rules, and if at least one matched we
  * apply it and start again.
  *
- * TODO: We should have a clear list of properties that are reqiuired by the rules of current stage and
+ * TODO: We should have a clear list of properties that are required by the rules of current stage and
  * ensure they are computed/maintained properly
  *
  * TODO: Add sanity checks that can be tunred on in debug mode to immediately catch transformation problems

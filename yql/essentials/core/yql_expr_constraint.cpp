@@ -2,6 +2,7 @@
 #include "yql_callable_transform.h"
 #include "yql_opt_utils.h"
 
+#include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/yql_join.h>
@@ -9,6 +10,7 @@
 
 #include <library/cpp/yson/node/node_io.h>
 
+#include <util/digest/murmur.h>
 #include <util/generic/scope.h>
 #include <util/generic/utility.h>
 #include <util/generic/algorithm.h>
@@ -18,6 +20,96 @@
 namespace NYql {
 
 using namespace NNodes;
+
+namespace {
+
+template <std::unsigned_integral T>
+ui64 MurmurHash(T value, ui64 init) {
+    return ::MurmurHash<ui64>(&value, sizeof(value), init);
+}
+
+ui64 MurmurHash(std::string_view value, ui64 init) {
+    return ::MurmurHash<ui64>(value.data(), value.size(), init);
+}
+
+bool ExtractMemberPath(TExprBase node, TExprBase arg, TPartOfConstraintBase::TPathType& result) {
+    if (node.Raw() == arg.Raw()) {
+        return true;
+    }
+    const auto maybeMember = node.Maybe<TCoMember>();
+    if (!maybeMember) {
+        return false;
+    }
+    const auto member = maybeMember.Cast();
+
+    if (!ExtractMemberPath(member.Struct(), arg, result)) {
+        return false;
+    }
+
+    result.push_back(member.Name().Value());
+    return true;
+}
+
+void CollectEventTime(TExprBase node, TExprBase arg, TStreamingConstraintNode::TEventTimeDescriptor& result) {
+    TPartOfConstraintBase::TPathType path;
+    if (ExtractMemberPath(node, arg, path) && !path.empty()) {
+        auto it = std::ranges::find(result.Bindings, path);
+        if (it == result.Bindings.end()) {
+            result.Bindings.push_back(path);
+            it = std::prev(result.Bindings.end());
+        }
+        const ui64 slot = std::distance(result.Bindings.begin(), it);
+
+        result.Hash = MurmurHash(Max<ui64>(), result.Hash);
+        result.Hash = MurmurHash(slot, result.Hash);
+        if (const auto type = node.Raw()->GetTypeAnn()) {
+            result.Hash = MurmurHash(FormatType(type), result.Hash);
+        }
+        return;
+    }
+
+    result.Hash = MurmurHash(ToUnderlying(node.Raw()->Type()), result.Hash);
+    if (node.Raw() == arg.Raw()) {
+        result.Hash = MurmurHash(Max<ui64>() - 1U, result.Hash);
+    } else {
+        result.Hash = MurmurHash(node.Raw()->Content(), result.Hash);
+    }
+    if (const auto type = node.Raw()->GetTypeAnn()) {
+        result.Hash = MurmurHash(FormatType(type), result.Hash);
+    }
+    const auto& children = node.Raw()->Children();
+    result.Hash = MurmurHash(children.size(), result.Hash);
+    for (const auto& child : children) {
+        CollectEventTime(TExprBase(child), arg, result);
+    }
+};
+
+} // anonymous namespace
+
+TStreamingConstraintNode::TEventTimeDescriptor BuildEventTimeDescriptor(const TExprNode* node) {
+    const auto maybeLambda = TExprBase(node).Maybe<TCoLambda>();
+    YQL_ENSURE(maybeLambda);
+    const auto lambda = maybeLambda.Cast();
+
+    const auto args = lambda.Args();
+    YQL_ENSURE(args.Size() == 1U);
+    const auto arg = args.Arg(0);
+    const auto body = lambda.Body();
+
+    auto result = TStreamingConstraintNode::TEventTimeDescriptor{.Hash=0, .Bindings={}};
+    CollectEventTime(body, arg, result);
+    return result;
+}
+
+TStreamingConstraintNode::TEventTimeDescriptor BuildEventTimeDescriptorForField(TStringBuf field, const TTypeAnnotationNode* type) {
+    auto result = TStreamingConstraintNode::TEventTimeDescriptor{.Hash=0, .Bindings={{field}}};
+    result.Hash = MurmurHash(Max<ui64>(), result.Hash);
+    result.Hash = MurmurHash<ui64>(0U, result.Hash);
+    if (type) {
+        result.Hash = MurmurHash(FormatType(type), result.Hash);
+    }
+    return result;
+}
 
 namespace {
 
@@ -115,10 +207,10 @@ public:
         Functions_["Collect"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions_["PruneAdjacentKeys"] = &TCallableConstraintTransformer::PruneKeysWrap<true>;
         Functions_["PruneKeys"] = &TCallableConstraintTransformer::PruneKeysWrap<false>;
-        Functions_["FilterNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>;
-        Functions_["SkipNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>;
-        Functions_["FilterNullElements"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>;
-        Functions_["SkipNullElements"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>;
+        Functions_["FilterNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>;
+        Functions_["SkipNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>;
+        Functions_["FilterNullElements"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>;
+        Functions_["SkipNullElements"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>;
         Functions_["Right!"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions_["Cons!"] = &TCallableConstraintTransformer::CopyAllFrom<1>;
         Functions_["ExtractMembers"] = &TCallableConstraintTransformer::ExtractMembersWrap;
@@ -165,10 +257,10 @@ public:
         Functions_["Member"] = &TCallableConstraintTransformer::MemberWrap;
         Functions_["AsStruct"] = &TCallableConstraintTransformer::AsStructWrap;
         Functions_["BlockAsStruct"] = &TCallableConstraintTransformer::AsStructWrap;
-        Functions_["Just"] = &TCallableConstraintTransformer::FromFirst<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
-        Functions_["Unwrap"] = &TCallableConstraintTransformer::FromFirst<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
+        Functions_["Just"] = &TCallableConstraintTransformer::FromFirst<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
+        Functions_["Unwrap"] = &TCallableConstraintTransformer::FromFirst<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["Ensure"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
-        Functions_["ToList"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
+        Functions_["ToList"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["ToOptional"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["Head"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["Last"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
@@ -193,7 +285,7 @@ public:
         Functions_["If"] = &TCallableConstraintTransformer::IfWrap;
         Functions_["Nothing"] = &TCallableConstraintTransformer::FromEmpty;
         Functions_["IfPresent"] = &TCallableConstraintTransformer::IfPresentWrap;
-        Functions_["Coalesce"] = &TCallableConstraintTransformer::CommonFromChildren<0, TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
+        Functions_["Coalesce"] = &TCallableConstraintTransformer::CommonFromChildren<0, TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions_["CombineByKey"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineByKey::idx_FinishHandlerLambda>;
         Functions_["FinalizeByKey"] = &TCallableConstraintTransformer::FromFinalLambda<TCoFinalizeByKey::idx_FinishHandlerLambda>;
         Functions_["CombineCore"] = &TCallableConstraintTransformer::FromFinalLambda<TCoCombineCore::idx_FinishHandler>;
@@ -259,6 +351,7 @@ public:
         Functions_["MatchRecognize"] = &TCallableConstraintTransformer::MatchRecognizeWrap;
         Functions_["MatchRecognizeCore"] = &TCallableConstraintTransformer::MatchRecognizeWrap;
         Functions_["TimeOrderRecover"] = &TCallableConstraintTransformer::TimeOrderRecoverWrap;
+        Functions_["WatermarkGenerator"] = &TCallableConstraintTransformer::WatermarkGeneratorWrap;
         Functions_["StablePickle"] = &TCallableConstraintTransformer::PickleWrap;
         Functions_["Unpickle"] = &TCallableConstraintTransformer::FromSecond<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
         Functions_["Seq!"] = &TCallableConstraintTransformer::SeqExclamWrap;
@@ -466,6 +559,7 @@ private:
     }
 
     TStatus AssumeConstraintsWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        // TODO(vokayndzop): разобраться с перезаворачиванием стриминг
         TConstraintSet set;
         try {
             set = ctx.MakeConstraintSet(NYT::NodeFromYsonString(input->Tail().Content()));
@@ -696,13 +790,14 @@ private:
             FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
             FilterFromHead<TPartOfUniqueConstraintNode>(input, filter, ctx);
             FilterFromHead<TPartOfDistinctConstraintNode>(input, filter, ctx);
+            FilterFromHead<TPartOfStreamingConstraintNode>(input, filter, ctx);
         }
 
         return TStatus::Ok;
     }
 
     template <bool Strict>
-    TStatus CastWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+    TStatus CastWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         const auto outItemType = input->GetTypeAnn();
         const auto inItemType = input->Head().GetTypeAnn();
         const auto filter = [inItemType, outItemType, toString = input->IsCallable({"ToString", "ToBytes"})](const TPartOfConstraintBase::TPathType& path) {
@@ -736,6 +831,7 @@ private:
         FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfUniqueConstraintNode>(input, filterForUnique, ctx);
         FilterFromHead<TPartOfDistinctConstraintNode>(input, filterForDistinct, ctx);
+        FromFirst<TStreamingConstraintNode>(input, output, ctx);
 
         const auto unwrapedOutItemType = RemoveOptionalType(outItemType);
         const auto unwrapedInItemType = RemoveOptionalType(inItemType);
@@ -797,6 +893,7 @@ private:
         ReduceFromHead<TPartOfChoppedConstraintNode>(input, rename, ctx);
         ReduceFromHead<TPartOfUniqueConstraintNode>(input, rename, ctx);
         ReduceFromHead<TPartOfDistinctConstraintNode>(input, rename, ctx);
+        ReduceFromHead<TPartOfStreamingConstraintNode>(input, rename, ctx);
         return FromFirst<TVarIndexConstraintNode>(input, output, ctx);
     }
 
@@ -811,7 +908,9 @@ private:
         FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfUniqueConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfDistinctConstraintNode>(input, filter, ctx);
-        return FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>(input, output, ctx);
+        FilterFromHead<TStreamingConstraintNode, true>(input, filter, ctx);
+        FilterFromHead<TPartOfStreamingConstraintNode>(input, filter, ctx);
+        return FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
     TStatus RemovePrefixMembersWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
@@ -827,6 +926,8 @@ private:
             FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
             FilterFromHead<TPartOfUniqueConstraintNode>(input, filter, ctx);
             FilterFromHead<TPartOfDistinctConstraintNode>(input, filter, ctx);
+            FilterFromHead<TStreamingConstraintNode, true>(input, filter, ctx);
+            FilterFromHead<TPartOfStreamingConstraintNode>(input, filter, ctx);
         }
         else if (outItemType->GetKind() == ETypeAnnotationKind::Variant) {
             if (auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
@@ -842,12 +943,13 @@ private:
                     FilterFromHead<TPartOfChoppedConstraintNode>(*input, constr, filter, ctx);
                     FilterFromHead<TPartOfUniqueConstraintNode>(*input, constr, filter, ctx);
                     FilterFromHead<TPartOfDistinctConstraintNode>(*input, constr, filter, ctx);
+                    FilterFromHead<TPartOfStreamingConstraintNode>(*input, constr, filter, ctx);
                 }
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
             }
         }
 
-        return FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode, TStreamingConstraintNode>(input, output, ctx);
+        return FromFirst<TEmptyConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
     // TODO: Empty for false condition
@@ -861,7 +963,7 @@ private:
             FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode>(input, output, ctx);
         }
 
-        return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode, TStreamingConstraintNode>(input, output, ctx);
+        return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode, TStreamingConstraintNode>(input, output, ctx);
     }
 
     template <bool Adjacent>
@@ -1084,6 +1186,13 @@ private:
         GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered, WideOutput>(input, singleItem, ctx);
         GetFromMapLambda<TPartOfSortedConstraintNode, Ordered, WideOutput>(input, singleItem, ctx);
         GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered, WideOutput>(input, singleItem, ctx);
+        GetFromMapLambda<TPartOfStreamingConstraintNode, Ordered, WideOutput>(input, singleItem, ctx);
+        if (const auto streaming = input->Head().GetConstraint<TStreamingConstraintNode>()) {
+            const auto lambda = GetConstraintFromLambda<TPartOfStreamingConstraintNode, WideOutput>(input->Tail(), ctx);
+            if (!streaming->GetEventTime().Defined() || !lambda || !lambda->GetColumnMapping().contains(streaming)) {
+                input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+            }
+        }
 
         const auto lambdaVarIndex = GetConstraintFromLambda<TVarIndexConstraintNode, WideOutput>(input->Tail(), ctx);
         const auto lambdaMulti = GetConstraintFromLambda<TMultiConstraintNode, WideOutput>(input->Tail(), ctx);
@@ -1124,6 +1233,7 @@ private:
                     GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
                     GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
                     GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
+                    GetFromMapLambda<TPartOfStreamingConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
 
                     if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                         remappedItems.pop_back();
@@ -1140,6 +1250,7 @@ private:
                             GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
                             GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
                             GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                            GetFromMapLambda<TPartOfStreamingConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
 
                             if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                                 remappedItems.pop_back();
@@ -1207,11 +1318,12 @@ private:
             }
         }
 
-        if (const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
-            output->AddConstraint(c);
-        } else if constexpr (Flat) {
-            if (c = input->Tail().GetConstraint<TStreamingConstraintNode>()) {
-                output->AddConstraint(c);
+        if constexpr (Flat) {
+            const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>();
+            if (!c) {
+                if (c = input->Tail().GetConstraint<TStreamingConstraintNode>()) {
+                    output->AddConstraint(c);
+                }
             }
         }
 
@@ -1258,6 +1370,9 @@ private:
             if (const auto part = input->Head().GetConstraint<TPartOfDistinctConstraintNode>()) {
                 input->AddConstraint(part);
             }
+            if (const auto part = input->Head().GetConstraint<TPartOfStreamingConstraintNode>()) {
+                input->AddConstraint(part);
+            }
         }
 
         return CommonFromChildren<0, TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
@@ -1299,12 +1414,17 @@ private:
         }
 
         if constexpr (!Merge) {
+            const TStreamingConstraintNode* result = nullptr;
             for (size_t i = 0; i < input->ChildrenSize(); ++i) {
                 if (const auto* streaming = input->Child(i)->GetConstraint<TStreamingConstraintNode>()) {
-                    input->AddConstraint(streaming);
-                    break;
+                    if (result && !result->Equals(*streaming)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Combining streams with assigned event time is not supported"));
+                        return TStatus::Error;
+                    }
+                    result = streaming;
                 }
             }
+            input->AddConstraint(result);
         }
 
         return CommonFromChildren<0, TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
@@ -1397,6 +1517,11 @@ private:
                     input->AddConstraint(extracted);
                 }
             }
+            if (const auto part = structNode.GetConstraint<TPartOfStreamingConstraintNode>()) {
+                if (const auto extracted = part->ExtractField(ctx, memberName)) {
+                    input->AddConstraint(extracted);
+                }
+            }
         }
 
         if (structNode.IsCallable("AsStruct")) {
@@ -1417,6 +1542,7 @@ private:
         TPartOfChoppedConstraintNode::TMapType chopped;
         TPartOfUniqueConstraintNode::TMapType uniques;
         TPartOfDistinctConstraintNode::TMapType distincts;
+        TPartOfStreamingConstraintNode::TMapType streaming;
 
         std::vector<const TConstraintSet*> structConstraints;
         for (auto i = 0U; i < input->ChildrenSize(); ++i) {
@@ -1438,6 +1564,9 @@ private:
             if (const auto part = child->GetConstraint<TPartOfDistinctConstraintNode>()) {
                 TPartOfDistinctConstraintNode::UniqueMerge(distincts, part->GetColumnMapping(name));
             }
+            if (const auto part = child->GetConstraint<TPartOfStreamingConstraintNode>()) {
+                TPartOfStreamingConstraintNode::UniqueMerge(streaming, part->GetColumnMapping(name));
+            }
 
             structConstraints.push_back(&child->GetConstraintSet());
         }
@@ -1453,6 +1582,9 @@ private:
         if (!distincts.empty()) {
             input->AddConstraint(ctx.MakeConstraint<TPartOfDistinctConstraintNode>(std::move(distincts)));
         }
+        if (!streaming.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(streaming)));
+        }
         if (const auto varIndex = TVarIndexConstraintNode::MakeCommon(structConstraints, ctx)) {
             input->AddConstraint(varIndex);
         }
@@ -1465,6 +1597,7 @@ private:
         TPartOfChoppedConstraintNode::TMapType chopped;
         TPartOfUniqueConstraintNode::TMapType uniques;
         TPartOfDistinctConstraintNode::TMapType distincts;
+        TPartOfStreamingConstraintNode::TMapType streaming;
 
         std::vector<const TConstraintSet*> structConstraints;
         for (const auto& child : input->Children()) {
@@ -1482,6 +1615,9 @@ private:
             if (const auto part = child->Tail().GetConstraint<TPartOfDistinctConstraintNode>()) {
                 TPartOfDistinctConstraintNode::UniqueMerge(distincts, part->GetColumnMapping(name));
             }
+            if (const auto part = child->Tail().GetConstraint<TPartOfStreamingConstraintNode>()) {
+                TPartOfStreamingConstraintNode::UniqueMerge(streaming, part->GetColumnMapping(name));
+            }
 
             structConstraints.push_back(&child->Tail().GetConstraintSet());
         }
@@ -1497,6 +1633,9 @@ private:
         if (!distincts.empty()) {
             input->AddConstraint(ctx.MakeConstraint<TPartOfDistinctConstraintNode>(std::move(distincts)));
         }
+        if (!streaming.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(streaming)));
+        }
         if (const auto varIndex = TVarIndexConstraintNode::MakeCommon(structConstraints, ctx)) {
             input->AddConstraint(varIndex);
         }
@@ -1509,6 +1648,7 @@ private:
         TPartOfChoppedConstraintNode::TMapType chopped;
         TPartOfUniqueConstraintNode::TMapType uniques;
         TPartOfDistinctConstraintNode::TMapType distincts;
+        TPartOfStreamingConstraintNode::TMapType streaming;
 
         for (const auto& child : input->Children()) {
             const auto& prefix = child->Head().Content();
@@ -1524,6 +1664,9 @@ private:
             if (const auto part = child->Tail().GetConstraint<TPartOfDistinctConstraintNode>()) {
                 TPartOfDistinctConstraintNode::UniqueMerge(distincts, part->GetColumnMapping(ctx, prefix));
             }
+            if (const auto part = child->Tail().GetConstraint<TPartOfStreamingConstraintNode>()) {
+                TPartOfStreamingConstraintNode::UniqueMerge(streaming, part->GetColumnMapping(ctx, prefix));
+            }
         }
         if (!sorted.empty()) {
             input->AddConstraint(ctx.MakeConstraint<TPartOfSortedConstraintNode>(std::move(sorted)));
@@ -1536,6 +1679,9 @@ private:
         }
         if (!distincts.empty()) {
             input->AddConstraint(ctx.MakeConstraint<TPartOfDistinctConstraintNode>(std::move(distincts)));
+        }
+        if (!streaming.empty()) {
+            input->AddConstraint(ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(streaming)));
         }
         return TStatus::Ok;
     }
@@ -1583,6 +1729,7 @@ private:
         AddPartOf<TPartOfChoppedConstraintNode>(input, ctx);
         AddPartOf<TPartOfUniqueConstraintNode>(input, ctx);
         AddPartOf<TPartOfDistinctConstraintNode>(input, ctx);
+        AddPartOf<TPartOfStreamingConstraintNode>(input, ctx);
 
         TVector<const TConstraintSet*> structConstraints;
         structConstraints.push_back(&addStructNode.GetConstraintSet());
@@ -1601,6 +1748,7 @@ private:
         FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfUniqueConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfDistinctConstraintNode>(input, filter, ctx);
+        FilterFromHead<TPartOfStreamingConstraintNode>(input, filter, ctx);
         return FromFirst<TVarIndexConstraintNode>(input, output, ctx);
     }
 
@@ -1613,6 +1761,7 @@ private:
         ReplacePartOf<TPartOfChoppedConstraintNode>(input, ctx);
         ReplacePartOf<TPartOfUniqueConstraintNode>(input, ctx);
         ReplacePartOf<TPartOfDistinctConstraintNode>(input, ctx);
+        ReplacePartOf<TPartOfStreamingConstraintNode>(input, ctx);
 
         if (const auto varIndex = TVarIndexConstraintNode::MakeCommon(structConstraints, ctx)) {
             input->AddConstraint(varIndex);
@@ -1671,6 +1820,13 @@ private:
                     }
                 }
             }
+            if (const auto& mapping = TPartOfStreamingConstraintNode::GetCommonMapping(node.Head().GetConstraint<TStreamingConstraintNode>(), node.Head().GetConstraint<TPartOfStreamingConstraintNode>()); !mapping.empty()) {
+                for (ui32 i = 0U; i < argsConstraints.size(); ++i) {
+                    if (auto extracted = TPartOfStreamingConstraintNode::ExtractField(mapping, ctx.GetIndexAsString(i)); !extracted.empty()) {
+                        argsConstraints[i].emplace_back(ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(extracted)));
+                    }
+                }
+            }
 
         } else {
             if (const auto inItemType = GetSeqItemType(node.Head().GetTypeAnn())) {
@@ -1690,6 +1846,9 @@ private:
                                     }
                                     if (auto mapping = TPartOfDistinctConstraintNode::GetCommonMapping(inputConstr->GetConstraint<TDistinctConstraintNode>(), inputConstr->GetConstraint<TPartOfDistinctConstraintNode>()); !mapping.empty()) {
                                         multiItems.back().second.AddConstraint(ctx.MakeConstraint<TPartOfDistinctConstraintNode>(std::move(mapping)));
+                                    }
+                                    if (auto mapping = TPartOfStreamingConstraintNode::GetCommonMapping(inputConstr->GetConstraint<TStreamingConstraintNode>(), inputConstr->GetConstraint<TPartOfStreamingConstraintNode>()); !mapping.empty()) {
+                                        multiItems.back().second.AddConstraint(ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(mapping)));
                                     }
                                 }
                             }
@@ -1715,6 +1874,9 @@ private:
                         if (auto mapping = TPartOfDistinctConstraintNode::GetCommonMapping(GetDetailed(node.Head().GetConstraint<TDistinctConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfDistinctConstraintNode>()); !mapping.empty()) {
                             argsConstraints.front().emplace_back(ctx.MakeConstraint<TPartOfDistinctConstraintNode>(std::move(mapping)));
                         }
+                    }
+                    if (auto mapping = TPartOfStreamingConstraintNode::GetCommonMapping(GetDetailed(node.Head().GetConstraint<TStreamingConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfStreamingConstraintNode>()); !mapping.empty()) {
+                        argsConstraints.front().emplace_back(ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(mapping)));
                     }
                 }
             }
@@ -1754,6 +1916,10 @@ private:
                 input->AddConstraint(filtered);
 
         if (const auto part = input->Tail().GetConstraint<TPartOfDistinctConstraintNode>())
+            if (const auto filtered = part->CompleteOnly(ctx))
+                input->AddConstraint(filtered);
+
+        if (const auto part = input->Tail().GetConstraint<TPartOfStreamingConstraintNode>())
             if (const auto filtered = part->CompleteOnly(ctx))
                 input->AddConstraint(filtered);
 
@@ -2274,6 +2440,11 @@ private:
                 }
             }
             if (const auto part = structNode.GetConstraint<TPartOfDistinctConstraintNode>()) {
+                if (const auto extracted = part->ExtractField(ctx, memberName)) {
+                    input->AddConstraint(extracted);
+                }
+            }
+            if (const auto part = structNode.GetConstraint<TPartOfStreamingConstraintNode>()) {
                 if (const auto extracted = part->ExtractField(ctx, memberName)) {
                     input->AddConstraint(extracted);
                 }
@@ -3205,8 +3376,9 @@ private:
         std::transform(keys.begin(), keys.end(), columns.begin(), [](const TPartOfConstraintBase::TPathType& path) -> std::string_view {
             return path.front();
         });
-        if (const auto hoppingColumn = input->Child(TCoMultiHoppingCore::idx_HoppingColumn)->Content();
-            "_yql_time" != hoppingColumn) {
+
+        const auto hoppingColumn = input->Child(TCoMultiHoppingCore::idx_HoppingColumn)->Content();
+        if ("_yql_time" != hoppingColumn) {
             columns.push_back(hoppingColumn);
         }
 
@@ -3215,7 +3387,48 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
         }
 
-        return FromFirst<TEmptyConstraintNode, TStreamingConstraintNode>(input, output, ctx);
+        const auto* streaming = input->Head().GetConstraint<TStreamingConstraintNode>();
+        if (streaming) {
+            if (!streaming->GetEventTime().Defined()) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "HoppingWindow requires watermarks"));
+                return TStatus::Error;
+            }
+
+            const auto hoppingEventTime = BuildEventTimeDescriptor(input->Child(TCoMultiHoppingCore::idx_TimeExtractor));
+            if (streaming->GetEventTime() != hoppingEventTime) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "HoppingWindow time extractor does not match assigned event time (" << streaming->GetEventTime() << " != " << hoppingEventTime << ")"));
+                return TStatus::Error;
+            }
+
+            const TTypeAnnotationNode* hoppingColumnType = nullptr;
+            if (const auto* itemType = GetSeqItemType(input->GetTypeAnn())->Cast<TStructExprType>()) {
+                if (const auto index = itemType->FindItem(hoppingColumn)) {
+                    hoppingColumnType = itemType->GetItems()[*index]->GetItemType();
+                }
+            }
+            input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(BuildEventTimeDescriptorForField(hoppingColumn, hoppingColumnType)));
+        }
+        return FromFirst<TEmptyConstraintNode>(input, output, ctx);
+    }
+
+    TStatus WatermarkGeneratorWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
+            return status;
+        }
+
+        const auto* streaming = input->Head().GetConstraint<TStreamingConstraintNode>();
+        if (!streaming) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Watermark generator requires streaming input"));
+            return TStatus::Error;
+        }
+        if (streaming->GetEventTime().Defined()) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Event time is already assigned for streaming input"));
+            return TStatus::Error;
+        }
+
+        auto descriptor = BuildEventTimeDescriptor(input->Child(1));
+        input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(std::move(descriptor)));
+        return FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
     }
 
     TStatus MatchRecognizeWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
@@ -3361,6 +3574,19 @@ TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfDistinc
     }
 
     return uniques.empty() ? nullptr : ctx.MakeConstraint<TPartOfDistinctConstraintNode>(std::move(uniques));
+}
+
+template<> const TPartOfStreamingConstraintNode*
+TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfStreamingConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
+    TPartOfStreamingConstraintNode::TMapType streaming;
+
+    for (auto i = 1U; i < lambda.ChildrenSize(); ++i) {
+        if (const auto part = lambda.Child(i)->GetConstraint<TPartOfStreamingConstraintNode>()) {
+            TPartOfStreamingConstraintNode::UniqueMerge(streaming, part->GetColumnMapping(ctx.GetIndexAsString(i - 1U)));
+        }
+    }
+
+    return streaming.empty() ? nullptr : ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(streaming));
 }
 
 template<> const TVarIndexConstraintNode*

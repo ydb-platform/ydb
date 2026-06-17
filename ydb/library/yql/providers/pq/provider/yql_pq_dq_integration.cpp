@@ -206,6 +206,7 @@ public:
 
                 watermarkSerialized = Build<TCoAtom>(ctx, watermark.Pos()).Value(serializedWatermarkExpr).Done();
             }
+            const auto enableWatermarksAdvanced = "advanced" == wrSettings.WatermarksMode.GetOrElse("disable");
 
             const auto expandedRowType = ExpandType(pqReadTopic.Pos(), *rowType, ctx);
 
@@ -223,7 +224,7 @@ public:
                     .Partitions<TCoVoid>().Build()
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
-                    .WatermarkExpr(maybeWatermark)
+                    .WatermarkExpr(enableWatermarksAdvanced ? TMaybeNode<TCoLambda>() : maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()
                 .RowType(expandedRowType)
@@ -231,7 +232,7 @@ public:
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done();
 
-            if (maybeWatermark && "advanced" == wrSettings.WatermarksMode.GetOrElse("disable") && !useSharedReading) {
+            if (maybeWatermark && enableWatermarksAdvanced) {
                 const auto watermark = maybeWatermark.Cast();
 
                 auto watermarkSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);

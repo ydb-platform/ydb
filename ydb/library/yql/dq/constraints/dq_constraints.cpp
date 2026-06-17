@@ -12,23 +12,19 @@ namespace {
 using namespace NYql::NNodes;
 using TStatus = NYql::IGraphTransformer::TStatus;
 
-template <class... TOther>
-struct TCopyConstraint;
-
-template <>
-struct TCopyConstraint<> {
-    static void Do(const TExprNode& from, const TExprNode::TPtr& to) {
-        Y_UNUSED(from, to);
-    }
-};
-
-template <class TConstraint, class... TOther>
-struct TCopyConstraint<TConstraint, TOther...> {
+template <class TConstraint>
+struct TCopyConstraint {
     static void Do(const TExprNode& from, const TExprNode::TPtr& to) {
         if (const auto* constraint = from.GetConstraint<TConstraint>()) {
             to->AddConstraint(constraint);
         }
-        TCopyConstraint<TOther...>::Do(from, to);
+    }
+};
+
+template <class... TConstraint>
+struct TCopyConstraints {
+    static void Do(const TExprNode& from, const TExprNode::TPtr& to) {
+        (TCopyConstraint<TConstraint>::Do(from, to), ...);
     }
 };
 
@@ -39,7 +35,7 @@ TStatus ConstraintDqCnValue(const TExprNode::TPtr& input, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input);
+    TCopyConstraints<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input);
     return TStatus::Ok;
 }
 
@@ -57,7 +53,7 @@ TStatus ConstraintDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx, boo
         return TStatus::Error;
     }
 
-    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input);
+    TCopyConstraints<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>::Do(output.Ref(), input);
     return TStatus::Ok;
 }
 
@@ -114,7 +110,20 @@ TStatus ConstrainDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext
         return status;
     }
 
-    TCopyConstraint<TStreamingConstraintNode>::Do(input->Head(), input);
+    const auto* streaming = input->Head().GetConstraint<TStreamingConstraintNode>();
+    if (!streaming) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Watermark generator requires streaming input"));
+        return TStatus::Error;
+    }
+    if (streaming->GetEventTime().Defined()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Event time is already assigned for streaming input"));
+        return TStatus::Error;
+    }
+
+    auto descriptor = BuildEventTimeDescriptor(input->Child(1));
+    input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(std::move(descriptor)));
+
+    TCopyConstraints<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>::Do(input->Head(), input);
     return TStatus::Ok;
 }
 
@@ -183,7 +192,7 @@ TStatus ConstraintDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
         return status;
     }
 
-    TCopyConstraint<TStreamingConstraintNode>::Do(stage.Program().Ref(), stage.Ptr());
+    TCopyConstraints<TStreamingConstraintNode>::Do(stage.Program().Ref(), stage.Ptr());
     return TStatus::Ok;
 }
 
@@ -196,7 +205,7 @@ TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (const auto* constraints = multi->GetItem(FromString<ui32>(output.Index().Value()))) {
             input->SetConstraints(*constraints);
         }
-        TCopyConstraint<TStreamingConstraintNode>::Do(output.Stage().Ref(), input);
+        TCopyConstraints<TStreamingConstraintNode>::Do(output.Stage().Ref(), input);
     } else {
         input->CopyConstraints(programBody);
     }
@@ -206,7 +215,7 @@ TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
 
 TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
-    TCopyConstraint<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode, TStreamingConstraintNode>::Do(TDqConnection(input).Output().Ref(), input);
+    TCopyConstraints<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode, TStreamingConstraintNode>::Do(TDqConnection(input).Output().Ref(), input);
     return TStatus::Ok;
 }
 

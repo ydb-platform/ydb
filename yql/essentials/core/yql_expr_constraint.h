@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/ast/yql_constraint.h>
 #include <yql/essentials/ast/yql_expr.h>
 
 #include <util/generic/ptr.h>
@@ -9,6 +10,8 @@
 #include <initializer_list>
 
 namespace NYql {
+
+[[nodiscard]] TStreamingConstraintNode::TEventTimeDescriptor BuildEventTimeDescriptor(const TExprNode* node);
 
 TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly = false, bool subGraph = false, bool disableCheck = false);
 TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer();

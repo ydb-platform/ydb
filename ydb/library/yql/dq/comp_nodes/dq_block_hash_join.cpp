@@ -173,11 +173,11 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Kind, IBlockLayoutConv
     TVector<arrow::Datum> FlushAndApplyRenames() {
         if constexpr(LeftSemiOrOnly(Kind)) {
             TVector<arrow::Datum> out;
-            this->Converters_.Probe->Unpack(this->Output_.Probe, out);
-            this->Output_.Probe.Clear();
+            this->Converters_.SelectSide(this->OutputSide_)->Unpack(this->Output_.SelectSide(this->OutputSide_), out);
+            this->Output_.SelectSide(this->OutputSide_).Clear();
             TVector<arrow::Datum> renamed;
             for(auto rename: *this->Renames_){
-                MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
+                MKQL_ENSURE(rename.Side == this->OutputSide_, "renames in Semi or Only Left Join shouldn't contain columns from right side");
                 renamed.push_back(out[rename.Index]);
             }
             return renamed;

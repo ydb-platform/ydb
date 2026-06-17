@@ -5824,7 +5824,8 @@ namespace {
             }
 
             auto savedType = lambdaSave->GetTypeAnn();
-            if (!noSaveLoad && !EnsurePersistableType(lambdaSave->Pos(), *savedType, ctx.Expr)) {
+            // we will check for persistable later
+            if (!noSaveLoad && !EnsureComputableType(lambdaSave->Pos(), *savedType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 

@@ -60,12 +60,18 @@ namespace NCoordination {
                 suppressLockLossNotify.store(false);
                 return false;
             }
+            if (!TryStartSession()) {
+                suppressLockLossNotify.store(false);
+                return false;
+            }
             suppressLockLossNotify.store(false);
-            return TryStartSession();
+            return true;
         }
         ~TImpl() {
             suppressLockLossNotify.store(true);
-            session.Close().GetValueSync();
+            try {
+                session.Close().GetValueSync();
+            } catch (...) {}
         }
         TImpl(TClient& client, std::string_view path, std::string_view name, TDuration timeout)
             : name(name)
@@ -82,7 +88,7 @@ namespace NCoordination {
                 throw TYdbLockException("Failed to start session");
             }
         }
-        bool try_lock() noexcept {
+        bool try_lock() noexcept try {
             if (!EnsureSession()) {
                 return false;
             }
@@ -97,6 +103,8 @@ namespace NCoordination {
                 return false;
             }
             return result.GetResult();
+        } catch (...) {
+            return false;
         }
         void lock() {
             if (!EnsureSession()) {
@@ -116,7 +124,7 @@ namespace NCoordination {
                 throw TYdbLockException("Failed to acquire semaphore");
             }
         }
-        void unlock() noexcept {
+        void unlock() noexcept try {
             auto releaseFuture = session.ReleaseSemaphore(name);
             if (releaseFuture.Wait(timeout_)) {
                 const auto result = releaseFuture.GetValue();
@@ -126,7 +134,8 @@ namespace NCoordination {
             } else {
                 ResetSession(true);
             }
-        }
+        } catch (...) {}
+        
     };
     TDistributedLock::TDistributedLock(TClient& client, std::string_view path, std::string_view name, TDuration timeout) {
         impl_ = std::make_unique<TImpl>(client, path, name, timeout);

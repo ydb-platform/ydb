@@ -9,11 +9,7 @@
 * `bloom_filter` — фильтр по точным значениям индексируемой колонки; подходит для условий равенства и `IN` (см. [когда применять](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter` — фильтр по n-граммам строковой колонки (`String`, `Utf8`); подходит для поиска подстрок и шаблонов `LIKE` в [колоночных таблицах](../concepts/glossary.md#column-oriented-table).
 
-Отличия типов и сравнение с глобальными индексами: [локальные индексы](../concepts/query_execution/local_indexes.md).
-
 ## Параметры и значения по умолчанию {#parameters}
-
-При создании или добавлении индекса в секции `INDEX` / `ADD INDEX` необязательный блок `WITH (...)` задаёт параметры конкретного блум-индекса (см. [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md), [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom)).
 
 Полный перечень параметров `WITH (...)` и значений по умолчанию:
 
@@ -28,7 +24,7 @@
 Создание таблицы с индексом `bloom_filter`:
 
 ```yql
-CREATE TABLE `/Root/events` (
+CREATE TABLE events (
     id Uint64,
     resource_id Utf8,
     message Utf8,
@@ -42,7 +38,7 @@ CREATE TABLE `/Root/events` (
 Добавление `bloom_ngram_filter` к существующей таблице:
 
 ```yql
-ALTER TABLE `/Root/events`
+ALTER TABLE events
   ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
   ON (message)
   WITH (
@@ -55,7 +51,7 @@ ALTER TABLE `/Root/events`
 Изменение параметров:
 
 ```yql
-ALTER TABLE `/Root/events` ALTER INDEX idx_ngram SET (
+ALTER TABLE events ALTER INDEX idx_ngram SET (
     ngram_size = 4,
     false_positive_probability = 0.005,
     case_sensitive = false

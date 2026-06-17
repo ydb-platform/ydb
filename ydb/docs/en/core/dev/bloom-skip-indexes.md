@@ -9,11 +9,7 @@ Bloom skip indexes are [local](../concepts/glossary.md#local-index) auxiliary st
 * `bloom_filter`: a filter over exact values of the indexed column; use for equality and `IN` (see [when to use which](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter`: a filter over n-grams of a string column (`String`, `Utf8`); use for substring and `LIKE` pattern search on [column-oriented tables](../concepts/glossary.md#column-oriented-table).
 
-For type differences and comparison with global indexes, see [local indexes](../concepts/query_execution/local_indexes.md).
-
 ## Parameters and defaults {#parameters}
-
-When you create or add an index in the `INDEX` / `ADD INDEX` clause, the optional `WITH (...)` block sets parameters for that Bloom skip index (see [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md), [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom)).
 
 Full list of `WITH (...)` parameters and defaults:
 
@@ -28,7 +24,7 @@ To change parameters after creation, use [ALTER INDEX](../yql/reference/syntax/a
 Create a table with a `bloom_filter` index:
 
 ```yql
-CREATE TABLE `/Root/events` (
+CREATE TABLE events (
     id Uint64,
     resource_id Utf8,
     message Utf8,
@@ -42,7 +38,7 @@ CREATE TABLE `/Root/events` (
 Add a `bloom_ngram_filter` index to an existing table:
 
 ```yql
-ALTER TABLE `/Root/events`
+ALTER TABLE events
   ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
   ON (message)
   WITH (
@@ -55,7 +51,7 @@ ALTER TABLE `/Root/events`
 Alter index parameters:
 
 ```yql
-ALTER TABLE `/Root/events` ALTER INDEX idx_ngram SET (
+ALTER TABLE events ALTER INDEX idx_ngram SET (
     ngram_size = 4,
     false_positive_probability = 0.005,
     case_sensitive = false

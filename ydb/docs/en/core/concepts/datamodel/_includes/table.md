@@ -163,9 +163,7 @@ The speed of renaming is determined by the type of data transactions currently r
 
 ### Bloom Filter {#bloom-filter}
 
-{% include [bloom_filter_concept.md](bloom_filter_concept.md) %}
-
-For row-oriented tables, you can enable a Bloom filter on the primary key to speed up multiple point lookups, at the cost of higher memory use and fewer disk I/O operations.
+Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) allows more efficiently determining the absence of keys in a table during multiple point lookups by primary key, reducing the number of required disk I/O operations at the cost of increased memory consumption.
 
 | Parameter name | Type | Acceptable values | Update capability | Reset capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
@@ -215,15 +213,6 @@ In most cases, working with {{ ydb-short-name }} column-oriented tables is simil
 
 * Column-oriented tables support column groups, but only for compression settings.
 
-At the moment, not all functionality of column-oriented tables is implemented. The following features are not currently supported:
-
-* Reading from replicas.
-* Global secondary indexes.
-* Vector and fulltext indexes.
-* Bloom filter for the primary key (`KEY_BLOOM_FILTER`; see [Bloom filter](#bloom-filter) for row-oriented tables).
-* Change Data Capture.
-* Custom table attributes.
-
 Let's recreate the "article" table, this time in column-oriented format, using the following YQL command:
 
 ```yql
@@ -238,8 +227,6 @@ WITH (STORE = COLUMN);
 ```
 
 ### Local Bloom skip indexes {#local-bloom-indexes}
-
-{% include [bloom_filter_concept.md](bloom_filter_concept.md) %}
 
 In column-oriented and row-oriented tables you can define [local Bloom skip indexes](../../glossary.md#local-bloom-skip-index) on columns with `LOCAL USING bloom_filter` or `LOCAL USING bloom_ngram_filter`, either during [table creation](../../../yql/reference/syntax/create_table/bloom_skip_index.md) or with [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom). See [local indexes](../../query_execution/local_indexes.md) and [Bloom skip indexes](../../../dev/bloom-skip-indexes.md).
 
@@ -273,3 +260,14 @@ To manage data partitioning, use the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` ad
 * The default value is `1`.
 
 Because it ignores all the other partitioning parameters, the system uses the same value as the upper partition limit.
+
+### Column-oriented table limitations
+
+At the moment, not all functionality of column-oriented tables is implemented. The following features are not currently supported:
+
+* Reading from replicas.
+* Global secondary indexes.
+* Vector and fulltext indexes.
+* Bloom filter for the primary key (`KEY_BLOOM_FILTER`; see [Bloom filter](#bloom-filter) for row-oriented tables).
+* Change Data Capture.
+* Custom table attributes.

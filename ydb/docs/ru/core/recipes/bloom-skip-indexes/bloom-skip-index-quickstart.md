@@ -1,9 +1,11 @@
 # Блум-индекс — быстрый старт
 
+## Создание таблицы с индексом bloom_filter
+
 Ниже минимальный пример: колоночная таблица с первичным ключом и локальным индексом `bloom_filter` по колонке, которая часто используется в условиях фильтрации.
 
 ```yql
-CREATE TABLE `/Root/events` (
+CREATE TABLE events (
     id Uint64 NOT NULL,
     resource_id Utf8 NOT NULL,
     payload String,
@@ -23,7 +25,7 @@ WITH (
 К той же таблице из примера выше можно добавить `bloom_ngram_filter` по строковой колонке (для колоночных таблиц):
 
 ```yql
-ALTER TABLE `/Root/events`
+ALTER TABLE events
   ADD INDEX idx_msg LOCAL USING bloom_ngram_filter
   ON (message)
   WITH (
@@ -37,12 +39,10 @@ ALTER TABLE `/Root/events`
 
 После загрузки данных селективные запросы с условиями по проиндексированным колонкам могут читать меньше данных: при обходе хранилища Блум-индекс пропускает фрагменты, в которых искомое значение гарантированно отсутствует (по сравнению с полным чтением колонки без такого фильтра).
 
-Чтобы убедиться, что индекс действительно уменьшает объём чтения, выполните один и тот же селективный запрос до и после его создания на таблице с достаточным объёмом данных.
-
 Пример данных и запросов к таблице из примеров выше:
 
 ```yql
-INSERT INTO `/Root/events` (id, resource_id, payload, message) VALUES
+INSERT INTO events (id, resource_id, payload, message) VALUES
     (1, "res-1", "{}", "started"),
     (2, "res-42", "{}", "error: timeout"),
     (3, "res-2", "{}", "done");
@@ -52,7 +52,7 @@ INSERT INTO `/Root/events` (id, resource_id, payload, message) VALUES
 
 ```yql
 SELECT id, message
-FROM `/Root/events`
+FROM events
 WHERE resource_id = "res-42";
 ```
 
@@ -60,9 +60,21 @@ WHERE resource_id = "res-42";
 
 ```yql
 SELECT id, message
-FROM `/Root/events`
+FROM events
 WHERE message LIKE '%timeout%';
 ```
+
+## Как убедиться в эффективности индекса
+
+Чтобы проверить, что Блум-индекс действительно сокращает объём чтения, используйте `EXPLAIN ANALYZE` — он покажет, сколько данных было прочитано и сколько фрагментов было пропущено:
+
+```yql
+EXPLAIN ANALYZE SELECT id, message
+FROM events
+WHERE resource_id = "res-42";
+```
+
+Также можно сравнить метрику `table.datashard.read.rows` (или аналогичную в системе мониторинга) до и после создания индекса на таблице с достаточным объёмом данных. При использовании {{ ydb-short-name }} CLI выполните запрос с флагом `--stats full`, чтобы увидеть детальную статистику чтения.
 
 Дополнительные материалы:
 

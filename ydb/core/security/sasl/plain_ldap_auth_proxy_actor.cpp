@@ -5,6 +5,8 @@
 #include <ydb/core/security/sasl/base_auth_actors.h>
 #include <ydb/core/security/sasl/events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SASL_AUTH
+
 using namespace NLoginProto;
 
 namespace NKikimr::NSasl {
@@ -40,20 +42,19 @@ public:
     void Handle(TEvLdapAuthProvider::TEvAuthenticateResponse::TPtr& ev, const TActorContext &ctx) {
         const TEvLdapAuthProvider::TEvAuthenticateResponse& response = *ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-            ActorName << "# " << ctx.SelfID.ToString() <<
-            " Handle TEvLdapAuthProvider::TEvAuthenticateResponse" <<
-            ", " << "status: " <<  static_cast<ui64>(response.Status) <<
-            ", " << "error: " << response.Error;
-        );
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvLdapAuthProvider::TEvAuthenticateResponse",
+            {"actorName", ActorName},
+            {"selfId", ctx.SelfID},
+            {"status", static_cast<ui64>(response.Status)},
+            {"error", response.Error;});
 
         if (response.Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
             ResolveSchemeShard(ctx);
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "LDAP authentication failed: "<< response.Error
-            );
+            YDB_LOG_INFO_CTX(ctx, "LDAP authentication",
+                {"actorName", ActorName},
+                {"selfId", ctx.SelfID},
+                {"failed", response.Error});
             SendError(ConvertLdapStatus(response.Status), response.Error.Message,
                 NLogin::NSasl::EScramServerError::OtherError, response.Error.LogMessage);
             return CleanupAndDie(ctx);

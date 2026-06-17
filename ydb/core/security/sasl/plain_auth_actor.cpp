@@ -12,6 +12,8 @@
 #include <ydb/library/login/hashes_checker/hashes_checker.h>
 #include <ydb/library/login/sasl/scram.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SASL_AUTH
+
 
 using namespace NLoginProto;
 
@@ -50,10 +52,9 @@ public:
     virtual void Bootstrap(const TActorContext &ctx) override final {
         if (!AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
             std::string error = "Login authentication is disabled";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_INFO_CTX(ctx, error,
+                {"actorName", ActorName},
+                {"selfId", ctx.SelfID});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             return CleanupAndDie(ctx);
         }
@@ -79,10 +80,10 @@ private:
         if (itUser == domainInfo->Users.end()) {
             std::stringstream error;
             error << "Cannot find user '" << AuthcId << "'";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Authentication failed: " << error.str();
-            );
+            YDB_LOG_INFO_CTX(ctx, "Authentication",
+                {"actorName", ActorName},
+                {"selfId", ctx.SelfID},
+                {"failed", error.str();});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str());
             return CleanupAndDie(ctx);
         }
@@ -154,11 +155,11 @@ private:
             switch (hashTypeDescr.Class) {
             case EHashClass::Argon: {
                 if (!IsBase64(itHashesInitParams->second)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                        ActorName << "# " << ctx.SelfID.ToString() <<
-                        ", " << "Authentication failed: " <<
-                        "'" << AuthcId << "' has broken Argon hash";
-                    );
+                    YDB_LOG_ERROR_CTX(ctx, "Authentication failed",
+                        {"actorName", ActorName},
+                        {"selfId", ctx.SelfID},
+                        {"authcId", AuthcId},
+                        {"failureReason", "' has broken Argon hash";});
                     SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
                     CleanupAndDie(ctx);
                     return false;
@@ -172,10 +173,9 @@ private:
             case EHashClass::Scram: {
                 if (Passwd.empty()) {
                     std::string error = "Empty password";
-                    LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                        ActorName << "# " << ctx.SelfID.ToString() <<
-                        ", " << error
-                    );
+                    YDB_LOG_INFO_CTX(ctx, error,
+                        {"actorName", ActorName},
+                        {"selfId", ctx.SelfID});
                     SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
                     CleanupAndDie(ctx);
                     return false;
@@ -185,11 +185,11 @@ private:
                 ui32 iterationsCount;
                 if (!TryFromString(scramInitParams.IterationsCount, iterationsCount)
                     || (iterationsCount == 0) || !IsBase64(scramInitParams.Salt)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                        ActorName << "# " << ctx.SelfID.ToString() <<
-                        ", " << "Authentication failed: " <<
-                        "'" << AuthcId << "' has broken Scram hash";
-                    );
+                    YDB_LOG_ERROR_CTX(ctx, "Authentication failed",
+                        {"actorName", ActorName},
+                        {"selfId", ctx.SelfID},
+                        {"authcId", AuthcId},
+                        {"failureReason", "' has broken Scram hash";});
                     SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
                     CleanupAndDie(ctx);
                     return false;
@@ -201,10 +201,9 @@ private:
                 auto scramHash = ComputeScramHash(hashTypeDescr, iterationsCount, scramSalt, error);
                 if (!error.empty()) {
                     std::string error = "Unsupported characters in the password";
-                    LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                        ActorName << "# " << ctx.SelfID.ToString() <<
-                        ", " << error
-                    );
+                    YDB_LOG_INFO_CTX(ctx, error,
+                        {"actorName", ActorName},
+                        {"selfId", ctx.SelfID});
                     SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
                     CleanupAndDie(ctx);
                     return false;
@@ -219,10 +218,11 @@ private:
         }
 
         if (ChosenAuthHashType == EHashType::Unknown) {
-            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Authentication failed: " <<
-                "'" << AuthcId << "' has no allowed hashes";
+            YDB_LOG_ERROR_CTX(ctx, "Authentication failed",
+                {"actorName", ActorName},
+                {"selfId", ctx.SelfID},
+                {"authcId", AuthcId},
+                {"failureReason", "' has no allowed hashes";}
             );
             SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
             CleanupAndDie(ctx);

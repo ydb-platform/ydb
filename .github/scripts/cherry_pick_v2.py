@@ -555,6 +555,110 @@ def find_existing_backport_comment(pull: Any, logger):
     return None
 
 
+def collect_unique_pulls(sources: List[Source]) -> List[Any]:
+    pulls = []
+    seen = set()
+    for source in sources:
+        for pull in source.pull_requests:
+            if pull.number not in seen:
+                pulls.append(pull)
+                seen.add(pull.number)
+    return pulls
+
+
+def build_shared_skip_comment(
+    pull_number: Optional[int],
+    sources: List[Source],
+    preflights: Dict[str, BranchPreflight],
+    invalid_branches: Set[str],
+    target_branches: List[str],
+    workflow_url: Optional[str],
+    cancelled_entire_run: bool,
+) -> str:
+    source = get_source_for_pull(pull_number, sources) if pull_number else None
+    branch_lines = []
+    for branch in target_branches:
+        if branch in invalid_branches:
+            branch_lines.append(f"`{branch}`: skipped (branch does not exist)")
+            continue
+
+        preflight = preflights.get(branch)
+        if not preflight:
+            continue
+        if preflight.all_present:
+            branch_lines.append(f"`{branch}`: skipped (all commits already present)")
+        elif source and all(sha in preflight.already_present_shas for sha in source.commit_shas):
+            branch_lines.append(f"`{branch}`: skipped (already present)")
+        else:
+            branch_lines.append(f"`{branch}`: skipped (already present)")
+
+    if cancelled_entire_run:
+        if len(branch_lines) == 1:
+            text = f"Backport cancelled: {branch_lines[0]}"
+        else:
+            text = "Backport cancelled:\n" + "\n".join(f"- {line}" for line in branch_lines)
+    elif len(branch_lines) == 1:
+        text = f"Backport skipped: {branch_lines[0]}"
+    else:
+        text = "Backport skipped:\n" + "\n".join(f"- {line}" for line in branch_lines)
+
+    if workflow_url:
+        text += f"\n\n[workflow run]({workflow_url})"
+    return text
+
+
+def notify_already_present_pulls(
+    pulls: List[Any],
+    sources: List[Source],
+    ordered_commit_shas: List[str],
+    preflights: Dict[str, BranchPreflight],
+    invalid_branches: Set[str],
+    target_branches: List[str],
+    workflow_url: Optional[str],
+    cancelled_entire_run: bool,
+    logger,
+    personalized: bool,
+):
+    for pull in pulls:
+        if personalized:
+            message = build_pull_result_comment(
+                pull.number,
+                sources,
+                ordered_commit_shas,
+                preflights,
+                [],
+                [],
+                invalid_branches,
+                target_branches,
+                workflow_url,
+            )
+            if cancelled_entire_run:
+                message = message.replace(
+                    "Backport result for this PR:",
+                    "Backport skipped:",
+                    1,
+                ).replace(
+                    "Backport results for this PR:",
+                    "Backport skipped:",
+                    1,
+                )
+        else:
+            message = build_shared_skip_comment(
+                pull.number,
+                sources,
+                preflights,
+                invalid_branches,
+                target_branches,
+                workflow_url,
+                cancelled_entire_run,
+            )
+        try:
+            pull.create_issue_comment(message)
+            logger.info("Posted skip backport comment on PR #%s", pull.number)
+        except GithubException as e:
+            logger.warning("Failed to post skip backport comment on PR #%s: %s", pull.number, e)
+
+
 def create_initial_backport_comments(
     pulls: List[Any],
     target_branches: List[str],
@@ -982,6 +1086,7 @@ def main():
     all_commit_shas = []
     for source in sources:
         all_commit_shas.extend(source.commit_shas)
+    unique_pull_requests = collect_unique_pulls(sources)
 
     if not all_commit_shas:
         logger.error("VALIDATION_ERROR: No commits to cherry-pick")
@@ -1029,10 +1134,22 @@ def main():
         has_work = bool(pulls_to_notify)
 
         if not has_work:
+            notify_already_present_pulls(
+                unique_pull_requests,
+                sources,
+                all_commit_shas,
+                preflights,
+                set(invalid_branches),
+                target_branches,
+                workflow_url,
+                True,
+                logger,
+                True,
+            )
             logger.info("WORKFLOW_SUCCESS: Nothing to backport — all commits are already present in target branch(es).")
             if summary_path:
                 with open(summary_path, 'a') as f:
-                    f.write("Nothing to backport — no comments posted to source PRs.\n\n")
+                    f.write("Nothing to backport — posted skip reason to source PRs.\n\n")
             return
 
         backport_comments = create_initial_backport_comments(
@@ -1081,6 +1198,23 @@ def main():
             backport_comments, sources, all_commit_shas, preflights, results,
             branch_failures, set(invalid_branches), target_branches, workflow_url, logger,
         )
+
+        already_present_pulls = [
+            pull for pull in unique_pull_requests if pull.number not in pulls_to_notify
+        ]
+        if already_present_pulls:
+            notify_already_present_pulls(
+                already_present_pulls,
+                sources,
+                all_commit_shas,
+                preflights,
+                set(invalid_branches),
+                target_branches,
+                workflow_url,
+                False,
+                logger,
+                True,
+            )
 
         if has_errors:
             error_msg = "Cherry-pick workflow completed with errors. See details above."

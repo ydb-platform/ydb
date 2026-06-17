@@ -17,7 +17,6 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
-#include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>

@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         }
     };
 
-    struct TTestTypeToStringBoth {
+    struct TTestTypeToBoth {
         TString ToString() const {
             return "some value";
         }
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(CreateMessageToMethods) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToString{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStructuredMessage{}}), "value.value1=1, value.value2=2");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStringBoth{}}), "value.value1=1, value.value2=2");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToBoth{}}), "value.value1=1, value.value2=2");
     }
 
     Y_UNIT_TEST(CreateMessageIterable) {

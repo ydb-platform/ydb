@@ -19,6 +19,7 @@ namespace NKikimr {
         const TActorId LogCutterId;
         const TActorId SyncLogId;
         const TIntrusivePtr<TVDiskConfig> Config;
+        const ui64 StartupDataSyncBlockedUntilCutLsn;
         NMonGroup::TSyncerGroup MonGroup;
 
         TSyncerContext(TIntrusivePtr<TVDiskContext> vctx,
@@ -29,7 +30,8 @@ namespace NKikimr {
                 const TActorId &loggerId,
                 const TActorId &logCutterId,
                 const TActorId &syncLogId,
-                TIntrusivePtr<TVDiskConfig> config)
+                TIntrusivePtr<TVDiskConfig> config,
+                ui64 startupDataSyncBlockedUntilCutLsn = 0)
             : VCtx(std::move(vctx))
             , LsnMngr(std::move(lsnMngr))
             , PDiskCtx(std::move(pdiskCtx))
@@ -39,6 +41,7 @@ namespace NKikimr {
             , LogCutterId(logCutterId)
             , SyncLogId(syncLogId)
             , Config(std::move(config))
+            , StartupDataSyncBlockedUntilCutLsn(startupDataSyncBlockedUntilCutLsn)
             , MonGroup(VCtx->VDiskCounters, "subsystem", "syncer")
         {
             Y_ABORT_UNLESS(VCtx && LsnMngr && PDiskCtx);

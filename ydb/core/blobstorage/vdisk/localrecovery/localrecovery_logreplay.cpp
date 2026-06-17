@@ -572,6 +572,7 @@ namespace NKikimr {
                 LocRecCtx->SyncerData->PutFromRecoveryLog(LocalSyncDataMsg.VDiskID, LocalSyncDataMsg.SyncState);
             }
 
+            LocRecCtx->RecovInfo->SetRecoveredLocalSyncDataLsn(record.Lsn);
             return EDispatchStatus::Success;
         }
 

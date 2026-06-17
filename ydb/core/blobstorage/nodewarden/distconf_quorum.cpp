@@ -166,9 +166,9 @@ namespace NKikimr::NStorage {
             const THashMap<TString, TBridgePileId>& /*bridgePileNameMap*/, TBridgePileId singleBridgePileId,
             const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name) {
         auto makeError = [&](TString error) -> bool {
-            YDB_LOG_CRIT("configuration incorrect",
-                {"Marker", "NWDC41"},
-                {"Error", error});
+            YDB_LOG_CRIT("Configuration incorrect",
+                {"marker", "NWDC41"},
+                {"error", error});
             //Y_DEBUG_ABORT("%s", error.c_str());
             if (out) {
                 *out << ' ' << name << ':' << error;

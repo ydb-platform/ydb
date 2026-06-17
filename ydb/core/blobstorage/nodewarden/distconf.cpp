@@ -28,7 +28,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Bootstrap() {
         YDB_LOG_DEBUG("Bootstrap",
-            {"Marker", "NWDC00"});
+            {"marker", "NWDC00"});
 
         auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
@@ -380,11 +380,11 @@ namespace NKikimr::NStorage {
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
         YDB_LOG_DEBUG("StateWaitForInit event",
-            {"Marker", "NWDC53"},
-            {"Type", ev->GetTypeRewrite()},
-            {"StorageConfigLoaded", StorageConfigLoaded},
-            {"NodeListObtained", NodeListObtained},
-            {"PendingEvents.size", PendingEvents.size()});
+            {"marker", "NWDC53"},
+            {"type", ev->GetTypeRewrite()},
+            {"storageConfigLoaded", StorageConfigLoaded},
+            {"nodeListObtained", NodeListObtained},
+            {"pendingEventsSize", PendingEvents.size()});
 
         auto processPendingEvents = [&] {
             if (PendingEvents.empty()) {
@@ -450,17 +450,17 @@ namespace NKikimr::NStorage {
         Y_DEFER {
             if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::MilliSeconds(5)) {
                 YDB_LOG_WARN("StateFunc too long",
-                    {"Marker", "NWDC01"},
-                    {"Type", type},
-                    {"Duration", duration});
+                    {"marker", "NWDC01"},
+                    {"type", type},
+                    {"duration", duration});
             }
         };
         YDB_LOG_DEBUG("StateFunc",
-            {"Marker", "NWDC15"},
-            {"Type", ev->GetTypeRewrite()},
-            {"Sender", ev->Sender},
-            {"SessionId", ev->InterconnectSession},
-            {"Cookie", ev->Cookie});
+            {"marker", "NWDC15"},
+            {"type", ev->GetTypeRewrite()},
+            {"sender", ev->Sender},
+            {"sessionId", ev->InterconnectSession},
+            {"cookie", ev->Cookie});
         const ui32 senderNodeId = ev->Sender.NodeId();
         if (ev->InterconnectSession && SubscribedSessions.contains(senderNodeId)) {
             // keep session actors intact

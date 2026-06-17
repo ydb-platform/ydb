@@ -71,9 +71,9 @@ namespace NKikimr::NStorage {
         fillRingGroups(&NKikimrBlobStorage::TStateStorageConfig::MutableStateStorageBoardConfig);
         fillRingGroups(&NKikimrBlobStorage::TStateStorageConfig::MutableSchemeBoardConfig);
         YDB_LOG_DEBUG("TStateStorageSelfhealActor::RequestChangeStateStorage",
-            {"Marker", "NW70"},
-            {"StateStorageReconfigurationStep", (ui32)StateStorageReconfigurationStep},
-            {"StateStorageConfig", config});
+            {"marker", "NW70"},
+            {"stateStorageReconfigurationStep", (ui32)StateStorageReconfigurationStep},
+            {"stateStorageConfig", config});
 
         AllowNextStep = false;
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
@@ -116,8 +116,8 @@ namespace NKikimr::NStorage {
     void TStateStorageSelfhealActor::HandleWakeup() {
         if (!AllowNextStep) {
             YDB_LOG_ERROR("TStateStorageSelfhealActor::HandleWakeup aborted. Previous reconfiguration step not finished yet",
-                {"Marker", "NW78"},
-                {"StateStorageReconfigurationStep", (ui32)StateStorageReconfigurationStep});
+                {"marker", "NW78"},
+                {"stateStorageReconfigurationStep", (ui32)StateStorageReconfigurationStep});
             Finish(TResult::ERROR, "Previous reconfiguration step not finished yet.");
             return;
         }
@@ -133,8 +133,8 @@ namespace NKikimr::NStorage {
     void TStateStorageSelfhealActor::HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
         if (ev->Get()->Record.GetStatus() != TResult::OK) {
             YDB_LOG_ERROR("TStateStorageSelfhealActor::HandleResult aborted",
-                {"Marker", "NW72"},
-                {"Reason", ev->Get()->Record.GetErrorReason()});
+                {"marker", "NW72"},
+                {"reason", ev->Get()->Record.GetErrorReason()});
             Finish(TResult::ERROR, ev->Get()->Record.GetErrorReason());
         } else {
             AllowNextStep = true;
@@ -184,8 +184,8 @@ namespace NKikimr::NStorage {
         AllowNextStep = false;
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
         YDB_LOG_ERROR("StateStorageReassignNodeSelfhealActor::RequestChangeStateStorage",
-            {"Marker", "NW72"},
-            {"Cmd", cmd});
+            {"marker", "NW72"},
+            {"cmd", cmd});
     }
 
     void TStateStorageReassignNodeSelfhealActor::Finish(TResult::EStatus result, const TString& errorReason) {
@@ -202,8 +202,8 @@ namespace NKikimr::NStorage {
     void TStateStorageReassignNodeSelfhealActor::HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
         if (ev->Get()->Record.GetStatus() != TResult::OK) {
             YDB_LOG_ERROR("TStateStorageReassignNodeSelfhealActor::HandleResult aborted",
-                {"Marker", "NW72"},
-                {"Reason", ev->Get()->Record.GetErrorReason()});
+                {"marker", "NW72"},
+                {"reason", ev->Get()->Record.GetErrorReason()});
             Finish(TResult::ERROR, ev->Get()->Record.GetErrorReason());
         } else {
             AllowNextStep = true;
@@ -213,7 +213,7 @@ namespace NKikimr::NStorage {
     void TStateStorageReassignNodeSelfhealActor::HandleWakeup() {
         if (!AllowNextStep) {
             YDB_LOG_ERROR("TStateStorageReassignNodeSelfhealActor::HandleWakeup aborted. Previous reconfiguration step not finished yet",
-                {"Marker", "NW78"});
+                {"marker", "NW78"});
             Finish(TResult::ERROR, "Previous reconfiguration step not finished yet.");
             return;
         }

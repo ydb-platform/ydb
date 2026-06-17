@@ -124,8 +124,8 @@ namespace NKikimr::NStorage {
                         f.Flush();
                     } catch (TFileError ex) {
                         YDB_LOG_WARN("Can't write new MockDevicesConfig to file",
-                            {"Marker", "NW89"},
-                            {"Path", MockDevicesPath});
+                            {"marker", "NW89"},
+                            {"path", MockDevicesPath});
                     }
                 }
             } else if (splitted[0] == "Serial") {
@@ -133,9 +133,9 @@ namespace NKikimr::NStorage {
             } else if (splitted[0] == "PCIe") {
                 ;
             } else {
-                YDB_LOG_ERROR("unknown pdisk path scheme",
-                    {"Marker", "NW27"},
-                    {"Path", path});
+                YDB_LOG_ERROR("Unknown pdisk path scheme",
+                    {"marker", "NW27"},
+                    {"path", path});
             }
         }
 
@@ -148,16 +148,16 @@ namespace NKikimr::NStorage {
         auto inferSettings = TInferPDiskSlotCountSettingsForDriveType(InferPDiskSlotCountSettings, deviceType);
         if (!inferSettings) {
             YDB_LOG_DEBUG("Inferring PDisk slot count not configured",
-                {"Marker", "NW102"},
-                {"Path", path},
-                {"SlotCount", pdiskConfig->ExpectedSlotCount},
-                {"SlotSizeInUnits", pdiskConfig->SlotSizeInUnits});
+                {"marker", "NW102"},
+                {"path", path},
+                {"slotCount", pdiskConfig->ExpectedSlotCount},
+                {"slotSizeInUnits", pdiskConfig->SlotSizeInUnits});
         } else if (pdiskConfig->ExpectedSlotCount != 0 && !inferSettings.PreferInferredSettingsOverExplicit) {
             YDB_LOG_DEBUG("Skipped inferring PDisk slot count, using explicit settings",
-                {"Marker", "NW102"},
-                {"Path", path},
-                {"SlotCount", pdiskConfig->ExpectedSlotCount},
-                {"SlotSizeInUnits", pdiskConfig->SlotSizeInUnits});
+                {"marker", "NW102"},
+                {"path", path},
+                {"slotCount", pdiskConfig->ExpectedSlotCount},
+                {"slotSizeInUnits", pdiskConfig->SlotSizeInUnits});
         } else {
             ui64 driveSize = 0;
             TStringStream outDetails;
@@ -170,19 +170,19 @@ namespace NKikimr::NStorage {
 
             if (!driveSize) {
                 YDB_LOG_ERROR("Unable to determine drive size for inferring PDisk slot count",
-                    {"Marker", "NW96"},
-                    {"Path", path},
-                    {"Details", outDetails.Str()});
+                    {"marker", "NW96"},
+                    {"path", path},
+                    {"details", outDetails.Str()});
             } else {
                 InferPDiskSlotCount(pdiskConfig, driveSize, inferSettings.UnitSize, inferSettings.MaxSlots);
                 YDB_LOG_DEBUG("Inferred PDisk slot count",
-                    {"Marker", "NW102"},
-                    {"Path", path},
-                    {"SlotCount", pdiskConfig->ExpectedSlotCount},
-                    {"SlotSizeInUnits", pdiskConfig->SlotSizeInUnits},
-                    {"FromDriveSize", driveSize},
-                    {"FromUnitSize", inferSettings.UnitSize},
-                    {"FromMaxSlots", inferSettings.MaxSlots});
+                    {"marker", "NW102"},
+                    {"path", path},
+                    {"slotCount", pdiskConfig->ExpectedSlotCount},
+                    {"slotSizeInUnits", pdiskConfig->SlotSizeInUnits},
+                    {"fromDriveSize", driveSize},
+                    {"fromUnitSize", inferSettings.UnitSize},
+                    {"fromMaxSlots", inferSettings.MaxSlots});
             }
         }
 
@@ -210,11 +210,11 @@ namespace NKikimr::NStorage {
                 PDisksWaitingToStart.insert(pdisk.GetPDiskID());
                 it->second.Pending = pdisk;
             } else { // incorrect configuration: we are trying to start two different PDisks with the same path
-                YDB_LOG_ERROR("starting two PDisks with the same path",
-                    {"Marker", "NW48"},
-                    {"Path", path},
-                    {"ExistingPDiskId", jt->first.PDiskId},
-                    {"NewPDiskId", pdisk.GetPDiskID()});
+                YDB_LOG_ERROR("Starting two PDisks with the same path",
+                    {"marker", "NW48"},
+                    {"path", path},
+                    {"existingPDiskId", jt->first.PDiskId},
+                    {"newPDiskId", pdisk.GetPDiskID()});
             }
             return;
         }
@@ -266,14 +266,14 @@ namespace NKikimr::NStorage {
         record.SlotSizeInUnits = pdiskConfig->SlotSizeInUnits;
 
         YDB_LOG_DEBUG("StartLocalPDisk",
-            {"Marker", "NW04"},
-            {"NodeId", key.NodeId},
+            {"marker", "NW04"},
+            {"nodeId", key.NodeId},
             {"PDiskId", key.PDiskId},
-            {"Path", TString(TStringBuilder() << '"' << pdisk.GetPath() << '"')},
+            {"path", TString(TStringBuilder() << '"' << pdisk.GetPath() << '"')},
             {"PDiskCategory", TPDiskCategory(record.Record.GetPDiskCategory())},
-            {"ExpectedSlotCount", record.ExpectedSlotCount},
-            {"SlotSizeInUnits", record.SlotSizeInUnits},
-            {"Temporary", temporary});
+            {"expectedSlotCount", record.ExpectedSlotCount},
+            {"slotSizeInUnits", record.SlotSizeInUnits},
+            {"temporary", temporary});
 
         const ui32 pdiskID = pdisk.GetPDiskID();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
@@ -290,7 +290,7 @@ namespace NKikimr::NStorage {
         std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> pending;
 
         YDB_LOG_INFO("DestroyLocalPDisk",
-            {"Marker", "NW36"},
+            {"marker", "NW36"},
             {"PDiskId", pdiskId});
 
         if (auto it = LocalPDisks.find({LocalNodeId, pdiskId}); it != LocalPDisks.end()) {
@@ -335,9 +335,9 @@ namespace NKikimr::NStorage {
     void TNodeWarden::SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase,
             std::variant<std::monostate, ui64, TString> shredState) {
         YDB_LOG_DEBUG("SendPDiskReport",
-            {"Marker", "NW41"},
+            {"marker", "NW41"},
             {"PDiskId", pdiskId},
-            {"Phase", phase});
+            {"phase", phase});
 
         auto report = std::make_unique<TEvBlobStorage::TEvControllerNodeReport>(LocalNodeId);
         auto *pReport = report->Record.AddPDiskReports();
@@ -431,7 +431,7 @@ namespace NKikimr::NStorage {
 
             vdisks << "}";
             YDB_LOG_NOTICE("RestartLocalPDisk has finished",
-                {"Marker", "NW74"},
+                {"marker", "NW74"},
                 {"PDiskId", pdiskId},
                 {"VDiskIds", vdisks.Str()});
         } else {
@@ -450,14 +450,14 @@ namespace NKikimr::NStorage {
         ui32 pdiskId = pdisk.GetPDiskID();
 
         YDB_LOG_NOTICE("DoRestartLocalPDisk",
-            {"Marker", "NW75"},
+            {"marker", "NW75"},
             {"PDiskId", pdiskId});
 
         const auto [restartIt, inserted] = PDiskRestartInFlight.try_emplace(pdiskId, false);
 
         if (!inserted) {
             YDB_LOG_NOTICE("Restart already in progress",
-                {"Marker", "NW76"},
+                {"marker", "NW76"},
                 {"PDiskId", pdiskId});
             // Restart is already in progress, but we will need to make a new restart, as the configuration changed.
             restartIt->second = true;
@@ -469,7 +469,7 @@ namespace NKikimr::NStorage {
             PDiskRestartInFlight.erase(pdiskId);
 
             YDB_LOG_NOTICE("Restart state carried from previous start, just starting",
-                {"Marker", "NW77"},
+                {"marker", "NW77"},
                 {"PDiskId", pdiskId});
 
             // This can happen if warden didn't handle pdisk's restart before node's restart.
@@ -579,19 +579,19 @@ namespace NKikimr::NStorage {
                 ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
                 ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
                 YDB_LOG_DEBUG("ApplyServiceSetPDisks",
-                    {"Marker", "NW110"},
+                    {"marker", "NW110"},
                     {"PDiskId", key.PDiskId},
-                    {"NewExpectedSlotCount", newExpectedSlotCount},
-                    {"OldExpectedSlotCount", localPDisk.ExpectedSlotCount},
-                    {"NewSlotSizeInUnits", newSlotSizeInUnits},
-                    {"OldSlotSizeInUnits", localPDisk.SlotSizeInUnits});
+                    {"newExpectedSlotCount", newExpectedSlotCount},
+                    {"oldExpectedSlotCount", localPDisk.ExpectedSlotCount},
+                    {"newSlotSizeInUnits", newSlotSizeInUnits},
+                    {"oldSlotSizeInUnits", localPDisk.SlotSizeInUnits});
                 if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
                         newSlotSizeInUnits != localPDisk.SlotSizeInUnits) {
                     YDB_LOG_DEBUG("SendChangeExpectedSlotCount",
-                        {"Marker", "NW107"},
+                        {"marker", "NW107"},
                         {"PDiskId", key.PDiskId},
-                        {"ExpectedSlotCount", newExpectedSlotCount},
-                        {"SlotSizeInUnits", newSlotSizeInUnits});
+                        {"expectedSlotCount", newExpectedSlotCount},
+                        {"slotSizeInUnits", newSlotSizeInUnits});
 
                     const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
                     Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
@@ -669,14 +669,14 @@ namespace NKikimr::NStorage {
             TRope rope(std::move(msg->Metadata));
             TRopeStream stream(rope.begin(), rope.size());
             YDB_LOG_DEBUG("TEvReadMetadataResult",
-                {"Marker", "NW59"},
+                {"marker", "NW59"},
                 {"PDiskId", PDiskKey.PDiskId},
-                {"Outcome", msg->Outcome},
+                {"outcome", msg->Outcome},
                 {"PDiskGuid", msg->PDiskGuid},
-                {"Metadata.size", rope.size()});
+                {"metadataSize", rope.size()});
             if (msg->Outcome == NPDisk::EPDiskMetadataOutcome::OK && !record.ParseFromZeroCopyStream(&stream)) {
                 YDB_LOG_CRIT("ParseFromString failed for TPDiskMetadataRecord",
-                    {"Marker", "NW44"},
+                    {"marker", "NW44"},
                     {"PDiskId", PDiskKey.PDiskId});
                 msg->Outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
             }
@@ -688,9 +688,9 @@ namespace NKikimr::NStorage {
         void Handle(NPDisk::TEvWriteMetadataResult::TPtr ev) {
             auto *msg = ev->Get();
             YDB_LOG_DEBUG("TEvWriteMetadataResult",
-                {"Marker", "NW60"},
+                {"marker", "NW60"},
                 {"PDiskId", PDiskKey.PDiskId},
-                {"Outcome", msg->Outcome},
+                {"outcome", msg->Outcome},
                 {"PDiskGuid", msg->PDiskGuid});
             Send(OriginalEv->Sender, new TEvNodeWardenWriteMetadataResult(msg->PDiskGuid, msg->Outcome), 0,
                 OriginalEv->Cookie);
@@ -705,8 +705,8 @@ namespace NKikimr::NStorage {
         void HandleWakeup() {
             Y_DEBUG_ABORT("Event# %s took too long to process", EventType);
             YDB_LOG_CRIT("TPDiskMetadataInteractionActor::Wakeup",
-                {"Marker", "NW61"},
-                {"EventType", EventType});
+                {"marker", "NW61"},
+                {"eventType", EventType});
         }
 
         STRICT_STFUNC(StateFunc,
@@ -720,8 +720,8 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TEvNodeWardenReadMetadata::TPtr ev) {
         const TString& path = ev->Get()->Path;
         YDB_LOG_DEBUG("TEvNodeWardenReadMetadata",
-            {"Marker", "NW56"},
-            {"Path", path});
+            {"marker", "NW56"},
+            {"path", path});
         Register(new TPDiskMetadataInteractionActor(GetPDiskForMetadata(path), ev.Release(),
             std::make_unique<NPDisk::TEvReadMetadata>(), "TEvNodeWardenReadMetadata"));
     }
@@ -733,9 +733,9 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(success);
         const TString& path = msg->Path;
         YDB_LOG_DEBUG("TEvNodeWardenWriteMetadata",
-            {"Marker", "NW57"},
-            {"Path", path},
-            {"Metadata.size", data.size()});
+            {"marker", "NW57"},
+            {"path", path},
+            {"metadataSize", data.size()});
         Register(new TPDiskMetadataInteractionActor(GetPDiskForMetadata(path), ev.Release(),
             std::make_unique<NPDisk::TEvWriteMetadata>(TRcBuf(std::move(data))), "TEvNodeWardenWriteMetadata"));
     }
@@ -766,7 +766,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::Handle(TEvPrivate::TEvDereferencePDisk::TPtr ev) {
         YDB_LOG_DEBUG("TEvDereferencePDisk",
-            {"Marker", "NW58"},
+            {"marker", "NW58"},
             {"PDiskId", ev->Get()->PDiskKey.PDiskId});
         const auto it = LocalPDisks.find(ev->Get()->PDiskKey);
         Y_ABORT_UNLESS(it != LocalPDisks.end());

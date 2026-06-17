@@ -41,9 +41,9 @@ namespace NKikimr::NStorage {
                 if (!status.ok()) {
                     return FinishWithError("failed to parse JSON");
                 }
-                YDB_LOG_DEBUG("sending TEvNodeConfigInvokeOnRoot",
-                    {"Marker", "NWDC04"},
-                    {"Record", ev->Record});
+                YDB_LOG_DEBUG("Sending TEvNodeConfigInvokeOnRoot",
+                    {"marker", "NWDC04"},
+                    {"record", ev->Record});
 
                 // send it to the actor
                 const TActorId nondeliveryId = SelfId();
@@ -53,9 +53,9 @@ namespace NKikimr::NStorage {
             }
 
             void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
-                YDB_LOG_DEBUG("receive TEvNodeConfigInvokeOnRootResult",
-                    {"Marker", "NWDC39"},
-                    {"Record", ev->Get()->Record});
+                YDB_LOG_DEBUG("Receive TEvNodeConfigInvokeOnRootResult",
+                    {"marker", "NWDC39"},
+                    {"record", ev->Get()->Record});
 
                 TString data;
                 google::protobuf::util::MessageToJsonString(ev->Get()->Record, &data);

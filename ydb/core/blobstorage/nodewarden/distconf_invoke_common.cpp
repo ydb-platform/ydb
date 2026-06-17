@@ -51,13 +51,13 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::HandleExecuteQuery() {
         YDB_LOG_DEBUG("HandleExecuteQuery",
-            {"Marker", "NWDC42"},
-            {"SelfId", SelfId()},
-            {"Binding", Self->Binding},
-            {"RootState", Self->RootState},
-            {"ErrorReason", Self->ErrorReason},
-            {"Query.InvokePipelineGeneration", InvokePipelineGeneration},
-            {"Keeper.InvokePipelineGeneration", Self->InvokePipelineGeneration});
+            {"marker", "NWDC42"},
+            {"selfId", SelfId()},
+            {"binding", Self->Binding},
+            {"rootState", Self->RootState},
+            {"errorReason", Self->ErrorReason},
+            {"queryInvokePipelineGeneration", InvokePipelineGeneration},
+            {"keeperInvokePipelineGeneration", Self->InvokePipelineGeneration});
 
         if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
             Y_ABORT_UNLESS(!Self->Binding);
@@ -132,9 +132,9 @@ namespace NKikimr::NStorage {
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {
                 YDB_LOG_DEBUG("ExecuteQuery",
-                    {"Marker", "NWDC43"},
-                    {"SelfId", SelfId()},
-                    {"Command", op.Command});
+                    {"marker", "NWDC43"},
+                    {"selfId", SelfId()},
+                    {"command", op.Command});
                 switch (op.Command.GetRequestCase()) {
                     case TQuery::kUpdateConfig:
                         return UpdateConfig(op.Command.MutableUpdateConfig());
@@ -209,7 +209,7 @@ namespace NKikimr::NStorage {
             },
             [&](TCollectConfigsAndPropose&) {
                 YDB_LOG_DEBUG("Starting config collection",
-                    {"Marker", "NWDC19"});
+                    {"marker", "NWDC19"});
 
                 TEvScatter task;
                 task.MutableCollectConfigs();
@@ -248,9 +248,9 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigGather::TPtr ev) {
         auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("Handle(TEvNodeConfigGather)",
-            {"Marker", "NWDC44"},
-            {"SelfId", SelfId()},
-            {"Record", record});
+            {"marker", "NWDC44"},
+            {"selfId", SelfId()},
+            {"record", record});
         if (record.GetAborted()) {
             throw TExRace() << "Scatter task was aborted due to loss of quorum or other error";
         }
@@ -363,10 +363,10 @@ namespace NKikimr::NStorage {
             SelfId(), mindPrev);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
-                {"Marker", "NWDC78"},
-                {"SelfId", SelfId()},
-                {"Error", *error},
-                {"ProposedConfig", *config});
+                {"marker", "NWDC78"},
+                {"selfId", SelfId()},
+                {"error", *error},
+                {"proposedConfig", *config});
             throw TExError() << "Config update validation failed: " << *error;
         }
     }
@@ -375,10 +375,10 @@ namespace NKikimr::NStorage {
         auto& msg = *ev->Get();
 
         YDB_LOG_DEBUG("OnConfigProposed",
-            {"Marker", "NWDC64"},
-            {"SelfId", SelfId()},
-            {"ErrorReason", msg.ErrorReason},
-            {"RootState", Self->RootState});
+            {"marker", "NWDC64"},
+            {"selfId", SelfId()},
+            {"errorReason", msg.ErrorReason},
+            {"rootState", Self->RootState});
 
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
@@ -423,9 +423,9 @@ namespace NKikimr::NStorage {
         }
 
         YDB_LOG_DEBUG("Finish",
-            {"Marker", "NWDC61"},
-            {"SelfId", SelfId()},
-            {"Record", record});
+            {"marker", "NWDC61"},
+            {"selfId", SelfId()},
+            {"record", record});
 
         std::optional<TString> switchToError; // when set, we will switch distconf keeper to error state with this reason
 

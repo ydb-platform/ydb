@@ -13,7 +13,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
         YDB_LOG_INFO("DestroyLocalVDisk",
-            {"Marker", "NW35"},
+            {"marker", "NW35"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()});
         Y_ABORT_UNLESS(!vdisk.RuntimeData);
@@ -29,10 +29,10 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk) {
         YDB_LOG_INFO("PoisonLocalVDisk",
-            {"Marker", "NW00"},
+            {"marker", "NW00"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()},
-            {"RuntimeData", vdisk.RuntimeData.has_value()});
+            {"runtimeData", vdisk.RuntimeData.has_value()});
 
         bool vdiskRunning = false;
 
@@ -73,12 +73,12 @@ namespace NKikimr::NStorage {
         Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
         YDB_LOG_DEBUG("StartLocalVDiskActor",
-            {"Marker", "NW23"},
-            {"SlayInFlight", SlayInFlight.contains(vslotId)},
+            {"marker", "NW23"},
+            {"slayInFlight", SlayInFlight.contains(vslotId)},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
             {"PDiskGuid", pdiskGuid},
-            {"DonorMode", donorMode},
+            {"donorMode", donorMode},
             {"PDiskRestartInFlight", PDiskRestartInFlight.contains(vslotId.PDiskId)},
             {"PDisksWaitingToStart", PDisksWaitingToStart.contains(vslotId.PDiskId)});
 
@@ -374,7 +374,7 @@ namespace NKikimr::NStorage {
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
         YDB_LOG_DEBUG("StartLocalVDiskActor done",
-            {"Marker", "NW24"},
+            {"marker", "NW24"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
             {"PDiskGuid", pdiskGuid},
@@ -502,10 +502,10 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Slay(TVDiskRecord& vdisk) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
         YDB_LOG_INFO("Slay",
-            {"Marker", "NW33"},
+            {"marker", "NW33"},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vdisk.GetVSlotId()},
-            {"SlayInFlight", SlayInFlight.contains(vslotId)});
+            {"slayInFlight", SlayInFlight.contains(vslotId)});
         if (!SlayInFlight.contains(vslotId)) {
             PoisonLocalVDisk(vdisk);
             const TVSlotId vslotId = vdisk.GetVSlotId();
@@ -535,7 +535,7 @@ namespace NKikimr::NStorage {
         auto *msg = ev->Get();
         const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
         YDB_LOG_INFO("TEvDropDonor",
-            {"Marker", "NW34"},
+            {"marker", "NW34"},
             {"VSlotId", vslotId},
             {"VDiskId", msg->VDiskId});
         SendDropDonorQuery(msg->NodeId, msg->PDiskId, msg->VSlotId, msg->VDiskId);

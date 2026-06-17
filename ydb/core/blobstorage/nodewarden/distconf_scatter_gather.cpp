@@ -14,13 +14,13 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(std::get<TActorId>(origin));
         }
         YDB_LOG_DEBUG("IssueScatterTask",
-            {"Marker", "NWDC21"},
-            {"Request", request},
-            {"Cookie", cookie},
-            {"Origin", origin},
-            {"Binding", Binding},
-            {"Scepter", Scepter ? std::make_optional(Scepter->Id) : std::nullopt},
-            {"AddedNodes", addedNodes});
+            {"marker", "NWDC21"},
+            {"request", request},
+            {"cookie", cookie},
+            {"origin", origin},
+            {"binding", Binding},
+            {"scepter", Scepter ? std::make_optional(Scepter->Id) : std::nullopt},
+            {"addedNodes", addedNodes});
         const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(origin), std::move(request), ScepterCounter,
             TActivationContext::Monotonic());
         Y_ABORT_UNLESS(inserted);
@@ -83,8 +83,8 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::CompleteScatterTask(TScatterTask& task) {
         YDB_LOG_DEBUG("CompleteScatterTask",
-            {"Marker", "NWDC22"},
-            {"Request", task.Request});
+            {"marker", "NWDC22"},
+            {"request", task.Request});
 
         if (std::holds_alternative<TBinding>(task.Origin)) {
             Y_ABORT_UNLESS(Binding); // when binding is dropped, all scatter tasks must be dropped too
@@ -120,9 +120,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::AbortScatterTask(ui64 cookie, ui32 nodeId) {
         YDB_LOG_DEBUG("AbortScatterTask",
-            {"Marker", "NWDC23"},
-            {"Cookie", cookie},
-            {"NodeId", nodeId});
+            {"marker", "NWDC23"},
+            {"cookie", cookie},
+            {"nodeId", nodeId});
 
         const auto it = ScatterTasks.find(cookie);
         Y_VERIFY_S(it != ScatterTasks.end(), "Cookie# " << cookie << " NodeId# " << nodeId);
@@ -135,8 +135,8 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::AbortAllScatterTasks(const std::optional<TBinding>& binding) {
         YDB_LOG_DEBUG("AbortAllScatterTasks",
-            {"Marker", "NWDC24"},
-            {"Binding", binding});
+            {"marker", "NWDC24"},
+            {"binding", binding});
 
         for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
             auto getAborted = [&] {
@@ -180,12 +180,12 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigScatter::TPtr ev) {
         YDB_LOG_DEBUG("TEvNodeConfigScatter",
-            {"Marker", "NWDC25"},
-            {"Binding", Binding},
-            {"Sender", ev->Sender},
-            {"Cookie", ev->Cookie},
-            {"SessionId", ev->InterconnectSession},
-            {"Record", ev->Get()->Record});
+            {"marker", "NWDC25"},
+            {"binding", Binding},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"sessionId", ev->InterconnectSession},
+            {"record", ev->Get()->Record});
 
         if (auto& record = ev->Get()->Record; Binding && Binding->Expected(*ev)) {
             IssueScatterTask(*Binding, std::move(record));
@@ -196,11 +196,11 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvNodeConfigGather::TPtr ev) {
         YDB_LOG_DEBUG("TEvNodeConfigGather",
-            {"Marker", "NWDC26"},
-            {"Sender", ev->Sender},
-            {"Cookie", ev->Cookie},
-            {"SessionId", ev->InterconnectSession},
-            {"Record", ev->Get()->Record});
+            {"marker", "NWDC26"},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"sessionId", ev->InterconnectSession},
+            {"record", ev->Get()->Record});
 
         auto& record = ev->Get()->Record;
         const ui64 cookie = record.GetCookie();

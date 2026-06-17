@@ -52,7 +52,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
         YDB_LOG_DEBUG("TEvNodesInfo",
-            {"Marker", "NWDC11"});
+            {"marker", "NWDC11"});
 
         if (SelfManagementEnabled) {
             // we obtain node list only from current StorageConfig
@@ -71,8 +71,8 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ApplyNewNodeList(std::span<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList) {
         YDB_LOG_DEBUG("ApplyNewNodeList",
-            {"Marker", "NWDC13"},
-            {"NewNodeList", newNodeList});
+            {"marker", "NWDC13"},
+            {"newNodeList", newNodeList});
 
         // do not start configuration negotiation for dynamic nodes
         if (!IsSelfStatic) {
@@ -222,7 +222,7 @@ namespace NKikimr::NStorage {
         closest = Min(closest, revClosest, otherClosest);
         if (closest != TMonotonic::Max() && !Scheduled) {
             YDB_LOG_DEBUG("Delaying bind",
-                {"Marker", "NWDC30"});
+                {"marker", "NWDC30"});
             TActivationContext::Schedule(closest, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, 0));
             Scheduled = true;
         }
@@ -240,10 +240,10 @@ namespace NKikimr::NStorage {
         }
 
         YDB_LOG_DEBUG("Initiated bind",
-            {"Marker", "NWDC29"},
-            {"NodeId", nodeId},
-            {"Binding", Binding},
-            {"SessionId", sessionId});
+            {"marker", "NWDC29"},
+            {"nodeId", nodeId},
+            {"binding", Binding},
+            {"sessionId", sessionId});
 
         // there can't be any pending queries
         Y_ABORT_UNLESS(InvokeQ.empty());
@@ -277,12 +277,12 @@ namespace NKikimr::NStorage {
         const ui64 cookie = ev->Cookie;
 
         YDB_LOG_DEBUG("TEvNodeConnected",
-            {"Marker", "NWDC14"},
-            {"NodeId", nodeId},
-            {"SessionId", sessionId},
-            {"Cookie", cookie},
-            {"CookieInFlight", SubscriptionCookieMap.contains(cookie)},
-            {"SubscriptionExists", SubscribedSessions.contains(nodeId)});
+            {"marker", "NWDC14"},
+            {"nodeId", nodeId},
+            {"sessionId", sessionId},
+            {"cookie", cookie},
+            {"cookieInFlight", SubscriptionCookieMap.contains(cookie)},
+            {"subscriptionExists", SubscribedSessions.contains(nodeId)});
 
         if (!IsSelfStatic) {
             return OnStaticNodeConnected(nodeId, sessionId, cookie);
@@ -319,8 +319,8 @@ namespace NKikimr::NStorage {
 
         if (Binding && Binding->NodeId == nodeId) {
             YDB_LOG_DEBUG("Continuing bind",
-                {"Marker", "NWDC09"},
-                {"Binding", Binding});
+                {"marker", "NWDC09"},
+                {"binding", Binding});
             BindToSession(sessionId);
         }
     }
@@ -331,10 +331,10 @@ namespace NKikimr::NStorage {
         const ui64 cookie = ev->Cookie;
 
         YDB_LOG_DEBUG("TEvNodeDisconnected",
-            {"Marker", "NWDC07"},
-            {"NodeId", nodeId},
-            {"SessionId", sessionId},
-            {"Cookie", cookie});
+            {"marker", "NWDC07"},
+            {"nodeId", nodeId},
+            {"sessionId", sessionId},
+            {"cookie", cookie});
 
         if (!IsSelfStatic) {
             return OnStaticNodeDisconnected(nodeId, sessionId, cookie);
@@ -365,9 +365,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::HandleDisconnect(ui32 nodeId, TActorId sessionId) {
         YDB_LOG_DEBUG("HandleDisconnect",
-            {"Marker", "NWDC56"},
-            {"NodeId", nodeId},
-            {"SessionId", sessionId});
+            {"marker", "NWDC56"},
+            {"nodeId", nodeId},
+            {"sessionId", sessionId});
 
         OnDynamicNodeDisconnected(nodeId, sessionId);
 
@@ -414,9 +414,9 @@ namespace NKikimr::NStorage {
         if (const auto it = SubscribedSessions.find(nodeId); it != SubscribedSessions.end()) {
             TSessionSubscription& subs = it->second;
             YDB_LOG_DEBUG("UnsubscribeInterconnect",
-                {"Marker", "NWDC55"},
-                {"NodeId", nodeId},
-                {"Subscription", subs});
+                {"marker", "NWDC55"},
+                {"nodeId", nodeId},
+                {"subscription", subs});
             if (subs.SubscriptionCookie) {
                 // we are waiting for TEvNodeConnected, so just drop it; we will generate unsubscribe when we get that
                 // TEvNodeConnected
@@ -444,12 +444,12 @@ namespace NKikimr::NStorage {
         const auto [it, inserted] = SubscribedSessions.try_emplace(nodeId, sessionId);
         TSessionSubscription& subs = it->second;
         YDB_LOG_DEBUG("SubscribeToPeerNode",
-            {"Marker", "NWDC54"},
-            {"NodeId", nodeId},
-            {"SessionId", sessionId},
-            {"Inserted", inserted},
-            {"Subscription", subs},
-            {"NextSubscribeCookie", NextSubscribeCookie});
+            {"marker", "NWDC54"},
+            {"nodeId", nodeId},
+            {"sessionId", sessionId},
+            {"inserted", inserted},
+            {"subscription", subs},
+            {"nextSubscribeCookie", NextSubscribeCookie});
         if (inserted) {
             // start subscription; always subscribe to the proxy to get the latest working session actor
             subs.SubscriptionCookie = NextSubscribeCookie++;
@@ -480,9 +480,9 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::AbortBinding(const char *reason, bool sendUnbindMessage, bool sendUpdate) {
         if (Binding) {
             YDB_LOG_DEBUG("AbortBinding",
-                {"Marker", "NWDC03"},
-                {"Binding", Binding},
-                {"Reason", reason});
+                {"marker", "NWDC03"},
+                {"binding", Binding},
+                {"reason", reason});
 
             ++BindFailuresStreak;
 
@@ -523,12 +523,12 @@ namespace NKikimr::NStorage {
         auto& record = ev->Get()->Record;
 
         YDB_LOG_DEBUG("TEvNodeConfigReversePush",
-            {"Marker", "NWDC17"},
-            {"NodeId", senderNodeId},
-            {"Cookie", ev->Cookie},
-            {"SessionId", ev->InterconnectSession},
-            {"Binding", Binding},
-            {"Record", record});
+            {"marker", "NWDC17"},
+            {"nodeId", senderNodeId},
+            {"cookie", ev->Cookie},
+            {"sessionId", ev->InterconnectSession},
+            {"binding", Binding},
+            {"record", record});
 
         if (!Binding || !Binding->Expected(*ev)) {
             return; // possible race with unbinding
@@ -598,10 +598,10 @@ namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg) {
         YDB_LOG_DEBUG("UpdateBound",
-            {"Marker", "NWDC18"},
-            {"RefererNodeId", refererNodeId},
-            {"NodeId", nodeId},
-            {"Meta", meta});
+            {"marker", "NWDC18"},
+            {"refererNodeId", refererNodeId},
+            {"nodeId", nodeId},
+            {"meta", meta});
 
         const auto [it, inserted] = AllBoundNodes.try_emplace(std::move(nodeId));
         TIndirectBoundNode& node = it->second;
@@ -644,9 +644,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::DeleteBound(ui32 refererNodeId, const TNodeIdentifier& nodeId, TEvNodeConfigPush *msg) {
         YDB_LOG_DEBUG("DeleteBound",
-            {"Marker", "NWDC34"},
-            {"RefererNodeId", refererNodeId},
-            {"NodeId", nodeId});
+            {"marker", "NWDC34"},
+            {"refererNodeId", refererNodeId},
+            {"nodeId", nodeId});
 
         const auto it = AllBoundNodes.find(nodeId);
         Y_ABORT_UNLESS(it != AllBoundNodes.end());
@@ -699,15 +699,15 @@ namespace NKikimr::NStorage {
         }
 
         YDB_LOG_DEBUG("TEvNodeConfigPush",
-            {"Marker", "NWDC02"},
-            {"NodeId", senderNodeId},
-            {"Cookie", ev->Cookie},
-            {"SessionId", ev->InterconnectSession},
-            {"Binding", Binding},
-            {"Record", record},
-            {"RootNodeId", GetRootNodeId()},
-            {"StorageConfigGeneration", StorageConfig ? (i64)StorageConfig->GetGeneration() : -1},
-            {"KnownNode", knownNode});
+            {"marker", "NWDC02"},
+            {"nodeId", senderNodeId},
+            {"cookie", ev->Cookie},
+            {"sessionId", ev->InterconnectSession},
+            {"binding", Binding},
+            {"record", record},
+            {"rootNodeId", GetRootNodeId()},
+            {"storageConfigGeneration", StorageConfig ? (i64)StorageConfig->GetGeneration() : -1},
+            {"knownNode", knownNode});
 
         if (!knownNode) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
@@ -718,12 +718,12 @@ namespace NKikimr::NStorage {
         // check if we can't accept this message (or else it would make a cycle)
         if (record.GetInitial() && senderNodeId == GetRootNodeId()) {
             YDB_LOG_DEBUG("TEvNodeConfigPush rejected",
-                {"Marker", "NWDC28"},
-                {"NodeId", senderNodeId},
-                {"Cookie", ev->Cookie},
-                {"SessionId", ev->InterconnectSession},
-                {"Binding", Binding},
-                {"Record", record});
+                {"marker", "NWDC28"},
+                {"nodeId", senderNodeId},
+                {"cookie", ev->Cookie},
+                {"sessionId", ev->InterconnectSession},
+                {"binding", Binding},
+                {"record", record});
             SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
             return;
         }
@@ -792,14 +792,14 @@ namespace NKikimr::NStorage {
                 IssueScatterTaskForNode(senderNodeId, info, cookie, task);
             }
         } else if (ev->Cookie != info.Cookie || ev->InterconnectSession != info.SessionId) {
-            YDB_LOG_CRIT("distributed configuration protocol violation: cookie/session mismatch",
-                {"Marker", "NWDC12"},
-                {"Sender", ev->Sender},
-                {"Cookie", ev->Cookie},
-                {"SelfId", SelfId()},
-                {"SessionId", ev->InterconnectSession},
-                {"ExpectedCookie", info.Cookie},
-                {"ExpectedSessionId", info.SessionId});
+            YDB_LOG_CRIT("Distributed configuration protocol violation: cookie/session mismatch",
+                {"marker", "NWDC12"},
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie},
+                {"selfId", SelfId()},
+                {"sessionId", ev->InterconnectSession},
+                {"expectedCookie", info.Cookie},
+                {"expectedSessionId", info.SessionId});
             Y_DEBUG_ABORT();
             return;
         }
@@ -827,13 +827,13 @@ namespace NKikimr::NStorage {
             if (info.BoundNodeIds.erase(nodeId)) {
                 DeleteBound(senderNodeId, nodeId, getPushEv());
             } else {
-                YDB_LOG_CRIT("distributed configuration protocol violation: deleting nonexisting item",
-                    {"Marker", "NWDC05"},
-                    {"Sender", ev->Sender},
-                    {"Cookie", ev->Cookie},
-                    {"SessionId", ev->InterconnectSession},
-                    {"Record", record},
-                    {"NodeId", nodeId});
+                YDB_LOG_CRIT("Distributed configuration protocol violation: deleting nonexisting item",
+                    {"marker", "NWDC05"},
+                    {"sender", ev->Sender},
+                    {"cookie", ev->Cookie},
+                    {"sessionId", ev->InterconnectSession},
+                    {"record", record},
+                    {"nodeId", nodeId});
                 Y_DEBUG_ABORT();
             }
         }
@@ -853,11 +853,11 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(senderNodeId != SelfId().NodeId());
 
         YDB_LOG_DEBUG("TEvNodeConfigUnbind",
-            {"Marker", "NWDC16"},
-            {"NodeId", senderNodeId},
-            {"Cookie", ev->Cookie},
-            {"SessionId", ev->InterconnectSession},
-            {"Binding", Binding});
+            {"marker", "NWDC16"},
+            {"nodeId", senderNodeId},
+            {"cookie", ev->Cookie},
+            {"sessionId", ev->InterconnectSession},
+            {"binding", Binding});
 
         if (const auto it = DirectBoundNodes.find(senderNodeId); it != DirectBoundNodes.end() && it->second.Expected(*ev)) {
             UnbindNode(it->first, "explicit unbind request");
@@ -867,9 +867,9 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::UnbindNode(ui32 nodeId, const char *reason) {
         if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
             YDB_LOG_DEBUG("UnbindNode",
-                {"Marker", "NWDC06"},
-                {"NodeId", nodeId},
-                {"Reason", reason});
+                {"marker", "NWDC06"},
+                {"nodeId", nodeId},
+                {"reason", reason});
 
             TBoundNode& info = it->second;
 

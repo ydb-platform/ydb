@@ -11,9 +11,9 @@ namespace NKikimr::NStorage {
         auto& msg = *ev->Get();
         const ui64 tabletId = msg.TabletId;
         YDB_LOG_DEBUG_COMP(BS_NODE, "TEvNodeWardenAcquireBlobDepotS3Router",
-            {"Marker", "NW70"},
-            {"TabletId", tabletId},
-            {"Sender", ev->Sender});
+            {"marker", "NW70"},
+            {"tabletId", tabletId},
+            {"sender", ev->Sender});
 
         TActorSystem* const as = TActivationContext::ActorSystem();
         auto& rec = BlobDepotS3Routers[tabletId];
@@ -24,14 +24,14 @@ namespace NKikimr::NStorage {
             rec.Router = Register(routerActor, TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
             as->RegisterLocalService(MakeBlobDepotS3RouterID(tabletId), rec.Router);
             YDB_LOG_INFO_COMP(BS_NODE, "BlobDepotS3Router created",
-                {"Marker", "NW71"},
-                {"TabletId", tabletId},
-                {"Router", rec.Router});
+                {"marker", "NW71"},
+                {"tabletId", tabletId},
+                {"router", rec.Router});
         } else {
             YDB_LOG_DEBUG_COMP(BS_NODE, "BlobDepotS3Router reused",
-                {"Marker", "NW72"},
-                {"TabletId", tabletId},
-                {"Router", rec.Router});
+                {"marker", "NW72"},
+                {"tabletId", tabletId},
+                {"router", rec.Router});
         }
 
         rec.Consumers.insert(ev->Sender);
@@ -41,9 +41,9 @@ namespace NKikimr::NStorage {
         auto& msg = *ev->Get();
         const ui64 tabletId = msg.TabletId;
         YDB_LOG_DEBUG_COMP(BS_NODE, "TEvNodeWardenReleaseBlobDepotS3Router",
-            {"Marker", "NW73"},
-            {"TabletId", tabletId},
-            {"Sender", ev->Sender});
+            {"marker", "NW73"},
+            {"tabletId", tabletId},
+            {"sender", ev->Sender});
 
         auto it = BlobDepotS3Routers.find(tabletId);
         if (it == BlobDepotS3Routers.end()) {
@@ -54,9 +54,9 @@ namespace NKikimr::NStorage {
         rec.Consumers.erase(ev->Sender);
         if (rec.Consumers.empty()) {
             YDB_LOG_INFO_COMP(BS_NODE, "BlobDepotS3Router terminating",
-                {"Marker", "NW74"},
-                {"TabletId", tabletId},
-                {"Router", rec.Router});
+                {"marker", "NW74"},
+                {"tabletId", tabletId},
+                {"router", rec.Router});
             TActorSystem* const as = TActivationContext::ActorSystem();
             as->RegisterLocalService(MakeBlobDepotS3RouterID(tabletId), TActorId());
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, rec.Router,

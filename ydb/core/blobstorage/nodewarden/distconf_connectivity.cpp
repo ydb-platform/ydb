@@ -53,8 +53,8 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(BridgeInfo);
 
             YDB_LOG_DEBUG("TEvNodeWardenStorageConfig received",
-                {"Marker", "NWDCC06"},
-                {"StorageConfig", StorageConfig});
+                {"marker", "NWDCC06"},
+                {"storageConfig", StorageConfig});
 
             // process any pending events
             for (auto& ev : std::exchange(PendingEvents, {})) {
@@ -73,10 +73,10 @@ namespace NKikimr::NStorage {
                     continue; // do not disconnect from the same pile
                 }
                 for (const ui32 nodeId : pile.StaticNodeIds) {
-                    YDB_LOG_DEBUG("disconnecting",
-                        {"Marker", "NWDCC00"},
-                        {"PeerNodeId", nodeId},
-                        {"BridgePileId", pile.BridgePileId});
+                    YDB_LOG_DEBUG("Disconnecting",
+                        {"marker", "NWDCC00"},
+                        {"peerNodeId", nodeId},
+                        {"bridgePileId", pile.BridgePileId});
                     as->Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0, as->InterconnectProxy(nodeId),
                         {}, nullptr, 0));
                 }
@@ -103,10 +103,10 @@ namespace NKikimr::NStorage {
                     if (nodeId <= MaxStaticNodeId) {
                         continue; // static nodes were already processed
                     }
-                    YDB_LOG_DEBUG("disconnecting dynamic",
-                        {"Marker", "NWDCC03"},
-                        {"PeerNodeId", nodeId},
-                        {"BridgePileId", pile.BridgePileId});
+                    YDB_LOG_DEBUG("Disconnecting dynamic",
+                        {"marker", "NWDCC03"},
+                        {"peerNodeId", nodeId},
+                        {"bridgePileId", pile.BridgePileId});
                     as->Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0, as->InterconnectProxy(nodeId),
                         {}, nullptr, 0));
                 }
@@ -156,11 +156,11 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            YDB_LOG_DEBUG("handle TEvPrepareOutgoingConnection",
-                {"Marker", "NWDCC01"},
-                {"PeerNodeId", peerNodeId},
-                {"Error", error},
-                {"Outgoing", outgoing});
+            YDB_LOG_DEBUG("Handle TEvPrepareOutgoingConnection",
+                {"marker", "NWDCC01"},
+                {"peerNodeId", peerNodeId},
+                {"error", error},
+                {"outgoing", outgoing});
 
             if (error) {
                 Send(ev->Sender, new TEvInterconnect::TEvPrepareOutgoingConnectionResult(std::move(*error)), 0, ev->Cookie);
@@ -248,11 +248,11 @@ namespace NKikimr::NStorage {
                     << " isPeerStatic# " << isPeerStatic;
             }
 
-            YDB_LOG_DEBUG("handle TEvCheckIncomingConnection",
-                {"Marker", "NWDCC02"},
-                {"PeerNodeId", peerNodeId},
-                {"Error", error},
-                {"Outgoing", outgoing});
+            YDB_LOG_DEBUG("Handle TEvCheckIncomingConnection",
+                {"marker", "NWDCC02"},
+                {"peerNodeId", peerNodeId},
+                {"error", error},
+                {"outgoing", outgoing});
 
             Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::move(error),
                 CreateParams(outgoing)), 0, ev->Cookie);
@@ -263,9 +263,9 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TConnectivityPayload incoming;
             if (const auto it = params.find(DistconfKey); it != params.end() && incoming.ParseFromString(it->second)) {
                 if (incoming.HasStorageConfig()) {
-                    YDB_LOG_DEBUG("applying config from TEvNotifyOutgoingConnectionEstablished",
-                        {"Marker", "NWDCC04"},
-                        {"Config", incoming.GetStorageConfig()});
+                    YDB_LOG_DEBUG("Applying config from TEvNotifyOutgoingConnectionEstablished",
+                        {"marker", "NWDCC04"},
+                        {"config", incoming.GetStorageConfig()});
                     UpdateLocalConfig(incoming);
                 }
             }
@@ -424,8 +424,8 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
             YDB_LOG_DEBUG("TEvNodeConfigInvokeOnRootResult",
-                {"Marker", "NWDCC05"},
-                {"Record", ev->Get()->Record});
+                {"marker", "NWDCC05"},
+                {"record", ev->Get()->Record});
         }
 
         STRICT_STFUNC(StateFunc,

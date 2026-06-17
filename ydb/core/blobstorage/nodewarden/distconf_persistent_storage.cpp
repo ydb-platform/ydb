@@ -25,8 +25,8 @@ namespace NKikimr::NStorage {
                 ParentId = parentId;
 
                 YDB_LOG_DEBUG("TReaderActor bootstrap",
-                    {"Marker", "NWDC40"},
-                    {"Paths", Paths});
+                    {"marker", "NWDC40"},
+                    {"paths", Paths});
 
                 const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 for (size_t index = 0; index < Paths.size(); ++index) {
@@ -46,11 +46,11 @@ namespace NKikimr::NStorage {
                 auto& record = msg->Record;
 
                 YDB_LOG_DEBUG("TReaderActor result",
-                    {"Marker", "NWDC50"},
-                    {"Path", path},
-                    {"Outcome", msg->Outcome},
-                    {"Guid", msg->Guid},
-                    {"Record", record});
+                    {"marker", "NWDC50"},
+                    {"path", path},
+                    {"outcome", msg->Outcome},
+                    {"guid", msg->Guid},
+                    {"record", record});
 
                 switch (msg->Outcome) {
                     case NPDisk::EPDiskMetadataOutcome::OK:
@@ -108,8 +108,8 @@ namespace NKikimr::NStorage {
                 ParentId = parentId;
 
                 YDB_LOG_DEBUG("TWriterActor bootstrap",
-                    {"Marker", "NWDC51"},
-                    {"Records", Records});
+                    {"marker", "NWDC51"},
+                    {"records", Records});
 
                 const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 for (auto& [path, record] : Records) {
@@ -127,10 +127,10 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(index < Drives.size());
                 const TString& path = Drives[index];
                 YDB_LOG_DEBUG("TWriterActor result",
-                    {"Marker", "NWDC52"},
-                    {"Path", path},
-                    {"Outcome", ev->Get()->Outcome},
-                    {"Guid", ev->Get()->Guid});
+                    {"marker", "NWDC52"},
+                    {"path", path},
+                    {"outcome", ev->Get()->Outcome},
+                    {"guid", ev->Get()->Guid});
                 Response->StatusPerPath.emplace_back(path, ev->Get()->Outcome == NPDisk::EPDiskMetadataOutcome::OK, ev->Get()->Guid);
                 --RepliesPending;
                 CheckIfDone();
@@ -174,8 +174,8 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::PersistConfig(TPersistCallback callback, const std::vector<TString>& drives) {
         YDB_LOG_DEBUG("PersistConfig",
-            {"Marker", "NWDC35"},
-            {"MetadataByPath", MetadataByPath});
+            {"marker", "NWDC35"},
+            {"metadataByPath", MetadataByPath});
 
         TPersistQueueItem& item = PersistQ.emplace_back();
         item.Callback = std::move(callback);
@@ -207,10 +207,10 @@ namespace NKikimr::NStorage {
         auto& item = PersistQ.front();
 
         YDB_LOG_DEBUG("TEvStorageConfigStored",
-            {"Marker", "NWDC36"},
-            {"NumOk", numOk},
-            {"NumError", numError},
-            {"Passed", TDuration::Seconds(item.Timer.Passed())});
+            {"marker", "NWDC36"},
+            {"numOk", numOk},
+            {"numError", numError},
+            {"passed", TDuration::Seconds(item.Timer.Passed())});
 
         if (item.Callback) {
             item.Callback(*ev->Get());
@@ -235,9 +235,9 @@ namespace NKikimr::NStorage {
         auto& msg = *ev->Get();
 
         YDB_LOG_DEBUG("TEvStorageConfigLoaded",
-            {"Marker", "NWDC32"},
-            {"Cookie", ev->Cookie},
-            {"NumItemsRead", msg.MetadataPerPath.size()});
+            {"marker", "NWDC32"},
+            {"cookie", ev->Cookie},
+            {"numItemsRead", msg.MetadataPerPath.size()});
         if (ev->Cookie) {
             if (const auto it = ScatterTasks.find(ev->Cookie); it != ScatterTasks.end()) {
                 TScatterTask& task = it->second;

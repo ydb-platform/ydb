@@ -50,11 +50,11 @@ namespace NKikimr::NStorage {
             const TActorId actorId = GroupInfo->GetActorId(i);
             const ui32 flags = IEventHandle::FlagTrackDelivery |
                 (actorId.NodeId() == SelfId().NodeId() ? 0 : IEventHandle::FlagSubscribeOnSession);
-            YDB_LOG_DEBUG("sending TEvVStatus",
-                {"Marker", "NWDC73"},
-                {"SelfId", SelfId()},
+            YDB_LOG_DEBUG("Sending TEvVStatus",
+                {"marker", "NWDC73"},
+                {"selfId", SelfId()},
                 {"VDiskId", vdiskId},
-                {"ActorId", actorId});
+                {"actorId", actorId});
             Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
             if (actorId.NodeId() != SelfId().NodeId()) {
                 NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
@@ -69,9 +69,9 @@ namespace NKikimr::NStorage {
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         YDB_LOG_DEBUG("TEvVStatusResult",
-            {"Marker", "NWDC74"},
-            {"SelfId", SelfId()},
-            {"Record", record},
+            {"marker", "NWDC74"},
+            {"selfId", SelfId()},
+            {"record", record},
             {"VDiskId", vdiskId});
         if (!PendingVDiskIds.erase(vdiskId)) {
             throw TExError() << "TEvVStatusResult VDiskID# " << vdiskId << " is unexpected";
@@ -118,8 +118,8 @@ namespace NKikimr::NStorage {
         const auto& cmd = record.GetReassignGroupDisk();
 
         YDB_LOG_DEBUG("ReassignGroupDiskExecute",
-            {"Marker", "NWDC75"},
-            {"SelfId", SelfId()});
+            {"marker", "NWDC75"},
+            {"selfId", SelfId()});
 
         const auto& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
 
@@ -216,11 +216,11 @@ namespace NKikimr::NStorage {
                         cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId);
                 } catch (const TExConfigError& ex) {
                     YDB_LOG_NOTICE("ReassignGroupDisk failed to allocate group",
-                        {"Marker", "NWDC76"},
-                        {"SelfId", SelfId()},
-                        {"Config", config},
-                        {"BaseConfig", *BaseConfig},
-                        {"Error", ex.what()});
+                        {"marker", "NWDC76"},
+                        {"selfId", SelfId()},
+                        {"config", config},
+                        {"baseConfig", *BaseConfig},
+                        {"error", ex.what()});
                     throw TExError() << "Failed to allocate group: " << ex.what();
                 }
 

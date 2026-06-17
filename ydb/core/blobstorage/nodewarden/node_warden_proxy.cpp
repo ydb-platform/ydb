@@ -14,8 +14,8 @@ using namespace NStorage;
 
 TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     YDB_LOG_DEBUG("StartErrorProxy",
-        {"Marker", "NW10"},
-        {"GroupId", groupId});
+        {"marker", "NW10"},
+        {"groupId", groupId});
     return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 }
 
@@ -35,10 +35,10 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     };
 
     YDB_LOG_DEBUG("StartLocalProxy",
-        {"Marker", "NW12"},
-        {"GroupId", groupId},
-        {"HasGroupInfo", static_cast<bool>(group.Info)},
-        {"GroupInfoGeneration", group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt});
+        {"marker", "NW12"},
+        {"groupId", groupId},
+        {"hasGroupInfo", static_cast<bool>(group.Info)},
+        {"groupInfoGeneration", group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt});
 
     if (EnableProxyMock) {
         // create mock proxy
@@ -123,8 +123,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
 
 void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
     YDB_LOG_DEBUG("StartVirtualGroupProxy",
-        {"Marker", "NW40"},
-        {"GroupId", groupId});
+        {"marker", "NW40"},
+        {"groupId", groupId});
 
     TActorSystem *as = TActivationContext::ActorSystem();
     TGroupRecord& group = Groups[groupId];
@@ -141,10 +141,10 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
 
     const bool noGroup = EjectedGroups.count(id);
     YDB_LOG_DEBUG("HandleForwarded",
-        {"Marker", "NW46"},
-        {"GroupId", id},
-        {"EnableProxyMock", EnableProxyMock},
-        {"NoGroup", noGroup});
+        {"marker", "NW46"},
+        {"groupId", id},
+        {"enableProxyMock", EnableProxyMock},
+        {"noGroup", noGroup});
 
     if (id == Max<ui32>()) {
         // invalid group; proxy for this group is created at start

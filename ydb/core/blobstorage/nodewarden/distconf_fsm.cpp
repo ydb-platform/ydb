@@ -72,9 +72,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::HandleRetryCollectConfigsAndPropose(STATEFN_SIG) {
         YDB_LOG_DEBUG("HandleRetryCollectConfigsAndPropose",
-            {"Marker", "NWDC84"},
-            {"Cookie", ev->Cookie},
-            {"InvokePipelineGeneration", InvokePipelineGeneration});
+            {"marker", "NWDC84"},
+            {"cookie", ev->Cookie},
+            {"invokePipelineGeneration", InvokePipelineGeneration});
         if (ev->Cookie == InvokePipelineGeneration) {
             Y_ABORT_UNLESS(Scepter);
             Y_ABORT_UNLESS(!Binding);
@@ -84,9 +84,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::BecomeRoot() {
         YDB_LOG_DEBUG("BecomeRoot",
-            {"Marker", "NWDC85"},
-            {"RootState", RootState},
-            {"InvokeQ.size", InvokeQ.size()});
+            {"marker", "NWDC85"},
+            {"rootState", RootState},
+            {"invokeQSize", InvokeQ.size()});
 
         // establish connection to console tablet (if we have means to do it)
         Y_ABORT_UNLESS(!ConsolePipeId);
@@ -111,9 +111,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::SwitchToError(const TString& reason) {
         YDB_LOG_NOTICE("SwitchToError",
-            {"Marker", "NWDC38"},
-            {"RootState", RootState},
-            {"Reason", reason});
+            {"marker", "NWDC38"},
+            {"rootState", RootState},
+            {"reason", reason});
         if (Scepter) {
             UnbecomeRoot();
             Scepter.reset();
@@ -136,7 +136,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {
         YDB_LOG_DEBUG("Error timeout hit",
-            {"Marker", "NWDC20"});
+            {"marker", "NWDC20"});
         Y_ABORT_UNLESS(RootState == ERootState::ERROR_TIMEOUT);
         Y_ABORT_UNLESS(!Scepter);
         Y_ABORT_UNLESS(InvokeQ.empty());
@@ -161,9 +161,9 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ProcessGather(TEvGather *res) {
         YDB_LOG_DEBUG("ProcessGather",
-            {"Marker", "NWDC27"},
-            {"RootState", RootState},
-            {"Res", *res});
+            {"marker", "NWDC27"},
+            {"rootState", RootState},
+            {"res", *res});
 
         if (!res) {
             return SwitchToError("leadership lost while executing query");
@@ -237,12 +237,12 @@ namespace NKikimr::NStorage {
             *Cfg, false, &err);
 
         YDB_LOG_DEBUG("ProcessCollectConfigs",
-            {"Marker", "NWDC31"},
-            {"RootState", RootState},
-            {"NodeQuorum", nodeQuorum},
-            {"ConfigQuorum", configQuorum},
-            {"Res", *res},
-            {"Error", err.Str()});
+            {"marker", "NWDC31"},
+            {"rootState", RootState},
+            {"nodeQuorum", nodeQuorum},
+            {"configQuorum", configQuorum},
+            {"res", *res},
+            {"error", err.Str()});
 
         if (nodeQuorum && !configQuorum) {
             // check if there is quorum of no-distconf config along the cluster
@@ -281,8 +281,8 @@ namespace NKikimr::NStorage {
                 const auto& baseConfig = node.GetBaseConfig();
                 if (!CheckFingerprint(baseConfig)) {
                     YDB_LOG_CRIT("BaseConfig fingerprint error",
-                        {"Marker", "NWDC57"},
-                        {"NodeRecord", node});
+                        {"marker", "NWDC57"},
+                        {"nodeRecord", node});
                     Y_DEBUG_ABORT("BaseConfig fingerprint error");
                     continue;
                 }
@@ -306,8 +306,8 @@ namespace NKikimr::NStorage {
         }
         if (baseConfigs.size() > 1) {
             YDB_LOG_CRIT("Multiple nonintersecting node sets have quorum of BaseConfig",
-                {"Marker", "NWDC08"},
-                {"BaseConfigs.size", baseConfigs.size()});
+                {"marker", "NWDC08"},
+                {"baseConfigsSize", baseConfigs.size()});
             Y_DEBUG_ABORT("Multiple nonintersecting node sets have quorum of BaseConfig");
             Halt();
             return {.ErrorReason = "Multiple nonintersecting node sets have quorum of BaseConfig"};
@@ -336,8 +336,8 @@ namespace NKikimr::NStorage {
                 const NKikimrBlobStorage::TStorageConfig& config = item.GetConfig();
                 if (!CheckFingerprint(config)) {
                     YDB_LOG_ERROR("PersistentConfig fingerprint error",
-                        {"Marker", "NWDC58"},
-                        {"ConfigRecord", config});
+                        {"marker", "NWDC58"},
+                        {"configRecord", config});
                     Y_DEBUG_ABORT("PersistentConfig fingerprint error");
                     continue;
                 }
@@ -370,12 +370,12 @@ namespace NKikimr::NStorage {
                     auto& [committed, configPtr] = configsWithQuorum[generation];
                     if (configPtr && configPtr->GetFingerprint() != r.Config.GetFingerprint()) {
                         YDB_LOG_ERROR("Persistent config quorum with different fingerprints",
-                            {"Marker", "NWDC37"},
-                            {"Generation", generation},
-                            {"Config", *configPtr},
-                            {"Committed", candidateCommitted},
-                            {"OtherConfig", r.Config},
-                            {"OtherCommitted", candidateCommitted});
+                            {"marker", "NWDC37"},
+                            {"generation", generation},
+                            {"config", *configPtr},
+                            {"committed", candidateCommitted},
+                            {"otherConfig", r.Config},
+                            {"otherCommitted", candidateCommitted});
                         Y_DEBUG_ABORT("Persistent config quorum with different fingerprints");
                         continue;
                     }
@@ -416,11 +416,11 @@ namespace NKikimr::NStorage {
         const bool canPropose = sc.HasBlobStorageConfig() && sc.GetBlobStorageConfig().HasDefineBox();
 
         YDB_LOG_DEBUG("ProcessCollectConfigs",
-            {"Marker", "NWDC59"},
-            {"BaseConfig", baseConfig},
-            {"PersistedConfig", persistedConfig},
-            {"ProposedConfig", proposedConfig},
-            {"CanPropose", canPropose});
+            {"marker", "NWDC59"},
+            {"baseConfig", baseConfig},
+            {"persistedConfig", persistedConfig},
+            {"proposedConfig", proposedConfig},
+            {"canPropose", canPropose});
 
         bool automaticBootstrap = false;
 
@@ -501,12 +501,12 @@ namespace NKikimr::NStorage {
             // this proposition came from actor -- we notify that actor and finish operation
             Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::nullopt));
         } else {
-            YDB_LOG_DEBUG("no quorum for ProposedStorageConfig",
-                {"Marker", "NWDC47"},
-                {"Record", *res},
-                {"ProposedStorageConfig", proposition.StorageConfig},
-                {"ActorId", proposition.ActorId},
-                {"Error", err.Str()});
+            YDB_LOG_DEBUG("No quorum for ProposedStorageConfig",
+                {"marker", "NWDC47"},
+                {"record", *res},
+                {"proposedStorageConfig", proposition.StorageConfig},
+                {"actorId", proposition.ActorId},
+                {"error", err.Str()});
             finishWithError(TStringBuilder() << "no quorum for ProposedStorageConfig:" << err.Str());
         }
 
@@ -562,10 +562,10 @@ namespace NKikimr::NStorage {
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
                     YDB_LOG_NOTICE_COMP(BS_NODE, "ProposedStorageConfig generation is not newer than the applied one",
-                        {"Marker", "NWDC49"},
-                        {"StorageConfig", StorageConfig.get()},
-                        {"Request", task.Request},
-                        {"RootNodeId", GetRootNodeId()});
+                        {"marker", "NWDC49"},
+                        {"storageConfig", StorageConfig.get()},
+                        {"request", task.Request},
+                        {"rootNodeId", GetRootNodeId()});
                 } else if (proposed.HasClusterState() && (!BridgeInfo ||
                         !NBridge::PileStateTraits(proposed.GetClusterState().GetPerPileState(
                             BridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())).RequiresConfigQuorum)) {
@@ -590,13 +590,13 @@ namespace NKikimr::NStorage {
                                 }
                             }
                             YDB_LOG_DEBUG("ProposeStorageConfig TEvStorageConfigStored",
-                                {"Marker", "NWDC48"},
-                                {"Cookie", cookie},
-                                {"Status", *status});
+                                {"marker", "NWDC48"},
+                                {"cookie", cookie},
+                                {"status", *status});
                         } else {
                             YDB_LOG_DEBUG("ProposeStorageConfig TEvStorageConfigStored no scatter task",
-                                {"Marker", "NWDC45"},
-                                {"Cookie", cookie});
+                                {"marker", "NWDC45"},
+                                {"cookie", cookie});
                         }
 
                         FinishAsyncOperation(cookie);
@@ -828,11 +828,11 @@ namespace NKikimr::NStorage {
         UpdateFingerprint(configToPropose);
 
         YDB_LOG_INFO("StartProposition",
-            {"Marker", "NWDC60"},
-            {"ConfigToPropose", *configToPropose},
-            {"PropositionBase", propositionBase},
-            {"StorageConfig", StorageConfig.get()},
-            {"ActorId", actorId});
+            {"marker", "NWDC60"},
+            {"configToPropose", *configToPropose},
+            {"propositionBase", propositionBase},
+            {"storageConfig", StorageConfig.get()},
+            {"actorId", actorId});
 
         if (propositionBase) {
             if (auto error = ValidateConfig(*propositionBase)) {
@@ -894,14 +894,14 @@ namespace NKikimr::NStorage {
         }
         if (NKikimrBlobStorage::TStorageConfig config(*StorageConfig); UpdateConfig(&config)) {
             YDB_LOG_DEBUG("CheckForConfigUpdate",
-                {"Marker", "NWDC63"},
-                {"Config", config});
+                {"marker", "NWDC63"},
+                {"config", config});
             Invoke(TProposeConfig{
                 .Config = std::move(config),
             });
         } else {
             YDB_LOG_DEBUG("CheckForConfigUpdate: no update",
-                {"Marker", "NWDC83"});
+                {"marker", "NWDC83"});
         }
     }
 

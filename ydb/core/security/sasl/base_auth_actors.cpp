@@ -4,6 +4,8 @@
 
 #include <ydb/library/login/sasl/saslprep.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SASL_AUTH
+
 namespace NKikimr::NSasl {
 
 using namespace NLogin;
@@ -18,10 +20,10 @@ TAuthActorBase::TAuthActorBase(TActorId sender, const std::string& database, con
 }
 
 void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext &ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::SASL_AUTH,
-        DerivedActorName << "# " << ctx.SelfID.ToString() <<
-        ", " << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult" <<
-        ", errors# " << ev->Get()->Request.Get()->ErrorCount);
+    YDB_LOG_TRACE_CTX(ctx, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+        {"derivedActorName", DerivedActorName},
+        {"selfId", ctx.SelfID},
+        {"errors", ev->Get()->Request.Get()->ErrorCount});
 
     const auto& resultSet = ev->Get()->Request.Get()->ResultSet;
     if (resultSet.size() == 1 && resultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -35,30 +37,28 @@ void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     }
 
     std::string error = "Unknown database";
-    LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-        DerivedActorName << "# " << ctx.SelfID.ToString() <<
-        ", " << "Authentication failed: " << error
-    );
+    YDB_LOG_INFO_CTX(ctx, "Authentication",
+        {"derivedActorName", DerivedActorName},
+        {"selfId", ctx.SelfID},
+        {"failed", error});
     SendError(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, error);
     return CleanupAndDie(ctx);
 }
 
 void TAuthActorBase::HandleUndelivered(TEvents::TEvUndelivered::TPtr&, const TActorContext &ctx) {
     std::string error = "SchemeShard is unreachable";
-    LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-        DerivedActorName << "# " << ctx.SelfID.ToString() <<
-        ", " << error
-    );
+    YDB_LOG_ERROR_CTX(ctx, error,
+        {"derivedActorName", DerivedActorName},
+        {"selfId", ctx.SelfID});
     SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, error);
     return CleanupAndDie(ctx);
 }
 
 void TAuthActorBase::HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext &ctx) {
     std::string error = "SchemeShard is unreachable";
-    LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-        DerivedActorName << "# " << ctx.SelfID.ToString() <<
-        ", " << error
-    );
+    YDB_LOG_ERROR_CTX(ctx, error,
+        {"derivedActorName", DerivedActorName},
+        {"selfId", ctx.SelfID});
     SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, error);
     return CleanupAndDie(ctx);
 }
@@ -66,41 +66,38 @@ void TAuthActorBase::HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&, c
 void TAuthActorBase::HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext &ctx) {
     if (ev->Get()->Status != NKikimrProto::OK) {
         std::string error = "SchemeShard is unreachable";
-        LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-            DerivedActorName << "# " << ctx.SelfID.ToString() <<
-            ", " << error
-        );
+        YDB_LOG_ERROR_CTX(ctx, error,
+            {"derivedActorName", DerivedActorName},
+            {"selfId", ctx.SelfID});
         SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, error);
         return CleanupAndDie(ctx);
     }
 }
 
 void TAuthActorBase::HandleLoginResult(TEvSchemeShard::TEvLoginResult::TPtr& ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-        DerivedActorName << "# " << ctx.SelfID.ToString() <<
-        " Handle TEvSchemeShard::TEvLoginResult" <<
-        ", " << ev->Get()->Record.DebugString()
-    );
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvSchemeShard::TEvLoginResult",
+        {"derivedActorName", DerivedActorName},
+        {"selfId", ctx.SelfID},
+        {"recordDebugString", ev->Get()->Record.DebugString()});
 
     const NKikimrScheme::TEvLoginResult& loginResult = ev->Get()->Record;
     if (loginResult.HasError()) { // explicit error takes precedence
-        LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-            DerivedActorName << "# " << ctx.SelfID.ToString() <<
-            ", " << "Authentication failed: " << loginResult.GetError()
-        );
+        YDB_LOG_INFO_CTX(ctx, "Authentication",
+            {"derivedActorName", DerivedActorName},
+            {"selfId", ctx.SelfID},
+            {"failed", loginResult.GetError()});
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, loginResult.GetError(), EScramServerError::InvalidProof);
     } else if (!loginResult.HasToken()) { // empty token is still an error
         std::string error = "Failed to produce a token";
-        LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-            DerivedActorName << "# " << ctx.SelfID.ToString() <<
-            ", " << error
-        );
+        YDB_LOG_ERROR_CTX(ctx, error,
+            {"derivedActorName", DerivedActorName},
+            {"selfId", ctx.SelfID});
         SendError(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, error);
     } else { // success = token + no errors
-        LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-            DerivedActorName << "# " << ctx.SelfID.ToString() <<
-            ", " << "Authentication completed for '" << AuthcId << "'"
-        );
+        YDB_LOG_DEBUG_CTX(ctx, "Authentication completed",
+            {"derivedActorName", DerivedActorName},
+            {"selfId", ctx.SelfID},
+            {"authcId", AuthcId});
 
         SendIssuedToken(loginResult);
     }
@@ -110,10 +107,9 @@ void TAuthActorBase::HandleLoginResult(TEvSchemeShard::TEvLoginResult::TPtr& ev,
 
 void TAuthActorBase::HandleTimeout(const TActorContext &ctx) {
     std::string error = "SchemeShard response timeout";
-    LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-        DerivedActorName << "# " << ctx.SelfID.ToString() <<
-        ", " << error
-    );
+    YDB_LOG_ERROR_CTX(ctx, error,
+        {"derivedActorName", DerivedActorName},
+        {"selfId", ctx.SelfID});
     SendError(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, error);
     return CleanupAndDie(ctx);
 }
@@ -168,10 +164,9 @@ bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
     std::vector<std::string> authMsgParts = StringSplitter(AuthMsg).Split('\0');
     if (authMsgParts.size() != 3) {
         std::string error = "Wrong SASL PLAIN auth message format";
-        LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-            DerivedActorName << "# " << ctx.SelfID.ToString() <<
-            ", " << error
-        );
+        YDB_LOG_WARN_CTX(ctx, error,
+            {"derivedActorName", DerivedActorName},
+            {"selfId", ctx.SelfID});
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
         CleanupAndDie(ctx);
         return false;
@@ -186,10 +181,9 @@ bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
         auto saslPrepRC = SaslPrep(AuthzId, prepAuthzId);
         if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authorization identity";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                DerivedActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_INFO_CTX(ctx, error,
+                {"derivedActorName", DerivedActorName},
+                {"selfId", ctx.SelfID});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             CleanupAndDie(ctx);
             return false;
@@ -200,10 +194,9 @@ bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
 
     if (AuthcId.empty()) {
         std::string error = "Empty authentication identity";
-        LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-            DerivedActorName << "# " << ctx.SelfID.ToString() <<
-            ", " << error
-        );
+        YDB_LOG_INFO_CTX(ctx, error,
+            {"derivedActorName", DerivedActorName},
+            {"selfId", ctx.SelfID});
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
         CleanupAndDie(ctx);
         return false;
@@ -212,10 +205,9 @@ bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
         auto saslPrepRC = SaslPrep(AuthcId, prepAuthcId);
         if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authentication identity";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                DerivedActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_INFO_CTX(ctx, error,
+                {"derivedActorName", DerivedActorName},
+                {"selfId", ctx.SelfID});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             CleanupAndDie(ctx);
             return false;

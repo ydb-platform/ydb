@@ -457,6 +457,22 @@ private:
         meta->SetNotNull(notNull);
     }
 
+    // Push top-K-by-distance ranking down into the datashard read so it returns
+    // only the K nearest rows of this read instead of the full scan. The actor
+    // still merges the per-read top-K across leaf clusters into the global top-K
+    // (the global K nearest are necessarily among each cluster's own top-K).
+    // VectorColumnIndex is the position of the embedding column within the read's
+    // requested columns list (datashard interprets VectorTopK.Column as that index,
+    // not as a column id); both call sites read the output columns first, so the
+    // embedding sits at that position.
+    void SetVectorTopK(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src) {
+        auto* topK = src->MutableVectorTopK();
+        topK->SetColumn(Settings.GetVectorColumnIndex());
+        *topK->MutableSettings() = Settings.GetIndexSettings();
+        topK->SetTargetVector(TargetVector);
+        topK->SetLimit(TopK);
+    }
+
     void StartLevelRead(TClusterId parent) {
         ReadingParent = parent;
 
@@ -522,6 +538,9 @@ private:
                 const NKikimrProto::TTypeInfo* ti = pk.HasTypeInfo() ? &pk.GetTypeInfo() : nullptr;
                 AddColumn(src, Settings.GetPostingTableKeyColumnIds(j + 1), pk.GetName(), pk.GetType(), ti, pk.GetNotNull());
             }
+            // Covered index ranks on the posting table: push top-K down so the
+            // datashard returns only the nearest rows of this leaf cluster.
+            SetVectorTopK(src);
         } else {
             // Read just the PK columns (using posting table column ids) to feed
             // the main table read.
@@ -573,6 +592,10 @@ private:
             const NKikimrProto::TTypeInfo* ti = col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr;
             AddColumn(src, col.GetId(), col.GetName(), col.GetType(), ti, col.GetNotNull());
         }
+
+        // Non-covered index ranks on the main table: push top-K down so the
+        // datashard returns only the K nearest of the gathered candidate PKs.
+        SetVectorTopK(src);
 
         LaunchInnerRead(src, arena);
     }

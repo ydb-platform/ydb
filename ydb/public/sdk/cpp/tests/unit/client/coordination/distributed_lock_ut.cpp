@@ -8,6 +8,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/system/hostname.h>
+#include <util/system/thread.h>
 
 #include <mutex>
 #include <optional>
@@ -117,8 +118,8 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
     Y_UNIT_TEST(UnlockFailureNotifiesStopToken) {
         TTestEnv env;
         auto lock = MakeLock(env);
-        auto token = lock.getStopToken();
         lock.lock();
+        auto token = lock.getStopToken();
         env.CoordinationService.FailNextRelease.store(true);
         lock.unlock();
         UNIT_ASSERT(token.stop_requested());
@@ -150,6 +151,22 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         TTestEnv env;
         auto lock = MakeLock(env);
         UNIT_ASSERT(!lock.getStopToken().stop_requested());
+    }
+
+    Y_UNIT_TEST(SessionExpiryWhileHoldingLock) {
+        TTestEnv env;
+        env.CoordinationService.MaxPingResponses.store(2);
+        auto lock = MakeLock(env);
+        lock.lock();
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (!lock.getStopToken().stop_requested() && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT(lock.getStopToken().stop_requested());
+        lock.unlock();
+        lock.lock();
+        UNIT_ASSERT(!lock.getStopToken().stop_requested());
+        lock.unlock();
     }
 
 }

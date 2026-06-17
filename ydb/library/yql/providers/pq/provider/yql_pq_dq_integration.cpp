@@ -882,17 +882,13 @@ public:
                 ToString(watermarksLateArrivalDelayUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksLateArrivalDelayMs.GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs)).MicroSeconds())), pos, ctx);
 
             const auto lateEventsPolicy = watermarksLateEventsPolicy
-                .GetOrElse("adjust");
+                .GetOrElse("drop");
             Add(props, WatermarksLateEventsPolicySetting, lateEventsPolicy, pos, ctx);
 
             if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(true)) {
-                if (wrSettings.WatermarksEnableIdlePartitions.Defined() && !watermarksIdleTimeoutUs) {
-                    watermarksIdleTimeoutUs = TDuration::MilliSeconds(wrSettings.WatermarksIdleTimeoutMs.GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs)).MicroSeconds();
-                }
-                if (watermarksIdleTimeoutUs) {
-                    Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
-                    Add(props, WatermarksIdleTimeoutUsSetting, ToString(*watermarksIdleTimeoutUs), pos, ctx);
-                }
+                Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
+                Add(props, WatermarksIdleTimeoutUsSetting,
+                    ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksIdleTimeoutMs.GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs)).MicroSeconds())), pos, ctx);
             } else {
                 if (watermarksIdleTimeoutUs) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "WATERMARK_IDLE_TIMEOUT specified, but watermarks idle partitions explicitly disabled"));

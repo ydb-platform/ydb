@@ -255,7 +255,7 @@ IComputationNode* WrapDqWatermarkGenerator(
     }
 
     if (watermarkTracker) {
-        watermarkTracker->SetSettings(granularity, true, lateArrivalDelay, idleTimeout);
+        watermarkTracker->SetSettings(granularity, true, TDuration::Zero(), idleTimeout);
     }
 
     return new TDqWatermarkGenerator(

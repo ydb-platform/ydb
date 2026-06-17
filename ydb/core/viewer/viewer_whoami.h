@@ -31,7 +31,7 @@ public:
         ReplyAndPassAway();
     }
 
-    void ReplyAndPassAway() {
+    void ReplyAndPassAway() override {
         NACLibProto::TUserToken userToken;
         Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(GetRequest().GetUserTokenObject());
         NJson::TJsonValue json(NJson::JSON_MAP);

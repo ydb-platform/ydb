@@ -909,6 +909,26 @@ TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version) {
     return batch;   
 }
 
+TKafkaRecordBatch ReadRecordBatch(TStringBuf data) {
+    static constexpr size_t RecordBatchMagicOffset =
+        sizeof(TKafkaInt64) + sizeof(TKafkaInt32) + sizeof(TKafkaInt32);
+
+    if (data.size() <= RecordBatchMagicOffset) {
+        ythrow yexception() << "Kafka record batch is too small: " << data.size();
+    }
+
+    const auto magic = static_cast<TKafkaVersion>(static_cast<ui8>(data[RecordBatchMagicOffset]));
+    if (magic >= TKafkaRecordBatch::MagicMeta::Default) {
+        return ReadKafkaRecordBatch(data);
+    }
+
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable readable(buffer);
+    TKafkaRecordBatch batch;
+    NPrivate::ReadLegacyRecordBatch(readable, magic, data.size(), batch);
+    return batch;
+}
+
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version) {
     TKafkaWriteBuffer buffer(WriteBufferChunkSize);
     TKafkaWritable writable(buffer);

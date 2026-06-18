@@ -679,6 +679,7 @@ TKafkaBatchHeader ReadLegacyRecordBatchHeader(
 TKafkaRecordBatch ReadKafkaRecordBatch(
     TStringBuf data,
     TKafkaVersion version = 2);
+TKafkaRecordBatch ReadRecordBatch(TStringBuf data);
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
 ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record);

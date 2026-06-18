@@ -168,13 +168,12 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
             continue;
         }
 
-        auto& recordsBatch = partKafkaResponse.Records.emplace();
-        FillRecordsBatch(partPQResponse, recordsBatch, timestampType, ctx);
+        FillRecordsBatch(partPQResponse, partKafkaResponse.Records, timestampType, ctx);
     }
 }
 
 void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse,
-                                        TKafkaRecordBatch& recordsBatch,
+                                        TKafkaBytesHolder& records,
                                         const std::optional<TString> timestampType,
                                         const TActorContext& ctx) {
     if (partPQResponse.GetReadResult().GetResult().size() == 1) {
@@ -182,13 +181,14 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
         if (result.GetIsBatch() && dataChunk.GetChunkType() == NKikimrPQClient::TDataChunk::REGULAR &&
             dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec()) {
-            recordsBatch = ReadKafkaRecordBatch(dataChunk.GetData());
+            records = dataChunk.GetData();
             auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
-            ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(recordsBatch.Records.size(), BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
+            ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(result.GetMessageCount(), BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
             return;
         }
     }
 
+    TKafkaRecordBatch recordsBatch;
     recordsBatch.Records.resize(partPQResponse.GetReadResult().GetResult().size());
 
     ui64 baseOffset = 0;
@@ -268,6 +268,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         ", BaseSequence: " << recordsBatch.BaseSequence << ", BatchLength: " << recordsBatch.BatchLength);
     auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(recordsBatch.Records.size(), BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
+    records = WriteKafkaRecordBatch(recordsBatch);
 }
 
 void TKafkaFetchActor::RespondIfRequired(const TActorContext& ctx) {

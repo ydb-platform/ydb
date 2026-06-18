@@ -77,26 +77,6 @@ TString MakeSourceId(const TString& transactionalId, i64 producerId) {
     return Base64Encode(sourceId);
 }
 
-TKafkaRecordBatch ReadRecordBatch(TStringBuf data) {
-    static constexpr size_t RecordBatchMagicOffset =
-        sizeof(TKafkaInt64) + sizeof(TKafkaInt32) + sizeof(TKafkaInt32);
-
-    if (data.size() <= RecordBatchMagicOffset) {
-        ythrow yexception() << "Kafka record batch is too small: " << data.size();
-    }
-
-    const auto magic = static_cast<TKafkaVersion>(static_cast<ui8>(data[RecordBatchMagicOffset]));
-    if (magic >= TKafkaRecordBatch::MagicMeta::Default) {
-        return ReadKafkaRecordBatch(data);
-    }
-
-    TBuffer buffer(data.data(), data.size());
-    TKafkaReadable readable(buffer);
-    TKafkaRecordBatch batch;
-    NPrivate::ReadLegacyRecordBatch(readable, magic, data.size(), batch);
-    return batch;
-}
-
 std::pair<EKafkaErrors, ui64> GetBaseSeqNo(const TKafkaBatchHeader& header) {
     if (header.ProducerId >= 0) {
         if (header.BaseSequence < 0) {

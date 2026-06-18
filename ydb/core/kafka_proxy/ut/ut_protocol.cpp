@@ -101,6 +101,11 @@ void AssertProduceOk(const TMessagePtr<TProduceResponseData>& msg, const TString
         static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 }
 
+TKafkaRecordBatch ReadFetchRecords(const TKafkaBytesHolder& records) {
+    UNIT_ASSERT(records);
+    return ReadKafkaRecordBatch(TStringBuf(records->data(), records->size()));
+}
+
 void AssertFetchedKafkaRecords(const TMessagePtr<TFetchResponseData>& msg) {
     UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
@@ -108,7 +113,8 @@ void AssertFetchedKafkaRecords(const TMessagePtr<TFetchResponseData>& msg) {
     UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     UNIT_ASSERT(msg->Responses[0].Partitions[0].Records);
 
-    const auto& records = msg->Responses[0].Partitions[0].Records->Records;
+    const auto batch = ReadFetchRecords(msg->Responses[0].Partitions[0].Records);
+    const auto& records = batch.Records;
     UNIT_ASSERT_VALUES_EQUAL(records.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(TString(records[0].Key->data(), records[0].Key->size()), "key-0");
     UNIT_ASSERT_VALUES_EQUAL(TString(records[0].Value->data(), records[0].Value->size()), "value-0");
@@ -326,7 +332,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 auto msg = client.Fetch(topics);
 
                 UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                auto record = msg->Responses[0].Partitions[0].Records->Records[0];
+                auto record = ReadFetchRecords(msg->Responses[0].Partitions[0].Records).Records[0];
 
                 auto recordValue = record.Value.value();
                 auto recordValuesAsStr = TString(recordValue.data(), recordValue.size());
@@ -1008,8 +1014,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), true);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->Records.size(), 1);
-            auto record = msg->Responses[0].Partitions[0].Records->Records[0];
+            auto recordsBatch = ReadFetchRecords(msg->Responses[0].Partitions[0].Records);
+            UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), 1);
+            auto record = recordsBatch.Records[0];
 
             auto data = record.Value.value();
             auto dataStr = TString(data.data(), data.size());
@@ -1089,7 +1096,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             for (size_t i = 0; i < 2; i++) {
                 UNIT_ASSERT_VALUES_EQUAL(msg->Responses[i].Partitions.size(), 1);
-                auto record = msg->Responses[i].Partitions[0].Records->Records[0];
+                auto record = ReadFetchRecords(msg->Responses[i].Partitions[0].Records).Records[0];
 
                 auto data = record.Value.value();
                 auto dataStr = TString(data.data(), data.size());
@@ -1151,8 +1158,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), true);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->Records.size(), 1);
-            auto record = msg->Responses[0].Partitions[0].Records->Records[0];
+            auto recordsBatch = ReadFetchRecords(msg->Responses[0].Partitions[0].Records);
+            UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), 1);
+            auto record = recordsBatch.Records[0];
 
             auto data = record.Value.value();
             auto dataStr = TString(data.data(), data.size());
@@ -1220,7 +1228,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), true);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->Records.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ReadFetchRecords(msg->Responses[0].Partitions[0].Records).Records.size(), 1);
         }
     } // Y_UNIT_TEST(FetchScenarioWithJoinGroup)
 
@@ -3163,9 +3171,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto fetchResponse = kafkaClient.Fetch({{topicName, {0}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions[0].Records->Records.size(), codecs.size());
-        for (size_t i = 0; i < fetchResponse->Responses[0].Partitions[0].Records->Records.size(); i++) {
-            auto& record = fetchResponse->Responses[0].Partitions[0].Records->Records[i];
+        auto recordsBatch = ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), codecs.size());
+        for (size_t i = 0; i < recordsBatch.Records.size(); i++) {
+            auto& record = recordsBatch.Records[i];
             UNIT_ASSERT_VALUES_EQUAL(record.Headers.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(TString(record.Headers[0].Key.value().data(), record.Headers[0].Key.value().size()), "__codec");
             UNIT_ASSERT_VALUES_EQUAL(TString(record.Headers[0].Value.value().data(), record.Headers[0].Value.value().size()), expectedCodecNames[i]);
@@ -4625,12 +4634,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         // validate data is accessible in target topic
         auto fetchResponse1 = kafkaClient.Fetch({{outputTopicName, {0, 1}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[0].Records->Records.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[1].Records->Records.size(), 1);
-        auto record1 = fetchResponse1->Responses[0].Partitions[0].Records->Records[0];
+        auto recordsBatch1 = ReadFetchRecords(fetchResponse1->Responses[0].Partitions[0].Records);
+        auto recordsBatch2 = ReadFetchRecords(fetchResponse1->Responses[0].Partitions[1].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch1.Records.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch2.Records.size(), 1);
+        auto record1 = recordsBatch1.Records[0];
         UNIT_ASSERT_VALUES_EQUAL(TString(record1.Key.value().data(), record1.Key.value().size()), "0");
         UNIT_ASSERT_VALUES_EQUAL(TString(record1.Value.value().data(), record1.Value.value().size()), "123");
-        auto record2 = fetchResponse1->Responses[0].Partitions[1].Records->Records[0];
+        auto record2 = recordsBatch2.Records[0];
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), "1");
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Value.value().data(), record2.Value.value().size()), "987");
 
@@ -4790,15 +4801,17 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // validate data is accessible in target topic
             auto fetchResponse1 = kafkaClient.Fetch({{outputTopicName, {0, 1}}});
             UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[0].Records->Records.size(), (i + 1) * 2);
-            UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[1].Records->Records.size(), i + 1);
-            auto record11 = fetchResponse1->Responses[0].Partitions[0].Records->Records[i * 2];
+            auto recordsBatch1 = ReadFetchRecords(fetchResponse1->Responses[0].Partitions[0].Records);
+            auto recordsBatch2 = ReadFetchRecords(fetchResponse1->Responses[0].Partitions[1].Records);
+            UNIT_ASSERT_VALUES_EQUAL(recordsBatch1.Records.size(), (i + 1) * 2);
+            UNIT_ASSERT_VALUES_EQUAL(recordsBatch2.Records.size(), i + 1);
+            auto record11 = recordsBatch1.Records[i * 2];
             UNIT_ASSERT_VALUES_EQUAL(TString(record11.Key.value().data(), record11.Key.value().size()), std::to_string(i));
             UNIT_ASSERT_VALUES_EQUAL(TString(record11.Value.value().data(), record11.Value.value().size()), "123");
-            auto record12 = fetchResponse1->Responses[0].Partitions[0].Records->Records[i * 2 + 1];
+            auto record12 = recordsBatch1.Records[i * 2 + 1];
             UNIT_ASSERT_VALUES_EQUAL(TString(record12.Key.value().data(), record12.Key.value().size()), std::to_string( i+ totalTxns * 2));
             UNIT_ASSERT_VALUES_EQUAL(TString(record12.Value.value().data(), record12.Value.value().size()), "456");
-            auto record2 = fetchResponse1->Responses[0].Partitions[1].Records->Records[i];
+            auto record2 = recordsBatch2.Records[i];
             UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), std::to_string(i + totalTxns));
             UNIT_ASSERT_VALUES_EQUAL(TString(record2.Value.value().data(), record2.Value.value().size()), "987");
 
@@ -4852,11 +4865,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         // validate data is accessible in target topic
         auto fetchResponse1 = kafkaClient.Fetch({{topicName, {0}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[0].Records->Records.size(), 2);
-        auto record1 = fetchResponse1->Responses[0].Partitions[0].Records->Records[0];
+        auto recordsBatch = ReadFetchRecords(fetchResponse1->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), 2);
+        auto record1 = recordsBatch.Records[0];
         UNIT_ASSERT_VALUES_EQUAL(TString(record1.Key.value().data(), record1.Key.value().size()), "0");
         UNIT_ASSERT_VALUES_EQUAL(TString(record1.Value.value().data(), record1.Value.value().size()), "123");
-        auto record2 = fetchResponse1->Responses[0].Partitions[0].Records->Records[1];
+        auto record2 = recordsBatch.Records[1];
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), "1");
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Value.value().data(), record2.Value.value().size()), "234");
     }
@@ -5182,13 +5196,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions.size(), 1);
 
+        auto recordsBatch = ReadFetchRecords(fetchResponse1->Responses[0].Partitions[0].Records);
         UNIT_ASSERT_VALUES_EQUAL(
-            fetchResponse1->Responses[0].Partitions[0].Records->Records.size(),
+            recordsBatch.Records.size(),
             2);
-        auto record1 = fetchResponse1->Responses[0].Partitions[0].Records->Records[0];
+        auto record1 = recordsBatch.Records[0];
         UNIT_ASSERT_VALUES_EQUAL(TString(record1.Key.value().data(), record1.Key.value().size()), "key1");
 
-        auto record2 = fetchResponse1->Responses[0].Partitions[0].Records->Records[1];
+        auto record2 = recordsBatch.Records[1];
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), "key2");
     }
 

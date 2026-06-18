@@ -14,7 +14,7 @@
 - [Трассировка](../../reference/observability/tracing/setup.md);
 - [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md);
 - [Встроенный UI](../../reference/embedded-ui/index.md);
-- [Планы запросов](../../dev/optimization/index.md);
+- [План выполнения запроса](../../dev/optimization/index.md);
 - Сторонние инструменты мониторинга.
 
 ## Классификация проблем с производительностью {{ ydb-short-name }}

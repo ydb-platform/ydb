@@ -18,6 +18,8 @@ PEERDIR(
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/scheme
     ydb/library/yql/providers/solomon/solomon_accessor/client
+    ydb/library/yql/utils/actors
+    ydb/library/yverify_stream
     ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/public/types
     yql/essentials/public/udf

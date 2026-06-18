@@ -557,6 +557,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         branch_labels = []
         env = None
         priority = None
+        releaseblocker_state = None
         area = None
         for label in issue.get('labels', {}).get('nodes', []):
             name = label.get('name', '')
@@ -574,12 +575,22 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             # priority detection
             if name.startswith('prio:'):
                 priority = name
+            # release blocker detection
+            if name.startswith('release:'):
+                releaseblocker_state = name
             # area detection
             if name.startswith('area/'):
                 area = name
         branch = ';'.join(branch_labels) if branch_labels else None
         max_branch = get_max_branch(branch_labels) if branch_labels else None
-        info = {'branch': branch, 'max_branch': max_branch, 'env': env, 'priority': priority, 'area': area}
+        info = {
+            'branch': branch,
+            'max_branch': max_branch,
+            'env': env,
+            'priority': priority,
+            'releaseblocker_state': releaseblocker_state,
+            'area': area,
+        }
         proj_list = projects_for_info_json(issue)
         if proj_list:
             info['projects'] = proj_list

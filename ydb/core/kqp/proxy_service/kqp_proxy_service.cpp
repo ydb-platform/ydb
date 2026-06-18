@@ -1020,15 +1020,19 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            // Fast-poll only while warmup may still fire and RM board hasn't converged
-            // (post-convergence the warmup actor self-skips, so 2s polling is pointless).
+            // Keep fast-polling while warmup may still fire and we haven't gathered
+            // peer proxy resources to start it. Board convergence alone isn't enough
+            // to stop: on a multi-node cluster the warmup actor blocks on our
+            // TEvStartWarmup (it self-skips only when the board has no peers), so
+            // dropping to the slow poll here delivers TEvStartWarmup past its deadline.
             bool fastPoll = false;
             if (!WarmupStarted
                 && TableServiceConfig.GetEnableCompileCacheWarmup()
                 && PeerProxyNodeResources.size() <= 1)
             {
                 auto rm = TryGetKqpResourceManager(SelfId().NodeId());
-                fastPoll = !rm || !rm->GetInitialBoardSyncDone();
+                fastPoll = !rm || !rm->GetInitialBoardSyncDone()
+                    || rm->GetInitialBoardNodeIds().size() > 1;
             }
             if (fastPoll) {
                 d = TDuration::Seconds(2);

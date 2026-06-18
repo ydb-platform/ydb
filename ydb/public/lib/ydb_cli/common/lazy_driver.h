@@ -22,7 +22,7 @@ namespace NYdb::NConsoleClient {
 //   * Stop() — stop the underlying driver (if any) and clear the wrapper;
 //              the next Init()/Get() builds a fresh driver via the factory.
 //
-// Idle timeout: when a non-zero IdleTimeout is configured, a background watcher
+// Idle timeout: when a positive IdleTimeout is configured, a background watcher
 // stops the driver after that period without any Init()/Get() call. Every
 // Init()/Get() extends the deadline, so an actively used driver stays alive and
 // is reused, while an idle one is released (and its discovery loop with it). The

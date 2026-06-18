@@ -25,7 +25,7 @@ TLazyDriver::TLazyDriver(TFactory factory, TDuration idleTimeout)
     , IdleTimeout_(idleTimeout)
 {
     Y_VALIDATE(Factory_, "TLazyDriver factory must not be empty");
-    if (IdleTimeout_ != TDuration::Zero()) {
+    if (IdleTimeout_ > TDuration::Zero()) {
         Watcher_.emplace([this] { WatcherLoop(); });
     }
 }
@@ -90,6 +90,9 @@ void TLazyDriver::WatcherLoop() {
                     CondVar_.WaitI(Mutex_);
                     continue;
                 }
+                // Recomputed on every wakeup: a Get()/Init() since the last
+                // sleep may have moved LastUseAt_ forward, so a driver in active
+                // use is never stopped before a full idle period has elapsed.
                 const TInstant deadline = LastUseAt_ + IdleTimeout_;
                 if (TInstant::Now() >= deadline) {
                     // Hand the driver off and stop it outside the lock, so a

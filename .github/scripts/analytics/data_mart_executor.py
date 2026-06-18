@@ -6,6 +6,7 @@ import ydb
 import os
 import re
 import time
+from typing import List
 from ydb_wrapper import YDBWrapper
 
 # Get repository path
@@ -38,6 +39,28 @@ def ydb_type_to_str(ydb_type, store_type = 'ROW'):
             result_type = ydb.PrimitiveType.Uint8
         name = 'Uint8'
     return result_type, name
+
+
+def string_column_names(column_types, store_type: str) -> List[str]:
+    """Columns typed as YDB String in query metadata (need bytes for bulk upsert)."""
+    names = []
+    for column_name, column_ydb_type in column_types:
+        _, column_type_str = ydb_type_to_str(column_ydb_type, store_type.upper())
+        if column_type_str.replace('?', '') == 'String':
+            names.append(column_name)
+    return names
+
+
+def normalize_rows_for_bulk_upsert(rows: List[dict], string_columns: List[str]) -> None:
+    """In-place: YDB String columns expect bytes, scan rows often have str."""
+    if not string_columns:
+        return
+    for row in rows:
+        for col in string_columns:
+            val = row.get(col)
+            if isinstance(val, str):
+                row[col] = val.encode('utf-8')
+
 
 def create_table(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key):
     """Create table using ydb_wrapper based on the structure of the provided column types."""
@@ -291,6 +314,11 @@ def main():
         for column_name, column_ydb_type in column_types:
             column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, args.store_type.upper())
             column_types_map.add_column(column_name, column_type_obj)
+
+        string_columns = string_column_names(column_types, args.store_type)
+        if string_columns:
+            print(f'Normalizing YDB String columns for bulk upsert: {string_columns}')
+            normalize_rows_for_bulk_upsert(results, string_columns)
 
         cleanup_args_set = any([args.cleanup_window_key, args.cleanup_window_interval])
         if cleanup_args_set:

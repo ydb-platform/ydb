@@ -60,7 +60,6 @@ SELECT
     i.max_branch AS max_branch,
     i.env AS env,
     i.priority AS priority,
-    i.releaseblocker_state AS releaseblocker_state,
     i.branch AS branch,
     i.area AS area,
     CAST(
@@ -107,11 +106,10 @@ CROSS JOIN (
         t.issue_type AS issue_type,
         t.exported_at AS exported_at,
         COALESCE(m.owner_team, 'unknown') AS owner_team,
-        COALESCE(CAST(JSON_QUERY(t.labels, "$.name" WITH UNCONDITIONAL ARRAY WRAPPER) AS Utf8), '') AS labels_list,
+        CAST(JSON_QUERY(t.labels, "$.name" WITH UNCONDITIONAL ARRAY WRAPPER) AS String) AS labels_list,
         COALESCE(JSON_VALUE(t.info, "$.max_branch"), '-') AS max_branch,
         COALESCE(JSON_VALUE(t.info, "$.env"), 'env:-') AS env,
         COALESCE(JSON_VALUE(t.info, "$.priority"), 'priority:-') AS priority,
-        COALESCE(JSON_VALUE(t.info, "$.releaseblocker_state"), 'release:-') AS releaseblocker_state,
         COALESCE(JSON_VALUE(t.info, "$.branch"), '-') AS branch,
         Coalesce(m.matched_area,
             CASE

@@ -58,7 +58,7 @@ public:
             source = Y("EnsureTupleSize", source, Q(ToString(EnsureTupleSize_)));
         }
 
-        Node_ = Y("let", Alias_, Y("block", Q(L(tables, Y("return", Q(Y("world", source)))))));
+        Node_ = Y("let", Alias_, Y("block", Q(L(tables, Y("return", Y("Cons!", "world", source))))));
         IsUsed_ = true;
         return true;
     }
@@ -124,7 +124,7 @@ public:
         for (TNodePtr& dependency : dependencies) {
             block->Add(std::move(dependency));
         }
-        block->Add(Y("return", Q(Y("world", Source_))));
+        block->Add(Y("return", Y("Cons!", "world", Source_)));
 
         Node_ = Y("let", Alias_, Y("block", Q(std::move(block))));
         IsUsed_ = true;

@@ -53,8 +53,23 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
             }
             case ESourceAction::Wait: {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "wait_source")("source_idx", source->GetSourceIdx());
+                ReleaseInFlightForPreparedEmptySources();
                 return;
             }
+        }
+    }
+    ReleaseInFlightForPreparedEmptySources();
+}
+
+void ISyncPoint::ReleaseInFlightForPreparedEmptySources() {
+    if (!Collection) {
+        return;
+    }
+    for (auto& source : SourcesSequentially) {
+        if (!source->IsInFlightReleased() && IsSourcePrepared(source) && source->HasStageResult() && source->GetStageResult().IsEmpty()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "early_release_inflight_empty_source")(
+                "source_idx", source->GetSourceIdx());
+            Collection->ReleaseInFlight(source);
         }
     }
 }

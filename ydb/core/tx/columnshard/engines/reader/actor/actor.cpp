@@ -1,6 +1,7 @@
 #include "actor.h"
 
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 

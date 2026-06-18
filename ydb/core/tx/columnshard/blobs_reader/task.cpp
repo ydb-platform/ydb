@@ -1,6 +1,8 @@
 #include "actor.h"
 #include "task.h"
 
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {

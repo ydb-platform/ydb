@@ -282,7 +282,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::
                 context->IncError();
                 YDB_LOG_WARN_CTX(*actorSystem, "Failed to register",
                     {"coordinatorId", coordinatorId},
-                    {"graph", response->Issues});
+                    {"issues", response->Issues});
             } else {
                 YDB_LOG_INFO_CTX(*actorSystem, "Graph registered",
                     {"coordinatorId", coordinatorId});
@@ -718,7 +718,7 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
             break;
         }
         case TEvCheckpointStorage::TEvAbortCheckpointRequest::EventType: {
-            YDB_LOG_WARN("Send TEvAbortCheckpointRequest with",
+            YDB_LOG_WARN("Send TEvAbortCheckpointResponse with",
                 {"issues", issues.ToOneLineString()});
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvAbortCheckpointRequest>(ev);
             auto response = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointResponse>(event->CheckpointId, std::move(issues));

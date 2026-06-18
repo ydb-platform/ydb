@@ -123,8 +123,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to mark checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, "Dump details",
-                    {"details", ss.Str()});
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                 context->Stage = TContext::StageFailed;
                 return future;
             }
@@ -145,8 +144,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to delete states of checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, "Dump details",
-                    {"details", ss.Str()});
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                 context->Stage = TContext::StageFailed;
                 return future;
             }
@@ -167,16 +165,14 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 ss << "GC failed to delete marked checkpoints of graph '" << context->GraphId
                    << "' up to " << context->UpperBound << ", issues:";
                 issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, "Dump details",
-                    {"details", ss.Str()});
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
                 context->Stage = TContext::StageFailed;
                 return future;
             }
             TStringStream ss;
             ss << "GC deleted checkpoints of graph '" << context->GraphId
                << "' up to " << context->UpperBound;
-            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "Dump details",
-                {"details", ss.Str()});
+            YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
             return future;
         });
 }

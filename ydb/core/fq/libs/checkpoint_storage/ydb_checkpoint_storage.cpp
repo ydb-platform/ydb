@@ -1144,7 +1144,8 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                         if (!queryResult.IsSuccess()) {
                             YDB_LOG_ERROR_CTX(*actorSystem, "GetTotalCheckpointsStateSize: can't get total graph's checkpoints size",
                                 {"graphId", graphId},
-                                {"issues", queryResult.GetIssues()});                            return status;
+                                {"issues", queryResult.GetIssues()});
+                            return status;
                         }
 
                         TResultSetParser parser = queryResult.GetResultSetParser(0);

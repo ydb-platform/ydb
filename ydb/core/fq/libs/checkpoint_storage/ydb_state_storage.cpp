@@ -520,7 +520,7 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         graphId,
         checkpointId);
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "GetState,",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "GetState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"tasks", JoinSeq(", ", taskIds)});

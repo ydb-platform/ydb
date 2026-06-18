@@ -142,11 +142,11 @@ namespace NKikimr::NBridge {
                 // synced group has lesser blocked generation for this tablet than unsynced one: we need to update
                 // blocked generation in source group and this will lead to possible tablet restart
                 Y_ABORT_UNLESS(targetGeneration);
-                IssueQuery(false, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *targetGeneration, TInstant::Max()));
+                IssueQuery(false, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *targetGeneration, TInstant::Max(), TWriteSource::SyncerMergeBlock));
             } else if (targetGeneration < sourceGeneration) {
                 // we just need to update target group generation to current one in source group
                 Y_ABORT_UNLESS(sourceGeneration);
-                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *sourceGeneration, TInstant::Max()));
+                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *sourceGeneration, TInstant::Max(), TWriteSource::SyncerMergeBlock));
             }
         };
 
@@ -190,7 +190,7 @@ namespace NKikimr::NBridge {
                 if (item.RecordGeneration || item.PerGenerationCounter || item.CollectGeneration || item.CollectStep) {
                     IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(sourceItem->TabletId,
                         item.RecordGeneration, item.PerGenerationCounter, sourceItem->Channel, true,
-                        item.CollectGeneration, item.CollectStep, nullptr, nullptr, TInstant::Max(), false, hard, true));
+                        item.CollectGeneration, item.CollectStep, nullptr, nullptr, TInstant::Max(), false, TWriteSource::SyncerMergeGC, hard, true));
                 }
             };
             issueCollectGarbage(sourceItem->Soft, targetItem ? &targetItem->Soft : nullptr, false);
@@ -262,7 +262,7 @@ namespace NKikimr::NBridge {
                 std::ranges::set_difference(tempKeep, *dkv, std::back_inserter(*kv)); // do not keep flag overrides keep
                 IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), 0u, 0u,
                     false, 0u, 0u, kv->empty() ? nullptr : kv.release(), dkv->empty() ? nullptr : dkv.release(),
-                    TInstant::Max(), true, false, true));
+                    TInstant::Max(), true, TWriteSource::SyncerMergeGC, false, true));
             }
         };
 
@@ -468,9 +468,16 @@ namespace NKikimr::NBridge {
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // rewrite this blob with keep flag, if set
-                    IssueQuery(true, std::make_unique<TEvBlobStorage::TEvPut>(r.Id, TRcBuf(r.Buffer), TInstant::Max(),
-                        NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, r.Keep,
-                        /*ignoreBlocks=*/ true));
+                    IssueQuery(true, std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                        .BlobId = r.Id,
+                        .Buffer = TRope(TRcBuf(r.Buffer)),
+                        .Deadline = TInstant::Max(),
+                        .HandleClass = NKikimrBlobStorage::TabletLog,
+                        .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
+                        .WriteSource = TWriteSource::SyncerMergePut,
+                        .IssueKeepFlag = r.Keep,
+                        .IgnoreBlock = true,
+                    }));
                 } else if (r.Status == NKikimrProto::NODATA) {
                     // this blob may have vanished, it's okay if we couldn't have read it; there was no matching target item
                     // so we don't need to issue any keep flags

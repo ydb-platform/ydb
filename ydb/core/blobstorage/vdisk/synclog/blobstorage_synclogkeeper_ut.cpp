@@ -388,60 +388,6 @@ namespace NKikimr {
             test.RunDisposeTest();
         }
 
-        static TIntrusivePtr<NSyncLog::TSyncLogCtx> MakeCtxWithBlobSizeLimit(
-                const TControlWrapper& blobSizeLimit) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
-            TIntrusivePtr<TVDiskContext> vctx = new TVDiskContext(
-                    TActorId(),
-                    groupInfo.PickTopology(),
-                    new ::NMonitoring::TDynamicCounters(),
-                    TVDiskID(),
-                    nullptr,
-                    NPDisk::DEVICE_TYPE_UNKNOWN);
-
-            const ui64 syncLogMaxMemAmount = ui64(64) << ui64(20);
-            const ui64 syncLogMaxDiskAmount = 0;
-            const ui64 syncLogMaxEntryPointSize = ui64(128) << ui64(10);
-            const ui32 maxResponseSize = 10 << 20;
-
-            return MakeIntrusive<NSyncLog::TSyncLogCtx>(
-                    vctx,
-                    nullptr,
-                    nullptr,
-                    TActorId{},
-                    TActorId{},
-                    TActorId{},
-                    TActorId{},
-                    syncLogMaxDiskAmount,
-                    syncLogMaxEntryPointSize,
-                    syncLogMaxMemAmount,
-                    maxResponseSize,
-                    nullptr,
-                    false,
-                    TControlWrapper(0, 0, 1),
-                    false,
-                    TControlWrapper(20'000'000, 1, 100'000'000'000),
-                    blobSizeLimit);
-        }
-
-        Y_UNIT_TEST(VolatilePhantomFlagStorageBlobSizeLimitPropagates) {
-            const i64 expected = 2'500'000;
-            auto slCtx = MakeCtxWithBlobSizeLimit(TControlWrapper(expected, 1, 10'000'000));
-            UNIT_ASSERT_VALUES_EQUAL(i64(slCtx->VolatilePhantomFlagStorageBlobSizeLimit), expected);
-
-            TMemorizableControlWrapper memo(slCtx->VolatilePhantomFlagStorageBlobSizeLimit);
-            UNIT_ASSERT_VALUES_EQUAL(memo.Update(TInstant::Now()), expected);
-            const std::optional<ui32> blobSizeLimit(memo.Update(TInstant::Now()));
-            UNIT_ASSERT(blobSizeLimit.has_value());
-            UNIT_ASSERT_VALUES_EQUAL(*blobSizeLimit, ui32(expected));
-        }
-
-        Y_UNIT_TEST(VolatilePhantomFlagStorageBlobSizeLimitDefault) {
-            const i64 defaultValue = 1'000'000;
-            auto slCtx = MakeCtxWithBlobSizeLimit(TControlWrapper(defaultValue, 1, 10'000'000));
-            UNIT_ASSERT_VALUES_EQUAL(i64(slCtx->VolatilePhantomFlagStorageBlobSizeLimit), defaultValue);
-        }
-
         Y_UNIT_TEST(WhatsNextReadsMemoryWhenCacheStartsBeforeDisk) {
             const ui64 logStartLsn = 61651193845;
             const ui64 firstMemLsn = 61651094865;

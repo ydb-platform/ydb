@@ -10,6 +10,7 @@
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/library/kafka/kafka_records.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
@@ -25,6 +26,94 @@ using namespace NYdb::NTable;
 
 static constexpr const ui64 FirstTopicOffset = -2;
 static constexpr const ui64 LastTopicOffset = -1;
+
+TKafkaRecord MakeKafkaRecord(i64 timestampDelta, i32 offsetDelta, TStringBuf key, TStringBuf value) {
+    TKafkaRecord record;
+    record.TimestampDelta = timestampDelta;
+    record.OffsetDelta = offsetDelta;
+    record.Key = TKafkaRawBytes(key.data(), key.size());
+    record.Value = TKafkaRawBytes(value.data(), value.size());
+    record.Length = record.Size(TKafkaRecordBatch::MagicMeta::Default)
+        - NKafka::NPrivate::SizeOfVarint<TKafkaRecord::LengthMeta::Type>(0);
+    return record;
+}
+
+TKafkaRecordBatch MakeKafkaBatch(ECompressionType compressionType) {
+    TKafkaRecordBatch batch;
+    batch.BaseOffset = 0;
+    batch.Magic = TKafkaRecordBatch::MagicMeta::Default;
+    batch.Attributes = static_cast<TKafkaRecordBatch::AttributesMeta::Type>(compressionType);
+    batch.LastOffsetDelta = 1;
+    batch.BaseTimestamp = 1000;
+    batch.MaxTimestamp = 1010;
+    batch.Records.push_back(MakeKafkaRecord(0, 0, "key-0", "value-0"));
+    batch.Records.push_back(MakeKafkaRecord(10, 1, "key-1", "value-1"));
+    batch.BatchLength = batch.Size(TKafkaRecordBatch::MagicMeta::Default)
+        - sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type)
+        - sizeof(TKafkaRecordBatch::BatchLengthMeta::Type);
+    return batch;
+}
+
+TKafkaRecordBatchV0 MakeLegacyKafkaRecord(TKafkaVersion magic, i64 offset, i64 timestamp, TStringBuf key, TStringBuf value) {
+    TKafkaRecordBatchV0 record;
+    record.Offset = offset;
+    record.Record.Magic = magic;
+    record.Record.Attributes = static_cast<TKafkaRecordV0::AttributesMeta::Type>(ECompressionType::NONE);
+    record.Record.Timestamp = timestamp;
+    record.Record.Key = TKafkaRawBytes(key.data(), key.size());
+    record.Record.Value = TKafkaRawBytes(value.data(), value.size());
+    record.Record.MessageSize = record.Record.Size(magic) - sizeof(TKafkaRecordV0::MessageSizeMeta::Type);
+    return record;
+}
+
+TString MakeLegacyKafkaBatchBytes() {
+    static constexpr TKafkaVersion Magic = 1;
+    const std::vector<TKafkaRecordBatchV0> records = {
+        MakeLegacyKafkaRecord(Magic, 42, 1000, "key-0", "value-0"),
+        MakeLegacyKafkaRecord(Magic, 43, 1010, "key-1", "value-1"),
+    };
+
+    size_t size = 0;
+    for (const auto& record : records) {
+        size += record.Size(Magic);
+    }
+
+    TKafkaWriteBuffer buffer(size);
+    TKafkaWritable writable(buffer);
+    for (const auto& record : records) {
+        record.Write(writable, Magic);
+    }
+    return buffer.AsString();
+}
+
+void EnableTopicMessagesBatching(TInsecureTestServer& testServer) {
+    testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicMessagesBatching(true);
+}
+
+void AssertProduceOk(const TMessagePtr<TProduceResponseData>& msg, const TString& topicName) {
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topicName);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
+    UNIT_ASSERT_VALUES_EQUAL(
+        msg->Responses[0].PartitionResponses[0].ErrorCode,
+        static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+}
+
+void AssertFetchedKafkaRecords(const TMessagePtr<TFetchResponseData>& msg) {
+    UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    UNIT_ASSERT(msg->Responses[0].Partitions[0].Records);
+
+    const auto& records = msg->Responses[0].Partitions[0].Records->Records;
+    UNIT_ASSERT_VALUES_EQUAL(records.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(TString(records[0].Key->data(), records[0].Key->size()), "key-0");
+    UNIT_ASSERT_VALUES_EQUAL(TString(records[0].Value->data(), records[0].Value->size()), "value-0");
+    UNIT_ASSERT_VALUES_EQUAL(TString(records[1].Key->data(), records[1].Key->size()), "key-1");
+    UNIT_ASSERT_VALUES_EQUAL(TString(records[1].Value->data(), records[1].Value->size()), "value-1");
+}
 
 TString GetMessageMetaKey(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& msg, const TString& key) {
     if (msg.GetMessageMeta()) {
@@ -772,6 +861,45 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         });
 
     } // Y_UNIT_TEST(IdempotentProducerScenario)
+
+    Y_UNIT_TEST(ProduceAndFetchCompressedKafkaBatches) {
+        TInsecureTestServer testServer("2");
+        EnableTopicMessagesBatching(testServer);
+
+        TString topicName = "/Root/topic-compressed-kafka-batches";
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, 1, {});
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        for (const auto compressionType : {ECompressionType::GZIP, ECompressionType::ZSTD}) {
+            const auto produceResponse = client.Produce(topicName, 0, MakeKafkaBatch(compressionType));
+            AssertProduceOk(produceResponse, topicName);
+
+            const auto fetchResponse = client.Fetch({{topicName, {0}}}, produceResponse->Responses[0].PartitionResponses[0].BaseOffset);
+            AssertFetchedKafkaRecords(fetchResponse);
+        }
+    }
+
+    Y_UNIT_TEST(ProduceAndFetchLegacyRawKafkaBatch) {
+        TInsecureTestServer testServer("2");
+        EnableTopicMessagesBatching(testServer);
+
+        TString topicName = "/Root/topic-legacy-raw-kafka-batch";
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, 1, {});
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        const TString legacyBatch = MakeLegacyKafkaBatchBytes();
+        const auto produceResponse = client.Produce(topicName, 0, TKafkaBytes(ToRawBytes(legacyBatch)));
+        AssertProduceOk(produceResponse, topicName);
+
+        const auto fetchResponse = client.Fetch({{topicName, {0}}});
+        AssertFetchedKafkaRecords(fetchResponse);
+    }
 
     Y_UNIT_TEST(FetchScenario) {
         TInsecureTestServer testServer("2");

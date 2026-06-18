@@ -267,14 +267,20 @@ struct TLegacyHeaderConsumer {
 
 private:
     void AppendHeaderRecord(i64 offset, i64 timestamp) {
-        if (Header.RecordsCount == 0 && Magic >= 1) {
-            Header.BaseTimestamp = timestamp;
-            Header.MaxTimestamp = timestamp;
-        } else if (Magic >= 1) {
-            Header.MaxTimestamp = Max(Header.MaxTimestamp, timestamp);
+        if (Header.RecordsCount == 0) {
+            Header.BaseOffset = offset;
+            Header.LastOffsetDelta = 0;
+            if (Magic >= 1) {
+                Header.BaseTimestamp = timestamp;
+                Header.MaxTimestamp = timestamp;
+            }
+        } else {
+            Header.LastOffsetDelta = offset - Header.BaseOffset;
+            if (Magic >= 1) {
+                Header.MaxTimestamp = Max(Header.MaxTimestamp, timestamp);
+            }
         }
 
-        Header.LastOffsetDelta = offset;
         ++Header.RecordsCount;
     }
 };

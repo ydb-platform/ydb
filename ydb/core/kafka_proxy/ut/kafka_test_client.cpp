@@ -184,6 +184,22 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     return WriteAndRead<TProduceResponseData>(header, request);
 }
 
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topicName, ui32 partition, const TKafkaBytes& records) {
+    Cerr << ">>>>> TProduceRequestData\n";
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
+
+    TProduceRequestData request;
+    request.Acks = -1;
+    request.TopicData.resize(1);
+    request.TopicData[0].Name = topicName;
+    request.TopicData[0].PartitionData.resize(1);
+    request.TopicData[0].PartitionData[0].Index = partition;
+    request.TopicData[0].PartitionData[0].Records = records;
+
+    return WriteAndRead<TProduceResponseData>(header, request);
+}
+
 void TKafkaTestClient::ProduceAsync(const TTopicPartition& topicPartition,
                                                             const std::vector<std::pair<TString, TString>>& keyValueMessages,
                                                             ui32 baseSequence,

@@ -214,8 +214,8 @@ public:
             IndexMeta::Type Index;
 
             struct RecordsMeta {
-                using Type = TKafkaRecords;
-                using TypeDesc = NPrivate::TKafkaRecordsDesc;
+                using Type = TKafkaBytes;
+                using TypeDesc = NPrivate::TKafkaBytesDesc;
 
                 static constexpr const char* Name = "records";
                 static constexpr const char* About = "The record data to be produced.";

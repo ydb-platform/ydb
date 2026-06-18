@@ -692,6 +692,137 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptDistinctDictionary)).Execute(settings);
     }
 
+    // Overlapping uncompacted portions + many rows per portion but few dict values:
+    // dictionary-only accessor row count != duplicate-filter row count.
+    TString scriptDistinctDictionaryOverlappingPortions = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            otherPk Uint64 NOT NULL,
+            message Utf8 ENCODING(DICT),
+            other Uint64,
+            PRIMARY KEY (pk, otherPk)
+        )
+        PARTITION BY HASH(pk, otherPk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (1u, 1u, '0', 1u), (2u, 2u, '1', 2u), (3u, 3u, '2', 3u), (4u, 4u, '3', 4u),
+            (5u, 5u, '0', 5u), (6u, 6u, '1', 6u), (7u, 7u, '2', 7u), (8u, 8u, '3', 8u);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (5u, 5u, '1', 50u), (6u, 6u, '2', 60u), (7u, 7u, '3', 70u), (8u, 8u, '0', 80u);
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "4"; SELECT DISTINCT message FROM `/Root/ColumnTable` LIMIT 4;
+        EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable`;
+        EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+    )";
+    Y_UNIT_TEST(DistinctDictionaryOverlappingPortions) {
+        auto settings = GetDictionarySettings();
+        Variator::ToExecutor(Variator::SingleScript(scriptDistinctDictionaryOverlappingPortions)).Execute(settings);
+    }
+
+    // Scale: 52 rows / 4 dict values, overlapping portions, deletion filter — dictionary-only must stay off.
+    TString scriptDistinctDictionaryOverlappingPortionsLarge = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            otherPk Uint64 NOT NULL,
+            message Utf8 ENCODING(DICT),
+            other Uint64,
+            PRIMARY KEY (pk, otherPk)
+        )
+        PARTITION BY HASH(pk, otherPk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (1u, 1u, '0', 1u), (2u, 2u, '1', 2u), (3u, 3u, '2', 3u), (4u, 4u, '3', 4u),
+            (5u, 5u, '0', 5u), (6u, 6u, '1', 6u), (7u, 7u, '2', 7u), (8u, 8u, '3', 8u),
+            (9u, 9u, '0', 9u), (10u, 10u, '1', 10u), (11u, 11u, '2', 11u), (12u, 12u, '3', 12u),
+            (13u, 13u, '0', 13u), (14u, 14u, '1', 14u), (15u, 15u, '2', 15u), (16u, 16u, '3', 16u),
+            (17u, 17u, '0', 17u), (18u, 18u, '1', 18u), (19u, 19u, '2', 19u), (20u, 20u, '3', 20u),
+            (21u, 21u, '0', 21u), (22u, 22u, '1', 22u), (23u, 23u, '2', 23u), (24u, 24u, '3', 24u),
+            (25u, 25u, '0', 25u), (26u, 26u, '1', 26u);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (27u, 27u, '2', 27u), (28u, 28u, '3', 28u), (29u, 29u, '0', 29u), (30u, 30u, '1', 30u),
+            (31u, 31u, '2', 31u), (32u, 32u, '3', 32u), (33u, 33u, '0', 33u), (34u, 34u, '1', 34u),
+            (35u, 35u, '2', 35u), (36u, 36u, '3', 36u), (37u, 37u, '0', 37u), (38u, 38u, '1', 38u),
+            (39u, 39u, '2', 39u), (40u, 40u, '3', 40u), (41u, 41u, '0', 41u), (42u, 42u, '1', 42u),
+            (43u, 43u, '2', 43u), (44u, 44u, '3', 44u), (45u, 45u, '0', 45u), (46u, 46u, '1', 46u),
+            (47u, 47u, '2', 47u), (48u, 48u, '3', 48u), (49u, 49u, '0', 49u), (50u, 50u, '1', 50u),
+            (51u, 51u, '2', 51u), (52u, 52u, '3', 52u);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, otherPk, message, other) VALUES
+            (30u, 30u, '2', 30u), (31u, 31u, '3', 31u), (32u, 32u, '0', 32u), (33u, 33u, '1', 33u),
+            (34u, 34u, '2', 34u), (35u, 35u, '3', 35u), (36u, 36u, '0', 36u), (37u, 37u, '1', 37u),
+            (38u, 38u, '2', 38u), (39u, 39u, '3', 39u), (40u, 40u, '0', 40u), (41u, 41u, '1', 41u),
+            (42u, 42u, '2', 42u), (43u, 43u, '3', 43u), (44u, 44u, '0', 44u), (45u, 45u, '1', 45u),
+            (46u, 46u, '2', 46u), (47u, 47u, '3', 47u), (48u, 48u, '0', 48u), (49u, 49u, '1', 49u),
+            (50u, 50u, '2', 50u), (51u, 51u, '3', 51u), (52u, 52u, '0', 52u);
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "4"; SELECT DISTINCT message FROM `/Root/ColumnTable` LIMIT 4;
+        EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        DATA:
+        DELETE FROM `/Root/ColumnTable` WHERE pk IN (1u, 2u, 5u, 9u, 13u);
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "4"; SELECT DISTINCT message FROM `/Root/ColumnTable` LIMIT 4;
+        EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "message"; SELECT DISTINCT message FROM `/Root/ColumnTable`;
+        EXPECTED_UNORDERED: [[["0"]];[["1"]];[["2"]];[["3"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+    )";
+    Y_UNIT_TEST(DistinctDictionaryOverlappingPortionsLarge) {
+        auto settings = GetDictionarySettings();
+        Variator::ToExecutor(Variator::SingleScript(scriptDistinctDictionaryOverlappingPortionsLarge)).Execute(settings);
+    }
+
     TString scriptGroupBySomeDictionaryWithCompaction = R"(
         STOP_COMPACTION
         ------

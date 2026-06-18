@@ -199,8 +199,17 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
 
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
     const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
-    ctx.AddLiveColumns(GetLeftInput(), liveOut);
-    ctx.AddLiveColumns(GetRightInput(), liveOut);
+    TInfoUnitSet leftLive;
+    TInfoUnitSet rightLive;
+    for (const auto& column : Columns) {
+        if (!liveOut.contains(column.Output)) {
+            continue;
+        }
+        AddInfoUnit(leftLive, column.LeftSource);
+        AddInfoUnit(rightLive, column.RightSource);
+    }
+    ctx.AddLiveColumns(GetLeftInput(), leftLive);
+    ctx.AddLiveColumns(GetRightInput(), rightLive);
 }
 
 void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {

@@ -229,57 +229,18 @@ void RepairAggregateOutputIUs(const TIntrusivePtr<TOpAggregate>& aggregate, TExp
 }
 
 void RepairUnionAllOutputIUs(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprContext& ctx, TPlanProps& props) {
+    Y_UNUSED(props);
     const auto leftOutput = unionAll->GetLeftInput()->GetOutputIUs();
     const auto rightOutput = unionAll->GetRightInput()->GetOutputIUs();
 
-    if (leftOutput == rightOutput) {
-        ValidateUniqueOutputIUs(unionAll, ctx);
-        return;
+    for (auto& column : unionAll->Columns) {
+        RepairInfoUnitReference(column.LeftSource, leftOutput);
+        RepairInfoUnitReference(column.RightSource, rightOutput);
+        Y_ENSURE(ContainsInfoUnit(leftOutput, column.LeftSource),
+            "UnionAll left source column " << column.LeftSource.GetFullName() << " is not visible");
+        Y_ENSURE(ContainsInfoUnit(rightOutput, column.RightSource),
+            "UnionAll right source column " << column.RightSource.GetFullName() << " is not visible");
     }
-
-    auto buildOutputMap = [&](const TIntrusivePtr<IOperator>& input, const TVector<TInfoUnit>& output) {
-        if (input->GetOutputIUs() == output) {
-            return input;
-        }
-
-        TVector<TMapElement> mapElements;
-        mapElements.reserve(output.size());
-        for (const auto& iu : output) {
-            mapElements.emplace_back(iu, iu, unionAll->Pos, &ctx, &props);
-        }
-        return CastOperator<IOperator>(MakeIntrusive<TOpMap>(input, unionAll->Pos, mapElements));
-    };
-
-    if (leftOutput.size() != rightOutput.size()) {
-        THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
-        rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
-        TVector<TInfoUnit> commonOutput;
-        commonOutput.reserve(std::min(leftOutput.size(), rightOutput.size()));
-        for (const auto& iu : leftOutput) {
-            if (rightOutputSet.contains(iu)) {
-                commonOutput.push_back(iu);
-            }
-        }
-
-        Y_ENSURE(!commonOutput.empty(),
-            "UnionAll inputs have different column counts and no common columns: " << leftOutput.size() << " vs " << rightOutput.size());
-
-        unionAll->GetLeftInput() = buildOutputMap(unionAll->GetLeftInput(), commonOutput);
-        unionAll->GetRightInput() = buildOutputMap(unionAll->GetRightInput(), commonOutput);
-        ValidateUniqueOutputIUs(unionAll, ctx);
-        return;
-    }
-
-    TVector<TMapElement> mapElements;
-    mapElements.reserve(leftOutput.size());
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
-    rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
-    for (size_t i = 0; i < leftOutput.size(); ++i) {
-        const auto& source = rightOutputSet.contains(leftOutput[i]) ? leftOutput[i] : rightOutput[i];
-        mapElements.emplace_back(leftOutput[i], source, unionAll->Pos, &ctx, &props);
-    }
-
-    unionAll->GetRightInput() = MakeIntrusive<TOpMap>(unionAll->GetRightInput(), unionAll->Pos, mapElements);
     ValidateUniqueOutputIUs(unionAll, ctx);
 }
 
@@ -364,6 +325,18 @@ bool GetOrdered(const TKqpOpMap& map) {
 bool GetDistinct(const TKqpOpAggregationTraits& aggTraits) {
     auto maybeDistinct = aggTraits.Distinct();
     return maybeDistinct && maybeDistinct.Cast().StringValue() == "distinct";
+}
+
+TVector<TInfoUnit> GetStructIUs(const TTypeAnnotationNode* type) {
+    Y_ENSURE(type);
+    const auto* structType = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    TVector<TInfoUnit> result;
+    result.reserve(structType->GetItems().size());
+    for (const auto& item : structType->GetItems()) {
+        result.emplace_back(TString(item->GetName()));
+    }
+    return result;
 }
 
 } // anonymous namespace
@@ -700,9 +673,20 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
     }
 
     if (setOpKind == "union_all" || setOpKind == "union") {
-        result =  MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos());
-    }  
-    else if (setOpKind == "intersect" || setOpKind == "except" ) {
+        const auto outputIUs = GetStructIUs(node->GetTypeAnn());
+        const auto leftSourceIUs = GetStructIUs(leftInputPtr->GetTypeAnn());
+        const auto rightSourceIUs = GetStructIUs(rightInputPtr->GetTypeAnn());
+        Y_ENSURE(outputIUs.size() == leftSourceIUs.size(), "UnionAll output and left input column counts mismatch");
+        Y_ENSURE(outputIUs.size() == rightSourceIUs.size(), "UnionAll output and right input column counts mismatch");
+
+        TVector<TUnionAllColumnMapping> columns;
+        columns.reserve(outputIUs.size());
+        for (size_t i = 0; i < outputIUs.size(); ++i) {
+            columns.push_back({outputIUs[i], leftSourceIUs[i], rightSourceIUs[i]});
+        }
+
+        result = MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos(), std::move(columns));
+    } else if (setOpKind == "intersect" || setOpKind == "except" ) {
 
         auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         TVector<TInfoUnit> setOpColumns;

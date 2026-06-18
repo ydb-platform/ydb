@@ -532,12 +532,21 @@ public:
     TVector<TExpression> JoinFilters;
 };
 
+struct TUnionAllColumnMapping {
+    TInfoUnit Output;
+    TInfoUnit LeftSource;
+    TInfoUnit RightSource;
+};
+
 class TOpUnionAll: public IBinaryOperator {
 public:
-    TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
+    TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos,
+                TVector<TUnionAllColumnMapping> columns, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "UnionAll"; }
@@ -545,6 +554,7 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
+    TVector<TUnionAllColumnMapping> Columns;
     bool Ordered;
 };
 

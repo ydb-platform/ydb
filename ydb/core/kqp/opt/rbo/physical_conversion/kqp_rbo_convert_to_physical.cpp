@@ -185,44 +185,31 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
 
-            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) {
-                auto hasSameType = [&](const TInfoUnit& source, const TInfoUnit& target) {
-                    const auto* sourceType = inputOp->GetIUType(source);
-                    const auto* targetType = unionAll->GetIUType(target);
-                    return sourceType && targetType && IsSameAnnotation(*sourceType, *targetType);
-                };
-
+            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp, bool left) {
                 const auto inputOutput = inputOp->GetOutputIUs();
-                if (inputOutput == unionOutput) {
+                THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
+                inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
+
+                TVector<std::pair<TString, TString>> renames;
+                renames.reserve(unionAll->Columns.size());
+                bool identity = inputOutput.size() == unionOutput.size();
+                for (size_t i = 0; i < unionAll->Columns.size(); ++i) {
+                    const auto& column = unionAll->Columns[i];
+                    const auto& source = left ? column.LeftSource : column.RightSource;
+                    Y_ENSURE(inputOutputSet.contains(source), "UnionAll source column " << source.GetFullName() << " is not visible");
+                    renames.emplace_back(source.GetFullName(), column.Output.GetFullName());
+                    identity = identity && inputOutput[i] == source && source == column.Output;
+                }
+
+                if (identity) {
                     return input;
                 }
-                if (inputOutput.size() == unionOutput.size()) {
-                    THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
-                    inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
-                    TVector<std::pair<TString, TString>> renames;
-                    renames.reserve(unionOutput.size());
-                    for (size_t i = 0; i < unionOutput.size(); ++i) {
-                        TInfoUnit source = inputOutput[i];
-                        if (inputOutputSet.contains(unionOutput[i]) && hasSameType(unionOutput[i], unionOutput[i])) {
-                            source = unionOutput[i];
-                        } else if (!hasSameType(source, unionOutput[i])) {
-                            for (const auto& candidate : inputOutput) {
-                                if (candidate.GetColumnName() == unionOutput[i].GetColumnName() && hasSameType(candidate, unionOutput[i])) {
-                                    source = candidate;
-                                    break;
-                                }
-                            }
-                        }
-                        renames.emplace_back(source.GetFullName(), unionOutput[i].GetFullName());
-                    }
-                    return NPhysicalConvertionUtils::BuildRenameMap(input, renames, ctx);
-                }
-                return NPhysicalConvertionUtils::ExtractMembers(input, ctx, unionOutput);
+                return NPhysicalConvertionUtils::BuildRenameMap(input, renames, ctx);
             };
 
             TVector<TExprNode::TPtr> extendArgs{
-                projectInput(leftArg, unionAll->GetLeftInput()),
-                projectInput(rightArg, unionAll->GetRightInput())
+                projectInput(leftArg, unionAll->GetLeftInput(), /*left=*/true),
+                projectInput(rightArg, unionAll->GetRightInput(), /*left=*/false)
             };
 
             if (unionAll->Ordered) {
@@ -237,10 +224,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                     .Add(extendArgs)
                 .Done().Ptr();
                 // clang-format on
-            }
-
-            if (unionOutput != unionAll->GetLeftInput()->GetOutputIUs()) {
-                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, unionOutput);
             }
 
             if (!unionAll->IsSingleConsumer()) {

@@ -3142,7 +3142,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeTestRename("column0", "column0", pos, testContext.ExprCtx, expressionProps),
         });
         auto rightRead = MakeTestRead({TInfoUnit("column0")}, pos);
-        auto unionAll = MakeIntrusive<TOpUnionAll>(identityMap, rightRead, pos);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            identityMap,
+            rightRead,
+            pos,
+            TVector<TUnionAllColumnMapping>{{TInfoUnit("column0"), TInfoUnit("column0"), TInfoUnit("column0")}}
+        );
         TOpRoot root(unionAll, pos, {"column0"});
 
         TVector<std::unique_ptr<IRule>> rules;

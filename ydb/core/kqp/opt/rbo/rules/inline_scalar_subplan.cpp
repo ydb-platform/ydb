@@ -152,7 +152,13 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         auto rename = MakeIntrusive<TOpMap>(subplan, subplan->Pos, renameElements);
         rename->Props.EnsureAtMostOne = true;
 
-        auto unionAll = MakeIntrusive<TOpUnionAll>(rename, map, subplan->Pos, true);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            rename,
+            map,
+            subplan->Pos,
+            TVector<TUnionAllColumnMapping>{{scalarIU, scalarIU, scalarIU}},
+            true
+        );
 
         auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
     

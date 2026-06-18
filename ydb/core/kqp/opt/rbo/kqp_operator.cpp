@@ -778,28 +778,21 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
  * OpUnionAll operator methods
  */
 
-TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, bool ordered)
-    : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput), Ordered(ordered) {}
+TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
+                         TVector<TUnionAllColumnMapping> columns, bool ordered)
+    : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput)
+    , Columns(std::move(columns))
+    , Ordered(ordered) {
+    Y_ENSURE(!Columns.empty(), "UnionAll must have output columns");
+}
 
 TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
-    const auto leftOutput = GetLeftInput()->GetOutputIUs();
-    const auto rightOutput = GetRightInput()->GetOutputIUs();
-    if (leftOutput.size() == rightOutput.size()) {
-        return leftOutput;
+    TVector<TInfoUnit> result;
+    result.reserve(Columns.size());
+    for (const auto& column : Columns) {
+        result.push_back(column.Output);
     }
-
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
-    rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
-
-    TVector<TInfoUnit> commonOutput;
-    commonOutput.reserve(std::min(leftOutput.size(), rightOutput.size()));
-    for (const auto& iu : leftOutput) {
-        if (rightOutputSet.contains(iu)) {
-            commonOutput.push_back(iu);
-        }
-    }
-
-    return commonOutput.empty() ? leftOutput : commonOutput;
+    return result;
 }
 
 TString TOpUnionAll::ToString(TExprContext& ctx) {
@@ -810,6 +803,18 @@ TString TOpUnionAll::ToString(TExprContext& ctx) {
 NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
     res["Ordered"] = Ordered;
+    TStringBuilder columns;
+    columns << "{";
+    for (size_t i = 0; i < Columns.size(); ++i) {
+        if (i != 0) {
+            columns << ", ";
+        }
+        columns << Columns[i].Output.GetFullName()
+            << ": " << Columns[i].LeftSource.GetFullName()
+            << " | " << Columns[i].RightSource.GetFullName();
+    }
+    columns << "}";
+    res["Columns"] = columns;
     return res;
 }
 

@@ -627,7 +627,7 @@ void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
 
     Props.Metadata = TRBOMetadata();
-    Props.Metadata->ColumnsCount = GetLeftInput()->Props.Metadata->ColumnsCount + GetRightInput()->Props.Metadata->ColumnsCount;
+    Props.Metadata->ColumnsCount = GetOutputIUs().size();
 }
 
 void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {

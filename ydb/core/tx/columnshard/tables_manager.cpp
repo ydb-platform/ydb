@@ -452,8 +452,8 @@ void TTablesManager::DropTable(
     Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
 }
 
-TInternalPathId TTablesManager::TruncateTable(
-    const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId oldPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
+TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId oldPathId,
+    const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     // Truncation is implemented by:
     // 1. Dropping the old table (marks old InternalPathId for background data cleanup)
     // 2. Removing the SchemeShardLocalPathId -> InternalPathId mapping
@@ -479,11 +479,8 @@ TInternalPathId TTablesManager::TruncateTable(
     TTableInfo newTable({ TUnifiedPathId::BuildValid(newPathId, schemeShardLocalPathId) });
     RegisterTable(std::move(newTable), db);
 
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("method", "TruncateTable")
-        ("ss_local_path_id", schemeShardLocalPathId)
-        ("old_internal_path_id", oldPathId)
-        ("new_internal_path_id", newPathId)
-        ("version", version.DebugString());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("method", "TruncateTable")("ss_local_path_id", schemeShardLocalPathId)(
+        "old_internal_path_id", oldPathId)("new_internal_path_id", newPathId)("version", version.DebugString());
 
     return newPathId;
 }

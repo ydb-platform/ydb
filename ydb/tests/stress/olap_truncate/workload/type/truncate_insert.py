@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import threading
-import time
 
 from ydb.tests.stress.common.common import WorkloadBase
 

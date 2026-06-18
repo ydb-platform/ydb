@@ -322,6 +322,9 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
                             }
                         } else {
                             auto fillColumns = [&](const auto& indexImplTable, const auto& indexImplColumns) {
+                                if (indexImplTable.GetPath().empty()) {
+                                    return;
+                                }
                                 auto& indexInfo = GetInfo(MakeTableId(indexImplTable));
                                 for (const auto& column : indexImplColumns) {
                                     indexInfo->AddColumn(column.GetName());
@@ -355,6 +358,9 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
                         }
                     } else {
                         auto fillColumns = [&](const auto& indexImplTable, const auto& indexImplColumns) {
+                            if (indexImplTable.GetPath().empty()) {
+                                return;
+                            }
                             auto& indexInfo = GetInfo(MakeTableId(indexImplTable));
                             for (const auto& column : indexImplColumns) {
                                 indexInfo->AddColumn(column.GetName());

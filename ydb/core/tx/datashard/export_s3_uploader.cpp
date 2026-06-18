@@ -784,16 +784,6 @@ public:
         return GetHttpResolverConfig(*s3Config);
     }
 
-    static EDataFormat DataFormatFromS3Settings(const NKikimrSchemeOp::TS3Settings& s3Settings) {
-        switch (s3Settings.GetFormatCase()) {
-            case NKikimrSchemeOp::TS3Settings::FORMAT_NOT_SET:
-            case NKikimrSchemeOp::TS3Settings::kYdbDump:
-                return EDataFormat::YdbDump;
-            case NKikimrSchemeOp::TS3Settings::kParquet:
-                return EDataFormat::Parquet;
-        }
-    }
-    
     explicit TS3Uploader(
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
@@ -803,7 +793,7 @@ public:
             TString&& metadata)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, NBackup::NFieldsWrappers::GetSettings<TSettings>(task)))
         , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
-        , DataFormat(DataFormatFromS3Settings(task.GetS3Settings()))
+        , DataFormat(DataFormatFromTask(task))
         , CompressionCodec(CodecFromTask(task))
         , ShardNum(task.GetShardNum())
         , HttpResolverConfig(GetHttpResolverConfigSafe(ExternalStorageConfig))

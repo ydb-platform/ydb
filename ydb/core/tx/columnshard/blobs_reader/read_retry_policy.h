@@ -10,6 +10,9 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 inline IRetryPolicy<>::TPtr MakeReadRetryPolicy() {
     if (HasAppData()) {
         const auto& rp = AppDataVerified().ColumnShardConfig.GetReadRetryPolicy();
+        if (rp.GetMaxRetries() == 0) {
+            return IRetryPolicy<>::GetNoRetryPolicy();
+        }
         return IRetryPolicy<>::GetExponentialBackoffPolicy([]() {
             return ERetryErrorClass::ShortRetry;
         }, TDuration::MilliSeconds(rp.GetInitialRetryDelayMs()), TDuration::MilliSeconds(rp.GetInitialRetryDelayMs()),

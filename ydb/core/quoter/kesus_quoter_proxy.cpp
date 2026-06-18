@@ -388,7 +388,7 @@ private:
     }
 
     void SendProxySessionError(TEvQuota::TEvProxySession::EResult code, const TString& resourcePath) {
-        YDB_LOG_TRACE("ProxySession(",
+        YDB_LOG_TRACE("ProxySession",
             {"logPrefix", LogPrefix},
             {"resourcePath", resourcePath},
             {"error", code});

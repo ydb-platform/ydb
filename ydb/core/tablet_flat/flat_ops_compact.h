@@ -557,8 +557,14 @@ namespace NTabletFlatExecutor {
             }
 
             auto flag = NKikimrBlobStorage::AsyncBlob;
-            auto *ev = new TEvPut(id.Logo, std::exchange(glob.Data, TString{ }), TInstant::Max(), flag,
-                TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput);
+            auto *ev = new TEvPut(TEvPut::TParameters{
+                .BlobId = id.Logo,
+                .Buffer = TRope(std::exchange(glob.Data, TString{ })),
+                .Deadline = TInstant::Max(),
+                .HandleClass = flag,
+                .Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput,
+                .WriteSource = TWriteSource::FlatCompactionPut,
+            });
             auto ctx = ActorContext();
 
             SendToBSProxy(ctx, id.Group, ev);

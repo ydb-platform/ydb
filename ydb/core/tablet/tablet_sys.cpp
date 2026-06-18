@@ -1369,6 +1369,9 @@ void TTablet::GcLogChannel(ui32 step) {
                     true,
                     gen, step,
                     nullptr, nullptr, TInstant::Max(),
+                    false,
+                    TWriteSource::GcLogChannel,
+                    false,
                     false
                 )
             );
@@ -1381,9 +1384,12 @@ void TTablet::GcLogChannel(ui32 step) {
                 true,
                 gen, step,
                 nullptr, nullptr, TInstant::Max(),
+                false,
+                TWriteSource::GcLogChannel,
+                false,
                 false
-                )
-            );
+            )
+        );
     }
     GcInFlyStep = step;
     GcNextStep = 0;

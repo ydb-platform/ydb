@@ -213,7 +213,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             Span && Span.Event("Send_TEvChunkWrite", {{"ChunkId", chunkId}, {"Offset", offset}, {"WrittenSize", writtenSize}});
             auto ev = std::make_unique<NPDisk::TEvChunkWrite>(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                         HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, chunkId, offset,
-                        partsPtr, Cookie, true, GetWritePriority(), false);
+                        partsPtr, Cookie, true, GetWritePriority(), Item->WriteSource, false);
+            if (AppData()->FeatureFlags.GetEnableBlobIdInSectorChecksum()) {
+                ev->BlobId = Item->LogoBlobId;
+            }
             ev->Orbit = std::move(Item->Orbit);
             ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId, ev.release(), 0, 0, Span.GetTraceId());
             DiskAddr = TDiskPart(chunkId, offset, storedBlobSize);
@@ -233,7 +236,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress, DiskAddr,
                 Item->IgnoreBlock, Item->SenderId, Item->Cookie, Item->HandleClass, std::move(Item->Result), &Item->ExtraBlockChecks,
-                Item->RewriteBlob), 0, 0, Span.GetTraceId());
+                Item->WriteSource, Item->RewriteBlob), 0, 0, Span.GetTraceId());
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
@@ -336,7 +339,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                 HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobAllocChunk,
-                commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr));
+                commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr, TWriteSource::HugeKeeperAllocChunk, NPDisk::TEvLog::TCallback()));
 
             // commit changes to the persistent state at once
             const ui64 prevLsn = std::exchange(Pers->LogPos.ChunkAllocationLsn, Lsn);
@@ -421,7 +424,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             // send log message
             ctx.Send(HugeKeeperCtx->LoggerId, new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                 HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureHugeBlobFreeChunk,
-                commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr));
+                commitRecord, data, TLsnSeg(Lsn, Lsn), nullptr, TWriteSource::HugeKeeperFreeChunk, NPDisk::TEvLog::TCallback()));
             TThis::Become(&TThis::StateFunc);
         }
 
@@ -484,7 +487,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             TLsnSeg seg(EntryPointLsn, EntryPointLsn);
             ctx.Send(HugeKeeperCtx->LoggerId,
                     new NPDisk::TEvLog(HugeKeeperCtx->PDiskCtx->Dsk->Owner, HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound,
-                        TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, TRcBuf(Serialized), seg, nullptr)); //FIXME(innokentii): wrapping
+                        TLogSignature::SignatureHugeBlobEntryPoint, commitRecord, TRcBuf(Serialized), seg, nullptr,
+                        TWriteSource::HugeKeeperEntryPoint,
+                        NPDisk::TEvLog::TCallback())); //FIXME(innokentii): wrapping
             TThis::Become(&TThis::StateFunc);
         }
 

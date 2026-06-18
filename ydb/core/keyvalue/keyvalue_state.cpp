@@ -594,7 +594,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             const auto& [group, channel] = key;
             const auto& [generation, step] = barrier;
             auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(info->TabletID, executorGeneration,
-                PerGenerationCounter, channel, generation, step, TInstant::Max());
+                PerGenerationCounter, channel, generation, step, TInstant::Max(), TWriteSource::KeyValueGC);
             ++PerGenerationCounter;
             ++InitialCollectsSent;
             SendToBSProxy(ctx, group, ev.Release(), (ui64)TKeyValueState::ECollectCookie::Hard);
@@ -645,7 +645,8 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             const auto& [group, channel] = key;
             auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(info->TabletID, executorGeneration,
                     PerGenerationCounter, channel, true /*collect*/, barrierGeneration, barrierStep, keep.Release(),
-                    nullptr /*doNotKeep*/, TInstant::Max(), true /*isMultiCollectAllowed*/, false /*hard*/);
+                    nullptr /*doNotKeep*/, TInstant::Max(), true /*isMultiCollectAllowed*/, TWriteSource::KeyValueGC,
+                    false /*hard*/);
             ++PerGenerationCounter;
             ++InitialCollectsSent;
             SendToBSProxy(ctx, group, ev.Release(), (ui64)TKeyValueState::ECollectCookie::SoftInitial);

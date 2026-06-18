@@ -35,7 +35,7 @@ namespace NKikimr::NBlobDepot {
         if (record.HardGenStep < hardGenStep) {
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(Self->TabletID(), generation,
                 record.PerGenerationCounter++, record.Channel, true, hardGenStep.Generation(), hardGenStep.Step(),
-                nullptr, nullptr, TInstant::Max(), false /*isMultiCollectAllowed*/, true /*hard*/);
+                nullptr, nullptr, TInstant::Max(), false /*isMultiCollectAllowed*/, TWriteSource::BlobDepotGC, true /*hard*/);
 
             std::optional<TLogoBlobID> minTrashId = record.Trash.empty()
                 ? std::nullopt
@@ -158,7 +158,7 @@ namespace NKikimr::NBlobDepot {
 
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(Self->TabletID(), generation,
                 record.PerGenerationCounter, record.Channel, collect, nextGenStep.Generation(), nextGenStep.Step(),
-                keep_.get(), doNotKeep_.get(), TInstant::Max(), true);
+                keep_.get(), doNotKeep_.get(), TInstant::Max(), true /*isMultiCollectAllowed*/, TWriteSource::BlobDepotGC);
 
             keep_.release();
             doNotKeep_.release();

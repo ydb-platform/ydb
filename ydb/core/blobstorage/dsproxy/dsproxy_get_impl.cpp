@@ -300,7 +300,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         Y_DEBUG_ABORT_UNLESS(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
             put.Id.PartId() != 3 || put.Buffer.IsEmpty());
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
-            Blackboard.PutHandleClass);
+            Blackboard.PutHandleClass, TWriteSource::DSProxyGetAccelerate);
         DSP_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
         History.AddVPutToWaitingList(put.Id, put.OrderNumber);
         outVPuts.push_back(std::move(vput));

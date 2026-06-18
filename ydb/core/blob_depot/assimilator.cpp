@@ -451,7 +451,12 @@ namespace NKikimr::NBlobDepot {
                     const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
                     const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
                     const ui64 putId = NextPutId++;
-                    SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, TRcBuf(resp.Buffer), TInstant::Max()), putId);
+                    SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                        .BlobId = id,
+                        .Buffer = TRope(TRcBuf(resp.Buffer)),
+                        .Deadline = TInstant::Max(),
+                        .WriteSource = TWriteSource::BlobDepotPut,
+                    }), putId);
                     const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
                     Y_ABORT_UNLESS(inserted);
                     const bool inserted1 = PutIdToKey.try_emplace(putId, TData::TKey(resp.Id), it->first).second;

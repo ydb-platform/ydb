@@ -1054,6 +1054,7 @@ TMessagePtr<T> TKafkaTestClient::Read(TSocketInput& si, TRequestHeaderData* requ
     TKafkaVersion headerVersion = ResponseHeaderVersion(requestHeader->RequestApiKey, requestHeader->RequestApiVersion);
 
     TKafkaReadable readable(*buffer);
+    readable.SetAllowCompressed(true);
 
     TResponseHeaderData header;
     header.Read(readable, headerVersion);

@@ -8,9 +8,11 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
+#include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include <ydb/library/kafka/kafka.h>
+#include <ydb/library/kafka/kafka_records.h>
 
 #include "actors.h"
 #include "kafka_fetch_actor.h"
@@ -21,6 +23,10 @@ namespace NKafka {
 static constexpr size_t SizeOfZeroVarint = 1;
 static constexpr size_t BatchFirstTwoFieldsSize = 12;
 static constexpr size_t KafkaMagic = 2;
+
+NPersQueueCommon::ECodec KafkaBatchCodec() {
+    return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
+}
 
 void FillRecordFromDataChunk(TKafkaRecord& record, const NKikimrPQClient::TDataChunk& dataChunk) {
     for (const auto& metadata : dataChunk.GetMessageMeta()) {
@@ -60,6 +66,7 @@ void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
             .MaxWaitTimeMs = FetchRequestData->MaxWaitMs <= 0 ? 0u : FetchRequestData->MaxWaitMs,
             .TotalMaxBytes = FetchRequestData->MaxBytes <= 0 ? 8_MB : FetchRequestData->MaxBytes,
             .RuPerRequest = ruPerRequest,
+            .CanReadBatches = true,
             .RequestId = 0,
             .RlCtx = Context->RlContext,
             .UserToken = Context->UserToken
@@ -170,6 +177,18 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
                                         TKafkaRecordBatch& recordsBatch,
                                         const std::optional<TString> timestampType,
                                         const TActorContext& ctx) {
+    if (partPQResponse.GetReadResult().GetResult().size() == 1) {
+        const auto& result = partPQResponse.GetReadResult().GetResult()[0];
+        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        if (result.GetIsBatch() && dataChunk.GetChunkType() == NKikimrPQClient::TDataChunk::REGULAR &&
+            dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec()) {
+            recordsBatch = ReadKafkaRecordBatch(dataChunk.GetData());
+            auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
+            ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(recordsBatch.Records.size(), BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
+            return;
+        }
+    }
+
     recordsBatch.Records.resize(partPQResponse.GetReadResult().GetResult().size());
 
     ui64 baseOffset = 0;

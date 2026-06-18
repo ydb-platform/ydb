@@ -88,6 +88,7 @@ TString MakeLegacyKafkaBatchBytes() {
 
 void EnableTopicMessagesBatching(TInsecureTestServer& testServer) {
     testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicMessagesBatching(true);
+    testServer.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
 }
 
 void AssertProduceOk(const TMessagePtr<TProduceResponseData>& msg, const TString& topicName) {

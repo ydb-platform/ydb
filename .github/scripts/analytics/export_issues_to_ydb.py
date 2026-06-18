@@ -11,34 +11,81 @@ import requests
 from typing import List, Dict, Any, Optional
 from ydb_wrapper import YDBWrapper
 
-# Configuration
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = None #'45'  # Optional: set to None to skip project data
+ISSUES_PAGE_SIZE = 50  # smaller pages → smaller GraphQL payloads (avoids truncated JSON)
 
 
 # YDB configuration is now handled by ydb_wrapper
 
+_RETRYABLE_GITHUB_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+_GITHUB_QUERY_MAX_RETRIES = 8
+_GITHUB_QUERY_INITIAL_BACKOFF_SEC = 2.0
+_GITHUB_QUERY_TIMEOUT_SEC = 120
+
+
+def _github_query_retry_wait(attempt: int, backoff: float, reason: str) -> float:
+    print(f"{reason}, retry {attempt + 1}/{_GITHUB_QUERY_MAX_RETRIES} in {backoff:.0f}s...")
+    time.sleep(backoff)
+    return min(backoff * 2, 60)
+
+
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
-    """Execute GraphQL query against GitHub API"""
-    GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-    HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
-    
-    request = requests.post(
-        'https://api.github.com/graphql', 
-        json={'query': query, 'variables': variables}, 
-        headers=HEADERS
-    )
-    
-    if request.status_code == 200:
-        response = request.json()
-        if 'errors' in response:
-            for error in response['errors']:
-                print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
-                raise Exception(f"GraphQL Error: {error.get('message', 'Unknown error')}")
-        return response
-    else:
+    """Execute GraphQL query against GitHub API (retries transient 5xx/429 and truncated JSON)."""
+    github_token = os.environ["GITHUB_TOKEN"]
+    headers = {"Authorization": f"Bearer {github_token}", "Content-Type": "application/json"}
+    payload = {'query': query, 'variables': variables}
+
+    backoff = _GITHUB_QUERY_INITIAL_BACKOFF_SEC
+    last_exc = None
+    for attempt in range(_GITHUB_QUERY_MAX_RETRIES + 1):
+        try:
+            request = requests.post(
+                'https://api.github.com/graphql',
+                json=payload,
+                headers=headers,
+                timeout=_GITHUB_QUERY_TIMEOUT_SEC,
+            )
+        except requests.RequestException as exc:
+            last_exc = exc
+            if attempt >= _GITHUB_QUERY_MAX_RETRIES:
+                raise
+            backoff = _github_query_retry_wait(
+                attempt, backoff, f"GitHub API request error ({exc})"
+            )
+            continue
+
+        if request.status_code == 200:
+            try:
+                response = request.json()
+            except json.JSONDecodeError as exc:
+                last_exc = exc
+                if attempt >= _GITHUB_QUERY_MAX_RETRIES:
+                    raise
+                backoff = _github_query_retry_wait(
+                    attempt,
+                    backoff,
+                    f"GitHub API truncated/invalid JSON ({exc})",
+                )
+                continue
+            if 'errors' in response:
+                for error in response['errors']:
+                    print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
+                raise Exception(f"GraphQL Error: {response['errors'][0].get('message', 'Unknown error')}")
+            return response
+
+        if request.status_code in _RETRYABLE_GITHUB_STATUS_CODES and attempt < _GITHUB_QUERY_MAX_RETRIES:
+            backoff = _github_query_retry_wait(
+                attempt, backoff, f"GitHub API {request.status_code}"
+            )
+            continue
+
         raise Exception(f"Query failed with status {request.status_code}: {request.text}")
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("GitHub API query failed after retries")
 
 def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[datetime]:
     """Get the latest updated_at timestamp from existing records"""
@@ -192,7 +239,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
     {
       organization(login: "%s") {
         repository(name: "%s") {
-          issues(first: 100, after: %s, orderBy: {field: UPDATED_AT, direction: DESC}%s) {
+          issues(first: %d, after: %s, orderBy: {field: UPDATED_AT, direction: DESC}%s) {
             nodes {
               id
               number
@@ -282,7 +329,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
     
     total_fetched = 0
     while has_next_page:
-        query = repository_issues_query % (org_name, repo_name, end_cursor, since_filter)
+        query = repository_issues_query % (org_name, repo_name, ISSUES_PAGE_SIZE, end_cursor, since_filter)
         result = run_query(query)
         
         if result and 'data' in result:

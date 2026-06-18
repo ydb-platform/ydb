@@ -107,7 +107,7 @@ CROSS JOIN (
         t.issue_type AS issue_type,
         t.exported_at AS exported_at,
         COALESCE(m.owner_team, 'unknown') AS owner_team,
-        CAST(JSON_QUERY(t.labels, "$.name" WITH UNCONDITIONAL ARRAY WRAPPER) AS String) AS labels_list,
+        COALESCE(CAST(JSON_QUERY(t.labels, "$.name" WITH UNCONDITIONAL ARRAY WRAPPER) AS Utf8), '') AS labels_list,
         COALESCE(JSON_VALUE(t.info, "$.max_branch"), '-') AS max_branch,
         COALESCE(JSON_VALUE(t.info, "$.env"), 'env:-') AS env,
         COALESCE(JSON_VALUE(t.info, "$.priority"), 'priority:-') AS priority,

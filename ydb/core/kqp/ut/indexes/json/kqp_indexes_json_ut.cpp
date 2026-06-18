@@ -2220,8 +2220,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         featureFlags.SetEnableJsonIndex(true);
 
         auto kikimr = TKikimrRunner(TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetEnableShowCreate(true));
+            .SetFeatureFlags(featureFlags));
 
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();

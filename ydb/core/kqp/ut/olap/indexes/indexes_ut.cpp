@@ -976,7 +976,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1013,7 +1013,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
 Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1049,7 +1049,7 @@ Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
 
 Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1090,7 +1090,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(RenameLocalBloomNgramIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1131,7 +1131,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(RenameLocalBloomAndBloomNgramIndexes, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1294,7 +1294,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
     // DEPRECATED: old syntax
     Y_UNIT_TEST(LocalBloomNgramIndexDeprecatedSyntaxFilterSizeRecordsCount, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -3154,7 +3154,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(LocalBloomIndexesCompatibleWithDictionaryEncoding, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);

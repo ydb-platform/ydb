@@ -55,6 +55,7 @@ public:
         return *this;
     }
 
+    void SetLCBucketsPlanner(const TString& storeName = "olapStore");
     void SetForcedCompaction(const TString& storeName = "olapStore");
 
     // Builds an `ALTER OBJECT ... (TYPE TABLE)` SQL statement that switches

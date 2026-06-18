@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         lHelper.CreateTestOlapTable("olapTable", 2);
         lHelper.StartSchemaRequest(
-            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`))"
+            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`))"
         );
         lHelper.StartSchemaRequest(
             R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval("P20D") TO EXTERNAL DATA SOURCE `/Root/tier2` ON timestamp)");

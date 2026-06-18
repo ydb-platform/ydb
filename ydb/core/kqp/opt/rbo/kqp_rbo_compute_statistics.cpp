@@ -232,7 +232,7 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     if (OriginalPredicate.has_value()) {
         auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(Props, true));
         auto lambda = TCoLambda(OriginalPredicate->Node);
-        double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
+        double selectivity = TPredicateSelectivityComputer(inputStats, &Props.Metadata->ColumnLineage).Compute(lambda.Body());
 
         double filterSelectivity = selectivity * Props.Statistics->Selectivity;
         Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
@@ -280,7 +280,7 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true));
     auto lambda = TCoLambda(FilterExpr.Node);
-    double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
+    double selectivity = TPredicateSelectivityComputer(inputStats, &Props.Metadata->ColumnLineage).Compute(lambda.Body());
 
     double filterSelectivity = selectivity * Props.Statistics->Selectivity;
     Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;

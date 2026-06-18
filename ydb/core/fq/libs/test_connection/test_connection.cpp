@@ -141,8 +141,8 @@ public:
     static constexpr char ActorName[] = "YQ_TEST_CONNECTION";
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("Starting yandex query test connection. Actor",
-            {"id", SelfId()});
+        YDB_LOG_DEBUG("Starting yandex query test connection",
+            {"actorId", SelfId()});
 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_TEST_CONNECTION_PROVIDER));
 

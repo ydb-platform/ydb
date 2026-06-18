@@ -96,7 +96,7 @@ public:
     }
 
     void StartRequest() {
-        YDB_LOG_DEBUG("Make request for read rule deletion for topic ` `",
+        YDB_LOG_DEBUG("Make request for read rule deletion for topic",
             {"queryId", QueryId},
             {"topicPath", Topic.topic_path()},
             {"index", Index});

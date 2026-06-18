@@ -196,7 +196,7 @@ private:
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)},
-            {"connection", message});
+            {"error", message});
         Counters->Error->Inc();
         Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, "Object Storage: " + message)}), 0, Cookie);
         DestroyActor(false /* success */);

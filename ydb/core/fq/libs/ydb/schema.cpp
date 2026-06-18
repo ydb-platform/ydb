@@ -159,7 +159,7 @@ protected:
             return;
         }
 
-        YDB_LOG_ERROR("Create",
+        YDB_LOG_ERROR("Create entity error",
             {"entityName", GetEntityName()},
             {"error", ev->Get()->Result.GetStatus()},
             {"issues", ev->Get()->Result.GetIssues().ToOneLineString()});

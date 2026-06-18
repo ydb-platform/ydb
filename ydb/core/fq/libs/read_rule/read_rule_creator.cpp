@@ -100,7 +100,7 @@ public:
     void StartRequest() {
         Y_ABORT_UNLESS(!RequestInFlight);
         RequestInFlight = true;
-        YDB_LOG_DEBUG("Make request for read rule creation for topic ` `",
+        YDB_LOG_DEBUG("Make request for read rule creation for topic",
             {"queryId", QueryId},
             {"topicPath", TopicConsumer.topic_path()},
             {"index", Index});

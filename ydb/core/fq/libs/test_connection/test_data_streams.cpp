@@ -133,7 +133,7 @@ public:
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)},
             {"id", SelfId()});
-        YDB_LOG_TRACE("Structured",
+        YDB_LOG_TRACE("Dump bootstrap details",
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)},
@@ -177,7 +177,7 @@ private:
     void Handler(TEvPrivate::TEvResolveDbResponse::TPtr& ev) {
         const auto& response = ev->Get()->Result;
         if (!response.Success) {
-            YDB_LOG_TRACE("Resolve datababse id error",
+            YDB_LOG_TRACE("Resolve datababse error",
                 {"scope", Scope},
                 {"user", User},
                 {"ticket", NKikimr::MaskTicket(Token)},
@@ -253,7 +253,7 @@ private:
     void Handler(TEvPrivate::TEvCheckListStreamsResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (!response.IsSuccess) {
-            YDB_LOG_TRACE("Check list strems error",
+            YDB_LOG_TRACE("Check list streams error",
                 {"scope", Scope},
                 {"user", User},
                 {"ticket", NKikimr::MaskTicket(Token)},

@@ -287,6 +287,7 @@ void TUringRouter::PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op)
     // Supports scatter-gather: Iov may contain multiple entries (writes); the
     // active window starts at IovBegin and is advanced by AdvanceIov on short I/O.
     int fd = (FixedFdIndex >= 0) ? FixedFdIndex : Fd;
+    Y_ABORT_UNLESS(op->IovBegin < op->Iov.size(), "PrepareSqe called with empty iovec window");
     const unsigned iovCount = static_cast<unsigned>(op->Iov.size() - op->IovBegin);
     switch (op->OperationType) {
     case TUringOperationBase::EREAD:

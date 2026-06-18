@@ -24,8 +24,8 @@ void TUringOperationBase::PrepareIov(void* buf, size_t size, ui64 offset) {
 }
 
 #if defined(__linux__)
-void TUringOperationBase::PrepareScatterGather(int count, ui64 offset) {
-    Y_ABORT_UNLESS(count > 0 && static_cast<size_t>(count) <= MAX_IOVS);
+void TUringOperationBase::PrepareScatterGather(size_t count, ui64 offset) {
+    Y_ABORT_UNLESS(count > 0 && count <= MAX_IOVS);
 
     TotalSize = 0;
     DiskOffset = offset;

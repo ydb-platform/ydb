@@ -49,8 +49,8 @@ public:
 #if defined(__linux__)
     // Begin a scatter-gather I/O: clears the iovec list, reserves room for
     // `count` segments and sets the disk offset.  Follow with `count` AddIov()
-    // calls to append each segment.  count must not exceed MAX_IOVS.
-    void PrepareScatterGather(int count, ui64 offset);
+    // calls to append each segment.  count must be in (0, MAX_IOVS].
+    void PrepareScatterGather(size_t count, ui64 offset);
 
     // Append one segment to the scatter-gather list started by
     // PrepareScatterGather.  buf must remain valid until OnComplete/OnDrop is

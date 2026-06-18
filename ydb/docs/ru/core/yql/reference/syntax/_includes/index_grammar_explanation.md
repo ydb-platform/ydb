@@ -9,9 +9,10 @@
     * `SYNC` - [синхронный](../../../../concepts/query_execution/secondary_indexes.md#sync) индекс. Значение по умолчанию.
     * `ASYNC` - [асинхронный](../../../../concepts/query_execution/secondary_indexes.md#async) индекс.
 
+* `UNIQUE` — признак [уникального вторичного индекса](../../../../concepts/query_execution/secondary_indexes.md#unique). Уникальный индекс должен быть глобальным синхронным (`GLOBAL UNIQUE SYNC`) и не иметь `index_type`.
 * `<index_type>` - тип индекса, в настоящее время поддерживаются:
 
-    * `secondary` — вторичный индекс. Доступен только `GLOBAL`. Является значением по умолчанию.
+    * `secondary` — вторичный индекс. Для вторичных индексов доступен только режим `GLOBAL`. Это тип индекса по умолчанию.
     * `vector_kmeans_tree` — векторный индекс. Подробнее описан в разделе [{#T}](../create_table/vector_index.md).
     * `fulltext_plain` — базовый полнотекстовый индекс. Подробнее описан в [{#T}](../create_table/fulltext_index.md).
     * `fulltext_relevance` — полнотекстовый индекс со статистикой [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) для расчёта релевантности. Подробнее описан в [{#T}](../create_table/fulltext_index.md).

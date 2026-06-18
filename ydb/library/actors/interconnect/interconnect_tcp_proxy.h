@@ -430,6 +430,12 @@ namespace NActors {
         void HandleCleanupEventQueue();
         void CleanupEventQueue();
         void HandleRdmaDelayedHandshake();
+        TDuration GetNextRdmaRetryDelay() const;
+        TDuration GetMaxRdmaRetryDelay() const;
+        void RegisterRdmaSuccess();
+        void RegisterRdmaFailure();
+        void ScheduleDelayedRdmaHandshake();
+        void SetRdmaRetryWatchdogPending(bool pending);
 
         // hold all events before connection is established
         struct TPendingSessionEvent {
@@ -564,6 +570,10 @@ namespace NActors {
         THolder<TProgramInfo> RemoteProgramInfo;
         NInterconnect::TSecureSocketContext::TPtr SecureContext;
         TDuration DelayedRdmaHandshakeTimeout;
+        bool RdmaRetryWatchdogPending = false;
+        ui32 ConsecutiveRdmaFailures = 0;
+        TInstant LastRdmaSuccessAt;
+        TInstant LastRdmaFailureAt;
 
         void Handle(TEvGetSecureSocket::TPtr ev) {
             auto socket = MakeIntrusive<NInterconnect::TSecureSocket>(*ev->Get()->Socket, SecureContext);

@@ -1037,9 +1037,12 @@ namespace NYdb::NConsoleClient {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partitions to read without consumer")
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify specific partitions through --partitions or specify --no-consumer to read all partitions without consumer")
             .Optional()
             .StoreResult(&Consumer_);
+        config.Opts->AddLongOption("no-consumer", "Allows to read all partitions without setting specific partition ids and without consumer")
+            .Optional()
+            .StoreTrue(&ReadWithoutConsumer_);
 
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
@@ -1166,9 +1169,12 @@ namespace NYdb::NConsoleClient {
             throw TMisuseException() << "--limit 0 is not allowed for " << MessagingFormat << " format. Please provide a non-negative --limit.";
         }
 
-        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used.
-        if (!Consumer_ && !PartitionIds_) {
-            throw TMisuseException() << "Please specify either --consumer or --partitions to read without consumer";
+        // validate partitions ids are specified, if no consumer is provided or user explicitly set no-consumer. no-consumer mode will be used.
+        if (Consumer_ && ReadWithoutConsumer_) {
+            throw TMisuseException() << "It is not allowed to specify both --consumer and --no-consumer at the same time";
+        }
+        if (!Consumer_ && !PartitionIds_ && !ReadWithoutConsumer_) {
+            throw TMisuseException() << "Please specify either --consumer or --partitions or explicitly set --no-consumer to read without consumer";
         }
 
         if (Offset_ && !(PartitionIds_.size() == 1)) {

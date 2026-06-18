@@ -70,6 +70,7 @@ void ISyncPoint::ReleaseInFlightForPreparedEmptySources() {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "early_release_inflight_empty_source")(
                 "source_idx", source->GetSourceIdx());
             Collection->ReleaseInFlight(source);
+            Context->GetCommonContext()->GetCounters().OnEarlyInFlightRelease();
         }
     }
 }

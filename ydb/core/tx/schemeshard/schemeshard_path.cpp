@@ -402,6 +402,23 @@ const TPath::TChecker& TPath::TChecker::NotBackupTable(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::NotReadOnlyColumnTable(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Base()->IsColumnTable()) {
+        return *this;
+    }
+
+    if (!Path.IsReadOnlyColumnTable()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is a read-only copy column table; only Copy and Drop are allowed"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) const {
     if (Failed) {
         return *this;
@@ -1818,6 +1835,17 @@ bool TPath::IsBackupTable() const {
     TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
 
     return tableInfo->IsBackup;
+}
+
+bool TPath::IsReadOnlyColumnTable() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsColumnTable() || !SS->ColumnTables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto tableInfo = SS->ColumnTables.GetVerified(Base()->PathId);
+    return tableInfo->IsReadOnly;
 }
 
 bool TPath::IsAsyncReplicaTable() const {

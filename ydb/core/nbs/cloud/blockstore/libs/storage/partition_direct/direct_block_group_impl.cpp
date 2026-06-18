@@ -64,6 +64,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
+    const TString& diskId,
     ui64 tabletId,
     ui32 generation,
     size_t directBlockGroupIndex,
@@ -79,6 +80,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TDirectBlockGroup{
+              .DiskId = diskId,
               .TabletId = TabletId,
               .Generation = generation,
               .DirectBlockGroupIndex = DirectBlockGroupIndex,
@@ -166,7 +168,6 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
 void TDirectBlockGroup::Run(IPartitionDirectService* service)
 {
     Service = service;
-    LogTitle.SetDiskId(Service->GetVolumeConfig()->DiskId);
 
     ScheduleOracleThinking();
 
@@ -567,9 +568,8 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
                 } else {
                     callback(
                         TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
-                            E_FAIL,
-                            "WriteBlocksToManyPBuffersResponse: DBG is "
-                            "destroyed already."));
+                            E_CANCELLED,
+                            "DBG is destroyed"));
                 }
             });
     };
@@ -691,7 +691,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          segmentCount = segments.size()]   //
-        (const TFuture<TEvSyncWithPersistentBufferResult>& f) mutable
+        (const TFuture<TEvSyncResult>& f) mutable
         {
             // ActorSystem thread
 
@@ -735,7 +735,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 }
 
 TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
-    const TEvSyncWithPersistentBufferResult& response,
+    const TEvSyncResult& response,
     size_t segmentCount)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -755,13 +755,11 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "SyncWithPBufferResult: Segment count: %d, %d. Error %s, status: "
-            "%d, error reason: %s",
+            "%s SyncWithPBufferResult: Segment count: %d. Response %s %s",
+            LogTitle.GetWithTime().c_str(),
             segmentCount,
-            response.SegmentResultsSize(),
             response.ShortUtf8DebugString().c_str(),
-            response.GetStatus(),
-            response.GetErrorReason().c_str());
+            FormatError(TranslateError(response)).c_str());
 
         for (size_t i = 0; i < segmentCount; ++i) {
             result.Errors.push_back(
@@ -1073,8 +1071,9 @@ void TDirectBlockGroup::SetHostState(
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "Host[%ld] state changed: %s -> %s",
-        static_cast<ui64>(hostIndex),
+        "%s %s state changed: %s -> %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(hostIndex).c_str(),
         ToString(oldState).c_str(),
         ToString(newState).c_str());
 

@@ -5739,10 +5739,7 @@ bool TSqlTranslation::ParseViewQuery(
     }
     queryText << CollectTokens(query);
 
-    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent;
-    if (Ctx_.Settings.MarkQueryTextAtomWithIgnoredContent) {
-        flags |= NYql::TAstNodeFlags::IgnoredContent;
-    }
+    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
     features["query_text"] = {Ctx_.Pos(), queryText, flags};
 
     // The AST is needed solely for the validation of the CREATE VIEW statement.
@@ -5819,10 +5816,7 @@ bool TSqlTranslation::ParseViewQuery(
     begin += beforeToken.value().size();
     YQL_ENSURE(begin < end);
 
-    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent;
-    if (Ctx_.Settings.MarkQueryTextAtomWithIgnoredContent) {
-        flags |= NYql::TAstNodeFlags::IgnoredContent;
-    }
+    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
     features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] =
         TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(begin, end - begin), flags);
 

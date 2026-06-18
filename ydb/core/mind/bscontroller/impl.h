@@ -178,9 +178,7 @@ public:
                     }
                 }
             }
-            if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
-                OnlyPhantomsRemain = onlyPhantomsRemain;
-            }
+            OnlyPhantomsRemain = status == NKikimrBlobStorage::EVDiskStatus::REPLICATING && onlyPhantomsRemain;
         }
 
         NKikimrBlobStorage::EVDiskStatus GetStatus() const {
@@ -2484,6 +2482,7 @@ public:
         std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
         TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
+        bool OnlyPhantomsRemain = false;
         bool MetricsCommitted = false;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
@@ -2501,9 +2500,14 @@ public:
                 VDiskStatus = item.VDiskStatus;
                 VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
+                OnlyPhantomsRemain = item.OnlyPhantomsRemain;
             } else {
                 VDiskStatusTimestamp = mono;
             }
+        }
+
+        bool IsReplicatingWithPhantomsOnly() const {
+            return VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING && OnlyPhantomsRemain;
         }
     };
 
@@ -2592,7 +2596,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);
     static void Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id);
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotInfo& vslot);
-    static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId);
+    static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId, std::optional<ui64> pdiskGuid = std::nullopt);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TVSlot *pb, const TVSlotInfo &vslot, const TVSlotFinder& finder);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
         const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo);

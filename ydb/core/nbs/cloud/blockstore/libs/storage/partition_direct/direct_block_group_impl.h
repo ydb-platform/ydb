@@ -34,6 +34,7 @@ public:
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
+        const TString& diskId,
         ui64 tabletId,
         ui32 generation,
         size_t directBlockGroupIndex,
@@ -133,8 +134,7 @@ public:
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
 private:
-    using TEvSyncWithPersistentBufferResult =
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+    using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
@@ -171,7 +171,7 @@ private:
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(
-        const TEvSyncWithPersistentBufferResult& response,
+        const TEvSyncResult& response,
         size_t segmentCount);
 
     void DoBarrierEraseFromPBuffer(

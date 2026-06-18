@@ -581,12 +581,16 @@ public:
     TString Word;
     TOwnedCellVec IndexKey;
 
-    TL1DocumentInfo(typename TDocumentInfo<TDocId>::TPtr& document, TString word)
+    TL1DocumentInfo(typename TDocumentInfo<TDocId>::TPtr& document, TString word, TConstArrayRef<TCell> prefix = {})
         : Document(document)
         , Word(word)
     {
         TCell tokenCell(Word.data(), Word.size());
-        TVector<TCell> point = TVector<TCell>{tokenCell, TCell::Make<TDocId>(document->DocumentNumId)};
+        TVector<TCell> point;
+        point.reserve(prefix.size() + 2);
+        point.insert(point.end(), prefix.begin(), prefix.end());
+        point.push_back(tokenCell);
+        point.push_back(TCell::Make<TDocId>(document->DocumentNumId));
         IndexKey = TOwnedCellVec(point);
     }
 
@@ -663,6 +667,21 @@ public:
         : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
     {}
 
+    // Prefix values are a per-query binding, not table-reader state: they are owned by the source
+    // and threaded into the per-token reads. This parses them once from the settings.
+    // Each value was serialized as a single-cell TSerializedCellVec.
+    static TOwnedCellVec ParsePrefixCells(const NKikimrKqp::TKqpFullTextSourceSettings* settings) {
+        TVector<TCell> prefixCells;
+        TVector<TSerializedCellVec> prefixHolders;
+        for (const auto& prefixColumn : settings->GetQuerySettings().GetPrefixColumns()) {
+            TSerializedCellVec vec(prefixColumn.GetValue());
+            YQL_ENSURE(vec.GetCells().size() == 1);
+            prefixCells.push_back(vec.GetCells()[0]);
+            prefixHolders.push_back(std::move(vec));
+        }
+        return TOwnedCellVec(prefixCells);
+    }
+
     static TIntrusivePtr<TIndexTableImplReader> FromSettings(
         const TIntrusivePtr<TKqpCounters>& counters,
         const IKqpGateway::TKqpSnapshot& snapshot,
@@ -680,6 +699,13 @@ public:
             settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
             settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact);
 
+        // Prefix columns are the leading key columns; they are known constants for this read
+        // and must be excluded from the requested (doc-id) result columns, like the token column.
+        THashSet<TString> prefixColumnNames;
+        for (const auto& prefixColumn : settings->GetQuerySettings().GetPrefixColumns()) {
+            prefixColumnNames.insert(prefixColumn.GetColumn().GetName());
+        }
+
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultColumnTypes;
         TVector<i32> resultColumnIds;
@@ -688,8 +714,8 @@ public:
         for (const auto& keyColumn : keyColumns) {
             keyColumnTypes.push_back(NScheme::TypeInfoFromProto(
                 keyColumn.GetTypeId(), keyColumn.GetTypeInfo()));
-            if (keyColumn.GetName() == TokenColumn) {
-                // dont request token column because it's not a part of document id
+            if (keyColumn.GetName() == TokenColumn || prefixColumnNames.contains(keyColumn.GetName())) {
+                // don't request token/prefix columns because they are not a part of document id
                 continue;
             }
             resultColumnTypes.push_back(keyColumnTypes.back());
@@ -697,10 +723,12 @@ public:
         }
 
         if (isCompact) {
-            YQL_ENSURE(keyColumns.size() == 3);
-            YQL_ENSURE(keyColumns[0].GetName() == TokenColumn);
-            YQL_ENSURE(keyColumns[1].GetName() == MaxIdColumn);
-            YQL_ENSURE(keyColumns[2].GetName() == GenColumn);
+            // Compact posting key is [prefix..., __ydb_token, __ydb_max_id, __ydb_generation].
+            const int numPrefix = static_cast<int>(prefixColumnNames.size());
+            YQL_ENSURE(keyColumns.size() == numPrefix + 3);
+            YQL_ENSURE(keyColumns[numPrefix].GetName() == TokenColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 1].GetName() == MaxIdColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 2].GetName() == GenColumn);
             auto addCol = [&](const char* str) {
                 for (auto& column: columns) {
                     if (column.GetName() == str) {
@@ -1032,6 +1060,9 @@ public:
     ui32 Frequency = 0;
 
     TCell TokenCell;
+    // Leading prefix key cells of the posting table (a per-query binding owned by the source).
+    // Empty for a non-prefixed index. Prepended to every posting read key.
+    TConstArrayRef<TCell> Prefix;
     TOwnedTableRange WordKeyCells;
     bool L1 = true;
     bool L2 = false;
@@ -1042,14 +1073,30 @@ public:
 
     using TPtr = TIntrusivePtr<TWordReadState<TDocId>>;
 
-    explicit TWordReadState(ui64 wordIndex, const TString& word, const TIntrusivePtr<TIndexTableImplReader>& reader)
+    explicit TWordReadState(ui64 wordIndex, const TString& word, const TIntrusivePtr<TIndexTableImplReader>& reader,
+        TConstArrayRef<TCell> prefix)
         : WordIndex(wordIndex)
         , Word(word)
         , Reader(reader)
         , TokenCell(Word.data(), Word.size())
+        , Prefix(prefix)
+        // WordKeyCells is the dictionary-table lookup key (token only, no prefix): the dict table is
+        // global (corpus-wide IDF). The prefix is applied only to posting-table reads (BuildRangesToRead).
         , WordKeyCells(TOwnedTableRange(TVector<TCell>{TokenCell}))
     {
         BuildRangesToRead();
+    }
+
+    // Build [prefix..., token, extra...] key cells.
+    TVector<TCell> MakePrefixedKey(const TCell& tokenCell, const TMaybe<TCell>& extra = {}) const {
+        TVector<TCell> cells;
+        cells.reserve(Prefix.size() + 1 + (extra.Defined() ? 1 : 0));
+        cells.insert(cells.end(), Prefix.begin(), Prefix.end());
+        cells.push_back(tokenCell);
+        if (extra.Defined()) {
+            cells.push_back(*extra);
+        }
+        return cells;
     }
 
     TOwnedTableRange GetWordKeyCells() const {
@@ -1079,8 +1126,8 @@ public:
         RangesToRead.clear();
 
         TCell tokenCell(Word.data(), Word.size());
-        std::vector<TCell> fromCells = {tokenCell, TCell::Make<TDocId>(StartReadKeyFrom)};
-        std::vector<TCell> toCells = {tokenCell};
+        TVector<TCell> fromCells = MakePrefixedKey(tokenCell, TCell::Make<TDocId>(StartReadKeyFrom));
+        TVector<TCell> toCells = MakePrefixedKey(tokenCell);
         auto range = TTableRange(fromCells, StartReadKeyFromInclusive, toCells, false /*toInclusive*/);
 
         auto rangePartition = Reader->GetRangePartitioning(range);
@@ -2465,6 +2512,10 @@ private:
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
     TIntrusivePtr<TUniqueIndexReader> UniqueIndexReader;  // Resolves __ydb_row_id -> PK via unique secondary index
 
+    // Leading prefix key values of the posting table (a per-query binding; empty for a non-prefixed
+    // index). Owned here for the source's lifetime and referenced by each per-token read.
+    TOwnedCellVec PrefixCells;
+
     // True when the fulltext index uses __ydb_row_id as the synthetic doc_id, and the
     // primary key must be resolved through UniqueIndexReader before main-table reads.
     bool UseRowIdAsDocId = false;
@@ -2504,7 +2555,7 @@ private:
 
             size_t wordIndex = 0;
             for (const TString& token : Settings->GetQuerySettings().GetTokens()) {
-                Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader));
+                Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells));
             }
         } else {
             YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
@@ -2520,7 +2571,7 @@ private:
                         size_t wordIndex = 0;
                         for (const TString& query: NFulltext::BuildSearchTerms(expr, analyzer.analyzers())) {
                             YQL_ENSURE(IndexTableReader);
-                            Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, query, IndexTableReader));
+                            Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, query, IndexTableReader, PrefixCells));
                         }
                     }
                 }
@@ -2841,6 +2892,7 @@ public:
         , DictTableReader(TDictTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
+        , PrefixCells(TIndexTableImplReader::ParsePrefixCells(Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
         , ReadsState(Counters, LogPrefix)
         , DocsReadingQueue(this->SelfId(), ReadsState)
@@ -3446,7 +3498,7 @@ public:
             std::vector<TL1DocInfoPtr> remappedMatches;
             remappedMatches.reserve(l1matched.size());
             for(auto& match: l1matched) {
-                remappedMatches.emplace_back(MakeIntrusive<TL1DocInfo>(match, word->Word));
+                remappedMatches.emplace_back(MakeIntrusive<TL1DocInfo>(match, word->Word, PrefixCells));
             }
 
             L2ReadingQueue.Sequential(IndexTableReader.Get(), EReadKind_Word_L2, remappedMatches, i);
@@ -3773,8 +3825,11 @@ static NScheme::TTypeId GetDocIdTypeId(const NKikimrKqp::TKqpFullTextSourceSetti
     if (settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
-        YQL_ENSURE(keyColumns.size() == 3);
-        idx = 1; // __ydb_max_id
+        // Compact key is [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the doc-id type
+        // is that of __ydb_max_id, which sits right after the prefix columns and the token.
+        const int numPrefix = settings->GetQuerySettings().GetPrefixColumns().size();
+        YQL_ENSURE(keyColumns.size() == numPrefix + 3);
+        idx = numPrefix + 1; // __ydb_max_id
     }
     return static_cast<NScheme::TTypeId>(keyColumns[idx].GetTypeId());
 }

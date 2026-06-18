@@ -1019,6 +1019,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVec
             const auto& stateName = aggTraits.StateFieldName;
             const bool inputIsOptional = aggTraits.InputItemType->IsOptionalOrNull();
             const bool outputIsOptional = aggTraits.OutputItemType->IsOptionalOrNull();
+            const bool unwrap = aggTraits.Unwrap;
             const TTypeAnnotationNode* typeNode = aggTraits.InputItemType;
             auto it = lambdaArgsMap.find(stateName);
             TExprNode::TPtr finishState = lambdaArgs[it->second];
@@ -1036,6 +1037,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVec
                 // clang-format off
                 finishState = Build<TCoJust>(Ctx, Pos)
                     .Input(finishState)
+                .Done().Ptr();
+                // clang-format on
+            // For scalar aggregation we have `coalesce` in condense.
+            } else if (unwrap && !IsScalarAggregation()) {
+                // clang-format off
+                finishState = Build<TCoUnwrap>(Ctx, Pos)
+                    .Optional(finishState)
                 .Done().Ptr();
                 // clang-format on
             }
@@ -1144,14 +1152,14 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
         }
     }
 
-    THashMap<TString, TVector<std::tuple<TString, TString, const TTypeAnnotationNode*, const TTypeAnnotationNode*>>> aggColumns;
+    THashMap<TString, TVector<std::tuple<TString, TString, const TTypeAnnotationNode*, const TTypeAnnotationNode*, bool>>> aggColumns;
     for (const auto& aggregationTraits : aggregationTraitsList) {
         const TString originalColName = aggregationTraits.OriginalColName.GetFullName();
         const TString resultColName = aggregationTraits.ResultColName.GetFullName();
         const TTypeAnnotationNode* inputItemType = inputStructType->FindItemType(originalColName);
         const TTypeAnnotationNode* outputItemType = outputStructType->FindItemType(resultColName);
         Y_ENSURE(inputItemType && outputItemType, "Cannot find type for item");
-        aggColumns[originalColName].push_back(std::make_tuple(aggregationTraits.AggFunction, resultColName, inputItemType, outputItemType));
+        aggColumns[originalColName].push_back(std::make_tuple(aggregationTraits.AggFunction, resultColName, inputItemType, outputItemType, aggregationTraits.Unwrap));
     }
 
     THashMap<TString, TString> aggFieldsMap;
@@ -1167,6 +1175,7 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
                 const auto& resultColName = std::get<1>(tupleTraits);
                 const auto* inputType = std::get<2>(tupleTraits);
                 const auto* outputType = std::get<3>(tupleTraits);
+                const auto unwrap = std::get<4>(tupleTraits);
 
                 auto stateName = "__kqp_agg_state_" + aggFunction + "_" + originalColName + ToString(j);
                 // No renames for distinct, we want to process only keys.
@@ -1183,7 +1192,7 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
                     inputField = aggFieldsMap[originalColName];
                 }
 
-                TPhysicalAggregationTraits phyTraits(inputField, stateName, aggFunction, inputType, outputType);
+                TPhysicalAggregationTraits phyTraits(inputField, stateName, aggFunction, inputType, outputType, unwrap);
                 if (inputColumnsToAggFunction.contains(originalColName)) {
                     phyTraits.InputAggFunc = inputColumnsToAggFunction[originalColName];
                 }
@@ -1223,7 +1232,15 @@ TExprNode::TPtr TPhysicalAggregationBuilder::CreateNothingForEmptyInput(const TT
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
+bool TPhysicalAggregationBuilder::NeedToWrapWithCoalesce(const TPhysicalAggregationTraits& traits, EOpPhase aggregationPhase) const {
+    // count -> intermediate::count() + final::sum()
+    const auto& aggFunc = traits.AggFunc;
+    auto maybeInputAggFunc = traits.InputAggFunc;
+    return aggFunc == "count" || (aggregationPhase == EOpPhase::Final && aggFunc == "sum" && maybeInputAggFunc.has_value() && *maybeInputAggFunc == "count") ||
+           traits.Unwrap;
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traitsList,
                                                                const THashMap<TString, TString>& renameMap, EOpPhase aggregationPhase) {
     // clang-format off
      return Ctx.Builder(Pos)
@@ -1233,17 +1250,15 @@ TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr i
                 .Param("arg")
                 .Callable(0, "AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                    for (ui32 i = 0; i < traits.size(); ++i) {
+                    for (ui32 i = 0; i < traitsList.size(); ++i) {
                         // Apply rename.
-                        auto fieldName = traits[i].StateFieldName;
+                        auto fieldName = traitsList[i].StateFieldName;
                         auto it = renameMap.find(fieldName);
                         if (it != renameMap.end()) {
                             fieldName = it->second;
                         }
-                        const auto& aggFunc = traits[i].AggFunc;
-                        auto maybeInputAggFunc = traits[i].InputAggFunc;
-                        // count -> intermediate::count() + final::sum()
-                        if (aggFunc == "count" || (aggregationPhase == EOpPhase::Final && aggFunc == "sum" && maybeInputAggFunc.has_value() && *maybeInputAggFunc == "count")) {
+
+                        if (NeedToWrapWithCoalesce(traitsList[i], aggregationPhase)) {
                             parent.List(i)
                                 .Atom(0, fieldName)
                                 .Callable(1, "Coalesce")

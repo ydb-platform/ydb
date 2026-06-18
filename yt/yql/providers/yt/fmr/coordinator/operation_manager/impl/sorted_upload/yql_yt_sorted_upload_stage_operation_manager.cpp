@@ -73,7 +73,7 @@ public:
         }
     }
     std::vector<TString> GetOperationResult() override {
-        return std::move(FragmentResultsYson_);
+        return FragmentResultsYson_;
     }
 
     std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& /* params */) const override {

@@ -3,8 +3,8 @@
 #include "abstract.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/formats/arrow/validation/validation.h>
 

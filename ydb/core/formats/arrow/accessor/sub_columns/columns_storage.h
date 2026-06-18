@@ -2,7 +2,7 @@
 
 #include "stats.h"
 
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 

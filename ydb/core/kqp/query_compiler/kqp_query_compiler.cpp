@@ -296,6 +296,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
         phyColumn.MutableId()->SetName(column->Name);
         phyColumn.SetTypeId(column->TypeInfo.GetTypeId());
         phyColumn.SetIsBuildInProgress(column->IsBuildInProgress);
+        phyColumn.SetSetNotNullInProgress(column->SetNotNullInProgress);
         if (column->IsDefaultFromSequence()) {
             phyColumn.SetDefaultFromSequence(column->DefaultFromSequence);
             phyColumn.MutableDefaultFromSequencePathId()->SetOwnerId(column->DefaultFromSequencePathId.OwnerId());
@@ -1627,6 +1628,20 @@ private:
                     auto* protoToken = fullTextProto.MutableQuerySettings()->AddTokens();
                     protoToken->SetToken(std::move(path));
                     protoToken->SetParamName(std::move(paramName));
+                }
+            }
+
+            for (const auto& [colName, valuePtr] : settingsObj.PrefixColumns) {
+                auto* prefixProto = fullTextProto.MutableQuerySettings()->AddPrefixColumns();
+                auto* columnPtr = tableMeta->Columns.FindPtr(colName);
+                YQL_ENSURE(columnPtr, "Prefix column " << colName << " not found in table");
+                fillCol(columnPtr, prefixProto->MutableColumn());
+                auto value = TExprBase(valuePtr);
+                auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+                if (inner.Maybe<TCoParameter>()) {
+                    prefixProto->MutableValue()->MutableParamValue()->SetParamName(inner.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(inner.Cast<TCoDataCtor>(), *prefixProto->MutableValue()->MutableLiteralValue());
                 }
             }
 

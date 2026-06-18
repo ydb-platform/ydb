@@ -32,6 +32,26 @@ Y_UNIT_TEST_SUITE(Util) {
         UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("SELECT 1 /* password hint */"));
     }
 
+    Y_UNIT_TEST(ProtectQueryForLoggingIfSensitiveOut) {
+        TString protectedText;
+
+        UNIT_ASSERT(!NKikimr::ProtectQueryForLoggingIfSensitive("SELECT 1", protectedText));
+        UNIT_ASSERT_VALUES_EQUAL(protectedText, "");
+
+        UNIT_ASSERT(!NKikimr::ProtectQueryForLoggingIfSensitive("", protectedText));
+        UNIT_ASSERT_VALUES_EQUAL(protectedText, "");
+
+        UNIT_ASSERT(NKikimr::ProtectQueryForLoggingIfSensitive("CREATE USER user1 PASSWORD 'p@ss'", protectedText));
+        UNIT_ASSERT_VALUES_EQUAL(
+            protectedText,
+            "Query text is hidden due to a sensitive marker: password");
+
+        UNIT_ASSERT(NKikimr::ProtectQueryForLoggingIfSensitive("CReaTE    SECRET x WITH (VALUE = '123')", protectedText));
+        UNIT_ASSERT_VALUES_EQUAL(
+            protectedText,
+            "Query text is hidden due to a sensitive marker: create secret");
+    }
+
     Y_UNIT_TEST(ProtectQueryForLoggingIfSensitive) {
         // false
         UNIT_ASSERT_VALUES_EQUAL(

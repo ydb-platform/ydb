@@ -194,6 +194,12 @@ void SerializeProtobufMessage(
     ParseProtobuf(consumer, &inputStream, type);
 }
 
+// std::filesystem::path
+void Serialize(const std::filesystem::path& path, IYsonConsumer* consumer)
+{
+    consumer->OnStringScalar(path.string());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // integers
@@ -402,6 +408,12 @@ void DeserializeProtobufMessage(
         THROW_ERROR_EXCEPTION("Error parsing protobuf message from wire bytes")
             << TErrorAttribute("protobuf_type", message.GetTypeName());
     }
+}
+// std::filesystem::path
+void Deserialize(std::filesystem::path& path, INodePtr node)
+{
+    std::string stringPath = node->AsString()->GetValue();
+    path = std::move(stringPath);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

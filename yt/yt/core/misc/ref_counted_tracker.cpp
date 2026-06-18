@@ -141,15 +141,7 @@ size_t TRefCountedTracker::TNamedSlot::ClampNonnegative(size_t allocated, size_t
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// nullptr if not initialized or already destroyed
-YT_DEFINE_THREAD_LOCAL(TRefCountedTracker::TLocalSlots*, RefCountedTrackerLocalSlots);
-
-// nullptr if not initialized or already destroyed
-YT_DEFINE_THREAD_LOCAL(TRefCountedTracker::TLocalSlot*, RefCountedTrackerLocalSlotsBegin);
-
-//  0 if not initialized
-// -1 if already destroyed
-YT_DEFINE_THREAD_LOCAL(int, RefCountedTrackerLocalSlotsSize);
+constinit thread_local TRefCountedTrackerLocalState RefCountedTrackerLocalStateData;
 
 int TRefCountedTracker::GetTrackedThreadCount() const
 {
@@ -358,57 +350,62 @@ TRefCountedTracker::TNamedSlot TRefCountedTracker::GetSlot(TRefCountedTypeKey ty
     return result;
 }
 
+// Like the fast path, these touch RefCountedTrackerLocalStateData and so are pinned
+// with YT_PREVENT_TLS_CACHING: every function that reads the thread pointer for this
+// TLS must stay out-of-line, so the read can never be hoisted and cached across a
+// fiber migration in an inlined caller.
 #define INCREMENT_COUNTER_SLOW(name, delta) \
-    if (RefCountedTrackerLocalSlotsSize() < 0) { \
+    if (RefCountedTrackerLocalStateData.SlotsSize < 0) { \
         auto guard = Guard(SpinLock_); \
         GetGlobalSlot(cookie)->name += delta; \
     } else { \
         GetLocalSlot(cookie)->name += delta; \
     }
 
-void TRefCountedTracker::AllocateInstanceSlow(TRefCountedTypeCookie cookie)
+YT_PREVENT_TLS_CACHING void TRefCountedTracker::AllocateInstanceSlow(TRefCountedTypeCookie cookie)
 {
     INCREMENT_COUNTER_SLOW(ObjectsAllocated, 1)
 }
 
-void TRefCountedTracker::FreeInstanceSlow(TRefCountedTypeCookie cookie)
+YT_PREVENT_TLS_CACHING void TRefCountedTracker::FreeInstanceSlow(TRefCountedTypeCookie cookie)
 {
     INCREMENT_COUNTER_SLOW(ObjectsFreed, 1)
 }
 
-void TRefCountedTracker::AllocateTagInstanceSlow(TRefCountedTypeCookie cookie)
+YT_PREVENT_TLS_CACHING void TRefCountedTracker::AllocateTagInstanceSlow(TRefCountedTypeCookie cookie)
 {
     INCREMENT_COUNTER_SLOW(TagObjectsAllocated, 1)
 }
 
-void TRefCountedTracker::FreeTagInstanceSlow(TRefCountedTypeCookie cookie)
+YT_PREVENT_TLS_CACHING void TRefCountedTracker::FreeTagInstanceSlow(TRefCountedTypeCookie cookie)
 {
     INCREMENT_COUNTER_SLOW(TagObjectsFreed, 1)
 }
 
-void TRefCountedTracker::AllocateSpaceSlow(TRefCountedTypeCookie cookie, size_t space)
+YT_PREVENT_TLS_CACHING void TRefCountedTracker::AllocateSpaceSlow(TRefCountedTypeCookie cookie, size_t space)
 {
     INCREMENT_COUNTER_SLOW(SpaceSizeAllocated, space)
 }
 
-void TRefCountedTracker::FreeSpaceSlow(TRefCountedTypeCookie cookie, size_t space)
+YT_PREVENT_TLS_CACHING void TRefCountedTracker::FreeSpaceSlow(TRefCountedTypeCookie cookie, size_t space)
 {
     INCREMENT_COUNTER_SLOW(SpaceSizeFreed, space)
 }
 
 #undef INCREMENT_COUNTER_SLOW
 
-TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedTypeCookie cookie)
+YT_PREVENT_TLS_CACHING TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedTypeCookie cookie)
 {
     struct TReclaimer
     {
-        ~TReclaimer()
+        YT_PREVENT_TLS_CACHING ~TReclaimer()
         {
             auto* this_ = TRefCountedTracker::Get();
 
             auto guard = Guard(this_->SpinLock_);
 
-            auto& localSlots = RefCountedTrackerLocalSlots();
+            auto& state = RefCountedTrackerLocalStateData;
+            auto* localSlots = state.Slots;
 
             if (this_->GlobalSlots_.size() < localSlots->size()) {
                 this_->GlobalSlots_.resize(std::max(localSlots->size(), this_->GlobalSlots_.size()));
@@ -421,37 +418,35 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
             YT_VERIFY(this_->AllLocalSlots_.erase(localSlots) == 1);
 
             delete localSlots;
-            localSlots = nullptr;
-            RefCountedTrackerLocalSlotsBegin() = nullptr;
-            RefCountedTrackerLocalSlotsSize() = -1;
+            state.Slots = nullptr;
+            state.SlotsBegin = nullptr;
+            state.SlotsSize = -1;
         }
     };
 
     thread_local TReclaimer Reclaimer;
 
-    auto& refCountedTrackerLocalSlotsSize = RefCountedTrackerLocalSlotsSize();
+    auto& state = RefCountedTrackerLocalStateData;
 
-    YT_VERIFY(refCountedTrackerLocalSlotsSize >= 0);
+    YT_VERIFY(state.SlotsSize >= 0);
 
     auto guard = Guard(SpinLock_);
 
-    auto& localSlotsBegin = RefCountedTrackerLocalSlotsBegin();
-    auto& localSlots = RefCountedTrackerLocalSlots();
-
-    if (!localSlots) {
-        localSlots = new TLocalSlots();
-        YT_VERIFY(AllLocalSlots_.insert(localSlots).second);
+    if (!state.Slots) {
+        state.Slots = new TLocalSlots();
+        YT_VERIFY(AllLocalSlots_.insert(state.Slots).second);
     }
 
+    auto* localSlots = state.Slots;
     auto index = cookie.Underlying();
     if (index >= std::ssize(*localSlots)) {
         localSlots->resize(2 * static_cast<size_t>(index) + 1);
     }
 
-    localSlotsBegin = localSlots->data();
-    refCountedTrackerLocalSlotsSize = std::ssize(*localSlots);
+    state.SlotsBegin = localSlots->data();
+    state.SlotsSize = std::ssize(*localSlots);
 
-    return localSlotsBegin + index;
+    return state.SlotsBegin + index;
 }
 
 TRefCountedTracker::TGlobalSlot* TRefCountedTracker::GetGlobalSlot(TRefCountedTypeCookie cookie)

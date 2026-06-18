@@ -48,13 +48,47 @@ jobs:
       - name: Get commit SHA
         id: sha
         run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-          
+
+      # Branches listed below keep the old logic (use-ya-opensource: false).
+      # All other branches use the new logic (use-ya-opensource: true).
+      - name: Determine ya-opensource flag
+        id: ya
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const legacyBranches = [
+              'stable-25-1',
+              'stable-25-2',
+              'stable-25-2-1',
+              'stable-25-3',
+              'stable-25-3-1',
+              'stable-25-4',
+              'stable-25-4-1',
+              'stable-26-1',
+              'stable-26-1-1',
+              'stable-26-2',
+              'stable-26-2-1',
+            ];
+            let baseRef;
+            if (context.eventName === 'workflow_dispatch') {
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(${{ inputs.pull_number }}),
+              });
+              baseRef = pr.base.ref;
+            } else {
+              baseRef = context.payload.pull_request.base.ref;
+            }
+            core.setOutput('use', legacyBranches.includes(baseRef) ? 'false' : 'true');
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
-          cli-version: stable
+          cli-version: "4.59.12"
+          use-ya-opensource: ${{ steps.ya.outputs.use }}
 
       # docs-build-action writes github.event.number to inputs/pr-number.
       # For workflow_dispatch this field is empty, so patch the artifact.

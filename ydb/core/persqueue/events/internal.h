@@ -239,6 +239,8 @@ struct TEvPQ {
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
         EvRewindCommitResult,
+        EvProcessBatchRead,
+        EvProcessBatchReadResult,
         EvEnd,
     };
 
@@ -302,7 +304,7 @@ struct TEvPQ {
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
             ui32 MessageCount = 1;
-            NPQ::EMessageFormat MessageFormat = NPQ::EMessageFormat::STANDARD;
+            bool IsBatch = false;
             std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 

@@ -79,4 +79,86 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             TestGetCompaction(runtime, compaction2Id, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         });
     }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceCompactWithTableDrop, 4, 4, false) {
+        t.EnvOpts.EnableBackgroundCompaction(false);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvCreateRequest);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvGetRequest);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvCancelRequest);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvForgetRequest);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvListRequest);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 txId = 100;
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+                CreateTable(runtime, txId, "Table1");
+                t.TestEnv->TestWaitNotification(runtime, txId);
+                WriteData(runtime, "Table1", TString(1000, 'A'));
+            }
+
+            // start a forced compaction and drop the table while it is in progress
+            AsyncCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Table1");
+            auto compactionId = txId;
+            AsyncDropTable(runtime, ++txId, "/MyRoot", "Table1");
+            auto dropId = txId;
+
+            t.TestEnv->TestWaitNotification(runtime, {compactionId, dropId});
+
+            // the compaction must finalize even though the table was dropped
+            {
+                auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+                UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            }
+
+            TestForgetCompaction(runtime, ++txId, "/MyRoot", compactionId);
+            TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceCompactWithIndexCreation, 2, 2, false) {
+        t.EnvOpts.EnableBackgroundCompaction(false);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvCreateRequest);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvGetRequest);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvCancelRequest);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvForgetRequest);
+        t.NoRebootEventTypes.insert(TEvForcedCompaction::EvListRequest);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 txId = 100;
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+                CreateTable(runtime, txId, "Table1");
+                t.TestEnv->TestWaitNotification(runtime, txId);
+                WriteData(runtime, "Table1", TString(1000, 'A'));
+            }
+
+            // start a cascade compaction and build a new index while it is in progress;
+            // the index added after creation is not part of the in-flight compaction
+            AsyncCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Table1", true);
+            auto compactionId = txId;
+            AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "ValueIndex", {"value"});
+            auto buildIndexId = txId;
+
+            t.TestEnv->TestWaitNotification(runtime, {compactionId, buildIndexId});
+
+            {
+                auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+                UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            }
+
+            TestForgetCompaction(runtime, ++txId, "/MyRoot", compactionId);
+            TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        });
+    }
 }

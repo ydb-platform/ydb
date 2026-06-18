@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/formats/arrow
+    ydb/core/formats/arrow/filter
     ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/columnshard/engines/reader/common_reader/iterator
     ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections

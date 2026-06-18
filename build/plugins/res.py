@@ -9,7 +9,8 @@ def remove_prefix(text, prefix):
     return text
 
 
-def onresource_files(unit, *args):
+@ymake.macro
+def RESOURCE_FILES(unit: ymake.Unit, *args: tuple[str, ...]):
     """
     @usage: RESOURCE_FILES([DONT_COMPRESS] [PREFIX {prefix}] [STRIP prefix_to_strip] {path})
 
@@ -72,22 +73,26 @@ def onresource_files(unit, *args):
         unit.onresource(res)
 
 
-def on_all_resource_files(unit, macro, *args):
+@ymake.macro
+def _ALL_RESOURCE_FILES(unit: ymake.Unit, macro: str, *args: tuple[str, ...]):
     # This is only validation, actual work is done in ymake.core.conf implementation
     for arg in args:
         if '*' in arg or '?' in arg:
             ymake.report_configure_error('Wildcards in [[imp]]{}[[rst]] are not allowed'.format(macro))
 
 
-def onall_resource_files(unit, *args):
-    on_all_resource_files(unit, 'ALL_RESOURCE_FILES', args)
+@ymake.macro
+def ALL_RESOURCE_FILES(unit: ymake.Unit, *args: tuple[str, ...]):
+    _ALL_RESOURCE_FILES(unit, 'ALL_RESOURCE_FILES', args)
 
 
-def onall_resource_files_from_dirs(unit, *args):
-    on_all_resource_files(unit, 'ALL_RESOURCE_FILES_FROM_DIRS', args)
+@ymake.macro
+def ALL_RESOURCE_FILES_FROM_DIRS(unit: ymake.Unit, *args: tuple[str, ...]):
+    _ALL_RESOURCE_FILES(unit, 'ALL_RESOURCE_FILES_FROM_DIRS', args)
 
 
-def on_ya_conf_json(unit, conf_file):
+@ymake.macro
+def _YA_CONF_JSON(unit: ymake.Unit, conf_file: str):
     conf_abs_path = unit.resolve('$S/' + conf_file)
     if not os.path.exists(conf_abs_path):
         ymake.report_configure_error('File "{}" not found'.format(conf_abs_path))

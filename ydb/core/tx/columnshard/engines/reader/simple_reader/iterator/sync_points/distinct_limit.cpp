@@ -1,6 +1,6 @@
 #include "distinct_limit.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.h>
 

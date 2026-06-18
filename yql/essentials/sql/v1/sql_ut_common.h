@@ -8856,7 +8856,7 @@ Y_UNIT_TEST(MultilineComments) {
 #if ANTLR_VER == 3
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token '*' : cannot match to any predicted input...\n\n");
 #else
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES, WITH}\n");
 #endif
     res = SqlToYqlWithAnsiLexer(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -14996,6 +14996,100 @@ Y_UNIT_TEST(PragmaUnsupportedAuto) {
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)
+
+Y_UNIT_TEST_SUITE(YqlSelectWithCTE) {
+
+void Parse(TString query) {
+    NYql::TAstParseResult r = SqlToYql(query);
+    TString e = Err2Str(r);
+    UNIT_ASSERT_C(!e.contains("Fatal"), e);
+    UNIT_ASSERT_C(!e.contains("ambiguity"), e);
+    UNIT_ASSERT_C(!e.contains("extraneous input"), e);
+    UNIT_ASSERT_C(!e.contains("mismatched input"), e);
+}
+
+Y_UNIT_TEST(NoSyntaxAmbiguity) {
+    Parse(R"sql(
+        WITH x AS (SELECT 1) SELECT * FROM x;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (VALUES (1)) SELECT * FROM x;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (SELECT 1), y AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH x(a) AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH x(a,b) AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH
+            RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            ),
+            RECURSIVE b(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM b
+                WHERE n < 5
+            )
+        SELECT * FROM a UNION SELECT * FROM b;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (SELECT 1), SELECT * FROM x;
+        WITH x AS (SELECT 1), y AS (SELECT 1), SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        $x =
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        ;
+    )sql");
+    Parse(R"sql(
+        $x = (
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        );
+    )sql");
+    Parse(R"sql(
+        SELECT (
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        );
+    )sql");
+    Parse(R"sql(
+        INSERT INTO x (b)
+        WITH RECURSIVE a(n) AS (
+            SELECT 1
+            UNION ALL
+            SELECT n + 1 FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql");
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelectWithCTE)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {
 

@@ -317,7 +317,7 @@ bool CreateConsistentCopyTables(
             if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
                 // Column tables use the OLAP local-index op; row tables use the generic one.
                 if (srcPath.Base()->IsColumnTable()) {
-                    result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), *scheme));
+                    result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), *scheme));
                 } else {
                     result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
                 }

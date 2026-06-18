@@ -1098,7 +1098,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
                 // Column tables use the OLAP local-index op; row tables use the generic one.
                 if (srcPath.Base()->IsColumnTable()) {
-                    result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), schema));
+                    result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), schema));
                 } else {
                     result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
                 }

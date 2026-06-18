@@ -552,6 +552,9 @@ private:
 
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
             LOG_D("InitiateValidationShards: added shard " << partition->ShardIdx);
+
+
+            Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, partition->ShardIdx, operationInfo);
         }
 
         return true;

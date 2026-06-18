@@ -4,6 +4,7 @@
 
 #if defined(__linux__)
 #include <sys/uio.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #endif
 
 namespace NActors {
@@ -41,19 +42,36 @@ public:
     virtual void OnDrop() noexcept = 0;
 
 public:
-    // note, that buf should be valid until operation is finished:
-    // normally only tests should use this "externally", while
-    // derived classes keep the buf and use this to prepare I/O
+    // Prepare a single-buffer I/O.
+    // buf must remain valid until OnComplete/OnDrop is called.
     void PrepareIov(void* buf, size_t size, ui64 offset);
+
+#if defined(__linux__)
+    // Begin a scatter-gather I/O: clears the iovec list, reserves room for
+    // `count` segments and sets the disk offset.  Follow with `count` AddIov()
+    // calls to append each segment.  count must not exceed MAX_IOVS.
+    void PrepareScatterGather(int count, ui64 offset);
+
+    // Append one segment to the scatter-gather list started by
+    // PrepareScatterGather.  buf must remain valid until OnComplete/OnDrop is
+    // called.  Accumulates into TotalSize.
+    void AddIov(void* buf, size_t size);
+#endif
 
     void AdvanceIov(size_t bytesProcessed);
 
     void SetOperationType(EOperationType opType) { OperationType = opType; }
     EOperationType GetOperationType() const { return OperationType; }
 
+    // Returns the number of bytes remaining in the current (possibly partially
+    // advanced) iovec window — used by OnComplete to detect short I/O.
     size_t GetOperationBytes() const {
 #if defined(__linux__)
-        return Iov.iov_len;
+        size_t total = 0;
+        for (size_t i = IovBegin; i < Iov.size(); ++i) {
+            total += Iov[i].iov_len;
+        }
+        return total;
 #else
         return GetTotalSize();
 #endif
@@ -68,7 +86,10 @@ public:
 
     const void* GetIovBase() const {
 #if defined(__linux__)
-        return Iov.iov_base;
+        if (IovBegin < Iov.size()) {
+            return Iov[IovBegin].iov_base;
+        }
+        return nullptr;
 #else
         return nullptr;
 #endif
@@ -82,9 +103,19 @@ public:
         TotalSize = 0;
         DiskOffset = 0;
 #if defined(__linux__)
-        Iov = {};
+        Iov.clear();
+        IovBegin = 0;
 #endif
     }
+
+#if defined(__linux__)
+    // Number of iovecs kept inline (on-stack) without heap allocation.
+    static constexpr size_t MAX_STACK_IOVS = 32;
+
+    // Hard upper bound on scatter-gather segments per operation.  Beyond
+    // MAX_STACK_IOVS the iovec vector spills to the heap, so this can exceed it.
+    static constexpr size_t MAX_IOVS = 64;
+#endif
 
 private:
     // Filled by TUringRouter on completion
@@ -102,9 +133,14 @@ private:
     ui64 DiskOffset = 0;
 
 #if defined(__linux__)
-    // Scratch space for the iovec used by readv/writev submissions.
-    // Populated by TUringRouter user and must remain valid until OnComplete is called.
-    struct iovec Iov = {};
+    // Iovec array for readv/writev submissions.  Supports scatter-gather: holds one
+    // entry for single-buffer I/O or N entries for multi-segment writes.
+    // All iov_base pointers must remain valid until OnComplete/OnDrop is called.
+    TStackVec<struct iovec, MAX_STACK_IOVS> Iov;
+
+    // Index into Iov of the first not-yet-completed iovec.
+    // Advanced by AdvanceIov() on short I/O retries.
+    size_t IovBegin = 0;
 #endif
 };
 

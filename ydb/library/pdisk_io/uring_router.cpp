@@ -191,16 +191,21 @@ public:
                     NSan::Acquire(op);
                     op->Result = cqe->res;
                     // For read operations the kernel fills the buffer via a syscall
-                    // that MSAN cannot observe.  Mark the iov as initialized so that
-                    // subsequent reads from the buffer do not trigger false
-                    // use-of-uninitialized-value reports.
+                    // that MSAN cannot observe.  Mark each iovec segment as initialized
+                    // so that subsequent reads do not trigger false use-of-uninitialized-
+                    // value reports.  Walk the active iovec window (starting at IovBegin)
+                    // and unpoison up to cqe->res bytes across all segments.
                     if constexpr (NSan::MSanIsOn()) {
                         if (op->OperationType == TUringOperationBase::EREAD && cqe->res > 0) {
-                            size_t unpoisonSize = static_cast<size_t>(cqe->res);
-                            if (unpoisonSize > op->Iov.iov_len) {
-                                unpoisonSize = op->Iov.iov_len;
+                            size_t remaining = static_cast<size_t>(cqe->res);
+                            for (size_t i = op->IovBegin; i < op->Iov.size() && remaining > 0; ++i) {
+                                size_t unpoisonSize = op->Iov[i].iov_len;
+                                if (unpoisonSize > remaining) {
+                                    unpoisonSize = remaining;
+                                }
+                                NSan::Unpoison(op->Iov[i].iov_base, unpoisonSize);
+                                remaining -= unpoisonSize;
                             }
-                            NSan::Unpoison(op->Iov.iov_base, unpoisonSize);
                         }
                     }
                     op->OnComplete(Owner.ActorSystem);
@@ -279,13 +284,16 @@ void TUringRouter::PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op)
     // Use readv/writev (IORING_OP_READV/WRITEV) instead of read/write
     // (IORING_OP_READ/WRITE) for kernel 5.4 compatibility.
     // IORING_OP_READ/WRITE were added in 5.6; readv/writev exist since 5.1.
+    // Supports scatter-gather: Iov may contain multiple entries (writes); the
+    // active window starts at IovBegin and is advanced by AdvanceIov on short I/O.
     int fd = (FixedFdIndex >= 0) ? FixedFdIndex : Fd;
+    const unsigned iovCount = static_cast<unsigned>(op->Iov.size() - op->IovBegin);
     switch (op->OperationType) {
     case TUringOperationBase::EREAD:
-        io_uring_prep_readv(sqe, fd, &op->Iov, 1, op->DiskOffset);
+        io_uring_prep_readv(sqe, fd, &op->Iov[op->IovBegin], iovCount, op->DiskOffset);
         break;
     case TUringOperationBase::EWRITE:
-        io_uring_prep_writev(sqe, fd, &op->Iov, 1, op->DiskOffset);
+        io_uring_prep_writev(sqe, fd, &op->Iov[op->IovBegin], iovCount, op->DiskOffset);
         break;
     default:
         Y_ABORT("Unknown OperationType");

@@ -1416,14 +1416,6 @@ namespace Tests {
                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
                 });
 
-                if (GetRuntime()->GetAppData(nodeIdx).FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-                    Runtime->RegisterService(
-                        NKikimr::NKqp::MakeKqpDescribeResourceIdServiceId(0),
-                        Runtime->Register(NKikimr::NKqp::CreateDescribeResourceIdServiceActor(FederatedQuerySetupDriver_), nodeIdx, userPoolId),
-                        nodeIdx
-                    );
-                }
-
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
                     connectorClient,

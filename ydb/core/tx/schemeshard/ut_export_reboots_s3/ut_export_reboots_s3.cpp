@@ -470,6 +470,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return ExternalTableScheme;
         }
 
+        static const TTypedScheme& Kesus() {
+            return KesusScheme;
+        }
+
         static TVector<TExportItem> Items(EPathType pathType = EPathType::EPathTypeTable) {
             switch (pathType) {
             case EPathType::EPathTypeTable:
@@ -482,6 +486,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 return {{"/MyRoot/DataSource", ""}};
             case EPathType::EPathTypeExternalTable:
                 return {{"/MyRoot/ExternalTable", ""}};
+            case EPathType::EPathTypeKesus:
+                return {{"/MyRoot/Kesus", ""}};
             default:
                 Y_ABORT("not supported");
             }
@@ -496,6 +502,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme TransferScheme;
         static const TTypedScheme ExternalDataSourceScheme;
         static const TTypedScheme ExternalTableScheme;
+        static const TTypedScheme KesusScheme;
         static const TTypedScheme IndexedTableScheme;
     };
 
@@ -592,6 +599,14 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             Columns { Name: "key" Type: "Uint64" NotNull: true }
             Columns { Name: "value1" Type: "Uint64" }
             Columns { Name: "value2" Type: "Utf8" NotNull: true }
+        )"
+    };
+
+    const TTypedScheme TTestData::KesusScheme = TTypedScheme {
+        EPathTypeKesus,
+        R"(
+            Name: "Kesus"
+            Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
         )"
     };
 
@@ -961,5 +976,24 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
             }
         });
+    }
+
+    // Kesus
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleKesus, 2, 1, false, IsFs) {
+        RunExport<IsFs>(t, {
+            TTestData::Kesus(),
+        }, TTestData::Items(EPathTypeKesus));
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleKesus, 2, 1, false, IsFs) {
+        CancelExport<IsFs>(t, {
+            TTestData::Kesus(),
+        }, TTestData::Items(EPathTypeKesus));
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ForgetShouldSucceedOnSingleKesus, 2, 1, false, IsFs) {
+        ForgetExport<IsFs>(t, {
+            TTestData::Kesus(),
+        }, TTestData::Items(EPathTypeKesus));
     }
 }

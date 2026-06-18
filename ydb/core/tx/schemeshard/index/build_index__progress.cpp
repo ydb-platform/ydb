@@ -384,7 +384,18 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
             auto postingPath = GetBuildPath(ss, buildInfo, PostingTable);
             const auto& postingTableInfo = ss->Tables.at(postingPath->PathId);
 
-            if (postingTableInfo->GetPartitions().size() == 1) {
+            // ESchemeOpSplitMergeTablePartitions requires shard stats to be reported.
+            // Skip split if stats are not yet available (shard might be freshly created).
+            bool shardReady = true;
+            if (postingTableInfo->GetPartitions().size() == 1 && ss->SplitSettings.SplitMergePartCountLimit != -1) {
+                auto shardIdx = postingTableInfo->GetPartitions()[0]->ShardIdx;
+                const auto* stats = postingTableInfo->GetStats().PartitionStats.FindPtr(shardIdx);
+                if (!stats || stats->ShardState != NKikimrTxDataShard::Ready) {
+                    shardReady = false;
+                }
+            }
+
+            if (postingTableInfo->GetPartitions().size() == 1 && shardReady) {
                 propose->Record.SetFailOnExist(false);
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
                 modifyScheme.SetWorkingDir(postingPath.Parent().PathString());
@@ -1889,7 +1900,19 @@ private:
         }
         auto postingPath = GetBuildPath(Self, buildInfo, NTableIndex::NKMeans::PostingTable);
         const auto& postingTableInfo = Self->Tables.at(postingPath->PathId);
-        return postingTableInfo->GetPartitions().size() == 1;
+        if (postingTableInfo->GetPartitions().size() != 1) {
+            return false;
+        }
+        // ESchemeOpSplitMergeTablePartitions requires shard stats to be reported.
+        // Skip split if stats are not yet available (shard might be freshly created).
+        if (Self->SplitSettings.SplitMergePartCountLimit != -1) {
+            auto shardIdx = postingTableInfo->GetPartitions()[0]->ShardIdx;
+            const auto* stats = postingTableInfo->GetStats().PartitionStats.FindPtr(shardIdx);
+            if (!stats || stats->ShardState != NKikimrTxDataShard::Ready) {
+                return false;
+            }
+        }
+        return true;
     }
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {

@@ -417,7 +417,7 @@ private:
     void SendProxySessionIfNotSent(TResourceState* resState) {
         if (!resState->ProxySessionWasSent) {
             resState->ProxySessionWasSent = true;
-            YDB_LOG_TRACE("ProxySession(",
+            YDB_LOG_TRACE("ProxySession",
                 {"logPrefix", LogPrefix},
                 {"resource", resState->Resource},
                 {"resId", resState->ResId});
@@ -656,21 +656,21 @@ private:
 
         if (Connected) {
             if (UpdateEv) {
-                YDB_LOG_TRACE("UpdateConsumptionState(",
+                YDB_LOG_TRACE("UpdateConsumptionState",
                     {"logPrefix", LogPrefix},
                     {"record", UpdateEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, UpdateEv.Release());
             }
 
             if (AccountEv && AccountEv->Record.GetResourcesInfo().size() > 0) {
-                YDB_LOG_TRACE("AccountResources(",
+                YDB_LOG_TRACE("AccountResources",
                     {"logPrefix", LogPrefix},
                     {"record", AccountEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, AccountEv.Release());
             }
 
             if (ReplicationEv && ReplicationEv->Record.GetResourcesInfo().size() > 0) {
-                YDB_LOG_TRACE("ReportResources(",
+                YDB_LOG_TRACE("ReportResources",
                     {"logPrefix", LogPrefix},
                     {"record", ReplicationEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, ReplicationEv.Release());
@@ -747,9 +747,8 @@ private:
 
     void ActivateSession(TResourceState& res, bool activate = true) {
         Y_ASSERT(res.SessionIsActive != activate);
-        YDB_LOG_INFO("Session",
+        YDB_LOG_INFO((activate ? "Activate session" : "Deactivate session"),
             {"logPrefix", LogPrefix},
-            {"action", (activate ? "Activate" : "Deactivate")},
             {"resource", res.Resource},
             {"connected", Connected});
 
@@ -790,10 +789,10 @@ private:
                     resInfo->AddAmount(amount);
                 }
             }
-            YDB_LOG_INFO("Report session to Total",
+            YDB_LOG_INFO("Report session",
                 {"logPrefix", LogPrefix},
                 {"resource", res.Resource},
-                {"amount", totalAmount});
+                {"totalAmount", totalAmount});
             if (hasNonZeroAmount) {
                 resInfo->SetResourceId(res.ResId);
                 resInfo->SetStartUs(start.MicroSeconds());
@@ -825,7 +824,7 @@ private:
 
     void Handle(TEvQuota::TEvProxyStats::TPtr& ev) {
         TEvQuota::TEvProxyStats* msg = ev->Get();
-        YDB_LOG_TRACE("ProxyStats(",
+        YDB_LOG_TRACE("ProxyStats",
             {"logPrefix", LogPrefix},
             {"resources", PrintResources(*ev->Get())});
         for (const TEvQuota::TProxyStat& stat : msg->Stats) {
@@ -889,7 +888,7 @@ private:
 
     void Handle(TEvQuota::TEvProxyCloseSession::TPtr& ev) {
         TEvQuota::TEvProxyCloseSession* msg = ev->Get();
-        YDB_LOG_TRACE("ProxyCloseSession(",
+        YDB_LOG_TRACE("ProxyCloseSession",
             {"logPrefix", LogPrefix},
             {"resource", msg->Resource},
             {"resourceId", msg->ResourceId});
@@ -997,9 +996,9 @@ private:
     }
 
     void Handle(NKesus::TEvKesus::TEvResourcesAllocated::TPtr& ev) {
-        YDB_LOG_TRACE("ResourcesAllocated(",
+        YDB_LOG_TRACE("ResourcesAllocated",
             {"logPrefix", LogPrefix},
-            {"record", ev->Get()->Record});
+            {"ev", ev->Get()->Record});
         const TInstant now = TActivationContext::Now();
         for (const NKikimrKesus::TEvResourcesAllocated::TResourceInfo& allocatedInfo : ev->Get()->Record.GetResourcesInfo()) {
             TResourceState* res = FindResource(allocatedInfo.GetResourceId());
@@ -1038,7 +1037,7 @@ private:
             return;
         }
 
-        YDB_LOG_TRACE("OfflineResourceAllocation(",
+        YDB_LOG_TRACE("OfflineResourceAllocation",
             {"logPrefix", LogPrefix},
             {"resources", PrintResources(*ev->Get())});
         const TInstant now = TActivationContext::Now();
@@ -1068,9 +1067,9 @@ private:
     }
 
     void Handle(NKesus::TEvKesus::TEvSyncResources::TPtr& ev) {
-        YDB_LOG_TRACE("SyncResources(",
+        YDB_LOG_TRACE("SyncResources",
             {"logPrefix", LogPrefix},
-            {"record", ev->Get()->Record});
+            {"ev", ev->Get()->Record});
         const TInstant now = TActivationContext::Now();
         for (const NKikimrKesus::TEvSyncResources::TResourceInfo& syncInfo : ev->Get()->Record.GetResourcesInfo()) {
             TResourceState* res = FindResource(syncInfo.GetResourceId());
@@ -1097,7 +1096,7 @@ private:
 
     void Handle(NKesus::TEvKesus::TEvAccountResourcesAck::TPtr& ev) {
         const auto& result = ev->Get()->Record;
-        YDB_LOG_TRACE("AccountResourcesAck(",
+        YDB_LOG_TRACE("AccountResourcesAck",
             {"logPrefix", LogPrefix},
             {"result", result});
         for (int i = 0; i < result.GetResourcesInfo().size(); ++i) {
@@ -1172,7 +1171,7 @@ private:
     }
 
     void SendToService(THolder<TEvQuota::TEvProxyUpdate>&& ev) {
-        YDB_LOG_TRACE("ProxyUpdate(",
+        YDB_LOG_TRACE("ProxyUpdate",
             {"logPrefix", LogPrefix},
             {"quoterState", ev->QuoterState},
             {"resources", PrintResources(*ev)});
@@ -1240,9 +1239,9 @@ public:
     }
 
     void Bootstrap() {
-        YDB_LOG_INFO("Created kesus quoter proxy. Tablet",
+        YDB_LOG_INFO("Created kesus quoter proxy",
             {"logPrefix", LogPrefix},
-            {"id", GetKesusTabletId()});
+            {"tabletId", GetKesusTabletId()});
         Counters.Init(CanonizePath(Path));
         if (AppData()->Icb) {
             TControlBoard::RegisterSharedControl(QuoterProxyProtocolVersion,

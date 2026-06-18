@@ -339,7 +339,7 @@ void TQuoterService::ScheduleNextTick(TInstant requested, TResource &quores) {
     const TInstant selected = Max(next, last, LastProcessed);
     quores.NextTick = selected;
     quores.LastTick = selected;
-    YDB_LOG_TRACE("Schedule next tick for Tick",
+    YDB_LOG_TRACE("Schedule next tick",
         {"resource", quores.Resource},
         {"size", quores.TickSize},
         {"time", quores.NextTick});
@@ -922,7 +922,7 @@ void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
-    YDB_LOG_TRACE("Request(",
+    YDB_LOG_TRACE("Request",
         {"event", PrintEvent(ev)});
 
     Counters.RequestsInFly->Inc();
@@ -1010,8 +1010,8 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     const bool isError = msg->Result != msg->Success;
     if (isError) {
-        YDB_LOG_INFO("Resource sesson",
-            {"failed", quoter.QuoterName},
+        YDB_LOG_INFO("Resource session failed",
+            {"quoterName", quoter.QuoterName},
             {"resourceName", resourceName});
 
         for (TRequestId reqIdx : waitingRequests) {
@@ -1027,8 +1027,8 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     const ui64 resourceId = msg->ResourceId;
 
-    YDB_LOG_INFO("Resource session as",
-        {"established", quoter.QuoterName},
+    YDB_LOG_INFO("Resource session established",
+        {"quoterName", quoter.QuoterName},
         {"resourceName", resourceName},
         {"resourceId", resourceId});
 

@@ -1,6 +1,6 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_set_column_constraint.h"
-#include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -9,10 +9,20 @@ TString SerializeSetColumnConstraintColumnNames(const std::vector<std::string>& 
     return JoinSeq("$", columns);
 }
 
-std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
-    TVector<TString> parts;
-    StringSplitter(serialized).Split('$').CollectInto(&parts);
-    return std::vector<TString>(parts.begin(), parts.end());
+std::vector<std::string> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
+    std::string part = "";
+    std::vector<std::string> parts;
+
+    for (size_t i = 0; i <= serialized.size(); ++i) {
+        if (i == serialized.size() || serialized[i] == '$') {
+            parts.push_back(part);
+            part = "";
+        } else {
+            part += serialized[i];
+        }
+    }
+
+    return parts;
 }
 
 void TSchemeShard::PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
@@ -34,13 +44,13 @@ void TSchemeShard::PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TS
 
 void TSchemeShard::PersistSetColumnConstraintLockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(ui64(operationInfo.LockTxId))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.LockTxId)
     );
 }
 
 void TSchemeShard::PersistSetColumnConstraintLockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(ui32(operationInfo.LockTxStatus))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.LockTxStatus)
     );
 }
 
@@ -52,13 +62,13 @@ void TSchemeShard::PersistSetColumnConstraintLockTxDone(NIceDb::TNiceDb& db, con
 
 void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(ui64(operationInfo.LockNullWritesTxId))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.LockNullWritesTxId)
     );
 }
 
 void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(ui32(operationInfo.LockNullWritesTxStatus))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.LockNullWritesTxStatus)
     );
 }
 
@@ -70,13 +80,13 @@ void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxDone(NIceDb::TNiceD
 
 void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(ui64(operationInfo.UnlockNullWritesTxId))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.UnlockNullWritesTxId)
     );
 }
 
 void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(ui32(operationInfo.UnlockNullWritesTxStatus))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.UnlockNullWritesTxStatus)
     );
 }
 
@@ -88,13 +98,13 @@ void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxDone(NIceDb::TNic
 
 void TSchemeShard::PersistSetColumnConstraintUnlockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(ui64(operationInfo.UnlockTxId))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.UnlockTxId)
     );
 }
 
 void TSchemeShard::PersistSetColumnConstraintUnlockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(ui32(operationInfo.UnlockTxStatus))
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxStatus>(operationInfo.UnlockTxStatus)
     );
 }
 
@@ -108,10 +118,12 @@ void TSchemeShard::PersistSetColumnConstraintValidationShardStatus(
     NIceDb::TNiceDb& db,
     TIndexBuildId operationId,
     TShardIdx shardIdx,
-    const TValidateColumnConstraintShardStatus& status)
+    const TSetColumnConstraintOperationInfo& operationInfo)
 {
+    auto status = operationInfo.ValidationShards.at(shardIdx);
+    // todo: persist issue
     db.Table<Schema::SetColumnConstraintDatashardStatuses>()
-        .Key(ui64(operationId), shardIdx.GetOwnerId(), shardIdx.GetLocalId())
+        .Key(operationId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
         .Update(
             NIceDb::TUpdate<Schema::SetColumnConstraintDatashardStatuses::Status>(status.ValidateStatus)
         );

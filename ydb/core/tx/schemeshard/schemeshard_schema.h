@@ -2610,7 +2610,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct SetColumnConstraint : Table<138> {
-        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId };
+        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId; };
         struct TableOwnerId :           Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
         struct TableLocalId :           Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalPathId; };
         // ColumnNames in `column_name_1$column_name_2$...$column_name_n` format
@@ -2639,7 +2639,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct SetColumnConstraintDatashardStatuses : Table<139> {
-        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId };
+        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId; };
         struct OwnerShardIdx :          Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
         struct LocalShardIdx :          Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalShardIdx; };
         struct Status :                 Column<4, NScheme::NTypeIds::Uint32>  { using Type = NKikimrSetColumnConstraint::EValidateStatus; };

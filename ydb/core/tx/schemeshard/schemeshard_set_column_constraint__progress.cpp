@@ -385,21 +385,10 @@ public:
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
                 operationInfo.ValidationFailed = true;
-
-                for (const auto& issue : record.GetIssues()) {
-                    NIceDb::TNiceDb db(txc.DB);
-                    // todo: persist issue
-                    LOG_N("TTxReplyValidateRowCondition: issue: " << issue.message());
-                }
             }
 
             operationInfo.InProgressValidationShards.erase(shardIdx);
             operationInfo.DoneValidationShards.emplace_back(shardIdx);
-
-            {
-                NIceDb::TNiceDb db(txc.DB);
-                Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, shardIdx, shardStatus);
-            }
 
             Progress(BuildId);
 
@@ -409,28 +398,19 @@ public:
 
             operationInfo.ValidationFailed = true;
 
-            for (const auto& issue : record.GetIssues()) {
-                // todo: persist issue
-                LOG_E("TTxReplyValidateRowCondition: error issue: " << issue.message());
-            }
-
             operationInfo.InProgressValidationShards.erase(shardIdx);
             operationInfo.DoneValidationShards.emplace_back(shardIdx);
-
-            {
-                NIceDb::TNiceDb db(txc.DB);
-                Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, shardIdx, shardStatus);
-            }
 
             Progress(BuildId);
 
         } else {
             LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
                 << " still in progress, status# " << record.GetStatus());
-            {
-                NIceDb::TNiceDb db(txc.DB);
-                Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, shardIdx, shardStatus);
-            }
+        }
+
+        {
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, shardIdx, operationInfo);
         }
 
         return true;
@@ -523,7 +503,7 @@ struct TSchemeShard::TIndexBuilder::TTxProgressSetColumnConstraint
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
-    bool InitiateValidationShards([[maybe_unused]] NIceDb::TNiceDb& db, TSetColumnConstraintOperationInfo& operationInfo) {
+    bool InitiateValidationShards(NIceDb::TNiceDb& db, TSetColumnConstraintOperationInfo& operationInfo) {
         LOG_D("InitiateValidationShards, id# " << BuildId);
 
         Y_ENSURE(operationInfo.ValidationShards.empty());
@@ -551,9 +531,10 @@ private:
             Y_ENSURE(emplaced);
 
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
-
-            // todo: persist shard status
             LOG_D("InitiateValidationShards: added shard " << partition->ShardIdx);
+
+
+            Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, partition->ShardIdx, operationInfo);
         }
 
         return true;

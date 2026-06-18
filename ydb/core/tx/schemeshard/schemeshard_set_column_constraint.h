@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 TString SerializeSetColumnConstraintColumnNames(const std::vector<std::string>& columns);
-std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized);
+std::vector<std::string> DeserializeSetColumnConstraintColumnNames(const TString& serialized);
 
 
 struct TEvSetColumnConstraint {

@@ -617,15 +617,15 @@ public:
             const TString& caCert,
             const TString& token,
             NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise)
-        : State(std::make_shared<TState>(
-            TState {
-                .Endpoint = endpoint,
-                .Database = database,
-                .Ssl = ssl,
-                .CaCert = caCert,
-                .Token = token,
-                .Promise = std::move(promise)
-            }))
+            : State(std::make_shared<TState>(
+                TState {
+                    .Endpoint = endpoint,
+                    .Database = database,
+                    .Ssl = ssl,
+                    .CaCert = caCert,
+                    .Token = token,
+                    .Promise = std::move(promise)
+                }))
         {
         }
 

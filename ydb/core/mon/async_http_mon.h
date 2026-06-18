@@ -19,6 +19,7 @@ namespace NActors {
 class TAsyncHttpMon : public TMon {
 public:
     TAsyncHttpMon(TConfig config);
+    ~TAsyncHttpMon();
 
     void Start(TActorSystem* actorSystem) override;
     void Stop() override;

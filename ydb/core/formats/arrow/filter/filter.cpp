@@ -1,16 +1,17 @@
-#include "arrow_filter.h"
+#include "filter.h"
 
-#include "common/adapter.h"
-#include "common/container.h"
-#include "switch/switch_type.h"
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/switch/switch_type.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 
 namespace NKikimr::NArrow {
 
@@ -186,50 +187,157 @@ ui32 TColumnFilter::CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const
     return f - s;
 }
 
-template <class TData>
-void ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const TColumnFilter::TApplyContext& context) {
-    if (!batch || !batch->num_rows()) {
-        return;
+std::shared_ptr<arrow::Table> ApplyArrowFilterToTable(const std::shared_ptr<arrow::Table>& table, const TColumnFilter& filter) {
+    auto res = arrow::compute::Filter(table, filter.BuildArrowFilter(table->num_rows()));
+    Y_VERIFY_S(res.ok(), res.status().message());
+    Y_ABORT_UNLESS(res->kind() == arrow::Datum::TABLE);
+    return res->table();
+}
+
+std::shared_ptr<arrow::Table> ApplySlicesToTable(const std::shared_ptr<arrow::Table>& table, TColumnFilter::TSlicesIterator slices) {
+    std::vector<std::shared_ptr<arrow::Table>> slicesData;
+    for (slices.Start(); slices.IsValid(); slices.Next()) {
+        if (!slices.IsFiltered()) {
+            continue;
+        }
+        slicesData.emplace_back(table->Slice(slices.GetStartIndex(), slices.GetSliceSize()));
     }
+    return TStatusValidator::GetValid(arrow::ConcatenateTables(slicesData));
+}
+
+namespace {
+
+void VerifyFilterSize(const TColumnFilter& filter, const ui32 recordsCount, const TColumnFilter::TApplyContext& context) {
     if (!filter.IsEmpty()) {
         if (context.HasSlice()) {
             AFL_VERIFY(filter.GetRecordsCountVerified() >= *context.GetStartPos() + *context.GetCount())(
                                                                                     "filter_size", filter.GetRecordsCountVerified())(
                                                                                     "start", context.GetStartPos())("count", context.GetCount());
-            AFL_VERIFY(*context.GetCount() == (size_t)batch->num_rows())("count", context.GetCount())("batch_size", batch->num_rows());
+            AFL_VERIFY(*context.GetCount() == (size_t)recordsCount)("count", context.GetCount())("batch_size", recordsCount);
         } else {
-            AFL_VERIFY(filter.GetRecordsCountVerified() == (size_t)batch->num_rows())("filter_size", filter.GetRecordsCountVerified())(
-                                                             "batch_size", batch->num_rows());
+            AFL_VERIFY(filter.GetRecordsCountVerified() == (size_t)recordsCount)("filter_size", filter.GetRecordsCountVerified())(
+                                                             "batch_size", recordsCount);
         }
     }
-    if (filter.IsTotalDenyFilter()) {
-        batch = NAdapter::TDataBuilderPolicy<TData>::GetEmptySame(batch);
+}
+
+bool ShouldTrySlices(const TColumnFilter& filter, const TColumnFilter::TApplyContext& context) {
+    return context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetRecordsCountVerified() &&
+        filter.GetRecordsCountVerified() < filter.GetFilteredCountVerified() * 50;
+}
+
+class TArrowTableFilterable: public TColumnFilter::IFilterable {
+private:
+    std::shared_ptr<arrow::Table> Table;
+
+public:
+    explicit TArrowTableFilterable(const std::shared_ptr<arrow::Table>& table)
+        : Table(table) {
+    }
+
+    const std::shared_ptr<arrow::Table>& GetData() const {
+        return Table;
+    }
+
+    ui32 GetRecordsCount() const override {
+        return Table ? Table->num_rows() : 0;
+    }
+
+    void ApplyEmpty() override {
+        Table = Table->Slice(0, 0);
+    }
+
+    void ApplyArrowFilter(const TColumnFilter& filter) override {
+        Table = ApplyArrowFilterToTable(Table, filter);
+    }
+
+    void ApplySlicesFilter(TColumnFilter::TSlicesIterator slices) override {
+        Table = ApplySlicesToTable(Table, slices);
+    }
+};
+
+class TArrowRecordBatchFilterable: public TColumnFilter::IFilterable {
+private:
+    std::shared_ptr<arrow::RecordBatch> Batch;
+
+public:
+    explicit TArrowRecordBatchFilterable(const std::shared_ptr<arrow::RecordBatch>& batch)
+        : Batch(batch) {
+    }
+
+    const std::shared_ptr<arrow::RecordBatch>& GetData() const {
+        return Batch;
+    }
+
+    ui32 GetRecordsCount() const override {
+        return Batch ? Batch->num_rows() : 0;
+    }
+
+    void ApplyEmpty() override {
+        Batch = Batch->Slice(0, 0);
+    }
+
+    void ApplyArrowFilter(const TColumnFilter& filter) override {
+        auto res = arrow::compute::Filter(Batch, filter.BuildArrowFilter(Batch->num_rows()));
+        Y_VERIFY_S(res.ok(), res.status().message());
+        Y_ABORT_UNLESS(res->kind() == arrow::Datum::RECORD_BATCH);
+        Batch = res->record_batch();
+    }
+
+    void ApplySlicesFilter(TColumnFilter::TSlicesIterator slices) override {
+        AFL_VERIFY(slices.GetRecordsCount() == Batch->num_rows());
+        std::vector<std::shared_ptr<arrow::RecordBatch>> slicesData;
+        for (slices.Start(); slices.IsValid(); slices.Next()) {
+            if (!slices.IsFiltered()) {
+                continue;
+            }
+            slicesData.emplace_back(Batch->Slice(slices.GetStartIndex(), slices.GetSliceSize()));
+        }
+        Batch = NArrow::ToBatch(TStatusValidator::GetValid(arrow::Table::FromRecordBatches(slicesData)));
+    }
+};
+
+}   // namespace
+
+void TColumnFilter::Apply(std::shared_ptr<IFilterable>& batch, const TApplyContext& context) const {
+    if (!batch || !batch->GetRecordsCount()) {
         return;
     }
-    if (filter.IsTotalAllowFilter()) {
+    VerifyFilterSize(*this, batch->GetRecordsCount(), context);
+    if (IsTotalDenyFilter()) {
+        batch->ApplyEmpty();
         return;
     }
-    if (context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetRecordsCountVerified() &&
-        filter.GetRecordsCountVerified() < filter.GetFilteredCountVerified() * 50) {
-        batch =
-            NAdapter::TDataBuilderPolicy<TData>::ApplySlicesFilter(batch, filter.BuildSlicesIterator(context.GetStartPos(), context.GetCount()));
+    if (IsTotalAllowFilter()) {
+        return;
+    }
+    if (ShouldTrySlices(*this, context)) {
+        batch->ApplySlicesFilter(BuildSlicesIterator(context.GetStartPos(), context.GetCount()));
     } else if (context.HasSlice()) {
-        batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(batch, filter.Slice(*context.GetStartPos(), *context.GetCount()));
+        batch->ApplyArrowFilter(Slice(*context.GetStartPos(), *context.GetCount()));
     } else {
-        batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(batch, filter);
+        batch->ApplyArrowFilter(*this);
     }
-}
-
-void TColumnFilter::Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context) const {
-    return ApplyImpl(*this, batch, context);
-}
-
-void TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context) const {
-    return ApplyImpl(*this, batch, context);
 }
 
 void TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context) const {
-    return ApplyImpl(*this, batch, context);
+    if (!batch || !batch->num_rows()) {
+        return;
+    }
+    auto filterable = std::make_shared<TArrowRecordBatchFilterable>(batch);
+    std::shared_ptr<IFilterable> impl = filterable;
+    Apply(impl, context);
+    batch = filterable->GetData();
+}
+
+void TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context) const {
+    if (!batch || !batch->num_rows()) {
+        return;
+    }
+    auto filterable = std::make_shared<TArrowTableFilterable>(batch);
+    std::shared_ptr<IFilterable> impl = filterable;
+    Apply(impl, context);
+    batch = filterable->GetData();
 }
 
 void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const {

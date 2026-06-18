@@ -7,6 +7,7 @@ PEERDIR(
     ydb/services/metadata/abstract
     ydb/library/actors/core
     ydb/core/formats/arrow/accessor/common
+    ydb/core/formats/arrow/filter
     ydb/library/formats/arrow/protos
     ydb/library/arrow_kernels
 )

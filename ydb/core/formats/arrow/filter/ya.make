@@ -2,16 +2,16 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/formats/arrow/container
     ydb/core/formats/arrow/switch
+    ydb/library/accessor
     ydb/library/actors/core
     ydb/library/conclusion
     ydb/library/formats/arrow
-    ydb/core/formats/arrow/splitter
+    ydb/library/yverify_stream
 )
 
 SRCS(
-    adapter.cpp
+    filter.cpp
 )
 
 END()

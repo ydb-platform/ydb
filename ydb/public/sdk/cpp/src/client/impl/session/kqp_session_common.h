@@ -20,7 +20,7 @@ class IServerCloseHandler {
 public:
     virtual ~IServerCloseHandler() = default;
     // called when session should be closed by server signal
-    virtual void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) = 0;
+    virtual void OnCloseSession(TKqpSessionCommon*, std::shared_ptr<ISessionClient>) = 0;
 };
 
 class TKqpSessionCommon : public TEndpointObj {

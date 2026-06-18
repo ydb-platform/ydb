@@ -106,7 +106,6 @@ public:
     // Returns % of pessimized endpoints
     int GetPessimizationRatio() const;
 
-
     // Associate object with the endpoint
     // Returns false if no required endpoint, or object already registered
     bool LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag);

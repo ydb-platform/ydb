@@ -688,8 +688,8 @@ private:
                                       << ", iteration# " << state->Backoff.GetIteration());
 
                                   if (IsRetryableError(result) && state->Backoff.HasMore()) {
-                                      actorSystem->Schedule(state->Backoff.Next(),
-                                              new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
+actorSystem->Schedule(state->Backoff.Next(),
+        new NActors::IEventHandle(selfId, TActorId(), new TEvDescribeResourceId(state)));
                                   } else {
                                       state->Promise.SetValue(
                                               TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));

@@ -65,13 +65,10 @@ public:
 
     // Returns the number of bytes remaining in the current (possibly partially
     // advanced) iovec window — used by OnComplete to detect short I/O.
+    // Invariant: GetOperationBytes() == TotalSize - BytesProcessed.
     size_t GetOperationBytes() const {
 #if defined(__linux__)
-        size_t total = 0;
-        for (size_t i = IovBegin; i < Iov.size(); ++i) {
-            total += Iov[i].iov_len;
-        }
-        return total;
+        return TotalSize - BytesProcessed;
 #else
         return GetTotalSize();
 #endif
@@ -105,12 +102,13 @@ public:
 #if defined(__linux__)
         Iov.clear();
         IovBegin = 0;
+        BytesProcessed = 0;
 #endif
     }
 
 #if defined(__linux__)
     // Number of iovecs kept inline (on-stack) without heap allocation.
-    static constexpr size_t MAX_STACK_IOVS = 32;
+    static constexpr size_t MAX_STACK_IOVS = 16;
 
     // Hard upper bound on scatter-gather segments per operation.  Beyond
     // MAX_STACK_IOVS the iovec vector spills to the heap, so this can exceed it.
@@ -125,8 +123,8 @@ private:
 
     EOperationType OperationType = ENOT_SET;
 
-    // Set once per I/O submission (by PrepareIov); preserved across short read/write
-    // retries (AdvanceIov) so completion logic knows the originally requested size.
+    // Originally requested byte count; set by PrepareIov/PrepareScatterGather/AddIov
+    // and preserved across short-I/O retries so OnComplete knows the full request size.
     // Reset to 0 by ResetSubmissionState() when the op is recycled.
     ui64 TotalSize = 0;
 
@@ -141,6 +139,10 @@ private:
     // Index into Iov of the first not-yet-completed iovec.
     // Advanced by AdvanceIov() on short I/O retries.
     size_t IovBegin = 0;
+
+    // Cumulative bytes consumed by AdvanceIov() across short-I/O retries.
+    // GetOperationBytes() == TotalSize - BytesProcessed (remaining window).
+    ui64 BytesProcessed = 0;
 #endif
 };
 

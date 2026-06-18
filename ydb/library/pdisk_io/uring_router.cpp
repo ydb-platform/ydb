@@ -339,6 +339,11 @@ bool TUringRouter::ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, T
     if (!sqe) {
         return false;
     }
+    // Populate op->Iov and OperationType so the completion handler's MSan
+    // unpoison loop, GetIovBase(), and GetOperationBytes() work uniformly.
+    // The actual kernel submission still uses the fixed-buffer variant below.
+    op->SetOperationType(TUringOperationBase::EREAD);
+    op->PrepareIov(buf, size, offset);
     int fd = (FixedFdIndex >= 0) ? FixedFdIndex : Fd;
     io_uring_prep_read_fixed(sqe, fd, buf, size, offset, bufIndex);
     if (FixedFdIndex >= 0) {
@@ -356,6 +361,10 @@ bool TUringRouter::WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufI
     if (!sqe) {
         return false;
     }
+    // Mirror ReadFixed: populate op->Iov and OperationType for consistent
+    // GetIovBase() logging and GetOperationBytes() bookkeeping in OnComplete.
+    op->SetOperationType(TUringOperationBase::EWRITE);
+    op->PrepareIov(const_cast<void*>(buf), size, offset);
     int fd = (FixedFdIndex >= 0) ? FixedFdIndex : Fd;
     io_uring_prep_write_fixed(sqe, fd, buf, size, offset, bufIndex);
     if (FixedFdIndex >= 0) {

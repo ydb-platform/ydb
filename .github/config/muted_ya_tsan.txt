@@ -977,7 +977,9 @@ ydb/tests/olap/min_max_index test_min_max_index.py.TestYdbMinMaxIndex.test_minma
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test_multi[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
+ydb/tests/sql py3test.sole chunk
 ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empty_rows
+ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_rows
 ydb/tests/sql test_kv.py.TestYdbKvWorkload.test_dynumber
 ydb/tests/stress/backup/tests py3test.sole chunk
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test

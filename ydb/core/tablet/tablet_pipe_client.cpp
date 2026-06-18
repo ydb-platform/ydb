@@ -36,7 +36,7 @@ namespace NTabletPipe {
         }
 
         void Bootstrap(const TActorContext& ctx) {
-            YDB_LOG_DEBUG_CTX(ctx, "TClient[ ::Bootstrap",
+            YDB_LOG_DEBUG_CTX(ctx, "TClient bootstrap",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
 
@@ -137,7 +137,7 @@ namespace NTabletPipe {
         }
 
         void HandleSendQueued(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-            YDB_LOG_DEBUG_CTX(ctx, "TClient[ queue send",
+            YDB_LOG_DEBUG_CTX(ctx, "TClient queue send",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
             Y_ABORT_UNLESS(!IsShutdown);
@@ -145,7 +145,7 @@ namespace NTabletPipe {
         }
 
         void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-            YDB_LOG_DEBUG_CTX(ctx, "TClient[ send",
+            YDB_LOG_DEBUG_CTX(ctx, "TClient send",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
             Y_ABORT_UNLESS(!IsShutdown);
@@ -163,7 +163,7 @@ namespace NTabletPipe {
             Y_ABORT_UNLESS(ev->Get()->TabletID == TabletId);
 
             if (ev->Get()->Status != NKikimrProto::OK) {
-                YDB_LOG_DEBUG_CTX(ctx, "TClient[ forward result error, check reconnect",
+                YDB_LOG_DEBUG_CTX(ctx, "TClient forward result error, check reconnect",
                     {"tabletId", TabletId},
                     {"selfId", ctx.SelfID});
                 return TryToReconnect(ctx);
@@ -174,7 +174,7 @@ namespace NTabletPipe {
             LastCacheEpoch = ev->Get()->CacheEpoch;
 
             if (!GetTabletLeader()) {
-                YDB_LOG_DEBUG_CTX(ctx, "TClient[ tablet actor unavailable, check reconnect",
+                YDB_LOG_DEBUG_CTX(ctx, "TClient tablet actor unavailable, check reconnect",
                     {"tabletId", TabletId},
                     {"selfId", ctx.SelfID});
                 return TryToReconnect(ctx);
@@ -185,14 +185,14 @@ namespace NTabletPipe {
 
         void Resolved(const TActorContext &ctx) {
             if (IsLocalNode(ctx)) {
-                YDB_LOG_DEBUG_CTX(ctx, "TClient[ forward result local node, try to connect",
+                YDB_LOG_DEBUG_CTX(ctx, "TClient forward result local node, try to connect",
                     {"tabletId", TabletId},
                     {"selfId", ctx.SelfID});
                 UnsubscribeNetworkSession(ctx);
                 Connect(ctx);
             } else {
                 const ui32 nodeId = GetTabletLeader().NodeId();
-                YDB_LOG_DEBUG_CTX(ctx, "TClient[ forward result remote node",
+                YDB_LOG_DEBUG_CTX(ctx, "TClient forward result remote node",
                     {"tabletId", TabletId},
                     {"nodeId", nodeId},
                     {"selfId", ctx.SelfID});
@@ -212,7 +212,7 @@ namespace NTabletPipe {
 
             TActorId proxy = TActivationContext::InterconnectProxy(nodeId);
             if (!proxy) {
-                YDB_LOG_ERROR_CTX(ctx, "TClient[ remote node on broken proxy",
+                YDB_LOG_ERROR_CTX(ctx, "TClient remote node on broken proxy",
                     {"tabletId", TabletId},
                     {"nodeId", nodeId},
                     {"selfId", ctx.SelfID});
@@ -228,13 +228,13 @@ namespace NTabletPipe {
 
         void HandleConnectNode(TEvInterconnect::TEvNodeConnected::TPtr& ev, const TActorContext &ctx) {
             if (ev->Cookie != InterconnectCookie) {
-                YDB_LOG_DEBUG_CTX(ctx, "TClient[ ignored outdated TEvNodeConnected",
+                YDB_LOG_DEBUG_CTX(ctx, "TClient ignored outdated TEvNodeConnected",
                     {"tabletId", TabletId},
                     {"selfId", ctx.SelfID});
                 return;
             }
 
-            YDB_LOG_DEBUG_CTX(ctx, "TClient[ remote node connected",
+            YDB_LOG_DEBUG_CTX(ctx, "TClient remote node connected",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
             Y_ABORT_UNLESS(!InterconnectSessionId);

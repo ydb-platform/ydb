@@ -311,8 +311,8 @@ public:
                 ++cc;
             }
         }
-        YDB_LOG_INFO_CTX(ctx, "Request processed, groups processed",
-            {"cc", cc});
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"groupsProcessed", cc});
     }
 
     void RecalcAll() {

@@ -632,7 +632,7 @@ TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnection
     auto moveToIgnore = [&]() {
         shouldEraseEntry = !followerInfo.PresentInList;
         followerInfo.SyncState = EFollowerSyncState::Ignore;
-        YDB_LOG_DEBUG("HandleFollowerConnectionProblem moved to Ignore state,",
+        YDB_LOG_DEBUG("HandleFollowerConnectionProblem moved to Ignore state",
             {"tablet", TabletID()},
             {"followerId", followerIt->first},
             {"shouldEraseEntry", shouldEraseEntry},
@@ -1035,7 +1035,7 @@ void TTablet::HandleFindLatestLogEntry(TEvTabletBase::TEvFindLatestLogEntryResul
         return PromoteToCandidate(0);
     default:
         {
-            YDB_LOG_ERROR("HandleFindLatestLogEntry,",
+            YDB_LOG_ERROR("HandleFindLatestLogEntry",
                 {"tablet", TabletID()},
                 {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
                 {"marker", "TSYS20"});
@@ -2353,7 +2353,7 @@ void TTablet::HandleEmptyZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr& ev) {
             break;
     default:
         {
-            YDB_LOG_ERROR("HandleEmptyZeroEntry,",
+            YDB_LOG_ERROR("HandleEmptyZeroEntry",
                 {"tablet", TabletID()},
                 {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
                 {"marker", "TSYS36"});
@@ -2374,7 +2374,7 @@ void TTablet::Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev) {
         return StartActivePhase();
     default:
         {
-            YDB_LOG_ERROR("HandleDeleteTabletResult,",
+            YDB_LOG_ERROR("HandleDeleteTabletResult",
                 {"tablet", TabletID()},
                 {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
                 {"marker", "TSYS38"});

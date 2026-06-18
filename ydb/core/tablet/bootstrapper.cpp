@@ -349,7 +349,7 @@ private:
         }
 
         SelfSeed = GenerateSeed();
-        YDB_LOG_INFO("Begin new round,",
+        YDB_LOG_INFO("Begin new round",
             {"tablet", TabletInfo->TabletID},
             {"type", GetTabletTypeName()},
             {"seed", SelfSeed});
@@ -578,7 +578,7 @@ private:
         }
 
         auto sleepDuration = Min(GetSleepDuration(), BootDelayedUntil - now);
-        YDB_LOG_DEBUG("/ nodes online (need wait",
+        YDB_LOG_DEBUG("",
             {"tablet", TabletInfo->TabletID},
             {"type", GetTabletTypeName()},
             {"online", online},
@@ -605,7 +605,7 @@ private:
             {"tablet", TabletInfo->TabletID},
             {"type", GetTabletTypeName()},
             {"watchNodeId", watchOn.NodeId()},
-            {"ownerSuffix", (owner ? " (owner)" : "")});
+            {"owner", (owner ? " (owner)" : "")});
 
         Watching.emplace(watchOn, owner);
         WatchedBy.emplace();

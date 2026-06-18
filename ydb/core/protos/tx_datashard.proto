@@ -428,6 +428,11 @@ message TKqpVectorIndexReadSettings {
     // order), the column id of that column in the posting table.
     optional bool PostingCovers = 30;
     repeated uint32 PostingOutputColumnIds = 31;
+
+    // Prefixed index: the transform input rows carry the root cluster id in the
+    // __ydb_parent member (input struct element 1; the target vector is element 0).
+    // The actor uses these as the level-traversal roots instead of cluster 0.
+    optional bool HasPrefix = 32;
 }
 
 message TKqpTaskInfo {

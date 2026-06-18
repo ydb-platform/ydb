@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/library/kafka/kafka_records.h>
 #include <ydb/library/login/sasl/scram.h>
 
 #include <util/random/random.h>
@@ -172,9 +173,12 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     request.TopicData.resize(1);
     request.TopicData[0].Name = topicName;
     request.TopicData[0].PartitionData.resize(msgs.size());
+    TVector<TString> serializedRecords;
+    serializedRecords.reserve(msgs.size());
     for(size_t i = 0 ; i < msgs.size(); ++i) {
         request.TopicData[0].PartitionData[i].Index = msgs[i].first;
-        request.TopicData[0].PartitionData[i].Records = msgs[i].second;
+        serializedRecords.push_back(WriteKafkaRecordBatch(msgs[i].second));
+        request.TopicData[0].PartitionData[i].Records = ToRawBytes(serializedRecords.back());
     }
 
     if (transactionalId) {
@@ -232,9 +236,12 @@ void TKafkaTestClient::ProduceAsync(const TTopicPartition& topicPartition,
     request.TopicData.resize(1);
     request.TopicData[0].Name = topicName;
     request.TopicData[0].PartitionData.resize(msgs.size());
+    TVector<TString> serializedRecords;
+    serializedRecords.reserve(msgs.size());
     for(size_t i = 0 ; i < msgs.size(); ++i) {
         request.TopicData[0].PartitionData[i].Index = msgs[i].first;
-        request.TopicData[0].PartitionData[i].Records = msgs[i].second;
+        serializedRecords.push_back(WriteKafkaRecordBatch(msgs[i].second));
+        request.TopicData[0].PartitionData[i].Records = ToRawBytes(serializedRecords.back());
     }
 
     if (transactionalId) {

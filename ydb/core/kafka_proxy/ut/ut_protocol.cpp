@@ -5318,6 +5318,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             batch.Records.resize(1);
             batch.Records[0].Key = TKafkaRawBytes(key.data(), key.size());
             batch.Records[0].Value = TKafkaRawBytes(value.data(), value.size());
+            const TString serializedBatch = WriteKafkaRecordBatch(batch);
 
             TProduceRequestData request;
             request.Acks = -1;
@@ -5326,12 +5327,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             request.TopicData[0].Name = topicName;
             request.TopicData[0].PartitionData.resize(1);
             request.TopicData[0].PartitionData[0].Index = 0;
-            request.TopicData[0].PartitionData[0].Records = batch;
+            request.TopicData[0].PartitionData[0].Records = ToRawBytes(serializedBatch);
 
             request.TopicData[1].Name = "/Root/topic-0-test-not-exists";
             request.TopicData[1].PartitionData.resize(1);
             request.TopicData[1].PartitionData[0].Index = 0;
-            request.TopicData[1].PartitionData[0].Records = batch;
+            request.TopicData[1].PartitionData[0].Records = ToRawBytes(serializedBatch);
 
             TRequestHeaderData header = client.Header(NKafka::EApiKey::PRODUCE, 9);
             auto msg = client.WriteAndRead<TProduceResponseData>(header, request);

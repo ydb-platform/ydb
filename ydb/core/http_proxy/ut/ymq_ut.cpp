@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         auto& description = describe.GetTopicDescription();
         UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
         auto& consumer = description.GetConsumers()[0];
-        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerName(), "sqs_consumer");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerName(), "ydb-sqs-consumer");
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetKeepMessagesOrder(), true);
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetDefaultProcessingTimeout(), TDuration::Seconds(3600));
@@ -2124,7 +2124,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
 
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerName(), "sqs_consumer");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerName(), "ydb-sqs-consumer");
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetKeepMessagesOrder(), true);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDefaultProcessingTimeout(), TDuration::Seconds(1234));

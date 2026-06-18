@@ -1,5 +1,6 @@
 #include "kafka_messages_int.h"
 
+#include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <limits>
@@ -13,6 +14,13 @@ namespace NKafka {
 namespace {
 
 static constexpr size_t WriteBufferChunkSize = 1 << 16;
+static constexpr size_t RecordBatchCrcOffset =
+    sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type) +
+    sizeof(TKafkaRecordBatch::BatchLengthMeta::Type) +
+    sizeof(TKafkaRecordBatch::PartitionLeaderEpochMeta::Type) +
+    sizeof(TKafkaRecordBatch::MagicMeta::Type);
+static constexpr size_t RecordBatchCrcBodyOffset =
+    RecordBatchCrcOffset + sizeof(TKafkaRecordBatch::CrcMeta::Type);
 
 void EnsureSupportedCompressionType(ECompressionType compressionType) {
     switch (compressionType) {
@@ -23,6 +31,13 @@ void EnsureSupportedCompressionType(ECompressionType compressionType) {
         default:
             ythrow yexception() << "unsupported Kafka record batch compression type: " << static_cast<int>(compressionType);
     }
+}
+
+void WriteKafkaInt32(TString& data, size_t offset, TKafkaInt32 value) {
+    data[offset] = static_cast<char>((static_cast<ui32>(value) >> 24) & 0xff);
+    data[offset + 1] = static_cast<char>((static_cast<ui32>(value) >> 16) & 0xff);
+    data[offset + 2] = static_cast<char>((static_cast<ui32>(value) >> 8) & 0xff);
+    data[offset + 3] = static_cast<char>(static_cast<ui32>(value) & 0xff);
 }
 
 TString DecompressRecordBatchPayload(TStringBuf data, ECompressionType compressionType) {
@@ -933,7 +948,12 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
     TKafkaWriteBuffer buffer(WriteBufferChunkSize);
     TKafkaWritable writable(buffer);
     batch.Write(writable, version);
-    return buffer.AsString();
+    TString result = buffer.AsString();
+    if (result.size() >= RecordBatchCrcBodyOffset) {
+        const ui32 crc = Crc32c(result.data() + RecordBatchCrcBodyOffset, result.size() - RecordBatchCrcBodyOffset);
+        WriteKafkaInt32(result, RecordBatchCrcOffset, static_cast<TKafkaInt32>(crc));
+    }
+    return result;
 }
 
 std::optional<TKafkaBatchHeader> ReadKafkaBatchHeader(TStringBuf data, TKafkaVersion version) {

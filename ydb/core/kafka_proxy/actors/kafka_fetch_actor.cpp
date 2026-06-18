@@ -176,52 +176,104 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
                                         TKafkaBytesHolder& records,
                                         const std::optional<TString> timestampType,
                                         const TActorContext& ctx) {
-    if (partPQResponse.GetReadResult().GetResult().size() == 1) {
-        const auto& result = partPQResponse.GetReadResult().GetResult()[0];
+    ui64 messagesCount = 0;
+    bool allResultsAreKafkaBatches = partPQResponse.GetReadResult().GetResult().size() > 0;
+
+    for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
         const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
-        if (result.GetIsBatch() && dataChunk.GetChunkType() == NKikimrPQClient::TDataChunk::REGULAR &&
-            dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec()) {
-            records = dataChunk.GetData();
-            auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
-            ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(result.GetMessageCount(), BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
-            return;
+        const bool isKafkaBatch = dataChunk.GetChunkType() == NKikimrPQClient::TDataChunk::REGULAR &&
+            dataChunk.HasCodec() &&
+            dataChunk.GetCodec() == KafkaBatchCodec();
+
+        KAFKA_LOG_D("Fetch actor: Kafka record candidate. ResultsCount=" << partPQResponse.GetReadResult().GetResult().size()
+            << ", Offset=" << result.GetOffset()
+            << ", IsBatch=" << result.GetIsBatch()
+            << ", MessageCount=" << result.GetMessageCount()
+            << ", ChunkType=" << static_cast<int>(dataChunk.GetChunkType())
+            << ", HasCodec=" << dataChunk.HasCodec()
+            << ", Codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
+            << ", KafkaBatchCodec=" << static_cast<int>(KafkaBatchCodec())
+            << ", DataSize=" << dataChunk.GetData().size()
+            << ", IsKafkaBatch=" << isKafkaBatch);
+
+        if (!isKafkaBatch) {
+            allResultsAreKafkaBatches = false;
         }
     }
 
+    if (allResultsAreKafkaBatches) {
+        TString kafkaBatchRecords;
+        for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
+            const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+            kafkaBatchRecords += dataChunk.GetData();
+            messagesCount += result.GetMessageCount();
+        }
+        auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
+        ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(messagesCount, BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
+        records = std::move(kafkaBatchRecords);
+        return;
+    }
+
     TKafkaRecordBatch recordsBatch;
-    recordsBatch.Records.resize(partPQResponse.GetReadResult().GetResult().size());
 
     ui64 baseOffset = 0;
     ui64 baseTimestamp = 0;
     ui64 baseSequense = 0;
     ui64 lastOffset = 0;
-    ui64 lastTimestamp = 0;
+    ui64 maxTimestamp = 0;
     bool first = true;
+    messagesCount = 0;
 
-    for (i32 recordIndex = 0; recordIndex < partPQResponse.GetReadResult().GetResult().size(); recordIndex++) {
-        auto& result = partPQResponse.GetReadResult().GetResult()[recordIndex];
+    auto addRecord = [&](TKafkaRecord record, ui64 offset, ui64 timestamp, ui64 seqNo) {
+        if (first) {
+            baseOffset = offset;
+            baseTimestamp = timestamp;
+            baseSequense = seqNo;
+            first = false;
+        }
+
+        record.OffsetDelta = offset - baseOffset;
+        record.TimestampDelta = timestamp - baseTimestamp;
+        record.Length = record.Size(TKafkaRecord::MessageMeta::PresentVersions.Max) - SizeOfZeroVarint;
+
+        lastOffset = offset;
+        maxTimestamp = std::max(maxTimestamp, timestamp);
+        recordsBatch.Records.push_back(std::move(record));
+        ++messagesCount;
+    };
+
+    for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
+        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
+            continue;
+        }
+
+        const bool isKafkaBatch = dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec();
+        if (isKafkaBatch) {
+            auto batch = ReadRecordBatch(dataChunk.GetData());
+            for (ui64 recordIndex = 0; recordIndex < batch.Records.size(); ++recordIndex) {
+                auto& record = batch.Records[recordIndex];
+                const ui64 offset = result.GetOffset() + record.OffsetDelta;
+                const ui64 timestamp = timestampType == MESSAGE_TIMESTAMP_LOG_APPEND
+                    ? result.GetWriteTimestampMS()
+                    : batch.BaseTimestamp + record.TimestampDelta;
+                addRecord(std::move(record), offset, timestamp, result.GetSeqNo() + recordIndex);
+            }
+            continue;
+        }
+
         auto fillTimestamp = [&timestampType, &result]() {
             if (timestampType == MESSAGE_TIMESTAMP_LOG_APPEND) {
                 return result.GetWriteTimestampMS();
             }
             return result.GetCreateTimestampMS();
         };
-        if (first) {
-            baseOffset = result.GetOffset();
-            baseTimestamp = fillTimestamp();
-            baseSequense = result.GetSeqNo();
-            first = false;
-        }
 
-        lastOffset = result.GetOffset();
-        lastTimestamp = fillTimestamp();
+        const ui64 baseOffset = result.GetOffset();
+        const ui64 baseTimestamp = fillTimestamp();
+        const ui64 baseSequense = result.GetSeqNo();
 
-        auto& record = recordsBatch.Records[recordIndex];
-
-        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
-        if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-            continue;
-        }
+        TKafkaRecord record;
 
         FillRecordFromDataChunk(record, dataChunk);
 
@@ -246,19 +298,14 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         record.AddHeader("__codec", std::move(codecValue));
 
-        record.OffsetDelta = lastOffset - baseOffset;
-        record.TimestampDelta = lastTimestamp - baseTimestamp;
-
-        record.Length = record.Size(TKafkaRecord::MessageMeta::PresentVersions.Max) - SizeOfZeroVarint;
-        KAFKA_LOG_D("Fetch actor: Record info. OffsetDelta: " << record.OffsetDelta <<
-            ", TimestampDelta: " << record.TimestampDelta << ", Length: " << record.Length);
+        addRecord(std::move(record), baseOffset, baseTimestamp, baseSequense);
     }
 
     recordsBatch.Magic = KafkaMagic;
     recordsBatch.BaseOffset = baseOffset;
     recordsBatch.LastOffsetDelta = lastOffset - baseOffset;
     recordsBatch.BaseTimestamp = baseTimestamp;
-    recordsBatch.MaxTimestamp = lastTimestamp;
+    recordsBatch.MaxTimestamp = maxTimestamp;
     recordsBatch.BaseSequence = baseSequense;
     //recordsBatch.Attributes https://kafka.apache.org/documentation/#recordbatch
 
@@ -267,7 +314,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         ", BaseTimestamp: " << recordsBatch.BaseTimestamp << ", MaxTimestamp: " << recordsBatch.MaxTimestamp <<
         ", BaseSequence: " << recordsBatch.BaseSequence << ", BatchLength: " << recordsBatch.BatchLength);
     auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
-    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(recordsBatch.Records.size(), BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
+    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(messagesCount, BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
     records = WriteKafkaRecordBatch(recordsBatch);
 }
 

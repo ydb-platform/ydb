@@ -157,6 +157,7 @@ namespace NKikimr {
             TMemorizableControlWrapper EnablePhantomFlagStorage;
             bool EnablePersistentPhantomFlagStorage;
             TMemorizableControlWrapper PhantomFlagStorageLimit;
+            TMemorizableControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
 
             ui32 SelfOrderNumber;
 

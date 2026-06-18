@@ -17,13 +17,15 @@ namespace NSyncLog {
 class TPhantomFlagStorageBuilderActor : public TActorBootstrapped<TPhantomFlagStorageBuilderActor> {
 public:
     TPhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-            const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds)
+            const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds,
+            std::optional<ui32> blobSizeLimit)
         : TActorBootstrapped<TPhantomFlagStorageBuilderActor>()
         , SlCtx(slCtx)
         , RequesterId(requesterId)
         , SyncLogSnapshot(snapshot)
         , Thresholds(slCtx->VCtx->Top->GType)
         , BuildThresholds(buildThresholds)
+        , BlobSizeLimit(blobSizeLimit)
     {}
 
     void Bootstrap() {
@@ -109,6 +111,10 @@ private:
     void ProcessRecord(const TRecordHdr* hdr) {
         if (LastLsn < hdr->Lsn && hdr->RecType == TRecordHdr::RecLogoBlob) {
             const TLogoBlobRec* blob = hdr->GetLogoBlob();
+            if (BlobSizeLimit && blob->LogoBlobID().BlobSize() < *BlobSizeLimit) {
+                LastLsn = hdr->Lsn;
+                return;
+            }
             if (blob->Ingress.IsDoNotKeep(SlCtx->VCtx->Top->GType)) {
                 AddFlag(*blob);
             }
@@ -163,12 +169,14 @@ private:
     ui64 LastLsn;
 
     const bool BuildThresholds = true;
+    const std::optional<ui32> BlobSizeLimit;
 };
 
 
 NActors::IActor* CreatePhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-        const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds) {
-    return new TPhantomFlagStorageBuilderActor(slCtx, requesterId, snapshot, buildThresholds);
+        const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds,
+        std::optional<ui32> blobSizeLimit) {
+    return new TPhantomFlagStorageBuilderActor(slCtx, requesterId, snapshot, buildThresholds, blobSizeLimit);
 }
 
 } // namespace NSyncLog

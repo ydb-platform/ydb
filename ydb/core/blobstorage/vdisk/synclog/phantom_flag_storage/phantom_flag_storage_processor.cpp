@@ -428,7 +428,7 @@ private:
             STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP10, VDISKP(Ctx.SyncLogCtx->VCtx,
                     "Snapshot: invoking builder for final batch"));
             Register(CreatePhantomFlagStorageBuilderActor(Ctx.SyncLogCtx, SelfId(),
-                    std::move(ActiveSnapshotRequest->Snapshot), false));
+                    std::move(ActiveSnapshotRequest->Snapshot), false, std::nullopt));
         }
     }
 

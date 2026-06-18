@@ -163,7 +163,7 @@ private:
         auto& data = ev->Get()->Data;
         const auto seqNo = message.SeqNo_.value_or(MessageSeqNo++);
         const auto size = data.size();
-        YDB_LOG_TRACE("Got write message event with seq and",
+        YDB_LOG_TRACE("Got write message event",
             {"logPrefix", LogPrefix()},
             {"no", seqNo},
             {"size", size});
@@ -211,7 +211,7 @@ private:
         const auto reason = ev->Get()->Reason;
         Y_VALIDATE(sourceType == TEvStreamTopicWriteRequest::EventType, "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
 
-        YDB_LOG_ERROR("PQ write service is unavailable,",
+        YDB_LOG_ERROR("PQ write service is unavailable",
             {"logPrefix", LogPrefix()},
             {"reason", reason});
         CloseSession(EStatus::INTERNAL_ERROR, "PQ write service is unavailable, please contact internal support");
@@ -310,7 +310,7 @@ private:
         }
 
         if (InflightMemory >= MaxMemoryUsage) {
-            YDB_LOG_TRACE("Max memory usage reached, skipping adding,",
+            YDB_LOG_TRACE("Max memory usage reached, skipping adding",
                 {"logPrefix", LogPrefix()},
                 {"inflightMemory", InflightMemory},
                 {"maxMemoryUsage", MaxMemoryUsage});
@@ -318,7 +318,7 @@ private:
         }
 
         if (InflightMessages.size() >= MaxInflightCount) {
-            YDB_LOG_TRACE("Max inflight count reached, skipping adding,",
+            YDB_LOG_TRACE("Max inflight count reached, skipping adding",
                 {"logPrefix", LogPrefix()},
                 {"inflightMessages", InflightMessages.size()},
                 {"maxInflightCount", MaxInflightCount});

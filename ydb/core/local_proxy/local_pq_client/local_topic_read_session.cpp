@@ -353,7 +353,7 @@ private:
         const auto reason = ev->Get()->Reason;
         Y_VALIDATE(sourceType == TEvStreamTopicReadRequest::EventType, "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
 
-        YDB_LOG_ERROR("PQ read service is unavailable,",
+        YDB_LOG_ERROR("PQ read service is unavailable",
             {"logPrefix", LogPrefix()},
             {"reason", reason});
         CloseSession(EStatus::INTERNAL_ERROR, "PQ read service is unavailable, please contact internal support");
@@ -379,7 +379,7 @@ private:
 
         for (auto& partitionData : *message.mutable_partition_data()) {
             const auto partitionSessionId = partitionData.partition_session_id();
-            YDB_LOG_TRACE("Partition data received,",
+            YDB_LOG_TRACE("Partition data received",
                 {"logPrefix", LogPrefix()},
                 {"session", partitionSessionId},
                 {"batches", partitionData.batches_size()});
@@ -571,7 +571,7 @@ private:
         }
 
         if (InflightMemory >= MaxMemoryUsage) {
-            YDB_LOG_TRACE("Max memory usage reached, skip reading,",
+            YDB_LOG_TRACE("Max memory usage reached, skip reading",
                 {"logPrefix", LogPrefix()},
                 {"inflightMemory", InflightMemory},
                 {"maxMemoryUsage", MaxMemoryUsage});
@@ -589,7 +589,7 @@ private:
 
         const auto bytesToRead = readMemoryBudget - ServerMemoryDelta;
         ServerMemoryDelta = readMemoryBudget;
-        YDB_LOG_TRACE("Reading bytes, new",
+        YDB_LOG_TRACE("Reading bytes",
             {"logPrefix", LogPrefix()},
             {"bytesToRead", bytesToRead},
             {"serverMemoryDelta", ServerMemoryDelta},
@@ -614,7 +614,7 @@ private:
     void AddOutgoingEvent(TEvent&& event, i64 internalSize = 0) {
         const auto size = static_cast<i64>(sizeof(TEvent)) + internalSize;
         InflightMemory += size;
-        YDB_LOG_TRACE("Adding outgoing event with",
+        YDB_LOG_TRACE("Adding outgoing event",
             {"logPrefix", LogPrefix()},
             {"size", size},
             {"inflightMemory", InflightMemory});

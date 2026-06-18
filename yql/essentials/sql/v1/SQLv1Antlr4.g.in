@@ -233,7 +233,9 @@ json_query: JSON_QUERY LPAREN
   (json_query_handler ON ERROR)?
 RPAREN;
 
-select_subexpr:
+select_subexpr: cte_with_clause? select_subexpr_core;
+
+select_subexpr_core:
   select_subexpr_intersect (union_op select_subexpr_intersect)*
 ;
 
@@ -387,11 +389,23 @@ sort_specification: expr (ASC | DESC)?;
 
 sort_specification_list: sort_specification (COMMA sort_specification)*;
 
-select_stmt: select_stmt_intersect (union_op select_stmt_intersect)*;
+cte_with_clause: WITH cte_binding (COMMA cte_binding)* COMMA?;
+
+cte_binding: RECURSIVE? cte_key AS LPAREN cte_value RPAREN;
+
+cte_key: id_table_or_type pure_column_list?;
+
+cte_value: select_stmt | values_stmt;
+
+select_stmt: cte_with_clause? select_stmt_core;
+
+select_stmt_core: select_stmt_intersect (union_op select_stmt_intersect)*;
 
 select_stmt_intersect: select_kind_parenthesis (intersect_op select_kind_parenthesis)*;
 
-select_unparenthesized_stmt: select_unparenthesized_stmt_intersect (union_op select_stmt_intersect)*;
+select_unparenthesized_stmt: cte_with_clause? select_unparenthesized_stmt_core;
+
+select_unparenthesized_stmt_core: select_unparenthesized_stmt_intersect (union_op select_stmt_intersect)*;
 
 select_unparenthesized_stmt_intersect: select_kind_partial (intersect_op select_kind_parenthesis)*;
 
@@ -1605,6 +1619,7 @@ keyword_as_compat:
   | QUEUE
   | RAISE
 //  | READ
+  | RECURSIVE
   | REFERENCES
   | REGEXP
   | REINDEX
@@ -1843,6 +1858,7 @@ keyword_compat: (
   | QUEUE
   | RAISE
 //  | READ
+  | RECURSIVE
   | REFERENCES
   | REGEXP
   | REINDEX
@@ -2221,6 +2237,7 @@ QUEUE: Q U E U E;
 RAISE: R A I S E;
 RANGE: R A N G E;
 //READ: R E A D;
+RECURSIVE: R E C U R S I V E;
 REDUCE: R E D U C E;
 REFERENCES: R E F E R E N C E S;
 REGEXP: R E G E X P;

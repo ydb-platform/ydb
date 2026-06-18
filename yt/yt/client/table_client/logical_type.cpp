@@ -239,7 +239,7 @@ private:
     size_t Index_ = 0;
     TStringBuf Identifier_;
 
-    TString UnescapedIdentifierHolder_;
+    std::string UnescapedIdentifierHolder_;
     bool QuotedIdentifier_ = false;
 
     TLogicalTypePtr ParseType()
@@ -1801,7 +1801,7 @@ void Serialize(const TStructField& structElement, NYson::IYsonConsumer* consumer
 void Deserialize(TStructField& structElement, NYTree::INodePtr node)
 {
     const auto& mapNode = node->AsMap();
-    structElement.Name = NYTree::ConvertTo<TString>(mapNode->GetChildOrThrow("name"));
+    structElement.Name = NYTree::ConvertTo<std::string>(mapNode->GetChildOrThrow("name"));
     structElement.Type = NYTree::ConvertTo<TLogicalTypePtr>(mapNode->GetChildOrThrow("type"));
     structElement.StableName = mapNode
         ->GetChildValueOrDefault<std::string>("stable_name", structElement.Name);
@@ -2405,7 +2405,7 @@ void Deserialize(TTypeV3LogicalTypeWrapper& wrapper, NYTree::INodePtr node)
     }
 
     auto mapNode = node->AsMap();
-    auto typeNameString = mapNode->GetChildValueOrThrow<TString>("type_name");
+    auto typeNameString = mapNode->GetChildValueOrThrow<std::string>("type_name");
     auto typeName = FromTypeV3(typeNameString);
     std::visit([&] (const auto& typeName) {
         using T = std::decay_t<decltype(typeName)>;
@@ -2578,18 +2578,18 @@ void DeserializeV3Impl(TLogicalTypePtr& type, TYsonPullParserCursor* cursor, int
             cursor->Next();
             members.emplace();
             cursor->ParseList([&] (TYsonPullParserCursor* cursor) {
-                std::optional<TString> name;
-                std::optional<TString> stableName;
+                std::optional<std::string> name;
+                std::optional<std::string> stableName;
                 TLogicalTypePtr type;
                 cursor->ParseMap([&] (TYsonPullParserCursor* cursor) {
                     EnsureYsonToken("logical type member attribute key", *cursor, EYsonItemType::StringValue);
                     auto key = (*cursor)->UncheckedAsString();
                     if (key == "name") {
                         cursor->Next();
-                        name = ExtractTo<TString>(cursor);
+                        name = ExtractTo<std::string>(cursor);
                     } else if (key == "stable_name") {
                         cursor->Next();
-                        stableName = ExtractTo<TString>(cursor);
+                        stableName = ExtractTo<std::string>(cursor);
                     } else if (key == "type") {
                         cursor->Next();
                         DeserializeV3Impl(type, cursor, depth + 1);
@@ -2932,8 +2932,8 @@ size_t GetHash(
 {
     size_t result = 0;
     for (const auto& field : fields) {
-        result = CombineHashes(result, THash<TString>{}(field.Name));
-        result = CombineHashes(result, THash<TString>{}(field.StableName));
+        result = CombineHashes(result, THash<std::string>{}(field.Name));
+        result = CombineHashes(result, THash<std::string>{}(field.StableName));
         result = CombineHashes(result, hasher(*field.Type));
     }
     return result;
@@ -2943,7 +2943,7 @@ size_t GetHash(const std::vector<std::string>& removedFieldStableNames)
 {
     size_t result = 0;
     for (const auto& removedFieldName : removedFieldStableNames) {
-        result = CombineHashes(result, THash<TString>{}(removedFieldName));
+        result = CombineHashes(result, THash<std::string>{}(removedFieldName));
     }
     return result;
 }

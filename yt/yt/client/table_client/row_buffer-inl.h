@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "row_buffer.h"
 #endif
-#undef ROW_BUFFER_INL_H_
 
 namespace NYT::NTableClient {
 

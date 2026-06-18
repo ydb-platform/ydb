@@ -151,7 +151,7 @@ IGraphTransformer::TStatus CollectCboStatsNode(THashMap<TString, THashSet<TStrin
     return result;
 }
 
-}  // namespace
+} // namespace
 
 IGraphTransformer::TStatus PopulateJoinStrategySizeInfo(
     TRelSizeInfo& outLeft,

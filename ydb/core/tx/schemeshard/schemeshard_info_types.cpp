@@ -1391,7 +1391,7 @@ bool TPartitionConfigMerger::VerifyCreateParams(
     const NKikimrSchemeOp::TPartitionConfig &config,
     const TAppData *appData, const bool shadowDataAllowed, TString &errDescr)
 {
-    if (config.HasShadowData()) {
+    if (config.HasShadowData() && config.GetShadowData()) {
         if (!shadowDataAllowed) {
             errDescr = TStringBuilder() << "Setting ShadowData is prohibited";
             return false;

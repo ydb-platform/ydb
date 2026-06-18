@@ -4282,7 +4282,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 } else { // remove that branch since we sure in persisting SourcePathId
                     // Figure out source path id for the Tx (for CopyTable)
-                    if (Self->ShardInfos.at(shardIdx).PathId != txState->TargetPathId &&
+                    if (!Self->SharedShards.contains(shardIdx) &&
+                        Self->ShardInfos.at(shardIdx).PathId != txState->TargetPathId &&
                         !txState->SourcePathId &&
                         txState->TxType != TTxState::TxForceDropSubDomain &&
                         txState->TxType != TTxState::TxForceDropExtSubDomain &&
@@ -4295,8 +4296,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         txState->TxType != TTxState::TxCreateReplication &&
                         txState->TxType != TTxState::TxAlterReplication &&
                         txState->TxType != TTxState::TxDropReplication &&
-                        txState->TxType != TTxState::TxDropReplicationCascade &&
-                        txState->TxType != TTxState::TxBackup
+                        txState->TxType != TTxState::TxDropReplicationCascade
                     )
                     {
                         Y_VERIFY_S(txState->TxType == TTxState::TxCopyTable || txState->TxType == TTxState::TxReadOnlyCopyColumnTable, "Only CopyTable Tx can have participating shards from a different table"

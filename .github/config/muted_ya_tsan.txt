@@ -188,7 +188,6 @@ ydb/core/transfer/ut/functional Transfer.BaseScenario_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional unittest.sole chunk
-ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Int64
 ydb/core/transfer/ut/row_table Transfer_RowTable.DropColumn
 ydb/core/transfer/ut/row_table Transfer_RowTable.MessageField_CreateTimestamp
 ydb/core/transfer/ut/row_table Transfer_RowTable.ProcessingTargetTableOtherType
@@ -974,7 +973,6 @@ ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumn
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_2_compression-algorithm=zstd,level=2-2]
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_7_compression-algorithm=zstd,level=7-2]
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_create_with_compression[lz4_compression-algorithm=lz4-1]
-ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_create_with_compression[zstd_14_compression-algorithm=zstd,level=14-2]
 ydb/tests/olap/min_max_index test_min_max_index.py.TestYdbMinMaxIndex.test_minmax_index_unsupported_type[JsonDocument-json_document]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test_multi[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]

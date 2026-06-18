@@ -1109,6 +1109,13 @@ public:
         }
     }
 
+    // Warmup completed (often via a skip before we ever sent TEvStartWarmup). Stop
+    // treating warmup as pending so fast-poll winds down and we don't later send
+    // TEvStartWarmup to a dead actor.
+    void Handle(NKqp::TEvKqpWarmupComplete::TPtr&) {
+        WarmupStarted = true;
+    }
+
     bool ShouldStartBalancing(const TSimpleResourceStats& stats, const double minResourceThreshold, const double currentResourceUsage) const {
         const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
         if (stats.CV < sbs.GetMinCVTreshold()) {
@@ -1381,6 +1388,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvPrivate::TEvCollectPeerProxyData, Handle);
+            hFunc(NKqp::TEvKqpWarmupComplete, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);

@@ -2430,6 +2430,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
             TVector<NActors::TActorId> notifyActorIds = {
                 NKqp::MakeKqpRmServiceID(NodeId),
+                NKqp::MakeKqpProxyID(NodeId),
                 MakeGRpcServersManagerId(NodeId),
                 NGRpcService::CreateGrpcPublisherServiceActorId(),
             };

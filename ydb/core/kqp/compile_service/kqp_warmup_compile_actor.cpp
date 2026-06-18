@@ -39,6 +39,7 @@ struct TEvPrivate {
         EvSoftDeadline,
         EvTruncatedCountResult,
         EvCheckTopology,
+        EvRetryFetch,
     };
 
     struct TQueryToCompile {
@@ -66,6 +67,7 @@ struct TEvPrivate {
     struct TEvHardDeadline : public NActors::TEventLocal<TEvHardDeadline, EvHardDeadline> {};
     struct TEvSoftDeadline : public NActors::TEventLocal<TEvSoftDeadline, EvSoftDeadline> {};
     struct TEvCheckTopology : public NActors::TEventLocal<TEvCheckTopology, EvCheckTopology> {};
+    struct TEvRetryFetch : public NActors::TEventLocal<TEvRetryFetch, EvRetryFetch> {};
 
     struct TEvTruncatedCountResult : public NActors::TEventLocal<TEvTruncatedCountResult, EvTruncatedCountResult> {
         bool Success;
@@ -356,6 +358,7 @@ private:
     STFUNC(StateFetching) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvFetchCacheResult, HandleFetchResult);
+            cFunc(TEvPrivate::EvRetryFetch, StartFetch);
             hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
@@ -422,10 +425,10 @@ private:
             // restart's transient blip syncs first and exits this branch.
             if (rm) {
                 const auto unavailableSince = rm->GetFirstBoardUnavailableAt();
+                const auto now = TActivationContext::Monotonic();
                 if (unavailableSince != NMonotonic::TMonotonic::Zero()
-                    && TActivationContext::Monotonic() - unavailableSince >= BoardUnavailableSkipDelay) {
-                    LOG_I("State Storage board unavailable for "
-                          << (TActivationContext::Monotonic() - unavailableSince)
+                    && now - unavailableSince >= BoardUnavailableSkipDelay) {
+                    LOG_W("State Storage board unavailable for " << (now - unavailableSince)
                           << ", infra not ready (cold bootstrap), skipping warmup");
                     Complete(true, "Skipped: state storage board unavailable");
                     return;
@@ -470,6 +473,8 @@ private:
             return;
         }
 
+        ++FetchAttempts;
+
         const ui32 maxNodesToQuery = Config.MaxNodesToRequest;
         if (maxNodesToQuery > 0 && maxNodesToQuery < NodeIds.size()) {
             // Contiguous slice of sorted NodeIds: see BuildNodeIdInClause for why.
@@ -497,6 +502,17 @@ private:
         auto* result = ev->Get();
 
         if (!result->Success) {
+            // The fetch now fires within ~2s of node start, before the database is
+            // always resolvable in the scheme cache ("Failed to fetch database
+            // info" — not a LookupError, so the fetcher doesn't retry it). Retry a
+            // few times; bounded so genuine failures still surface before the soft
+            // deadline rather than completing as a (successful) deadline skip.
+            if (!SoftDeadlineReached && FetchAttempts < MaxFetchAttempts) {
+                LOG_W("Fetch failed (attempt " << FetchAttempts << "/" << MaxFetchAttempts
+                      << "), retrying in " << FetchRetryDelay << ": " << result->Error);
+                Schedule(FetchRetryDelay, new TEvPrivate::TEvRetryFetch());
+                return;
+            }
             LOG_W("Fetch failed (no compile cache nodes responded), skipping warmup: " << result->Error);
             Complete(false, "Fetch failed: " + result->Error);
             return;
@@ -687,7 +703,7 @@ private:
 
 
     void HandleHardDeadline() {
-        LOG_I("Hard deadline reached, compiled: " << EntriesLoaded
+        LOG_W("Hard deadline reached, compiled: " << EntriesLoaded
               << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
 
@@ -714,7 +730,7 @@ private:
 
     void HandleSoftDeadlineInTopology() {
         // No peer NodeIds yet → can only read self (useless on warm restart).
-        LOG_I("Soft deadline reached while waiting for topology, skipping warmup");
+        LOG_W("Soft deadline reached while waiting for topology, skipping warmup");
         Complete(true, "Skipped: topology not delivered before soft deadline");
     }
 
@@ -742,6 +758,10 @@ private:
     // How long the board must stay unavailable before we treat it as a cold
     // bootstrap: above warm-restart sync latency, well below the soft deadline.
     static constexpr TDuration BoardUnavailableSkipDelay = TDuration::Seconds(1);
+    // Bounded retries for an early fetch racing the database becoming resolvable.
+    // Count * delay stays below the soft deadline so real failures still report.
+    static constexpr ui32 MaxFetchAttempts = 3;
+    static constexpr TDuration FetchRetryDelay = TDuration::Seconds(1);
 
     const TKqpWarmupConfig Config;
 
@@ -756,6 +776,7 @@ private:
     THashMap<ui64, TEvPrivate::TQueryToCompile> PendingQueriesByCookie;
     ui64 NextCookie = 0;
     ui32 PendingCompilations = 0;
+    ui32 FetchAttempts = 0;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
     ui32 MaxConcurrentCompilations = 1;

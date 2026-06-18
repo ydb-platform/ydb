@@ -1058,6 +1058,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             // legal, but nothing to check
             return;
         }
+        NeedsStatsCollectors = true;
         constexpr ui32 combinations = WithFeatureFlag && !WithFullscanFlag ? 2 : 1;
         {
             auto& setupAppConfig = SetupAppConfig();
@@ -1187,6 +1188,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         readSession->AddDataReceivedEvent(sampleMessages);
         writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4"});
 
+        auto actorsAlive = GetCounters("utils")->GetSubgroup("execpool", "User")->GetSubgroup("sensor", "ActorsAliveByActivity")->GetNamedCounter("activity", "NYql::NDq::(anonymous namespace)::TInputTransformStreamLookupBase");
+        WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
+            auto val = actorsAlive->Val();
+            error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 1";
+            return val == 1;
+        });
+
         CheckScriptExecutionsCount(1, 1);
         const auto results = ExecQuery(
             "SELECT ast_compressed FROM `.metadata/script_executions`;"
@@ -1196,6 +1204,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& ast = result.ColumnParser(0).GetOptionalString();
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(1, 0);
+
+        WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
+            auto val = actorsAlive->Val();
+            error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 0";
+            return val == 0;
         });
 
         if (!WithFullscanFlag) {
@@ -1231,7 +1254,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             EStatus::GENERIC_ERROR,
             "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is 123");
 
-            CheckScriptExecutionsCount(2, 1);
+            CheckScriptExecutionsCount(2, 0);
         }
     }
 

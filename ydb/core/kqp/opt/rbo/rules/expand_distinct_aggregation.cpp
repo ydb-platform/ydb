@@ -56,18 +56,18 @@ TIntrusivePtr<IOperator> BuildDistinct(const TIntrusivePtr<IOperator>& input, TV
 }
 
 const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputType, const TString& aggFunction, TExprContext& ctx) {
-    Y_ENSURE(inputType);
+    Y_ENSURE(inputType, "Type is nullptr");
     const TTypeAnnotationNode* resultType = inputType;
     TPositionHandle pos;
 
     if (aggFunction == "count") {
-        Y_ENSURE(false, "Count not supported for multiple distinct");
+        return ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
     } else if (aggFunction == "sum") {
         Y_ENSURE(GetSumResultType(pos, *inputType, resultType, ctx), "Unsupported type for sum aggregation function");
     } else if (aggFunction == "avg") {
         Y_ENSURE(false, "Avg not supported for multiple distinct.");
     } else if (aggFunction == "variance_1_1") {
-        Y_ENSURE(GetAvgResultType(pos, *inputType, resultType, ctx), "Unsupported type for variance aggregation function");
+        Y_ENSURE(false, "Variacnce not supported for multiple distinct.");
     }
 
     return resultType;
@@ -87,7 +87,7 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
     TVector<TMapElement> mapElements;
     TVector<std::pair<TString, TString>> fakeColumns;
     ui32 i = 0;
-    for (const auto& aggTraits: aggTraitsList) {
+    for (const auto& aggTraits : aggTraitsList) {
         const auto originalColName = aggTraits.OriginalColName.GetFullName();
         const auto resultColName = aggTraits.ResultColName.GetFullName();
         const auto mapColName = TInfoUnit(prefix + resultColName);
@@ -106,7 +106,8 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
             .Done().Ptr();
             // clang-format on
 
-            if (!fieldType->IsOptionalOrNull()) {
+            // Count unwraps optional.
+            if (!fieldType->IsOptionalOrNull() || aggTraits.AggFunction == "count") {
                 // clang-format off
                 body = Build<TCoJust>(ctx, input->Pos)
                     .Input(body)
@@ -115,10 +116,7 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
             }
 
             // clang-format on
-            columnExpr = Build<TCoLambda>(ctx, input->Pos)
-                .Args({arg})
-                .Body(body)
-            .Done().Ptr();
+            columnExpr = Build<TCoLambda>(ctx, input->Pos).Args({arg}).Body(body).Done().Ptr();
             // clang-format off
 
             const auto newName = mapColName.GetFullName() + "_" + ToString(i++);
@@ -155,11 +153,28 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
     return MakeIntrusive<TOpMap>(input, input->Pos, mapElements);
 }
 
+bool NeedToUnwrapOptional(const TTypeAnnotationNode* inputType, const TString& aggField, const std::pair<TString, TString>& aggFunctions,
+                          const TVector<TInfoUnit>& keys) {
+    Y_ENSURE(inputType);
+    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto fieldType = structType->FindItemType(aggField);
+    Y_ENSURE(fieldType, "Aggregation field not found " << aggField);
+
+    if (aggFunctions.first == "count" && aggFunctions.second == "sum") {
+        return true;
+    }
+
+    if (!keys.empty()) {
+        return !fieldType->IsOptionalOrNull();
+    }
+
+    return false;
+}
+
 TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& aggregate, TPlanProps& props, TExprContext& ctx) {
     const auto& aggTraitsList = aggregate->GetAggregationTraits();
     const auto pos = aggregate->Pos;
     const auto intermediateColumnPrefix = "__intermediate_";
-    Y_ENSURE(aggregate->KeyColumns.empty(), "Multiple distinct with group by not supported.");
 
     TIntrusivePtr<IOperator> unionAllResult;
     TVector<TOpAggregationTraits> finalAggTraitsList;
@@ -175,7 +190,9 @@ TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& 
         const auto aggFunctions = GetAggFunctions(aggTraits.AggFunction);
         const auto intermediateColName = TInfoUnit(intermediateColumnPrefix + aggTraits.ResultColName.GetFullName());
         const auto partialAggTraits = TOpAggregationTraits(aggTraits.OriginalColName, aggFunctions.first, intermediateColName);
-        const auto finalAggTraits = TOpAggregationTraits(intermediateColName, aggFunctions.second, aggTraits.ResultColName);
+        const auto finalAggTraits = TOpAggregationTraits(
+            intermediateColName, aggFunctions.second, aggTraits.ResultColName, false,
+            NeedToUnwrapOptional(aggregate->GetInput()->Type, aggTraits.OriginalColName.GetFullName(), aggFunctions, aggregate->KeyColumns));
         TVector<TOpAggregationTraits> partialAggregationTraitsList{partialAggTraits};
         finalAggTraitsList.emplace_back(finalAggTraits);
 
@@ -203,7 +220,7 @@ TIntrusivePtr<IOperator> TExpandDistinctAggregationRule::SimpleMatchAndApply(con
 
     const auto aggregate = CastOperator<TOpAggregate>(input);
     if (aggregate->GetAggregationTraits().size() == 1) {
-       return ExpandSingleDistinct(aggregate);
+        return ExpandSingleDistinct(aggregate);
     }
     return ExpandMultiDistinct(aggregate, props, rboCtx.ExprCtx);
 }

@@ -2438,4 +2438,151 @@ Y_UNIT_TEST(PgSyntax) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(WithCTE) {
+    TCases cases = {
+        {
+            TrimIndent(R"sql(
+                WITH x AS (SELECT 1) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x AS (
+                    SELECT
+                        1
+                )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x (a) AS (VALUES (1)) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x (a) AS (
+                    VALUES
+                        (1)
+                )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x AS (SELECT 1), y AS (SELECT 1) SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH
+                    x AS (
+                        SELECT
+                            1
+                    ),
+                    y AS (
+                        SELECT
+                            1
+                    )
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH x(a, b) AS (SELECT 1), SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH x (a, b) AS (
+                    SELECT
+                        1
+                ),
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                WITH RECURSIVE x(a, b) AS (SELECT 1), y(a, b) AS (SELECT 1), SELECT 1;
+            )sql"),
+            TrimIndent(R"sql(
+                WITH
+                    RECURSIVE x (a, b) AS (
+                        SELECT
+                            1
+                    ),
+                    y (a, b) AS (
+                        SELECT
+                            1
+                    ),
+                SELECT
+                    1
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                $x = (WITH x AS (SELECT 1) SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                $x = (
+                    WITH x AS (
+                        SELECT
+                            1
+                    )
+                    SELECT
+                        1
+                );
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                SELECT (WITH x AS (SELECT 1) SELECT 1);
+            )sql"),
+            TrimIndent(R"sql(
+                SELECT
+                    (
+                        WITH x AS (
+                            SELECT
+                                1
+                        )
+                        SELECT
+                            1
+                    )
+                ;
+
+            )sql"),
+        },
+        {
+            TrimIndent(R"sql(
+                INSERT INTO x
+                WITH a AS (SELECT 1 AS b)
+                SELECT * FROM a;
+            )sql"),
+            TrimIndent(R"sql(
+                INSERT INTO x
+                WITH a AS (
+                    SELECT
+                        1 AS b
+                )
+                SELECT
+                    *
+                FROM
+                    a
+                ;
+
+            )sql"),
+        },
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 // NOLINTEND(misc-definitions-in-headers)

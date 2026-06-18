@@ -171,7 +171,7 @@ void FormatBacktrace(TStringBuilder* builder, const std::vector<const void*>& ba
 
 } // namespace
 
-TString FormatIntrospectionInfos(const std::vector<TThreadIntrospectionInfo>& infos)
+std::string FormatIntrospectionInfos(const std::vector<TThreadIntrospectionInfo>& infos)
 {
     TStringBuilder builder;
     for (const auto& info : infos) {
@@ -192,7 +192,7 @@ TString FormatIntrospectionInfos(const std::vector<TThreadIntrospectionInfo>& in
     return builder.Flush();
 }
 
-TString FormatIntrospectionInfos(const std::vector<TFiberIntrospectionInfo>& infos)
+std::string FormatIntrospectionInfos(const std::vector<TFiberIntrospectionInfo>& infos)
 {
     TStringBuilder builder;
     for (const auto& info : infos) {

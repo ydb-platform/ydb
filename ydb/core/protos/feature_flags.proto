@@ -320,4 +320,5 @@ message TFeatureFlags {
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
     optional bool EnableCompactFulltextIndex = 280 [default = false];
+    optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
 }

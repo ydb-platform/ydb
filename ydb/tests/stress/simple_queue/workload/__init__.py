@@ -115,14 +115,10 @@ def get_table_description(table_name, mode, in_memory):
     if mode == "row":
         store_entry = "STORE = ROW,"
         ttl_entry = """TTL = Interval("PT240S") ON `timestamp` AS SECONDS,"""
-    elif mode == "column":
-        store_entry = "STORE = COLUMN,"
-        ttl_entry = ""
-    else:
-        raise RuntimeError("Unkown mode: {}".format(mode))
-
-    if in_memory:
-        families_entry = """
+        # Keep LZ4 compression for row tables only.
+        value_entry = "value Utf8 FAMILY lz4_family NOT NULL,"
+        if in_memory:
+            families_entry = """
             FAMILY default (
                 CACHE_MODE = "in_memory"
             ),
@@ -130,17 +126,26 @@ def get_table_description(table_name, mode, in_memory):
                 CACHE_MODE = "in_memory",
                 COMPRESSION = "lz4"
             ),"""
-    else:
-        families_entry = """
+        else:
+            families_entry = """
             FAMILY lz4_family (
                 COMPRESSION = "lz4"
             ),"""
+    elif mode == "column":
+        store_entry = "STORE = COLUMN,"
+        ttl_entry = ""
+        # Column tables do not support a FAMILY clause, so neither LZ4
+        # compression nor in_memory CACHE_MODE can be expressed here.
+        value_entry = "value Utf8 NOT NULL,"
+        families_entry = ""
+    else:
+        raise RuntimeError("Unkown mode: {}".format(mode))
 
     return f"""
         CREATE TABLE `{table_name}` (
             key Uint64 NOT NULL,
             `timestamp` Uint64 NOT NULL,
-            value Utf8 FAMILY lz4_family NOT NULL,
+            {value_entry}
             PRIMARY KEY (key),
             {families_entry}
             INDEX by_timestamp GLOBAL ON (`timestamp`)

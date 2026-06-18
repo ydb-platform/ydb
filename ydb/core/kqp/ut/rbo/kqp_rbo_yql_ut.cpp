@@ -1643,7 +1643,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 select sum(distinct t1.a), max(distinct t1.b) from `/Root/t1` as t1;
             )",
+            R"(
+                select count(distinct t1.a), count(distinct t1.b) from `/Root/t1` as t1;
+            )"
         };
+
         std::vector<std::string> resultsEmptyColumns = {
             R"([[0u]])",
             R"([[0u;0u]])",
@@ -1652,11 +1656,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[#;#]])",
             R"([[#;#]])",
             R"([[#;#]])",
+            R"([[0u;0u]])",
         };
 
         for (ui32 i = 0; i < queriesOnEmptyColumns.size(); ++i) {
             const auto& query = queriesOnEmptyColumns[i];
-            //Cout << query << Endl;
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), resultsEmptyColumns[i]);
@@ -1858,6 +1862,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select sum(distinct t1.b), sum(t1.b) from `/Root/t1` as t1;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(distinct t1.a) as r0, sum(t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by r0, r1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(distinct t1.c) as r0, sum(t1.a) as r1 from `/Root/t1` as t1 group by t1.b order by r0, r1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(distinct t1.c) as r0, sum(t1.a) as r1 from `/Root/t1` as t1 group by t1.b order by r0, r1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(distinct t1.a) as r0, count(t1.a) as r1 from `/Root/t1` as t1 group by t1.b order by r0, r1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(distinct t1.a) as r0, count(distinct t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by r0, r1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select min(distinct t1.a) as r0, max(distinct t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by r0, r1;
+            )",
             /*
             R"(
                 select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
@@ -1911,6 +1939,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[[4];[1]]])",
                                             R"([[[10];[10]]])",
                                             R"([[[3];[8]]])",
+                                            R"([[4;[4]];[6;[6]]])",
+                                            R"([[[2];4];[[2];6]])",
+                                            R"([[[2];4];[[2];6]])",
+                                            R"([[2u;2u];[3u;3u]])",
+                                            R"([[2u;1u];[3u;1u]])",
+                                            R"([[0;[2]];[1;[2]]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -1944,7 +1978,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                SELECT stddev_samp(t1.a) as res, t1.b from `/Root/t1` as t1 group by t1.b order by res, t1.b;
+                SELECT stddev_samp(t1.a) as res, t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -4160,9 +4194,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 15, 18, 19, 21, 22, 24, 25, 26, 29, 30, 31, 32, 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48,
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 29, 30, 31, 32, 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48,
                                                                       50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83,
-                                                                      84, 85, 87, 88, 90, 91, 92, 93, 96, 97, 99},
+                                                                      84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
                            /*rbo never finish*/{}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});

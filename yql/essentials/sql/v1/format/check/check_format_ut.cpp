@@ -38,7 +38,7 @@ Y_UNIT_TEST(PgSyntax) {
 
     NYql::TIssues issues;
     auto formatted = NSQLFormat::CheckedFormat(
-        query, settings, issues, NSQLFormat::EConvergenceRequirement::Double);
+        query, Nothing(), settings, issues, NSQLFormat::EConvergenceRequirement::Double);
 
     UNIT_ASSERT_C(formatted.Defined(), issues.ToString());
     UNIT_ASSERT(!formatted->empty());
@@ -62,7 +62,7 @@ Y_UNIT_TEST(QueryText) {
 
     NYql::TIssues issues;
     auto formatted = NSQLFormat::CheckedFormat(
-        query, settings, issues, NSQLFormat::EConvergenceRequirement::Double);
+        query, Nothing(), settings, issues, NSQLFormat::EConvergenceRequirement::Double);
 
     UNIT_ASSERT_C(formatted.Defined(), issues.ToString());
 }

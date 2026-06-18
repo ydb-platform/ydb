@@ -1623,6 +1623,35 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(queueUrl.Contains("ExampleQueue.fifo"));
     }
 
+    Y_UNIT_TEST_F(TestCreateFifoQueueWithoutSuffix, TFixture) {
+        const TString queueName = "CreateQueueWithoutSuffix";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        Cerr << (TStringBuilder() << "queueUrl: " << queueUrl << Endl);
+        UNIT_ASSERT_C(queueUrl.Contains(queueName), queueUrl);
+
+        json = GetQueueAttributes({{"QueueUrl", queueUrl}, {"AttributeNames", NJson::TJsonArray{"FifoQueue"}}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["FifoQueue"], "true");
+
+        json = GetQueueUrl({{"QueueName", queueName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        queueUrl = GetPathFromQueueUrlMap(json);
+        Cerr << (TStringBuilder() << "queueUrl: " << queueUrl << Endl);
+        UNIT_ASSERT_C(queueUrl.Contains(queueName), queueUrl);
+
+        json = SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "test"}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+    }
+
     Y_UNIT_TEST_F(TestCreateQueueWithAttributes, TFixture) {
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName"},

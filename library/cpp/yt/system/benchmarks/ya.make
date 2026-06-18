@@ -5,6 +5,12 @@ SRCS(
     thread.cpp
 )
 
+IF (OS_LINUX)
+    SRCS(
+        cpu_id.cpp
+    )
+ENDIF()
+
 PEERDIR(
     library/cpp/yt/system
 )

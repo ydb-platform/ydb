@@ -62,7 +62,7 @@ public:
     }
 
     std::any visitSelect_stmt(SQLv1::Select_stmtContext* ctx) override {
-        return AccumulatingVisit(ctx->select_stmt_intersect());
+        return AccumulatingVisit(ctx->select_stmt_core()->select_stmt_intersect());
     }
 
     std::any visitSelect_stmt_intersect(SQLv1::Select_stmt_intersectContext* ctx) override {

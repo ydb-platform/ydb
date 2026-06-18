@@ -23,8 +23,7 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
             bRange, NKikimrProto::EReplyStatus::OK, ev->Body, TString{}, false, StorageId);
     } else {
         const auto& error = ev->GetError();
-        const bool isRetriable = error.ShouldRetry() || error.GetExceptionName() == "SlowDown" ||
-                                 error.GetExceptionName() == "TooManyRequests" || error.GetExceptionName() == "ServiceUnavailable";
+        const bool isRetriable = error.ShouldRetry() || error.GetExceptionName() == "SlowDown" || error.GetExceptionName() == "TooManyRequests";
         AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "get_object")("exception",
             error.GetExceptionName())("message", error.GetMessage())("storage_id", StorageId)("blob", logoBlobId)("retriable", isRetriable);
         TString err = TStringBuilder() << error.GetExceptionName() << ", " << error.GetMessage();

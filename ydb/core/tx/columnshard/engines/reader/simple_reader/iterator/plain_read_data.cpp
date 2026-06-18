@@ -47,7 +47,26 @@ void TPlainReadData::OnSentDataFromInterval(const TPartialSourceAddress& sourceA
     if (!SpecialReadContext->IsActive()) {
         return;
     }
+
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "OnSentDataFromInterval")(
+        "source_idx", sourceAddress.GetSourceIdx())(
+        "sync_point_idx", sourceAddress.GetSyncPointIndex());
+
+    // Continuation only: pages-in-flight bookkeeping lives in OnStreamingPageSent.
     Scanner->GetSyncPoint(sourceAddress.GetSyncPointIndex())->Continue(sourceAddress, *this);
+}
+
+void TPlainReadData::OnStreamingPageSent(const TPartialSourceAddress& sourceAddress) {
+    if (!SpecialReadContext->IsActive()) {
+        return;
+    }
+    // Backpressure ack: paired one-to-one with ISourcesCollection::OnPageCreated().
+    // Set on every streaming page including the last one, so unlike Continue() this
+    // hook fires even when no further continuation is required.
+    Scanner->MutableSourcesCollection().OnPageSent();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_sent")(
+        "source_idx", sourceAddress.GetSourceIdx())(
+        "pages_in_flight", Scanner->GetSourcesCollection().GetPagesInFlightCount());
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

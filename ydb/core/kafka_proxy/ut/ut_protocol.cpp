@@ -103,7 +103,7 @@ void AssertProduceOk(const TMessagePtr<TProduceResponseData>& msg, const TString
 
 TKafkaRecordBatch ReadFetchRecords(const TKafkaBytesHolder& records) {
     UNIT_ASSERT(records);
-    return ReadKafkaRecordBatch(TStringBuf(records->data(), records->size()));
+    return ReadRecordBatch(TStringBuf(records->data(), records->size()));
 }
 
 void AssertFetchedKafkaRecords(const TMessagePtr<TFetchResponseData>& msg) {

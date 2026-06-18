@@ -40,7 +40,7 @@ bool IsRawRecordBatch(const TKafkaBatchHeader& header) {
     return CompressionType(header) == ECompressionType::NONE;
 }
 
-bool CanStoreAsKafkaBatch(const TKafkaBatchHeader& header, bool batchingEnabled) {
+bool CanStoreRawRecords(const TKafkaBatchHeader& header, bool batchingEnabled) {
     return batchingEnabled && (IsRecordBatchV2OrNewer(header) || IsRawRecordBatch(header));
 }
 
@@ -104,28 +104,6 @@ std::pair<EKafkaErrors, ui64> GetMaxSeqNo(const TKafkaBatchHeader& header, ui64 
         return {EKafkaErrors::INVALID_RECORD, 0};
     }
     return {EKafkaErrors::NONE_ERROR, baseSeqNo + static_cast<ui64>(header.LastOffsetDelta)};
-}
-
-size_t GetRecordsCount(const TKafkaBytes& records, bool batchingEnabled) {
-    const TStringBuf data = AsStringBuf(records);
-    if (data.empty()) {
-        return 0;
-    }
-
-    try {
-        if (const auto header = ReadKafkaBatchHeader(data)) {
-            if (CanStoreAsKafkaBatch(*header, batchingEnabled)) {
-                return header->RecordsCount;
-            }
-            if ((!IsRecordBatchV2OrNewer(*header) || !batchingEnabled) && !IsRawRecordBatch(*header)) {
-                return 0;
-            }
-        }
-        return ReadRecordBatch(data).Records.size();
-    } catch (const yexception& e) {
-        KAFKA_LOG_ERROR("Failed to read Kafka records count: " << e.what());
-        return 0;
-    }
 }
 
 } // namespace
@@ -412,14 +390,57 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     return canProcess;
 }
 
+struct TParsedProduceRecords {
+    TStringBuf Records;
+    std::optional<TKafkaBatchHeader> BatchHeader;
+    TKafkaRecordBatch Batch;
+    bool StoreRawRecords = false;
+    size_t RecordsCount = 0;
+    i64 ProducerId = TKafkaRecordBatch::ProducerIdMeta::Default;
+    i16 ProducerEpoch = TKafkaRecordBatch::ProducerEpochMeta::Default;
+};
+
+std::pair<EKafkaErrors, TParsedProduceRecords> ParseProduceRecords(
+    const TKafkaBytes& records,
+    bool batchingEnabled
+) {
+    TParsedProduceRecords result;
+    result.Records = AsStringBuf(records);
+    if (result.Records.empty()) {
+        return {EKafkaErrors::INVALID_RECORD, result};
+    }
+
+    result.BatchHeader = ReadKafkaBatchHeader(result.Records);
+    if (result.BatchHeader) {
+        if (const auto error = ValidateBatchCompression(*result.BatchHeader, batchingEnabled);
+            error != EKafkaErrors::NONE_ERROR) {
+            return {error, result};
+        }
+    }
+
+    result.StoreRawRecords = result.BatchHeader && CanStoreRawRecords(*result.BatchHeader, batchingEnabled);
+    if (result.StoreRawRecords) {
+        result.RecordsCount = result.BatchHeader->RecordsCount;
+        result.ProducerId = result.BatchHeader->ProducerId;
+        result.ProducerEpoch = result.BatchHeader->ProducerEpoch;
+    } else {
+        result.Batch = ReadRecordBatch(result.Records);
+        result.RecordsCount = result.Batch.Records.size();
+        result.ProducerId = result.Batch.ProducerId;
+        result.ProducerEpoch = result.Batch.ProducerEpoch;
+    }
+
+    return {EKafkaErrors::NONE_ERROR, std::move(result)};
+}
+
 std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
     const TString& transactionalId,
     const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
+    const TParsedProduceRecords& parsedRecords,
     const TString& topicName,
     ui64 cookie,
     const TString& clientDC,
-    bool ruPerRequest,
-    bool batchingEnabled
+    bool ruPerRequest
 ) {
     if (!data.Records) {
         return {EKafkaErrors::INVALID_RECORD, nullptr};
@@ -428,24 +449,11 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
     auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
     auto& request = ev->Record;
 
-    const TStringBuf records = AsStringBuf(data.Records);
-    const std::optional<TKafkaBatchHeader> maybeBatchHeader = ReadKafkaBatchHeader(records);
-    if (maybeBatchHeader) {
-        if (const auto error = ValidateBatchCompression(*maybeBatchHeader, batchingEnabled);
-            error != EKafkaErrors::NONE_ERROR) {
-            return {error, nullptr};
-        }
-    }
-    const std::optional<TKafkaBatchHeader> batchHeader =
-        maybeBatchHeader && CanStoreAsKafkaBatch(*maybeBatchHeader, batchingEnabled)
-            ? maybeBatchHeader
-            : std::nullopt;
-    const TKafkaRecordBatch batch = batchHeader
-        ? TKafkaRecordBatch{}
-        : ReadRecordBatch(records);
-
-    const i64 producerId = batchHeader ? batchHeader->ProducerId : batch.ProducerId;
-    const i16 producerEpoch = batchHeader ? batchHeader->ProducerEpoch : batch.ProducerEpoch;
+    const TStringBuf records = parsedRecords.Records;
+    const auto& batchHeader = parsedRecords.BatchHeader;
+    const auto& batch = parsedRecords.Batch;
+    const i64 producerId = parsedRecords.ProducerId;
+    const i16 producerEpoch = parsedRecords.ProducerEpoch;
     const TString sourceId = MakeSourceId(transactionalId, producerId);
 
     auto* partitionRequest = request.MutablePartitionRequest();
@@ -458,7 +466,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
     ui64 totalSize = 0;
 
-    if (batchHeader) {
+    if (parsedRecords.StoreRawRecords) {
         if (batchHeader->RecordsCount <= 0) {
             return {EKafkaErrors::INVALID_RECORD, nullptr};
         }
@@ -788,8 +796,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                 const auto& partitionData = topicData.PartitionData[j];
                 auto& partitionResponse = topicResponse.PartitionResponses[j];
                 const auto& result = pendingRequest->Results[position++];
-                const bool batchingEnabled = NPQ::IsTopicMessagesBatchingEnabled(ctx);
-                size_t recordsCount = GetRecordsCount(partitionData.Records, batchingEnabled);
+                size_t recordsCount = result.RecordsCount;
                 partitionResponse.Index = partitionData.Index;
                 if (EKafkaErrors::NONE_ERROR != result.ErrorCode) {
                     KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode)
@@ -944,33 +951,22 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
         return;
     }
 
-    i64 producerId = TKafkaRecordBatch::ProducerIdMeta::Default;
-    i16 producerEpoch = TKafkaRecordBatch::ProducerEpochMeta::Default;
+    TParsedProduceRecords parsedRecords;
     try {
-        const TStringBuf records = AsStringBuf(partitionData.Records);
-        const auto batchHeader = ReadKafkaBatchHeader(records);
-        if (batchHeader) {
-            if (const auto error = ValidateBatchCompression(*batchHeader, batchingEnabled);
-                error != EKafkaErrors::NONE_ERROR) {
-                result.ErrorCode = error;
-                return;
-            }
+        auto [parseError, parsed] = ParseProduceRecords(partitionData.Records, batchingEnabled);
+        if (parseError != EKafkaErrors::NONE_ERROR) {
+            result.ErrorCode = parseError;
+            return;
         }
-        if (batchHeader && CanStoreAsKafkaBatch(*batchHeader, batchingEnabled)) {
-            producerId = batchHeader->ProducerId;
-            producerEpoch = batchHeader->ProducerEpoch;
-        } else {
-            const auto batch = ReadRecordBatch(records);
-            producerId = batch.ProducerId;
-            producerEpoch = batch.ProducerEpoch;
-        }
+        parsedRecords = std::move(parsed);
+        result.RecordsCount = parsedRecords.RecordsCount;
     } catch (const yexception& e) {
         KAFKA_LOG_ERROR("Failed to read Kafka records metadata: " << e.what());
         result.ErrorCode = EKafkaErrors::INVALID_RECORD;
         return;
     }
 
-    TProducerInstanceId producerInstanceId{producerId, producerEpoch};
+    TProducerInstanceId producerInstanceId{parsedRecords.ProducerId, parsedRecords.ProducerEpoch};
     TMaybe<TString> transactionalId;
     if (r->TransactionalId) {
         transactionalId.ConstructInPlace(r->TransactionalId->c_str());
@@ -980,7 +976,7 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
     if (OK == writer.first) {
         auto ownCookie = ++Cookie;
 
-        auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, topicPath, ownCookie, ClientDC, ruPerRequest, batchingEnabled);
+        auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, parsedRecords, topicPath, ownCookie, ClientDC, ruPerRequest);
         if (error == EKafkaErrors::NONE_ERROR) {
             auto& cookieInfo = Cookies[ownCookie];
             cookieInfo.TopicPath = topicPath;

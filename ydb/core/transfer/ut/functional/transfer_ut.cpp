@@ -1449,7 +1449,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             )", MainTestCase::CreateTransferSettings::WithDirectory("/local"));
 
         testCase.Write({"Message-1"});
-        testCase.CheckTransferStateError(" unknown table");
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
 
         testCase.DropTransfer();
         testCase.DropTopic();
@@ -1484,7 +1486,10 @@ Y_UNIT_TEST_SUITE(Transfer)
             MainTestCase::CreateTransferSettings::WithDirectory("/local"));
 
         testCase.Write({"Message-1"});
-        testCase.CheckTransferStateError(" unknown table");
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
 
         testCase.DropTransfer();
         testCase.DropTopic();

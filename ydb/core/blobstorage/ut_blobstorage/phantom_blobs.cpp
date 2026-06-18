@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 TString data;
                 SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvCollectGarbage(
                         TabletId, Generation, ++GenerationCtr, Channel, true, Generation, Step,
-                        keepFlags, doNotKeepFlags, TInstant::Max(), true, false));
+                        keepFlags, doNotKeepFlags, TInstant::Max(), true, TWriteSource::Unknown, false));
             });
             Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(
                     Edge, false, TInstant::Max());

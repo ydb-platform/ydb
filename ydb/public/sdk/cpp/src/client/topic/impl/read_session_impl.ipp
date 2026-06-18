@@ -16,6 +16,8 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#include <ydb/library/kafka/kafka_records.h>
+
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 #include <util/generic/guid.h>
@@ -30,6 +32,26 @@
 
 
 namespace NYdb::inline Dev::NTopic {
+
+namespace {
+
+using NKafka::ReadKafkaBatchHeader;
+
+size_t GetReadMessageCount(const Ydb::Topic::StreamReadMessage_ReadResponse_MessageData& messageData, int32_t codec) {
+    const auto& dataBytes = messageData.data();
+
+    switch (codec) {
+        case Ydb::Topic::CODEC_KAFKA_BATCH:
+            if (const auto header = NKafka::ReadKafkaBatchHeader(dataBytes)) {
+                return static_cast<size_t>(header->RecordsCount);
+            }
+            return 1;
+        default:
+            return 1;
+    }
+}
+
+} // namespace
 
 static const bool RangesMode = !std::string{std::getenv("PQ_OFFSET_RANGES_MODE") ? std::getenv("PQ_OFFSET_RANGES_MODE") : ""}.empty();
 static const bool ExperimentalDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
@@ -224,7 +246,10 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
                 ready.push_back(std::move(event));
             } else if (isDataEvent) {
                 // We should release memory for this ready event here
-                accumulator.Add(event.GetDataEvent().GetParent(), event.GetDataEvent().GetDataSize());
+                accumulator.Add(
+                    event.GetDataEvent().GetParent(),
+                    event.GetDataEvent().GetDataSize(),
+                    event.GetDataEvent().GetMessageCount());
             }
         } else {
             hasNonReadyEvents = true;
@@ -556,6 +581,8 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
     if (Settings.PartitionMaxInFlightBytes_) {
         init.set_partition_max_in_flight_bytes(*Settings.PartitionMaxInFlightBytes_);
     }
+
+    init.set_is_batching_supported(true);
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
@@ -1329,7 +1356,9 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
             // Validate messages.
             for (const auto& messageData : batch.message_data()) {
                 // Check offsets continuity.
-                if (messageData.offset() != desiredOffset) {
+                // A message may start below the desired offset when a multi-message batch
+                // is redelivered as a whole blob after restarting from an offset inside it.
+                if (messageData.offset() > desiredOffset) {
                     bool res = partitionStream->AddToCommitRanges(desiredOffset, messageData.offset(), GetRangesMode());
                     Y_ABORT_UNLESS(res);
                 }
@@ -1338,13 +1367,14 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                     firstOffset = messageData.offset();
                 }
                 currentOffset = messageData.offset();
-                desiredOffset = currentOffset + 1;
-                partitionStream->UpdateMaxReadOffset(currentOffset);
+                const ui64 logicalMessageCount = GetReadMessageCount(messageData, batch.codec());
+                desiredOffset = Max(desiredOffset, currentOffset + static_cast<i64>(logicalMessageCount));
+                partitionStream->UpdateMaxReadOffset(currentOffset + static_cast<i64>(logicalMessageCount) - 1);
                 const i64 messageSize = static_cast<i64>(messageData.data().size());
                 CompressedDataSize += messageSize;
                 *Settings.Counters_->BytesInflightTotal += messageSize;
                 *Settings.Counters_->BytesInflightCompressed += messageSize;
-                ++*Settings.Counters_->MessagesInflight;
+                *Settings.Counters_->MessagesInflight += logicalMessageCount;
             }
         }
         if (firstOffset == std::numeric_limits<i64>::max()) {
@@ -1357,10 +1387,12 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         }
         partitionStream->SetFirstNotReadOffset(desiredOffset);
 
+        const ui64 committedOffset = partitionStream->GetMaxCommittedOffset();
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<false>>(std::move(partitionData),
                                                                                  SelfContext,
                                                                                  Settings.Decompress_,
-                                                                                 serverBytesSize);
+                                                                                 serverBytesSize,
+                                                                                 committedOffset);
         // TODO (ildar-khisam@): share serverBytesSize between partitions data according to their actual sizes;
         //                       for now whole serverBytesSize goes with first (and only) partition data.
         serverBytesSize = 0;
@@ -2564,17 +2596,22 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::GetDataEventImpl(TIntr
         auto& event = queue.front().GetDataEvent();
 
         TDataDecompressionInfoPtr<UseMigrationProtocol> parent = event.GetParent();
-        size_t size = 0;
 
-        event.TakeData(partitionStream, messages, compressedMessages, maxByteSize, size);
+        auto decompressedData = event.TakeData(partitionStream, maxByteSize);
+        messages.insert(messages.end(),
+                        std::make_move_iterator(decompressedData.Messages.begin()),
+                        std::make_move_iterator(decompressedData.Messages.end()));
+        compressedMessages.insert(compressedMessages.end(),
+                                  std::make_move_iterator(decompressedData.CompressedMessages.begin()),
+                                  std::make_move_iterator(decompressedData.CompressedMessages.end()));
         queue.pop_front();
 
-        accumulator.Add(parent, size);
+        accumulator.Add(parent, decompressedData.DataSize, decompressedData.MessagesTaken);
     }
 }
 
 template <bool UseMigrationProtocol>
-TADataReceivedEvent<UseMigrationProtocol>
+std::optional<TADataReceivedEvent<UseMigrationProtocol>>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                                                                 size_t& maxByteSize,
                                                                 TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator) // Assumes that we're under lock.
@@ -2600,19 +2637,21 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<TP
         TParent::Events.pop();
     }
 
-    Y_ABORT_UNLESS(!messages.empty() || !compressedMessages.empty());
+    if (messages.empty() && compressedMessages.empty()) {
+        return std::nullopt;
+    }
 
-    return {std::move(messages), std::move(compressedMessages), stream};
+    return TADataReceivedEvent<UseMigrationProtocol>{std::move(messages), std::move(compressedMessages), stream};
 }
 
 template <bool UseMigrationProtocol>
-TReadSessionEventInfo<UseMigrationProtocol>
+std::optional<TReadSessionEventInfo<UseMigrationProtocol>>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
                                                             TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator) // Assumes that we're under lock.
 {
     Y_ASSERT(TParent::HasEventsImpl());
 
-    if (!TParent::Events.empty()) {
+    while (!TParent::Events.empty()) {
         TReadSessionEventInfo<UseMigrationProtocol>& front = TParent::Events.front();
         auto partitionStream = front.PartitionStream;
 
@@ -2623,7 +2662,15 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
         std::optional<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> event;
         auto frontCbContext = front.CbContext;
         if (partitionStream->TopEvent().IsDataEvent()) {
-            event = GetDataEventImpl(partitionStream, maxByteSize, accumulator);
+            auto dataEvent = GetDataEventImpl(partitionStream, maxByteSize, accumulator);
+            if (!dataEvent) {
+                TParent::RenewWaiterImpl();
+                if (maxByteSize == 0) {
+                    return std::nullopt;
+                }
+                continue;
+            }
+            event = std::move(*dataEvent);
         } else {
             event = std::move(partitionStream->TopEvent().GetEvent());
             partitionStream->PopEvent();
@@ -2642,12 +2689,14 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
 
         TParent::RenewWaiterImpl();
 
-        return {partitionStream, std::move(frontCbContext), std::move(*event)};
+        return TReadSessionEventInfo<UseMigrationProtocol>{partitionStream, std::move(frontCbContext), std::move(*event)};
     }
 
-    Y_ASSERT(TParent::CloseEvent);
+    if (!TParent::CloseEvent) {
+        return std::nullopt;
+    }
 
-    return {*TParent::CloseEvent};
+    return TReadSessionEventInfo<UseMigrationProtocol>{*TParent::CloseEvent};
 }
 
 template <bool UseMigrationProtocol>
@@ -2670,8 +2719,11 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvents(bool block, std::option
             }
 
             while (TParent::HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
-                TReadSessionEventInfo<UseMigrationProtocol> event = GetEventImpl(maxByteSize, accumulator);
-                eventInfos.emplace_back(std::move(event));
+                auto event = GetEventImpl(maxByteSize, accumulator);
+                if (!event) {
+                    continue;
+                }
+                eventInfos.emplace_back(std::move(*event));
                 if (eventInfos.back().IsSessionClosedEvent()) {
                     break;
                 }
@@ -2827,20 +2879,28 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
     TPartitionData<UseMigrationProtocol>&& msg,
     TCallbackContextPtr<UseMigrationProtocol> cbContext,
     bool doDecompress,
-    i64 serverBytesSize
+    i64 serverBytesSize,
+    ui64 committedOffset
 )
     : ServerMessage(std::move(msg))
     , CbContext(std::move(cbContext))
     , DoDecompress(doDecompress)
+    , CommittedOffset(committedOffset)
     , ServerBytesSize(serverBytesSize)
 {
     i64 compressedSize = 0;
     i64 messagesCount = 0;
 
     for (const auto& batch : ServerMessage.batches()) {
+        DecompressedData.emplace_back();
+        DecompressedData.back().resize(static_cast<size_t>(batch.message_data_size()));
         for (const auto& messageData : batch.message_data()) {
             compressedSize += messageData.data().size();
-            ++messagesCount;
+            if constexpr (UseMigrationProtocol) {
+                ++messagesCount;
+            } else {
+                messagesCount += static_cast<i64>(GetReadMessageCount(messageData, batch.codec()));
+            }
         }
     }
 
@@ -3035,17 +3095,18 @@ void TDataDecompressionInfo<UseMigrationProtocol>::OnDestroyReadSession()
 }
 
 template<bool UseMigrationProtocol>
-void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-                                                             std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TMessage>& messages,
-                                                             std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
-                                                             size_t& maxByteSize,
-                                                             size_t& dataSize) const
+typename TDataDecompressionInfo<UseMigrationProtocol>::TDecompressedData
+TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                                                    size_t batchIndex,
+                                                                    size_t messageIndex,
+                                                                    const TDecompressionResult& codecResult)
 {
-    auto& msg = Parent->GetServerMessage();
+    TDecompressedData result;
+    auto& msg = GetServerMessage();
     i64 minOffset = Max<i64>();
     i64 maxOffset = 0;
-    auto& batch = *msg.mutable_batches(Batch);
-    const auto& meta = Parent->GetBatchMeta(Batch);
+    auto& batch = *msg.mutable_batches(batchIndex);
+    const auto& meta = GetBatchMeta(batchIndex);
     const TInstant batchWriteTimestamp = [&batch](){
         if constexpr (UseMigrationProtocol) {
             return TInstant::MilliSeconds(batch.write_timestamp_ms());
@@ -3053,7 +3114,106 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
             return TInstant::MilliSeconds(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(batch.written_at()));
         }
     }();
-    auto& messageData = *batch.mutable_message_data(Message);
+    auto& messageData = *batch.mutable_message_data(messageIndex);
+
+    result.MessagesTaken = 1;
+
+    if constexpr (!UseMigrationProtocol) {
+        const auto& messageMeta = GetMessageMeta(batchIndex, messageIndex);
+
+        if (GetDoDecompress()) {
+            ui64 recordsSkipped = 0;
+            result.MessagesTaken = 0;
+
+            for (const auto& decompressedMsg : codecResult.Messages) {
+                ui64 offset = messageData.offset();
+                ui64 seqNo = messageData.seq_no();
+                TInstant createTime = TInstant::MilliSeconds(
+                    ::google::protobuf::util::TimeUtil::TimestampToMilliseconds(messageData.created_at()));
+
+                if (decompressedMsg.Meta) {
+                    const auto& recordMeta = *decompressedMsg.Meta;
+                    offset = static_cast<ui64>(messageData.offset()) + static_cast<ui64>(recordMeta.OffsetDelta);
+                    if (offset < CommittedOffset) {
+                        ++result.MessagesTaken;
+                        ++recordsSkipped;
+                        continue;
+                    }
+                    seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(recordMeta.SequenceDelta);
+                    createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + recordMeta.TimestampDelta);
+                }
+
+                TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(
+                    offset,
+                    batch.producer_id(),
+                    seqNo,
+                    createTime,
+                    batchWriteTimestamp,
+                    meta,
+                    messageMeta,
+                    decompressedMsg.Data.size(),
+                    messageData.message_group_id()
+                );
+
+                minOffset = Min(minOffset, static_cast<i64>(offset));
+                maxOffset = Max(maxOffset, static_cast<i64>(offset));
+                result.DataSize += decompressedMsg.Data.size();
+
+                result.Messages.emplace_back(
+                    std::move(decompressedMsg.Data),
+                    GetDecompressionError(batchIndex, messageIndex),
+                    std::move(messageInfo),
+                    partitionStream);
+
+                ++result.MessagesTaken;
+            }
+
+            messageData.clear_data();
+
+            if (recordsSkipped > 0) {
+                LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+                    << "Take Data (codec batch). Partition " << partitionStream->GetPartitionId()
+                    << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
+                    << minOffset << "-" << maxOffset << "), messages: " << result.MessagesTaken
+                    << ", skipped as committed: " << recordsSkipped);
+            } else {
+                LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+                    << "Take Data. Partition " << partitionStream->GetPartitionId()
+                    << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
+                    << minOffset << "-" << maxOffset << ")");
+            }
+            return result;
+        }
+
+        TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(
+                messageData.offset(),
+                batch.producer_id(),
+                messageData.seq_no(),
+                TInstant::MilliSeconds(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(messageData.created_at())),
+                batchWriteTimestamp,
+                meta,
+                messageMeta,
+                messageData.uncompressed_size(),
+                messageData.message_group_id()
+        );
+
+        minOffset = Min(minOffset, static_cast<i64>(messageData.offset()));
+        maxOffset = Max(maxOffset, static_cast<i64>(messageData.offset()));
+
+        result.CompressedMessages.emplace_back(static_cast<ECodec>(batch.codec()),
+                                               messageData.data(),
+                                               messageInfo,
+                                               partitionStream);
+
+        result.DataSize += messageData.data().size();
+        messageData.clear_data();
+
+        LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+            << "Take Data. Partition " << partitionStream->GetPartitionId()
+            << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
+            << minOffset << "-" << maxOffset << ")");
+        return result;
+    }
 
     minOffset = Min(minOffset, static_cast<i64>(messageData.offset()));
     maxOffset = Max(maxOffset, static_cast<i64>(messageData.offset()));
@@ -3070,64 +3230,110 @@ void TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPart
                                         meta,
                                         messageData.uncompressed_size());
 
-        if (Parent->GetDoDecompress()) {
-            messages.emplace_back(messageData.data(),
-                                  Parent->GetDecompressionError(Batch, Message),
-                                  messageInfo,
-                                  partitionStream,
-                                  messageData.partition_key(),
-                                  messageData.explicit_hash());
+        if (GetDoDecompress()) {
+            Y_ASSERT(!codecResult.Messages.empty());
+            const auto& decompressedMsg = codecResult.Messages.front();
+            result.Messages.emplace_back(decompressedMsg.Data,
+                                         GetDecompressionError(batchIndex, messageIndex),
+                                         messageInfo,
+                                         partitionStream,
+                                         messageData.partition_key(),
+                                         messageData.explicit_hash());
+            result.DataSize += decompressedMsg.Data.size();
         } else {
-            compressedMessages.emplace_back(static_cast<NPersQueue::ECodec>(messageData.codec()),
-                                            messageData.data(),
-                                            std::vector<TMessageInformation>{messageInfo},
-                                            partitionStream,
-                                            messageData.partition_key(),
-                                            messageData.explicit_hash());
-        }
-    } else {
-        const auto& messageMeta = Parent->GetMessageMeta(Batch, Message);
-        TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(
-                messageData.offset(),
-                batch.producer_id(),
-                messageData.seq_no(),
-                TInstant::MilliSeconds(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(messageData.created_at())),
-                batchWriteTimestamp,
-                meta,
-                messageMeta,
-                messageData.uncompressed_size(),
-                messageData.message_group_id()
-        );
-
-        if (Parent->GetDoDecompress()) {
-            messages.emplace_back(messageData.data(),
-                                  Parent->GetDecompressionError(Batch, Message),
-                                  messageInfo,
-                                  partitionStream);
-        } else {
-            compressedMessages.emplace_back(static_cast<ECodec>(batch.codec()),
-                                            messageData.data(),
-                                            messageInfo,
-                                            partitionStream);
+            result.CompressedMessages.emplace_back(static_cast<NPersQueue::ECodec>(messageData.codec()),
+                                                   messageData.data(),
+                                                   std::vector<TMessageInformation>{messageInfo},
+                                                   partitionStream,
+                                                   messageData.partition_key(),
+                                                   messageData.explicit_hash());
+            result.DataSize += messageData.data().size();
         }
     }
-
-    maxByteSize -= Min(maxByteSize, messageData.data().size());
-
-    dataSize += messageData.data().size();
 
     // Clear data to free internal session's memory.
     messageData.clear_data();
 
     LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
                                         << "Take Data. Partition " << partitionStream->GetPartitionId()
-                                        << ". Read: {" << Batch << ", " << Message << "} ("
+                                        << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
                                         << minOffset << "-" << maxOffset << ")");
+    return result;
+}
+
+template<bool UseMigrationProtocol>
+size_t TDataDecompressionInfo<UseMigrationProtocol>::GetPreparedDataSize(size_t batch, size_t message) const
+{
+    Y_ASSERT(batch < DecompressedData.size());
+    Y_ASSERT(message < DecompressedData[batch].size());
+    const auto& data = DecompressedData[batch][message];
+    if (data.MessagesTaken > 0) {
+        return data.DataSize;
+    }
+    return GetServerMessage().batches(batch).message_data(message).data().size();
+}
+
+template<bool UseMigrationProtocol>
+size_t TDataDecompressionInfo<UseMigrationProtocol>::GetPreparedMessageCount(size_t batch, size_t message) const
+{
+    Y_ASSERT(batch < DecompressedData.size());
+    Y_ASSERT(message < DecompressedData[batch].size());
+    const auto& data = DecompressedData[batch][message];
+    if (data.MessagesTaken > 0) {
+        return data.MessagesTaken;
+    }
+    if constexpr (UseMigrationProtocol) {
+        return 1;
+    } else {
+        const auto& serverBatch = GetServerMessage().batches(batch);
+        return GetReadMessageCount(serverBatch.message_data(message), serverBatch.codec());
+    }
+}
+
+template<bool UseMigrationProtocol>
+void TDataDecompressionInfo<UseMigrationProtocol>::PutDecompressedData(size_t batch,
+                                                                       size_t message,
+                                                                       TDecompressedData&& data)
+{
+    Y_ASSERT(batch < DecompressedData.size());
+    Y_ASSERT(message < DecompressedData[batch].size());
+    DecompressedData[batch][message] = std::move(data);
+}
+
+template<bool UseMigrationProtocol>
+typename TDataDecompressionInfo<UseMigrationProtocol>::TDecompressedData
+TDataDecompressionInfo<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                                       size_t batch,
+                                                       size_t message,
+                                                       size_t& maxByteSize)
+{
+    Y_ASSERT(batch < DecompressedData.size());
+    Y_ASSERT(message < DecompressedData[batch].size());
+
+    TDecompressedData result = std::move(DecompressedData[batch][message]);
+    if (result.MessagesTaken == 0 && result.Messages.empty() && result.CompressedMessages.empty()) {
+        result = BuildDecompressedData(partitionStream, batch, message, TDecompressionResult{});
+    }
+    maxByteSize -= Min(maxByteSize, result.DataSize);
+    return result;
+}
+
+template<bool UseMigrationProtocol>
+typename TDataDecompressionInfo<UseMigrationProtocol>::TDecompressedData
+TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                                        size_t& maxByteSize) const
+{
+    return Parent->TakeData(partitionStream, Batch, Message, maxByteSize);
 }
 
 template<bool UseMigrationProtocol>
 size_t TDataDecompressionEvent<UseMigrationProtocol>::GetDataSize() const {
-    return Parent->GetServerMessage().batches(Batch).message_data(Message).data().size();
+    return Parent->GetPreparedDataSize(Batch, Message);
+}
+
+template<bool UseMigrationProtocol>
+size_t TDataDecompressionEvent<UseMigrationProtocol>::GetMessageCount() const {
+    return Parent->GetPreparedMessageCount(Batch, Message);
 }
 
 template<bool UseMigrationProtocol>
@@ -3204,30 +3410,39 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
         for (size_t i = messages.MessageRange.first; i < messages.MessageRange.second; ++i) {
             auto& data = *batch.mutable_message_data(i);
 
-            ++messagesProcessed;
             dataProcessed += static_cast<i64>(data.data().size());
             minOffset = Min(minOffset, static_cast<i64>(data.offset()));
             maxOffset = Max(maxOffset, static_cast<i64>(data.offset()));
 
+            TDecompressionResult codecResult;
             try {
-                if constexpr (UseMigrationProtocol) {
-                    if (parent->DoDecompress
-                        && data.codec() != Ydb::PersQueue::V1::CODEC_RAW
-                        && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
-                    ) {
-                        const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
-                        std::string decompressed = codecImpl->Decompress(data.data());
-                        data.set_data(TStringType{std::move(decompressed)});
-                        data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
-                    }
-                } else {
-                    if (parent->DoDecompress
-                        && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_RAW
-                        && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED
-                    ) {
-                        const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
-                        std::string decompressed = codecImpl->Decompress(data.data());
-                        data.set_data(TStringType{std::move(decompressed)});
+                if (parent->DoDecompress) {
+                    if constexpr (UseMigrationProtocol) {
+                        if (data.codec() != Ydb::PersQueue::V1::CODEC_RAW
+                            && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
+                        ) {
+                            const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
+                            codecResult = codecImpl->DecompressData(data.data());
+                            data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
+                        } else {
+                            codecResult.Messages.push_back(TDecompressedMessage{
+                                .Data = std::string(data.data()),
+                                .Meta = std::nullopt,
+                            });
+                        }
+                    } else {
+                        const auto batchCodec = static_cast<Ydb::Topic::Codec>(batch.codec());
+                        if (batchCodec != Ydb::Topic::CODEC_RAW
+                            && batchCodec != Ydb::Topic::CODEC_UNSPECIFIED
+                        ) {
+                            const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
+                            codecResult = codecImpl->DecompressData(data.data());
+                        } else {
+                            codecResult.Messages.push_back(TDecompressedMessage{
+                                .Data = std::string(data.data()),
+                                .Meta = std::nullopt,
+                            });
+                        }
                     }
                 }
             } catch (...) {
@@ -3236,9 +3451,19 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                 if (auto session = parent->CbContext->LockShared()) {
                     session->GetLog() << TLOG_INFO << "Error decompressing data: " << CurrentExceptionMessage();
                 }
+
+                if (codecResult.Messages.empty()) {
+                    codecResult.Messages.push_back(TDecompressedMessage{
+                        .Data = std::string(data.data()),
+                        .Meta = std::nullopt,
+                    });
+                }
             }
 
-            DecompressedSize += data.data().size();
+            auto decompressedData = parent->BuildDecompressedData(PartitionStream, messages.Batch, i, codecResult);
+            DecompressedSize += decompressedData.DataSize;
+            messagesProcessed += decompressedData.MessagesTaken;
+            parent->PutDecompressedData(messages.Batch, i, std::move(decompressedData));
         }
     }
 
@@ -3282,12 +3507,15 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::ClearPare
 // TUserRetrievedEventsInfoAccumulator
 
 template<bool UseMigrationProtocol>
-void TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>::Add(TDataDecompressionInfoPtr<UseMigrationProtocol> info, i64 decompressedSize)
+void TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>::Add(
+        TDataDecompressionInfoPtr<UseMigrationProtocol> info,
+        i64 decompressedSize,
+        size_t messagesCount)
 {
     auto& counter = Counters[info];
 
     counter.DecompressedSize += decompressedSize;
-    ++counter.MessagesCount;
+    counter.MessagesCount += messagesCount;
 }
 
 template<bool UseMigrationProtocol>

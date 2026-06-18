@@ -1,10 +1,11 @@
-#include <ydb/core/ymq/http/xml_builder.h>
+#include "xml_builder.h"
 
 #include <libxml/threads.h>
 #include <libxml/xmlwriter.h>
 
 #include <exception>
 #include <mutex>
+
 
 // SQS-284: LeakSanitizer: detected memory leaks: xmlTextWriterStartDocument
 // Libxml2 has a small problem in this place.
@@ -18,6 +19,8 @@ static void LibXmlBugsWorkAround() {
     xmlGetGlobalState(); // Thread Sanitizer
     xmlInitThreads(); // Thread Sanitizer
 }
+
+namespace NKikimr::NHttpProxy::NSQS {
 
 TXmlStringBuilder::TXmlStringBuilder() {
     std::call_once(LibXmlBugsWorkaroundFlag, LibXmlBugsWorkAround);
@@ -84,3 +87,5 @@ TXmlRecursiveElement::~TXmlRecursiveElement() noexcept(false) {
         }
     }
 }
+
+} // namespace NKikimr::NHttpProxy::NSQS

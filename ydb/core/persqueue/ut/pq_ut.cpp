@@ -96,13 +96,13 @@ void CmdWriteKafkaBatch(
             const TString kafkaBatchPayload = MakeKafkaBatchPayload(values, batchCompression);
             NKikimrPQClient::TDataChunk dataChunk;
             dataChunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
-            dataChunk.SetCodec(NPersQueueCommon::RAW);
+            dataChunk.SetCodec(static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1));
             dataChunk.SetData(kafkaBatchPayload);
             TString serializedDataChunk;
             Y_ENSURE(dataChunk.SerializeToString(&serializedDataChunk));
             write->SetData(std::move(serializedDataChunk));
             write->SetMessageCount(values.size());
-            write->SetMessageFormat(NKikimrClient::KAFKA_BATCH);
+            write->SetIsBatch(true);
             write->SetMaxSeqNo(seqNo + values.size() - 1);
 
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
@@ -404,7 +404,6 @@ Y_UNIT_TEST(KafkaBatchReadWithoutBatchSupportIsCut) {
         UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), i);
         UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u + i);
         UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
         NKikimrPQClient::TDataChunk dataChunk;
         Y_ENSURE(dataChunk.ParseFromString(msg.GetData()));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetChunkType()), static_cast<ui32>(NKikimrPQClient::TDataChunk::REGULAR));
@@ -423,7 +422,6 @@ void AssertKafkaBatchCutMessage(
     UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), expectedOffset);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), expectedSeqNo);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
     UNIT_ASSERT(!msg.HasUncompressedSize());
 
     NKikimrPQClient::TDataChunk dataChunk;
@@ -615,7 +613,6 @@ Y_UNIT_TEST(BatchedMessageWithMultiplePartsWriteRead) {
     UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 0u);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), messageCount);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
     UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), part0 + part1);
 
     readSettings.Offset = 3;
@@ -625,7 +622,6 @@ Y_UNIT_TEST(BatchedMessageWithMultiplePartsWriteRead) {
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetOffset(), 0u);
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetSeqNo(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetMessageCount(), messageCount);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(middleMsg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetData(), part0 + part1);
 }
 

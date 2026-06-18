@@ -377,8 +377,12 @@ bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::F
         settingsColumns.push_back(column.column());
     }
 
-    if (columns != settingsColumns) {
-        error = TStringBuilder() << "columns " << settingsColumns << " should be " << columns;
+    // The indexed (text) columns must be the suffix of the index key columns;
+    // any leading key columns are prefix columns.
+    if (settingsColumns.size() > columns.size() ||
+        !std::equal(settingsColumns.begin(), settingsColumns.end(), columns.end() - settingsColumns.size()))
+    {
+        error = TStringBuilder() << "indexed columns " << settingsColumns << " should be the suffix of index columns " << columns;
         return false;
     }
 

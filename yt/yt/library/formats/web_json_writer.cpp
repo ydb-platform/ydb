@@ -364,7 +364,7 @@ private:
     std::vector<TUnversionedValueToYqlConverter> Converters_;
     std::vector<TLogicalTypePtr> Types_;
     std::vector<std::vector<int>> TableIndexToColumnIdToTypeIndex_;
-    THashMap<std::pair<int, TString>, int> TableIndexAndColumnNameToTypeIndex_;
+    THashMap<std::pair<int, std::string>, int> TableIndexAndColumnNameToTypeIndex_;
     TEnumIndexedArray<EValueType, int> ValueTypeToTypeIndex_;
 
 private:
@@ -380,7 +380,7 @@ private:
         if (typeIndex == UnschematizedTypeIndex) {
             typeIndex = ValueTypeToTypeIndex_[valueType];
         } else if (typeIndex == UnknownTypeIndex) {
-            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::pair(tableIndex, columnName));
+            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::pair<int, std::string>(tableIndex, columnName));
             if (it == TableIndexAndColumnNameToTypeIndex_.end()) {
                 typeIndex = ValueTypeToTypeIndex_[valueType];
                 columnIdToTypeIndex[columnId] = UnschematizedTypeIndex;
@@ -531,7 +531,7 @@ private:
     const std::unique_ptr<IJsonWriter> ResponseBuilder_;
 
     TWebJsonColumnFilter ColumnFilter_;
-    THashMap<ui16, TString> AllColumnIdToName_;
+    THashMap<ui16, std::string> AllColumnIdToName_;
 
     TValueWriter ValueWriter_;
 

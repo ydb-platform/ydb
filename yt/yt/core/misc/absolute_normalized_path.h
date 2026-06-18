@@ -41,6 +41,10 @@ public:
     const std::filesystem::path& Path() const noexcept;
 
     template <class TSource>
+        requires (std::constructible_from<TAbsoluteNormalizedPath, TSource>)
+    bool IsAncestorOf(const TSource& descendantPath, bool treatEqualPathAsAncestor = false) const;
+
+    template <class TSource>
     TAbsoluteNormalizedPath& operator/=(const TSource& path);
 
     template <class TSource>

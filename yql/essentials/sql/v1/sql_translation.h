@@ -1,6 +1,11 @@
 #pragma once
+
 #include "context.h"
+#include "namespace.h"
+#include "select_yql.h"
+
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
+
 #include <library/cpp/charset/ci_string.h>
 
 namespace NSQLTranslationV1 {
@@ -10,7 +15,9 @@ using namespace NSQLv1Generated;
 
 class TSqlTranslation;
 
-// Do not use it to get a positon for a SQL hint.
+using TReadyCTE = std::tuple<TYqlSourceAlias, TNodePtr>;
+
+// Do not use it to get a position for a SQL hint.
 // Use TContext::TokenPosition instead.
 inline TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
@@ -161,6 +168,11 @@ public:
 
     void SetPure(bool isPure) noexcept {
         IsPure_ = isPure;
+    }
+
+    void ForkNamespace() {
+        YQL_ENSURE(IsYqlSelectProduced_);
+        CTEs_ = TYqlNamespace<TReadyCTE>::Fork(CTEs_);
     }
 
 protected:
@@ -333,6 +345,8 @@ protected:
         std::function<TNodePtr()> legacy,
         TMaybe<TPosition> position = Nothing());
 
+    [[nodiscard]] bool WarnUnusedCTEs() const;
+
 private:
     TMaybe<TDeferredAtom> DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix);
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
@@ -351,6 +365,7 @@ protected:
     NSQLTranslation::ESqlMode Mode_;
     bool IsYqlSelectProduced_ = false;
     bool IsPure_ = false;
+    TYqlNamespace<TReadyCTE>::TPtr CTEs_ = TYqlNamespace<TReadyCTE>::Fork();
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);

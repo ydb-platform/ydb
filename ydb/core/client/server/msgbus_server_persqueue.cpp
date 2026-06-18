@@ -357,16 +357,16 @@ TPersQueueBaseRequestProcessor::~TPersQueueBaseRequestProcessor() {
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded topics count",
+    YDB_LOG_TRACE_CTX(ctx, "TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded topics",
         {"count", ChildrenToCreate.size()});
 
     Y_ABORT_UNLESS(NeedChildrenCreation);
 
     if (AtomicAdd(Infly, ChildrenToCreate.size()) > MAX_INFLY) {
         AtomicSub(Infly, ChildrenToCreate.size());
-        YDB_LOG_DEBUG_CTX(ctx, "Topics count is greater then",
+        YDB_LOG_DEBUG_CTX(ctx, "Topics count is greater then allowed",
             {"count", ChildrenToCreate.size()},
-            {"MAXINFLY", MAX_INFLY});
+            {"allowed", MAX_INFLY});
         return false;
     }
 
@@ -1325,9 +1325,9 @@ public:
         Y_ABORT_UNLESS(record.HasPartitionResponse());
         if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
             YDB_LOG_ERROR_CTX(ctx, "Proxy fetch error: got response from tablet while waiting from and requested tablet is",
-                {"cookie", record.GetPartitionResponse().GetCookie()},
-                {"currentCookie", CurrentCookie},
-                {"fetchRequestCurrentReadTablet", FetchRequestCurrentReadTablet});
+                {"responseTablet", record.GetPartitionResponse().GetCookie()},
+                {"waitingFrom", CurrentCookie},
+                {"requestedTablet", FetchRequestCurrentReadTablet});
             return;
         }
 

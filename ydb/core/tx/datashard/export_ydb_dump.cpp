@@ -28,7 +28,7 @@ public:
     TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override;
     TMaybe<TBuffer> Flush(bool last) override;
     void Clear() override;
-    bool IsFilled() const override;
+    size_t GetReadyOutputBytes() const override;
     TString GetError() const override;
 
 private:
@@ -178,8 +178,9 @@ TMaybe<TBuffer> TDataFormatYdbDump::Collect(const NTable::IScan::TRow& row) {
 void TDataFormatYdbDump::Clear() {
 }
 
-bool TDataFormatYdbDump::IsFilled() const {
-    return true;
+size_t TDataFormatYdbDump::GetReadyOutputBytes() const {
+    // Rows are serialized and returned directly from Collect, nothing is buffered here.
+    return 0;
 }
 
 TString TDataFormatYdbDump::GetError() const {

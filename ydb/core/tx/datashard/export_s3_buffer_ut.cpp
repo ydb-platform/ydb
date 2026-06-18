@@ -56,6 +56,15 @@ public:
                 TParquetExportSettings dataFormatSettings;
                 dataFormatSettings.WithColumns(Columns);
                 dataFormatSettings.WithRowGroupSize(2);
+                // Mirror production: Parquet handles compression internally, so
+                // buffer-level compression is disabled and the codec is forwarded
+                // to the Parquet writer instead.
+                if (settings.CompressionSettings) {
+                    dataFormatSettings.WithCompression(TParquetExportSettings::TCompressionSettings()
+                        .WithAlgorithm(TParquetExportSettings::TCompressionSettings::EAlgorithm::Zstd)
+                        .WithLevel(settings.CompressionSettings->CompressionLevel));
+                    settings.WithoutCompression();
+                }
                 std::unique_ptr<IExportDataFormat> dataFormat(CreateExportDataFormat(std::move(dataFormatSettings)));
                 buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
                 break;

@@ -246,6 +246,11 @@ void TS3Buffer::Clear() {
     Rows = 0;
     BytesRead = 0;
     Buffer = TBuffer();
+    // Reset the data format too: on a retry the scan is restarted from scratch,
+    // so any format-internal state (e.g. the Parquet writer and its already
+    // emitted file header) must be discarded, otherwise the regenerated file
+    // would be corrupted.
+    DataFormat->Clear();
     if (Checksum) {
         Checksum.reset(ChecksumCreator());
     }
@@ -256,13 +261,13 @@ void TS3Buffer::Clear() {
 }
 
 bool TS3Buffer::IsFilled() const {
-    if (!DataFormat->IsFilled()) {
-        return false;
-    }
     size_t outputSize = Buffer.Size();
     if (Compression) {
         outputSize = Compression->GetReadyOutputBytes();
     }
+    // Some formats (e.g. Parquet) keep encoded output inside the format itself
+    // until a flush, so it is not yet reflected in Buffer/Compression.
+    outputSize += DataFormat->GetReadyOutputBytes();
     if (outputSize < MinBytes) {
         return false;
     }

@@ -20,7 +20,10 @@ public:
     virtual TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) = 0;
     virtual TMaybe<TBuffer> Flush(bool last) = 0;
     virtual void Clear() = 0;
-    virtual bool IsFilled() const = 0;
+    // Number of encoded output bytes the format is currently holding internally
+    // (data produced but not yet returned via Collect/Flush). Formats that hand
+    // their output back immediately from Collect return 0.
+    virtual size_t GetReadyOutputBytes() const = 0;
     virtual TString GetError() const = 0;
 
     virtual ~IExportDataFormat() = default;

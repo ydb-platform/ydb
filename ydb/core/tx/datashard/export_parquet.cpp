@@ -60,7 +60,7 @@ public:
     TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override;
     TMaybe<TBuffer> Flush(bool last) override;
     void Clear() override;
-    bool IsFilled() const override;
+    size_t GetReadyOutputBytes() const override;
     TString GetError() const override;
 
 private:
@@ -225,8 +225,9 @@ void TDataFormatParquet::Clear() {
     OutStream.reset(new TCheckpointOutputStream());
 }
 
-bool TDataFormatParquet::IsFilled() const {
-    return OutStream->GetBufferSize() > 0;
+size_t TDataFormatParquet::GetReadyOutputBytes() const {
+    // Encoded row groups accumulate in the output stream until the buffer flushes them.
+    return OutStream->GetBufferSize();
 }
 
 TString TDataFormatParquet::GetError() const {

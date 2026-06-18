@@ -112,7 +112,7 @@ namespace NKikimr {
             if (PhantomFlagStorageState.IsActive() && !PhantomFlagStorageState.IsPersistent()
                     && rec->RecType == TRecordHdr::RecLogoBlob) {
                 PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob(),
-                        PhantomFlagStorageLimit.Update(TActivationContext::Now()));
+                        PhantomFlagStorageLimit);
             }
         }
 
@@ -131,7 +131,7 @@ namespace NKikimr {
                     Y_DEBUG_ABORT_UNLESS(recSize <= size);
                     if (rec->RecType == TRecordHdr::RecLogoBlob) {
                         PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob(),
-                                PhantomFlagStorageLimit.Update(TActivationContext::Now()));
+                                PhantomFlagStorageLimit);
                     }
                     rec = rec->Next();
                     size -= recSize;

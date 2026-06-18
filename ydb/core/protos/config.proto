@@ -1902,7 +1902,7 @@ message TImmediateControlsConfig {
         }];
 
         optional uint64 VolatilePhantomFlagStorageBlobSizeLimitBytes = 48 [(ControlOptions) = {
-            Description: "Minimal size of blob in bytes covered by PhantomFlagStorage",
+            Description: "Minimum size of a blob in bytes covered by PhantomFlagStorage",,
             MinValue: 1,
             MaxValue: 10000000,     // 10 MB
             DefaultValue: 1000000,  // 1 MB

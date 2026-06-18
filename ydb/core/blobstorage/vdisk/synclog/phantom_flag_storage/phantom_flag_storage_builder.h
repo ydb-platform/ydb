@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 namespace NSyncLog {

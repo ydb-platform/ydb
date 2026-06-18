@@ -7,6 +7,8 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client_factory.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
@@ -312,6 +314,13 @@ namespace {
             setup->LocalServices.push_back(
                 std::make_pair(DatabaseResolverActorId.value(),
                                TActorSetupCmd(databaseResolverActor, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
+
+        if (appConfig.GetFeatureFlags().GetEnableExternalDataSourceAuthMethodIam()) {
+            auto actor = CreateDescribeResourceIdServiceActor(Driver);
+            setup->LocalServices.push_back(
+                std::make_pair(MakeKqpDescribeResourceIdServiceId(0),
+                               TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
         }
     }
 

@@ -589,91 +589,109 @@ inline bool IsRetryableError(const NYdb::TStatus status) {
 }
 // XXX end duplicated code
 
-class TDescribeResourceIdActor : public NActors::TActorBootstrapped<TDescribeResourceIdActor> {
+class TDescribeResourceIdService : public NActors::TActorBootstrapped<TDescribeResourceIdService> {
 public:
     using TRetryPolicy = IRetryPolicy<NYdb::TStatus>;
 
-    TDescribeResourceIdActor(
-        const TString& endpoint,
-        const TString& database,
-        bool ssl,
-        const TString& caCert,
-        const TString& token,
-        NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise)
-    : Endpoint(endpoint)
-    , Database(database)
-    , Ssl(ssl)
-    , CaCert(caCert)
-    , Token(token)
-    , Promise(promise) {
+    enum EDescribeResourceEvents {
+        EvDescribeResourceId = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvEnd,
+    };
+
+    struct TState {
+        TString Endpoint;
+        TString Database;
+        bool Ssl;
+        TString CaCert;
+        TString Token;
+        NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> Promise;
+        TBackoff Backoff = TBackoff(/*maxRetries=*/10, /*initialDelay=*/TDuration::MilliSeconds(100), /*maxDelay=*/TDuration::Seconds(10));
+    };
+
+    struct TEvDescribeResourceId : public NActors::TEventLocal<TEvDescribeResourceId, EvDescribeResourceId> {
+    public:
+        TEvDescribeResourceId(
+            const TString& endpoint,
+            const TString& database,
+            bool ssl,
+            const TString& caCert,
+            const TString& token,
+            NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise)
+        : State(std::make_shared<TState>(endpoint, database, ssl, caCert, token, promise))
+        {
+        }
+
+        TEvDescribeResourceId(std::shared_ptr<TState> state)
+        : State(std::move(state))
+        {
+        }
+
+    public:
+        std::shared_ptr<TState> State;
+    };
+
+    TDescribeResourceIdService(std::shared_ptr<NYdb::TDriver> driver)
+    : Driver(std::move(driver))
+    {
     }
 
     void Bootstrap() {
-        Become(&TDescribeResourceIdActor::StateFunc);
-        Request();
-        Promise.GetFuture().Subscribe([actorSystem = TlsActivationContext->ActorSystem(), selfId = SelfId()](const auto&) {
-            actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
-        });
+        Become(&TDescribeResourceIdService::StateFunc);
     }
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NActors::TEvents::TEvWakeup, Handle)
-        sFunc(NActors::TEvents::TEvPoison, PassAway)
+        hFunc(TEvDescribeResourceId, Handle)
     )
 
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-        Request();
-    }
-
-    void Request() {
+    void Handle(TEvDescribeResourceId::TPtr& ev) {
+        auto state = std::move(ev->Get()->State);
         NYdb::NTable::TClientSettings settings;
         settings
-            .DiscoveryEndpoint(Endpoint)
+            .DiscoveryEndpoint(state->Endpoint)
             .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .Database(Database)
-            .SslCredentials(NYdb::TSslCredentials(Ssl, CaCert))
-            .AuthToken(Token);
+            .Database(state->Database)
+            .SslCredentials(NYdb::TSslCredentials(state->Ssl, state->CaCert))
+            .AuthToken(state->Token);
         auto actorSystem = TlsActivationContext->ActorSystem();
         auto selfId = SelfId();
         LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << Database << " at " << Endpoint << (Ssl ? " (Ssl)" : ""));
-        Y_ABORT_UNLESS(AppData()->YdbDriver);
-        NYdb::NTable::TTableClient tableClient(*AppData()->YdbDriver, settings);
-        tableClient.GetSession().Subscribe([promise = Promise, actorSystem, selfId, backoff = Backoff, database = Database](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
+                "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << state->Database << " at " << state->Endpoint << (state->Ssl ? " (Ssl)" : ""));
+        NYdb::NTable::TTableClient tableClient(*Driver, settings);
+        tableClient.GetSession().Subscribe([actorSystem, selfId, state = std::move(state)](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
             try {
                 auto& result = future.GetValue();
                 if (!result.IsSuccess()) {
                     LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " GetSession failed"
                             << ", status# " << result.GetStatus()
                             << ", issues# " << result.GetIssues().ToOneLineString()
-                            << ", iteration# " << backoff->GetIteration());
-                    if (IsRetryableError(result) && backoff->HasMore()) {
-                        actorSystem->Schedule(backoff->Next(),
-                                new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
+                            << ", iteration# " << state->Backoff.GetIteration());
+                    if (IsRetryableError(result) && state->Backoff.HasMore()) {
+                        actorSystem->Schedule(state->Backoff.Next(),
+                                new NActors::IEventHandle(selfId, TActorId(), new TEvDescribeResourceId(std::move(state))));
                     } else {
-                        promise.SetValue(
+                        state->Promise.SetValue(
                                 TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
                     }
                     return;
                 }
-                backoff->Reset();
+                state->Backoff.Reset();
                 result.GetSession()
-                      .DescribeTable(database, {})
-                      .Subscribe([promise, actorSystem, selfId, backoff](const NYdb::NTable::TAsyncDescribeTableResult& future) mutable {
+                      .DescribeTable(state->Database, {})
+                      .Subscribe([state, actorSystem, selfId](const NYdb::NTable::TAsyncDescribeTableResult& future) mutable {
                           try {
                               const auto& result = future.GetValue();
                               if (!result.IsSuccess()) {
                                   LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " DescribeTable failed"
                                       << ", status# " << result.GetStatus()
                                       << ", issues# " << result.GetIssues().ToOneLineString()
-                                      << ", iteration# " << backoff->GetIteration());
+                                      << ", iteration# " << state->Backoff.GetIteration());
 
-                                  if (IsRetryableError(result) && backoff->HasMore()) {
-                                      actorSystem->Schedule(backoff->Next(),
+                                  if (IsRetryableError(result) && state->Backoff.HasMore()) {
+                                      actorSystem->Schedule(state->Backoff.Next(),
                                               new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
                                   } else {
-                                      promise.SetValue(
+                                      state->Promise.SetValue(
                                               TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
                                   }
                                   return;
@@ -686,42 +704,26 @@ private:
                                           "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
                                   if (k == "cloud_id") {
                                       LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
-                                      promise.SetValue(TString{v});
+                                      state->Promise.SetValue(TString{v});
                                       return;
                                   }
                               }
                               LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
-                              promise.SetValue(TString(""));
+                              state->Promise.SetValue(TString(""));
                           } catch(const std::exception& ex) {
                               LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
-                              promise.SetException(std::current_exception());
+                              state->Promise.SetException(std::current_exception());
                           }
                       });
               } catch(const std::exception& ex) {
                 LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
-                promise.SetException(std::current_exception());
+                state->Promise.SetException(std::current_exception());
               }
         });
     }
 private:
-    const TString Endpoint;
-    const TString Database;
-    const bool Ssl;
-    const TString CaCert;
-    const TString Token;
-    NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> Promise;
-    std::shared_ptr<TBackoff> Backoff = std::make_shared<TBackoff>(10, TDuration::MilliSeconds(100), TDuration::Seconds(10));
+    std::shared_ptr<NYdb::TDriver> Driver;
 };
-
-IActor* CreateDescribeResourceIdActor(
-        const TString& endpoint,
-        const TString& database,
-        bool ssl,
-        const TString& caCert,
-        const TString& token,
-        NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise) {
-    return new TDescribeResourceIdActor(endpoint, database, ssl, caCert, token, promise);
-}
 } // namespace {
 
 NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExternalDataSourceResourceId(
@@ -733,8 +735,12 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
     TActorSystem* actorSystem
 ) {
     auto promise = NThreading::NewPromise<TEvDescribeResourceIdResponse::TDescription>();
-    actorSystem->Register(CreateDescribeResourceIdActor(endpoint, database, ssl, caCert, token, promise));
+    actorSystem->Send(MakeKqpDescribeResourceIdServiceId(0), new TDescribeResourceIdService::TEvDescribeResourceId(endpoint, database, ssl, caCert, token, promise));
     return promise.GetFuture();
+}
+
+IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver) {
+    return new TDescribeResourceIdService(driver);
 }
 
 }  // namespace NKikimr::NKqp

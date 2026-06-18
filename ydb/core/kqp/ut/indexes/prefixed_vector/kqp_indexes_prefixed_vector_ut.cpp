@@ -403,53 +403,62 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
     }
 
     void DoTestOrderByCosine(ui32 indexLevels, int flags) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
+        // Run the same scenario through both the legacy StreamLookup lowering and the new specialized
+        // vector index read actor (TableServiceConfig.EnableVectorIndexRead, off by default), so both
+        // read paths are verified identically against the same brute-force ground truth.
+        for (bool enableVectorIndexRead : {false, true}) {
+            Cerr << "DoTestOrderByCosine: indexLevels=" << indexLevels << " flags=" << flags
+                 << " enableVectorIndexRead=" << enableVectorIndexRead << Endl;
 
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            NKikimrConfig::TFeatureFlags featureFlags;
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetFeatureFlags(featureFlags)
+                .SetKqpSettings({setting});
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorIndexRead(enableVectorIndexRead);
 
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, flags);
-        DoCreatePrefixedVectorIndex(session, indexLevels, flags);
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            std::vector<std::string> indexKeyColumns{"user", "emb"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-            if (flags & F_COVERING) {
-                std::vector<std::string> indexDataColumns{"emb", "data"};
-                UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
+            TKikimrRunner kikimr(serverSettings);
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+            auto db = kikimr.GetTableClient();
+            auto session = DoCreateTableForPrefixedVectorIndex(db, flags);
+            DoCreatePrefixedVectorIndex(session, indexLevels, flags);
+            {
+                auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+                const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+                UNIT_ASSERT_EQUAL(indexes.size(), 1);
+                UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+                std::vector<std::string> indexKeyColumns{"user", "emb"};
+                UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
+                if (flags & F_COVERING) {
+                    std::vector<std::string> indexDataColumns{"emb", "data"};
+                    UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
+                }
+                const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
+                UNIT_ASSERT_EQUAL(settings.Settings.Metric, (flags & F_SIMILARITY)
+                    ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
+                    : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+                UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+                UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+                UNIT_ASSERT_EQUAL(settings.Levels, indexLevels);
+                UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+                UNIT_ASSERT_EQUAL(settings.OverlapClusters, (flags & F_OVERLAP) ? 2 : 0);
+                UNIT_ASSERT_EQUAL(settings.OverlapRatio, 0);
             }
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, (flags & F_SIMILARITY)
-                ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
-                : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, indexLevels);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-            UNIT_ASSERT_EQUAL(settings.OverlapClusters, (flags & F_OVERLAP) ? 2 : 0);
-            UNIT_ASSERT_EQUAL(settings.OverlapRatio, 0);
-        }
 
-        if (flags & F_OVERLAP) {
-            DoCheckOverlap(session, "index");
-        }
+            if (flags & F_OVERLAP) {
+                DoCheckOverlap(session, "index");
+            }
 
-        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, flags);
+            DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, flags);
 
-        {
-            const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
-            auto result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            {
+                const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
+                auto result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
         }
     }
 

@@ -69,6 +69,7 @@ public:
         , OverlapClusters(Settings.GetOverlapClusters() > 0 ? Settings.GetOverlapClusters() : 1)
         , OverlapRatio(Settings.GetOverlapRatio())
         , PostingCovers(Settings.GetPostingCovers())
+        , HasPrefix(Settings.GetHasPrefix())
         , LogPrefix(TStringBuilder() << "VectorIndexReadActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
         , Input(input)
@@ -230,34 +231,74 @@ private:
             return;
         }
 
-        // Begin level traversal from the root cluster.
-        CurrentParents = {0};
         LevelsRemaining = std::max<ui32>(1, Settings.GetIndexLevels());
+
+        if (HasPrefix) {
+            // Prefixed index: the level-traversal roots are the prefix groups' root
+            // clusters. Roots carrying the PostingParentFlag have no level-table
+            // subtree (single cluster) and go straight to the posting scan.
+            if (RootParents.empty()) {
+                // No prefix group matched the predicate: empty result.
+                Phase = EPhase::Done;
+                return;
+            }
+            for (TClusterId root : RootParents) {
+                if (NTableIndex::NKMeans::HasPostingParentFlag(root)) {
+                    DirectPostingParents.push_back(root);
+                } else {
+                    CurrentParents.push_back(root);
+                }
+            }
+            // Keep LevelTop nearest clusters per prefix group, mirroring the legacy
+            // levelTopTotal = levelTop * numPrefixGroups.
+            LevelTop *= std::max<size_t>(1, RootParents.size());
+        } else {
+            // Begin level traversal from the single root cluster.
+            CurrentParents = {0};
+        }
+
         CA_LOG_D("StartSearch: targetBytes=" << TargetVector.size() << " indexLevels=" << Settings.GetIndexLevels()
-            << " levelTop=" << LevelTop << " topK=" << TopK);
-        StartLevelRound();
+            << " levelTop=" << LevelTop << " topK=" << TopK << " hasPrefix=" << HasPrefix
+            << " levelRoots=" << CurrentParents.size() << " directPosting=" << DirectPostingParents.size());
+
+        if (CurrentParents.empty()) {
+            // All roots are direct posting partitions: skip level traversal.
+            StartPosting();
+        } else {
+            StartLevelRound();
+        }
     }
 
-    // Fetches the single target-vector input row. Returns:
+    // Fetches the target-vector input rows. The input is a stream of single- or
+    // two-field structs: element 0 is the target vector; for a prefixed index
+    // element 1 is the prefix group's root __ydb_parent id. The whole input is
+    // drained (it is materialized upstream), collecting all root ids. Returns:
     //   Ok     - target captured, ready to search;
     //   Yield  - input not ready yet, the caller should retry on the next poll;
     //   Finish - input ended without a usable target (search yields empty result).
     NUdf::EFetchStatus FetchTarget() {
         auto guard = BindAllocator();
         NUdf::TUnboxedValue row;
-        auto status = Input.Fetch(row);
-        if (status != NUdf::EFetchStatus::Ok) {
-            return status;
+        for (;;) {
+            auto status = Input.Fetch(row);
+            if (status == NUdf::EFetchStatus::Yield) {
+                return NUdf::EFetchStatus::Yield;
+            }
+            if (status == NUdf::EFetchStatus::Finish) {
+                break;
+            }
+            if (TargetVector.empty()) {
+                // First row carries the target vector (same value in every row).
+                auto value = row.GetElement(0);
+                if (!value.IsString() && !value.IsEmbedded()) {
+                    return NUdf::EFetchStatus::Finish;
+                }
+                TargetVector = TString(value.AsStringRef());
+            }
+            if (HasPrefix) {
+                RootParents.push_back(row.GetElement(1).Get<ui64>());
+            }
         }
-        // The input is a single-field struct carrying the target vector value.
-        auto value = row.GetElement(0);
-        if (!value.IsString() && !value.IsEmbedded()) {
-            return NUdf::EFetchStatus::Finish;
-        }
-        TargetVector = TString(value.AsStringRef());
-        // Drain the rest of the input (there should be exactly one row).
-        NUdf::TUnboxedValue extra;
-        while (Input.Fetch(extra) == NUdf::EFetchStatus::Ok) {}
         return TargetVector.empty() ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Ok;
     }
 
@@ -312,8 +353,11 @@ private:
     }
 
     void StartPosting() {
-        // Candidate leaf clusters are now in CurrentParents.
+        // Candidate leaf clusters are now in CurrentParents. For a prefixed index,
+        // also scan the prefix groups' direct posting partitions (roots that had no
+        // level-table subtree), which bypassed level traversal.
         ParentQueue.assign(CurrentParents.begin(), CurrentParents.end());
+        ParentQueue.insert(ParentQueue.end(), DirectPostingParents.begin(), DirectPostingParents.end());
         PostingKeys.clear();
         Phase = EPhase::Posting;
         ProcessNextRead();
@@ -402,7 +446,13 @@ private:
         }
         *src->MutableTable() = table;
         src->SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
-        if (immutableFollowerRead) {
+        // Follower reads are a stale-RO optimization for the immutable index impl
+        // tables and carry no locks (the datashard read actor asserts that follower
+        // reads take no locks). If the surrounding transaction holds a lock (e.g. a
+        // prefixed multi-phase query whose main-table read locks), fall back to a
+        // normal lock-based read of the index tables instead of going to followers.
+        const bool followerRead = immutableFollowerRead && !Settings.HasLockTxId();
+        if (followerRead) {
             // No snapshot: the read actor only routes to followers when no snapshot
             // is set; the table is immutable, so inconsistent reads are safe.
             src->SetUseFollowers(true);
@@ -411,14 +461,14 @@ private:
             src->MutableSnapshot()->SetTxId(Snapshot.TxId);
             src->MutableSnapshot()->SetStep(Snapshot.Step);
         }
-        if (Settings.HasLockTxId()) {
+        if (!followerRead && Settings.HasLockTxId()) {
             src->SetLockTxId(Settings.GetLockTxId());
             if (Settings.HasLockMode()) {
                 src->SetLockMode(Settings.GetLockMode());
             }
-        }
-        if (Settings.HasLockNodeId()) {
-            src->SetLockNodeId(Settings.GetLockNodeId());
+            if (Settings.HasLockNodeId()) {
+                src->SetLockNodeId(Settings.GetLockNodeId());
+            }
         }
         if (Settings.HasQuerySpanId()) {
             src->SetQuerySpanId(Settings.GetQuerySpanId());
@@ -851,10 +901,11 @@ private:
     // Parameters
     const NKikimrTxDataShard::TKqpVectorIndexReadSettings Settings;
     const ui32 TopK;
-    const ui32 LevelTop;
+    ui32 LevelTop;
     const ui32 OverlapClusters;
     const double OverlapRatio;
     const bool PostingCovers;
+    const bool HasPrefix;
     const TString LogPrefix;
     const ui64 InputIndex;
     NUdf::TUnboxedValue Input;
@@ -889,6 +940,11 @@ private:
 
     ui32 LevelsRemaining = 0;
     TVector<TClusterId> CurrentParents;
+    // Prefixed index: root cluster ids collected from the transform input. Roots
+    // with the PostingParentFlag are direct posting partitions (skip level
+    // traversal); the rest are level-traversal roots.
+    TVector<TClusterId> RootParents;
+    TVector<TClusterId> DirectPostingParents;
     TDeque<TClusterId> ParentQueue;
     TClusterId ReadingParent = 0;
     TMap<TClusterId, TString> LevelChildren;

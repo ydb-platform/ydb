@@ -6,6 +6,7 @@
 #include "layout_helpers.h"
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/debug_tools/operation_log.h>
 
 namespace NKikimr::NBsController {
@@ -761,13 +762,11 @@ namespace NKikimr::NBsController {
                         out << (selfHealEnabled ? "Enabled" : "Disabled");
                         if (selfHealEnabled) {
                             out << "<br/>" << Endl;
-                            out << "<form method='POST'>" << Endl;
-                            out << "<input type='hidden' name='TabletID' value='" << TabletId << "'>" << Endl;
-                            out << "<input type='hidden' name='page' value='SelfHeal'>" << Endl;
-                            out << "<input type='hidden' name='disable' value='1'>" << Endl;
-                            out << "<input type='hidden' name='action' value='disableSelfHeal'>" << Endl;
-                            out << "<input class='btn btn-primary' type='submit' value='DISABLE NOW'/>" << Endl;
-                            out << "</form>";
+                            const TStringBuf tabletAppPath = UsesTabletDevUiSecurePath(AppData(), TTabletTypes::BSController)
+                                ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+                                : TStringBuf("app");
+                            out << "<a class='btn btn-primary' href='" << tabletAppPath << "?TabletID=" << TabletId
+                                << "&page=SelfHeal&disable=1&action=disableSelfHeal'>DISABLE NOW</a>";
                         }
                     }
                 }

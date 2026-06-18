@@ -4,9 +4,9 @@ namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> TFilterBuildingGuard::GetStageFeatures() {
     static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
-        NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("FILTERS", 2000000000),   // 2 GiB
+        NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("FILTERS", 10000000),   // 10 MiB
         NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
-        NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 1000000000),   // 1 GiB
+        NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 3000000000),   // 3 GiB
     };
     return StageFeatures;
 }

@@ -95,8 +95,8 @@ private:
     }
 
 public:
-    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting)
-        : TBase(sorting)
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, const bool sortByFinish = false)
+        : TBase(sorting, sortByFinish)
     {
         InitializeConstructors(std::move(sources));
     }

@@ -280,6 +280,7 @@ namespace NKikimr {
         TControlWrapper EnablePhantomFlagStorage;
         bool EnablePersistentPhantomFlagStorage = false;
         TControlWrapper PhantomFlagStorageLimit;
+        TControlWrapper EnableFreshSyncDataThrottling;
 
         ///////////// CHUNK Keeper //////////////////
         TControlWrapper EnableChunkKeeper;

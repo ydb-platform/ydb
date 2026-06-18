@@ -1893,6 +1893,13 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000,
             DefaultValue: 0 }];
+
+        optional uint64 EnableFreshSyncDataThrottling = 47 [(ControlOptions) = {
+            Description: "Enables throttling of sync data being applied to fresh index",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {

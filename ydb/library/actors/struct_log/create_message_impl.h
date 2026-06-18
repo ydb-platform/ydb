@@ -45,7 +45,7 @@ public:
     template <typename T>
     class THasToStringMethod {
         // check the signature if it exists
-        template <typename X> static constexpr typename std::is_same<decltype(&X::ToString), TString(X::*)()const>::type check(int);
+        template <typename X> static constexpr decltype(static_cast<TString (X::*)() const>(&X::ToString), std::true_type{}) check(int);
         // in case when there is no such signature
         template <typename>   static constexpr std::false_type check(...);
     public:

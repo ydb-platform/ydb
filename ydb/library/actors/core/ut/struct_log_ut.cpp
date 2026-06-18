@@ -243,6 +243,18 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TString ToString() const {
             return "some value";
         }
+
+        TString ToString() {
+            return "wrong value from non-const ToString()";
+        }
+
+        static TString ToString(int) {
+            return "wrong value from static ToString(int)";
+        }
+
+        TString ToString(bool) {
+            return "wrong value from ToString(bool)";
+        }
     };
 
     struct TTestTypeToStructuredMessage {

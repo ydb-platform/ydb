@@ -2609,6 +2609,50 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct SetColumnConstraint : Table<138> {
+        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId };
+        struct TableOwnerId :           Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
+        struct TableLocalId :           Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalPathId; };
+        // ColumnNames in `column_name_1$column_name_2$...$column_name_n` format
+        struct SerializedColumnNames :  Column<4, NScheme::NTypeIds::Utf8>    {};
+
+        struct ValidationFailed :       Column<5, NScheme::NTypeIds::Bool>    { static constexpr bool Default = false; };
+        struct OperationState :         Column<6, NScheme::NTypeIds::Uint32>  {};
+
+        // We dont want keep LockingTxId/LockingNullWritesTxId/FinishingTxId/UnlockingTxId separately
+        struct SubStateTxId :           Column<7, NScheme::NTypeIds::Uint64>  { using Type = TTxId; };
+        struct SubStateTxStatus :       Column<8, NScheme::NTypeIds::Uint32>  { using Type = NKikimrScheme::EStatus; };
+        struct SubStateTxDone :         Column<9, NScheme::NTypeIds::Bool>    {};
+
+        using TKey = TableKey<OperationId>;
+        using TColumns = TableColumns<
+            OperationId,
+            TableOwnerId,
+            TableLocalId,
+            SerializedColumnNames,
+            ValidationFailed,
+            OperationState,
+            SubStateTxId,
+            SubStateTxStatus,
+            SubStateTxDone
+        >;
+    };
+
+    struct SetColumnConstraintDatashardStatuses : Table<139> {
+        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId };
+        struct OwnerShardIdx :          Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
+        struct LocalShardIdx :          Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalShardIdx; };
+        struct Status :                 Column<4, NScheme::NTypeIds::Uint32>  { using Type = NKikimrSetColumnConstraint::EValidateStatus; };
+
+        using TKey = TableKey<OperationId, OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OperationId,
+            OwnerShardIdx,
+            LocalShardIdx,
+            Status
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2744,7 +2788,9 @@ struct Schema : NIceDb::Schema {
         TablePartitionsByShardIdx,
         TablePartitionStatsByShardIdx,
         FullBackups,
-        FullBackupItems
+        FullBackupItems,
+        SetColumnConstraint,
+        SetColumnConstraintDatashardStatuses
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

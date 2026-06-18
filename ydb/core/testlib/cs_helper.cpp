@@ -221,28 +221,6 @@ void THelper::SetForcedCompaction(const TString& storeName) {
     ExecuteModifyScheme(modyfySchemeOp);
 }
 
-TString THelper::GetTilingNoCompactionAlter(const TString& tablePath) {
-    // tiling++ with thresholds high enough to keep every portion in the
-    // accumulator and never produce a compaction task.
-    return TStringBuilder() <<
-        "ALTER OBJECT `" << tablePath << "` (TYPE TABLE) SET ("
-        "ACTION=UPSERT_OPTIONS, "
-        "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
-        "`COMPACTION_PLANNER.FEATURES`=`" << TILING_NO_COMPACTION_FEATURES_JSON << "`);";
-}
-
-TString THelper::GetTilingForceLastLevelCompactionAlter(const TString& tablePath) {
-    // tiling++ with thresholds that route every portion directly to the
-    // last level and trigger compaction there as soon as more than one
-    // candidate appears.
-    return TStringBuilder() <<
-        "ALTER OBJECT `" << tablePath << "` (TYPE TABLE) SET ("
-        "ACTION=UPSERT_OPTIONS, "
-        "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
-        "`COMPACTION_PLANNER.FEATURES`=`" << TILING_FORCE_COMPACTION_FEATURES_JSON << "`);";
-}
-
-
 TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;
     sb << R"(Columns{ Name: "timestamp" Type : "Timestamp" NotNull : true })";

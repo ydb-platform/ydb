@@ -6,6 +6,20 @@
 
 namespace NYdb::NConsoleClient {
 
+namespace {
+
+void StopDriver(TDriver& driver, bool wait) noexcept {
+    try {
+        driver.Stop(wait);
+    } catch (const std::exception& ex) {
+        YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed: " << ex.what());
+    } catch (...) {
+        YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed with unknown exception");
+    }
+}
+
+} // anonymous namespace
+
 TLazyDriver::TLazyDriver(TFactory factory, TDuration idleTimeout)
     : Factory_(std::move(factory))
     , IdleTimeout_(idleTimeout)
@@ -43,7 +57,7 @@ void TLazyDriver::InitLocked() {
     LastUseAt_ = TInstant::Now();
 }
 
-const TDriver& TLazyDriver::Get() {
+TDriver TLazyDriver::Get() {
     TGuard<TMutex> guard(Mutex_);
     InitLocked();
     return *Driver_;
@@ -60,32 +74,36 @@ void TLazyDriver::Stop(bool wait) noexcept {
 }
 
 void TLazyDriver::StopLocked(bool wait) noexcept {
-    if (!Driver_) {
-        return;
+    if (Driver_) {
+        StopDriver(*Driver_, wait);
+        Driver_.reset();
     }
-    try {
-        Driver_->Stop(wait);
-    } catch (const std::exception& ex) {
-        YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed: " << ex.what());
-    } catch (...) {
-        YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed with unknown exception");
-    }
-    Driver_.reset();
 }
 
 void TLazyDriver::WatcherLoop() {
-    TGuard<TMutex> guard(Mutex_);
-    while (!Shutdown_) {
-        if (!Driver_) {
-            CondVar_.WaitI(Mutex_);
-            continue;
+    while (true) {
+        std::optional<TDriver> dying;
+        {
+            TGuard<TMutex> guard(Mutex_);
+            while (!Shutdown_ && !dying) {
+                if (!Driver_) {
+                    CondVar_.WaitI(Mutex_);
+                    continue;
+                }
+                const TInstant deadline = LastUseAt_ + IdleTimeout_;
+                if (TInstant::Now() >= deadline) {
+                    // Hand the driver off and stop it outside the lock, so a
+                    // concurrent Get() is not blocked by driver shutdown.
+                    Driver_.swap(dying);
+                    continue;
+                }
+                CondVar_.WaitD(Mutex_, deadline);
+            }
+            if (Shutdown_) {
+                return;
+            }
         }
-        const TInstant deadline = LastUseAt_ + IdleTimeout_;
-        if (TInstant::Now() >= deadline) {
-            StopLocked(/* wait = */ true);
-            continue;
-        }
-        CondVar_.WaitD(Mutex_, deadline);
+        StopDriver(*dying, /* wait = */ true);
     }
 }
 

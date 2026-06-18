@@ -15,7 +15,10 @@ namespace NYdb::NConsoleClient {
 
 // Lazy wrapper around TDriver:
 //   * Init() — create the driver via the factory if it has not been created yet.
-//   * Get()  — same as Init() plus returns a reference to the driver.
+//   * Get()  — same as Init() plus returns a copy of the driver handle. A copy
+//              (not a reference) is returned on purpose: TDriver is a cheap
+//              shared_ptr-backed pimpl, and the idle watcher may reset the
+//              wrapped driver concurrently, which would dangle a reference.
 //   * Stop() — stop the underlying driver (if any) and clear the wrapper;
 //              the next Init()/Get() builds a fresh driver via the factory.
 //
@@ -35,7 +38,7 @@ public:
     ~TLazyDriver();
 
     void Init();
-    const TDriver& Get();
+    TDriver Get();
     bool IsInitialized() const noexcept;
     void Stop(bool wait = true) noexcept;
 

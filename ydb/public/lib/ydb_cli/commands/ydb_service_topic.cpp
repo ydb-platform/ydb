@@ -34,6 +34,7 @@ namespace NYdb::NConsoleClient {
             {NYdb::NTopic::ECodec::GZIP, "GZIP codec. Data is compressed with GZIP compression algorithm."},
             {NYdb::NTopic::ECodec::LZOP, "LZOP codec. Data is compressed with LZOP compression algorithm."},
             {NYdb::NTopic::ECodec::ZSTD, "ZSTD codec. Data is compressed with ZSTD compression algorithm."},
+            {NYdb::NTopic::ECodec::KAFKA_BATCH, "Kafka batch codec. Messages are packed into Kafka record batches."},
         };
 
         THashMap<TString, NYdb::NTopic::ECodec> ExistingCodecs = {
@@ -41,6 +42,7 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("gzip", NYdb::NTopic::ECodec::GZIP),
             std::pair<TString, NYdb::NTopic::ECodec>("lzop", NYdb::NTopic::ECodec::LZOP),
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
+            std::pair<TString, NYdb::NTopic::ECodec>("kafka-batch", NYdb::NTopic::ECodec::KAFKA_BATCH),
         };
 
         TVector<ui32> ExistingMetricsLevels = {2, 3};

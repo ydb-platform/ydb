@@ -2047,6 +2047,35 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.99, 0.0, 99.6, 3, 4, TColor::RED);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeHardLimitRoundsDownToChunkSize) {
+        TActorTestContext testCtx({
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        const ui32 formatChunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        const ui64 expectedSlotSize = 3ull * formatChunkSize + 1;
+
+        auto pdiskConfig = testCtx.GetPDiskConfig();
+        pdiskConfig->ExpectedSlotSize = expectedSlotSize;
+        testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        const auto evCheckSpaceResult = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+
+        const ui32 expectedHardLimitChunks = expectedSlotSize / formatChunkSize;
+        UNIT_ASSERT_VALUES_EQUAL(expectedHardLimitChunks, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedHardLimitChunks);
+        UNIT_ASSERT_LE(ui64(evCheckSpaceResult->TotalChunks) * formatChunkSize, expectedSlotSize);
+    }
+
     Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 

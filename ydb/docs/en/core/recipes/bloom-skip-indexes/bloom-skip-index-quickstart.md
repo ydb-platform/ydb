@@ -66,7 +66,7 @@ WHERE message LIKE '%timeout%';
 
 ## How to verify index effectiveness
 
-To check that the Bloom skip index actually reduces read volume, run the same selective query on a table with enough data before and after creating the index and compare execution time and the amount of data read.
+To check that the Bloom skip index actually helps, run the same selective query on a table with enough data before and after creating the index and compare execution time.
 
 Further reading:
 

@@ -6,7 +6,6 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
-#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -1040,15 +1039,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         auto& appData = runtime.GetAppData();
         appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
-        {
-            auto builder = CreateImmutableSnapshotRegistryBuilder();
-            auto holder = CreateImmutableSnapshotRegistryHolder();
-            holder->Set(std::move(*builder).Build());
-            appData.SnapshotRegistryHolder = holder;
-            appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
-        }
+        // No LongTxService keeps a live registry here, so install a stand-in whose OldestCollectionTime
+        // tracks the clock; otherwise the cleanup floor stays at 0 and deleted data is never collected.
+        NKikimr::NTxUT::InstallTimingBasedSnapshotRegistry(runtime);
 
         // apply config via reboot
         TActorId sender = runtime.AllocateEdgeActor();

@@ -357,13 +357,13 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         for rs in self._execute(f"SELECT * FROM `{result_table}`"):
             rows += rs.rows
 
-        assert len(rows) == 3  # 3 filter types
-
+        filter_types = set()
         for row in rows:
             logger.info(f"Result row from {result_table}: {row}")
             filter_type = row.filter_type
             if isinstance(filter_type, bytes):
                 filter_type = filter_type.decode()
+            filter_types.add(filter_type)
 
             if filter_type == 'pk_range':
                 assert row.row_count == (row.filter_hi - row.filter_lo + 1)
@@ -379,6 +379,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
             else:
                 assert False, f"unknown filter type {filter_type}"
+
+        assert len(filter_types) == 3
 
     # -------------------------------------------------------------------------
     # Progress tracking

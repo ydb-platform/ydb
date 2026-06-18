@@ -45,7 +45,7 @@ struct TEvPartitionDirectPrivate
         {}
     };
 
-    // Signals that FastPathServiceReady (and it's dbg's) is ready.
+    // Signals that FastPathServiceReady (and its DBGs) are ready.
     struct TEvFastPathServiceReady
         : public NActors::
               TEventLocal<TEvFastPathServiceReady, EvDBGsInitiallyReady>

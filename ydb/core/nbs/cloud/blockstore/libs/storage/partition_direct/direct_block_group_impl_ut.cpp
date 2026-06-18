@@ -143,14 +143,20 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // All DDisk connects are deferred -> the sessions stay NotLocked until
         // the test resolves them.
-        TVector<TStorageTransportMock::TConnectPromise> connectPromises;
+        TVector<TStorageTransportMock::TConnectPromise> connectDDiskPromises;
         for (const auto& ddiskId: ddisks) {
-            connectPromises.push_back(transportPtr->SetPendingConnect(
+            connectDDiskPromises.push_back(transportPtr->SetPendingConnect(
                 EConnectionType::DDisk,
                 ddiskId));
         }
-        connectPromises.push_back(
-            transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]));
+
+        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
+        TVector<TStorageTransportMock::TConnectPromise> connectPBufferPromises;
+        for (size_t i = 2; i < pbuffers.size(); ++i) {
+            connectPBufferPromises.push_back(transportPtr->SetPendingConnect(
+                EConnectionType::PBuffer,
+                pbuffers[i]));
+        }
 
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
@@ -161,28 +167,19 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         DrainExecutor(executor);
         UNIT_ASSERT(!initialReady.HasValue());
 
-        // Resolve two sessions: still below the quorum of three.
-        connectPromises[0].SetValue(TStorageTransportMock::MakeConnectResult());
-        connectPromises[1].SetValue(TStorageTransportMock::MakeConnectResult());
-        DrainExecutor(executor);
-        UNIT_ASSERT(!initialReady.HasValue());
-
-        // The third locked session reaches the quorum -> signal fires.
-        connectPromises[2].SetValue(TStorageTransportMock::MakeConnectResult());
-        DrainExecutor(executor);
-        initialReady.Wait(WaitTimeout);
-        UNIT_ASSERT(!initialReady.HasValue());
-
-        // Last PBuffer connected
-        connectPromises[connectPromises.size() - 1].SetValue(
+        // Resolve 3 ddisk sessions: still don't have pbuffer's quorum.
+        connectDDiskPromises[0].SetValue(
             TStorageTransportMock::MakeConnectResult());
-        initialReady.Wait(WaitTimeout);
-        UNIT_ASSERT(initialReady.HasValue());
+        connectDDiskPromises[1].SetValue(
+            TStorageTransportMock::MakeConnectResult());
+        connectDDiskPromises[2].SetValue(
+            TStorageTransportMock::MakeConnectResult());
+        DrainExecutor(executor);
+        UNIT_ASSERT(!initialReady.HasValue());
 
-        // Locking the remaining sessions must not re-signal (one-shot promise;
-        // a second SetValue would abort).
-        connectPromises[3].SetValue(TStorageTransportMock::MakeConnectResult());
-        connectPromises[4].SetValue(TStorageTransportMock::MakeConnectResult());
+        // The third PBuffer connected
+        connectPBufferPromises[0].SetValue(
+            TStorageTransportMock::MakeConnectResult());
         DrainExecutor(executor);
         UNIT_ASSERT(initialReady.HasValue());
     }

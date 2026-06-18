@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
     // A second UpdateDirtyMap call (resync path) must
     // not try to SetValue on an already-resolved DirtyMapReady promise (which
-    // would rase exception), and operations issued afterwards must complete
+    // would raise an exception), and operations issued afterwards must complete
     // immediately.
     Y_UNIT_TEST_F(ShouldNotRecreateDirtyMapPromiseOnResync, TBaseFixture)
     {

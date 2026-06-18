@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/abstract
     ydb/core/formats/arrow/program
     ydb/core/tx/columnshard/engines/storage/indexes/min_max
+    ydb/core/tx/columnshard/engines/storage/indexes/bloom
 
     yql/essentials/udfs/common/json2
 )

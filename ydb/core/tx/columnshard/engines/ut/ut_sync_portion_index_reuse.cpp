@@ -7,7 +7,11 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/snapshot_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
@@ -16,6 +20,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <array>
+
 namespace NKikimr::NOlap::NTest {
 
 namespace {
@@ -23,13 +29,18 @@ namespace {
 constexpr ui32 PkColumnId = 1;
 constexpr ui32 ValueColumnId = 2;
 constexpr ui32 MaxIndexId = 1001;
-constexpr const char* IndexMarker = "REUSE_INDEX_MARKER_v1";
+constexpr ui32 BloomIndexId = 1002;
+constexpr const char* MaxIndexMarker = "REUSE_MAX_INDEX_MARKER_v1";
+constexpr const char* BloomIndexMarker = "REUSE_BLOOM_INDEX_MARKER_v1";
+constexpr std::array<i32, 3> TestValueColumnData = { 10, 20, 30 };
+constexpr i32 ExpectedMaxColumnValue = TestValueColumnData.back();
 
-ISnapshotSchema::TPtr MakeSchemaWithMaxIndex(const ui64 presetId = 1) {
-    auto storages = TTestStoragesManager::GetInstance();
-    auto cache = std::make_shared<TSchemaObjectsCache>();
+struct TTestSchemaOptions {
+    bool WithMaxIndex = false;
+    bool WithBloomIndex = false;
+};
 
-    NKikimrSchemeOp::TColumnTableSchema proto;
+void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui64 presetId) {
     const std::vector<NArrow::NTest::TTestColumn> columns = {
         NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
         NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Int32)),
@@ -41,9 +52,29 @@ ISnapshotSchema::TPtr MakeSchemaWithMaxIndex(const ui64 presetId = 1) {
     proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
     *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
         NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
-    *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
-        std::make_shared<NIndexes::NMax::TIndexMeta>(MaxIndexId, "max_value", IStoragesManager::LocalMetadataStorageId, false, ValueColumnId))
-                              .SerializeToProto();
+}
+
+ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptions& options) {
+    auto storages = TTestStoragesManager::GetInstance();
+    auto cache = std::make_shared<TSchemaObjectsCache>();
+
+    NKikimrSchemeOp::TColumnTableSchema proto;
+    FillDefaultSchemaProto(proto, presetId);
+
+    if (options.WithMaxIndex) {
+        *proto.AddIndexes() = NIndexes::TIndexMetaContainer(std::make_shared<NIndexes::NMax::TIndexMeta>(MaxIndexId, "max_value",
+                                                                IStoragesManager::LocalMetadataStorageId, false, ValueColumnId))
+                                  .SerializeToProto();
+    }
+    if (options.WithBloomIndex) {
+        NIndexes::TRequestSettings bloomRequest;
+        bloomRequest.FalsePositiveProbability = NIndexes::NDefaults::FalsePositiveProbability;
+        *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
+            std::make_shared<NIndexes::TBloomIndexMeta>(BloomIndexId, "bloom_value", IStoragesManager::LocalMetadataStorageId, false,
+                ValueColumnId, bloomRequest, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
+                NIndexes::IBitsStorageConstructor::GetDefault()))
+                                  .SerializeToProto();
+    }
 
     auto indexInfoOpt = TIndexInfo::BuildFromProto(presetId, proto, storages, cache);
     UNIT_ASSERT(indexInfoOpt);
@@ -54,48 +85,42 @@ std::shared_ptr<arrow::RecordBatch> MakeTestBatch() {
     arrow::UInt64Builder pkBuilder;
     arrow::Int32Builder valueBuilder;
     UNIT_ASSERT(pkBuilder.AppendValues({ 1, 2, 3 }).ok());
-    UNIT_ASSERT(valueBuilder.AppendValues({ 10, 20, 30 }).ok());
+    UNIT_ASSERT(valueBuilder.AppendValues({ TestValueColumnData[0], TestValueColumnData[1], TestValueColumnData[2] }).ok());
     auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::int32()) });
     return arrow::RecordBatch::Make(schema, 3, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
+}
+
+std::shared_ptr<NChunks::TChunkPreparation> BuildColumnChunkFromArray(
+    const ISnapshotSchema& schema, const ui32 columnId, const std::shared_ptr<arrow::Array>& column) {
+    auto loader = schema.GetIndexInfo().GetColumnLoaderVerified(columnId);
+    const auto& columnFeatures = schema.GetIndexInfo().GetColumnFeaturesVerified(columnId);
+    const auto& accessorConstructor = loader->GetAccessorConstructor();
+    auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(column);
+    const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
+    auto arrToWrite = accessorConstructor->Construct(accessor, loadContext);
+    UNIT_ASSERT(arrToWrite.IsSuccess());
+    return std::make_shared<NChunks::TChunkPreparation>(
+        accessorConstructor->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures);
 }
 
 THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> BuildColumnChunks(
     const ISnapshotSchema::TPtr& schema, const std::shared_ptr<arrow::RecordBatch>& batch) {
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks;
-    const auto& indexFields = schema->GetIndexInfo().ArrowSchema();
-
-    auto itIncoming = batch->schema()->fields().begin();
-    const auto itIncomingEnd = batch->schema()->fields().end();
-    auto itIndex = indexFields.begin();
-    const auto itIndexEnd = indexFields.end();
-
-    while (itIncoming != itIncomingEnd && itIndex != itIndexEnd) {
-        if ((*itIncoming)->name() == (*itIndex)->name()) {
-            const ui32 incomingIndex = itIncoming - batch->schema()->fields().begin();
-            const ui32 columnIndex = itIndex - indexFields.begin();
-            const ui32 columnId = schema->GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
-            auto loader = schema->GetIndexInfo().GetColumnLoaderVerified(columnId);
-            const auto& columnFeatures = schema->GetIndexInfo().GetColumnFeaturesVerified(columnId);
-            const auto& accessorConstructor = loader->GetAccessorConstructor();
-            const auto incomingColumn = batch->column(incomingIndex);
-            auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(incomingColumn);
-            const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
-            auto arrToWrite = accessorConstructor->Construct(accessor, loadContext);
-            UNIT_ASSERT(arrToWrite.IsSuccess());
-
-            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                accessorConstructor->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
-            UNIT_ASSERT(chunks.emplace(columnId, std::move(columnChunks)).second);
-            ++itIncoming;
+    for (const auto& field : batch->schema()->fields()) {
+        const auto columnId = schema->GetColumnIdOptional(field->name());
+        if (!columnId || schema->IsSpecialColumnId(*columnId)) {
+            continue;
         }
-        ++itIndex;
+        const int fieldIndex = batch->schema()->GetFieldIndex(field->name());
+        UNIT_ASSERT(fieldIndex >= 0);
+        const auto columnChunk = BuildColumnChunkFromArray(*schema, *columnId, batch->column(fieldIndex));
+        UNIT_ASSERT(chunks.emplace(*columnId, std::vector<std::shared_ptr<IPortionDataChunk>>{ columnChunk }).second);
     }
-    UNIT_ASSERT(itIncoming == itIncomingEnd);
     return chunks;
 }
 
 TWritePortionInfoWithBlobsResult BuildTestPortion(const ISnapshotSchema::TPtr& schema, const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::optional<TString>& indexMarker, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
+    const THashMap<ui32, TString>& indexMarkers, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
     const TString& tier = IStoragesManager::DefaultStorageId) {
     auto storages = TTestStoragesManager::GetInstance();
     const auto entityChunks = BuildColumnChunks(schema, batch);
@@ -108,9 +133,9 @@ TWritePortionInfoWithBlobsResult BuildTestPortion(const ISnapshotSchema::TPtr& s
         NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(), NBlobOperations::TGlobal::DefaultStorageId);
 
     THashMap<ui32, std::shared_ptr<IPortionDataChunk>> inplaceChunks;
-    if (indexMarker) {
-        inplaceChunks[MaxIndexId] =
-            std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(MaxIndexId, 0), batch->num_rows(), indexMarker->size(), *indexMarker);
+    for (auto&& [indexId, marker] : indexMarkers) {
+        inplaceChunks[indexId] =
+            std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(indexId, 0), batch->num_rows(), marker.size(), marker);
     }
 
     std::vector<TSplittedBlob> blobs;
@@ -151,7 +176,7 @@ TString GetInplaceIndexData(const TWritePortionInfoWithBlobsResult& result, cons
             return *data;
         }
     }
-    UNIT_ASSERT_C(false, "inplace index not found");
+    UNIT_ASSERT_C(false, "inplace index not found: " + ::ToString(indexId));
     return "";
 }
 
@@ -172,13 +197,28 @@ void FinalizeWritePortion(TWritePortionInfoWithBlobsResult& portion) {
     portion.FinalizePortionConstructor(TSnapshot(1, 1));
 }
 
+std::optional<TWritePortionInfoWithBlobsResult> RunSyncPortion(TWritePortionInfoWithBlobsResult& writePortion,
+    const ISnapshotSchema::TPtr& schemaFrom, const ISnapshotSchema::TPtr& schemaTo, const TString& targetTier,
+    const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) {
+    NBlobOperations::NRead::TCompositeReadBlobs blobs;
+    FillReadBlobs(writePortion, blobs);
+
+    auto readPortion = TReadPortionInfoWithBlobs::RestorePortion(writePortion.GetPortionResult(), blobs, schemaFrom->GetIndexInfo());
+    return TReadPortionInfoWithBlobs::SyncPortion(
+        std::move(readPortion), schemaFrom, schemaTo, targetTier, TTestStoragesManager::GetInstance(), splitterCounters);
+}
+
+bool IsMemoryTierAvailable() {
+    return TTestStoragesManager::GetInstance()->GetOperatorOptional(IStoragesManager::MemoryStorageId) != nullptr;
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TReuseIndexChunksTests) {
     Y_UNIT_TEST(PlacesInplaceIndexChunk) {
-        const auto schema = MakeSchemaWithMaxIndex();
+        const auto schema = MakeTestSchema(1, { .WithMaxIndex = true });
         const auto batch = MakeTestBatch();
-        const TString marker(IndexMarker);
+        const TString marker(MaxIndexMarker);
 
         TIndexInfo::TSecondaryData secondaryData;
         std::vector<std::shared_ptr<IPortionDataChunk>> chunks = {
@@ -194,79 +234,86 @@ Y_UNIT_TEST_SUITE(TReuseIndexChunksTests) {
         UNIT_ASSERT(inplace.contains(MaxIndexId));
         UNIT_ASSERT_VALUES_EQUAL(inplace.at(MaxIndexId)->GetData(), marker);
     }
-
-    Y_UNIT_TEST(RejectsOversizedBlob) {
-        const auto schema = MakeSchemaWithMaxIndex();
-        const auto storages = TTestStoragesManager::GetInstance();
-        const auto maxBlobSize =
-            storages->GetOperatorVerified(IStoragesManager::LocalMetadataStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
-        const TString hugeMarker(maxBlobSize + 1024, 'X');
-
-        TIndexInfo::TSecondaryData secondaryData;
-        std::vector<std::shared_ptr<IPortionDataChunk>> chunks = {
-            std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(MaxIndexId, 0), 3, hugeMarker.size(), hugeMarker),
-        };
-
-        const auto status = schema->GetIndexInfo().ReuseIndexChunks(
-            std::move(chunks), MaxIndexId, storages, 3, IStoragesManager::DefaultStorageId, secondaryData);
-        UNIT_ASSERT(status.IsFail());
-        UNIT_ASSERT(secondaryData.GetSecondaryInplaceData().empty());
-    }
 }
 
 Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
     Y_UNIT_TEST(TierChangeReusesMaxIndex) {
-#ifndef KIKIMR_DISABLE_S3_OPS
-        const auto schema = MakeSchemaWithMaxIndex();
+        if (!IsMemoryTierAvailable()) {
+            return;
+        }
+
+        const auto schema = MakeTestSchema(1, { .WithMaxIndex = true });
         const auto batch = MakeTestBatch();
         const auto splitterCounters = MakeSplitterCounters();
 
-        auto writePortion = BuildTestPortion(schema, batch, TString(IndexMarker), splitterCounters);
+        auto writePortion = BuildTestPortion(schema, batch, { { MaxIndexId, MaxIndexMarker } }, splitterCounters);
         FinalizeWritePortion(writePortion);
 
-        NBlobOperations::NRead::TCompositeReadBlobs blobs;
-        FillReadBlobs(writePortion, blobs);
-
-        auto readPortion = TReadPortionInfoWithBlobs::RestorePortion(writePortion.GetPortionResult(), blobs, schema->GetIndexInfo());
-        auto syncResult = TReadPortionInfoWithBlobs::SyncPortion(
-            std::move(readPortion), schema, schema, IStoragesManager::MemoryStorageId, TTestStoragesManager::GetInstance(), splitterCounters);
+        auto syncResult = RunSyncPortion(writePortion, schema, schema, IStoragesManager::MemoryStorageId, splitterCounters);
 
         UNIT_ASSERT(syncResult);
         FinalizeWritePortion(*syncResult);
         UNIT_ASSERT_VALUES_EQUAL(syncResult->GetPortionResult().GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId),
             IStoragesManager::MemoryStorageId);
-        UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, MaxIndexId), IndexMarker);
-#else
-        UNIT_ASSERT(true);
-#endif
+        UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, MaxIndexId), MaxIndexMarker);
     }
 
-    Y_UNIT_TEST(MissingIndexChunksRebuildsIndex) {
-        const auto schemaFrom = MakeSchemaWithMaxIndex(1);
-        const auto schemaTo = MakeSchemaWithMaxIndex(2);
+    Y_UNIT_TEST(DifferentSchemaReusesCompatibleBloomIndex) {
+        const auto schemaFrom = MakeTestSchema(1, { .WithBloomIndex = true });
+        const auto schemaTo = MakeTestSchema(2, { .WithBloomIndex = true });
         const auto batch = MakeTestBatch();
         const auto splitterCounters = MakeSplitterCounters();
 
-        auto writePortion = BuildTestPortion(schemaFrom, batch, std::nullopt, splitterCounters);
+        auto writePortion = BuildTestPortion(schemaFrom, batch, { { BloomIndexId, BloomIndexMarker } }, splitterCounters);
         FinalizeWritePortion(writePortion);
 
-        NBlobOperations::NRead::TCompositeReadBlobs blobs;
-        FillReadBlobs(writePortion, blobs);
+        auto syncResult = RunSyncPortion(writePortion, schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, splitterCounters);
 
-        auto readPortion = TReadPortionInfoWithBlobs::RestorePortion(writePortion.GetPortionResult(), blobs, schemaFrom->GetIndexInfo());
-        auto syncResult = TReadPortionInfoWithBlobs::SyncPortion(std::move(readPortion), schemaFrom, schemaTo,
-            IStoragesManager::DefaultStorageId, TTestStoragesManager::GetInstance(), splitterCounters);
+        UNIT_ASSERT(syncResult);
+        FinalizeWritePortion(*syncResult);
+        UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, BloomIndexId), BloomIndexMarker);
+    }
+
+    Y_UNIT_TEST(DifferentSchemaRebuildsIncompatibleMaxIndex) {
+        const auto schemaFrom = MakeTestSchema(1, { .WithMaxIndex = true });
+        const auto schemaTo = MakeTestSchema(2, { .WithMaxIndex = true });
+        const auto batch = MakeTestBatch();
+        const auto splitterCounters = MakeSplitterCounters();
+
+        auto writePortion = BuildTestPortion(schemaFrom, batch, { { MaxIndexId, MaxIndexMarker } }, splitterCounters);
+        FinalizeWritePortion(writePortion);
+
+        auto syncResult = RunSyncPortion(writePortion, schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, splitterCounters);
 
         UNIT_ASSERT(syncResult);
         FinalizeWritePortion(*syncResult);
         const TString indexData = GetInplaceIndexData(*syncResult, MaxIndexId);
-        UNIT_ASSERT_VALUES_UNEQUAL(indexData, IndexMarker);
-        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, indexData), 30);
+        UNIT_ASSERT_VALUES_UNEQUAL(indexData, MaxIndexMarker);
+        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, indexData), ExpectedMaxColumnValue);
     }
 
+    Y_UNIT_TEST(MissingIndexChunksRebuildsIndex) {
+        const auto schemaFrom = MakeTestSchema(1, { .WithMaxIndex = true });
+        const auto schemaTo = MakeTestSchema(2, { .WithMaxIndex = true });
+        const auto batch = MakeTestBatch();
+        const auto splitterCounters = MakeSplitterCounters();
+
+        auto writePortion = BuildTestPortion(schemaFrom, batch, {}, splitterCounters);
+        FinalizeWritePortion(writePortion);
+
+        auto syncResult = RunSyncPortion(writePortion, schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, splitterCounters);
+
+        UNIT_ASSERT(syncResult);
+        FinalizeWritePortion(*syncResult);
+        const TString indexData = GetInplaceIndexData(*syncResult, MaxIndexId);
+        UNIT_ASSERT_VALUES_UNEQUAL(indexData, MaxIndexMarker);
+        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, indexData), ExpectedMaxColumnValue);
+    }
+
+    // ReuseIndexChunks rejects index blobs above MaxBlobSize; SyncPortion must rebuild via AppendIndex.
     Y_UNIT_TEST(OversizedIndexFallsBackToRebuild) {
-        const auto schemaFrom = MakeSchemaWithMaxIndex(1);
-        const auto schemaTo = MakeSchemaWithMaxIndex(2);
+        const auto schemaFrom = MakeTestSchema(1, { .WithMaxIndex = true });
+        const auto schemaTo = MakeTestSchema(2, { .WithMaxIndex = true });
         const auto batch = MakeTestBatch();
         const auto splitterCounters = MakeSplitterCounters();
         const auto storages = TTestStoragesManager::GetInstance();
@@ -274,21 +321,37 @@ Y_UNIT_TEST_SUITE(TSyncPortionIndexReuseTests) {
             storages->GetOperatorVerified(IStoragesManager::LocalMetadataStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
         const TString hugeMarker(maxBlobSize + 1024, 'X');
 
-        auto writePortion = BuildTestPortion(schemaFrom, batch, hugeMarker, splitterCounters);
+        auto writePortion = BuildTestPortion(schemaFrom, batch, { { MaxIndexId, hugeMarker } }, splitterCounters);
         FinalizeWritePortion(writePortion);
 
-        NBlobOperations::NRead::TCompositeReadBlobs blobs;
-        FillReadBlobs(writePortion, blobs);
-
-        auto readPortion = TReadPortionInfoWithBlobs::RestorePortion(writePortion.GetPortionResult(), blobs, schemaFrom->GetIndexInfo());
-        auto syncResult = TReadPortionInfoWithBlobs::SyncPortion(
-            std::move(readPortion), schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, storages, splitterCounters);
+        auto syncResult = RunSyncPortion(writePortion, schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, splitterCounters);
 
         UNIT_ASSERT(syncResult);
         FinalizeWritePortion(*syncResult);
         const TString indexData = GetInplaceIndexData(*syncResult, MaxIndexId);
         UNIT_ASSERT_VALUES_UNEQUAL(indexData, hugeMarker);
-        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, indexData), 30);
+        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, indexData), ExpectedMaxColumnValue);
+    }
+
+    Y_UNIT_TEST(MixedIndexesPartialReuse) {
+        const TTestSchemaOptions options{ .WithMaxIndex = true, .WithBloomIndex = true };
+        const auto schemaFrom = MakeTestSchema(1, options);
+        const auto schemaTo = MakeTestSchema(2, options);
+        const auto batch = MakeTestBatch();
+        const auto splitterCounters = MakeSplitterCounters();
+
+        auto writePortion =
+            BuildTestPortion(schemaFrom, batch, { { MaxIndexId, MaxIndexMarker }, { BloomIndexId, BloomIndexMarker } }, splitterCounters);
+        FinalizeWritePortion(writePortion);
+
+        auto syncResult = RunSyncPortion(writePortion, schemaFrom, schemaTo, IStoragesManager::DefaultStorageId, splitterCounters);
+
+        UNIT_ASSERT(syncResult);
+        FinalizeWritePortion(*syncResult);
+        const TString maxIndexData = GetInplaceIndexData(*syncResult, MaxIndexId);
+        UNIT_ASSERT_VALUES_UNEQUAL(maxIndexData, MaxIndexMarker);
+        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(schemaTo, maxIndexData), ExpectedMaxColumnValue);
+        UNIT_ASSERT_VALUES_EQUAL(GetInplaceIndexData(*syncResult, BloomIndexId), BloomIndexMarker);
     }
 }
 

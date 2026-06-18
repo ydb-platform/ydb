@@ -651,8 +651,6 @@ namespace NKikimr::NDDisk {
                     // duplicated write requests can not be batched
                     Y_ABORT_UNLESS(replyInflight.Records.size() == 1);
                     auto& record2 = replyInflight.Records[0];
-                    Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, record2.Size,
-                        HPMilliSecondsFloat(HPNow() - inflight.StartTs));
                     auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
                         status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
                     auto h = std::make_unique<IEventHandle>(record2.Sender, SelfId(), replyEv.release(), 0, record2.Cookie);

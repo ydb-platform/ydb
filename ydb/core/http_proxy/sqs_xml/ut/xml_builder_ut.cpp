@@ -1,6 +1,8 @@
-#include <ydb/core/ymq/http/xml_builder.h>
+#include <ydb/core/http_proxy/sqs_xml/xml_builder.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+using namespace NKikimr::NHttpProxy::NSQS;
 
 Y_UNIT_TEST_SUITE(XmlBuilderTest) {
     Y_UNIT_TEST(WritesProperly) {

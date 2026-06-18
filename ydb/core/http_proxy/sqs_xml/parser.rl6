@@ -1,21 +1,24 @@
 #include <ydb/library/http_proxy/error/error.h>
 #include <ydb/core/ymq/base/helpers.h>
-#include <ydb/core/ymq/http/params.h>
+#include <ydb/core/http_proxy/sqs_xml/params.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/string/cast.h>
 #include <util/generic/strbuf.h>
 
-namespace NKikimr::NSQS {
+namespace NKikimr::NHttpProxy::NSQS {
+
+using namespace NKikimr::NSQS;
+
 namespace {
 
-const TString& ValidateAlphaNumAndPunctuation128ForAssign(const TString& value, TStringBuf parameterName) {
+const TStringBuf ValidateAlphaNumAndPunctuation128ForAssign(const TStringBuf value, TStringBuf parameterName) {
     if (value.size() > 128 || !IsAlphaNumAndPunctuation(value)) {
         if (parameterName) {
             throw TSQSException(NErrors::INVALID_PARAMETER_VALUE)
                 << "Invalid parameter \"" << parameterName
-                << "\". It is expected to be shorter than 128 characters and consist of aplhanum and punctuation characters.";
+                << "\". It is expected to be no longer than 128 characters and consist of alphanum and punctuation characters.";
         } else {
             throw TSQSException(NErrors::INVALID_PARAMETER_VALUE);
         }
@@ -62,8 +65,8 @@ alphtype unsigned char;
 
 attribute =
     "Attribute" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ? '.'
-        (("Name"  % { CurrentParams_->Attributes[Num_].SetName(value); }) |
-         ("Value" % { CurrentParams_->Attributes[Num_].SetValue(value); }));
+        (("Name"  % { CurrentParams_->Attributes[Num_].Name = value; }) |
+         ("Value" % { CurrentParams_->Attributes[Num_].Value = value; }));
 
 attribute_name =
     "AttributeName" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ?
@@ -71,8 +74,8 @@ attribute_name =
 
 tag =
     "Tag" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ? '.'
-        (("Key"   % { CurrentParams_->Tags[Num_].SetKey(value); }) |
-         ("Value" % { CurrentParams_->Tags[Num_].SetValue(value); }));
+        (("Key"   % { CurrentParams_->Tags[Num_].Key = value; }) |
+         ("Value" % { CurrentParams_->Tags[Num_].Value = value; }));
 
 tag_key =
     "TagKey" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ?
@@ -80,11 +83,11 @@ tag_key =
 
 message_attribute =
     "MessageAttribute" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ? '.'
-        (("Name" % { CurrentParams_->MessageAttributes[Num_].SetName(value); }) |
+        (("Name" % { CurrentParams_->MessageAttributes[Num_].Name = value; }) |
          ("Value" '.'
-            (("StringValue" % { CurrentParams_->MessageAttributes[Num_].SetStringValue(value); }) |
-             ("DataType"    % { CurrentParams_->MessageAttributes[Num_].SetDataType(value); }) |
-             ("BinaryValue" % { CurrentParams_->MessageAttributes[Num_].SetBinaryValue(Base64Decode(value)); }))));
+            (("StringValue" % { CurrentParams_->MessageAttributes[Num_].StringValue = value; }) |
+             ("DataType"    % { CurrentParams_->MessageAttributes[Num_].DataType = value; }) |
+             ("BinaryValue" % { CurrentParams_->MessageAttributes[Num_].BinaryValue = Base64Decode(value); }))));
 
 change_visibility_entry =
     "ChangeMessageVisibilityBatchRequestEntry" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; }) '.'
@@ -147,6 +150,8 @@ main := |*
     ('WaitTimeSeconds')         { CurrentParams_->WaitTimeSeconds = ParseAndValidate(value, TStringBuf("WaitTimeSeconds")); };
     ('CreatedTimestamp')        { CurrentParams_->CreateTimestampSeconds = ParseAndValidate(value, TStringBuf("CreatedTimestamp")); };
     ('CustomQueueName')         { CurrentParams_->CustomQueueName = ParseAndValidate(value, TStringBuf("CustomQueueName")); };
+    ('MaxResults')              { CurrentParams_->MaxResults = ParseAndValidate(value, TStringBuf("MaxResults")); };
+    ('NextToken')               { CurrentParams_->NextToken = ParseAndValidate(value, TStringBuf("NextToken")); };
 
     attribute;
     attribute_name;
@@ -179,7 +184,7 @@ TParametersParser::TParametersParser(TParameters* params)
 TParametersParser::~TParametersParser()
 { }
 
-void TParametersParser::Append(const TString& name, const TString& value) {
+void TParametersParser::Append(const TString& name, const TStringBuf value) {
     CurrentParams_ = Params_;
 
     int cs;
@@ -200,4 +205,4 @@ void TParametersParser::Append(const TString& name, const TString& value) {
     %% write exec;
 }
 
-} // namespace NKikimr::NSQS
+} // namespace NKikimr::NHttpProxy::NSQS

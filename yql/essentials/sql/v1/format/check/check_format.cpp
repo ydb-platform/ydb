@@ -24,7 +24,7 @@ bool ValidateAST(
     const TString& original,
     TMaybe<const NYql::TAstNode*> originalRes,
     const TString& formatted,
-    NSQLTranslation::TTranslationSettings settings,
+    const NSQLTranslation::TTranslationSettings& settings,
     const NSQLTranslationV1::TLexers& lexers,
     const NSQLTranslationV1::TParsers& parsers,
     NYql::TIssues& issues)
@@ -117,15 +117,13 @@ bool ValidateConvergence(
 TMaybe<TString> CheckedFormat(
     const TString& query,
     TMaybe<const NYql::TAstNode*> ast,
-    const NSQLTranslation::TTranslationSettings& settings,
+    NSQLTranslation::TTranslationSettings settings,
     NYql::TIssues& issues,
     EConvergenceRequirement convergence)
 {
-    if (NSQLTranslation::TTranslationSettings effective;
-        !NSQLTranslation::ParseTranslationSettings(query, effective, issues))
-    {
+    if (!NSQLTranslation::ParseTranslationSettings(query, settings, issues)) {
         return Nothing();
-    } else if (effective.PgParser) {
+    } else if (settings.PgParser) {
         return query;
     }
 

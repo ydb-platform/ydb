@@ -5,6 +5,7 @@
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_config.h"
 
+#include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/blobstorage/base/vdisk_lsn.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/base/bufferwithgaps.h>
@@ -369,7 +370,8 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     using TCallback = std::unique_ptr<ICallback>;
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
-                    const TRcBuf &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
+                    const TRcBuf &data, TLsnSeg seg, void *cookie, TWriteSource writeSource = UnknownWriteSource(),
+                    TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
         , Signature(signature)
@@ -377,6 +379,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         , LsnSegmentStart(seg.First)
         , Lsn(seg.Last)
         , Cookie(cookie)
+        , WriteSource(writeSource)
         , LogCallback(std::move(cb))
     {
         Y_VERIFY(Owner);
@@ -390,7 +393,8 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
 
     explicit TEvLog(TOwner owner, TOwnerRound ownerRound, TLogSignature signature,
                     const TCommitRecord &commitRecord,
-                    const TRcBuf &data, TLsnSeg seg, void *cookie, TCallback &&cb = TCallback())
+                    const TRcBuf &data, TLsnSeg seg, void *cookie, TWriteSource writeSource = UnknownWriteSource(),
+                    TCallback &&cb = TCallback())
         : Owner(owner)
         , OwnerRound(ownerRound)
         , Signature(signature, /*commitRecord*/ true)
@@ -398,6 +402,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         , LsnSegmentStart(seg.First)
         , Lsn(seg.Last)
         , Cookie(cookie)
+        , WriteSource(writeSource)
         , LogCallback(std::move(cb))
         , CommitRecord(commitRecord)
     {
@@ -441,6 +446,7 @@ struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
                             // usually LsnSegmentStart=Lsn and this diapason is a single point
     ui64 Lsn;
     void *Cookie;
+    const TWriteSource WriteSource;
     TCallback LogCallback;
     TCommitRecord CommitRecord;
 
@@ -1072,6 +1078,7 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     bool DoFlush;
+    const TWriteSource WriteSource;
     bool IsSeqWrite; // sequential write to this chunk (normally, it is 'true', for huge blobs -- 'false')
 
     mutable NLWTrace::TOrbit Orbit;
@@ -1181,7 +1188,8 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
 
 
     TEvChunkWrite(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, TPartsPtr partsPtr,
-            void *cookie, bool doFlush, ui8 priorityClass, bool isSeqWrite = true)
+            void *cookie, bool doFlush, ui8 priorityClass, TWriteSource writeSource = UnknownWriteSource(),
+            bool isSeqWrite = true)
         : ChunkIdx(chunkIdx)
         , Offset(offset)
         , PartsPtr(partsPtr)
@@ -1190,6 +1198,7 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
         , OwnerRound(ownerRound)
         , PriorityClass(priorityClass)
         , DoFlush(doFlush)
+        , WriteSource(writeSource)
         , IsSeqWrite(isSeqWrite)
     {
         Validate();

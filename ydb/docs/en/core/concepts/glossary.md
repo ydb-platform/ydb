@@ -58,6 +58,8 @@ A **storage group**, **Distributed storage group**, or **Blob storage group** is
 
 [Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group can be assigned to a specific [database](#database) to increase disk capacity and input/output throughput available to this database.
 
+[Static](#static-group) and [dynamic](#dynamic-group) storage groups are physical, meaning their data is stored directly on [VDisks](#vdisk).
+
 #### Static group {#static-group}
 
 A **static group** is a special [storage group](#storage-group) created during the initial cluster deployment. Its primary role is to store system [tablet's](#tablet) data, which can be considered cluster-wide metadata.

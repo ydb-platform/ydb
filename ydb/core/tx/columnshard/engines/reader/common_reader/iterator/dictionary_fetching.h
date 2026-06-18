@@ -2,7 +2,7 @@
 #include "constructor.h"
 
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 

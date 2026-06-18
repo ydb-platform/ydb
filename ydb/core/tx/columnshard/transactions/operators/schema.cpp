@@ -169,6 +169,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
@@ -312,6 +313,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());

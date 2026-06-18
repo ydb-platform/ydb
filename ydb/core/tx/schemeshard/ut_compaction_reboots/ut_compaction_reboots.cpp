@@ -40,8 +40,6 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvForgetRequest);
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvListRequest);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            ui64 txId = 100;
-
             {
                 TInactiveZone inactive(activeZone);
 
@@ -49,19 +47,19 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
                 runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
                 runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-                CreateTable(runtime, txId, "Table1");
-                t.TestEnv->TestWaitNotification(runtime, txId);
+                CreateTable(runtime, t.TxId, "Table1");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 WriteData(runtime, "Table1", TString(1000, 'A'));
 
-                CreateTable(runtime, txId, "Table2");
-                t.TestEnv->TestWaitNotification(runtime, txId);
+                CreateTable(runtime, t.TxId, "Table2");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 WriteData(runtime, "Table2", TString(1000, 'B'));
             }
 
-            AsyncCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Table1");
-            auto compaction1Id = txId;
-            AsyncCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Table2");
-            auto compaction2Id = txId;
+            AsyncCompact(runtime, ++t.TxId, "/MyRoot", "/MyRoot/Table1");
+            auto compaction1Id = t.TxId;
+            AsyncCompact(runtime, ++t.TxId, "/MyRoot", "/MyRoot/Table2");
+            auto compaction2Id = t.TxId;
 
             t.TestEnv->TestWaitNotification(runtime, {compaction1Id, compaction2Id});
 
@@ -72,8 +70,8 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL(response2.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
             }
 
-            TestForgetCompaction(runtime, ++txId, "/MyRoot", compaction1Id);
-            TestForgetCompaction(runtime, ++txId, "/MyRoot", compaction2Id);
+            TestForgetCompaction(runtime, ++t.TxId, "/MyRoot", compaction1Id);
+            TestForgetCompaction(runtime, ++t.TxId, "/MyRoot", compaction2Id);
 
             TestGetCompaction(runtime, compaction1Id, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
             TestGetCompaction(runtime, compaction2Id, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
@@ -88,8 +86,6 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvForgetRequest);
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvListRequest);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            ui64 txId = 100;
-
             {
                 TInactiveZone inactive(activeZone);
 
@@ -97,16 +93,16 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
                 runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
                 runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-                CreateTable(runtime, txId, "Table1");
-                t.TestEnv->TestWaitNotification(runtime, txId);
+                CreateTable(runtime, t.TxId, "Table1");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 WriteData(runtime, "Table1", TString(1000, 'A'));
             }
 
             // start a forced compaction and drop the table while it is in progress
-            AsyncCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Table1");
-            auto compactionId = txId;
-            AsyncDropTable(runtime, ++txId, "/MyRoot", "Table1");
-            auto dropId = txId;
+            AsyncCompact(runtime, ++t.TxId, "/MyRoot", "/MyRoot/Table1");
+            auto compactionId = t.TxId;
+            AsyncDropTable(runtime, ++t.TxId, "/MyRoot", "Table1");
+            auto dropId = t.TxId;
 
             t.TestEnv->TestWaitNotification(runtime, {compactionId, dropId});
 
@@ -116,7 +112,7 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
             }
 
-            TestForgetCompaction(runtime, ++txId, "/MyRoot", compactionId);
+            TestForgetCompaction(runtime, ++t.TxId, "/MyRoot", compactionId);
             TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         });
     }
@@ -129,8 +125,6 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvForgetRequest);
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvListRequest);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            ui64 txId = 100;
-
             {
                 TInactiveZone inactive(activeZone);
 
@@ -138,17 +132,17 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
                 runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
                 runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-                CreateTable(runtime, txId, "Table1");
-                t.TestEnv->TestWaitNotification(runtime, txId);
+                CreateTable(runtime, t.TxId, "Table1");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 WriteData(runtime, "Table1", TString(1000, 'A'));
             }
 
             // start a cascade compaction and build a new index while it is in progress;
             // the index added after creation is not part of the in-flight compaction
-            AsyncCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Table1", true);
-            auto compactionId = txId;
-            AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "ValueIndex", {"value"});
-            auto buildIndexId = txId;
+            AsyncCompact(runtime, ++t.TxId, "/MyRoot", "/MyRoot/Table1", true);
+            auto compactionId = t.TxId;
+            AsyncBuildIndex(runtime, ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "ValueIndex", {"value"});
+            auto buildIndexId = t.TxId;
 
             t.TestEnv->TestWaitNotification(runtime, {compactionId, buildIndexId});
 
@@ -157,7 +151,7 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
             }
 
-            TestForgetCompaction(runtime, ++txId, "/MyRoot", compactionId);
+            TestForgetCompaction(runtime, ++t.TxId, "/MyRoot", compactionId);
             TestGetCompaction(runtime, compactionId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         });
     }

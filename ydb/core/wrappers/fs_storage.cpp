@@ -182,7 +182,9 @@ private:
 
     template<typename TEvResponse, typename... Args>
     void ReplyFsSystemError(const NActors::TActorId& sender, const TString& context, const TSystemError& ex, Args&&... args) {
-        const auto msg = TStringBuilder() << context << ", error# " << ex.what() << ", errno# " << ex.Status();
+        const auto msg = TStringBuilder() << context
+            << ", error# " << ex.what()
+            << ", errno# " << ex.Status();
 
         auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
 
@@ -290,7 +292,8 @@ public:
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
             ReplyFsSystemError<TEvPutObjectResponse>(ev->Sender,
-                TStringBuilder() << "PutObject failed with system error: key# " << key, ex, key);
+                TStringBuilder() << "PutObject failed with system error"
+                    << ": key# " << key, ex, key);
         } catch (const std::exception& ex) {
             FS_LOG_E("PutObject failed"
                 << ": key# " << key
@@ -369,7 +372,8 @@ public:
             Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             ReplyFsSystemError<TEvGetObjectResponse>(ev->Sender,
-                TStringBuilder() << "GetObject failed with system error: key# " << key, ex, key, InvalidRange);
+                TStringBuilder() << "GetObject failed with system error"
+                    << ": key# " << key, ex, key, InvalidRange);
         } catch (const std::exception& ex) {
             FS_LOG_E("GetObject error"
                 << ": key# " << key
@@ -404,7 +408,8 @@ public:
             Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             ReplyFsSystemError<TEvHeadObjectResponse>(ev->Sender,
-                TStringBuilder() << "HeadObject failed with system error: key# " << key, ex, key);
+                TStringBuilder() << "HeadObject failed with system error"
+                    << ": key# " << key, ex, key);
         } catch (const std::exception& ex) {
             FS_LOG_E("HeadObject error"
                 << ": key# " << key
@@ -525,7 +530,8 @@ public:
             Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             ReplyFsSystemError<TEvListObjectsResponse>(ev->Sender,
-                TStringBuilder() << "ListObjects failed with system error: prefix# " << prefix, ex);
+                TStringBuilder() << "ListObjects failed with system error"
+                    << ": prefix# " << prefix, ex);
         } catch (const std::exception& ex) {
             FS_LOG_E("ListObjects failed"
                 << ": prefix# " << prefix
@@ -570,7 +576,8 @@ public:
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             ReplyFsSystemError<TEvCreateMultipartUploadResponse>(ev->Sender,
-                TStringBuilder() << "CreateMultipartUpload failed with system error: key# " << originalKey, ex, originalKey);
+                TStringBuilder() << "CreateMultipartUpload failed with system error"
+                    << ": key# " << originalKey, ex, originalKey);
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
                 << ": key# " << originalKey
@@ -633,7 +640,8 @@ public:
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             ReplyFsSystemError<TEvUploadPartResponse>(ev->Sender,
-                TStringBuilder() << "UploadPart failed with system error: key# " << originalKey
+                TStringBuilder() << "UploadPart failed with system error"
+                    << ": key# " << originalKey
                     << ", uploadId# " << uploadId, ex, originalKey);
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
@@ -711,7 +719,8 @@ public:
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             ReplyFsSystemError<TEvCompleteMultipartUploadResponse>(ev->Sender,
-                TStringBuilder() << "CompleteMultipartUpload failed with system error: key# " << key
+                TStringBuilder() << "CompleteMultipartUpload failed with system error"
+                    << ": key# " << key
                     << ", uploadId# " << uploadId, ex, key);
         } catch (const std::exception& ex) {
             FS_LOG_E("CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());

@@ -223,7 +223,6 @@ public:
                     .Usable = true,
                     .NumSlots = 0,
                     .MaxSlots = 1,
-                    .SlotSizeInUnits = 0,
                     .SlotSizeInBytes = 0,
                     .SpaceAvailable = 0,
                     .Operational = true,

@@ -135,8 +135,8 @@ i64 TPDisk::GetExpectedOwnerSizeInChunks() const {
     if (!ExpectedSlotSize || !Format.ChunkSize) {
         return 0;
     }
-    // Quota accounting is chunk-based; round up to avoid truncating explicit byte limit.
-    ui64 chunks = (ExpectedSlotSize - 1) / Format.ChunkSize + 1;
+    // Quota accounting is chunk-based; round down to keep ExpectedSlotSize an upper bound.
+    ui64 chunks = ExpectedSlotSize / Format.ChunkSize;
     Y_VERIFY(chunks <= ui64(Max<i64>()));
     return chunks;
 }

@@ -396,7 +396,10 @@ public:
             operationInfo.InProgressValidationShards.erase(shardIdx);
             operationInfo.DoneValidationShards.emplace_back(shardIdx);
 
-            // todo: persist shard status
+            {
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, shardIdx, shardStatus);
+            }
 
             Progress(BuildId);
 
@@ -407,7 +410,6 @@ public:
             operationInfo.ValidationFailed = true;
 
             for (const auto& issue : record.GetIssues()) {
-                NIceDb::TNiceDb db(txc.DB);
                 // todo: persist issue
                 LOG_E("TTxReplyValidateRowCondition: error issue: " << issue.message());
             }
@@ -415,14 +417,20 @@ public:
             operationInfo.InProgressValidationShards.erase(shardIdx);
             operationInfo.DoneValidationShards.emplace_back(shardIdx);
 
-            // todo: persist shard status
+            {
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, shardIdx, shardStatus);
+            }
 
             Progress(BuildId);
 
         } else {
             LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
                 << " still in progress, status# " << record.GetStatus());
-            // todo: persist shard status
+            {
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, shardIdx, shardStatus);
+            }
         }
 
         return true;
@@ -536,7 +544,7 @@ private:
             Y_ENSURE(Self->ShardInfos.contains(partition->ShardIdx));
 
             // For validation, we scan the entire shard, so use empty range and lastKeyAck
-            TIndexBuildShardStatus shardStatus(TSerializedTableRange{}, "");
+            TValidateColumnConstraintShardStatus shardStatus(TSerializedTableRange{}, "");
             shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
             auto [it, emplaced] = operationInfo.ValidationShards.emplace(partition->ShardIdx, std::move(shardStatus));

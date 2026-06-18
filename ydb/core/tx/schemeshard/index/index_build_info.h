@@ -50,6 +50,7 @@ struct TIndexBuildShardStatus {
 };
 
 struct TValidateColumnConstraintShardStatus : TIndexBuildShardStatus {
+    using TIndexBuildShardStatus::TIndexBuildShardStatus;
     NKikimrSetColumnConstraint::EValidateStatus ValidateStatus = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
 };
 

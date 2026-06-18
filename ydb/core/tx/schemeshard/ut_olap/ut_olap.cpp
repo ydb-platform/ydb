@@ -1203,6 +1203,18 @@ Y_UNIT_TEST_SUITE(TOlap) {
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
 
+    Y_UNIT_TEST(MoveNonExistentTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/MyDir/non_existent", "/MyRoot/MyDir/something",
+            {NKikimrScheme::StatusPathDoesNotExist});
+    }
+
     Y_UNIT_TEST(MoveTableStats) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

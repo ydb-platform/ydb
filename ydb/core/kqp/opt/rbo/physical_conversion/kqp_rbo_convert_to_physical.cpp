@@ -98,7 +98,11 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 currentStageBody = stageInput;
             }
 
-            currentStageBody = Build<TPhysicalMapBuilder>(map, ctx, op->Pos, currentStageBody);
+            const TInfoUnitSet* liveOut = nullptr;
+            if (const auto liveIt = root.PlanProps.LiveOut.find(map.get()); liveIt != root.PlanProps.LiveOut.end()) {
+                liveOut = &liveIt->second;
+            }
+            currentStageBody = TPhysicalMapBuilder(map, ctx, op->Pos, liveOut).BuildPhysicalOp(currentStageBody);
 
             if (!map->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, map->GetNumOfConsumers(), ctx, op->Pos);

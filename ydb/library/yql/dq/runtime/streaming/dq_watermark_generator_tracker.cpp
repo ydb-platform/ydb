@@ -72,12 +72,13 @@ TMaybe<TInstant> TDqWatermarkGeneratorTracker::HandleIdleness(TInstant systemTim
 }
 
 void TDqWatermarkGeneratorTracker::PrepareIdlenessCheck(TInstant systemTime) {
+    if (!NotifyHandler_) {
+        return;
+    }
     if (auto nextCheck = Impl_.GetNextIdlenessCheckAt()) {
         const auto notifyTime = ToNextDiscreteTime(Max(*nextCheck, systemTime));
         if (Impl_.AddScheduledIdlenessCheck(notifyTime)) {
-            if (NotifyHandler_) {
-                NotifyHandler_(notifyTime);
-            }
+            NotifyHandler_(notifyTime);
         }
     }
 }

@@ -191,7 +191,7 @@ TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
     TRuntimeNode input,
     const TUnaryLambda& watermarkExtractor,
     const TUnaryLambda& partitionKeyExtractor,
-    TConstArrayRef<std::pair<std::string_view, std::string_view>> watermarkSettings,
+    TConstArrayRef<std::pair<std::string, std::string>> watermarkSettings,
     TRuntimeNode partitionKeys
 ) {
     auto returnType = AS_TYPE(TStreamType, input);

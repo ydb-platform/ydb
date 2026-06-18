@@ -8,6 +8,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/string/split.h>
+
 namespace NYql::NDq {
 
 using namespace NKikimr::NMiniKQL;
@@ -34,12 +36,36 @@ public:
                 callableBuilder.Add(callable.GetInput(4));
 
                 if (callable.GetInput(5).GetStaticType()->IsVoid()) {
+                    const auto watermarkSettingsNode = AS_VALUE(TListLiteral, callable.GetInput(4));
+                    const auto watermarkSettings = TConstArrayRef<TRuntimeNode>(watermarkSettingsNode->GetItems(), watermarkSettingsNode->GetItemsCount());
+
+                    std::vector<TPartitionKey> federatedClusters;
+                    for (ui32 i = 0; i + 2 <= watermarkSettings.size(); i += 2) {
+                        const auto  name = AS_VALUE(TDataLiteral, watermarkSettings[i + 0])->AsValue().AsStringRef();
+                        const auto value = AS_VALUE(TDataLiteral, watermarkSettings[i + 1])->AsValue().AsStringRef();
+
+                        if ("FederatedClusters" == std::string_view{name}) {
+                            TVector<TString> federatedClustersStr;
+                            Split(value.data(), ",", federatedClustersStr);
+
+                            for (const auto& federatedClusterStr : federatedClustersStr) {
+                                TPartitionKey federatedCluster;
+                                TStringStream ss(federatedClusterStr);
+                                ss >> federatedCluster;
+                                federatedClusters.push_back(federatedCluster);
+                            }
+                        }
+                    }
+
                     auto readTaskParams = ExtractReadTaskParams(TaskParams, ReadRanges);
-                    auto partitionIds = GetPartitionsToRead(readTaskParams);
+                    auto partitionKeys = GetPartitionsToRead(readTaskParams, federatedClusters);
 
                     std::vector<TRuntimeNode> items;
-                    for (const auto& partitionId : partitionIds) {
-                        items.push_back(pgmBuilder.NewDataLiteral(partitionId));
+                    for (const auto& partitionKey : partitionKeys) {
+                        TStringStream ss;
+                        ss << partitionKey;
+
+                        items.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(ss.Str()));
                     }
                     callableBuilder.Add(pgmBuilder.NewList(items.front().GetStaticType(), items));
                 } else {

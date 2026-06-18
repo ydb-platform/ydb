@@ -547,13 +547,27 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return MkqlBuildLambda(*wg.PartitionKeyExtractor().Raw(), ctx, {item});
         };
 
-        std::vector<std::pair<std::string_view, std::string_view>> watermarkSettings;
+        std::vector<std::pair<std::string, std::string>> watermarkSettings;
         watermarkSettings.reserve(wg.WatermarkSettings().Size());
         for (const auto& nameValue : wg.WatermarkSettings()) {
-            std::string_view name  = nameValue.Name().Value();
-            std::string_view value = nameValue.Value().Cast<TCoAtom>().Value();
+            if (std::string_view name  = nameValue.Name().Value();
+                "FederatedClusters" == name) {
+                const auto valueList = nameValue.Value().Cast<TCoAtomList>();
 
-            watermarkSettings.emplace_back(name, value);
+                TStringBuilder valueBuilder;
+                for (bool first = true; const auto& value : valueList) {
+                    if (!std::exchange(first, false)) {
+                        valueBuilder << ',';
+                    }
+                    valueBuilder << value.Value();
+                }
+                const TString value = valueBuilder;
+
+                watermarkSettings.emplace_back(name, value);
+            } else {
+                std::string_view value = nameValue.Value().Cast<TCoAtom>().Value();
+                watermarkSettings.emplace_back(name, value);
+            }
         }
 
         const auto partitionKeys = pgmBuilder.NewVoid();

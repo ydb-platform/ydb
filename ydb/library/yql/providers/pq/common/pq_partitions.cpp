@@ -2,9 +2,37 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 namespace NYql::NDq {
+
+namespace {
+
+std::vector<TPartitionKey> GetPartitionsToRead(const std::vector<NPq::NProto::TDqReadTaskParams>& readTaskParams, const TMaybe<TPartitionKey>& federatedCluster) {
+    const auto cluster = federatedCluster.Transform(std::bind(&TPartitionKey::Cluster, std::placeholders::_1)).GetOrElse("");
+    const auto maybeTopicPartitionsCount = federatedCluster.Transform(std::bind(&TPartitionKey::PartitionId, std::placeholders::_1));
+
+    std::vector<TPartitionKey> result;
+    for (const auto& readTaskParams : readTaskParams) {
+        for (const auto& partitioningParams : readTaskParams.GetPartitioningParams()) {
+            auto topicPartitionsCount = maybeTopicPartitionsCount.GetOrElse(partitioningParams.GetTopicPartitionsCount());
+            if (!topicPartitionsCount) {
+                topicPartitionsCount = partitioningParams.GetTopicPartitionsCount();
+            }
+            for (
+                auto pk = partitioningParams.GetEachTopicPartitionGroupId();
+                pk < topicPartitionsCount;
+                pk += partitioningParams.GetDqPartitionsCount()
+            ) {
+                result.emplace_back(cluster, pk); // 0-based in topic API
+            }
+        }
+    }
+    return result;
+}
+
+} // anonymous namespace
 
 std::vector<NPq::NProto::TDqReadTaskParams> ExtractReadTaskParams(
     const THashMap<TString, TString>& taskParams, // partitions are here in dq
@@ -29,18 +57,18 @@ std::vector<NPq::NProto::TDqReadTaskParams> ExtractReadTaskParams(
     return result;
 }
 
-std::vector<ui64> GetPartitionsToRead(const std::vector<NPq::NProto::TDqReadTaskParams>& readTaskParams) {
-    std::vector<ui64> result;
-    for (const auto& readTaskParams : readTaskParams) {
-        for (const auto& partitioningParams : readTaskParams.GetPartitioningParams()) {
-            for (
-                auto pk = partitioningParams.GetEachTopicPartitionGroupId();
-                pk < partitioningParams.GetTopicPartitionsCount();
-                pk += partitioningParams.GetDqPartitionsCount()
-            ) {
-                result.emplace_back(pk); // 0-based in topic API
-            }
-        }
+std::vector<TPartitionKey> GetPartitionsToRead(
+    const std::vector<NPq::NProto::TDqReadTaskParams>& readTaskParams,
+    const std::vector<TPartitionKey>& federatedClusters
+) {
+    if (federatedClusters.empty()) {
+        return GetPartitionsToRead(readTaskParams, Nothing());
+    }
+
+    std::vector<TPartitionKey> result;
+    for (const auto& federatedCluster : federatedClusters) {
+        const auto partitionKeys = GetPartitionsToRead(readTaskParams, federatedCluster);
+        result.insert(result.end(), partitionKeys.begin(), partitionKeys.end());
     }
     return result;
 }

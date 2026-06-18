@@ -79,7 +79,7 @@ public:
                 const auto partitionKeyValue = Self_->PartitionKeyExtractor_->GetValue(Ctx_);
 
                 const auto clusterValue = partitionKeyValue.GetElement(0);
-                const auto cluster = std::string(clusterValue.AsStringRef());
+                const auto cluster = TString(clusterValue.AsStringRef());
 
                 const auto partitionIdValue = partitionKeyValue.GetElement(1);
                 const auto partitionId = partitionIdValue.Get<ui64>();
@@ -118,7 +118,6 @@ public:
         TDuration lateArrivalDelay,
         TDuration granularity,
         TDuration idleTimeout,
-        std::vector<std::string> clusters,
         TWatermark& watermark,
         NYql::NDq::TDqWatermarkGeneratorTracker* watermarkTracker
     )
@@ -131,7 +130,6 @@ public:
         , LateArrivalDelay_(lateArrivalDelay)
         , Granularity_(granularity)
         , IdleTimeout_(idleTimeout)
-        , Clusters_(std::move(clusters))
         , Watermark_(watermark)
         , WatermarkTracker_(watermarkTracker)
     {
@@ -179,13 +177,16 @@ private:
     [[nodiscard]] std::vector<NYql::NDq::TPartitionKey> ExtractPartitions(NUdf::TUnboxedValue partitionsValue) const {
         std::vector<NYql::NDq::TPartitionKey> partitionKeys;
 
-        for (const auto& cluster : Clusters_) {
-            auto partitionsIterator = partitionsValue.GetListIterator();
-            NUdf::TUnboxedValue partitionValue;
-            while (partitionsIterator.Next(partitionValue)) {
-                auto partitionId = partitionValue.Get<ui64>();
-                partitionKeys.emplace_back(cluster, partitionId);
-            }
+        auto partitionsIterator = partitionsValue.GetListIterator();
+        NUdf::TUnboxedValue partitionValue;
+        while (partitionsIterator.Next(partitionValue)) {
+            NYql::NDq::TPartitionKey partitionKey;
+
+            const auto partitionKeyStr = TString(partitionValue.AsStringRef());
+            TStringStream ss(partitionKeyStr);
+            ss >> partitionKey;
+
+            partitionKeys.push_back(partitionKey);
         }
         return partitionKeys;
     }
@@ -200,7 +201,6 @@ private:
     TDuration LateArrivalDelay_;
     TDuration Granularity_;
     TDuration IdleTimeout_;
-    std::vector<std::string> Clusters_;
     TWatermark& Watermark_;
     NYql::NDq::TDqWatermarkGeneratorTracker* WatermarkTracker_;
 };
@@ -226,7 +226,6 @@ IComputationNode* WrapDqWatermarkGenerator(
     auto lateArrivalDelay = TDuration::Seconds(5);
     auto granularity = TDuration::Seconds(1);
     auto idleTimeout = TDuration::Seconds(5);
-    std::vector<std::string> clusters;
     for (ui32 i = 0; i + 2 <= watermarkSettings->GetItemsCount(); i += 2) {
         const auto  name = AS_VALUE(TDataLiteral, watermarkSettings->GetItems()[i + 0])->AsValue().AsStringRef();
         const auto value = AS_VALUE(TDataLiteral, watermarkSettings->GetItems()[i + 1])->AsValue().AsStringRef();
@@ -237,16 +236,7 @@ IComputationNode* WrapDqWatermarkGenerator(
             lateArrivalDelay = TDuration::MicroSeconds(FromString<ui64>(value));
         } else if ("WatermarksIdleTimeoutUs" == std::string_view{name}) {
             idleTimeout = TDuration::MicroSeconds(FromString<ui64>(value));
-        } else if ("FederatedClusters" == std::string_view{name}) {
-            TVector<TStringBuf> clusterList;
-            Split(value, ",", clusterList);
-            for (const auto& cluster : clusterList) {
-                clusters.emplace_back(cluster);
-            }
         }
-    }
-    if (clusters.empty()) {
-        clusters.emplace_back();
     }
 
     if (watermarkTracker) {
@@ -263,7 +253,6 @@ IComputationNode* WrapDqWatermarkGenerator(
         lateArrivalDelay,
         granularity,
         idleTimeout,
-        clusters,
         watermark,
         watermarkTracker
     );

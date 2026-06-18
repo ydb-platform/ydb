@@ -6,6 +6,7 @@
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -247,7 +248,25 @@ public:
                 for (const auto& nameValue : pqTopic.Props()) {
                     if (const auto name = nameValue.Name().Value();
                         FederatedClustersProp == name) {
-                        watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
+                        auto federatedClusters = nameValue.Value().Cast<TDqPqFederatedClusterList>();
+
+                        TVector<TCoAtom> newFederatedClusters;
+                        for (const auto& federatedCluster : federatedClusters) {
+                            const auto cluster = federatedCluster.Name();
+                            const auto partitionsCount = federatedCluster.PartitionsCount();
+
+                            TString newFederatedCluster;
+                            TStringOutput ss(newFederatedCluster);
+                            ss << NDq::TPartitionKey {
+                                .Cluster = TString{cluster.Value()},
+                                .PartitionId = partitionsCount ? FromString<ui32>(partitionsCount.Cast().Value()) : 0,
+                            };
+                            newFederatedClusters.push_back(Build<TCoAtom>(ctx, federatedClusters.Pos()).Value(newFederatedCluster).Done());
+                        }
+                        watermarkSettingsBuilder.Add<TCoNameValueTuple>()
+                            .Name<TCoAtom>().Build(name)
+                            .Value<TCoAtomList>().Add(newFederatedClusters).Build()
+                            .Build();
                     }
                 }
                 const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
@@ -886,9 +905,13 @@ public:
             Add(props, WatermarksLateEventsPolicySetting, lateEventsPolicy, pos, ctx);
 
             if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(true)) {
-                Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
-                Add(props, WatermarksIdleTimeoutUsSetting,
-                    ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksIdleTimeoutMs.GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs)).MicroSeconds())), pos, ctx);
+                if (wrSettings.WatermarksEnableIdlePartitions.Defined() && !watermarksIdleTimeoutUs) {
+                    watermarksIdleTimeoutUs = TDuration::MilliSeconds(wrSettings.WatermarksIdleTimeoutMs.GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs)).MicroSeconds();
+                }
+                if (watermarksIdleTimeoutUs) {
+                    Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
+                    Add(props, WatermarksIdleTimeoutUsSetting, ToString(*watermarksIdleTimeoutUs), pos, ctx);
+                }
             } else {
                 if (watermarksIdleTimeoutUs) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "WATERMARK_IDLE_TIMEOUT specified, but watermarks idle partitions explicitly disabled"));

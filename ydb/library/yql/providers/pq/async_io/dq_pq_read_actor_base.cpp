@@ -86,7 +86,7 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
         const auto& [cluster, partition] = clusterAndPartition;
         NPq::NProto::TDqPqTopicSourceState::TPartitionReadState* partitionState = stateProto.AddPartitions();
         partitionState->SetTopicIndex(0); // Now we are supporting only one topic per source.
-        partitionState->SetCluster(TString{cluster});
+        partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
         partitionState->SetOffset(*info.Offset);
     }

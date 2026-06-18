@@ -158,9 +158,13 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroupMock::CreateChildSpan(
     return nullptr;
 }
 
-void TDirectBlockGroupMock::Run(IPartitionDirectService* service)
+NThreading::TFuture<void> TDirectBlockGroupMock::Run(
+    IPartitionDirectService* service)
 {
     Y_UNUSED(service);
+    // The mock is considered ready immediately - tests that do not exercise
+    // session locking should not block on the initial-ready gate.
+    return NThreading::MakeFuture();
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>
@@ -309,13 +313,6 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
 {
     return DumpHandler();
-}
-
-NThreading::TFuture<void> TDirectBlockGroupMock::GetInitialReadyFuture()
-{
-    // The mock is considered ready immediately - tests that do not exercise
-    // session locking should not block on the initial-ready gate.
-    return NThreading::MakeFuture();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

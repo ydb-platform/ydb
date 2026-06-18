@@ -70,13 +70,9 @@ public:
 
     ~TFastPathService() override;
 
-    void Run();
-
-    // Returns a future that becomes ready the FIRST time the Locked-session
-    // quorum is reached in every DBG. Used to gate the synchronous start mode
-    // without blocking the actor thread: the caller subscribes to this future
-    // and opens the endpoint in the callback.
-    NThreading::TFuture<void> GetAllDBGsInitiallyReadyFuture();
+    // Starts all DBGs and regions; returns a future that becomes ready the
+    // first time the Locked-session quorum is reached in every DBG.
+    NThreading::TFuture<void> Run();
 
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(

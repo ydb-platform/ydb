@@ -495,13 +495,13 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
-    // ReadBlocksLocal / WriteBlocksLocal are blocked while DirtyMapRestored
+    // ReadBlocksLocal / WriteBlocksLocal are blocked while DirtyMapReady
     // is false and resume after UpdateDirtyMap fires on the executor thread.
-    Y_UNIT_TEST_F(ShouldBlockLocalIoUntilDirtyMapRestored, TBaseFixture)
+    Y_UNIT_TEST_F(ShouldBlockLocalIoUntilDirtyMapReady, TBaseFixture)
     {
         Init();
 
-        // Override the restore handler to keep DirtyMapRestored == false: the
+        // Override the restore handler to keep DirtyMapReady == false: the
         // future is never resolved, so the vchunk subscription callback never
         // fires during the "before" phase of the test.
         auto neverResolvePromise =
@@ -528,9 +528,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Start();
 
         // Drain executor: DoStart has subscribed to the restore future; since
-        // that future is pending, DirtyMapRestored stays false.
+        // that future is pending, DirtyMapReady stays false.
         DrainExecutor(DirectBlockGroup->GetExecutor());
-        UNIT_ASSERT_EQUAL(false, AccessDirtyMapRestored(*vchunk));
+        UNIT_ASSERT_EQUAL(false, IsDirtyMapReady(*vchunk));
 
         // Submit write - coroutine suspends on WaitFor(DirtyMapReadyFuture).
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
@@ -559,13 +559,12 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             readRequest,
             NWilson::TTraceId());
 
-        // Drain: both coroutines are now suspended inside WaitFor.
+        // Drain: both coroutines are now suspended inside WaitFor
         DrainExecutor(DirectBlockGroup->GetExecutor());
         UNIT_ASSERT(!writeFuture.HasValue());
         UNIT_ASSERT(!readFuture.HasValue());
 
-        // Invoke UpdateDirtyMap on the executor thread: resolves
-        // DirtyMapReadyPromise and unblocks both suspended coroutines.
+        // resolves DirtyMapReady promise and unblocks both suspended coroutines
         RunOnExecutor(
             DirectBlockGroup->GetExecutor(),
             [&]() -> bool
@@ -606,7 +605,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     }
 
     // A second UpdateDirtyMap call (resync path) must
-    // not try to SetValue on an already-resolved DirtyMapReadyPromise (which
+    // not try to SetValue on an already-resolved DirtyMapReady promise (which
     // would rase exception), and operations issued afterwards must complete
     // immediately.
     Y_UNIT_TEST_F(ShouldNotRecreateDirtyMapPromiseOnResync, TBaseFixture)
@@ -614,7 +613,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         // Default handler returns an immediately-resolved future, so
-        // DirtyMapRestored becomes true inside DoStart.
+        // DirtyMapReady becomes true inside DoStart.
 
         const TBlockRange64 range = TBlockRange64::WithLength(0, 1);
         ExpectedRange = range;
@@ -631,12 +630,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Start();
 
         // Drain: the restore callback fires synchronously (future was already
-        // resolved) and sets DirtyMapRestored = true.
+        // resolved) and sets DirtyMapReady = true
         DrainExecutor(DirectBlockGroup->GetExecutor());
-        UNIT_ASSERT_EQUAL(true, AccessDirtyMapRestored(*vchunk));
+        UNIT_ASSERT_EQUAL(true, IsDirtyMapReady(*vchunk));
 
-        // Simulate a resync by calling UpdateDirtyMap a second time. This must
-        // NOT call SetValue on the already-resolved one-shot promise.
+        // This must NOT call SetValue on the already-resolved one-shot promise
         RunOnExecutor(
             DirectBlockGroup->GetExecutor(),
             [&]() -> bool
@@ -647,8 +645,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 return true;
             });
 
-        // Operations issued after the second update must not block (the
-        // DirtyMapRestored flag is still true, WaitFor is never entered).
+        // Operations issued after the second update must not block
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto writeRequest =
             std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{

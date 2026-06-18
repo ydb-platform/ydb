@@ -45,19 +45,11 @@ struct TEvPartitionDirectPrivate
         {}
     };
 
-    // Signals (on the actor thread) that every DBG has reached its initial
-    // Locked-session quorum, so the vhost endpoint can be opened. Carries the
-    // TFastPathService keeping it alive until the actor opens the endpoint.
-    struct TEvDBGsInitiallyReady
+    // Signals that FastPathServiceReady (and it's dbg's) is ready.
+    struct TEvFastPathServiceReady
         : public NActors::
-              TEventLocal<TEvDBGsInitiallyReady, EvDBGsInitiallyReady>
+              TEventLocal<TEvFastPathServiceReady, EvDBGsInitiallyReady>
     {
-        std::shared_ptr<TFastPathService> FastPathService;
-
-        explicit TEvDBGsInitiallyReady(
-            std::shared_ptr<TFastPathService> fastPathService)
-            : FastPathService(std::move(fastPathService))
-        {}
     };
 };
 

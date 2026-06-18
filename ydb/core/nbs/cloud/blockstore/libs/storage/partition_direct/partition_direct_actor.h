@@ -49,6 +49,7 @@ private:
 
     NActors::TActorId LoadActorAdapter;
     bool DdiskBlockGroupAllocated = false;
+    std::shared_ptr<TFastPathService> FastPathService;
 
 public:
     TPartitionActor(
@@ -108,8 +109,8 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleDBGsInitiallyReady(
-        const TEvPartitionDirectPrivate::TEvDBGsInitiallyReady::TPtr& ev,
+    void HandleFastPathServiceReady(
+        const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void Start(

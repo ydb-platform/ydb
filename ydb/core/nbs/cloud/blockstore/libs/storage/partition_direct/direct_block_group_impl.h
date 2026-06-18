@@ -39,20 +39,6 @@ public:
         ui32 generation,
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
-        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
-
-    // Delegating constructor with an injectable storage transport. Used by
-    // tests to substitute a mock transport. The production constructor above
-    // delegates here, creating a real TICStorageTransport.
-    TDirectBlockGroup(
-        NActors::TActorSystem* actorSystem,
-        TStorageConfigPtr storageConfig,
-        TExecutorPtr executor,
-        const TString& diskId,
-        ui64 tabletId,
-        ui32 generation,
-        size_t directBlockGroupIndex,
-        const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
         std::unique_ptr<NTransport::IStorageTransport> storageTransport);
 
@@ -72,7 +58,7 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    void Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -140,8 +126,6 @@ public:
         THostIndex hostIndex) override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
-
-    NThreading::TFuture<void> GetInitialReadyFuture() override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -234,6 +218,9 @@ private:
 
     void Thinking();
     void ScheduleOracleThinking();
+
+    [[nodiscard]] bool TryWaitForSessionLock(THostIndex hostIndex);
+
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
@@ -256,7 +243,6 @@ private:
     // ONLY to gate the synchronous tablet start (wait for readiness before
     // opening the endpoint). It does NOT reflect the current runtime readiness.
     NThreading::TPromise<void> InitialReadyPromise = NThreading::NewPromise();
-    bool InitialReadySignaled = false;
 
     THashMap<ui32, TDBGRestoreResponse> RestoredPBuffers;
     NThreading::TPromise<void> RestoredPBuffersPromise =

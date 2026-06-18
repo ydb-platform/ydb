@@ -97,14 +97,14 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         return vchunk.VChunkConfig;
     }
 
-    static bool AccessDirtyMapRestored(TVChunk& vchunk)
+    static bool IsDirtyMapReady(TVChunk& vchunk)
     {
-        return vchunk.DirtyMapRestored;
+        return vchunk.DirtyMapReady.HasValue();
     }
 
     static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)
     {
-        return vchunk.DirtyMapReadyPromise;
+        return vchunk.DirtyMapReady;
     }
 
     // Must be invoked on the vchunk's executor thread.

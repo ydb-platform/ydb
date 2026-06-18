@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
@@ -194,7 +195,9 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             Executor()->Generation(),   // generation
             i,                          // direct block group index
             std::move(ddiskIds),
-            std::move(persistentBufferDDiskIds));
+            std::move(persistentBufferDDiskIds),
+            std::make_unique<NTransport::TICStorageTransport>(
+                TActivationContext::ActorSystem()));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -264,7 +267,7 @@ void TPartitionActor::Start(
     }
 
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    auto fastPathService = std::make_shared<TFastPathService>(
+    FastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         SelfId(),
         TabletID(),
@@ -278,39 +281,36 @@ void TPartitionActor::Start(
         nbsService->Timer,
         AppData()->Counters);
 
-    fastPathService->Run();
-
     // Synchronous start mode - requests pass as the initial quorum of Locked
     // DDisk sessions across all DBGs is achieved.
     // TODO: make optional via StorageConfig after implementation of async mode.
     auto* actorSystem = TActivationContext::ActorSystem();
     auto selfId = SelfId();
-    fastPathService->GetAllDBGsInitiallyReadyFuture().Subscribe(
-        [actorSystem, selfId, fastPathService](
-            const NThreading::TFuture<void>&) mutable
+    FastPathService->Run().Subscribe(
+        [actorSystem,
+         selfId]   //
+        (const NThreading::TFuture<void>&) mutable
         {
             // This callback runs OUTSIDE the actor thread - on the DBG's
             // executor-thread
             auto event = std::make_unique<
-                TEvPartitionDirectPrivate::TEvDBGsInitiallyReady>(
-                std::move(fastPathService));
+                TEvPartitionDirectPrivate::TEvFastPathServiceReady>();
             actorSystem->Send(selfId, event.release());
         });
 }
 
-void TPartitionActor::HandleDBGsInitiallyReady(
-    const TEvPartitionDirectPrivate::TEvDBGsInitiallyReady::TPtr& ev,
+void TPartitionActor::HandleFastPathServiceReady(
+    const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    auto fastPathService = ev->Get()->FastPathService;
-
+    Y_UNUSED(ev);
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
 
-    LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
+    LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
     {
         auto service = GetNbsService();
@@ -327,8 +327,8 @@ void TPartitionActor::HandleDBGsInitiallyReady(
             .VhostQueuesCount = StorageConfig->GetVhostQueuesCount()};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
-            fastPathService,
-            fastPathService,
+            FastPathService,
+            FastPathService,
             options);
     }
 
@@ -497,8 +497,8 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);
         HFunc(
-            TEvPartitionDirectPrivate::TEvDBGsInitiallyReady,
-            HandleDBGsInitiallyReady);
+            TEvPartitionDirectPrivate::TEvFastPathServiceReady,
+            HandleFastPathServiceReady);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

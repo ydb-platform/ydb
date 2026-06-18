@@ -329,9 +329,8 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     for (const auto& meta: response.Meta) {
         BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
     }
-    if (!DirtyMapRestored) {
-        DirtyMapRestored = true;
-        DirtyMapReadyPromise.SetValue();
+    if (!DirtyMapReady.HasValue()) {
+        DirtyMapReady.SetValue();
     }
 
     DoFlush(false);
@@ -388,13 +387,7 @@ void TVChunk::DoReadBlocksLocal(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (!DirtyMapRestored) {
-        // Block until the initial DirtyMap assembly completes (or return
-        // immediately if it is already done). The coroutine is suspended on the
-        // Executor thread.
-        const auto dirtyMapReadyFuture = DirtyMapReadyPromise.GetFuture();
-        Executor->WaitFor(dirtyMapReadyFuture);
-    }
+    WaitForDirtyMapReady();
 
     TReadHint readHint;
     {
@@ -489,13 +482,7 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (!DirtyMapRestored) {
-        // Block until the initial DirtyMap assembly completes (or return
-        // immediately if it is already done). The coroutine is suspended on the
-        // Executor thread before any lsn is generated.
-        const auto dirtyMapReadyFuture = DirtyMapReadyPromise.GetFuture();
-        Executor->WaitFor(dirtyMapReadyFuture);
-    }
+    WaitForDirtyMapReady();
 
     // Generate the lsn and register the write as inflight on the same executor
     // thread, so the cleanup watermark covers it from the moment of generation.
@@ -987,6 +974,14 @@ void TVChunk::OnCopyComplete(
     };
 
     UpdateConfig(std::move(prepare), std::move(apply));
+}
+
+void TVChunk::WaitForDirtyMapReady()
+{
+    if (!DirtyMapReady.HasValue()) {
+        const auto dirtyMapReadyFuture = DirtyMapReady.GetFuture();
+        Executor->WaitFor(dirtyMapReadyFuture);
+    }
 }
 
 TString TVChunk::PrintInflight() const

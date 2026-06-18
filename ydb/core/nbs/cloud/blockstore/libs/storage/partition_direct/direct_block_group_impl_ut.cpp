@@ -1,6 +1,6 @@
 #include "direct_block_group_impl.h"
 
-#include "ut/storage_transport_mock.h"
+#include "storage_transport_mock.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
@@ -154,10 +154,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
-        auto initialReady = dbg->GetInitialReadyFuture();
-
         TPartitionDirectServiceMock service(true);
-        dbg->Run(&service);
+        auto initialReady = dbg->Run(&service);
 
         // Establish-connections has run, but no DDisk session is locked yet.
         DrainExecutor(executor);
@@ -211,10 +209,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
-        auto initialReady = dbg->GetInitialReadyFuture();
-
         TPartitionDirectServiceMock service(true);
-        dbg->Run(&service);
+        auto initialReady = dbg->Run(&service);
 
         // Three immediate sessions -> quorum reached.
         initialReady.Wait(WaitTimeout);
@@ -224,7 +220,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // Read from a locked host completes right away.
         TString readyBuffer(DefaultBlockSize, 'r');
-        auto readyRead = InvokeOnExecutor(
+        auto readyRead = RunOnExecutor(
             executor,
             [&]
             {
@@ -241,7 +237,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // Write to a locked host completes right away.
         TString readyWriteBuffer(DefaultBlockSize, 'w');
-        auto readyWrite = InvokeOnExecutor(
+        auto readyWrite = RunOnExecutor(
             executor,
             [&]
             {
@@ -259,7 +255,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         // Read from the still-connecting host 3 suspends inside the method, so
         // the outer future (carrying the returned future) is not resolved.
         TString pendingBuffer(DefaultBlockSize, 'p');
-        auto pendingRead = InvokeOnExecutor(
+        auto pendingRead = RunOnExecutor(
             executor,
             [&]
             {
@@ -305,20 +301,21 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         }
         auto dbgB = MakeDirectBlockGroup(executorB, std::move(transportB), 200);
 
-        // Mirror fast_path_service.cpp: WaitAll over per-DBG initial-ready.
-        TVector<TFuture<void>> initialReadyFutures{
-            dbgA->GetInitialReadyFuture(),
-            dbgB->GetInitialReadyFuture()};
-        auto allReady = NThreading::WaitAll(initialReadyFutures);
-
+        // Mirror fast_path_service.cpp: WaitAll over per-DBG initial-ready
+        // futures returned by Run().
         TPartitionDirectServiceMock serviceA(true);
         TPartitionDirectServiceMock serviceB(true);
-        dbgA->Run(&serviceA);
-        dbgB->Run(&serviceB);
+        auto initialReadyA = dbgA->Run(&serviceA);
+        auto initialReadyB = dbgB->Run(&serviceB);
+
+        TVector<TFuture<void>> initialReadyFutures{
+            initialReadyA,
+            initialReadyB};
+        auto allReady = NThreading::WaitAll(initialReadyFutures);
 
         // DBG A is ready; DBG B is not -> the aggregate gate is not resolved.
-        dbgA->GetInitialReadyFuture().Wait(WaitTimeout);
-        UNIT_ASSERT(dbgA->GetInitialReadyFuture().HasValue());
+        initialReadyA.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReadyA.HasValue());
         DrainExecutor(executorB);
         UNIT_ASSERT(!allReady.HasValue());
 

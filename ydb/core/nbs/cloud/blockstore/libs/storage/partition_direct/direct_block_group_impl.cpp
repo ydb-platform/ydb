@@ -72,29 +72,6 @@ TDirectBlockGroup::TDirectBlockGroup(
     ui32 generation,
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
-    const TVector<NBsController::TDDiskId>& pbufferIds)
-    : TDirectBlockGroup(
-          actorSystem,
-          std::move(storageConfig),
-          std::move(executor),
-          diskId,
-          tabletId,
-          generation,
-          directBlockGroupIndex,
-          ddisksIds,
-          pbufferIds,
-          std::make_unique<NTransport::TICStorageTransport>(actorSystem))
-{}
-
-TDirectBlockGroup::TDirectBlockGroup(
-    NActors::TActorSystem* actorSystem,
-    TStorageConfigPtr storageConfig,
-    TExecutorPtr executor,
-    const TString& diskId,
-    ui64 tabletId,
-    ui32 generation,
-    size_t directBlockGroupIndex,
-    const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
     std::unique_ptr<NTransport::IStorageTransport> storageTransport)
     : ActorSystem(actorSystem)
@@ -191,7 +168,8 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
         ActorSystem);
 }
 
-void TDirectBlockGroup::Run(IPartitionDirectService* service)
+NThreading::TFuture<void> TDirectBlockGroup::Run(
+    IPartitionDirectService* service)
 {
     Service = service;
 
@@ -205,6 +183,8 @@ void TDirectBlockGroup::Run(IPartitionDirectService* service)
                 self->DoEstablishConnections();
             }
         });
+
+    return InitialReadyPromise.GetFuture();
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>
@@ -220,16 +200,10 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
     using TEvReadResultFuture =
         TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult>;
 
-    auto& conn = DDiskConnections[hostIndex];
-    if (conn.SessionState != EDDiskSessionState::Locked) {
-        const auto sessionReadyFuture = GetSessionReadyFuture(hostIndex);
-        Executor->WaitFor(sessionReadyFuture);
-        if (conn.SessionState != EDDiskSessionState::Locked) {
-            return MakeFuture<TDBGReadBlocksResponse>(
-                {.Error = MakeError(
-                     E_REJECTED,
-                     "DDisk session is not established")});
-        }
+    if (!TryWaitForSessionLock(hostIndex)) {
+        return MakeFuture<TDBGReadBlocksResponse>(
+            {.Error =
+                 MakeError(E_REJECTED, "DDisk session is not established")});
     }
 
     auto childSpan =
@@ -377,16 +351,10 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 
     const auto startAt = TMonotonic::Now();
 
-    auto& conn = DDiskConnections[hostIndex];
-    if (conn.SessionState != EDDiskSessionState::Locked) {
-        const auto sessionReadyFuture = GetSessionReadyFuture(hostIndex);
-        Executor->WaitFor(sessionReadyFuture);
-        if (conn.SessionState != EDDiskSessionState::Locked) {
-            return MakeFuture<TDBGWriteBlocksResponse>(
-                {.Error = MakeError(
-                     E_REJECTED,
-                     "DDisk session is not established")});
-        }
+    if (!TryWaitForSessionLock(hostIndex)) {
+        return MakeFuture<TDBGWriteBlocksResponse>(
+            {.Error =
+                 MakeError(E_REJECTED, "DDisk session is not established")});
     }
 
     auto childSpan =
@@ -1243,8 +1211,9 @@ void TDirectBlockGroup::SetInitialReadyIfQuorum()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (!InitialReadySignaled && HasLockedQuorum() && HasPBufferQuorum()) {
-        InitialReadySignaled = true;
+    if (!InitialReadyPromise.HasValue() && HasLockedQuorum() &&
+        HasPBufferQuorum())
+    {
         InitialReadyPromise.SetValue();
         LOG_INFO(
             *ActorSystem,
@@ -1261,11 +1230,6 @@ NThreading::TFuture<NProto::TError> TDirectBlockGroup::GetSessionReadyFuture(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return DDiskConnections[hostIndex].GetFuture();
-}
-
-NThreading::TFuture<void> TDirectBlockGroup::GetInitialReadyFuture()
-{
-    return InitialReadyPromise.GetFuture();
 }
 
 void TDirectBlockGroup::DoListPBuffers()
@@ -1393,6 +1357,17 @@ void TDirectBlockGroup::ScheduleOracleThinking()
                 self->ScheduleOracleThinking();
             }
         });
+}
+
+bool TDirectBlockGroup::TryWaitForSessionLock(THostIndex hostIndex)
+{
+    const auto& conn = DDiskConnections[hostIndex];
+    if (conn.SessionState != EDDiskSessionState::Locked) {
+        const auto sessionReadyFuture = GetSessionReadyFuture(hostIndex);
+        Executor->WaitFor(sessionReadyFuture);
+        return conn.SessionState == EDDiskSessionState::Locked;
+    }
+    return true;
 }
 
 TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()

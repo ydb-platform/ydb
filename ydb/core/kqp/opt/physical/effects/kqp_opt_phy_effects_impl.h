@@ -123,6 +123,11 @@ std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPref
     const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
     TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
+bool FulltextUsesRowIdAsDocId(const NYql::TIndexDescription* indexDesc);
+
+void AddFulltextDocIdColumns(const NYql::TIndexDescription* indexDesc,
+    TVector<TStringBuf>& indexTableColumns, THashSet<TStringBuf>& indexTableColumnsSet);
+
 NYql::NNodes::TExprBase BuildFulltextIndexRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
     const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
     bool forDelete, NYql::TPositionHandle pos, NYql::TExprContext& ctx);

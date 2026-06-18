@@ -137,7 +137,7 @@ namespace NActors {
                 cFunc(EvPassAwayIfNeeded, HandlePassAwayIfNeeded)                               \
                 hFunc(TEvSubscribeForConnection, Handle);                                       \
                 hFunc(TEvReportConnection, Handle);                                             \
-                cFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
+                fFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
                 default:                                                                        \
                     Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                       \
             }                                                                                   \
@@ -429,7 +429,7 @@ namespace NActors {
         void ScheduleCleanupEventQueue();
         void HandleCleanupEventQueue();
         void CleanupEventQueue();
-        void HandleRdmaDelayedHandshake();
+        void HandleRdmaDelayedHandshake(STATEFN_SIG);
         TDuration GetNextRdmaRetryDelay() const;
         TDuration GetMaxRdmaRetryDelay() const;
         void RegisterRdmaSuccess();
@@ -571,6 +571,7 @@ namespace NActors {
         NInterconnect::TSecureSocketContext::TPtr SecureContext;
         TDuration DelayedRdmaHandshakeTimeout;
         bool RdmaRetryWatchdogPending = false;
+        ui64 RdmaRetryWatchdogCookie = 0;
         ui32 ConsecutiveRdmaFailures = 0;
         TInstant LastRdmaSuccessAt;
         TInstant LastRdmaFailureAt;

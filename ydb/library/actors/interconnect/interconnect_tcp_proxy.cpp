@@ -388,6 +388,7 @@ namespace NActors {
             }
 
             // Create new session actor.
+            ++RdmaRetryWatchdogCookie;
             SessionID = RegisterWithSameMailbox(Session = new TInterconnectSessionTCP(this, msg->Params));
             IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Init);
             SessionVirtualId = msg->Self;
@@ -738,10 +739,17 @@ namespace NActors {
         LOG_NOTICE_IC("ICP38", "schedule delayed rdma handshake for session: %s failures: %" PRIu32 " timeout: %s",
             SessionID.ToString().data(), ConsecutiveRdmaFailures, DelayedRdmaHandshakeTimeout.ToString().data());
         TActivationContext::Schedule(DelayedRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
-            {}, nullptr, 0));
+            {}, nullptr, RdmaRetryWatchdogCookie));
     }
 
-    void TInterconnectProxyTCP::HandleRdmaDelayedHandshake() {
+    void TInterconnectProxyTCP::HandleRdmaDelayedHandshake(STATEFN_SIG) {
+        if (ev->Cookie != RdmaRetryWatchdogCookie) {
+            LOG_DEBUG_IC("ICP41", "ignore stale rdma retry watchdog event for session: %s"
+                " event_cookie: %" PRIu64 " current_cookie: %" PRIu64, SessionID.ToString().data(),
+                ev->Cookie, RdmaRetryWatchdogCookie);
+            return;
+        }
+
         if (!DelayedRdmaHandshakeTimeout) {
             return;
         }
@@ -764,7 +772,7 @@ namespace NActors {
             DelayedRdmaHandshakeTimeout = RdmaRetryStateCheckDelay;
             SetRdmaRetryWatchdogPending(true);
             TActivationContext::Schedule(DelayedRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
-                {}, nullptr, 0));
+                {}, nullptr, RdmaRetryWatchdogCookie));
         }
     }
 

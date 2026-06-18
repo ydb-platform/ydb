@@ -183,7 +183,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
 
 }
 
-void THelper::SetLCBucketsPlanner(const TString& storeName) {
+void THelper::SetTilingPlanner(const TString& storeName) {
     auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
     NKikimrSchemeOp::TModifyScheme modyfySchemeOp;
@@ -196,12 +196,8 @@ void THelper::SetLCBucketsPlanner(const TString& storeName) {
     auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
     schemaOptions->SetSchemeNeedActualization(false);
     auto plannerConstructor = schemaOptions->MutableCompactionPlannerConstructor();
-    plannerConstructor->SetClassName("lc-buckets");
-    auto* lcBuckets = plannerConstructor->MutableLCBuckets();
-    auto* level0 = lcBuckets->AddLevels();
-    level0->SetClassName("Zero");
-    auto* level1 = lcBuckets->AddLevels();
-    level1->SetClassName("OneLayer");
+    plannerConstructor->SetClassName("tiling++");
+    plannerConstructor->MutableTiling()->SetJson(TILING_NO_COMPACTION_FEATURES_JSON);
 
     ExecuteModifyScheme(modyfySchemeOp);
 }
@@ -218,15 +214,9 @@ void THelper::SetForcedCompaction(const TString& storeName) {
     schemaPreset->SetName("default");
     auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
     schemaOptions->SetSchemeNeedActualization(false);
-    auto plannerConstructor = schemaOptions->MutableCompactionPlannerConstructor();
-    plannerConstructor->SetClassName("lc-buckets");
-    auto* lcBuckets = plannerConstructor->MutableLCBuckets();
-    auto* level0 = lcBuckets->AddLevels();
-    level0->SetClassName("Zero");
-    level0->MutableZeroLevel()->SetPortionsCountAvailable(1);
-    level0->MutableZeroLevel()->SetPortionsLiveDurationSeconds(1);
-    auto* level1 = lcBuckets->AddLevels();
-    level1->SetClassName("OneLayer");
+    auto* plannerConstructor = schemaOptions->MutableCompactionPlannerConstructor();
+    plannerConstructor->SetClassName("tiling++");
+    plannerConstructor->MutableTiling()->SetJson("{}");
 
     ExecuteModifyScheme(modyfySchemeOp);
 }
@@ -238,13 +228,7 @@ TString THelper::GetTilingNoCompactionAlter(const TString& tablePath) {
         "ALTER OBJECT `" << tablePath << "` (TYPE TABLE) SET ("
         "ACTION=UPSERT_OPTIONS, "
         "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
-        "`COMPACTION_PLANNER.FEATURES`=`{"
-            "\"accumulator_portion_size_limit\":18446744073709551615,"
-            "\"accumulator_trigger_portions\":18446744073709551615,"
-            "\"accumulator_trigger_bytes\":18446744073709551615,"
-            "\"accumulator_overload_portions\":18446744073709551615,"
-            "\"accumulator_overload_bytes\":18446744073709551615"
-        "}`);";
+        "`COMPACTION_PLANNER.FEATURES`=`" << TILING_NO_COMPACTION_FEATURES_JSON << "`);";
 }
 
 TString THelper::GetTilingForceLastLevelCompactionAlter(const TString& tablePath) {
@@ -255,13 +239,7 @@ TString THelper::GetTilingForceLastLevelCompactionAlter(const TString& tablePath
         "ALTER OBJECT `" << tablePath << "` (TYPE TABLE) SET ("
         "ACTION=UPSERT_OPTIONS, "
         "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
-        "`COMPACTION_PLANNER.FEATURES`=`{"
-            "\"accumulator_portion_size_limit\":0,"
-            "\"k\":255,"
-            "\"last_level_candidate_portions_overload\":1,"
-            "\"last_level_compaction_portions\":1000000000,"
-            "\"last_level_compaction_bytes\":1099511627776"
-        "}`);";
+        "`COMPACTION_PLANNER.FEATURES`=`" << TILING_FORCE_COMPACTION_FEATURES_JSON << "`);";
 }
 
 

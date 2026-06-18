@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -286,13 +286,13 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/LeftTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/LeftTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/LeftTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/RightTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/RightTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/RightTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         WITH (STORE = COLUMN, PARTITION_COUNT = $$1|2$$);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -1493,7 +1493,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -1554,7 +1554,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
@@ -1777,10 +1777,10 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             WITH (STORE = COLUMN, PARTITION_COUNT = 1);
             ------
             SCHEMA:
-            ALTER OBJECT `/Root/CompressionOnlyTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+            ALTER OBJECT `/Root/CompressionOnlyTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
             ------
             SCHEMA:
-            ALTER OBJECT `/Root/CompressionAndDictTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`)
+            ALTER OBJECT `/Root/CompressionAndDictTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
             ------
             SCHEMA:
             ALTER OBJECT `/Root/CompressionOnlyTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)

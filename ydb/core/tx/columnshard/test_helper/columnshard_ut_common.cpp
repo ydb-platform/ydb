@@ -497,14 +497,8 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     }
     if (specials.GetUseForcedCompaction()) {
         auto* plannerConstructor = schema->MutableOptions()->MutableCompactionPlannerConstructor();
-        plannerConstructor->SetClassName("lc-buckets");
-        auto* lcBuckets = plannerConstructor->MutableLCBuckets();
-        auto* level0 = lcBuckets->AddLevels();
-        level0->SetClassName("Zero");
-        level0->MutableZeroLevel()->SetPortionsCountAvailable(1);
-        level0->MutableZeroLevel()->SetPortionsLiveDurationSeconds(1);
-        auto* level1 = lcBuckets->AddLevels();
-        level1->SetClassName("OneLayer");
+        plannerConstructor->SetClassName("tiling++");
+        plannerConstructor->MutableTiling()->SetJson("{}");
     }
 }
 

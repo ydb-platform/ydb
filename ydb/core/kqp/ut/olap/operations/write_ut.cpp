@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
-        helper.SetLCBucketsPlanner();
+        helper.SetTilingPlanner();
 
         auto writeSession = helper.StartWriting("/Root/olapStore/olapTable");
         writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();
-        helper.SetLCBucketsPlanner();
+        helper.SetTilingPlanner();
         auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
         writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));

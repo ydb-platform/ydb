@@ -399,8 +399,7 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     runtime.SimulateSleep(TDuration::Seconds(1));
 
     ExecuteYqlScript(env, Sprintf(R"(
-        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
-            `COMPACTION_PLANNER.FEATURES`=`{"levels": [{"class_name": "Zero", "portions_count_available": 1, "portions_live_duration": "1s"}, {"class_name": "OneLayer"}]}`);
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
     )", fullTableName.c_str()));
     runtime.SimulateSleep(TDuration::Seconds(1));
 

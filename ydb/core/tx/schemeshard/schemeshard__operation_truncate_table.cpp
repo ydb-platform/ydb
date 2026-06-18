@@ -568,12 +568,25 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
     // so as not to generate a large set of sub-operations in case even the main table is "wrong".
     TPath::TChecker checks = mainTablePath.Check();
     checks
-        .IsResolved()
-        .IsTable();
+        .IsResolved();
 
     if (!checks) {
-        // We cannot return empty vector of suboperations because of technical features of schemeshard's work
         result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        return result;
+    }
+
+    if (mainTablePath.Base()->IsColumnTable()) {
+        // Column tables: use the dedicated TruncateColumnTable sub-operation
+        result.push_back(CreateTruncateColumnTable(opId, tx));
+        return result;
+    }
+
+    // Row tables: check that it's a table
+    TPath::TChecker tableChecks = mainTablePath.Check();
+    tableChecks.IsTable();
+
+    if (!tableChecks) {
+        result = {CreateReject(opId, tableChecks.GetStatus(), tableChecks.GetError())};
         return result;
     }
 

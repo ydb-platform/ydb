@@ -452,6 +452,42 @@ void TTablesManager::DropTable(
     Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
 }
 
+TInternalPathId TTablesManager::TruncateTable(
+    const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId oldPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
+    // Truncation is implemented by:
+    // 1. Dropping the old table (marks old InternalPathId for background data cleanup)
+    // 2. Removing the SchemeShardLocalPathId -> InternalPathId mapping
+    // 3. Allocating a NEW InternalPathId for the same SchemeShardLocalPathId
+    // 4. Registering a fresh empty table with the new InternalPathId
+    //
+    // This way reads will use the new InternalPathId which has no data (empty granule),
+    // while old data gets cleaned up in the background via PathsToDrop.
+
+    // Step 1: Drop the old table entry
+    DropTable(schemeShardLocalPathId, oldPathId, version, db);
+
+    // Step 2: Remove the SchemeShardLocalPathId -> InternalPathId mapping
+    AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+
+    // Step 3: Allocate a new InternalPathId
+    // Since we removed the mapping, GetOrCreateInternalPathId would work for GenerateInternalPathId=true.
+    // But for safety, always generate a new one via MaxInternalPathId.
+    const auto newPathId = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
+    MaxInternalPathId = newPathId;
+
+    // Step 4: Register a fresh empty table with the new InternalPathId
+    TTableInfo newTable({ TUnifiedPathId::BuildValid(newPathId, schemeShardLocalPathId) });
+    RegisterTable(std::move(newTable), db);
+
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("method", "TruncateTable")
+        ("ss_local_path_id", schemeShardLocalPathId)
+        ("old_internal_path_id", oldPathId)
+        ("new_internal_path_id", newPathId)
+        ("version", version.DebugString());
+
+    return newPathId;
+}
+
 void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     AFL_VERIFY(SchemaPresetsIds.contains(presetId));
     SchemaPresetsIds.erase(presetId);
@@ -618,7 +654,14 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
     for (const auto& unifiedPathId : itTable->second.GetPathIds()) {
-        AFL_VERIFY(SchemeShardLocalToInternal.erase(unifiedPathId.GetSchemeShardLocalPathId()));
+        // The SchemeShardLocalPathId -> InternalPathId mapping may have been reassigned
+        // by TruncateTable (which drops the old table and registers a new one with the same
+        // SchemeShardLocalPathId but a different InternalPathId). Only erase the mapping
+        // if it still points to the old InternalPathId being cleaned up.
+        auto it = SchemeShardLocalToInternal.find(unifiedPathId.GetSchemeShardLocalPathId());
+        if (it != SchemeShardLocalToInternal.end() && it->second == pathId) {
+            SchemeShardLocalToInternal.erase(it);
+        }
     }
     Tables.erase(itTable);
     RebuildReadOnlyTablesSnapshots();

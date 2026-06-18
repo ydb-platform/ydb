@@ -4151,6 +4151,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         txState->TxType != TTxState::TxCreateColumnTable &&
                         txState->TxType != TTxState::TxAlterColumnTable &&
                         txState->TxType != TTxState::TxDropColumnTable &&
+                        txState->TxType != TTxState::TxTruncateColumnTable &&
                         txState->TxType != TTxState::TxCreateSequence &&
                         txState->TxType != TTxState::TxAlterSequence &&
                         txState->TxType != TTxState::TxDropSequence &&

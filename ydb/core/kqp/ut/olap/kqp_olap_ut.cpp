@@ -5192,9 +5192,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(TruncateColumnTableFails) {
+    Y_UNIT_TEST(TruncateColumnTable) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTruncateTable(true);
+        featureFlags.SetEnableTruncateColumnTable(true);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
@@ -5226,15 +5227,42 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
+        // Verify data was inserted
+        {
+            const TString query = R"(
+                SELECT COUNT(*) AS cnt FROM `/Root/TestColumnTable`;
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto resultSet = result.GetResultSet(0);
+            NYdb::TResultSetParser parser(resultSet);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("cnt").GetUint64(), 3u);
+        }
+
+        // Truncate the column table
         {
             const TString query = R"(
                 TRUNCATE TABLE `/Root/TestColumnTable`;
             )";
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_C(result.GetIssues().ToString().contains("path is not a table"),
-                "Unexpected error message: " << result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Verify data was truncated
+        {
+            const TString query = R"(
+                SELECT COUNT(*) AS cnt FROM `/Root/TestColumnTable`;
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto resultSet = result.GetResultSet(0);
+            NYdb::TResultSetParser parser(resultSet);
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("cnt").GetUint64(), 0u);
         }
     }
 

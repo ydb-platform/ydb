@@ -129,15 +129,16 @@ bool TFiltersStore::NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& const
     return true;
 }
 
-void TFiltersStore::AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter) {
+bool TFiltersStore::AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter) {
     auto waitingIt = WaitingPortions.find(portionId);
     if (waitingIt != WaitingPortions.end()) {
         waitingIt->second->AddFilter(MakeOrderedFilter(std::move(filter)));
         WaitingPortions.erase(waitingIt);
-        return;
+        return true;
     }
     Counters->OnReadyFilters(1, filter.GetDataSize());
     AFL_VERIFY(ReadyFilters.emplace(portionId, std::move(filter)).second);
+    return false;
 }
 
 void TFiltersStore::AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor) {

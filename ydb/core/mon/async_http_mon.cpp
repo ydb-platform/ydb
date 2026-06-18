@@ -789,6 +789,10 @@ TAsyncHttpMon::TAsyncHttpMon(TConfig config)
 {
 }
 
+TAsyncHttpMon::~TAsyncHttpMon() {
+    IndexMonPage->ClearPages(); // it's required to avoid loop-reference
+}
+
 void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
     if (actorSystem) {
         TGuard<TMutex> g(Mutex);
@@ -854,9 +858,8 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
 }
 
 void TAsyncHttpMon::Stop() {
-    IndexMonPage->ClearPages(); // it's required to avoid loop-reference
+    TGuard<TMutex> g(Mutex);
     if (ActorSystem) {
-        TGuard<TMutex> g(Mutex);
         for (const auto& [path, actorId] : ActorServices) {
             ActorSystem->Send(actorId, new TEvents::TEvPoisonPill);
         }

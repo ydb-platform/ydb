@@ -182,7 +182,6 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
         const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
         const bool isKafkaBatch = dataChunk.GetChunkType() == NKikimrPQClient::TDataChunk::REGULAR &&
-            dataChunk.HasCodec() &&
             dataChunk.GetCodec() == KafkaBatchCodec();
 
         KAFKA_LOG_D("Fetch actor: Kafka record candidate. ResultsCount=" << partPQResponse.GetReadResult().GetResult().size()
@@ -190,7 +189,6 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
             << ", IsBatch=" << result.GetIsBatch()
             << ", MessageCount=" << result.GetMessageCount()
             << ", ChunkType=" << static_cast<int>(dataChunk.GetChunkType())
-            << ", HasCodec=" << dataChunk.HasCodec()
             << ", Codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
             << ", KafkaBatchCodec=" << static_cast<int>(KafkaBatchCodec())
             << ", DataSize=" << dataChunk.GetData().size()

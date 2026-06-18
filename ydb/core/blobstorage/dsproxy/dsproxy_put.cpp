@@ -486,7 +486,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     {"restartCounter", RestartCounter},
                     {"history", PutImpl.PrintHistory()});
             }
-            if (EnableStorageRetroTraceCollectionSlowRequests && Span.GetRetroSpanPtr()) {
+            if (ResponsesSent == PutImpl.Blobs.size() && EnableStorageRetroTraceCollectionSlowRequests &&
+                    Span.GetRetroSpanPtr()) {
                 NRetroTracing::DemandTrace(Span.GetTraceId());
             }
         }

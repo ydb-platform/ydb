@@ -1127,6 +1127,176 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
     }
 }
 
+// `+term` required-term syntax: every match must contain all `+` terms, and
+// minimum_should_match applies to the remaining optional terms. Validates the
+// required-driven L1/L2 split for both the plain (FulltextMatch) and the
+// relevance (FulltextScore) read paths.
+Y_UNIT_TEST(SelectWithFulltextRequiredTerms) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    auto exec = [&](const TString& q) {
+        auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+        return r;
+    };
+
+    exec(R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+    exec(R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+            (0, "the quick brown fox jumps over the lazy dog"),
+            (1, "quick quick fox"),
+            (2, "lazy dog sleeps"),
+            (3, "brown bear eats honey"),
+            (4, "xylophone music is rare")
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX fulltext_plain
+            GLOBAL USING fulltext_plain ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true)
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX fulltext_rel
+            GLOBAL USING fulltext_relevance ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true)
+    )sql");
+
+    auto selectKeys = [&](const TString& index, const TString& wherePred) {
+        TString query = Sprintf(R"sql(
+            SELECT Key FROM `/Root/Texts` VIEW `%s`
+            WHERE %s
+            ORDER BY Key;
+        )sql", index.c_str(), wherePred.c_str());
+        auto result = exec(query);
+        TVector<ui64> keys;
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
+        }
+        return keys;
+    };
+
+    struct TCase {
+        TString Search;
+        TString Options;
+        TVector<ui64> Expected;
+    };
+    const TString orMsm1 = R"(, "or" as DefaultOperator, "1" as MinimumShouldMatch)";
+    const TString orMsm2 = R"(, "or" as DefaultOperator, "2" as MinimumShouldMatch)";
+    std::vector<TCase> cases = {
+        // All required -> behaves as strict AND (brown AND fox).
+        {"+brown +fox", orMsm1, {0}},
+        // Required quick + at least one optional (fox).
+        {"+quick fox", orMsm1, {0, 1}},
+        // Required honey, optional quick: the only honey doc has no quick -> empty.
+        {"+honey quick", orMsm1, {}},
+        // Required brown + at least one of {lazy, honey}.
+        {"+brown lazy honey", orMsm1, {0, 3}},
+        // Required brown AND lazy + at least one optional (dog).
+        {"+brown +lazy dog", orMsm1, {0}},
+        // Required quick + at least 1 of {fox, brown}.
+        {"+quick fox brown", orMsm1, {0, 1}},
+        // Required quick + at least 2 of {fox, brown} -> only doc0 has both.
+        {"+quick fox brown", orMsm2, {0}},
+    };
+
+    for (const auto& c : cases) {
+        const TString plainPred = Sprintf(R"(FulltextMatch(Text, "%s"%s))", c.Search.c_str(), c.Options.c_str());
+        UNIT_ASSERT_VALUES_EQUAL_C(selectKeys("fulltext_plain", plainPred), c.Expected,
+            "plain match mismatch for query: " + c.Search + c.Options);
+
+        const TString relPred = Sprintf(R"(FulltextScore(Text, "%s"%s) > 0)", c.Search.c_str(), c.Options.c_str());
+        UNIT_ASSERT_VALUES_EQUAL_C(selectKeys("fulltext_rel", relPred), c.Expected,
+            "relevance match mismatch for query: " + c.Search + c.Options);
+    }
+}
+
+// `+term` relevance scoring. BM25 sums over the matched query tokens regardless of
+// whether a term was required or optional, so a `+` query yields the same per-document
+// scores as the plain OR query over the same tokens -- only the matched set is narrowed
+// by the required terms. The scores below are the hand-verified Lucene BM25 values reused
+// from LuceneRelevanceComparison (same documents, same standard+lowercase analyzer).
+Y_UNIT_TEST(SelectWithFulltextRequiredTermsRelevance) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    auto exec = [&](const TString& q) {
+        auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+    };
+
+    exec(R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+    exec(R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+            (0, "the quick brown fox jumps over the lazy dog"),
+            (1, "quick quick fox"),
+            (2, "lazy dog sleeps"),
+            (3, "brown bear eats honey"),
+            (4, "xylophone music is rare")
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext_relevance ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true)
+    )sql");
+
+    std::vector<std::pair<std::string, std::vector<std::pair<ui64, double>>>> testCases = {
+        // Required quick + optional fox -> docs with quick AND fox; scores over {quick,fox}.
+        {"+quick fox", {
+            {1, 1.0704575},  // "quick quick fox"
+            {0, 0.5720391}   // "the quick brown fox ..."
+        }},
+        // Required/optional order does not affect matching or scoring.
+        {"+fox quick", {
+            {1, 1.0704575},
+            {0, 0.5720391}
+        }},
+        // Required brown narrows OR("brown fox")={0,1,3} to the one doc that also has the
+        // optional fox; its BM25 score over {brown,fox} is unchanged from the OR query.
+        {"+brown fox", {
+            {0, 0.5720391}
+        }},
+        // Both terms required -> same single doc, same score.
+        {"+brown +fox", {
+            {0, 0.5720391}
+        }},
+        // Required lazy + optional dog -> both lazy docs also have dog; scores over {lazy,dog}.
+        {"+lazy dog", {
+            {2, 0.92791617}, // "lazy dog sleeps"
+            {0, 0.5720391}   // "the quick brown fox ... lazy dog"
+        }},
+        // Single required term (no optionals) -> strict AND on honey.
+        {"+honey", {
+            {3, 0.66565275}
+        }},
+        // Required xylophone + optional rare.
+        {"+xylophone rare", {
+            {4, 1.3313055}
+        }},
+    };
+
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "1" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextScore(Text, "%s", "or" as DefaultOperator, "1" as MinimumShouldMatch) > 0
+            ORDER BY Relevance DESC
+        )sql",
+        testCases);
+}
+
 Y_UNIT_TEST_TWIN(SelectWithFulltextMatchAndSnowball, Compact) {
     auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
     auto db = kikimr.GetQueryClient();

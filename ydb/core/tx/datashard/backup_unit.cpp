@@ -6,6 +6,7 @@
 #include "export_s3.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 
 namespace NKikimr {
@@ -85,9 +86,10 @@ protected:
                 return false;
             }
 
-            if (backup.HasS3Settings() && backup.GetS3Settings().HasParquet()) {
-                if (!appData->FeatureFlags.GetEnableParquetForS3Export()) {
-                    Abort(op, ctx, "Parquet export to S3 is disabled by feature flag EnableParquetForS3Export");
+            if ((backup.HasS3Settings() && backup.GetS3Settings().HasParquet()) 
+                || (backup.HasFSSettings() && backup.GetFSSettings().HasParquet())) {
+                if (!appData->FeatureFlags.GetEnableParquetForExport()) {
+                    Abort(op, ctx, "Parquet export is disabled by feature flag EnableParquetForExport");
                     return false;
                 }
             }

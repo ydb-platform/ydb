@@ -321,5 +321,5 @@ message TFeatureFlags {
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
     optional bool EnableCompactFulltextIndex = 280 [default = false];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
-    optional bool EnableParquetForS3Export = 282 [default = true];
+    optional bool EnableParquetForExport = 282 [default = true];
 }

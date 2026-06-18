@@ -110,6 +110,7 @@ CROSS JOIN (
         COALESCE(JSON_VALUE(t.info, "$.max_branch"), '-') AS max_branch,
         COALESCE(JSON_VALUE(t.info, "$.env"), 'env:-') AS env,
         COALESCE(JSON_VALUE(t.info, "$.priority"), 'priority:-') AS priority,
+        COALESCE(JSON_VALUE(t.info, "$.releaseblocker_state"), 'release:-') AS releaseblocker_state,
         COALESCE(JSON_VALUE(t.info, "$.branch"), '-') AS branch,
         Coalesce(m.matched_area,
             CASE

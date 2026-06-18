@@ -2558,7 +2558,8 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
 TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    if (!EnsureArgsCount(*node, 6, ctx)) {
+    // PrefixRows (the per-prefix-group root cluster rows) is an optional last child.
+    if (!EnsureMinMaxArgsCount(*node, 6, 7, ctx)) {
         return TStatus::Error;
     }
 
@@ -2576,6 +2577,25 @@ TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& 
     }
     TCoAtomList columns{node->ChildPtr(TKqlReadTableVectorIndex::idx_Columns)};
 
+    if (node->ChildrenSize() > TKqlReadTableVectorIndex::idx_PrefixRows) {
+        // Prefixed index: the prefix-table rows carry the root __ydb_parent id per group.
+        const TTypeAnnotationNode* prefixType = node->Child(TKqlReadTableVectorIndex::idx_PrefixRows)->GetTypeAnn();
+        const TTypeAnnotationNode* prefixItemType = nullptr;
+        if (!EnsureNewSeqType<false>(node->Child(TKqlReadTableVectorIndex::idx_PrefixRows)->Pos(), *prefixType, ctx, &prefixItemType)) {
+            return TStatus::Error;
+        }
+        if (!EnsureStructType(node->Child(TKqlReadTableVectorIndex::idx_PrefixRows)->Pos(), *prefixItemType, ctx)) {
+            return TStatus::Error;
+        }
+        const auto* prefixStruct = prefixItemType->Cast<TStructExprType>();
+        if (!prefixStruct->FindItem(NTableIndex::NKMeans::ParentColumn)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "TKqlReadTableVectorIndex: PrefixRows must contain the "
+                << NTableIndex::NKMeans::ParentColumn << " column"));
+            return TStatus::Error;
+        }
+    }
+
     auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
     if (!rowType) {
         return TStatus::Error;
@@ -2591,7 +2611,8 @@ TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& 
 TStatus AnnotateVectorIndexReadConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    if (!EnsureArgsCount(*node, 7, ctx)) {
+    // HasPrefix is an optional last child (prefixed index).
+    if (!EnsureMinMaxArgsCount(*node, 7, 8, ctx)) {
         return TStatus::Error;
     }
 

@@ -357,6 +357,9 @@ message TKqpPhyCnVectorIndexRead {
     double OverlapRatio = 13;
     uint32 Levels = 14;                // Number of KMeans tree levels
     uint32 VectorColumnIndex = 15;     // Index of the embedding column in Columns
+    // Prefixed index: the transform input carries, per prefix group, the root
+    // __ydb_parent id alongside the target vector (see KqpBuildReadTableVectorIndexStage).
+    bool HasPrefix = 16;
 }
 
 message TKqpPhyCnSequencer {

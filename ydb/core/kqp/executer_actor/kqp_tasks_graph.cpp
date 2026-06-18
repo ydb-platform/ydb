@@ -1119,6 +1119,7 @@ void TKqpTasksGraph::BuildVectorIndexReadChannels(const TStageInfo& stageInfo, u
     settings->SetVectorColumnIndex(vectorIndexRead.GetVectorColumnIndex());
     settings->SetInputType(vectorIndexRead.GetInputType());
     settings->SetOutputType(vectorIndexRead.GetOutputType());
+    settings->SetHasPrefix(vectorIndexRead.GetHasPrefix());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 2);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas[0].TableConstInfo;

@@ -2986,6 +2986,11 @@ private:
             proto.SetTopK(topK);
             proto.SetIsDesc(vectorIndexRead.IsDesc().Value() == "true");
 
+            // Prefixed index: the transform input carries the per-group root __ydb_parent.
+            if (vectorIndexRead.HasPrefix().IsValid()) {
+                proto.SetHasPrefix(vectorIndexRead.HasPrefix().Cast().Value() == "true");
+            }
+
             return;
         }
 

@@ -32,12 +32,21 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test");
 
+        auto [tables, ownerId] = GetTables(server, shards[0]);
+        ui32 valueColId = 0;
+        for (const auto& col : tables["test"].GetDescription().GetColumns()) {
+            if (col.GetName() == "value") {
+                valueColId = col.GetId();
+                break;
+            }
+        }
+
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(100);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
-        request->Record.AddNotNullColumns("value");
+        request->Record.AddNotNullColumnIds(valueColId);
 
         runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -71,12 +80,21 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test_nulls");
 
+        auto [tables, ownerId] = GetTables(server, shards[0]);
+        ui32 valueColId = 0;
+        for (const auto& col : tables["test_nulls"].GetDescription().GetColumns()) {
+            if (col.GetName() == "value") {
+                valueColId = col.GetId();
+                break;
+            }
+        }
+
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(101);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
-        request->Record.AddNotNullColumns("value");
+        request->Record.AddNotNullColumnIds(valueColId);
 
         runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -115,12 +133,21 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols");
 
+        auto [tables, ownerId] = GetTables(server, shards[0]);
+        ui32 col3Id = 0;
+        for (const auto& col : tables["test_cols"].GetDescription().GetColumns()) {
+            if (col.GetName() == "col3") {
+                col3Id = col.GetId();
+                break;
+            }
+        }
+
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(102);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
-        request->Record.AddNotNullColumns("col3");
+        request->Record.AddNotNullColumnIds(col3Id);
 
         runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -159,12 +186,21 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols_null");
 
+        auto [tables, ownerId] = GetTables(server, shards[0]);
+        ui32 col2Id = 0;
+        for (const auto& col : tables["test_cols_null"].GetDescription().GetColumns()) {
+            if (col.GetName() == "col2") {
+                col2Id = col.GetId();
+                break;
+            }
+        }
+
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(103);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
-        request->Record.AddNotNullColumns("col2");
+        request->Record.AddNotNullColumnIds(col2Id);
 
         runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
 

@@ -26,10 +26,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWrites
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
 
-    for (const auto& columnName : operationInfo.SetNotNullColumns) {
-        auto col = modifyScheme.MutableAlterTable()->AddColumns();
-        col->SetName(TString(columnName));
-        col->SetSetNotNullInProgress(true);
+    {
+        const auto& tableInfo = ss->Tables.at(operationInfo.TablePathId);
+        for (const auto columnId : operationInfo.SetNotNullColumnIds) {
+            auto col = modifyScheme.MutableAlterTable()->AddColumns();
+            col->SetName(tableInfo->Columns.at(columnId).Name);
+            col->SetSetNotNullInProgress(true);
+        }
     }
 
     *propose->Record.AddTransaction() = modifyScheme;
@@ -47,13 +50,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWrit
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
 
-    for (const auto& columnName : operationInfo.SetNotNullColumns) {
-        auto col = modifyScheme.MutableAlterTable()->AddColumns();
-        col->SetName(TString(columnName));
-        col->SetSetNotNullInProgress(false);
+    {
+        const auto& tableInfo = ss->Tables.at(operationInfo.TablePathId);
+        for (const auto columnId : operationInfo.SetNotNullColumnIds) {
+            auto col = modifyScheme.MutableAlterTable()->AddColumns();
+            col->SetName(tableInfo->Columns.at(columnId).Name);
+            col->SetSetNotNullInProgress(false);
 
-        if (!operationInfo.ValidationFailed) {
-            col->SetNotNull(true);
+            if (!operationInfo.ValidationFailed) {
+                col->SetNotNull(true);
+            }
         }
     }
 
@@ -567,8 +573,8 @@ private:
         record.SetSeqNoGeneration(Self->Generation());
         record.SetSeqNoRound(++shardStatus.SeqNoRound);
 
-        for (const auto& columnName : operationInfo.SetNotNullColumns) {
-            record.AddNotNullColumns(TString(columnName));
+        for (const auto columnId : operationInfo.SetNotNullColumnIds) {
+            record.AddNotNullColumnIds(columnId);
         }
 
         LOG_N("TTxProgressSetColumnConstraint: TEvValidateRowConditionRequest: " << record.ShortDebugString());

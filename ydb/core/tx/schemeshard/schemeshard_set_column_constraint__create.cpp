@@ -110,6 +110,8 @@ public:
             return Reply(Ydb::StatusIds::BAD_REQUEST, std::move(error));
         }
 
+        std::vector<ui32> setNotNullColumnIds;
+        setNotNullColumnIds.reserve(sortedSetNotNullColumns.size());
         {
             Y_ABORT_UNLESS(Self->Tables.contains(tablePath.Base()->PathId));
             const auto& tableInfo = Self->Tables.at(tablePath.Base()->PathId);
@@ -120,6 +122,7 @@ public:
                 if (id == TTableInfo::InvalidColumnId) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: Column '" << columnName << "' does not exist");
                 }
+                setNotNullColumnIds.push_back(id);
             }
         }
 
@@ -133,7 +136,7 @@ public:
         operationInfo->SenderCookie = Request->Cookie;
         operationInfo->StartTime = TAppData::TimeProvider->Now();
 
-        operationInfo->SetNotNullColumns = std::move(sortedSetNotNullColumns);
+        operationInfo->SetNotNullColumnIds = std::move(setNotNullColumnIds);
 
         if (request.HasUserSID()) {
             operationInfo->UserSID = request.GetUserSID();

@@ -25,23 +25,21 @@ public:
         const NKikimrTxDataShard::TEvValidateRowConditionRequest& request,
         const TActorId& sender,
         ui64 tabletId,
-        const TUserTable& tableInfo
+        const TUserTable& /*tableInfo*/
     )
         : TActor(&TThis::StateWork)
         , Request(request)
         , Sender(sender)
         , TabletId(tabletId)
     {
-        TVector<TString> columnNames;
-        columnNames.reserve(Request.NotNullColumnsSize());
-        for (const auto& col : Request.GetNotNullColumns()) {
-            columnNames.push_back(col);
+        ScanTags.reserve(Request.NotNullColumnIdsSize());
+        for (const auto colId : Request.GetNotNullColumnIds()) {
+            ScanTags.push_back(static_cast<NTable::TTag>(colId));
         }
-        ScanTags = BuildTags(tableInfo, std::move(columnNames));
         LOG_I("Create TValidateRowConditionScan"
             << " id# " << Request.GetId()
             << " tabletId# " << TabletId
-            << " notNullColumns# " << Request.NotNullColumnsSize());
+            << " notNullColumnIds# " << Request.NotNullColumnIdsSize());
     }
 
     ~TValidateRowConditionScan() final = default;
@@ -168,7 +166,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         << " tabletId# " << record.GetTabletId()
         << " ownerId# " << record.GetOwnerId()
         << " pathId# " << record.GetPathId()
-        << " notNullColumns# " << record.NotNullColumnsSize()
+        << " notNullColumnIds# " << record.NotNullColumnIdsSize()
         << " rowVersion# " << rowVersion);
 
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {

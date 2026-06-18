@@ -6,28 +6,60 @@
 
 namespace NYdb::NConsoleClient {
 
-TLazyDriver::TLazyDriver(TFactory factory)
+TLazyDriver::TLazyDriver(TFactory factory, TDuration idleTimeout)
     : Factory_(std::move(factory))
+    , IdleTimeout_(idleTimeout)
 {
     Y_VALIDATE(Factory_, "TLazyDriver factory must not be empty");
-}
-
-void TLazyDriver::Init() {
-    if (!Driver_) {
-        Driver_.emplace(Factory_());
+    if (IdleTimeout_ != TDuration::Zero()) {
+        Watcher_.emplace([this] { WatcherLoop(); });
     }
 }
 
+TLazyDriver::~TLazyDriver() {
+    {
+        TGuard<TMutex> guard(Mutex_);
+        Shutdown_ = true;
+    }
+    CondVar_.Signal();
+    if (Watcher_ && Watcher_->joinable()) {
+        Watcher_->join();
+    }
+    TGuard<TMutex> guard(Mutex_);
+    StopLocked(/* wait = */ true);
+}
+
+void TLazyDriver::Init() {
+    TGuard<TMutex> guard(Mutex_);
+    InitLocked();
+}
+
+void TLazyDriver::InitLocked() {
+    if (!Driver_) {
+        Driver_.emplace(Factory_());
+        // Wake the watcher so it starts tracking the freshly created driver.
+        CondVar_.Signal();
+    }
+    LastUseAt_ = TInstant::Now();
+}
+
 const TDriver& TLazyDriver::Get() {
-    Init();
+    TGuard<TMutex> guard(Mutex_);
+    InitLocked();
     return *Driver_;
 }
 
 bool TLazyDriver::IsInitialized() const noexcept {
+    TGuard<TMutex> guard(Mutex_);
     return Driver_.has_value();
 }
 
 void TLazyDriver::Stop(bool wait) noexcept {
+    TGuard<TMutex> guard(Mutex_);
+    StopLocked(wait);
+}
+
+void TLazyDriver::StopLocked(bool wait) noexcept {
     if (!Driver_) {
         return;
     }
@@ -39,6 +71,22 @@ void TLazyDriver::Stop(bool wait) noexcept {
         YDB_CLI_LOG(Warning, "TLazyDriver::Stop failed with unknown exception");
     }
     Driver_.reset();
+}
+
+void TLazyDriver::WatcherLoop() {
+    TGuard<TMutex> guard(Mutex_);
+    while (!Shutdown_) {
+        if (!Driver_) {
+            CondVar_.WaitI(Mutex_);
+            continue;
+        }
+        const TInstant deadline = LastUseAt_ + IdleTimeout_;
+        if (TInstant::Now() >= deadline) {
+            StopLocked(/* wait = */ true);
+            continue;
+        }
+        CondVar_.WaitD(Mutex_, deadline);
+    }
 }
 
 } // namespace NYdb::NConsoleClient

@@ -86,8 +86,7 @@ class TLineReader final : public ILineReader {
 
 public:
     explicit TLineReader(const TLineReaderSettings& settings)
-        : CompleterLazyDriver(settings.LazyDriver)
-        , ContinueAfterCancel(settings.ContinueAfterCancel)
+        : ContinueAfterCancel(settings.ContinueAfterCancel)
         , EnableSwitchMode(settings.EnableSwitchMode)
         , Prompt(settings.Prompt)
         , Placeholder(settings.Placeholder)
@@ -208,9 +207,7 @@ public:
                             color = replxx::Replxx::Color::GRAY;
                             return std::vector<std::string>{std::string(Placeholder)};
                         }
-                        auto hints = YQLCompleter->ApplyLight(text, prefix, contextLen);
-                        StopCompleterDriver();
-                        return hints;
+                        return YQLCompleter->ApplyLight(text, prefix, contextLen);
                     });
                 }
             }
@@ -254,9 +251,7 @@ private:
         Rx->install_window_change_handler();
 
         Rx->set_completion_callback([this](const std::string& prefix, int& contextLen) {
-            auto completions = YQLCompleter->ApplyHeavy(Rx->get_state().text(), prefix, contextLen);
-            StopCompleterDriver();
-            return completions;
+            return YQLCompleter->ApplyHeavy(Rx->get_state().text(), prefix, contextLen);
         });
 
         Rx->set_hint_delay(100);
@@ -267,9 +262,7 @@ private:
                     color = replxx::Replxx::Color::GRAY;
                     return std::vector<std::string>{std::string(Placeholder)};
                 }
-                auto hints = YQLCompleter->ApplyLight(text, prefix, contextLen);
-                StopCompleterDriver();
-                return hints;
+                return YQLCompleter->ApplyLight(text, prefix, contextLen);
             });
         } else {
             // Hints disabled - only show placeholder
@@ -371,14 +364,7 @@ private:
         Cout << "\x1b[J" << Flush;
     }
 
-    void StopCompleterDriver() noexcept {
-        if (CompleterLazyDriver) {
-            CompleterLazyDriver->Stop(/* wait = */ true);
-        }
-    }
-
 private:
-    TLazyDriver::TPtr CompleterLazyDriver;
     const bool ContinueAfterCancel = true;
     const bool EnableSwitchMode = true;
     bool EnableYqlCompletion = true;

@@ -88,6 +88,9 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             table_service_config={
                 "enable_snapshot_isolation_rw": True,
             },
+            column_shard_config={
+                "enable_cursor_v1": True,
+            },
         )
 
     # -------------------------------------------------------------------------

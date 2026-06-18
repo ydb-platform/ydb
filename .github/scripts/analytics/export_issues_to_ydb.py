@@ -38,7 +38,6 @@ def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     payload = {'query': query, 'variables': variables}
 
     backoff = _GITHUB_QUERY_INITIAL_BACKOFF_SEC
-    last_exc = None
     for attempt in range(_GITHUB_QUERY_MAX_RETRIES + 1):
         try:
             request = requests.post(
@@ -48,7 +47,6 @@ def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
                 timeout=_GITHUB_QUERY_TIMEOUT_SEC,
             )
         except requests.RequestException as exc:
-            last_exc = exc
             if attempt >= _GITHUB_QUERY_MAX_RETRIES:
                 raise
             backoff = _github_query_retry_wait(
@@ -59,8 +57,7 @@ def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
         if request.status_code == 200:
             try:
                 response = request.json()
-            except json.JSONDecodeError as exc:
-                last_exc = exc
+            except ValueError as exc:
                 if attempt >= _GITHUB_QUERY_MAX_RETRIES:
                     raise
                 backoff = _github_query_retry_wait(
@@ -82,10 +79,6 @@ def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
             continue
 
         raise Exception(f"Query failed with status {request.status_code}: {request.text}")
-
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError("GitHub API query failed after retries")
 
 def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[datetime]:
     """Get the latest updated_at timestamp from existing records"""

@@ -1877,7 +1877,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             NYdb::NTopic::TDescribeConsumerSettings settings;
             settings.IncludeStats(true);
-            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "sqs_consumer", settings).GetValueSync();
+            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "ydb-sqs-consumer", settings).GetValueSync();
             UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
 
             UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions().size(), 1);
@@ -2395,7 +2395,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             NYdb::NTopic::TDescribeConsumerSettings settings;
             settings.IncludeStats(true);
-            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "sqs_consumer", settings).GetValueSync();
+            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "ydb-sqs-consumer", settings).GetValueSync();
             UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
 
             UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions().size(), 1);

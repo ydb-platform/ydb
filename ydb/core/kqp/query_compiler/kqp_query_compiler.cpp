@@ -1509,7 +1509,8 @@ private:
                         break;
                     }
                 }
-                YQL_ENSURE(uniqueIdx, "fulltext index has UseRowIdAsDocId=true but no Ready unique index on " << NKikimr::NTableIndex::NFulltext::RowIdColumn << " was found");
+                YQL_ENSURE(uniqueIdx, "Index '" << indexName << "' has UseRowIdAsDocId=true but no Ready unique index on '"
+                    << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' was found");
                 YQL_ENSURE(uniqueImplMeta);
 
                 TVector<TString> uniquePathParts = {

@@ -150,7 +150,7 @@ public:
         try {
             StartTime = TInstant::Now();
             InitializeLogPrefix(); // re-initialize with SelfId
-            CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
+            CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId() << ", running: " << Running);
 
             if (Task.GetDqChannelVersion() <= 1u) {
                 Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
@@ -1218,7 +1218,7 @@ protected:
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
-                if (Running && State == NDqProto::COMPUTE_STATE_EXECUTING) {
+                if (State == NDqProto::COMPUTE_STATE_EXECUTING || State == NDqProto::COMPUTE_STATE_UNKNOWN) {
                     ReportStats();
                     this->Schedule(RuntimeSettings.ReportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
@@ -1651,6 +1651,7 @@ protected:
                 str << "  TaskId: " << Task.GetId() << Endl;
                 str << "  StageId: " << Task.GetStageId() << Endl;
                 str << "  State: " << NDqProto::EComputeState_Name(State) << Endl;
+                str << "  Running: " << this->Running << Endl;
                 str << "  ExecuterId: ";
                 HREF(NActors::NMon::BuildActorsLink("kqp_node", cgi, {{"ex", ToString(ExecuterId)}, {"ca", ""}, {"sf", ""}, {"view", ""}}))  {
                     str << ExecuterId;
@@ -2670,7 +2671,10 @@ public:
 protected:
     void ReportStats() {
         auto now = TInstant::Now();
-        if (State != NDqProto::COMPUTE_STATE_EXECUTING || !RuntimeSettings.ReportStatsSettings || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
+        if ((State != NDqProto::COMPUTE_STATE_EXECUTING && !Task.GetCreateSuspended())      // non streaming queries
+            || ((State != NDqProto::COMPUTE_STATE_UNKNOWN && State != NDqProto::COMPUTE_STATE_EXECUTING) && Task.GetCreateSuspended())
+            || !RuntimeSettings.ReportStatsSettings
+            || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
             return;
         }
         auto evState = std::make_unique<TEvDqCompute::TEvState>();

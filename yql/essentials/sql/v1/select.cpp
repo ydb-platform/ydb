@@ -1997,20 +1997,25 @@ public:
         };
         if (ctx.EnableSystemColumns && ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             if (Columns_.All) {
-                cleanup = Y("let", label, Y("RemoveSystemMembers", label));
+                cleanup = Y("let", label, removeSystemMembers(label));
             } else if (!Columns_.List.empty()) {
                 const bool isJoin = Source_->GetJoin();
                 if (!isJoin && Columns_.QualifiedAll) {
                     if (ctx.SimpleColumns) {
-                        cleanup = Y("let", label, Y("RemoveSystemMembers", label));
+                        cleanup = Y("let", label, removeSystemMembers(label));
                     } else {
                         TNodePtr members;
+                        auto addPrefix = [&members, this](const TString& prefix) {
+                            members = members ? L(members, Q(prefix)) : Y(Q(prefix));
+                        };
                         for (auto& term : Terms_) {
                             if (term->IsAsterisk()) {
                                 auto sourceName = term->GetSourceName();
                                 YQL_ENSURE(*sourceName && !sourceName->empty());
-                                auto prefix = *sourceName + "._yql_";
-                                members = members ? L(members, Q(prefix)) : Y(Q(prefix));
+                                addPrefix(*sourceName + "._yql_");
+                                for (const auto& prefix : ctx.Settings.ExtraSystemColumnPrefixes) {
+                                    addPrefix(*sourceName + "." + prefix);
+                                }
                             }
                         }
                         if (members) {

@@ -32,14 +32,6 @@ namespace NKikimr::NWrappers::NExternalStorage {
 
 namespace {
 
-bool IsExpectedFsError(int status) {
-    return status == EWOULDBLOCK
-#if EAGAIN != EWOULDBLOCK
-        || status == EAGAIN
-#endif
-        ;
-}
-
 class TFsOperationActor : public TActorBootstrapped<TFsOperationActor> {
 private:
     const TString BasePath;
@@ -191,13 +183,15 @@ private:
     template<typename TEvResponse, typename... Args>
     void ReplyFsSystemError(const NActors::TActorId& sender, const TString& context, const TSystemError& ex, Args&&... args) {
         const auto msg = TStringBuilder() << context << ", error# " << ex.what() << ", errno# " << ex.Status();
-        if (IsExpectedFsError(ex.Status())) {
+
+        auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
+
+        if (opts.Retryable) {
             FS_LOG_W(msg);
         } else {
             FS_LOG_E(msg);
         }
 
-        auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
         if (opts.ErrorMessage.empty()) {
             opts.ErrorMessage = ex.what();
         }

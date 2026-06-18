@@ -9,6 +9,24 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
+    std::vector<ui32> GetColumnIdsByNames(const auto& tables, TString&& tableName, std::vector<TString>&& columnNames) {
+        std::vector<ui32> result(columnNames.size());
+
+        std::map<TString, ui32> nameToIndex;
+        for (size_t i = 0; i < columnNames.size(); i++) {
+            nameToIndex[columnNames[i]] = i;
+        }
+
+        for (const auto& column : tables.at(tableName).GetDescription().GetColumns()) {
+            auto columnName = column.GetName();
+            auto it = nameToIndex.find(columnName);
+            if (it != nameToIndex.end()) {
+                result[it->second] = column.GetId();
+            }
+        }
+
+        return result; 
+    }
 
     Y_UNIT_TEST(SimpleCheck) {
         TPortManager pm;
@@ -33,13 +51,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         auto tableId = ResolveTableId(server, sender, "/Root/test");
 
         auto [tables, ownerId] = GetTables(server, shards[0]);
-        ui32 valueColId = 0;
-        for (const auto& col : tables["test"].GetDescription().GetColumns()) {
-            if (col.GetName() == "value") {
-                valueColId = col.GetId();
-                break;
-            }
-        }
+        ui32 valueColId = GetColumnIdsByNames(tables, "test", {"value"})[0];
 
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(100);
@@ -81,13 +93,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         auto tableId = ResolveTableId(server, sender, "/Root/test_nulls");
 
         auto [tables, ownerId] = GetTables(server, shards[0]);
-        ui32 valueColId = 0;
-        for (const auto& col : tables["test_nulls"].GetDescription().GetColumns()) {
-            if (col.GetName() == "value") {
-                valueColId = col.GetId();
-                break;
-            }
-        }
+        ui32 valueColId = GetColumnIdsByNames(tables, "test_nulls", {"value"})[0];
 
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(101);
@@ -134,13 +140,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols");
 
         auto [tables, ownerId] = GetTables(server, shards[0]);
-        ui32 col3Id = 0;
-        for (const auto& col : tables["test_cols"].GetDescription().GetColumns()) {
-            if (col.GetName() == "col3") {
-                col3Id = col.GetId();
-                break;
-            }
-        }
+        ui32 col3Id = GetColumnIdsByNames(tables, "test_cols", {"col3"})[0];
 
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(102);
@@ -187,13 +187,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols_null");
 
         auto [tables, ownerId] = GetTables(server, shards[0]);
-        ui32 col2Id = 0;
-        for (const auto& col : tables["test_cols_null"].GetDescription().GetColumns()) {
-            if (col.GetName() == "col2") {
-                col2Id = col.GetId();
-                break;
-            }
-        }
+        ui32 col2Id = GetColumnIdsByNames(tables, "test_cols_null", {"col2"})[0];
 
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(103);

@@ -150,6 +150,8 @@ private:
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
     TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
+    // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
+    NThreading::TPromise<void> DirtyMapReadyPromise = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
 
     size_t InflightWritesCount = 0;

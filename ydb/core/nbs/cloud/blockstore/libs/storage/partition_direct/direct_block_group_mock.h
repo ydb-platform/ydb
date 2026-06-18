@@ -207,6 +207,8 @@ public:
         THostIndex hostIndex) override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
+
+    NThreading::TFuture<void> GetInitialReadyFuture() override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

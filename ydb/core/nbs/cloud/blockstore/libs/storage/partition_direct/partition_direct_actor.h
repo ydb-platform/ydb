@@ -108,6 +108,10 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleDBGsInitiallyReady(
+        const TEvPartitionDirectPrivate::TEvDBGsInitiallyReady::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void Start(
         const NActors::TActorContext& ctx,
         TDirectBlockGroupsConnections directBlockGroupsConnections,

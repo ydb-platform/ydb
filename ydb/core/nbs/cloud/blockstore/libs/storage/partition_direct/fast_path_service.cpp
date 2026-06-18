@@ -21,6 +21,8 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#include <library/cpp/threading/future/wait/wait.h>
+
 #include <util/system/fs.h>
 
 #include <utility>
@@ -199,6 +201,16 @@ void TFastPathService::Run()
         region->Run();
     }
     ScheduleDirtyMapDebugPrint();
+}
+
+NThreading::TFuture<void> TFastPathService::GetAllDBGsInitiallyReadyFuture()
+{
+    TVector<NThreading::TFuture<void>> initialReadyFutures;
+    initialReadyFutures.reserve(DirectBlockGroups.size());
+    for (const auto& dbg: DirectBlockGroups) {
+        initialReadyFutures.push_back(dbg->GetInitialReadyFuture());
+    }
+    return NThreading::WaitAll(initialReadyFutures);
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(

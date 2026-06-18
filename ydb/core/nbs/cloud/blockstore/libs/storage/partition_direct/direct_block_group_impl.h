@@ -41,6 +41,21 @@ public:
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
 
+    // Delegating constructor with an injectable storage transport. Used by
+    // tests to substitute a mock transport. The production constructor above
+    // delegates here, creating a real TICStorageTransport.
+    TDirectBlockGroup(
+        NActors::TActorSystem* actorSystem,
+        TStorageConfigPtr storageConfig,
+        TExecutorPtr executor,
+        const TString& diskId,
+        ui64 tabletId,
+        ui32 generation,
+        size_t directBlockGroupIndex,
+        const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
+        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
+        std::unique_ptr<NTransport::IStorageTransport> storageTransport);
+
     ~TDirectBlockGroup() override = default;
 
     // IDirectBlockGroup implementation
@@ -126,6 +141,8 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
+    NThreading::TFuture<void> GetInitialReadyFuture() override;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -139,6 +156,15 @@ private:
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
 
+    // State of a logical session (lock) with a DDisk.
+    // Sessions are used only for DDisk connections.
+    enum class EDDiskSessionState
+    {
+        NotLocked,
+        Locked,
+        Broken,
+    };
+
     struct TDDiskConnection
     {
         using TPromise = NThreading::TPromise<NProto::TError>;
@@ -147,6 +173,8 @@ private:
         NTransport::THostConnection HostConnection;
         TPromise ConnectPromise = NThreading::NewPromise<NProto::TError>();
         TFuture ConnectFuture{ConnectPromise.GetFuture()};
+
+        EDDiskSessionState SessionState = EDDiskSessionState::NotLocked;
 
         [[nodiscard]] const TFuture& GetFuture() const;
     };
@@ -159,6 +187,12 @@ private:
         EConnectionType connectionType,
         size_t index,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+
+    [[nodiscard]] bool HasPBufferQuorum() const;
+    [[nodiscard]] bool HasLockedQuorum() const;
+    void SetInitialReadyIfQuorum();
+    [[nodiscard]] NThreading::TFuture<NProto::TError> GetSessionReadyFuture(
+        THostIndex hostIndex);
 
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);
@@ -218,9 +252,11 @@ private:
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
 
-    bool Initialized = false;
-    NThreading::TPromise<void> ConnectionEstablishedPromise =
-        NThreading::NewPromise();
+    // One-shot signal of the FIRST time the locked quorum was reached. Used
+    // ONLY to gate the synchronous tablet start (wait for readiness before
+    // opening the endpoint). It does NOT reflect the current runtime readiness.
+    NThreading::TPromise<void> InitialReadyPromise = NThreading::NewPromise();
+    bool InitialReadySignaled = false;
 
     THashMap<ui32, TDBGRestoreResponse> RestoredPBuffers;
     NThreading::TPromise<void> RestoredPBuffersPromise =

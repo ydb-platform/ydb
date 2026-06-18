@@ -329,7 +329,10 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     for (const auto& meta: response.Meta) {
         BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
     }
-    DirtyMapRestored = true;
+    if (!DirtyMapRestored) {
+        DirtyMapRestored = true;
+        DirtyMapReadyPromise.SetValue();
+    }
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
@@ -386,10 +389,11 @@ void TVChunk::DoReadBlocksLocal(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (!DirtyMapRestored) {
-        auto error = MakeError(E_REJECTED, "dirty map not restored");
-        auto ender = TEndSpanWithError(span, error);
-        promise.SetValue(TReadBlocksLocalResponse{.Error = std::move(error)});
-        return;
+        // Block until the initial DirtyMap assembly completes (or return
+        // immediately if it is already done). The coroutine is suspended on the
+        // Executor thread.
+        const auto dirtyMapReadyFuture = DirtyMapReadyPromise.GetFuture();
+        Executor->WaitFor(dirtyMapReadyFuture);
     }
 
     TReadHint readHint;
@@ -484,6 +488,14 @@ void TVChunk::DoReadBlocksLocal(
 void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (!DirtyMapRestored) {
+        // Block until the initial DirtyMap assembly completes (or return
+        // immediately if it is already done). The coroutine is suspended on the
+        // Executor thread before any lsn is generated.
+        const auto dirtyMapReadyFuture = DirtyMapReadyPromise.GetFuture();
+        Executor->WaitFor(dirtyMapReadyFuture);
+    }
 
     // Generate the lsn and register the write as inflight on the same executor
     // thread, so the cleanup watermark covers it from the moment of generation.

@@ -6,7 +6,13 @@
 
 #include <ydb/library/actors/core/event_local.h>
 
+#include <memory>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFastPathService;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,6 +29,7 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
+        EvDBGsInitiallyReady,
 
         EvEnd,
     };
@@ -35,6 +42,21 @@ struct TEvPartitionDirectPrivate
 
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
+        {}
+    };
+
+    // Signals (on the actor thread) that every DBG has reached its initial
+    // Locked-session quorum, so the vhost endpoint can be opened. Carries the
+    // TFastPathService keeping it alive until the actor opens the endpoint.
+    struct TEvDBGsInitiallyReady
+        : public NActors::
+              TEventLocal<TEvDBGsInitiallyReady, EvDBGsInitiallyReady>
+    {
+        std::shared_ptr<TFastPathService> FastPathService;
+
+        explicit TEvDBGsInitiallyReady(
+            std::shared_ptr<TFastPathService> fastPathService)
+            : FastPathService(std::move(fastPathService))
         {}
     };
 };

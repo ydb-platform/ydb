@@ -311,6 +311,13 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
     return DumpHandler();
 }
 
+NThreading::TFuture<void> TDirectBlockGroupMock::GetInitialReadyFuture()
+{
+    // The mock is considered ready immediately - tests that do not exercise
+    // session locking should not block on the initial-ready gate.
+    return NThreading::MakeFuture();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

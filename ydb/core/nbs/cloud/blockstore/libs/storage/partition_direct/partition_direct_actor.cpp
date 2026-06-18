@@ -280,11 +280,42 @@ void TPartitionActor::Start(
 
     fastPathService->Run();
 
+    // Synchronous start mode - requests pass as the initial quorum of Locked
+    // DDisk sessions across all DBGs is achieved.
+    // TODO: make optional via StorageConfig after implementation of async mode.
+    auto* actorSystem = TActivationContext::ActorSystem();
+    auto selfId = SelfId();
+    fastPathService->GetAllDBGsInitiallyReadyFuture().Subscribe(
+        [actorSystem, selfId, fastPathService](
+            const NThreading::TFuture<void>&) mutable
+        {
+            // This callback runs OUTSIDE the actor thread - on the DBG's
+            // executor-thread
+            auto event = std::make_unique<
+                TEvPartitionDirectPrivate::TEvDBGsInitiallyReady>(
+                std::move(fastPathService));
+            actorSystem->Send(selfId, event.release());
+        });
+}
+
+void TPartitionActor::HandleDBGsInitiallyReady(
+    const TEvPartitionDirectPrivate::TEvDBGsInitiallyReady::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto fastPathService = ev->Get()->FastPathService;
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s All DBGs reached initial locked quorum, opening endpoint",
+        LogTitle.GetWithTime().c_str());
+
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
 
     {
         auto service = GetNbsService();
 
+        const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
         TString socketPath = "/tmp/" + VolumeConfig.GetDiskId() + ".sock";
         NVhost::TStorageOptions options{
             .DiskId = VolumeConfig.GetDiskId(),
@@ -465,6 +496,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvDBGsInitiallyReady,
+            HandleDBGsInitiallyReady);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

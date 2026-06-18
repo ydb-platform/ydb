@@ -8,6 +8,9 @@ included: true
 singlePage: true
 strict: false
 
+extensions:
+  - ./assets/loader.cjs
+
 resources:
   style:
     - _assets/tags.css
@@ -34,7 +37,6 @@ docs-viewer:
   need_pdf: true
   pdf: true
 
-  
   logo-options:
     url:
       en: https://ydb.tech/
@@ -46,7 +48,7 @@ docs-viewer:
     img-has:
       width: 80px
       offset: true
-  
+
   index-page:
     title: YDB Open Source
     description: Горизонтально масштабируемая распределённая отказоустойчивая СУБД

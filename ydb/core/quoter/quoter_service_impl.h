@@ -362,7 +362,7 @@ public:
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event",
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString()});
+                {"ev", ev->ToString()});
             break;
         }
 

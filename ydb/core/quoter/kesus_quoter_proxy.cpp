@@ -420,7 +420,7 @@ private:
             YDB_LOG_TRACE("ProxySession",
                 {"logPrefix", LogPrefix},
                 {"resource", resState->Resource},
-                {"resId", resState->ResId});
+                {"resourceId", resState->ResId});
             Send(QuoterServiceId,
                 new TEvQuota::TEvProxySession(
                     TEvQuota::TEvProxySession::Success,
@@ -658,21 +658,21 @@ private:
             if (UpdateEv) {
                 YDB_LOG_TRACE("UpdateConsumptionState",
                     {"logPrefix", LogPrefix},
-                    {"record", UpdateEv->Record});
+                    {"ev", UpdateEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, UpdateEv.Release());
             }
 
             if (AccountEv && AccountEv->Record.GetResourcesInfo().size() > 0) {
                 YDB_LOG_TRACE("AccountResources",
                     {"logPrefix", LogPrefix},
-                    {"record", AccountEv->Record});
+                    {"ev", AccountEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, AccountEv.Release());
             }
 
             if (ReplicationEv && ReplicationEv->Record.GetResourcesInfo().size() > 0) {
                 YDB_LOG_TRACE("ReportResources",
                     {"logPrefix", LogPrefix},
-                    {"record", ReplicationEv->Record});
+                    {"ev", ReplicationEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, ReplicationEv.Release());
             }
         }
@@ -947,7 +947,7 @@ private:
         if (!resourcePaths.empty()) {
             const auto& result = ev->Get()->Record;
             ServerVersion = result.GetProtocolVersion();
-            YDB_LOG_TRACE("SubscribeOnResourceResult(",
+            YDB_LOG_TRACE("SubscribeOnResourceResult",
                 {"logPrefix", LogPrefix},
                 {"result", result});
             Y_ABORT_UNLESS(result.ResultsSize() == resourcePaths.size(), "Expected %" PRISZT " resources, but got %" PRISZT, resourcePaths.size(), result.ResultsSize());
@@ -1023,10 +1023,10 @@ private:
                 CheckState(*res);
                 AddResourceUpdate(*res);
             } else {
-                YDB_LOG_WARN("Resource is",
+                YDB_LOG_WARN("Resource is broken",
                     {"logPrefix", LogPrefix},
                     {"resource", res->Resource},
-                    {"broken", KesusErrorToString(allocatedInfo.GetStateNotification())});
+                    {"error", KesusErrorToString(allocatedInfo.GetStateNotification())});
                 BreakResource(*res, GetProxyUpdateEv());
             }
         }
@@ -1271,7 +1271,7 @@ public:
                 YDB_LOG_WARN("TKesusQuoterProxy::StateFunc unexpected event",
                     {"logPrefix", LogPrefix},
                     {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()});
+                    {"ev", ev->ToString()});
                 Y_DEBUG_ABORT("Unknown event");
                 break;
         }

@@ -558,7 +558,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             }
 
             if (CanonizePath(path) != leaf.Quoter) {
-                YDB_LOG_WARN("Not canonized path to quoter is provided. Provided: but canonized is",
+                YDB_LOG_WARN("Not canonized path to quoter is provided",
                     {"quoter", leaf.Quoter},
                     {"canonizedPath", CanonizePath(path)});
                 return EInitLeafStatus::GenericError;
@@ -923,7 +923,7 @@ void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
 
 void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
     YDB_LOG_TRACE("Request",
-        {"event", PrintEvent(ev)});
+        {"ev", PrintEvent(ev)});
 
     Counters.RequestsInFly->Inc();
     Counters.Requests->Inc();
@@ -1232,7 +1232,7 @@ bool TQuoterService::CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TS
         return false;
     }
 
-    YDB_LOG_INFO("Closing quoter on as no activity left",
+    YDB_LOG_INFO("Closing quoter as no activity left",
         {"reason", reason},
         {"quoterName", quoterIt->second.QuoterName});
     BreakQuoter(quoterIt);

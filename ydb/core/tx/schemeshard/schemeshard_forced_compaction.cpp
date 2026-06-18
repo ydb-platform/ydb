@@ -104,15 +104,19 @@ bool TSchemeShard::TryFreeForcedCompactionSlot(NIceDb::TNiceDb& db, const TActor
         }
     }
 
+    if (toForget.size() < needToFree) {
+        return false;
+    }
+
     for (const ui64 id : toForget) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[ForcedCompaction] [AutoForget] Forgetting finished compaction# " << id
             << " to make room for a new operation, limit# " << limit
             << " at schemeshard " << TabletID());
         ForgetForcedCompaction(db, *ForcedCompactions.at(id));
     }
 
-    return toForget.size() >= needToFree;
+    return true;
 }
 
 void TSchemeShard::PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& info, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact) {

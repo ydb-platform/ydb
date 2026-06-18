@@ -3441,6 +3441,48 @@ Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
     UNIT_ASSERT_VALUES_EQUAL(rowIds[3], 400u);
 }
 
+Y_UNIT_TEST(RowIdHiddenFromSelectStarButExplicitlySelectable) {
+    // __ydb_row_id is a system column: SELECT * must not surface it, but selecting it by name must
+    // still work (and return the stored values).
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+
+    {
+        // SELECT * must expose only the user-visible columns, never __ydb_row_id.
+        auto result = db.ExecuteQuery(
+            "SELECT * FROM `/Root/RowIdTexts` ORDER BY Pk;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        const auto& columns = resultSet.GetColumnsMeta();
+        for (const auto& col : columns) {
+            UNIT_ASSERT_C(col.Name != "__ydb_row_id",
+                "SELECT * leaked the __ydb_row_id system column");
+        }
+        // Only the three user columns must be present.
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
+    }
+
+    {
+        // Explicitly naming the system column must keep working and return the stored values.
+        auto result = db.ExecuteQuery(
+            "SELECT Pk, __ydb_row_id FROM `/Root/RowIdTexts` ORDER BY __ydb_row_id;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("__ydb_row_id").GetUint64(), 100u);
+    }
+}
+
 Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
     // ALTER TABLE t ADD COLUMN __ydb_row_id Uint64 NOT NULL on a table without a sequence default
     // must be accepted: schemeshard creates a sequence, the column-build scan backfills every

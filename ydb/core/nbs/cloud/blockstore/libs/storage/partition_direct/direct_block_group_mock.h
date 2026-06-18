@@ -10,6 +10,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct TOracleMock: public IOracle
 {
+    TDuration ReadHedgingDelay;
+    TDuration ReadRequestTimeout;
     TDuration WriteHedgingDelay;
     TDuration WriteRequestTimeout;
     TDuration PBufferReplyTimeout;
@@ -30,9 +32,11 @@ struct TOracleMock: public IOracle
         TInstant now) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
-        std::span<const THostIndex> hostIndexes,
+        THostMask hosts,
         EOperation operation) const override;
 
+    [[nodiscard]] TDuration GetReadHedgingDelay() const override;
+    [[nodiscard]] TDuration GetReadRequestTimeout() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
     [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;

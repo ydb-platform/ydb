@@ -22,6 +22,7 @@
  *
  * Usage:
  *   builder --input INPUT.ndjson --output OUTPUT.bin [--parse-nested]
+ *           [--values-dump VALUES.txt]
  */
 
 #include <avro/Compiler.hh>
@@ -752,6 +753,7 @@ int main(int argc, const char* argv[]) {
 
     TString inputPath;
     TString outputPath;
+    TString valuesDumpPath;
     bool parseNested = false;
     int zstdLevel = -1;
 
@@ -763,6 +765,9 @@ int main(int argc, const char* argv[]) {
     opts.AddLongOption("zstd-level",
         "ZSTD compression level (1..22). If omitted, no compression.")
         .Optional().StoreResult(&zstdLevel);
+    opts.AddLongOption("values-dump",
+        "Dump the newline-separated values array into the given file")
+        .Optional().StoreResult(&valuesDumpPath);
     opts.AddHelpOption();
 
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
@@ -844,6 +849,20 @@ int main(int argc, const char* argv[]) {
 
     const auto& keys = keyDict.GetStrings();
     const auto& vals = valDict.GetStrings();
+
+    // Optionally dump the values array as newline-separated strings.
+    if (!valuesDumpPath.empty()) {
+        std::ofstream dump(std::string(valuesDumpPath.data(), valuesDumpPath.size()),
+                           std::ios::binary);
+        if (!dump) {
+            std::cerr << "Cannot open values dump file: " << valuesDumpPath << std::endl;
+            return 1;
+        }
+        for (const auto& v : vals) {
+            dump.write(v.data(), v.size());
+            dump.put('\n');
+        }
+    }
 
     auto keysRaw = SerializeStrings(keys);
     auto valsRaw = SerializeStrings(vals);

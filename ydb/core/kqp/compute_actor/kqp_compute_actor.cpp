@@ -193,7 +193,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         }
 
         static_assert(
-            NYql::NDq::EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER == NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER,
+            static_cast<ui32>(NYql::NDq::EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER) == static_cast<ui32>(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),
             "ES_SOLOMON_PROVIDER is out of sync with ydb/core/base/events.h");
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();

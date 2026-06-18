@@ -69,7 +69,8 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
             for (auto&& i : portions) {
                 sources.emplace_back(NReader::NTrivial::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
             }
-            return std::make_unique<NReader::NTrivial::TPortionsSources>(std::move(sources), readDescription.GetSorting());
+            return std::make_unique<NReader::NTrivial::TPortionsSources>(
+                std::move(sources), readDescription.GetSorting(), readDescription.GetFakeSort());
         }
     }
     return nullptr;

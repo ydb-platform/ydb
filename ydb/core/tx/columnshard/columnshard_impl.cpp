@@ -1536,7 +1536,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
             std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(columns),
             std::make_shared<TExecutor>(ev->Get()->GetCallback(), portion.GetPortionAddress(), SelfId(),
                 std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns)), env,
-            NConveyorComposite::ESpecialTaskCategory::Scan);
+            NConveyorComposite::ESpecialTaskCategory::Deduplication);
     }
 }
 

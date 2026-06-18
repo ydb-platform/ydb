@@ -280,11 +280,6 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (!AppData()->FeatureFlags.GetEnableTruncateTable()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE statement is not supported");
-            return result;
-        }
-
         if (!AppData()->FeatureFlags.GetEnableTruncateColumnTable()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "TRUNCATE TABLE is not supported for column tables");
             return result;

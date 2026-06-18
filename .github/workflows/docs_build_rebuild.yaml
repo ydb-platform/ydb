@@ -50,7 +50,7 @@ jobs:
           revision: "pr-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
           cli-version: stable
-          use-ya-opensource: ${{ github.base_ref == 'main' && 'true' || 'false' }}
+          use-ya-opensource: true
 
       - name: Remove rebuild_docs label
         if: always()

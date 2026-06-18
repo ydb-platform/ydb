@@ -410,7 +410,7 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
         start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
 
-        verify_pattern = 'VERIFY failed'
+        verify_pattern = 'VERIFY failed|unhandled exception'
         violations = []
 
         try:
@@ -419,8 +419,8 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             sample_cmd = (
                 "ulimit -n 100500 2>/dev/null; "
                 "unified_agent select -S '{start}' -U '{end}' -s kikimr-start 2>/dev/null | "
-                "grep -i -A {lines} --no-group-separator '{pattern}' | "
-                "sed '/{pattern}/i --'"
+                "grep -iE -A {lines} --no-group-separator '{pattern}' | "
+                "sed -E '/{pattern}/i --'"
             ).format(start=start_str, end=end_str, lines=self.LINES_AFTER_MATCH, pattern=verify_pattern)
             sample_result = subprocess.run(
                 sample_cmd, shell=True, capture_output=True, text=True, timeout=1200  # 20 minutes
@@ -441,5 +441,93 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             logger.warning("Error parsing unified_agent output: {}".format(e))
         except Exception as e:
             logger.warning("Error checking unified_agent: {}".format(e))
+
+        return violations
+
+
+class UnifiedAgentSanitizerSafetyWarden(SafetyWarden):
+    """
+    Safety warden that checks for sanitizer errors (ASan/LSan/TSan/MSan/UBSan)
+    in unified_agent logs.
+
+    Uses unified_agent to search kikimr-start logs for the canonical sanitizer
+    error pattern ``ERROR: <Word>Sanitizer:`` (e.g. ``ERROR: LeakSanitizer:``,
+    ``ERROR: AddressSanitizer:``).
+
+    Each violation in the returned list is a full sanitizer report block,
+    spanning from the leading ``=====`` separator line through the trailing
+    ``SUMMARY:`` line, so callers see the complete stack trace.
+
+    Based on logic from ``UnifiedAgentVerifyFailedSafetyWarden``.
+    Runs locally (no SSH).
+    """
+
+    def __init__(self, hours_back=24):
+        """
+        Args:
+            hours_back: How many hours back to search (default 24)
+        """
+        super(UnifiedAgentSanitizerSafetyWarden, self).__init__(
+            'UnifiedAgentSanitizerSafetyWarden'
+        )
+        self._hours_back = hours_back
+
+    def list_of_safety_violations(self):
+        """
+        Check unified_agent logs for sanitizer error blocks.
+
+        Returns:
+            List of violation strings, empty if no violations found.
+            Each violation is a complete sanitizer report (from ``====...``
+            through ``SUMMARY:``). Returns ALL errors found, not limited.
+        """
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=self._hours_back)
+
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+        violations = []
+
+        # AWK program: collect lines between the leading "=====...====="
+        # separator and the trailing "SUMMARY:" line. Emit the block only if
+        # it contains an "ERROR: <Word>Sanitizer:" line. Blocks are separated
+        # by lines containing only "--" so we can split on them later.
+        awk_program = (
+            'BEGIN { buf=""; in_block=0; has_err=0 } '
+            '/^=+$/ { buf=$0 ORS; in_block=1; has_err=0; next } '
+            'in_block { buf=buf $0 ORS } '
+            'in_block && /ERROR:[[:space:]]*[A-Za-z]+Sanitizer:/ { has_err=1 } '
+            'in_block && /^SUMMARY:/ { '
+            'if (has_err) { printf "%s--%s", buf, ORS } '
+            'buf=""; in_block=0; has_err=0 '
+            '}'
+        )
+
+        try:
+            sample_cmd = (
+                "ulimit -n 100500 2>/dev/null; "
+                "unified_agent select -S '{start}' -U '{end}' -s kikimr-start 2>/dev/null | "
+                "awk '{awk}'"
+            ).format(start=start_str, end=end_str, awk=awk_program)
+
+            sample_result = subprocess.run(
+                sample_cmd, shell=True, capture_output=True, text=True, timeout=1200  # 20 minutes
+            )
+            if sample_result.returncode == 0 and sample_result.stdout.strip():
+                raw_output = sample_result.stdout.strip()
+                # AWK emits "--\n" between blocks; split and keep non-empty.
+                error_blocks = raw_output.split('\n--\n')
+                for block in error_blocks:
+                    block = block.strip()
+                    if block and block != '--':
+                        violations.append(block)
+
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout while checking unified_agent for sanitizer errors")
+        except FileNotFoundError:
+            logger.warning("unified_agent not found")
+        except Exception as e:
+            logger.warning("Error checking unified_agent for sanitizer errors: {}".format(e))
 
         return violations

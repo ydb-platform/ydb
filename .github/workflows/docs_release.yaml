@@ -26,7 +26,7 @@ jobs:
           revision: "${{ github.sha }}"
           src-root: ${{ vars.SRC_ROOT }}
           cli-version: stable
-          use-ya-opensource: ${{ github.base_ref == 'main' && 'true' || 'false' }}
+          use-ya-opensource: true
 
   upload:
     needs: build

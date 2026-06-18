@@ -33,7 +33,7 @@ public:
     }
 
     virtual void HandleResponse(typename TResponse::TPtr &ev, const TActorContext &ctx) {
-        Callback(Promise, std::move(*ev->Get()));
+        Callback(std::move(Promise), std::move(*ev->Get()));
         this->Die(ctx);
     }
 
@@ -66,6 +66,14 @@ public:
         Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             "Failed to deliver request to destination.", {}));
         this->Die(ctx);
+    }
+
+    ~TRequestHandlerBase() override {
+        if (Promise.Initialized() && !Promise.IsReady()) {
+            Promise.TrySetValue(NYql::NCommon::ResultFromIssues<TResult>(
+                NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                "Shutting down.", {}));
+        }
     }
 
 protected:

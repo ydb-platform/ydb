@@ -621,8 +621,8 @@ public:
         {
         }
 
-        TEvDescribeResourceId(std::shared_ptr<TState> state)
-        : State(std::move(state))
+        explicit TEvDescribeResourceId(std::shared_ptr<TState> state)
+            : State(std::move(state))
         {
         }
 

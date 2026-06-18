@@ -630,8 +630,8 @@ public:
         std::shared_ptr<TState> State;
     };
 
-    TDescribeResourceIdService(std::shared_ptr<NYdb::TDriver> driver)
-    : Driver(std::move(driver))
+    explicit TDescribeResourceIdService(std::shared_ptr<NYdb::TDriver> driver)
+        : Driver(std::move(driver))
     {
     }
 

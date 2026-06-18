@@ -157,7 +157,7 @@ TDuration TStorageConfig::GetTraceSamplePeriod() const
 
 TDuration TStorageConfig::GetReadHedgingDelay() const
 {
-    return StorageServiceConfig.HasWriteHedgingDelay()
+    return StorageServiceConfig.HasReadHedgingDelay()
                ? TDuration::MicroSeconds(
                      StorageServiceConfig.GetReadHedgingDelay())
                : DefaultReadHedgingDelay;
@@ -165,7 +165,7 @@ TDuration TStorageConfig::GetReadHedgingDelay() const
 
 TDuration TStorageConfig::GetReadRequestTimeout() const
 {
-    return StorageServiceConfig.HasWriteRequestTimeout()
+    return StorageServiceConfig.HasReadRequestTimeout()
                ? TDuration::MilliSeconds(
                      StorageServiceConfig.GetReadRequestTimeout())
                : DefaultReadRequestTimeout;

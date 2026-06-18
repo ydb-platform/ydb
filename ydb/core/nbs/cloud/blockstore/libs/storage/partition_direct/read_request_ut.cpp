@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(3, ReadPromises.size());
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
-        // Response with success fo second request.
+        // Response with success for second request.
         ReadPromises[1].SetValue({.Error = MakeError(S_OK)});
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();

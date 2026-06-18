@@ -97,6 +97,10 @@ TReadSingleLocationRequestExecutor::GetFuture() const
 
 void TReadSingleLocationRequestExecutor::StartReading()
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     const auto& hint = ReadHint.RangeHints[0];
 
     auto candidates = hint.HostMask.Exclude(Requested);
@@ -254,6 +258,10 @@ void TReadSingleLocationRequestExecutor::ScheduleRequestTimeout()
 
 void TReadSingleLocationRequestExecutor::OnHedgingTimeout()
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -270,6 +278,10 @@ void TReadSingleLocationRequestExecutor::OnHedgingTimeout()
 
 void TReadSingleLocationRequestExecutor::OnRequestTimeout()
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

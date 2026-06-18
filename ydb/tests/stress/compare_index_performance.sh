@@ -9,7 +9,7 @@
 # The S3 bucket has builds for: release, relwithdebinfo.
 #
 # Usage:
-#   ./ydb/tests/stress/compare_performance.sh [OPTIONS]
+#   ./ydb/tests/stress/compare_index_performance.sh [OPTIONS]
 #
 # Options:
 #   --duration SECONDS     Duration of each workload run (default: 60)
@@ -17,6 +17,7 @@
 #   --main-ydbd PATH       Path to pre-built main branch ydbd (skips downloading)
 #   --current-ydbd PATH    Path to pre-built current branch ydbd (skips building)
 #   --ref REF              S3 ref to download ydbd from (default: main)
+#   --workload WORKLOAD    Run only specified workload: vector, fulltext, or all (default: all)
 
 set -euo pipefail
 
@@ -27,6 +28,7 @@ MAIN_YDBD=""
 CURRENT_YDBD=""
 S3_REF="main"
 BUILD_PRESET="relwithdebinfo"
+WORKLOAD="all"
 RESULTS_DIR="$REPO_ROOT/benchmark_results"
 S3_BASE_URL="https://storage.yandexcloud.net/ydb-builds"
 
@@ -37,9 +39,15 @@ while [[ $# -gt 0 ]]; do
         --main-ydbd) MAIN_YDBD="$2"; shift 2 ;;
         --current-ydbd) CURRENT_YDBD="$2"; shift 2 ;;
         --ref) S3_REF="$2"; shift 2 ;;
+        --workload) WORKLOAD="$2"; shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
+
+if [[ "$WORKLOAD" != "all" && "$WORKLOAD" != "vector" && "$WORKLOAD" != "fulltext" ]]; then
+    echo "ERROR: --workload must be one of: all, vector, fulltext"
+    exit 1
+fi
 
 mkdir -p "$RESULTS_DIR"
 
@@ -47,6 +55,7 @@ CURRENT_BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
 echo "=== Performance comparison: $S3_REF vs $CURRENT_BRANCH ==="
 echo "Build preset: $BUILD_PRESET"
 echo "Duration per run: ${DURATION}s"
+echo "Workload: $WORKLOAD"
 echo ""
 
 # --- Download ydbd from S3 if not provided ---
@@ -115,39 +124,6 @@ extract_total_txs_sec() {
     grep -A1 "^Total" "$test_log" | tail -1 | awk '{print $3}'
 }
 
-# --- Run vector workload ---
-echo ""
-echo "=========================================="
-echo "  Vector workload"
-echo "=========================================="
-
-VECTOR_TEST="ydb/tests/stress/vector_workload/tests"
-
-run_test "$S3_REF" "$MAIN_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_main.log"
-VECTOR_MAIN_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
-VECTOR_MAIN_TXS=$(extract_total_txs_sec "$VECTOR_MAIN_LOG_DIR")
-
-run_test "current" "$CURRENT_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_current.log"
-VECTOR_CURRENT_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
-VECTOR_CURRENT_TXS=$(extract_total_txs_sec "$VECTOR_CURRENT_LOG_DIR")
-
-# --- Run fulltext workload ---
-echo ""
-echo "=========================================="
-echo "  Fulltext workload"
-echo "=========================================="
-
-FULLTEXT_TEST="ydb/tests/stress/fulltext_workload/tests"
-
-run_test "$S3_REF" "$MAIN_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_main.log"
-FULLTEXT_MAIN_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
-FULLTEXT_MAIN_TXS=$(extract_total_txs_sec "$FULLTEXT_MAIN_LOG_DIR")
-
-run_test "current" "$CURRENT_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_current.log"
-FULLTEXT_CURRENT_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
-FULLTEXT_CURRENT_TXS=$(extract_total_txs_sec "$FULLTEXT_CURRENT_LOG_DIR")
-
-# --- Print comparison ---
 calc_diff() {
     local main_val="$1"
     local current_val="$2"
@@ -158,6 +134,48 @@ calc_diff() {
     awk "BEGIN { diff = ($current_val - $main_val) / $main_val * 100; printf \"%+.1f%%\", diff }"
 }
 
+VECTOR_MAIN_TXS="N/A"
+VECTOR_CURRENT_TXS="N/A"
+FULLTEXT_MAIN_TXS="N/A"
+FULLTEXT_CURRENT_TXS="N/A"
+
+# --- Run vector workload ---
+if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
+    echo ""
+    echo "=========================================="
+    echo "  Vector workload"
+    echo "=========================================="
+
+    VECTOR_TEST="ydb/tests/stress/vector_workload/tests"
+
+    run_test "$S3_REF" "$MAIN_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_main.log"
+    VECTOR_MAIN_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
+    VECTOR_MAIN_TXS=$(extract_total_txs_sec "$VECTOR_MAIN_LOG_DIR")
+
+    run_test "current" "$CURRENT_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_current.log"
+    VECTOR_CURRENT_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
+    VECTOR_CURRENT_TXS=$(extract_total_txs_sec "$VECTOR_CURRENT_LOG_DIR")
+fi
+
+# --- Run fulltext workload ---
+if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
+    echo ""
+    echo "=========================================="
+    echo "  Fulltext workload"
+    echo "=========================================="
+
+    FULLTEXT_TEST="ydb/tests/stress/fulltext_workload/tests"
+
+    run_test "$S3_REF" "$MAIN_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_main.log"
+    FULLTEXT_MAIN_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
+    FULLTEXT_MAIN_TXS=$(extract_total_txs_sec "$FULLTEXT_MAIN_LOG_DIR")
+
+    run_test "current" "$CURRENT_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_current.log"
+    FULLTEXT_CURRENT_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
+    FULLTEXT_CURRENT_TXS=$(extract_total_txs_sec "$FULLTEXT_CURRENT_LOG_DIR")
+fi
+
+# --- Print comparison ---
 VECTOR_DIFF=$(calc_diff "$VECTOR_MAIN_TXS" "$VECTOR_CURRENT_TXS")
 FULLTEXT_DIFF=$(calc_diff "$FULLTEXT_MAIN_TXS" "$FULLTEXT_CURRENT_TXS")
 
@@ -169,22 +187,30 @@ echo "=========================================="
 echo ""
 printf "%-20s %15s %15s %10s\n" "Workload" "$S3_REF (Txs/Sec)" "$CURRENT_BRANCH (Txs/Sec)" "Diff"
 printf "%-20s %15s %15s %10s\n" "--------------------" "---------------" "---------------" "----------"
-printf "%-20s %15s %15s %10s\n" "vector select" "$VECTOR_MAIN_TXS" "$VECTOR_CURRENT_TXS" "$VECTOR_DIFF"
-printf "%-20s %15s %15s %10s\n" "fulltext select" "$FULLTEXT_MAIN_TXS" "$FULLTEXT_CURRENT_TXS" "$FULLTEXT_DIFF"
+if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
+    printf "%-20s %15s %15s %10s\n" "vector select" "$VECTOR_MAIN_TXS" "$VECTOR_CURRENT_TXS" "$VECTOR_DIFF"
+fi
+if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
+    printf "%-20s %15s %15s %10s\n" "fulltext select" "$FULLTEXT_MAIN_TXS" "$FULLTEXT_CURRENT_TXS" "$FULLTEXT_DIFF"
+fi
 echo ""
 echo "Detailed logs: $RESULTS_DIR/"
 
 # --- Write markdown report ---
 REPORT_FILE="$RESULTS_DIR/report.md"
-cat > "$REPORT_FILE" <<EOF
-## Performance Comparison: \`$S3_REF\` vs \`$CURRENT_BRANCH\`
-
-**Build preset:** \`$BUILD_PRESET\` | **Duration:** ${DURATION}s per workload
-
-| Workload | $S3_REF (Txs/Sec) | $CURRENT_BRANCH (Txs/Sec) | Diff |
-|---|---|---|---|
-| vector select | $VECTOR_MAIN_TXS | $VECTOR_CURRENT_TXS | $VECTOR_DIFF |
-| fulltext select | $FULLTEXT_MAIN_TXS | $FULLTEXT_CURRENT_TXS | $FULLTEXT_DIFF |
-EOF
+{
+    echo "## Performance Comparison: \`$S3_REF\` vs \`$CURRENT_BRANCH\`"
+    echo ""
+    echo "**Build preset:** \`$BUILD_PRESET\` | **Duration:** ${DURATION}s per workload"
+    echo ""
+    echo "| Workload | $S3_REF (Txs/Sec) | $CURRENT_BRANCH (Txs/Sec) | Diff |"
+    echo "|---|---|---|---|"
+    if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
+        echo "| vector select | $VECTOR_MAIN_TXS | $VECTOR_CURRENT_TXS | $VECTOR_DIFF |"
+    fi
+    if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
+        echo "| fulltext select | $FULLTEXT_MAIN_TXS | $FULLTEXT_CURRENT_TXS | $FULLTEXT_DIFF |"
+    fi
+} > "$REPORT_FILE"
 echo ""
 echo "Markdown report: $REPORT_FILE"

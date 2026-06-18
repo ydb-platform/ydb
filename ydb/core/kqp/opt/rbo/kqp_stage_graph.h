@@ -1,10 +1,8 @@
 #pragma once
 
 #include "kqp_info_unit.h"
-
+#include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/core/yql_statistics.h>
-
-#include <util/generic/string.h>
 
 #include <optional>
 

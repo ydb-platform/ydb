@@ -517,7 +517,7 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
         if (IsAttribute(right)) {
             return TWO_COLUMNS_DEFAULT_SELECTIVITY;
         } else if (IsConstantExprWithParams(right.Ptr())) {
-            const TString attributeName = attribute.GetRef();
+            TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultInequalitySelectivity(Stats, attributeName);
             }
@@ -529,6 +529,15 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
                     }
                 }
                 return DefaultInequalitySelectivity(Stats, attributeName);
+            }
+
+            if (Lineage) {
+                const auto& mapping = Lineage->Mapping;
+                if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+                    const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+                    auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+                    attributeName = infoUnit.GetFullName();
+                }
             }
 
             if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
@@ -571,7 +580,7 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
 
         // In case the right side is a constant that can be extracted, compute the selectivity using statistics
         else if (IsConstantExprWithParams(right.Ptr())) {
-            const TString attributeName = attribute.GetRef();
+            TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
@@ -590,6 +599,15 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                     }
                 }
                 return DefaultEqualitySelectivity(Stats, attributeName);
+            }
+
+            if (Lineage) {
+                const auto& mapping = Lineage->Mapping;
+                if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+                    const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+                    auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+                    attributeName = infoUnit.GetFullName();
+                }
             }
 
             if (const auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch) {
@@ -895,6 +913,15 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
 
     if (!Stats->Nrows) {
         return DefaultEqualitySelectivity(Stats, attributeName); 
+    }
+
+    if (Lineage) {
+        const auto& mapping = Lineage->Mapping;
+        if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+            const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+            auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+            attributeName = infoUnit.GetFullName();
+        }
     }
 
     // point predicate logic

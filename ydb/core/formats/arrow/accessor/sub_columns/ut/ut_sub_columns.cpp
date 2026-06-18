@@ -227,16 +227,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());
     }
 
-    Y_UNIT_TEST(ValidateJsonPath) {
-        UNIT_ASSERT(NSubColumns::IsValidJsonPath(R"($."type")"));
-        UNIT_ASSERT(NSubColumns::IsValidJsonPath(R"($."deployment.environment")"));
-        UNIT_ASSERT(!NSubColumns::IsValidJsonPath(R"("deployment.environment")"));
-
-        const auto invalidResult = NSubColumns::ValidateJsonPath(R"("deployment.environment")");
-        UNIT_ASSERT(invalidResult.IsFail());
-        UNIT_ASSERT(invalidResult.GetErrorMessage().Contains("Unsupported path"));
-    }
-
     Y_UNIT_TEST(SplitJsonPath) {
         TString path = R"($.a."b".'c'.'d"'."'"."\"".""."."[0,2].b[0].c[3][4].d[2 to 5].e[last])";
         TVector<TString> expectedItems = {"a", "b", "c", "d\"", "'", "\"", "", ".", "[0,2]", "b", "[0]", "c", "[3]", "[4]", "d", "[2 to 5]", "e", "[last]"};

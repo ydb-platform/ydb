@@ -87,14 +87,6 @@ TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonP
     return result;
 }
 
-TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath) {
-    const auto result = SplitJsonPath(jsonPath, TJsonPathSplitSettings{.FillTypes = false, .FillStartPositions = false});
-    if (result.IsSuccess()) {
-        return TConclusionStatus::Success();
-    }
-    return TConclusionStatus::Fail(result.GetErrorMessage());
-}
-
 TString ToSubcolumnName(TStringBuf path) {
     auto pathItemsResult = SplitJsonPath(path, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
     if (pathItemsResult.IsFail()) {

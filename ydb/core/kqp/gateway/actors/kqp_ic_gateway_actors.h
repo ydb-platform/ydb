@@ -78,6 +78,8 @@ public:
 
 protected:
     THolder<TRequest> Request;
+    // Note: Promise must be moved into Callback to avoid racing with
+    // the destructor.
     NThreading::TPromise<TResult> Promise;
     TCallbackFunc Callback;
 };

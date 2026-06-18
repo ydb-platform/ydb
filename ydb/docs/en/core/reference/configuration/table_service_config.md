@@ -41,9 +41,9 @@ Spilling is enabled by default. The following parameter controls enabling and di
 
 #### local_file_config.enable {#local-file-config-enable}
 
-**Location:** `table_service_config.spilling_service_config.local_file_config.enable`
-**Type:** `boolean`
-**Default:** `true`
+**Location:** `table_service_config.spilling_service_config.local_file_config.enable`  
+**Type:** `boolean`  
+**Default:** `true`  
 **Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/query_execution/spilling.md) does not function, which may lead to errors when processing large data volumes.
 
 ##### Possible errors

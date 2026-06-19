@@ -31,7 +31,7 @@ const std::string TEncryptionAlgorithm::CHACHA_20_POLY_1305 = "ChaCha20-Poly1305
 namespace {
 
 // helper type for the visitor
-template<class... Ts>
+template <typename... Ts>
 struct overloads : Ts... { using Ts::operator()...; };
 
 std::vector<TExportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<ExportItemProgress>& proto) {

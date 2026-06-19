@@ -38,7 +38,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left") {
+    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
         YQL_CLOG(TRACE, CoreDq) << "Wrong join type " << join->JoinKind << Endl;
         return input;
     }
@@ -71,9 +71,9 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
             }
         }
 
-        if (IUSetDiff(conj.GetInputIUs(true, true), leftIUs).empty()) {
+        if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {
             pushLeft.push_back(conj);
-        } else if (IUSetDiff(conj.GetInputIUs(true, true), rightIUs).empty()) {
+        } else if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty()) {
             pushRight.push_back(conj);
         } else {
             topLevelPreds.push_back(conj);
@@ -116,6 +116,9 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
             } else if (!pushLeft.size()) {
                 return input;
             }
+        } else if (join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly") {
+            // Keep on top.
+            topLevelPreds.insert(topLevelPreds.end(), pushRight.begin(), pushRight.end());
         } else {
             auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
             rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);

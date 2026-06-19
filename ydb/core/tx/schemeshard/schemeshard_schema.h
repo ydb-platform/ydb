@@ -2649,13 +2649,15 @@ struct Schema : NIceDb::Schema {
         struct OwnerShardIdx :          Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
         struct LocalShardIdx :          Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalShardIdx; };
         struct Status :                 Column<4, NScheme::NTypeIds::Uint32>  { using Type = NKikimrSetColumnConstraint::EValidateStatus; };
+        struct Issue :                  Column<5, NScheme::NTypeIds::Utf8>    { using Type = TString; };
 
         using TKey = TableKey<OperationId, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
             OperationId,
             OwnerShardIdx,
             LocalShardIdx,
-            Status
+            Status,
+            Issue
         >;
     };
 

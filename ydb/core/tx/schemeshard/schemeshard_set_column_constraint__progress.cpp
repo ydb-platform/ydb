@@ -381,6 +381,17 @@ public:
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
         shardStatus.ValidateStatus = record.GetStatus();
 
+        if (record.IssuesSize() > 0) {
+            TStringBuilder issuesText;
+            for (size_t i = 0; i < record.IssuesSize(); ++i) {
+                if (i > 0) {
+                    issuesText << "; ";
+                }
+                issuesText << record.GetIssues(i).message();
+            }
+            shardStatus.DebugMessage = issuesText;
+        }
+
         if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);

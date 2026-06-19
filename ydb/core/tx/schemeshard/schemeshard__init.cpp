@@ -5425,6 +5425,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SetColumnConstraintDatashardStatuses::LocalShardIdx>()
                     );
                     auto validateStatus = rowset.GetValue<Schema::SetColumnConstraintDatashardStatuses::Status>();
+                    TString issue = rowset.GetValueOrDefault<Schema::SetColumnConstraintDatashardStatuses::Issue>(TString{});
 
                     auto* opPtr = loadedOperations.FindPtr(operationId);
                     if (!opPtr) {
@@ -5439,6 +5440,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     TValidateColumnConstraintShardStatus shardStatus(TSerializedTableRange{}, "");
                     shardStatus.ValidateStatus = validateStatus;
+                    shardStatus.DebugMessage = issue;
 
                     operationInfo.ValidationShards.emplace(shardIdx, std::move(shardStatus));
 

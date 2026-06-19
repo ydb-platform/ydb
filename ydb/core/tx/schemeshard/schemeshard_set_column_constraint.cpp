@@ -128,11 +128,11 @@ void TSchemeShard::PersistSetColumnConstraintValidationShardStatus(
     const TSetColumnConstraintOperationInfo& operationInfo)
 {
     auto status = operationInfo.ValidationShards.at(shardIdx);
-    // todo: persist issue
     db.Table<Schema::SetColumnConstraintDatashardStatuses>()
         .Key(operationId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
         .Update(
-            NIceDb::TUpdate<Schema::SetColumnConstraintDatashardStatuses::Status>(status.ValidateStatus)
+            NIceDb::TUpdate<Schema::SetColumnConstraintDatashardStatuses::Status>(status.ValidateStatus),
+            NIceDb::TUpdate<Schema::SetColumnConstraintDatashardStatuses::Issue>(status.DebugMessage)
         );
 }
 

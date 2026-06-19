@@ -1,8 +1,10 @@
 #include "actors.h"
 #include "common.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/persqueue/public/schema/alter_topic_operation.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
 namespace NKikimr::NGRpcProxy::V1::NPQv1 {
@@ -30,12 +32,28 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         if (topicInfo.CdcStream) {
             return {Ydb::StatusIds::SCHEME_ERROR, "Full alter of CDC stream is forbidden"};
         }
+
+        const auto& pqConfig = AppData()->PQConfig;
+        const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
+        for (const auto& readRule : Request.settings().read_rules()) {
+            const auto consumerName = NPersQueue::ConvertNewConsumerName(readRule.consumer_name(), pqConfig);
+            for (const auto& existingConsumer : sourceTabletConfig.GetConsumers()) {
+                if (existingConsumer.GetName() != consumerName) {
+                    continue;
+                }
+                const bool newIsShared = readRule.has_shared_consumer_type();
+                const bool oldIsShared = existingConsumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
+                if (newIsShared != oldIsShared) {
+                    return {Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type"};
+                }
+            }
+        }
+
         auto result = ApplyChangesInt(Database, sourceConfig.GetName(), Request, modifyScheme, targetConfig, localCluster);
         if (!result) {
             return result;
         }
 
-        const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
         auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
         targetTabletConfig.SetLocalDC(sourceTabletConfig.GetLocalDC());
         targetTabletConfig.SetDC(sourceTabletConfig.GetDC());

@@ -126,6 +126,34 @@ Y_UNIT_TEST(AddSharedConsumer) {
     UNIT_ASSERT_VALUES_EQUAL(consumer->GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
 }
 
+Y_UNIT_TEST(CannotChangeConsumerType) {
+    TPqv1SdkTestSetup setup("CannotChangeConsumerType");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-alter-change-type");
+
+    TCreateTopicSettings createSettings;
+    createSettings.ReadRules({TReadRuleSettings{}.ConsumerName(DEFAULT_STREAMING_CONSUMER)});
+
+    const auto createStatus = CreateTopicViaSdk(client, path, createSettings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
+
+    {
+        const auto describe = DescribeTopicViaSdk(client, path);
+        UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.TopicSettings().ReadRules().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(describe.TopicSettings().ReadRules().at(0).ConsumerName(), DEFAULT_STREAMING_CONSUMER);
+    }
+
+    TAlterTopicSettings alterSettings;
+    alterSettings.ReadRules({MakeSharedConsumerReadRuleSettings(DEFAULT_STREAMING_CONSUMER)});
+
+    const auto alterStatus = AlterTopicViaSdk(client, path, alterSettings);
+    const auto issue = alterStatus.GetIssues().ToOneLineString();
+    UNIT_ASSERT_C(!alterStatus.IsSuccess(), issue);
+    UNIT_ASSERT_C(issue.contains("Cannot alter consumer type"), issue);
+}
+
 } // Y_UNIT_TEST_SUITE(AlterTopic_PQv1SDK)
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

@@ -9,6 +9,7 @@ SRCS(
     expand_cbo_tree.cpp
     expand_distinct_aggregation.cpp
     extract_join_expressions.cpp
+    kqp_cbo_trees.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp
     inline_cbo_tree.cpp

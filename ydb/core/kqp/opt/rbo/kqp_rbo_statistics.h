@@ -2,6 +2,7 @@
 
 #include "kqp_info_unit.h"
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -110,11 +111,12 @@ public:
     double ERows = 0;
     double EBytes = 0;
     double Selectivity = 1.0;
+    TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> ColumnStatistics;
 
     TString ToString(ui32 printOptions);
 };
 
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts);
+TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx);
 
 }
 }

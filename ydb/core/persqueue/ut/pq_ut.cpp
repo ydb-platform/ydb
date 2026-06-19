@@ -269,6 +269,16 @@ void WaitRetentionCleanup(TTestContext& tc, ui32 retentionSeconds = 5, ui32 wake
     }
 }
 
+void DispatchPartitionWakeup(TTestContext& tc, ui32 wakeTimeoutSeconds = 5) {
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
+    tc.Runtime->ResetScheduledCount();
+    try {
+        tc.Runtime->DispatchEvents();
+    } catch (const NActors::TSchedulingLimitReachedException&) {
+        tc.Runtime->ResetScheduledCount();
+    }
+}
+
 Y_UNIT_TEST(TestCompaction) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
@@ -4080,6 +4090,53 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzh) {
     PQGetPartInfo(100, 202, tc);
     WaitRetentionCleanup(tc, retentionSeconds);
     PQGetPartInfo(202, 202, tc);
+}
+
+Y_UNIT_TEST(TestRetentionCrossZoneMessages) {
+    // CZB+CZH are removed by retention first; FWZ messages are written afterwards
+    // and removed in a second retention cycle.
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+    constexpr ui32 retentionSeconds = 5;
+
+    PQTabletPrepare({.deleteTime = 10'000, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(7_MB, 'x'));
+    CmdWrite(0, "sourceid_czb", data, tc, false, {}, true, "", -1, 100);
+    CmdRunCompaction(0, tc);
+
+    data[0].second = TString(1_KB, 'x');
+    ++data[0].first;
+    CmdWrite(0, "sourceid_czh_1", data, tc, false, {}, true, "", -1, 200);
+    ++data[0].first;
+    CmdWrite(0, "sourceid_czh_2", data, tc, false, {}, true, "", -1, 201);
+    CmdRunCompaction(0, tc);
+
+    PQTabletRestart(tc);
+    PQGetPartInfo(100, 202, tc);
+
+    PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
+    WaitRetentionCleanup(tc, retentionSeconds);
+    PQGetPartInfo(202, 202, tc);
+
+    PQTabletPrepare({.deleteTime = 10'000, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+    PQTabletRestart(tc);
+    PQGetPartInfo(202, 202, tc);
+
+    TVector<std::pair<ui64, TString>> fwzData;
+    fwzData.emplace_back(1, TString(100, 'x'));
+    CmdWrite(0, "sourceid_fwz", fwzData, tc, false, {}, false);
+    PQGetPartInfo(202, 203, tc);
+
+    PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
+    WaitRetentionCleanup(tc, retentionSeconds);
+    PQGetPartInfo(203, 203, tc);
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

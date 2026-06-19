@@ -2,7 +2,7 @@
 
 - `--ca-file <filename>` : файл корневого PEM-сертификата (CA), которым подписан серверный сертификат
 
-Если в конфигурации кластера в секции `client_certificate_authorization` включён параметр [`request_client_certificate`](../../../configuration/client_certificate_authorization.md), сервер также запрашивает клиентский сертификат при TLS-handshake. В этом случае дополнительно указывается:
+Если в конфигурации кластера в секции `client_certificate_authorization` включён параметр [request_client_certificate](../../../configuration/client_certificate_authorization.md), сервер также запрашивает клиентский сертификат при TLS-handshake. В этом случае дополнительно указывается:
 
 - `--client-cert-file <filename>` : файл клиентского сертификата (PEM или PKCS#12)
 - `--client-cert-key-file <filename>` : файл закрытого ключа клиентского сертификата (указывается, если сертификат и ключ содержатся в отдельных файлах)

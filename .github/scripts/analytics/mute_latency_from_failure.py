@@ -886,12 +886,18 @@ def main() -> int:
     )
     git_history_available = ensure_git_history(repo, args.branch, history_days)
     if not git_history_available:
+        if args.force:
+            print(
+                f'ERROR: origin/{args.branch} unavailable — aborting '
+                f'(refusing unsafe --force cleanup without git history)',
+                file=sys.stderr,
+            )
+            return 1
         print(
-            f'ERROR: origin/{args.branch} unavailable — aborting '
-            f'(refusing unsafe --force cleanup without git history)',
+            f'WARNING: origin/{args.branch} unavailable — skip mute latency git scan',
             file=sys.stderr,
         )
-        return 1
+        return 0
 
     # ── Phase 2: git — collect commits and per-commit added lines (no YDB) ───
     commits = commits_touching_file(repo, rel_path, since_date, branch=args.branch)

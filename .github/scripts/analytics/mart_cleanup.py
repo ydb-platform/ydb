@@ -26,8 +26,15 @@ def validate_interval_expression(interval_expr: str) -> None:
         )
 
 
+def normalize_pk_value(value: Any) -> Any:
+    """Normalize YDB scan values for PK comparison (Utf8 often arrives as bytes)."""
+    if isinstance(value, bytes):
+        return value.decode('utf-8', errors='replace')
+    return value
+
+
 def pk_tuple(row: Dict[str, Any], primary_keys: Sequence[str]) -> Tuple[Any, ...]:
-    return tuple(row[key] for key in primary_keys)
+    return tuple(normalize_pk_value(row[key]) for key in primary_keys)
 
 
 def to_typed_param(value: Any, type_name: str) -> Any:
@@ -73,7 +80,7 @@ def delete_stale_pk_rows(
             for key in primary_keys:
                 param_name = f"${key}_{row_idx}"
                 declare_lines.append(f"DECLARE {param_name} AS {pk_type_map[key]};")
-                params[param_name] = to_typed_param(row[key], pk_type_map[key])
+                params[param_name] = to_typed_param(normalize_pk_value(row[key]), pk_type_map[key])
                 row_param_names.append(param_name)
             predicates.append(
                 "(" + " AND ".join(

@@ -622,11 +622,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
     }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
->>>>>>> eb2505b11e0 (add tiering tests for min_max index (#42383))
     Y_UNIT_TEST_DUO(MinMaxIndexInheritsTiering, InheritPortionStorage) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();
@@ -671,26 +666,16 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 if (InheritPortionStorage) {
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), DEFAULT_TIER_PATH);
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
-<<<<<<< HEAD
                     UNIT_ASSERT_VALUES_UNEQUAL(GetUtf8(row.at("ChunkDetails")), "");
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), "__DEFAULT");
                     UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
                     UNIT_ASSERT_VALUES_UNEQUAL(GetUtf8(row.at("ChunkDetails")), "");
-=======
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), "__DEFAULT");
-                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
->>>>>>> eb2505b11e0 (add tiering tests for min_max index (#42383))
                 }
             }
         }
     }
 
-<<<<<<< HEAD
->>>>>>> 428c2e38e9b (Min max index prints chunk values for trivial reader and __DEFAULT storage_id (#42337))
-=======
->>>>>>> eb2505b11e0 (add tiering tests for min_max index (#42383))
     Y_UNIT_TEST(TieringBoolToS3) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();

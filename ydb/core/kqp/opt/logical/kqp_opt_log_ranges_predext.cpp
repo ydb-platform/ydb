@@ -383,18 +383,12 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         if (primaryBuildResult.PointPrefixLen < mainTableDesc.Metadata->KeyColumnNames.size()) {
             auto maxKey = calcKey(primaryBuildResult, mainTableDesc.Metadata->KeyColumnNames.size(), false, mainTableDesc);
             for (auto& index : mainTableDesc.Metadata->Indexes) {
-<<<<<<< HEAD
-                if (index.Type != TIndexDescription::EType::GlobalAsync && index.State == TIndexDescription::EIndexState::Ready) {
-=======
                 if (index.Type != TIndexDescription::EType::GlobalAsync
-                    && index.Type != TIndexDescription::EType::GlobalJson
-                    && index.Type != TIndexDescription::EType::GlobalJsonCompact
                     && index.Type != TIndexDescription::EType::LocalMinMax
                     && index.Type != TIndexDescription::EType::LocalBloomFilter
                     && index.Type != TIndexDescription::EType::LocalBloomNgramFilter
                     && index.State == TIndexDescription::EIndexState::Ready)
                 {
->>>>>>> 99c3024a6ce (better fix for ColumnShards alter index (#43251))
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(index.Name).first->Name);
 
                     bool uselessIndex = true;

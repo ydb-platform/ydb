@@ -7,11 +7,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
-<<<<<<< HEAD
-=======
-    test_bloom_index.py
     test_min_max_index.py
->>>>>>> a0173dea729 (min_max index compability tests (#41172))
     test_rename_table.py
     test_compression.py
     test_encoding.py

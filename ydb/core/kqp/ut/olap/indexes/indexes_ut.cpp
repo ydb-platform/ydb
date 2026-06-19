@@ -202,15 +202,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
     )";
-<<<<<<< HEAD
-    Y_UNIT_TEST(ChunkDetailsMinMax) {
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));
-=======
-
-    Y_UNIT_TEST(ChunkDetailsMinMaxWithLocalDBStorage, ELocalIndexAsSchemeObject) {
-        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+    Y_UNIT_TEST(ChunkDetailsMinMaxWithLocalDBStorage) {
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithLocalDBStorage)).Execute(settings);
     }   
     
@@ -238,12 +231,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         EXPECTED: [[%true]]
     )";
     
-    Y_UNIT_TEST(ChunkDetailsMinMaxWithBSStorage, ELocalIndexAsSchemeObject) {
-        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+    Y_UNIT_TEST(ChunkDetailsMinMaxWithBSStorage) {
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
->>>>>>> 428c2e38e9b (Min max index prints chunk values for trivial reader and __DEFAULT storage_id (#42337))
     }
 
 
@@ -252,11 +242,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-<<<<<<< HEAD
-=======
         settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
->>>>>>> 79f5008b5ff (Min max more pushdown tests (#41868))
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);

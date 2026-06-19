@@ -35,6 +35,7 @@ ydb/core/transfer/ut/functional Transfer.AlterFlushInterval
 ydb/core/transfer/ut/functional Transfer.AlterLambdaOnWork
 ydb/core/transfer/ut/functional Transfer.AlterTargetDirectory
 ydb/core/transfer/ut/functional Transfer.Alter_WithSecret
+ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime
 ydb/core/transfer/ut/functional Transfer.CreateAndAlterTransferInDirectory
 ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists
 ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists_LocalTopic

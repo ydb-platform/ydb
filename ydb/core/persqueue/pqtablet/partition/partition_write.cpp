@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
+#include <ydb/core/persqueue/public/config.h>
 
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
@@ -1197,7 +1198,7 @@ bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg&
         return true;
     }
 
-    if (!AppData()->FeatureFlags.GetEnableTopicMessagesBatching() || !AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()) {
+    if (!NPQ::IsTopicMessagesBatchingEnabled(ctx)) {
         CancelOneWriteOnWrite(ctx,
                               TStringBuilder() << "messages batching is not enabled, partitionId: " << Partition,
                               p,
@@ -1208,17 +1209,6 @@ bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg&
     if (!p.Msg.MaxSeqNo.has_value()) {
         CancelOneWriteOnWrite(ctx,
                               TStringBuilder() << "MaxSeqNo is required for batch messages, partitionId: " << Partition,
-                              p,
-                              NPersQueue::NErrorCode::BAD_REQUEST);
-        return false;
-    }
-
-    if (*p.Msg.MaxSeqNo != p.Msg.SeqNo + p.Msg.MessageCount - 1) {
-        CancelOneWriteOnWrite(ctx,
-                              TStringBuilder() << "MaxSeqNo is inconsistent with MessageCount, partitionId: " << Partition
-                                               << ", seqNo: " << p.Msg.SeqNo
-                                               << ", maxSeqNo: " << *p.Msg.MaxSeqNo
-                                               << ", messageCount: " << p.Msg.MessageCount,
                               p,
                               NPersQueue::NErrorCode::BAD_REQUEST);
         return false;

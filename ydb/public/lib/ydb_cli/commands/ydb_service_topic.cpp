@@ -1037,10 +1037,10 @@ namespace NYdb::NConsoleClient {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify specific partitions through --partitions or specify --no-consumer to read all partitions without consumer")
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If omitted, use --partitions to target specific partitions, or --no-consumer to read all partitions without a consumer.")
             .Optional()
             .StoreResult(&Consumer_);
-        config.Opts->AddLongOption("no-consumer", "Allows to read all partitions without setting specific partition ids and without consumer")
+        config.Opts->AddLongOption("no-consumer", "Allows to read all partitions without setting specific partition ids and without consumer.")
             .Optional()
             .StoreTrue(&ReadWithoutConsumer_);
 
@@ -1051,7 +1051,7 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);
-        config.Opts->AddLongOption("commit", "Commit messages after successful read")
+        config.Opts->AddLongOption("commit", "Commit messages after successful read.")
             .Optional()
             .DefaultValue(false)
             .StoreResult(&Commit_);
@@ -1068,11 +1068,11 @@ namespace NYdb::NConsoleClient {
             .RequiredArgument("TIMESTAMP")
             .Optional()
             .Handler(TimestampOptionHandler(&Timestamp_));
-        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
+        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\".")
             .Optional()
             .Hidden()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
-        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\"")
+        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\".")
             .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
         config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partitions' option.")

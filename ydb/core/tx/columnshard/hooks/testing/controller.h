@@ -356,6 +356,8 @@ public:
         return ShardActuals.size();
     }
 
+    ui64 GetPortionsCount() const;
+
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.emplace(id);

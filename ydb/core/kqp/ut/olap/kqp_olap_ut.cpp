@@ -5013,6 +5013,53 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(TruncateTableCleansPortions, Standalone) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTruncateColumnTable(true);
+        TKikimrRunner kikimr(settings);
+        if (Standalone) {
+            TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+        } else {
+            TLocalHelper(kikimr).CreateTestOlapTable();
+        }
+        auto client = kikimr.GetQueryClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        const TString tablePath = Standalone ? "/Root/olapTable" : "/Root/olapStore/olapTable";
+        const TString truncateTarget = Standalone ? "olapTable" : "olapStore/olapTable";
+
+        UNIT_ASSERT_EQUAL(csController->GetPortionsCount(), 0);
+
+        for (ui64 i = 0; i < 1000; ++i) {
+            WriteTestData(kikimr, tablePath, 0, 1000000 + i * 10000, 100);
+        }
+
+        // Sanity: data is stored as portions before TRUNCATE.
+        UNIT_ASSERT_GT(csController->GetPortionsCount(), 0);
+
+        {
+            auto result = client.ExecuteQuery(Sprintf("TRUNCATE TABLE `%s`", truncateTarget.c_str()), NQuery::TTxControl::NoTx())
+                              .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // All portions must be physically removed after TRUNCATE.
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        for (;;) {
+            const auto portionsCount = csController->GetPortionsCount();
+            Cerr << "portions left after truncate: " << portionsCount << Endl;
+            if (portionsCount == 0) {
+                break;
+            }
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "portions were not cleaned up after TRUNCATE");
+            Sleep(TDuration::MilliSeconds(100));
+        }
+    }
+
     Y_UNIT_TEST(OlapTxMode) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);

@@ -596,13 +596,6 @@
           .exec(
               r#"
               PRAGMA TablePathPrefix("/local");
-              DECLARE $seriesData AS List<Struct<
-                  series_id: Uint64,
-                  title: Utf8,
-                  series_info: Utf8,
-                  comment: Optional<Utf8>
-              >>;
-
               UPSERT INTO series
               (
                   series_id,

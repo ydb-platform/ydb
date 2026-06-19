@@ -15272,6 +15272,87 @@ Y_UNIT_TEST(Redefinition) {
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:13: Error: Bad CTE: Redefinition is forbidden: x");
 }
 
+Y_UNIT_TEST(RecursiveReferenceFromRecursive) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH RECURSIVE a AS (
+            WITH RECURSIVE b AS (
+                SELECT 1 AS n
+                UNION ALL
+                SELECT n + 1 AS n FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM b
+        )
+        SELECT * FROM a;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        ":6:40: Error: Can't reference outer RECURSIVE CTE 'a'. "
+        "Recursion only with a current CTE is allowed, which is 'b' here");
+}
+
+Y_UNIT_TEST(RecursiveReferenceFromSubquery) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    const auto test = [&](TString query, TString position, TString target, TString current) {
+        auto res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(
+            Err2Str(res),
+            TStringBuilder()
+                << position << ": "
+                << "Error: Can't reference outer RECURSIVE CTE '" << target << "'. "
+                << "Recursion only with a current CTE is allowed, which is " << current << " here");
+    };
+
+    test(R"sql(
+        WITH RECURSIVE a AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT n + 1 AS n FROM (SELECT * FROM a)
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql", ":5:51", "a", "undefined");
+
+    test(R"sql(
+        WITH RECURSIVE a AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT (SELECT n + 1 FROM a) AS n FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql", ":5:39", "a", "undefined");
+
+    test(R"sql(
+        WITH RECURSIVE a AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT EXISTS (SELECT n + 1 FROM a) AS n FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql", ":5:46", "a", "undefined");
+
+    test(R"sql(
+        WITH RECURSIVE a AS (
+            SELECT 1 AS n
+            UNION ALL
+            SELECT 1 IN (SELECT n + 1 FROM a) AS n FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql", ":5:44", "a", "undefined");
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelectWithCTE)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {

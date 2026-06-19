@@ -125,6 +125,8 @@ TYqlSelectArgs DestructYqlSelect(TNodePtr node);
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 
+TNodePtr BuildYqlSelf(TPosition position);
+
 TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 
 TNodePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);

@@ -2619,10 +2619,15 @@ struct Schema : NIceDb::Schema {
         struct ValidationFailed :       Column<5, NScheme::NTypeIds::Bool>    { static constexpr bool Default = false; };
         struct OperationState :         Column<6, NScheme::NTypeIds::Uint32>  {};
 
-        // We dont want keep LockingTxId/LockingNullWritesTxId/FinishingTxId/UnlockingTxId separately
+        // We dont want keep LockingNullWritesTxId/FinishingTxId/UnlockingTxId separately
         struct SubStateTxId :           Column<7, NScheme::NTypeIds::Uint64>  { using Type = TTxId; };
         struct SubStateTxStatus :       Column<8, NScheme::NTypeIds::Uint32>  { using Type = NKikimrScheme::EStatus; };
         struct SubStateTxDone :         Column<9, NScheme::NTypeIds::Bool>    {};
+
+        // LockTxId is persisted separately because it's needed in Unlocking phase
+        // to identify which lock to drop (LockGuard.OwnerTxId), even after SubStateTxId
+        // has been overwritten by subsequent phases.
+        struct LockTxId :               Column<10, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
@@ -2634,7 +2639,8 @@ struct Schema : NIceDb::Schema {
             OperationState,
             SubStateTxId,
             SubStateTxStatus,
-            SubStateTxDone
+            SubStateTxDone,
+            LockTxId
         >;
     };
 

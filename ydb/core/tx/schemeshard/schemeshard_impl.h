@@ -1995,6 +1995,7 @@ public:
 
     void PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
     void PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
+    void PersistSetColumnConstraintResetSubState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintLockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintLockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintLockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);

@@ -10,15 +10,13 @@ TString SerializeSetColumnConstraintColumnNames(const std::vector<std::string>& 
 }
 
 std::vector<std::string> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
-    std::string part = "";
-    std::vector<std::string> parts;
+    std::vector<std::string> parts = {""};
 
-    for (size_t i = 0; i <= serialized.size(); ++i) {
-        if (i == serialized.size() || serialized[i] == '$') {
-            parts.push_back(part);
-            part = "";
+    for (size_t i = 0; i < serialized.size(); ++i) {
+        if (serialized[i] == '$') {
+            parts.push_back("");
         } else {
-            part += serialized[i];
+            parts.back() += serialized[i];
         }
     }
 
@@ -42,9 +40,18 @@ void TSchemeShard::PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TS
     );
 }
 
+void TSchemeShard::PersistSetColumnConstraintResetSubState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxId>(),
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxStatus>(),
+        NIceDb::TNull<Schema::SetColumnConstraint::SubStateTxDone>()
+    );
+}
+
 void TSchemeShard::PersistSetColumnConstraintLockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
     db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
-        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.LockTxId)
+        NIceDb::TUpdate<Schema::SetColumnConstraint::SubStateTxId>(operationInfo.LockTxId),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::LockTxId>(operationInfo.LockTxId)
     );
 }
 

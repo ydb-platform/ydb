@@ -5358,10 +5358,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     NKikimrScheme::EStatus subStateTxStatus = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxStatus>(NKikimrScheme::StatusSuccess);
                     bool subStateTxDone = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxDone>(false);
 
+                    // LockTxId is stored separately so it survives SubStateTxId overwrites in later phases
+                    operationInfo->LockTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::LockTxId>(TTxId());
+
                     // Map SubStateTxId/Status/Done to the appropriate phase fields
                     switch (operationInfo->OperationState) {
                         case TSetColumnConstraintOperationInfo::EOperationState::Locking:
-                            operationInfo->LockTxId = subStateTxId;
+                            operationInfo->LockTxId = subStateTxId; // still in Locking: SubState is LockTxId
                             operationInfo->LockTxStatus = subStateTxStatus;
                             operationInfo->LockTxDone = subStateTxDone;
                             if (subStateTxId && !subStateTxDone) {

@@ -2625,6 +2625,11 @@ struct Schema : NIceDb::Schema {
         struct SubStateTxDone :         Column<9, NScheme::NTypeIds::Bool>    {};
         struct LockTxId :               Column<10, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
 
+        // LockTxId is persisted separately because it's needed in Unlocking phase
+        // to identify which lock to drop (LockGuard.OwnerTxId), even after SubStateTxId
+        // has been overwritten by subsequent phases.
+        struct LockTxId :               Column<10, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,

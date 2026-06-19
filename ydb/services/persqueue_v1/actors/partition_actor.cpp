@@ -28,7 +28,7 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes
+        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -72,6 +72,7 @@ TPartitionActor::TPartitionActor(
     , Topic(topic)
     , Database(database)
     , DirectRead(directRead)
+    , CanReadBatches(canReadBatches)
     , PartitionInFlightMemoryController(partitionMaxInFlightBytes)
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
@@ -510,8 +511,11 @@ bool FillBatchedData(
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
         const auto& r = res.GetResult(i);
         WTime = r.GetWriteTimestampMS();
-        AFL_ENSURE(r.GetOffset() >= ReadOffset);
-        ReadOffset = r.GetOffset() + 1;
+        const ui64 messageCount = Max<ui64>(1, r.GetMessageCount());
+        // When reading from the middle of a batch, tablet returns the whole blob
+        // with base offset below ReadOffset; SDK skips already-committed records.
+        AFL_ENSURE(r.GetOffset() + static_cast<i64>(messageCount) > ReadOffset);
+        ReadOffset = r.GetOffset() + messageCount;
         hasOffset = true;
 
         auto proto(GetDeserializedData(r.GetData()));
@@ -800,10 +804,12 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     bool hasData = false;
     if (UseMigrationProtocol) {
         typename MigrationStreamingReadServerMessage::DataBatch* data = migrationResponse.mutable_data_batch();
-        hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     } else {
         StreamReadMessage::ReadResponse* data = response.mutable_read_response();
-        hasData = FillBatchedData<StreamReadMessage::ReadResponse>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        hasData = FillBatchedData<StreamReadMessage::ReadResponse>(
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     }
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);
@@ -1452,6 +1458,7 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
         read->SetBytes(maxSize);
     }
     read->SetReadToBlobEnd(true);
+    read->SetCanReadBatches(CanReadBatches);
     if (maxTimeLagMs) {
         read->SetMaxTimeLagMs(maxTimeLagMs);
     }

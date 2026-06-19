@@ -441,7 +441,6 @@ The fast_float library is part of:
 * [WebKit](https://github.com/WebKit/WebKit), the engine behind Safari (Apple's
   web browser),
 * [DuckDB](https://duckdb.org),
-* [Redis](https://github.com/redis/redis) and [Valkey](https://github.com/valkey-io/valkey),
 * [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied
   the number parsing speed by two or three times,
 * [Google Jsonnet](https://github.com/google/jsonnet),
@@ -454,15 +453,6 @@ AdaCore](https://github.com/AdaCore/VSS). The [SerenityOS operating
 system](https://github.com/SerenityOS/serenity/commit/53b7f5e6a11e663c83df8030c3171c5945cb75ec)
 has a derived implementation that is inherited by the [Ladybird
 Browser](https://github.com/LadybirdBrowser/ladybird).
-
-The fast_float library provides a performance similar to that of the
-[fast_double_parser](https://github.com/lemire/fast_double_parser) library but
-using an updated algorithm reworked from the ground up, and while offering an
-API more in line with the expectations of C++ programmers. The
-fast_double_parser library is part of the [Microsoft LightGBM machine-learning
-framework](https://github.com/microsoft/LightGBM).
-
-
 
 Packages
 ------
@@ -541,7 +531,7 @@ sufficiently recent version of CMake (3.11 or better at least):
 FetchContent_Declare(
   fast_float
   GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
-  GIT_TAG tags/v8.2.5
+  GIT_TAG tags/v8.2.6
   GIT_SHALLOW TRUE)
 
 FetchContent_MakeAvailable(fast_float)
@@ -557,7 +547,7 @@ You may also use [CPM](https://github.com/cpm-cmake/CPM.cmake), like so:
 CPMAddPackage(
   NAME fast_float
   GITHUB_REPOSITORY "fastfloat/fast_float"
-  GIT_TAG v8.2.5)
+  GIT_TAG v8.2.6)
 ```
 
 ## Using as single header
@@ -569,7 +559,7 @@ if desired as described in the command line help.
 
 You may directly download automatically generated single-header files:
 
-<https://github.com/fastfloat/fast_float/releases/download/v8.2.5/fast_float.h>
+<https://github.com/fastfloat/fast_float/releases/download/v8.2.6/fast_float.h>
 
 ## Benchmarking
 

@@ -56,6 +56,25 @@ Y_UNIT_TEST(TruncateTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Materialize) {
+    TCases cases{
+        {"use plato;materialize Input into $result;",
+         "USE plato;\n\nMATERIALIZE Input INTO $result;\n"},
+
+        {"materialize plato.Input on plato into $result;",
+         "MATERIALIZE plato.Input ON plato INTO $result;\n"},
+
+        {"use plato;materialize Input into $result;select * from $result;",
+         "USE plato;\n\nMATERIALIZE Input INTO $result;\n\nSELECT\n\t*\nFROM\n\t$result\n;\n"},
+
+        {"materialize (select * from plato.Input) on plato into $result;",
+         "MATERIALIZE (\n\tSELECT\n\t\t*\n\tFROM\n\t\tplato.Input\n) ON plato INTO $result;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(GrantPermissions) {
     TCases cases{
         {"use plato;grant connect, modify tables, list on `/Root` to user;", "USE plato;\n\nGRANT CONNECT, MODIFY TABLES, LIST ON `/Root` TO user;\n"},

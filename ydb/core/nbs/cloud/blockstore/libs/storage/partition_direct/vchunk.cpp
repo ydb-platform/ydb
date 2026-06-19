@@ -250,7 +250,7 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "\nVChunk" << VChunkConfig.DebugPrint() << "\n";
     sb << "DDiskStates: " << BlocksDirtyMap.DebugPrintDDiskState() << "\n";
     sb << "PBuffers:\n" << BlocksDirtyMap.DebugPrintPBuffers();
-    sb << "Inflight:\n" << PrintInflight();
+    sb << "Inflight(" << Inflight.size() << "):\n" << PrintInflight();
     sb << "PBuffersUsage:\n" << BlocksDirtyMap.DebugPrintPBuffersUsage();
     sb << "DDiskLocks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges()
        << "\n";
@@ -532,6 +532,7 @@ void TVChunk::DoFlush(bool force)
     for (auto& [route, hint]: flushBatch.TakeAllHints()) {
         auto flushExecutor = std::make_shared<TFlushRequestExecutor>(
             ActorSystem,
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             route,
@@ -615,6 +616,7 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
     for (auto& [host, hint]: hints.TakeAllHints()) {
         auto eraseExecutor = std::make_shared<TEraseRequestExecutor>(
             ActorSystem,
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             host,
@@ -721,10 +723,12 @@ void TVChunk::CleaningUp()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    Inflight.erase(std::remove_if(
-        Inflight.begin(),
-        Inflight.end(),
-        [](const IRequestExecutorWeakPtr& p) { return p.expired(); }));
+    Inflight.erase(
+        std::remove_if(
+            Inflight.begin(),
+            Inflight.end(),
+            [](const IRequestExecutorWeakPtr& p) { return p.expired(); }),
+        Inflight.end());
 
     if (InflightFlushesCount || InflightWritesCount) {
         return;

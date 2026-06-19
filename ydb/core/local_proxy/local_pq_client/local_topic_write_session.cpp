@@ -479,7 +479,9 @@ private:
         TBase::ValidateSettings(settings);
 
         Y_VALIDATE(settings.Codec_ == ECodec::RAW, "Compression is not supported for local topic write session");
-        Y_VALIDATE(!settings.BatchFlushInterval_, "BatchFlushInterval is not supported for local topic write session");
+        Y_VALIDATE(
+            settings.BatchFlushInterval_ == TDuration::Seconds(1),
+            "Custom BatchFlushInterval is not supported for local topic write session");
         Y_VALIDATE(!settings.BatchFlushSizeBytes_, "BatchFlushSizeBytes is not supported for local topic write session");
 
         const auto& eventHandlers = settings.EventHandlers_;

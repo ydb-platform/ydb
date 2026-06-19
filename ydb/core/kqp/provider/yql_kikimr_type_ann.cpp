@@ -1379,11 +1379,45 @@ private:
                 dataColums.emplace_back(TString(dataCol.Value()));
             }
 
+            const bool isFulltextIndex =
+                indexType == TIndexDescription::EType::GlobalFulltextPlain ||
+                indexType == TIndexDescription::EType::GlobalFulltextRelevance ||
+                indexType == TIndexDescription::EType::GlobalFulltextCompact ||
+                indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance;
+            // Fulltext index key columns are [prefix..., text]; the text column is the last one.
+            // More than one key column means the index has prefix columns.
+            if (isFulltextIndex && indexColums.size() > 1) {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndexPrefix()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                        "Fulltext index prefix columns support is disabled"));
+                    return TStatus::Error;
+                }
+                // Relevance scoring uses a corpus-global dictionary keyed by token only; with prefix
+                // columns as the leading sort key the same token scatters across prefix groups, which
+                // the streaming dictionary/borders build cannot aggregate. Not supported yet.
+                if (indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                        "Fulltext index prefix columns are not supported for compact relevance indexes"));
+                    return TStatus::Error;
+                }
+                // Prefix columns must be disjoint from the primary key (doc-id) columns:
+                // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
+                const THashSet<TString> pkColumns{meta->KeyColumnNames.begin(), meta->KeyColumnNames.end()};
+                for (size_t i = 0; i + 1 < indexColums.size(); ++i) {
+                    if (pkColumns.contains(indexColums[i])) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
+                            << "Fulltext index prefix column '" << indexColums[i]
+                            << "' must not be a primary key column"));
+                        return TStatus::Error;
+                    }
+                }
+            }
+
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDescription;
             TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
-            // fulltext index has per-column analyzers settings, single value for now
+            // fulltext index has per-column analyzers settings; the text column is the last index column
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
                 indexColums.empty() ? "<none>" : indexColums.back()
             );

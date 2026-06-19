@@ -25,7 +25,7 @@ class TReadSingleLocationRequestExecutor
 public:
     TReadSingleLocationRequestExecutor(
         NActors::TActorSystem const* actorSystem,
-        TChildLogTitle logTitle,
+        const TLogTitle& logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TReadHint readHint,
@@ -43,8 +43,16 @@ public:
     [[nodiscard]] NThreading::TFuture<TResponse> GetFuture() const override;
 
 private:
-    void OnReadResponse(const TDBGReadBlocksResponse& response);
+    void StartReading();
+    void OnReadResponse(
+        THostIndex host,
+        const TDBGReadBlocksResponse& response);
     void Reply(NProto::TError error);
+
+    void ScheduleHedging();
+    void ScheduleRequestTimeout();
+    void OnHedgingTimeout();
+    void OnRequestTimeout();
 
     NActors::TActorSystem const* ActorSystem;
     const TChildLogTitle LogTitle;
@@ -54,8 +62,11 @@ private:
     const TCallContextPtr CallContext;
     const std::shared_ptr<TReadBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
+    const TDuration HedgingDelay;
+    const TDuration RequestTimeout;
 
-    size_t TryNumber = 0;
+    THostMask Requested;
+    THostMask Failed;
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

@@ -22,7 +22,9 @@ private:
 private:
     const TString User;
     TString LogPrefix;
-    THashMap<NKikimrClient::EMessageFormat, THolder<IBatchCutter>> BatchCutters;
+
+    // codec -> batch cutter
+    THashMap<int, THolder<IBatchCutter>> BatchCutters;
 };
 
 NActors::IActor* CreateConsumerBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user);

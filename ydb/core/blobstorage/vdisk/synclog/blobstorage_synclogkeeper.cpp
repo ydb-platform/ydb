@@ -286,7 +286,13 @@ namespace NKikimr {
             void Handle(const TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
                 // This actor only requests PhantomFlagStorage snapshot on restart
                 // to rebuild ThresholdsStructure
-                KeepState.RecoverPhantomFlagStorage(std::move(ev->Get()->Snapshot));
+                auto* msg = ev->Get();
+                KeepState.RecoverPhantomFlagStorage(std::move(msg->Thresholds), msg->Eof);
+                if (!msg->Eof) {
+                    auto next = std::make_unique<TEvPhantomFlagStorageGetSnapshot>();
+                    next->ProcessedChunks = std::move(msg->ProcessedChunks);
+                    KeepState.ContinuePhantomFlagStorageSnapshot(std::move(next));
+                }
             }
 
             void Handle(const TEvLocalSyncData::TPtr& ev) {

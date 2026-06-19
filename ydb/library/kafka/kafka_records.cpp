@@ -168,6 +168,117 @@ void AppendLegacyRecords(
     }
 }
 
+template <typename TConsumer>
+void ForEachLegacyRecordBatch(
+    TKafkaReadable& recordsReadable,
+    TKafkaVersion magic,
+    bool allowCompressed,
+    TConsumer& consumer)
+{
+    while (recordsReadable.left() > 0) {
+        const TKafkaVersion entryMagic = recordsReadable.take(16);
+        if (entryMagic != magic) {
+            ythrow yexception() << "Kafka legacy record magic " << entryMagic
+                << " does not match expected magic " << magic;
+        }
+
+        TKafkaRecordBatchV0 entry;
+        entry.Read(recordsReadable, magic);
+
+        const ECompressionType compressionType = entry.Record.CompressionType();
+        if (compressionType == ECompressionType::NONE) {
+            consumer.OnUncompressed(entry);
+            continue;
+        }
+
+        if (!allowCompressed) {
+            ythrow yexception() << "Supported only CompressionType::NONE";
+        }
+        EnsureSupportedCompressionType(compressionType);
+        if (!entry.Record.Value) {
+            ythrow yexception() << "compressed Kafka legacy record has null value";
+        }
+
+        const auto& value = *entry.Record.Value;
+        const TString decompressed = DecompressRecordBatchPayload(
+            TStringBuf(value.data(), value.size()),
+            compressionType);
+        TBuffer innerBuffer(decompressed.data(), decompressed.size());
+        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(innerBuffer, magic);
+        consumer.OnCompressed(entry, compressionType, innerEntries);
+    }
+}
+
+struct TLegacyBatchConsumer {
+    TKafkaRecordBatch& Batch;
+    TKafkaVersion Magic;
+
+    void OnUncompressed(const TKafkaRecordBatchV0& entry) {
+        AppendLegacyRecord(Batch, entry, entry.Offset);
+    }
+
+    void OnCompressed(
+        const TKafkaRecordBatchV0& entry,
+        ECompressionType compressionType,
+        const std::vector<TKafkaRecordBatchV0>& innerEntries)
+    {
+        Batch.Attributes = static_cast<TKafkaRecordBatch::AttributesMeta::Type>(compressionType);
+        const std::optional<i64> wrapperTimestamp = Magic == 1
+            ? std::optional<i64>(entry.Record.Timestamp)
+            : std::nullopt;
+        AppendLegacyRecords(Batch, innerEntries, Magic, entry.Offset, wrapperTimestamp);
+    }
+};
+
+struct TLegacyHeaderConsumer {
+    TKafkaBatchHeader& Header;
+    TKafkaVersion Magic;
+
+    void OnUncompressed(const TKafkaRecordBatchV0& entry) {
+        AppendHeaderRecord(
+            entry.Offset,
+            Magic >= 1 ? entry.Record.Timestamp : 0);
+    }
+
+    void OnCompressed(
+        const TKafkaRecordBatchV0& entry,
+        ECompressionType /*compressionType*/,
+        const std::vector<TKafkaRecordBatchV0>& innerEntries)
+    {
+        Header.Attributes = entry.Record.Attributes;
+        const std::optional<i64> wrapperTimestamp = Magic == 1
+            ? std::optional<i64>(entry.Record.Timestamp)
+            : std::nullopt;
+
+        i64 absoluteBaseOffset = 0;
+        if (Magic == 1) {
+            absoluteBaseOffset = entry.Offset == 0 ? 0 : entry.Offset - innerEntries.back().Offset;
+        }
+
+        for (const auto& innerEntry : innerEntries) {
+            const i64 offset = Magic == 1
+                ? absoluteBaseOffset + innerEntry.Offset
+                : innerEntry.Offset;
+            const i64 timestamp = wrapperTimestamp.value_or(
+                Magic >= 1 ? innerEntry.Record.Timestamp : 0);
+            AppendHeaderRecord(offset, timestamp);
+        }
+    }
+
+private:
+    void AppendHeaderRecord(i64 offset, i64 timestamp) {
+        if (Header.RecordsCount == 0 && Magic >= 1) {
+            Header.BaseTimestamp = timestamp;
+            Header.MaxTimestamp = timestamp;
+        } else if (Magic >= 1) {
+            Header.MaxTimestamp = Max(Header.MaxTimestamp, timestamp);
+        }
+
+        Header.LastOffsetDelta = offset;
+        ++Header.RecordsCount;
+    }
+};
+
 } // namespace
 
 //
@@ -560,6 +671,85 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
 }
 
 
+//
+// TKafkaBatchHeader
+//
+TKafkaBatchHeader::TKafkaBatchHeader()
+    : BaseOffset(BaseOffsetMeta::Default)
+    , BatchLength(BatchLengthMeta::Default)
+    , PartitionLeaderEpoch(PartitionLeaderEpochMeta::Default)
+    , Magic(MagicMeta::Default)
+    , Crc(CrcMeta::Default)
+    , Attributes(AttributesMeta::Default)
+    , LastOffsetDelta(LastOffsetDeltaMeta::Default)
+    , BaseTimestamp(BaseTimestampMeta::Default)
+    , MaxTimestamp(MaxTimestampMeta::Default)
+    , ProducerId(ProducerIdMeta::Default)
+    , ProducerEpoch(ProducerEpochMeta::Default)
+    , BaseSequence(BaseSequenceMeta::Default)
+    , RecordsCount(RecordsCountMeta::Default) {
+}
+
+void TKafkaBatchHeader::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TKafkaBatchHeader";
+    }
+    NPrivate::Read<BaseOffsetMeta>(_readable, _version, BaseOffset);
+    NPrivate::Read<BatchLengthMeta>(_readable, _version, BatchLength);
+    NPrivate::Read<PartitionLeaderEpochMeta>(_readable, _version, PartitionLeaderEpoch);
+    NPrivate::Read<MagicMeta>(_readable, _version, Magic);
+    NPrivate::Read<CrcMeta>(_readable, _version, Crc);
+    NPrivate::Read<AttributesMeta>(_readable, _version, Attributes);
+    NPrivate::Read<LastOffsetDeltaMeta>(_readable, _version, LastOffsetDelta);
+    NPrivate::Read<BaseTimestampMeta>(_readable, _version, BaseTimestamp);
+    NPrivate::Read<MaxTimestampMeta>(_readable, _version, MaxTimestamp);
+    NPrivate::Read<ProducerIdMeta>(_readable, _version, ProducerId);
+    NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
+    NPrivate::Read<BaseSequenceMeta>(_readable, _version, BaseSequence);
+    NPrivate::Read<RecordsCountMeta>(_readable, _version, RecordsCount);
+    EnsureValidRecordBatchRecordsCount(RecordsCount);
+}
+
+void TKafkaBatchHeader::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TKafkaBatchHeader";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<BaseOffsetMeta>(_collector, _writable, _version, BaseOffset);
+    NPrivate::Write<BatchLengthMeta>(_collector, _writable, _version, BatchLength);
+    NPrivate::Write<PartitionLeaderEpochMeta>(_collector, _writable, _version, PartitionLeaderEpoch);
+    NPrivate::Write<MagicMeta>(_collector, _writable, _version, Magic);
+    NPrivate::Write<CrcMeta>(_collector, _writable, _version, Crc);
+    NPrivate::Write<AttributesMeta>(_collector, _writable, _version, Attributes);
+    NPrivate::Write<LastOffsetDeltaMeta>(_collector, _writable, _version, LastOffsetDelta);
+    NPrivate::Write<BaseTimestampMeta>(_collector, _writable, _version, BaseTimestamp);
+    NPrivate::Write<MaxTimestampMeta>(_collector, _writable, _version, MaxTimestamp);
+    NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, ProducerId);
+    NPrivate::Write<ProducerEpochMeta>(_collector, _writable, _version, ProducerEpoch);
+    NPrivate::Write<BaseSequenceMeta>(_collector, _writable, _version, BaseSequence);
+    NPrivate::Write<RecordsCountMeta>(_collector, _writable, _version, RecordsCount);
+}
+
+i32 TKafkaBatchHeader::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<BaseOffsetMeta>(_collector, _version, BaseOffset);
+    NPrivate::Size<BatchLengthMeta>(_collector, _version, BatchLength);
+    NPrivate::Size<PartitionLeaderEpochMeta>(_collector, _version, PartitionLeaderEpoch);
+    NPrivate::Size<MagicMeta>(_collector, _version, Magic);
+    NPrivate::Size<CrcMeta>(_collector, _version, Crc);
+    NPrivate::Size<AttributesMeta>(_collector, _version, Attributes);
+    NPrivate::Size<LastOffsetDeltaMeta>(_collector, _version, LastOffsetDelta);
+    NPrivate::Size<BaseTimestampMeta>(_collector, _version, BaseTimestamp);
+    NPrivate::Size<MaxTimestampMeta>(_collector, _version, MaxTimestamp);
+    NPrivate::Size<ProducerIdMeta>(_collector, _version, ProducerId);
+    NPrivate::Size<ProducerEpochMeta>(_collector, _version, ProducerEpoch);
+    NPrivate::Size<BaseSequenceMeta>(_collector, _version, BaseSequence);
+    NPrivate::Size<RecordsCountMeta>(_collector, _version, RecordsCount);
+    return _collector.Size;
+}
+
+
+
 
 //
 // TKafkaRecordV0
@@ -620,9 +810,8 @@ i32 TKafkaRecordV0::Size(TKafkaVersion _version) const {
 }
 
 
-
 //
-// TKafkaRecordV0
+// TKafkaRecordBatchV0
 //
 TKafkaRecordBatchV0::TKafkaRecordBatchV0()
     : Offset(OffsetMeta::Default) {
@@ -668,43 +857,37 @@ void NPrivate::ReadLegacyRecordBatch(
     batch.BaseOffset = 0;
     batch.BaseTimestamp = 0;
 
-    while (recordsReadable.left() > 0) {
-        const TKafkaVersion entryMagic = recordsReadable.take(16);
-        if (entryMagic != magic) {
-            ythrow yexception() << "Kafka legacy record magic " << entryMagic << " does not match expected magic " << magic;
-        }
-
-        TKafkaRecordBatchV0 entry;
-        entry.Read(recordsReadable, magic);
-
-        const ECompressionType compressionType = entry.Record.CompressionType();
-        if (compressionType == ECompressionType::NONE) {
-            AppendLegacyRecord(batch, entry, entry.Offset);
-            continue;
-        }
-
-        if (!readable.GetAllowCompressed()) {
-            ythrow yexception() << "Supported only CompressionType::NONE";
-        }
-        EnsureSupportedCompressionType(compressionType);
-        if (!entry.Record.Value) {
-            ythrow yexception() << "compressed Kafka legacy record has null value";
-        }
-
-        batch.Attributes = static_cast<TKafkaRecordBatch::AttributesMeta::Type>(compressionType);
-        const auto& value = *entry.Record.Value;
-        const TString decompressed = DecompressRecordBatchPayload(
-            TStringBuf(value.data(), value.size()),
-            compressionType);
-        TBuffer innerBuffer(decompressed.data(), decompressed.size());
-        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(innerBuffer, magic);
-        const std::optional<i64> wrapperTimestamp = magic == 1
-            ? std::optional<i64>(entry.Record.Timestamp)
-            : std::nullopt;
-        AppendLegacyRecords(batch, innerEntries, magic, entry.Offset, wrapperTimestamp);
-    }
+    TLegacyBatchConsumer consumer{batch, magic};
+    ForEachLegacyRecordBatch(recordsReadable, magic, readable.GetAllowCompressed(), consumer);
 
     batch.LastOffsetDelta = batch.Records.empty() ? 0 : batch.Records.back().OffsetDelta;
+}
+
+void ReadLegacyRecordBatchHeaderFields(
+    TKafkaReadable& recordsReadable,
+    TKafkaVersion magic,
+    bool allowCompressed,
+    TKafkaBatchHeader& header)
+{
+    TLegacyHeaderConsumer consumer{header, magic};
+    ForEachLegacyRecordBatch(recordsReadable, magic, allowCompressed, consumer);
+}
+
+TKafkaBatchHeader ReadLegacyRecordBatchHeader(
+    TKafkaReadable& readable,
+    TKafkaVersion magic,
+    size_t length)
+{
+    const auto data = readable.Bytes(length);
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable recordsReadable(buffer);
+
+    // Legacy batches (magic 0/1) do not have a v2 RecordBatch header on wire.
+    // BaseSequence, ProducerId, Crc, etc. stay at ctor defaults.
+    TKafkaBatchHeader header;
+    header.Magic = magic;
+    ReadLegacyRecordBatchHeaderFields(recordsReadable, magic, readable.GetAllowCompressed(), header);
+    return header;
 }
 
 TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version) {
@@ -725,6 +908,33 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
     TKafkaWritable writable(buffer);
     batch.Write(writable, version);
     return buffer.AsString();
+}
+
+std::optional<TKafkaBatchHeader> ReadKafkaBatchHeader(TStringBuf data, TKafkaVersion version) {
+    static constexpr size_t RecordBatchMagicOffset =
+        sizeof(TKafkaInt64) + sizeof(TKafkaInt32) + sizeof(TKafkaInt32);
+
+    if (data.size() <= RecordBatchMagicOffset) {
+        return std::nullopt;
+    }
+
+    const auto magic = static_cast<TKafkaVersion>(static_cast<ui8>(data[RecordBatchMagicOffset]));
+
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable readable(buffer);
+    readable.SetAllowCompressed(true);
+
+    try {
+        if (magic < TKafkaRecordBatch::MagicMeta::Default) {
+            return ReadLegacyRecordBatchHeader(readable, magic, data.size());
+        }
+
+        TKafkaBatchHeader header;
+        header.Read(readable, version);
+        return header;
+    } catch (const yexception&) {
+        return std::nullopt;
+    }
 }
 
 ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record) {

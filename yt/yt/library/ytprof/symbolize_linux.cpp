@@ -48,8 +48,8 @@ public:
                 continue;
             }
 
-            TString name;
-            TString demangledName;
+            std::string name;
+            std::string demangledName;
             if (!dlinfo.dli_sname) {
                 auto offset = reinterpret_cast<intptr_t>(ip) - reinterpret_cast<intptr_t>(dlinfo.dli_fbase);
                 auto filename = TFsPath{dlinfo.dli_fname}.Basename();
@@ -68,9 +68,9 @@ public:
 private:
     NProto::Profile* const Profile_;
 
-    THashMap<TString, ui64> Strings_;
+    THashMap<std::string, ui64> Strings_;
 
-    ui64 SymbolizeString(const TString& str)
+    ui64 SymbolizeString(const std::string& str)
     {
         auto it = Strings_.find(str);
         if (it != Strings_.end()) {
@@ -141,8 +141,8 @@ public:
         const TElf& Elf_;
     };
 
-    explicit TElf(const TString& path)
-        : FileMap_(path)
+    explicit TElf(const std::string& path)
+        : FileMap_(path.c_str())
     {
         FileMap_.Map(0, FileMap_.GetFile().GetLength());
 
@@ -242,7 +242,7 @@ public:
     const char* end() const { return Mapped_ + ElfSize_; }
     size_t size() const { return ElfSize_; }
 
-    TString GetBuildId() const
+    std::string GetBuildId() const
     {
         for (size_t idx = 0; idx < Header_->e_phnum; ++idx) {
             const TElfPhdr& phdr = ProgramHeaders_[idx];
@@ -255,7 +255,7 @@ public:
         return {};
     }
 
-    static TString GetBuildId(const char* nhdrPos, size_t nhdrSize)
+    static std::string GetBuildId(const char* nhdrPos, size_t nhdrSize)
     {
         const char* nhdrEnd = nhdrPos + nhdrSize;
 
@@ -353,8 +353,8 @@ public:
         const void* AddressBegin;
         const void* AddressEnd;
 
-        TString Name;
-        TString BuildId;
+        std::string Name;
+        std::string BuildId;
 
         TElfPtr Elf;
     };
@@ -379,7 +379,7 @@ public:
         return Objects_;
     }
 
-    static TString GetBuildId(dl_phdr_info* info)
+    static std::string GetBuildId(dl_phdr_info* info)
     {
         for (size_t header_index = 0; header_index < info->dlpi_phnum; ++header_index) {
             const auto& phdr = info->dlpi_phdr[header_index];
@@ -395,7 +395,7 @@ private:
     std::vector<TSymbol> Symbols_;
     std::vector<TObject> Objects_;
 
-    THashMap<TString, TElfPtr> ObjectNameToElf_;
+    THashMap<std::string, TElfPtr> ObjectNameToElf_;
 
     template <typename T>
     static const T* Find(const void* address, const std::vector<T>& vec)
@@ -529,17 +529,17 @@ private:
         __msan_unpoison_string(info->dlpi_name);
 #endif
 
-        TString objectName = info->dlpi_name;
+        std::string objectName = info->dlpi_name;
         auto buildId = GetBuildId(info);
 
         /// If the name is empty and there is a non-empty build-id - it's main executable.
         /// Find a elf file for the main executable and set the build-id.
         if (objectName.empty()) {
-            objectName = TFsPath{"/proc/self/exe"}.ReadLink();
+            objectName = TFsPath{"/proc/self/exe"}.ReadLink().GetPath();
         } else {
             TFsPath debugInfoPath = TFsPath("/usr/lib/debug") / TFsPath{objectName}.Basename();
             if (debugInfoPath.Exists()) {
-                objectName = debugInfoPath;
+                objectName = debugInfoPath.GetPath();
             }
         }
 
@@ -639,7 +639,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetVersion()
+std::string GetVersion()
 {
     return "0.3";
 }
@@ -712,10 +712,10 @@ private:
     TSymbolIndex SymbolIndex_;
 
     THashMap<const TSymbolIndex::TObject*, ui64> Objects_;
-    THashMap<TString, ui64> Strings_;
+    THashMap<std::string, ui64> Strings_;
     THashSet<const void*> Functions_;
 
-    ui64 AddString(const TString& str)
+    ui64 AddString(const std::string& str)
     {
         auto it = Strings_.find(str);
         if (it != Strings_.end()) {
@@ -820,9 +820,9 @@ std::pair<void*, void*> GetVdsoRange()
 
 static int OnBuildIdPhdr(struct dl_phdr_info *info, size_t /*size*/, void *data)
 {
-    auto buildId = reinterpret_cast<std::optional<TString>*>(data);
+    auto buildId = reinterpret_cast<std::optional<std::string>*>(data);
 
-    TString objectName = info->dlpi_name;
+    std::string objectName = info->dlpi_name;
     if (objectName.empty()) {
         *buildId = TSymbolIndex::GetBuildId(info);
     }
@@ -830,9 +830,9 @@ static int OnBuildIdPhdr(struct dl_phdr_info *info, size_t /*size*/, void *data)
     return 0;
 }
 
-std::optional<TString> GetBuildId()
+std::optional<std::string> GetBuildId()
 {
-    std::optional<TString> buildId;
+    std::optional<std::string> buildId;
     dl_iterate_phdr(OnBuildIdPhdr, &buildId);
     return buildId;
 }
@@ -850,7 +850,7 @@ void Symbolize(NProto::Profile* profile, const TSymbolizeOptions& options)
 
 void AddBuildInfo(NProto::Profile* profile, const TBuildInfo& buildInfo)
 {
-    auto addComment = [&] (const TString& comment) {
+    auto addComment = [&] (const std::string& comment) {
         auto id = profile->string_table_size();
         profile->add_string_table(comment);
         profile->add_comment(id);

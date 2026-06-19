@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
+        const auto hosts = THostMask::MakeAll(5);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
             const THostIndex selected = oracle.SelectBestPBufferHost(
-                hostIndexes,
+                hosts,
                 EOperation::WriteToManyPBuffers);
 
             UNIT_ASSERT_VALUES_EQUAL(2u, selected);
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        const std::vector<THostIndex> hostIndexes = {3};
+        const auto hosts = THostMask::MakeOne(3);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
             const THostIndex selected = oracle.SelectBestPBufferHost(
-                hostIndexes,
+                hosts,
                 EOperation::WriteToManyPBuffers);
 
             UNIT_ASSERT_VALUES_EQUAL(3u, selected);
@@ -111,7 +111,9 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Even if some non-listed host has a lower inflight count, the
         // selection must be limited to the supplied hostIndexes.
-        const std::vector<THostIndex> hostIndexes = {0, 3};
+        THostMask hosts;
+        hosts.Set(0);
+        hosts.Set(3);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -127,7 +129,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // the minimum).
         for (size_t iter = 0; iter < 100; ++iter) {
             const THostIndex selected = oracle.SelectBestPBufferHost(
-                hostIndexes,
+                hosts,
                 EOperation::WriteToManyPBuffers);
 
             UNIT_ASSERT_VALUES_EQUAL(3u, selected);
@@ -143,7 +145,10 @@ Y_UNIT_TEST_SUITE(TOracle)
         // sampling, every tied host must have a roughly equal probability of
         // being selected. We verify this by sampling a large number of times
         // and checking that every candidate appears at least once.
-        const std::vector<THostIndex> hostIndexes = {1, 2, 4};
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(2);
+        hosts.Set(4);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -151,7 +156,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const size_t iterations = 3000;
         for (size_t iter = 0; iter < iterations; ++iter) {
             const THostIndex selected = oracle.SelectBestPBufferHost(
-                hostIndexes,
+                hosts,
                 EOperation::WriteToManyPBuffers);
             ++counts[selected];
         }
@@ -162,7 +167,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // Expected ~1/3 of iterations each, allow generous tolerance.
         const size_t expected = iterations / 3;
         const size_t tolerance = expected / 2;   // 50% tolerance
-        for (auto hostIndex: hostIndexes) {
+        for (auto hostIndex: hosts) {
             const size_t count = counts[hostIndex];
             UNIT_ASSERT_C(
                 count + tolerance >= expected && count <= expected + tolerance,
@@ -179,7 +184,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Hosts with inflight equal to the (non-best) tie value must never be
         // picked - only ties at the global minimum are randomized.
-        const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
+        const auto hosts = THostMask::MakeAll(5);
 
         TOracle oracle(storageConfig, nullptr);
 
@@ -191,7 +196,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         for (size_t iter = 0; iter < 200; ++iter) {
             const THostIndex selected =
-                oracle.SelectBestPBufferHost(hostIndexes, EOperation::Flush);
+                oracle.SelectBestPBufferHost(hosts, EOperation::Flush);
 
             UNIT_ASSERT_VALUES_EQUAL(2u, selected);
         }

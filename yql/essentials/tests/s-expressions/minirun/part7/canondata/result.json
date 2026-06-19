@@ -307,6 +307,20 @@
             "uri": "https://{canondata_backend}/1937424/fdec47b84b4fdc9bcfbdb62d97078a9e82e64468/resource.tar.gz#test.test_Join-CommonJoinCoreSortedLeft-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Join-ListJoinCore-default.txt-Debug]": [
+        {
+            "checksum": "466e642640bbca7ecbbc277200d4ed33",
+            "size": 972,
+            "uri": "https://{canondata_backend}/1889210/d8cf4f29f3b12a7f532ef52c2e2d59bfeab373f0/resource.tar.gz#test.test_Join-ListJoinCore-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Join-ListJoinCore-default.txt-Results]": [
+        {
+            "checksum": "9a03ade521fdc05ee27759334fbc266b",
+            "size": 1048,
+            "uri": "https://{canondata_backend}/1889210/d8cf4f29f3b12a7f532ef52c2e2d59bfeab373f0/resource.tar.gz#test.test_Join-ListJoinCore-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Lib-Agg_Bit_Or-default.txt-Debug]": [
         {
             "checksum": "618a15bd97761ab6c236fa909736d69d",
@@ -571,6 +585,20 @@
             "checksum": "732f016333f322b20e5d44a025ddd280",
             "size": 4524,
             "uri": "https://{canondata_backend}/1937424/639f8d4c922a1612eed16165354ac2003260e838/resource.tar.gz#test.test_Optimizers-VisitAsGuess-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Pure-Cons-default.txt-Debug]": [
+        {
+            "checksum": "b0333bdd28d68c266fec9d14f0a8069d",
+            "size": 136,
+            "uri": "https://{canondata_backend}/1599023/6a21aac9653d6058614adb39bc0acceabaa8a0d8/resource.tar.gz#test.test_Pure-Cons-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Pure-Cons-default.txt-Results]": [
+        {
+            "checksum": "f1e7d247c6ca7cb58ce878f5de7b9c17",
+            "size": 212,
+            "uri": "https://{canondata_backend}/1599023/6a21aac9653d6058614adb39bc0acceabaa8a0d8/resource.tar.gz#test.test_Pure-Cons-default.txt-Results_/results.txt"
         }
     ],
     "test.test[Result-ResultColumns-default.txt-Debug]": [

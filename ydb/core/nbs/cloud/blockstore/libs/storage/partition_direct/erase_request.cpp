@@ -11,12 +11,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TEraseRequestExecutor::TEraseRequestExecutor(
     NActors::TActorSystem* actorSystem,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     THostIndex host,
     TEraseHint hint,
     NWilson::TSpan span)
     : ActorSystem(actorSystem)
+    , LogTitle(logTitle.GetChildWithTags(
+          GetCycleCount(),
+          {{"t", "BatchErase"}, {"h", PrintHostIndex(host)}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
@@ -30,7 +34,8 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TEraseRequestExecutor. Reply not sent");
+            "%s Reply not sent",
+            LogTitle.GetWithTime().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -55,7 +60,17 @@ void TEraseRequestExecutor::Run()
 TString TEraseRequestExecutor::Print()
 {
     TStringBuilder result;
-    result << "TEraseRequestExecutor";
+    result << LogTitle.GetWithTime();
+    result << "{";
+    bool first = true;
+    for (const auto& segment: Hint.Segments) {
+        result << " " << segment.Lsn;
+        if (!first) {
+            result << ",";
+        }
+        first = false;
+    }
+    result << "}";
     return result;
 }
 
@@ -77,7 +92,8 @@ void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TEraseRequestExecutor. Erase failed: %s",
+            "%s Erase failed: %s",
+            LogTitle.GetWithTime().c_str(),
             FormatError(response.Error).c_str());
 
         Reply({}, std::move(lsns));

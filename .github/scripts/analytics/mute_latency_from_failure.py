@@ -380,14 +380,26 @@ def _git_rc(repo: str, *args: str) -> Tuple[int, str, str]:
     return r.returncode, r.stdout, r.stderr
 
 
+def _first_parent_sha(repo: str, sha: str) -> Optional[str]:
+    rc, stdout, _ = _git_rc(repo, 'rev-parse', '--verify', f'{sha}^1')
+    if rc != 0:
+        return None
+    return stdout.strip()
+
+
 def commit_touches_file(repo: str, sha: str, rel_path: str) -> bool:
-    """True iff sha actually modifies rel_path (uses commit tree, not file history).
+    """True iff sha modifies rel_path relative to its first parent.
+
+    Uses first-parent diff so merge commits (e.g. manual mute PR merges) are detected.
+    ``git diff-tree -r`` combined diff can miss files that match one merge parent.
 
     With a shallow clone and no parent commit, ``git rev-list -- path`` can falsely
-    list HEAD as touching the file, while ``git show`` may treat the whole file as
-    newly added. ``git diff-tree`` does not have this problem.
+    list HEAD as touching the file; parent lookup fails and this returns False.
     """
-    rc, stdout, _ = _git_rc(repo, 'diff-tree', '--no-commit-id', '--name-only', '-r', sha)
+    parent = _first_parent_sha(repo, sha)
+    if parent is None:
+        return False
+    rc, stdout, _ = _git_rc(repo, 'diff', '--name-only', parent, sha, '--', rel_path)
     if rc != 0 or not stdout.strip():
         return False
     return rel_path in stdout.splitlines()
@@ -495,9 +507,12 @@ def read_muted_ya(repo: str, sha: str, rel_path: str) -> List[str]:
 
 
 def _diff_lines(repo: str, sha: str, rel_path: str, prefix: str) -> List[str]:
-    """Return lines starting with `prefix` (+/-) from the diff of sha for rel_path."""
+    """Return lines starting with `prefix` (+/-) from first-parent diff for rel_path."""
+    parent = _first_parent_sha(repo, sha)
+    if parent is None:
+        return []
     try:
-        diff = _git(repo, 'show', '--format=', '--unified=0', sha, '--', rel_path)
+        diff = _git(repo, 'diff', '--unified=0', parent, sha, '--', rel_path)
     except RuntimeError:
         return []
     other = '++' if prefix == '+' else '--'

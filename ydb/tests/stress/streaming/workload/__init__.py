@@ -55,12 +55,31 @@ class Workload():
             """
         )
 
+    def create_table(self):
+        logger.info("Workload::create_table")
+        self.pool.execute_with_retries(
+            f"""
+                CREATE TABLE table_name (
+                    key Utf8,
+                    value Utf8,
+                    PRIMARY KEY (key)
+                );
+            """
+        )
+        self.pool.execute_with_retries(
+            f"""
+                INSERT INTO table_name (key, value) VALUES ('key1', 'value1');
+            """
+        )
+
     def create_streaming_query(self, external):
         logger.info("Workload::create_streaming_query")
         source = f"`{self.prefix}/source_name`." if external else ""
         self.pool.execute_with_retries(
             f"""
                 CREATE STREAMING QUERY `{self.prefix}/query_name_{'ext' if external else 'loc'}` AS DO BEGIN
+                $precompute_data = SELECT value FROM table_name LIMIT 1;
+
                 $input = (
                     SELECT * FROM
                         {source}`{self.input_topic}` WITH (
@@ -79,7 +98,7 @@ class Workload():
                         HoppingWindow(CAST(time AS Timestamp), 'PT1S', 'PT1S')
                 );
 
-                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())) || $precompute_data))
                     FROM $number_errors
                 );
 

@@ -304,6 +304,7 @@ public:
                 .NotUnderDomainUpgrade()
                 .NotDeleted()
                 .IsColumnTable()
+                .NotReadOnlyColumnTable()
                 .NotUnderDeleting()
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();

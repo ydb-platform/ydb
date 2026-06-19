@@ -43,6 +43,7 @@ runs:
             --test-threads "${{ inputs.test_threads }}"
             --link-threads "${{ inputs.link_threads }}"
             --output "$out_dir"
+            --no-dir-outputs
           )
           if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
             params+=(--bazel-remote-store --bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")

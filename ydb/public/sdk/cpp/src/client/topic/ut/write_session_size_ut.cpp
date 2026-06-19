@@ -96,11 +96,16 @@ Y_UNIT_TEST_SUITE(WriteSessionGrpcSize) {
         const size_t maxSize = NGrpc::ProtoMessageFieldSize(2, 10);
         NGrpc::TRequestSizeLimiter limiter(2, maxSize);
 
+        // The first block is allowed even when it is larger than the limit:
+        // otherwise a single oversized block would make the send loop stuck.
         UNIT_ASSERT(limiter.Empty());
         UNIT_ASSERT(limiter.CanAdd(maxSize * 2));
 
         limiter.Add(5);
         UNIT_ASSERT(!limiter.Empty());
+
+        // For non-empty requests the limiter checks the full serialized
+        // envelope size: field #2 tag + body length + body bytes.
         UNIT_ASSERT(limiter.CanAdd(5));
         UNIT_ASSERT(!limiter.CanAdd(6));
     }

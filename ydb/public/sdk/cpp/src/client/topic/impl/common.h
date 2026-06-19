@@ -27,7 +27,7 @@ std::string IssuesSingleLineString(const NYdb::NIssue::TIssues& issues);
 namespace NWriteSessionGrpc {
 
 inline size_t GetMaxGrpcMessageSize() {
-    return 120 * 1024 * 1024;
+    return 120_MB;
 }
 
 using TWireFormatLite = google::protobuf::internal::WireFormatLite;

@@ -109,6 +109,61 @@ result.close().await?;
 
 {% include [steps/06_param_queries.md](../_includes/steps/06_param_queries.md) %}
 
-Параметры задаются функцией `.param(name, value)` или макросом `ydb_params!`.
+Параметры задаются функцией `.param(name, value)` или макросом `ydb_params!`:
 
-В Rust SDK явное управление транзакциями (через `Begin` и `Commit`) недоступно для клиентского кода. Вместо этого предлагается использовать ретраер `retry_transaction`, в котором можно задать режим изоляции [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) для интерактивных транзакций. Для одиночных вызовов на query-клиенте  можно поменять режим изоляции по умолчанию с помощью опции `.with_tx_mode(QueryTxMode::SnapshotReadOnly)`. По умолчанию для запросов на query-клиенте используется режим ImplicitTx, реальный режим изоляции определяет серверная сторона {{ ydb-short-name }}.
+```rust
+use ydb::ydb_params;
+
+// по одному параметру
+qc.exec("UPSERT INTO `native/query/series` (series_id, title) VALUES ($id, $title)")
+    .param("$id", b"series-1".to_vec())
+    .param("$title", "Example title")
+    .await?;
+
+// несколько параметров через макрос
+qc.exec("UPSERT INTO `native/query/series` (series_id, title) VALUES ($id, $title)")
+    .params(ydb_params!(
+        "$id" => b"series-2".to_vec(),
+        "$title" => "Another title",
+    ))
+    .await?;
+```
+
+{% include [steps/10_transaction_control.md](../_includes/steps/10_transaction_control.md) %}
+
+В Rust SDK явное управление транзакциями (через `Begin` и `Commit`) недоступно для клиентского кода. Вместо этого используйте `retry_transaction` с [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) для интерактивных транзакций. Для одиночного SQL-запроса режим изоляции задаётся через `.with_tx_mode(...)`.
+
+Один запрос в режиме snapshot read-only:
+
+```rust
+use ydb::QueryTxMode;
+
+let mut row = qc
+    .query_row("SELECT title FROM `native/query/series` WHERE series_id = $id")
+    .param("$id", b"series-1".to_vec())
+    .with_tx_mode(QueryTxMode::SnapshotReadOnly)
+    .idempotent(true)
+    .await?;
+```
+
+Интерактивная транзакция с несколькими операциями:
+
+```rust
+use ydb::{QueryTransactionOptions, QueryTxMode};
+
+let mut qc = qc.clone_with_transaction_options(
+    QueryTransactionOptions::new().with_mode(QueryTxMode::SerializableReadWrite),
+);
+
+let title: String = qc
+    .retry_transaction(async |tx| {
+        let mut row = tx
+            .query_row("SELECT title FROM `native/query/series` WHERE series_id = $id")
+            .param("$id", b"series-1".to_vec())
+            .await?;
+        Ok(row.remove_field_by_name("title")?.try_into()?)
+    })
+    .await?;
+```
+
+По умолчанию для запросов на query-клиенте используется режим ImplicitTx, реальный режим изоляции определяет серверная сторона {{ ydb-short-name }}.

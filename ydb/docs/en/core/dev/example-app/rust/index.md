@@ -109,6 +109,61 @@ result.close().await?;
 
 {% include [steps/06_param_queries.md](../_includes/steps/06_param_queries.md) %}
 
-Per-call parameters use `.param(name, value)` or the `ydb_params!` macro.
+Per-call parameters use `.param(name, value)` or the `ydb_params!` macro:
 
-Explicit isolation modes are set with `.with_tx_mode(QueryTxMode::SnapshotReadOnly)` (for QueryClient methods that execute one SQL statement) or [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) for interactive transactions. By default, such calls use implicit transaction control — the server infers isolation from the SQL statement.
+```rust
+use ydb::ydb_params;
+
+// one parameter at a time
+qc.exec("UPSERT INTO `native/query/series` (series_id, title) VALUES ($id, $title)")
+    .param("$id", b"series-1".to_vec())
+    .param("$title", "Example title")
+    .await?;
+
+// several parameters via macro
+qc.exec("UPSERT INTO `native/query/series` (series_id, title) VALUES ($id, $title)")
+    .params(ydb_params!(
+        "$id" => b"series-2".to_vec(),
+        "$title" => "Another title",
+    ))
+    .await?;
+```
+
+{% include [steps/10_transaction_control.md](../_includes/steps/10_transaction_control.md) %}
+
+The Rust SDK does not expose explicit `Begin` / `Commit` to application code. Use `retry_transaction` with [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) for interactive transactions. For a single SQL statement, set isolation with `.with_tx_mode(...)`.
+
+Single statement in snapshot read-only mode:
+
+```rust
+use ydb::QueryTxMode;
+
+let mut row = qc
+    .query_row("SELECT title FROM `native/query/series` WHERE series_id = $id")
+    .param("$id", b"series-1".to_vec())
+    .with_tx_mode(QueryTxMode::SnapshotReadOnly)
+    .idempotent(true)
+    .await?;
+```
+
+Interactive transaction with multiple operations:
+
+```rust
+use ydb::{QueryTransactionOptions, QueryTxMode};
+
+let mut qc = qc.clone_with_transaction_options(
+    QueryTransactionOptions::new().with_mode(QueryTxMode::SerializableReadWrite),
+);
+
+let title: String = qc
+    .retry_transaction(async |tx| {
+        let mut row = tx
+            .query_row("SELECT title FROM `native/query/series` WHERE series_id = $id")
+            .param("$id", b"series-1".to_vec())
+            .await?;
+        Ok(row.remove_field_by_name("title")?.try_into()?)
+    })
+    .await?;
+```
+
+By default, such calls use implicit transaction control — the server infers isolation from the SQL statement.

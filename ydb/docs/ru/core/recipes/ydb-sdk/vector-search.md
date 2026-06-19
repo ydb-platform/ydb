@@ -148,8 +148,13 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
+    ```rust
+    use ydb::{ClientBuilder, YdbResult};
+
+    let client = ClientBuilder::new_from_connection_string(connection_string)?.client()?;
+    client.wait().await?;
+    let mut qc = client.query_client().clone_with_idempotent_operations(true);
+    ```
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -301,8 +306,17 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
+    ```rust
+    qc.exec(format!(
+        "CREATE TABLE IF NOT EXISTS `{table_name}` (
+            id Utf8,
+            document Utf8,
+            embedding String,
+            PRIMARY KEY (id)
+        );"
+    ))
+    .await?;
+    ```
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -896,8 +910,35 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
+    ```rust
+    use ydb::{Bytes, Value, ydb_struct};
+
+    fn convert_vector_to_bytes(vector: &[f32]) -> Bytes {
+        let mut buf = Vec::with_capacity(vector.len() * 4 + 1);
+        for v in vector {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        buf.push(0x01);
+        Bytes::from(buf)
+    }
+
+    let example = ydb_struct!(
+        "id" => "",
+        "document" => "",
+        "embedding" => Bytes::default(),
+    );
+    let rows: Vec<Value> = items
+        .iter()
+        .map(|item| ydb_struct!(
+            "id" => item.id,
+            "document" => item.document,
+            "embedding" => convert_vector_to_bytes(&item.embedding),
+        ))
+        .collect();
+    let list = Value::list_from(example, rows)?;
+
+    qc.exec(insert_query).param("$items", list).await?;
+    ```
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1182,8 +1223,22 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
+    ```rust
+    let temp_index_name = format!("{index_name}__temp");
+    qc.exec(format!(
+        "ALTER TABLE `{table_name}`
+         ADD INDEX {temp_index_name}
+         GLOBAL USING vector_kmeans_tree
+         ON (embedding)
+         WITH ({strategy}, vector_type=\"Float\", vector_dimension={dimension},
+               levels={levels}, clusters={clusters});"
+    ))
+    .await?;
+    qc.exec(format!(
+        "ALTER TABLE `{table_name}` RENAME INDEX `{temp_index_name}` TO `{index_name}`;"
+    ))
+    .await?;
+    ```
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1791,8 +1846,21 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
+    ```rust
+    let view_index = index_name.map(|n| format!("VIEW {n}")).unwrap_or_default();
+    let sort_order = if strategy.ends_with("Similarity") { "DESC" } else { "ASC" };
+
+    let mut stream = qc
+        .query(search_query)
+        .param("$embedding", convert_vector_to_bytes(&embedding))
+        .await?;
+    while let Some(result_set) = stream.next_result_set().await? {
+        for mut row in result_set {
+            // id, document, score
+        }
+    }
+    stream.close().await?;
+    ```
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2180,8 +2248,19 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
+    Полный пример на GitHub: [`vector-search.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/vector-search.rs).
+
+    ```rust
+    // drop → create table → insert → search → add index → search with VIEW
+    drop_vector_table_if_exists(&mut qc, table_name).await?;
+    create_vector_table(&mut qc, table_name).await?;
+    insert_items_as_bytes(&mut qc, table_name, &items).await?;
+    let hits = search_items_as_bytes(&mut qc, table_name, &[1.0, 0.0, 0.0],
+        "CosineSimilarity", 3, None).await?;
+    add_vector_index(&mut qc, table_name, index_name, "similarity=cosine", 3, 1, 3).await?;
+    let hits = search_items_as_bytes(&mut qc, table_name, &[1.0, 0.0, 0.0],
+        "CosineSimilarity", 3, Some(index_name)).await?;
+    ```
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

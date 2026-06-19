@@ -965,9 +965,17 @@
   use ydb::QueryTxMode;
 
   let mut qc = client.query_client();
+
+  // Online RO — согласованное чтение (allow_inconsistent_reads = false)
   let mut row = qc
       .query_row("SELECT 1 AS one")
       .with_tx_mode(QueryTxMode::OnlineReadOnly)
+      .await?;
+
+  // Online inconsistent RO — максимальная производительность (allow_inconsistent_reads = true)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::OnlineReadOnlyInconsistent)
       .await?;
   ```
 

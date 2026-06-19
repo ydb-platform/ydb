@@ -846,9 +846,17 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   use ydb::QueryTxMode;
 
   let mut qc = client.query_client();
+
+  // Online RO — consistent reads (allow_inconsistent_reads = false)
   let mut row = qc
       .query_row("SELECT 1 AS one")
       .with_tx_mode(QueryTxMode::OnlineReadOnly)
+      .await?;
+
+  // Online inconsistent RO — higher throughput (allow_inconsistent_reads = true)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::OnlineReadOnlyInconsistent)
       .await?;
   ```
 

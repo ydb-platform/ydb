@@ -43,7 +43,7 @@ TBatchInfo GetBatchInfo(const TPersQueueReadEvent::TDataReceivedEvent::TCompress
     }
 
     const ui32 messageCount = static_cast<ui32>(header->RecordsCount);
-    const auto [error, maxSeqNo] = NKafka::GetMaxSeqNo(*header, message.GetSeqNo());
+    const auto [error, maxSeqNo] = NKafka::GetBatchMaxSeqNo(*header, message.GetSeqNo());
     if (error != NKafka::EKafkaErrors::NONE_ERROR) {
         return {};
     }

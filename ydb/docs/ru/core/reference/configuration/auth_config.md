@@ -291,7 +291,7 @@ auth_config:
 
 ## Конфигурация аутентификации по клиентскому сертификату {#certificate-auth-config}
 
-{{ ydb-short-name }} поддерживает [аутентификацию по клиентскому сертификату](../../security/authentication.md#client-certificate). Правила проверки сертификатов задаются в секции [`client_certificate_authorization`](client_certificate_authorization.md). Дополнительно в секции `auth_config` может указываться суффикс имён пользователей, аутентифицированных по сертификату:
+{{ ydb-short-name }} поддерживает [аутентификацию по клиентскому сертификату](../../security/authentication.md#client-certificate). Правила проверки сертификатов задаются в секции [client_certificate_authorization](client_certificate_authorization.md). Дополнительно в секции `auth_config` может указываться суффикс имён пользователей, аутентифицированных по сертификату:
 
 #|
 || Параметр | Описание ||

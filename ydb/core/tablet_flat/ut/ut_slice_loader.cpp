@@ -106,6 +106,11 @@ namespace {
             return Part->Store->PageCollectionBytes(Room);
         }
 
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return NTable::NPage::TPageLocation::FromPageIndex(pageId, Page(pageId).Size);
+        }
+
     private:
         TIntrusiveConstPtr<NTest::TPartStore> Part;
         ui32 Room;

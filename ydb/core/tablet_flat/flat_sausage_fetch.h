@@ -15,19 +15,22 @@ namespace NPageCollection {
     struct TLoadedPage {
         TLoadedPage() = default;
 
-        TLoadedPage(TPageId page, TSharedData data)
-            : PageId(page)
+        TLoadedPage(NTable::NPage::TPageLocation location, TSharedData data)
+            : Location(location)
             , Data(std::move(data))
         {
 
         }
 
+        TLoadedPage(TPageId page, TSharedData data) = delete;
+
         explicit operator bool() const noexcept
         {
-            return Data && PageId != Max<TPageId>();
+            return Data && bool(Location);
         }
 
-        TPageId PageId = Max<TPageId>();
+        NTable::NPage::TPageLocation Location;
+        TPageId PageId = ::Max<TPageId>();
         TSharedData Data;
     };
 

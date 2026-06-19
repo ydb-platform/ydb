@@ -180,13 +180,25 @@ namespace NTest {
                     PageLoadingLogic->Forward(this, upper);
                 }
 
-                for (auto &seq: IndexFetch) {
-                    NPageCollection::TLoadedPage page(seq, *Store->GetPage(IndexRoom, seq));
-                    PageLoadingLogic->Fill(page, {}, Store->GetPageType(IndexRoom, seq)); /* will move data */
+                {
+                    for (auto &seq: IndexFetch) {
+                        auto pageData = Store->GetPage(IndexRoom, seq);
+                        NPageCollection::TLoadedPage page(
+                            NTable::NPage::TPageLocation::FromPageIndex(seq, pageData->size()),
+                            *pageData);
+                        page.PageId = seq;
+                        PageLoadingLogic->Fill(page, {}, Store->GetPageType(IndexRoom, seq)); /* will move data */
+                    }
                 }
-                for (auto &seq: GroupFetch) {
-                    NPageCollection::TLoadedPage page(seq, *Store->GetPage(GroupRoom, seq));
-                    PageLoadingLogic->Fill(page, {}, Store->GetPageType(GroupRoom, seq)); /* will move data */
+                {
+                    for (auto &seq: GroupFetch) {
+                        auto pageData = Store->GetPage(GroupRoom, seq);
+                        NPageCollection::TLoadedPage page(
+                            NTable::NPage::TPageLocation::FromPageIndex(seq, pageData->size()),
+                            *pageData);
+                        page.PageId = seq;
+                        PageLoadingLogic->Fill(page, {}, Store->GetPageType(GroupRoom, seq)); /* will move data */
+                    }
                 }
 
                 IndexFetch.clear();

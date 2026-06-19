@@ -205,13 +205,14 @@ void TBlockIO::Terminate(EStatus code)
 
     auto *ev = new TEvData(code, PageCollection, RequestCookie);
 
-    ev->Pages.resize(Pages.size());
+    ev->Pages.reserve(Pages.size());
     for (auto index : xrange(Pages.size())) {
-        auto& page = ev->Pages[index];
-        page.PageId = Pages[index];
-        if (code == NKikimrProto::OK) {
-            page.Data = std::move(BlockStates.at(index++).Data);
-        }
+        auto data = (code == NKikimrProto::OK)
+            ? std::move(BlockStates.at(index).Data)
+            : TSharedData{};
+        auto loc = PageCollection->GetLocation(Pages[index]);
+        ev->Pages.emplace_back(loc, std::move(data));
+        ev->Pages.back().PageId = Pages[index];
     }
 
     if (StatActorId)

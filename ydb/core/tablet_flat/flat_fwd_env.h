@@ -178,7 +178,9 @@ namespace NFwd {
             for (auto& page : pages) {
                 auto type = EPage(pageCollection->Page(page.PageId).Type);
                 auto data = NSharedCache::TPinnedPageRef(page.Page).GetData();
-                NPageCollection::TLoadedPage loadedPage{page.PageId, std::move(data)};
+                auto loc = pageCollection->GetLocation(page.PageId);
+                NPageCollection::TLoadedPage loadedPage{loc, std::move(data)};
+                loadedPage.PageId = page.PageId;
                 if (IsIndexPage(type)) {
                     Y_ENSURE(queue.IndexPageCollection->Label() == pageCollection->Label(), "TPart head storage doesn't match with fetch result");
                     queue->Fill(loadedPage, std::move(page.Page), type);

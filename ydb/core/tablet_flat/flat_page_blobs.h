@@ -100,6 +100,11 @@ namespace NPage {
             return data && data.size() == Array.at(page).Bytes();
         }
 
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return NTable::NPage::TPageLocation::FromPageIndex(pageId, Glob(pageId).Bytes());
+        }
+
         size_t BackingSize() const noexcept override
         {
             return Raw.size();

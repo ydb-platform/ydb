@@ -78,6 +78,26 @@ ui64 TMeta::GetPageSize(ui32 pageId) const
     return Index[pageId].Page - begin;
 }
 
+NTable::NPage::TPageLocation TMeta::GetLocation(ui32 pageId) const
+{
+    Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
+
+    const ui64 offset = (pageId == 0) ? 0 : Index[pageId - 1].Page;
+    const ui64 size = Index[pageId].Page - offset;
+
+    return NTable::NPage::TPageLocation::FromByteOffset(offset, size, Extra[pageId].Crc32);
+}
+
+TBorder TMeta::Bounds(NTable::NPage::TPageLocation location) const
+{
+    return TAlign(Steps).Lookup(location.GetByteOffset(), location.Size);
+}
+
+bool TMeta::Verify(NTable::NPage::TPageLocation location, TArrayRef<const char> data) const
+{
+    return data.size() == location.Size && Checksum(data) == location.Crc32;
+}
+
 TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);

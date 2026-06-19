@@ -99,7 +99,10 @@ namespace {
                     UNIT_ASSERT(false);
                 }
 
-                load.emplace_back(page, TSharedData::Copy(TString(rel.Size, 'x')));
+                load.emplace_back(
+                    NTable::NPage::TPageLocation::FromPageIndex(page, rel.Size),
+                    TSharedData::Copy(TString(rel.Size, 'x')));
+                load.back().PageId = page;
             }
 
             if (load.size() < least || load.size() >= most) {
@@ -190,7 +193,9 @@ namespace {
             TVector<NPageCollection::TLoadedPage> load;
             NTest::TTestEnv testEnv;
             for (auto pageId : std::exchange(Queue, TDeque<ui32>{ })) {
-                load.emplace_back(pageId, *testEnv.TryGetPage(Part.Get(), pageId, { }));
+                auto* data = testEnv.TryGetPage(Part.Get(), pageId, { });
+                load.emplace_back(NTable::NPage::TPageLocation::FromPageIndex(pageId, data->size()), *data);
+                load.back().PageId = pageId;
             }
 
             Shuffle(load.begin(), load.end(), Rnd);
@@ -211,7 +216,7 @@ namespace {
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(TVector<TPageId>(Queue.begin(), Queue.end()), pageIds, CurrentStepStr());
-        
+
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
 
             return *this;
@@ -231,7 +236,9 @@ namespace {
                     }
                 }
                 UNIT_ASSERT_C(found, CurrentStepStr());
-                load.emplace_back(pageId, *testEnv.TryGetPage(Part.Get(), pageId, { }));
+                auto* data = testEnv.TryGetPage(Part.Get(), pageId, { });
+                load.emplace_back(NTable::NPage::TPageLocation::FromPageIndex(pageId, data->size()), *data);
+                load.back().PageId = pageId;
             }
 
             Shuffle(load.begin(), load.end(), Rnd);

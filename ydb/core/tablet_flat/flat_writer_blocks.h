@@ -53,6 +53,7 @@ namespace NWriter {
 
             Y_ENSURE(!Writer, "Block writer is not empty after Finish");
 
+            Offset = 0;
             return std::exchange(Result, {});
         }
 
@@ -64,12 +65,17 @@ namespace NWriter {
                 Cone->Put(std::move(glob));
             }
 
+            auto location = NTable::NPage::TPageLocation::FromByteOffset(Offset, raw.size());
+            Offset += raw.size();
+
             if (NTable::TLoader::NeedIn(type) || Cache == ECache::Ever || StickyFlatIndex && type == EPage::FlatIndex) {
-                Result.StickyPages.emplace_back(pageId, std::move(raw));
+                Result.StickyPages.emplace_back(location, std::move(raw));
+                Result.StickyPages.back().PageId = pageId;
             } else if (bool(Cache) && type == EPage::DataPage || type == EPage::BTreeIndex || CacheMode == ECacheMode::TryKeepInMemory) {
                 // TODO: take into account memory limits for TryKeepInMemory mode
                 // Note: save b-tree index pages to shared cache regardless of a cache mode
-                Result.RegularPages.emplace_back(pageId, std::move(raw));
+                Result.RegularPages.emplace_back(location, std::move(raw));
+                Result.RegularPages.back().PageId = pageId;
             }
 
             return pageId;
@@ -95,6 +101,7 @@ namespace NWriter {
 
         NPageCollection::TWriter Writer;
         TResult Result;
+        ui64 Offset = 0;
     };
 }
 }

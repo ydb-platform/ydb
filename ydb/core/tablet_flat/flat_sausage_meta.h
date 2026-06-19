@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_sausage_datacollection.h"
 #include "flat_sausage_misc.h"
 #include "flat_sausage_layout.h"
 #include "flat_sausage_solid.h"
@@ -9,7 +10,7 @@
 namespace NKikimr {
 namespace NPageCollection {
 
-    class TMeta {
+    class TMeta : public IDataPageCollection {
     public:
         TMeta(TSharedData blob, ui32 group);
         ~TMeta();
@@ -40,6 +41,13 @@ namespace NPageCollection {
         ui32 GetPageChecksum(ui32 pageId) const;
         ui64 GetPageSize(ui32 pageId) const;
         TStringBuf GetPageInplaceData(ui32 pageId) const;
+
+        // IDataPageCollection
+        TBorder Bounds(NTable::NPage::TPageLocation location) const override;
+        bool Verify(NTable::NPage::TPageLocation location, TArrayRef<const char> data) const override;
+
+        /// Returns the location of a page identified by its index
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const;
 
     public:
         const TSharedData Raw;  /* Page collection serialized meta blob */

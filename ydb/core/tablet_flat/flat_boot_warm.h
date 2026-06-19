@@ -61,8 +61,9 @@ namespace NBoot {
             Y_ENSURE(page < state.Pages.size());
             Y_ENSURE(!state.Pages[page].Data);
 
-            state.Pages[page].PageId = page;
-            state.Pages[page].Data = load->PlainData();
+            auto data = load->PlainData();
+            state.Pages[page].Location = NTable::NPage::TPageLocation::FromPageIndex(page, data.size());
+            state.Pages[page].Data = std::move(data);
 
             if (!--state.Pending) {
                 state.Blobs->Assign(state.Pages);

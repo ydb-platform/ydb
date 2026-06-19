@@ -53,6 +53,11 @@ namespace NPageCollection {
                 && Meta.GetPageChecksum(page) == Checksum(body);
         }
 
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return Meta.GetLocation(pageId);
+        }
+
         size_t BackingSize() const noexcept override
         {
             return Meta.BackingSize();

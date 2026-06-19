@@ -17,6 +17,7 @@ namespace NPageCollection {
         virtual TGlobId Glob(ui32 blob) const = 0;
         virtual bool Verify(ui32 page, TArrayRef<const char>) const = 0;
         virtual size_t BackingSize() const noexcept = 0;
+        virtual NTable::NPage::TPageLocation GetLocation(ui32 pageId) const = 0;
     };
 
 }

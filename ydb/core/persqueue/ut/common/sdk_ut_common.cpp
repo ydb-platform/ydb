@@ -39,6 +39,13 @@ void WriteKafkaBatchMessages(
     auto writeSession = client.CreateWriteSession(writeSettings);
 
     std::optional<NYdb::NTopic::TContinuationToken> token;
+    const auto getEvent = [&]() {
+        UNIT_ASSERT_C(writeSession->WaitEvent().Wait(TDuration::Seconds(10)),
+            "WriteKafkaBatchMessages: write session event timeout");
+        auto event = writeSession->GetEvent(false);
+        UNIT_ASSERT_C(event.has_value(), "WriteKafkaBatchMessages: empty write session event after wait");
+        return event;
+    };
 
     for (const auto& [firstSeqNo, messageCount, fill] : writes) {
         const ui64 lastSeqNo = firstSeqNo + messageCount - 1;
@@ -56,8 +63,7 @@ void WriteKafkaBatchMessages(
                 continue;
             }
 
-            auto event = writeSession->GetEvent(true);
-            UNIT_ASSERT(event.has_value());
+            auto event = getEvent();
             if (auto* ready = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
                 token = std::move(ready->ContinuationToken);
             } else if (auto* ack = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {

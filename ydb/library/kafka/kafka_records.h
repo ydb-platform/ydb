@@ -3,6 +3,7 @@
 #include "kafka.h"
 
 #include <optional>
+#include <utility>
 
 namespace NKafka {
 

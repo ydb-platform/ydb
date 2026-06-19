@@ -291,6 +291,49 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
+    Y_UNIT_TEST(TruncateReadOnlyTableFails) {
+        // A table created via CopyTable is read-only (its data is pinned to a copy snapshot).
+        // TRUNCATE for such tables must be rejected at propose time.
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit data to the source table.
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        // Copy the table: the destination becomes a read-only table.
+        const ui64 dstPathId = 2;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // TRUNCATE of the read-only (copied) table must be rejected at propose time.
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(dstPathId, 1), ++txId);
+
+        // The read-only copy must remain intact and readable.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+    }
+
     Y_UNIT_TEST(TruncateSeqNoCheck) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);

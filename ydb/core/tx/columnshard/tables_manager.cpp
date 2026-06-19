@@ -146,11 +146,18 @@ void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tab
 void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo&& tableInfo) {
     auto it = Tables.find(unifiedPathId.InternalPathId);
     if (it == Tables.end()) {
-        Tables.emplace(unifiedPathId.InternalPathId, std::move(tableInfo));
+        it = Tables.emplace(unifiedPathId.InternalPathId, std::move(tableInfo)).first;
     } else {
         it->second.Merge(std::move(tableInfo));
     }
-    SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId);
+    // After a TRUNCATE the dropped pre-truncate table and the freshly created table are both persisted with
+    // the same SchemeShardLocalPathId but different InternalPathIds, and InitFromDB may load them in any
+    // order (rows are iterated by InternalPathId). Always prefer the live (non-dropped) table for the
+    // mapping so the table stays resolvable/writable after a restart regardless of the load order.
+    const auto [mapIt, inserted] = SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId);
+    if (!inserted && !it->second.IsDropped()) {
+        mapIt->second = unifiedPathId.InternalPathId;
+    }
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
@@ -469,9 +476,12 @@ TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId sche
     // Step 2: Remove the SchemeShardLocalPathId -> InternalPathId mapping
     AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
 
-    // Step 3: Allocate a new InternalPathId
-    // Since we removed the mapping, GetOrCreateInternalPathId would work for GenerateInternalPathId=true.
-    // But for safety, always generate a new one via MaxInternalPathId.
+    // Step 3: Allocate a new InternalPathId.
+    // TRUNCATE swaps the table to a freshly generated InternalPathId, which only makes sense when
+    // GenerateInternalPathId is enabled (otherwise InternalPathId is forced to equal SchemeShardLocalPathId
+    // and MaxInternalPathId is not persisted across restarts). The operation must be rejected upstream when
+    // the mode is disabled; guard here as a last line of defense.
+    AFL_VERIFY(GenerateInternalPathId)("error", "truncate requires GenerateInternalPathId");
     const auto newPathId = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
     MaxInternalPathId = newPathId;
 

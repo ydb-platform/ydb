@@ -35,7 +35,8 @@ class TestWatermarksInYdb(StreamingTestBase):
                     {cluster}{self.input_topic} WITH (
                         FORMAT = json_each_row,
                         SCHEMA (ts String, pass Uint64),
-                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
+                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S'),
+                        WATERMARK_IDLE_TIMEOUT = 'PT5S'
                     ) AS input
             );
 

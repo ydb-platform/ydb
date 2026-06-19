@@ -55,14 +55,15 @@ class Workload():
             """
         )
 
-    def create_streaming_query(self):
+    def create_streaming_query(self, external):
         logger.info("Workload::create_streaming_query")
+        source = f"`{self.prefix}/source_name`." if external else ""
         self.pool.execute_with_retries(
             f"""
-                CREATE STREAMING QUERY `{self.prefix}/query_name` AS DO BEGIN
+                CREATE STREAMING QUERY `{self.prefix}/query_name_{'ext' if external else 'loc'}` AS DO BEGIN
                 $input = (
                     SELECT * FROM
-                        `{self.prefix}/source_name`.`{self.input_topic}` WITH (
+                        {source}`{self.input_topic}` WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time Uint64 NOT NULL, level String NOT NULL),
                             WATERMARK = SystemMetadata('write_time') - Interval('PT0S'),
@@ -82,7 +83,7 @@ class Workload():
                     FROM $number_errors
                 );
 
-                INSERT INTO `{self.prefix}/source_name`.`{self.output_topic}`
+                INSERT INTO {source}`{self.output_topic}`
                 SELECT * FROM $json;
                 END DO;
             """
@@ -148,13 +149,14 @@ class Workload():
                 except TimeoutError:
                     break
         expected = self.duration  # Group by HOP 1s
-        if count < expected * 0.7:
+        if count / 2 < expected * 0.7:
             raise Exception(f"Insufficient data in output topic: expected ~{expected} messages, got {count}")
 
     def loop(self):
         self.create_topics()
         self.create_external_data_source()
-        self.create_streaming_query()
+        self.create_streaming_query(external=True)
+        self.create_streaming_query(external=False)
         self.check_status()
         self.write_to_input_topic()
         self.read_from_output_topic()

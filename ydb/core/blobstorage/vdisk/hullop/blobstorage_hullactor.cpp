@@ -137,6 +137,8 @@ namespace NKikimr {
 
         auto actorId = RunInBatchPool(ctx, compaction.release());
         rtCtx->LevelIndex->ActorCtx->ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+
+        ctx.Send(rtCtx->SkeletonId, new TEvFreshCompactionStarted);
     }
 
     ////////////////////////////////////////////////////////////////////////////

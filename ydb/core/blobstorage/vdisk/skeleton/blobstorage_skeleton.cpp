@@ -71,7 +71,15 @@ namespace NKikimr {
         struct TEvPrivate {
             enum {
                 EvCheckSnapshotExpiration = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvProcessLocalSyncDataQueue,
+                EvProcessLocalSyncDataQueueWakeup,
             };
+
+            struct TEvProcessLocalSyncDataQueue :
+                TEventLocal<TEvProcessLocalSyncDataQueue, EvProcessLocalSyncDataQueue> {};
+
+            struct TEvProcessLocalSyncDataQueueWakeup :
+                TEventLocal<TEvProcessLocalSyncDataQueueWakeup, EvProcessLocalSyncDataQueueWakeup> {};
         };
 
         ////////////////////////////////////////////////////////////////////////
@@ -1605,6 +1613,64 @@ namespace NKikimr {
         }
 
         void Handle(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
+#ifdef UNPACK_LOCALSYNCDATA
+            Y_VERIFY_S(ev->Get()->Extracted.IsReady(), VCtx->VDiskLogPrefix);
+#else
+            ev->Get()->CalculateSizesFromData();
+#endif
+
+            if (!LocalSyncDataQueue.empty()) {
+                LocalSyncDataQueue.push(ev);
+                ProcessLocalSyncDataQueue(ctx);
+                return;
+            }
+
+            if (!Config->EnableFreshSyncDataThrottling) {
+                ProcessLocalSyncData(ev, ctx);
+                return;
+            }
+
+            if (Config->EnableFreshSyncDataThrottling && !ProcessLocalSyncDataQueueWakeupScheduled) {
+                ProcessLocalSyncDataQueueWakeupScheduled = true;
+                ctx.Send(SelfId(), new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
+            }
+
+            auto calcFreeSpace = [] (ui64 space, ui64 inFlight) {
+                return space < inFlight ? 0 : space - inFlight;
+            };
+            ui64 freeLogoBlobsSpace = calcFreeSpace(
+                Hull->GetHullDs()->LogoBlobs->GetFreshFreeInPlaceSizeApproximation(),
+                Hull->GetLogoBlobSyncDataSizeInFlight());
+            ui64 freeBlocksSpace = calcFreeSpace(
+                Hull->GetHullDs()->Blocks->GetFreshFreeInPlaceSizeApproximation(),
+                Hull->GetBlockSyncDataSizeInFlight());
+            ui64 freeBarriersSpace = calcFreeSpace(
+                Hull->GetHullDs()->Barriers->GetFreshFreeInPlaceSizeApproximation(),
+                Hull->GetBarrierSyncDataSizeInFlight());
+
+            if (freeLogoBlobsSpace == 0 || freeBlocksSpace == 0 || freeBarriersSpace == 0) {
+                LocalSyncDataQueue.push(ev);
+                return;
+            }
+
+            ProcessLocalSyncData(ev, ctx);
+        }
+
+        void HandleFreshCompactionStarted(const TActorContext &ctx) {
+            ProcessLocalSyncDataQueue(ctx);
+        }
+
+        void HandleProcessLocalSyncDataQueue(const TActorContext &ctx) {
+            ProcessLocalSyncDataQueueScheduled = false;
+            ProcessLocalSyncDataQueue(ctx);
+        }
+
+        void HandleProcessLocalSyncDataQueueWakeup(const TActorContext &ctx) {
+            ProcessLocalSyncDataQueue(ctx);
+            ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
+        }
+
+        void ProcessLocalSyncData(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
             TInstant now = TAppData::TimeProvider->Now();
             SyncLogIFaceGroup.LocalSyncMsgs()++;
 
@@ -1625,6 +1691,8 @@ namespace NKikimr {
 
             OverloadHandler->ActualizeWeights(ctx, AllEHullDbTypes);
 
+            Hull->AddLocalSyncDataInFlight(ev->Get()->LogoBlobsSize, ev->Get()->BlocksSize, ev->Get()->BarriersSize);
+
             auto traceId = ev->TraceId.Clone();
             TString data = ev->Get()->Serialize();
             Y_ABORT_UNLESS(Db->SyncLogID);
@@ -1636,6 +1704,44 @@ namespace NKikimr {
                     loggedRecCookie, nullptr, nullptr, TWriteSource::SkeletonLocalSyncData);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(traceId));
+        }
+
+        void ProcessLocalSyncDataQueue(const TActorContext &ctx) {
+            auto calcFreeSpace = [] (ui64 space, ui64 inFlight) {
+                return space <= inFlight ? 0 : space - inFlight;
+            };
+            ui64 freeLogoBlobsSpace = calcFreeSpace(
+                Hull->GetHullDs()->LogoBlobs->GetFreshFreeInPlaceSizeApproximation(),
+                Hull->GetLogoBlobSyncDataSizeInFlight());
+            ui64 freeBlocksSpace = calcFreeSpace(
+                Hull->GetHullDs()->Blocks->GetFreshFreeInPlaceSizeApproximation(),
+                Hull->GetBlockSyncDataSizeInFlight());
+            ui64 freeBarriersSpace = calcFreeSpace(
+                Hull->GetHullDs()->Barriers->GetFreshFreeInPlaceSizeApproximation(),
+                Hull->GetBarrierSyncDataSizeInFlight());
+
+            ui64 processedSize = 0;
+
+            while (!LocalSyncDataQueue.empty() && processedSize < (1 << 20)) {
+                if (freeLogoBlobsSpace == 0 || freeBlocksSpace == 0 || freeBarriersSpace == 0) {
+                    return;
+                }
+                auto ev = LocalSyncDataQueue.front();
+                LocalSyncDataQueue.pop();
+
+                freeLogoBlobsSpace -= Min(freeLogoBlobsSpace, ev->Get()->LogoBlobsSize);
+                freeBlocksSpace -= Min(freeBlocksSpace, ev->Get()->BlocksSize);
+                freeBarriersSpace -= Min(freeBarriersSpace, ev->Get()->BarriersSize);
+
+                processedSize += ev->Get()->LogoBlobsSize + ev->Get()->BlocksSize + ev->Get()->BarriersSize;
+
+                ProcessLocalSyncData(ev, ctx);
+            }
+
+            if (!LocalSyncDataQueue.empty() && !ProcessLocalSyncDataQueueScheduled) {
+                ProcessLocalSyncDataQueueScheduled = true;
+                ctx.Send(SelfId(), new TEvPrivate::TEvProcessLocalSyncDataQueue);
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -2134,6 +2240,11 @@ namespace NKikimr {
             // create scrubber actor
             if (Config->RunScrubber) {
                 StartScrubberActor(ctx, std::move(ev->Get()->ScrubEntrypoint), ev->Get()->ScrubEntrypointLsn);
+            }
+
+            if (Config->EnableFreshSyncDataThrottling) {
+                ProcessLocalSyncDataQueueWakeupScheduled = true;
+                ctx.Send(SelfId(), new TEvPrivate::TEvProcessLocalSyncDataQueueWakeup);
             }
 
             // create syncer actor
@@ -3006,6 +3117,9 @@ namespace NKikimr {
             hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
             hFunc(TEvNotifyChunksDeleted, Handle)
             hFunc(TEvGetSkeletonState, Handle)
+            CFunc(TEvBlobStorage::EvFreshCompactionStarted, HandleFreshCompactionStarted)
+            CFunc(TEvPrivate::EvProcessLocalSyncDataQueue, HandleProcessLocalSyncDataQueue)
+            CFunc(TEvPrivate::EvProcessLocalSyncDataQueueWakeup, HandleProcessLocalSyncDataQueueWakeup)
         )
 
         COUNTED_STRICT_STFUNC(StateNormal,
@@ -3082,6 +3196,9 @@ namespace NKikimr {
             hFunc(NPDisk::TEvShredVDisk, HandleShred)
             hFunc(TEvNotifyChunksDeleted, Handle)
             hFunc(TEvGetSkeletonState, Handle)
+            CFunc(TEvBlobStorage::EvFreshCompactionStarted, HandleFreshCompactionStarted)
+            CFunc(TEvPrivate::EvProcessLocalSyncDataQueue, HandleProcessLocalSyncDataQueue)
+            CFunc(TEvPrivate::EvProcessLocalSyncDataQueueWakeup, HandleProcessLocalSyncDataQueueWakeup)
         )
 
         COUNTED_STRICT_STFUNC(StateDatabaseError,
@@ -3114,6 +3231,9 @@ namespace NKikimr {
             hFunc(NPDisk::TEvShredVDisk, HandleShredError)
             hFunc(TEvNotifyChunksDeleted, Handle)
             hFunc(TEvGetSkeletonState, Handle)
+            CFunc(TEvBlobStorage::EvFreshCompactionStarted, HandleFreshCompactionStarted)
+            CFunc(TEvPrivate::EvProcessLocalSyncDataQueue, HandleProcessLocalSyncDataQueue)
+            CFunc(TEvPrivate::EvProcessLocalSyncDataQueueWakeup, HandleProcessLocalSyncDataQueueWakeup)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
@@ -3223,6 +3343,10 @@ namespace NKikimr {
         ui16 ActorQueueSeqNo = 0;
 
         TEvBlobStorage::TEvLocalRecoveryDone::TPtr LocalRecoveryDoneEvent;
+
+        std::queue<TEvLocalSyncData::TPtr> LocalSyncDataQueue;
+        bool ProcessLocalSyncDataQueueScheduled = false;
+        bool ProcessLocalSyncDataQueueWakeupScheduled = false;
     };
 
     ////////////////////////////////////////////////////////////////////////////

@@ -177,44 +177,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
                                         const std::optional<TString> timestampType,
                                         const TActorContext& ctx) {
     ui64 messagesCount = 0;
-    bool allResultsAreKafkaBatches = partPQResponse.GetReadResult().GetResult().size() > 0;
-
-    for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
-        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
-        const bool isKafkaBatch = dataChunk.GetChunkType() == NKikimrPQClient::TDataChunk::REGULAR &&
-            dataChunk.GetCodec() == KafkaBatchCodec();
-
-        KAFKA_LOG_D("Fetch actor: Kafka record candidate. ResultsCount=" << partPQResponse.GetReadResult().GetResult().size()
-            << ", Offset=" << result.GetOffset()
-            << ", IsBatch=" << result.GetIsBatch()
-            << ", MessageCount=" << result.GetMessageCount()
-            << ", ChunkType=" << static_cast<int>(dataChunk.GetChunkType())
-            << ", Codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
-            << ", KafkaBatchCodec=" << static_cast<int>(KafkaBatchCodec())
-            << ", DataSize=" << dataChunk.GetData().size()
-            << ", IsKafkaBatch=" << isKafkaBatch);
-
-        if (!isKafkaBatch) {
-            allResultsAreKafkaBatches = false;
-        }
-    }
-
     TString kafkaBatchRecords;
-    auto addRawKafkaBatch = [&](const NKikimrPQClient::TDataChunk& dataChunk, const size_t messagesInBatch) {
-        kafkaBatchRecords += dataChunk.GetData();
-        messagesCount += messagesInBatch;
-    };
-
-    if (allResultsAreKafkaBatches) {
-        for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
-            const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
-            addRawKafkaBatch(dataChunk, result.GetMessageCount());
-        }
-        auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
-        ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(messagesCount, BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
-        records = std::move(kafkaBatchRecords);
-        return;
-    }
 
     TKafkaRecordBatch recordsBatch;
     ui64 baseOffset = 0;
@@ -223,7 +186,11 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     ui64 lastOffset = 0;
     ui64 maxTimestamp = 0;
     bool first = true;
-    messagesCount = 0;
+
+    auto addRawKafkaBatch = [&](const NKikimrPQClient::TDataChunk& dataChunk, const size_t messagesInBatch) {
+        kafkaBatchRecords += dataChunk.GetData();
+        messagesCount += messagesInBatch;
+    };
 
     auto flushRecordsBatch = [&]() {
         if (first) {
@@ -278,6 +245,17 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         }
 
         const bool isKafkaBatch = dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec();
+
+        KAFKA_LOG_D("Fetch actor: Kafka record candidate. ResultsCount=" << partPQResponse.GetReadResult().GetResult().size()
+            << ", Offset=" << result.GetOffset()
+            << ", IsBatch=" << result.GetIsBatch()
+            << ", MessageCount=" << result.GetMessageCount()
+            << ", ChunkType=" << static_cast<int>(dataChunk.GetChunkType())
+            << ", Codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
+            << ", KafkaBatchCodec=" << static_cast<int>(KafkaBatchCodec())
+            << ", DataSize=" << dataChunk.GetData().size()
+            << ", IsKafkaBatch=" << isKafkaBatch);
+
         if (isKafkaBatch) {
             flushRecordsBatch();
             addRawKafkaBatch(dataChunk, result.GetMessageCount());

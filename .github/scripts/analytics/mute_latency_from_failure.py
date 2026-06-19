@@ -16,6 +16,7 @@ python3 .github/scripts/analytics/mute_latency_from_failure.py
 # Force reprocess the last N days (overwrites existing rows via upsert):
 python3 ... --force [--timeline-since-days 30]
 # In --force mode stale rows in the window are deleted (window antijoin cleanup).
+# Git history for origin/<branch> is fetched automatically before scan.
 """
 
 from __future__ import annotations
@@ -390,6 +391,48 @@ def commit_touches_file(repo: str, sha: str, rel_path: str) -> bool:
     if rc != 0 or not stdout.strip():
         return False
     return rel_path in stdout.splitlines()
+
+
+def _required_git_history_days(
+    since_date: dt.date,
+    *,
+    force: bool,
+    timeline_since_days: Optional[int],
+) -> int:
+    """How many days of origin/<branch> history to fetch for reliable mute diffs."""
+    if force or timeline_since_days is not None:
+        return timeline_since_days or 90
+    days_span = (dt.datetime.now(dt.timezone.utc).date() - since_date).days
+    # Extra buffer so parent commits are available for git show/diff-tree.
+    return max(days_span + 14, 30)
+
+
+def ensure_git_history(repo: str, branch: str, since_days: int) -> None:
+    """Fetch enough origin/<branch> history (safe for shallow CI checkouts)."""
+    git_ref = f'origin/{branch}'
+    print(
+        f'Fetching origin/{branch} (--shallow-since="{since_days} days ago")',
+        file=sys.stderr,
+    )
+    rc, _, stderr = _git_rc(
+        repo, 'fetch', f'--shallow-since={since_days} days ago', 'origin', branch,
+    )
+    if rc != 0:
+        print(
+            f'git fetch --shallow-since failed ({stderr.strip()}), trying --deepen=500',
+            file=sys.stderr,
+        )
+        rc, _, stderr = _git_rc(repo, 'fetch', '--deepen=500', 'origin', branch)
+        if rc != 0:
+            print(f'WARNING: git fetch failed: {stderr.strip()}', file=sys.stderr)
+            return
+    try:
+        _git(repo, 'rev-parse', '--verify', git_ref)
+    except RuntimeError:
+        print(
+            f'WARNING: {git_ref} not available after fetch — mute git scan may be skipped',
+            file=sys.stderr,
+        )
 
 
 def commits_touching_file(
@@ -811,6 +854,11 @@ def main() -> int:
         print('YDB: no prior data found — will process all available commits', file=sys.stderr)
         fallback_days = args.timeline_since_days or 90
         since_date = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=fallback_days)).date()
+
+    history_days = _required_git_history_days(
+        since_date, force=args.force, timeline_since_days=args.timeline_since_days,
+    )
+    ensure_git_history(repo, args.branch, history_days)
 
     # ── Phase 2: git — collect commits and per-commit added lines (no YDB) ───
     CommitGitData = List[Tuple[str, dt.datetime, List[str], List[str], List[Tuple[str, str]], List[str]]]

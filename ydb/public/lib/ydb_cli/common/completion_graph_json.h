@@ -13,16 +13,27 @@ namespace NYdb::NConsoleClient {
 //
 // Schema for each node (root has the same shape):
 //   {
-//     "handlers": { <subcommand_name>: <node>, ... },   // sorted by key
-//     "options":  { "--flag" | "-x": <opt_value>, ... } // sorted by key
+//     "handlers":  { <subcommand_name>: <node>, ... }, // sorted by key
+//     "options":   { "--flag" | "-x": <opt_value>, ... }, // sorted by key
+//     "free_args": <free_args_value>
 //   }
 //
-// <opt_value> is one of:
+// <opt_value> describes what the option accepts and is one of:
 //   * null            -- the option is a flag without an argument (e.g. --help)
-//                        or it accepts an arbitrary value (URL, path, number, ...);
-//                        in both cases no completion choices are available
 //   * [v1, v2, ...]   -- the option accepts only one of the listed values
 //                        (TOpt::Choices); the list is sorted lexicographically
+//   * "file"          -- the option takes a free-form value that is completed as
+//                        a local file/path (the CLI's default for value options)
+//   * "value"         -- the option takes a free-form value with custom or
+//                        server-side completion (e.g. a YDB scheme path) that a
+//                        third party cannot reproduce as local files
+//
+// <free_args_value> describes the positional (free) arguments and is one of:
+//   * null            -- no positional arguments. Also reported on command groups
+//                        (where the positional selects a subcommand listed in
+//                        "handlers") and on commands that never declared any
+//   * "file"          -- positional(s) completed as local files/paths
+//   * "value"         -- positional(s) with custom/server-side completion
 //
 // Hidden subcommands and options are omitted. Handlers and options are emitted in
 // stable (sorted) order so the output can be cached and compared between runs.

@@ -592,7 +592,6 @@ inline bool IsRetryableError(const NYdb::TStatus status) {
 class TDescribeResourceIdService : public NActors::TActor<TDescribeResourceIdService> {
 public:
     using TBase = NActors::TActor<TDescribeResourceIdService>;
-    using TRetryPolicy = IRetryPolicy<NYdb::TStatus>;
 
     enum EDescribeResourceEvents {
         EvDescribeResourceId = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),

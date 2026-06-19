@@ -108,6 +108,7 @@ namespace NKikimr {
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
             void UpdateMetrics();
+            void UpdateAtomics(TInstant now);
 
             TVector<ui32> GetChunksToForget() {
                 return std::exchange(ChunksToForget, {});

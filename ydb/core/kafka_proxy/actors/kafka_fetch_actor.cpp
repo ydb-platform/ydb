@@ -200,11 +200,15 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     }
 
     TString kafkaBatchRecords;
+    auto addRawKafkaBatch = [&](const NKikimrPQClient::TDataChunk& dataChunk, const size_t messagesInBatch) {
+        kafkaBatchRecords += dataChunk.GetData();
+        messagesCount += messagesInBatch;
+    };
+
     if (allResultsAreKafkaBatches) {
         for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
             const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
-            kafkaBatchRecords += dataChunk.GetData();
-            messagesCount += result.GetMessageCount();
+            addRawKafkaBatch(dataChunk, result.GetMessageCount());
         }
         auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
         ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(messagesCount, BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
@@ -276,8 +280,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         const bool isKafkaBatch = dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec();
         if (isKafkaBatch) {
             flushRecordsBatch();
-            kafkaBatchRecords += dataChunk.GetData();
-            messagesCount += result.GetMessageCount();
+            addRawKafkaBatch(dataChunk, result.GetMessageCount());
             continue;
         }
 

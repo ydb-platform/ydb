@@ -106,6 +106,27 @@ TKafkaRecordBatch ReadFetchRecords(const TKafkaBytesHolder& records) {
     return ReadRecordBatch(TStringBuf(records->data(), records->size()));
 }
 
+TVector<TString> SplitFetchRecordBatches(const TKafkaBytesHolder& records) {
+    UNIT_ASSERT(records);
+
+    TStringBuf data(records->data(), records->size());
+    TVector<TString> batches;
+    while (!data.empty()) {
+        const auto header = ReadKafkaBatchHeader(data);
+        UNIT_ASSERT_C(header, "Failed to read Kafka batch header from " << data.size() << " bytes");
+
+        const size_t batchSize = sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type)
+            + sizeof(TKafkaRecordBatch::BatchLengthMeta::Type)
+            + header->BatchLength;
+        UNIT_ASSERT_LE_C(batchSize, data.size(), "Kafka batch size exceeds fetch records size");
+
+        batches.emplace_back(data.data(), batchSize);
+        data.Skip(batchSize);
+    }
+
+    return batches;
+}
+
 void AssertFetchedKafkaRecords(const TMessagePtr<TFetchResponseData>& msg) {
     UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
@@ -887,6 +908,44 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             const auto fetchResponse = client.Fetch({{topicName, {0}}}, produceResponse->Responses[0].PartitionResponses[0].BaseOffset);
             AssertFetchedKafkaRecords(fetchResponse);
         }
+    }
+
+    Y_UNIT_TEST(ProduceAndFetchMixedPlainRecordsAndCompressedKafkaBatch) {
+        TInsecureTestServer testServer("2");
+
+        TString topicName = "/Root/topic-mixed-plain-records-and-compressed-kafka-batch";
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, 1, {});
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        const auto plainProduceResponse = client.Produce(topicName, 0, MakeKafkaBatch(ECompressionType::NONE));
+        AssertProduceOk(plainProduceResponse, topicName);
+
+        EnableTopicMessagesBatching(testServer);
+
+        const TString compressedBatchBytes = WriteKafkaRecordBatch(MakeKafkaBatch(ECompressionType::ZSTD));
+        const auto compressedProduceResponse = client.Produce(topicName, 0, TKafkaBytes(ToRawBytes(compressedBatchBytes)));
+        AssertProduceOk(compressedProduceResponse, topicName);
+
+        const auto fetchResponse = client.Fetch({{topicName, {0}}});
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        const auto batches = SplitFetchRecordBatches(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(batches.size(), 2);
+
+        const auto plainFetchedBatch = ReadKafkaRecordBatch(batches[0]);
+        UNIT_ASSERT_VALUES_EQUAL(plainFetchedBatch.Records.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[0].Key->data(), plainFetchedBatch.Records[0].Key->size()), "key-0");
+        UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[0].Value->data(), plainFetchedBatch.Records[0].Value->size()), "value-0");
+        UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[1].Key->data(), plainFetchedBatch.Records[1].Key->size()), "key-1");
+        UNIT_ASSERT_VALUES_EQUAL(TString(plainFetchedBatch.Records[1].Value->data(), plainFetchedBatch.Records[1].Value->size()), "value-1");
+
+        UNIT_ASSERT_VALUES_EQUAL(batches[1], compressedBatchBytes);
     }
 
     Y_UNIT_TEST(ProduceAndFetchLegacyRawKafkaBatch) {

@@ -65,11 +65,17 @@ inline size_t ProtoPackedInt64FieldSize(ui32 fieldNumber, size_t dataSize) {
 }
 
 inline size_t ProtoBytesFieldSize(ui32 fieldNumber, size_t size) {
+    if (size == 0) {
+        return 0;
+    }
     return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_BYTES)
         + TWireFormatLite::LengthDelimitedSize(size);
 }
 
 inline size_t ProtoStringFieldSize(ui32 fieldNumber, size_t size) {
+    if (size == 0) {
+        return 0;
+    }
     return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_STRING)
         + TWireFormatLite::LengthDelimitedSize(size);
 }

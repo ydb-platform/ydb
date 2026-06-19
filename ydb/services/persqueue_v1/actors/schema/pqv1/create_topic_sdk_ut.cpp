@@ -68,6 +68,7 @@ Y_UNIT_TEST(CreateTopicWithStreamingConsumer) {
     UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).StartingMessageTimestamp(), TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(topicSettings.ReadRules().at(0).SupportedFormat()), static_cast<int>(EFormat::BASE));
     UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).Version(), 0u);
+    UNIT_ASSERT(!topicSettings.ReadRules().at(0).SharedConsumer().has_value());
 
     auto& runtime = setup.GetRuntime();
     runtime.Register(NPQ::NDescriber::CreateDescriberActor(
@@ -138,6 +139,43 @@ Y_UNIT_TEST(CreateTopicWithSharedConsumer) {
         NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
     UNIT_ASSERT_VALUES_EQUAL(consumer->GetMaxProcessingAttempts(), 11u);
     UNIT_ASSERT_VALUES_EQUAL(consumer->GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
+}
+
+Y_UNIT_TEST(DescribeTopicReturnsSharedConsumerSettings) {
+    TPqv1SdkTestSetup setup("DescribeTopicReturnsSharedConsumerSettings");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-describe-shared");
+
+    TCreateTopicSettings settings;
+    settings.ReadRules({MakeSharedConsumerReadRuleSettings()});
+
+    const auto createStatus = CreateTopicViaSdk(client, path, settings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
+
+    const auto describe = DescribeTopicViaSdk(client, path);
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+
+    const auto& readRule = describe.TopicSettings().ReadRules().at(0);
+    UNIT_ASSERT(readRule.SharedConsumer().has_value());
+
+    const auto sharedConsumer = readRule.SharedConsumer().value();
+    UNIT_ASSERT_VALUES_EQUAL(sharedConsumer.GetKeepMessagesOrder(), true);
+    UNIT_ASSERT_VALUES_EQUAL(sharedConsumer.GetDefaultProcessingTimeout(), TDuration::Seconds(3));
+    UNIT_ASSERT_VALUES_EQUAL(sharedConsumer.GetReceiveMessageWaitTime(), TDuration::Seconds(5));
+    UNIT_ASSERT_VALUES_EQUAL(sharedConsumer.GetReceiveMessageDelay(), TDuration::Seconds(7));
+
+    const auto& deadLetterPolicy = sharedConsumer.GetDeadLetterPolicy();
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetEnabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
+
+    TReadRuleSettings roundTrip;
+    roundTrip.SetSettings(readRule);
+    UNIT_ASSERT(roundTrip.GetSharedConsumer().has_value());
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetKeepMessagesOrder(), true);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDefaultProcessingTimeout(), TDuration::Seconds(3));
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
 }
 
 } // Y_UNIT_TEST_SUITE(CreateTopic_PQv1SDK)

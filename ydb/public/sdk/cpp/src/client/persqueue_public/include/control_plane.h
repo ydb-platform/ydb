@@ -48,6 +48,10 @@ struct TSharedConsumerDeadLetterPolicySettings {
     FLUENT_SETTING_DEFAULT(bool, Enabled, false);
     FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 0);
     FLUENT_SETTING(std::string, DeadLetterQueue);
+
+    bool GetEnabled() const { return Enabled_; }
+    ui32 GetMaxProcessingAttempts() const { return MaxProcessingAttempts_; }
+    const std::string& GetDeadLetterQueue() const { return DeadLetterQueue_; }
 };
 
 struct TSharedConsumerSettings {
@@ -58,6 +62,12 @@ struct TSharedConsumerSettings {
     FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageWaitTime, TDuration::Zero());
     FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageDelay, TDuration::Zero());
     FLUENT_SETTING(TSharedConsumerDeadLetterPolicySettings, DeadLetterPolicy);
+
+    bool GetKeepMessagesOrder() const { return KeepMessagesOrder_; }
+    TDuration GetDefaultProcessingTimeout() const { return DefaultProcessingTimeout_; }
+    TDuration GetReceiveMessageWaitTime() const { return ReceiveMessageWaitTime_; }
+    TDuration GetReceiveMessageDelay() const { return ReceiveMessageDelay_; }
+    const TSharedConsumerDeadLetterPolicySettings& GetDeadLetterPolicy() const { return DeadLetterPolicy_; }
 };
 
 
@@ -211,6 +221,8 @@ struct TReadRuleSettings {
     FLUENT_SETTING_DEFAULT(ui32, Version, 0);
     FLUENT_SETTING(std::string, ServiceType);
     FLUENT_SETTING_OPTIONAL(TSharedConsumerSettings, SharedConsumer);
+
+    const std::optional<TSharedConsumerSettings>& GetSharedConsumer() const { return SharedConsumer_; }
 
     TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
         ConsumerName_ = settings.ConsumerName();

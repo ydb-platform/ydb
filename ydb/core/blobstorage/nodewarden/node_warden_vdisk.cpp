@@ -243,6 +243,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
+            vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;

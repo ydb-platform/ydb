@@ -77,35 +77,6 @@ TString MakeSourceId(const TString& transactionalId, i64 producerId) {
     return Base64Encode(sourceId);
 }
 
-std::pair<EKafkaErrors, ui64> GetBaseSeqNo(const TKafkaBatchHeader& header) {
-    if (header.ProducerId >= 0) {
-        if (header.BaseSequence < 0) {
-            KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << header.BaseSequence);
-            return {EKafkaErrors::INVALID_RECORD, 0};
-        }
-        return {EKafkaErrors::NONE_ERROR, static_cast<ui64>(header.BaseSequence)};
-    }
-
-    if (header.BaseOffset < 0) {
-        return {EKafkaErrors::INVALID_RECORD, 0};
-    }
-    return {EKafkaErrors::NONE_ERROR, static_cast<ui64>(header.BaseOffset)};
-}
-
-std::pair<EKafkaErrors, ui64> GetMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo) {
-    if (header.ProducerId >= 0) {
-        return {
-            EKafkaErrors::NONE_ERROR,
-            (baseSeqNo + header.RecordsCount - 1) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1)
-        };
-    }
-
-    if (header.LastOffsetDelta < 0) {
-        return {EKafkaErrors::INVALID_RECORD, 0};
-    }
-    return {EKafkaErrors::NONE_ERROR, baseSeqNo + static_cast<ui64>(header.LastOffsetDelta)};
-}
-
 } // namespace
 
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
@@ -471,11 +442,11 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
             return {EKafkaErrors::INVALID_RECORD, nullptr};
         }
 
-        auto [error, seqNo] = GetBaseSeqNo(*batchHeader);
+        auto [error, seqNo] = GetBatchBaseSeqNo(*batchHeader);
         if (error != EKafkaErrors::NONE_ERROR) {
             return {error, nullptr};
         }
-        auto [maxSeqNoError, maxSeqNo] = GetMaxSeqNo(*batchHeader, seqNo);
+        auto [maxSeqNoError, maxSeqNo] = GetBatchMaxSeqNo(*batchHeader, seqNo);
         if (maxSeqNoError != EKafkaErrors::NONE_ERROR) {
             return {maxSeqNoError, nullptr};
         }

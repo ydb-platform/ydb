@@ -956,6 +956,34 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
     return result;
 }
 
+std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header) {
+    if (header.ProducerId >= 0) {
+        if (header.BaseSequence < 0) {
+            return {EKafkaErrors::INVALID_RECORD, 0};
+        }
+        return {EKafkaErrors::NONE_ERROR, static_cast<ui64>(header.BaseSequence)};
+    }
+
+    if (header.BaseOffset < 0) {
+        return {EKafkaErrors::INVALID_RECORD, 0};
+    }
+    return {EKafkaErrors::NONE_ERROR, static_cast<ui64>(header.BaseOffset)};
+}
+
+std::pair<EKafkaErrors, ui64> GetBatchMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo) {
+    if (header.ProducerId >= 0) {
+        return {
+            EKafkaErrors::NONE_ERROR,
+            (baseSeqNo + header.RecordsCount - 1) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1)
+        };
+    }
+
+    if (header.LastOffsetDelta < 0) {
+        return {EKafkaErrors::INVALID_RECORD, 0};
+    }
+    return {EKafkaErrors::NONE_ERROR, baseSeqNo + static_cast<ui64>(header.LastOffsetDelta)};
+}
+
 std::optional<TKafkaBatchHeader> ReadKafkaBatchHeader(TStringBuf data, TKafkaVersion version) {
     static constexpr size_t RecordBatchMagicOffset =
         sizeof(TKafkaInt64) + sizeof(TKafkaInt32) + sizeof(TKafkaInt32);

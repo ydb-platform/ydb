@@ -58,14 +58,16 @@ Y_UNIT_TEST(AddIndexCompact) {
     AddIndex(db, "fulltext_plain");
 
     auto index = ReadIndex(db);
+    Cerr << "index: " << NYdb::FormatResultSetYson(index) << "\n";
+
     CompareYson(R"([
-        [%true;4294967295u;100u;"d";"animals"];
-        [%true;4294967295u;300u;"ddd";"cats"];
-        [%true;4294967295u;200u;"dd";"chase"];
-        [%true;4294967295u;400u;"\xC8\1\xC8\1";"dogs"];
-        [%true;4294967295u;400u;"\x90\3";"foxes"];
-        [%true;4294967295u;400u;"\xAC\2d";"love"];
-        [%true;4294967295u;200u;"dd";"small"]
+        [%true;18446744073709551615u;100u;"d";"animals"];
+        [%true;18446744073709551615u;300u;"ddd";"cats"];
+        [%true;18446744073709551615u;200u;"dd";"chase"];
+        [%true;18446744073709551615u;400u;"\xC8\1\xC8\1";"dogs"];
+        [%true;18446744073709551615u;400u;"\x90\3";"foxes"];
+        [%true;18446744073709551615u;400u;"\xAC\2d";"love"];
+        [%true;18446744073709551615u;200u;"dd";"small"]
     ])", NYdb::FormatResultSetYson(index));
 }
 
@@ -84,14 +86,15 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
     }
 
     auto index = ReadIndex(db);
+    Cerr << "index: " << NYdb::FormatResultSetYson(index) << "\n";
     CompareYson(R"([
-        [%true;4294967295u;100u;"\xA4\1";"animals"];
-        [%true;4294967295u;300u;"\xA4\1\xA4\1\xE4\1\2";"cats"];
-        [%true;4294967295u;200u;"\xA4\1\xA4\1";"chase"];
-        [%true;4294967295u;400u;"\x88\3\x88\3";"dogs"];
-        [%true;4294967295u;400u;"\x90\6";"foxes"];
-        [%true;4294967295u;400u;"\xAC\4\xA4\1";"love"];
-        [%true;4294967295u;200u;"\xA4\1\xA4\1";"small"]
+        [%true;18446744073709551615u;100u;"\xA4\1";"animals"];
+        [%true;18446744073709551615u;300u;"\xA4\1\xA4\1\xE4\1\2";"cats"];
+        [%true;18446744073709551615u;200u;"\xA4\1\xA4\1";"chase"];
+        [%true;18446744073709551615u;400u;"\x88\3\x88\3";"dogs"];
+        [%true;18446744073709551615u;400u;"\x90\6";"foxes"];
+        [%true;18446744073709551615u;400u;"\xAC\4\xA4\1";"love"];
+        [%true;18446744073709551615u;200u;"\xA4\1\xA4\1";"small"]
     ])", NYdb::FormatResultSetYson(index));
 
     index = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
@@ -146,10 +149,10 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
         Cerr << "indexImplDictTable: " << dict << Endl;
         Cerr << "indexImplStatsTable: " << stats << Endl;
         CompareYson(R"([
-            [%true;4294967295u;100u;"\xE4\1\2";"cats"];
-            [%true;4294967295u;200u;"\x88\3";"dogs"];
-            [%true;4294967295u;200u;"\x88\3";"foxes"];
-            [%true;4294967295u;200u;"\xA4\1\xA4\1";"love"]
+            [%true;18446744073709551615u;100u;"\xE4\1\2";"cats"];
+            [%true;18446744073709551615u;200u;"\x88\3";"dogs"];
+            [%true;18446744073709551615u;200u;"\x88\3";"foxes"];
+            [%true;18446744073709551615u;200u;"\xA4\1\xA4\1";"love"]
         ])", index);
         CompareYson(R"([
             [[100u];3u];
@@ -166,10 +169,10 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
         ])", stats);
     } else {
         CompareYson(R"([
-            [%true;4294967295u;100u;"d";"cats"];
-            [%true;4294967295u;200u;"\xC8\1";"dogs"];
-            [%true;4294967295u;200u;"\xC8\1";"foxes"];
-            [%true;4294967295u;200u;"dd";"love"]
+            [%true;18446744073709551615u;100u;"d";"cats"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"foxes"];
+            [%true;18446744073709551615u;200u;"dd";"love"]
         ])", index);
     }
 
@@ -192,13 +195,13 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
         Cerr << "indexImplDictTable: " << dict << Endl;
         Cerr << "indexImplStatsTable: " << stats << Endl;
         CompareYson(R"([
-            [%true;4294967295u;100u;"\xE4\1\2";"cats"];
-            [%true;4294967295u;18446744073709551615u;"\x96\2";"cats"];
-            [%true;4294967295u;200u;"\x88\3";"dogs"];
-            [%true;4294967290u;200u;"\x96\2";"foxes"];
-            [%true;4294967295u;200u;"\x88\3";"foxes"];
-            [%true;4294967290u;200u;"\x96\2";"love"];
-            [%true;4294967295u;200u;"\xA4\1\xA4\1";"love"]
+            [%true;18446744073709551614u;150u;"\x96\2";"cats"];
+            [%true;18446744073709551615u;100u;"\xE4\1\2";"cats"];
+            [%true;18446744073709551615u;200u;"\x88\3";"dogs"];
+            [%true;18446744073709551614u;150u;"\x96\2";"foxes"];
+            [%true;18446744073709551615u;200u;"\x88\3";"foxes"];
+            [%true;18446744073709551614u;150u;"\x96\2";"love"];
+            [%true;18446744073709551615u;200u;"\xA4\1\xA4\1";"love"]
         ])", index);
         CompareYson(R"([
             [[100u];3u];
@@ -216,13 +219,13 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
         ])", stats);
     } else {
         CompareYson(R"([
-            [%true;4294967295u;100u;"d";"cats"];
-            [%true;4294967295u;18446744073709551615u;"\x96\1";"cats"];
-            [%true;4294967295u;200u;"\xC8\1";"dogs"];
-            [%true;4294967290u;200u;"\x96\1";"foxes"];
-            [%true;4294967295u;200u;"\xC8\1";"foxes"];
-            [%true;4294967290u;200u;"\x96\1";"love"];
-            [%true;4294967295u;200u;"dd";"love"]
+            [%true;18446744073709551614u;150u;"\x96\1";"cats"];
+            [%true;18446744073709551615u;100u;"d";"cats"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551614u;150u;"\x96\1";"foxes"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"foxes"];
+            [%true;18446744073709551614u;150u;"\x96\1";"love"];
+            [%true;18446744073709551615u;200u;"dd";"love"]
         ])", index);
     }
 

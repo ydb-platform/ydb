@@ -473,7 +473,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     op = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         NKikimrSchemeOp::TTableDescription(),
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
-        buildInfo.IndexType, prefixColumns);
+        buildInfo.IndexType, prefixColumns, true);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 

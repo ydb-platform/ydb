@@ -654,6 +654,8 @@ public:
  * used for efficient columnar transfer of Uint64 doc_ids.
  */
 class TIndexTableImplReader : public TTableReader<TIndexTableImplReader> {
+    bool IsCompact = false;
+
 public:
     TIndexTableImplReader(const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
@@ -664,8 +666,10 @@ public:
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
-        const TVector<i32>& resultColumnIds)
+        const TVector<i32>& resultColumnIds,
+        bool isCompact)
         : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        , IsCompact(isCompact)
     {}
 
     // Prefix values are a per-query binding, not table-reader state: they are owned by the source
@@ -728,8 +732,8 @@ public:
             const int numPrefix = static_cast<int>(prefixColumnNames.size());
             YQL_ENSURE(keyColumns.size() == numPrefix + 3);
             YQL_ENSURE(keyColumns[numPrefix].GetName() == TokenColumn);
-            YQL_ENSURE(keyColumns[numPrefix + 1].GetName() == MaxIdColumn);
-            YQL_ENSURE(keyColumns[numPrefix + 2].GetName() == GenColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 1].GetName() == GenColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 2].GetName() == MaxIdColumn);
             auto addCol = [&](const char* str) {
                 for (auto& column: columns) {
                     if (column.GetName() == str) {
@@ -776,9 +780,13 @@ public:
         TIntrusivePtr<TIndexTableImplReader> reader = MakeIntrusive<TIndexTableImplReader>(
             counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
             settings->GetDatabase(), settings->GetPoolId(),
-            keyColumnTypes, resultColumnTypes, resultColumnIds);
+            keyColumnTypes, resultColumnTypes, resultColumnIds, isCompact);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
+    }
+
+    bool GetIsCompact() {
+        return IsCompact;
     }
 };
 
@@ -913,60 +921,90 @@ template <typename TDocId>
 class TCompactTokenStream: public TTokenStream<TDocId> {
     bool WithFreq = false;
     std::deque<std::unique_ptr<TEvDataShard::TEvReadResult>> Results;
+    std::vector<std::unique_ptr<TEvDataShard::TEvReadResult>> DeltaResults;
     size_t ResultIdx = 0;
     size_t RowIdx = 0; // position within Results[ResultIdx]
+    size_t DeltaResultIdx = 0;
+    size_t DeltaRowIdx = 0;
+    bool HasDeltas = false;
 
     bool Started = false;
     NFulltext::TMultiDeltaReader Reader;
 
     ui64 CurDocId = 0;
     ui32 CurFreq = 0;
-    ui64 MaxDocId = 0;
     ui64 Bytes = 0;
     ui64 Rows = 0;
 
     bool StartReader() {
         while (!Started) {
-            if (ResultIdx >= Results.size()) {
-                return false;
-            }
-            if (RowIdx >= Results[ResultIdx]->GetRowsCount()) {
+            if (RowIdx > 0 && RowIdx >= Results[ResultIdx]->GetRowsCount()) {
+                if (DeltaRowIdx > 0) {
+                    DeltaResultIdx++;
+                    DeltaRowIdx = 0;
+                }
                 ResultIdx++;
                 RowIdx = 0;
-                if (ResultIdx >= Results.size()) {
-                    return false;
-                }
             }
-            // row = { max_id, gen, added, segment }
+            if (ResultIdx >= Results.size()) {
+                if (this->ReadFinished && HasDeltas) {
+                    // Deltas may contain items with larger IDs than the last batch, consume them too
+                    HasDeltas = false;
+                    Reader.SetMaxId((ui64)std::numeric_limits<TDocId>::max());
+                    Started = true;
+                    Reader.Start();
+                    if (Reader.Read(CurDocId, CurFreq)) {
+                        break;
+                    }
+                    FreeReader();
+                }
+                return false;
+            }
+            // row = { gen, max_id, added, segment }
             auto row = Results[ResultIdx]->GetCells(RowIdx);
             RowIdx++;
-            NTableIndex::NFulltext::TGen gen = row[1].AsValue<NTableIndex::NFulltext::TGen>();
+            NTableIndex::NFulltext::TGen gen = row[0].AsValue<NTableIndex::NFulltext::TGen>();
+            TDocId maxId = row[1].AsValue<TDocId>();
             bool added = row[2].AsValue<bool>();
-            TConstArrayRef<ui8> buf((const ui8*)row[3].Data(), row[3].Size());
-            Reader.Add(added, buf);
+            TConstArrayRef<ui8> seg((const ui8*)row[3].Data(), row[3].Size());
+            Reader.Add(added, seg);
             if (gen == std::numeric_limits<NTableIndex::NFulltext::TGen>::max()) {
-                // This is the last segment, we can start reading
+                // This is the last segment, we can start reading, but only up to its maxId
+                Reader.SetMaxId((ui64)maxId);
                 Started = true;
                 Reader.Start();
                 if (!Reader.Read(CurDocId, CurFreq)) {
                     // Segment may be logically empty, then we have to switch to the next one
                     FreeReader();
                 }
+            } else {
+                // This is a delta segment from updates
+                DeltaRowIdx++;
+                HasDeltas = true;
             }
         }
         return true;
     }
 
     void FreeReader() {
-        Reader.Reset(WithFreq, std::is_signed<TDocId>::value);
+        // Only the last segment is static and max_id-partitioned
+        Reader.Pop();
+        Reader.Stop();
         Started = false;
-        if (RowIdx >= Results[ResultIdx]->GetRowsCount()) {
-            Results.erase(Results.begin(), Results.begin()+ResultIdx+1);
-            RowIdx = 0;
-            ResultIdx = 0;
-        } else if (ResultIdx > 0) {
+        YQL_ENSURE(DeltaResultIdx <= ResultIdx);
+        while (DeltaResultIdx > 0) {
+            // Save DeltaResults separately - we need them alive to handle deltas
+            DeltaResults.push_back(std::move(Results.front()));
+            Results.pop_front();
+            DeltaResultIdx--;
+            ResultIdx--;
+        }
+        if (ResultIdx > 0) {
             Results.erase(Results.begin(), Results.begin()+ResultIdx);
             ResultIdx = 0;
+        }
+        if (!HasDeltas && DeltaResults.size()) {
+            DeltaResults.clear();
         }
     }
 public:
@@ -980,7 +1018,7 @@ public:
     }
 
     TDocId GetMaxKey() const override {
-        return (TDocId)MaxDocId;
+        return (TDocId)CurDocId + 1;
     }
 
     std::pair<ui64, ui64> GetStats() const override {
@@ -1002,8 +1040,6 @@ public:
                 Bytes += cell.Size();
             }
         }
-        auto lastRow = result->GetCells(result->GetRowsCount()-1);
-        MaxDocId = lastRow[0].AsValue<TDocId>();
         Results.push_back(std::move(result));
         StartReader();
     }
@@ -1130,8 +1166,23 @@ public:
         RangesToRead.clear();
 
         TCell tokenCell(Word.data(), Word.size());
+        if (Reader->GetIsCompact()) {
+            // With the compact format, we always have to read all rows with __ydb_gen < MAX (these are updates)
+            TVector<TCell> fromCells = MakePrefixedKey(tokenCell, TCell::Make<NTableIndex::NFulltext::TGen>(0));
+            TVector<TCell> toCells = MakePrefixedKey(tokenCell, TCell::Make<NTableIndex::NFulltext::TGen>(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()-1));
+            auto range = TTableRange(fromCells, true /*fromInclusive*/, toCells, false /*toInclusive*/);
+            auto rangePartition = Reader->GetRangePartitioning(range);
+            for (const auto& [shardId, range] : rangePartition) {
+                RangesToRead.emplace_back(shardId, std::move(range));
+            }
+        }
+
         TVector<TCell> fromCells = MakePrefixedKey(tokenCell, TCell::Make<TDocId>(StartReadKeyFrom));
         TVector<TCell> toCells = MakePrefixedKey(tokenCell);
+        if (Reader->GetIsCompact()) {
+            // With the compact format, we always have to read all rows with __ydb_gen < MAX (these are updates)
+            fromCells.insert(fromCells.end()-1, TCell::Make<NTableIndex::NFulltext::TGen>(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
+        }
         auto range = TTableRange(fromCells, StartReadKeyFromInclusive, toCells, false /*toInclusive*/);
 
         auto rangePartition = Reader->GetRangePartitioning(range);
@@ -1193,7 +1244,7 @@ public:
         return stream->GetMaxKey();
     }
 
-    void FinishTokenStream(ui64 tokenIndex) {
+    virtual void FinishTokenStream(ui64 tokenIndex) {
         YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
         auto& stream = Streams[tokenIndex];
         stream->SetReadFinished();
@@ -1272,7 +1323,20 @@ public:
         auto& stream = Streams[tokenIndex];
         bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
         stream->AddResult(std::move(msg));
-        if (wasEmpty) {
+        if (wasEmpty && stream->GetUnprocessedDocumentCount() > 0) {
+            ReadyStreams.push_back(tokenIndex);
+        }
+    }
+
+    void FinishTokenStream(ui64 tokenIndex) override {
+        YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
+        auto& stream = Streams[tokenIndex];
+        bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
+        stream->SetReadFinished();
+        if (stream->IsEof()) {
+            FinishedTokens++;
+        } else if (wasEmpty) {
+            // Compact token may become non-empty after it's marked with ReadFinished
             ReadyStreams.push_back(tokenIndex);
         }
     }
@@ -1423,7 +1487,7 @@ public:
         auto& stream = Streams[tokenIndex];
         bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
         stream->AddResult(std::move(msg));
-        if (wasEmpty) {
+        if (wasEmpty && stream->GetUnprocessedDocumentCount() > 0) {
             MergeQueue.push(THeapEntry(tokenIndex, stream->GetLeastDocId()));
         }
     }
@@ -3893,11 +3957,11 @@ static NScheme::TTypeId GetDocIdTypeId(const NKikimrKqp::TKqpFullTextSourceSetti
     if (settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
-        // Compact key is [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the doc-id type
+        // Compact key is [prefix..., __ydb_token, __ydb_generation, __ydb_max_id]; the doc-id type
         // is that of __ydb_max_id, which sits right after the prefix columns and the token.
         const int numPrefix = settings->GetQuerySettings().GetPrefixColumns().size();
         YQL_ENSURE(keyColumns.size() == numPrefix + 3);
-        idx = numPrefix + 1; // __ydb_max_id
+        idx = numPrefix + 2; // __ydb_max_id (after __ydb_generation)
     }
     return static_cast<NScheme::TTypeId>(keyColumns[idx].GetTypeId());
 }

@@ -57,9 +57,7 @@ sequenceDiagram
 
 Параметры настройки:
 
-- `WATERMARK` - выражение для вычисления водяного знака. Формат: `SystemMetadata("write_time") - Interval("<delay>")`, где `<delay>` задаётся в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#Durations).
-- `WATERMARK_GRANULARITY` - периодичность генерации водяных знаков. Чем меньше значение, тем больше потребление CPU и тем ниже задержка ответа. Значение по умолчанию: 1 секунда.
-- `WATERMARK_IDLE_TIMEOUT` - период, после которого [простаивающая партиция](#idle-partitions) будет исключена из вычисления общего водяного знака. Значение по умолчанию: 5 секунд.
+{% include [watermark_parameters.md](../../_includes/watermark_parameters.md) %}
 
 {% note warning %}
 

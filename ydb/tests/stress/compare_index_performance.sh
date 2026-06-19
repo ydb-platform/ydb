@@ -100,12 +100,16 @@ run_test() {
     local ydbd_path="$2"
     local test_path="$3"
     local log_file="$4"
+    shift 4
+    # Remaining arguments are extra --test-param flags
+    local extra_params=("$@")
 
     echo "--- Running $test_path with $label ydbd ---"
     cd "$REPO_ROOT"
     ./ya make --build "$BUILD_PRESET" -tA "$test_path" \
         -DYDB_DRIVER_BINARY_PREBUILT="$ydbd_path" \
         --test-param stress_default_duration="$DURATION" \
+        "${extra_params[@]}" \
         2>&1 | tee "$log_file" | tail -5
     echo ""
 }
@@ -147,12 +151,19 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
     echo "=========================================="
 
     VECTOR_TEST="ydb/tests/stress/vector_workload/tests"
+    VECTOR_DATA_DIR="$RESULTS_DIR/vector_data"
 
-    run_test "$S3_REF" "$MAIN_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_main.log"
+    # Main: generate data + dump to files
+    run_test "$S3_REF" "$MAIN_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_main.log" \
+        --test-param vector_mode=generate \
+        --test-param vector_data_dir="$VECTOR_DATA_DIR"
     VECTOR_MAIN_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
     VECTOR_MAIN_TXS=$(extract_total_txs_sec "$VECTOR_MAIN_LOG_DIR")
 
-    run_test "current" "$CURRENT_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_current.log"
+    # Current: load data from dump
+    run_test "current" "$CURRENT_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_current.log" \
+        --test-param vector_mode=load \
+        --test-param vector_data_dir="$VECTOR_DATA_DIR"
     VECTOR_CURRENT_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
     VECTOR_CURRENT_TXS=$(extract_total_txs_sec "$VECTOR_CURRENT_LOG_DIR")
 fi

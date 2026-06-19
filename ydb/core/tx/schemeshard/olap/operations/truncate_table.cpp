@@ -285,6 +285,16 @@ public:
             return result;
         }
 
+        // TRUNCATE for column tables swaps the table to a freshly generated internal path id on the column
+        // shard. This requires GenerateInternalPathId mode: otherwise the internal path id is forced to equal
+        // the SchemeShard local path id and the generated-id counter (MaxInternalPathId) is not persisted
+        // across restarts, which would break the table or lead to internal path id reuse on later truncations.
+        if (!AppData()->ColumnShardConfig.GetGenerateInternalPathId()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "TRUNCATE TABLE for column tables requires GenerateInternalPathId to be enabled");
+            return result;
+        }
+
         TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
         {
             TPath::TChecker checks = tablePath.Check();

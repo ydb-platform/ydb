@@ -63,7 +63,7 @@ struct TPartitionSessionControl: public TPartitionSession {
     virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
 
     //! Confirm partition session creation from TStartPartitionSessionEvent.
-    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) = 0;
+    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset = std::nullopt) = 0;
 
     //! Confirm partition session destruction from TStopPartitionSessionEvent.
     virtual void ConfirmDestroy() = 0;

@@ -861,7 +861,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }
         RunExport<IsFs>(t, {
             TTestData::ColumnTable()
-        }, TTestData::Items(EPathTypeColumnTable));
+        }, TTestData::Items(EPathTypeColumnTable),
+        TTestEnvOptions().EnableColumnTablesBackup(true));
     }
     
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
@@ -870,7 +871,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }
         CancelExport<IsFs>(t, {
             TTestData::ColumnTable()
-        }, TTestData::Items(EPathTypeColumnTable));
+        }, TTestData::Items(EPathTypeColumnTable),
+        TTestEnvOptions().EnableColumnTablesBackup(true));
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ForgetShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
@@ -879,7 +881,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }
         ForgetExport<IsFs>(t, {
             TTestData::ColumnTable()
-        }, TTestData::Items(EPathTypeColumnTable));
+        }, TTestData::Items(EPathTypeColumnTable),
+        TTestEnvOptions().EnableColumnTablesBackup(true));
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemViewPermissions, 2, 1, false, IsFs) {

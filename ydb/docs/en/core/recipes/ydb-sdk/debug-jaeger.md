@@ -161,7 +161,9 @@ Below are examples of code for enabling tracing in Jaeger in different {{ ydb-sh
 
 - Rust
 
-  Jaeger integration is intentionally not supported. Use the [`tracing`](https://docs.rs/tracing) ecosystem and OpenTelemetry export ([#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)).
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  
+  Use the [`tracing`](https://docs.rs/tracing) ecosystem and OpenTelemetry export ([#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)).
 
 - PHP
 

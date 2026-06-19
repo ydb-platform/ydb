@@ -226,7 +226,7 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
 
   #[tokio::main]
   async fn main() -> YdbResult<()> {
-      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?
           .with_credentials(AccessTokenCredentials::from("..."))
           .client()?;
       client.wait().await?;

@@ -6,7 +6,7 @@ import ydb
 import os
 import time
 from ydb_wrapper import YDBWrapper
-from mart_cleanup import cleanup_window_antijoin_by_date_key, validate_identifier, validate_interval_expression
+from mart_cleanup import cleanup_window_antijoin_by_date_key
 
 # Get repository path
 dir = os.path.dirname(__file__)
@@ -104,10 +104,6 @@ def cleanup_after_upsert(
     window_interval,
     query_name,
 ):
-    validate_identifier(window_key, "--cleanup_window_key")
-    validate_interval_expression(window_interval)
-    for key in primary_keys:
-        validate_identifier(key, "--primary_keys")
     pk_type_map = _collect_pk_type_map(primary_keys, column_types)
     cleanup_window_antijoin_by_date_key(
         ydb_wrapper,

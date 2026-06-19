@@ -68,6 +68,10 @@ MUTE_LATENCY_PK_TYPES = {**_MUTE_PK_TYPES, 'full_name': 'Utf8'}
 MUTE_EVENTS_PK_TYPES = {**_MUTE_PK_TYPES, 'event': 'Utf8', 'full_name': 'Utf8'}
 AFFECTED_PRS_PK_TYPES = {**_MUTE_PK_TYPES, 'pull': 'Utf8'}
 
+CommitGitData = List[
+    Tuple[str, dt.datetime, List[str], List[str], List[Tuple[str, str]], List[str]]
+]
+
 
 def _repo_root() -> str:
     return os.path.normpath(os.path.join(_scripts_dir, '..', '..', '..'))
@@ -890,7 +894,6 @@ def main() -> int:
         return 1
 
     # ── Phase 2: git — collect commits and per-commit added lines (no YDB) ───
-    CommitGitData = List[Tuple[str, dt.datetime, List[str], List[str], List[Tuple[str, str]], List[str]]]
     commits = commits_touching_file(repo, rel_path, since_date, branch=args.branch)
     if ydb_since_dt is not None:
         commits = [(s, c) for s, c in commits if c > ydb_since_dt]

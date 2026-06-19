@@ -230,7 +230,7 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     // Overwrite with selectivity for successfully pushed-down filters within the read operator.
     if (OriginalPredicate.has_value()) {
-        auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(Props, true));
+        auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(Props, true, ctx.TypeCtx));
         auto lambda = TCoLambda(OriginalPredicate->Node);
         double selectivity = TPredicateSelectivityComputer(inputStats, &Props.Metadata->ColumnLineage).Compute(lambda.Body());
 
@@ -278,7 +278,7 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = GetInput()->Props.Statistics;
     Props.Cost = GetInput()->Props.Cost;
 
-    auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true));
+    auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true, ctx.TypeCtx));
     auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats, &Props.Metadata->ColumnLineage).Compute(lambda.Body());
 
@@ -461,8 +461,8 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     // FIXME: Compute decent logical cardinality
     Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
     
-    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, false));
-    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, false));
+    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, false, ctx.TypeCtx));
+    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, false, ctx.TypeCtx));
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
@@ -548,8 +548,8 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 
     Props.Statistics = TRBOStatistics();
     
-    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, true));
-    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, true));
+    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, true, ctx.TypeCtx));
+    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, true, ctx.TypeCtx));
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;

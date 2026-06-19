@@ -255,7 +255,7 @@ TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> BuildTranslatedColumnStatist
 }
 
 TOptimizerStatistics BuildLeafOptimizerStatistics(const TCBOLeaf& leaf, NYql::TTypeAnnotationContext& typeCtx) {
-    auto stats = BuildOptimizerStatistics(leaf.Op->Props, true);
+    auto stats = BuildOptimizerStatistics(leaf.Op->Props, true, typeCtx);
     stats.KeyColumns = MakeIntrusive<TOptimizerStatistics::TKeyColumns>(BuildTranslatedKeyColumns(leaf));
 
     if (leaf.Op->Props.Metadata) {

@@ -230,7 +230,13 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
                 Db->SyncLogFirstLsnToKeep,
                 false,
                 TControlWrapper(0, 0, 1),
+<<<<<<< HEAD
                 TControlWrapper(20'000'000, 1, 100'000'000'000));
+=======
+                false,
+                TControlWrapper(20'000'000, 1, 100'000'000'000),
+                TControlWrapper(1'000'000, 1, 10'000'000));
+>>>>>>> 0dfc3c930dd (Configure the size of blobs protected by PhantomFlagStorage (#43892))
         TestCtx->SyncLogId = ctx.Register(CreateSyncLogActor(slCtx, Conf->GroupInfo, TestCtx->SelfVDiskId, std::move(repaired)));
         // Send Db birth lsn
         ui64 dbBirthLsn = 0;

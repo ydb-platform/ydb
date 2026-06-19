@@ -247,7 +247,7 @@ C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 
 ### Настройка сервера
 
-Правила проверки сертификатов и назначения групп задаются в секции [`client_certificate_authorization`](../reference/configuration/client_certificate_authorization.md) статической конфигурации кластера. Для включения на сервере запросов клиентского сертификата при TLS-handshake по gRPCs необходимо задать в этой секции параметр `request_client_certificate: true`. Подробнее о параметрах — в разделе [{#T}](../reference/configuration/client_certificate_authorization.md).
+Правила проверки сертификатов и назначения групп задаются в секции [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) статической конфигурации кластера. Для включения на сервере запросов клиентского сертификата при TLS-handshake по gRPCs необходимо задать в этой секции параметр `request_client_certificate: true`. Подробнее о параметрах — в разделе [{#T}](../reference/configuration/client_certificate_authorization.md).
 
 ### Настройка клиента
 

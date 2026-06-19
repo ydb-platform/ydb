@@ -399,8 +399,8 @@ message TKqpVectorIndexReadSettings {
     optional uint32 OverlapClusters = 16;
     optional double OverlapRatio = 17;
 
-    // Prefixed index support (optional). When set, the input also carries the prefix
-    // key columns used to look up root clusters from the prefix table.
+    // Prefixed index support (reserved): the prefix table is read in the plan; the actor
+    // receives the per-prefix-group root cluster id in the input row's __ydb_parent member.
     optional TKqpTransaction.TTableMeta PrefixTable = 18;
     repeated uint32 PrefixTableKeyColumnIds = 19;
 

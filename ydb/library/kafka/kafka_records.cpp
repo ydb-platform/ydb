@@ -1019,4 +1019,18 @@ ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TK
     return static_cast<ui64>(batch.BaseOffset) + record.OffsetDelta;
 }
 
+std::pair<EKafkaErrors, ui64> GetMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo) {
+    if (header.ProducerId >= 0) {
+        return {
+            EKafkaErrors::NONE_ERROR,
+            (baseSeqNo + header.RecordsCount - 1) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1)
+        };
+    }
+
+    if (header.LastOffsetDelta < 0) {
+        return {EKafkaErrors::INVALID_RECORD, 0};
+    }
+    return {EKafkaErrors::NONE_ERROR, baseSeqNo + static_cast<ui64>(header.LastOffsetDelta)};
+}
+
 } // namespace NKafka

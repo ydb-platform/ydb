@@ -3,6 +3,7 @@
 #include "kafka.h"
 
 #include <optional>
+#include <utility>
 
 namespace NKafka {
 
@@ -685,5 +686,6 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
 std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header);
 std::pair<EKafkaErrors, ui64> GetBatchMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo);
 ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record);
+std::pair<EKafkaErrors, ui64> GetMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo);
 
 } // namespace NKafka

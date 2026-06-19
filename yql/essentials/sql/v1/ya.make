@@ -63,9 +63,9 @@ GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 END()
 
 RECURSE(
-    complete
     format
     highlight
+    ide
     lexer
     perf
     proto_parser

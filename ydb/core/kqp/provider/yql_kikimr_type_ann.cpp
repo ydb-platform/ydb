@@ -794,11 +794,17 @@ private:
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
-                if (meta.NotNull) {
+                if (meta.NotNull || meta.SetNotNullInProgress) {
                     if (!rowType->FindItem(name) && !meta.IsDefaultKindDefined()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                            << "Missing not null column in input: " << name
-                            << ". All not null columns should be initialized"));
+                        if (meta.SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                                << "Missing column in input: " << name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                                << "Missing not null column in input: " << name
+                                << ". All not null columns should be initialized"));
+                        }
                         return TStatus::Error;
                     }
 
@@ -809,9 +815,15 @@ private:
                     }
 
                     if (itemType && itemType->HasOptionalOrNull()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                            << "Can't set NULL or optional value to not null column: " << name
-                            << ". All not null columns should be initialized"));
+                        if (meta.SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to column: " << name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to not null column: " << name
+                                << ". All not null columns should be initialized"));
+                        }
                         return TStatus::Error;
                     }
                 }
@@ -826,9 +838,15 @@ private:
                 auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
                 YQL_ENSURE(column);
                 if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
-                    if (column->NotNull && item->HasOptionalOrNull()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                            << "Can't set NULL or optional value to not null column: " << column->Name));
+                    if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
+                        if (column->SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to column: " << column->Name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to not null column: " << column->Name));
+                        }
                         return TStatus::Error;
                     }
                 }
@@ -991,19 +1009,31 @@ private:
                 return TStatus::Error;
             }
 
-            if (column->IsBuildInProgress) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-                    << "Column '" << item->GetName() << "' is under the build operation '" << node.Table().Value() << "'."));
+            if (column->IsBuildInProgress || column->SetNotNullInProgress) {
+                if (column->SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                        << "Column '" << item->GetName() << "' is under `SET NOT NULL` operation for table '"
+                        << node.Table().Value() << "'."));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                        << "Column '" << item->GetName() << "' is under the build operation '" << node.Table().Value() << "'."));
+                }
                 return TStatus::Error;
             }
 
-            if (column->NotNull && item->HasOptionalOrNull()) {
+            if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
                 if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg) {
                     //no type-level notnull check for pg types.
                     continue;
                 }
-                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                    << "Can't set NULL or optional value to not null column: " << column->Name));
+                if (column->SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set NULL or optional value to column: " << column->Name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set NULL or optional value to not null column: " << column->Name));
+                }
                 return TStatus::Error;
             }
         }
@@ -1349,11 +1379,45 @@ private:
                 dataColums.emplace_back(TString(dataCol.Value()));
             }
 
+            const bool isFulltextIndex =
+                indexType == TIndexDescription::EType::GlobalFulltextPlain ||
+                indexType == TIndexDescription::EType::GlobalFulltextRelevance ||
+                indexType == TIndexDescription::EType::GlobalFulltextCompact ||
+                indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance;
+            // Fulltext index key columns are [prefix..., text]; the text column is the last one.
+            // More than one key column means the index has prefix columns.
+            if (isFulltextIndex && indexColums.size() > 1) {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndexPrefix()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                        "Fulltext index prefix columns support is disabled"));
+                    return TStatus::Error;
+                }
+                // Relevance scoring uses a corpus-global dictionary keyed by token only; with prefix
+                // columns as the leading sort key the same token scatters across prefix groups, which
+                // the streaming dictionary/borders build cannot aggregate. Not supported yet.
+                if (indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                        "Fulltext index prefix columns are not supported for compact relevance indexes"));
+                    return TStatus::Error;
+                }
+                // Prefix columns must be disjoint from the primary key (doc-id) columns:
+                // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
+                const THashSet<TString> pkColumns{meta->KeyColumnNames.begin(), meta->KeyColumnNames.end()};
+                for (size_t i = 0; i + 1 < indexColums.size(); ++i) {
+                    if (pkColumns.contains(indexColums[i])) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
+                            << "Fulltext index prefix column '" << indexColums[i]
+                            << "' must not be a primary key column"));
+                        return TStatus::Error;
+                    }
+                }
+            }
+
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDescription;
             TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
-            // fulltext index has per-column analyzers settings, single value for now
+            // fulltext index has per-column analyzers settings; the text column is the last index column
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
                 indexColums.empty() ? "<none>" : indexColums.back()
             );
@@ -2031,7 +2095,7 @@ private:
                         if (auto status = ValidateDefaultColumn(columnType, defaultType, defaultExpr, nameNode.Pos(), name, table, ctx, Types, [&](TExprNode::TPtr expr) {
                             alterColumnList.Ptr()->ChildRef(1) = std::move(expr);
                             ctx.Step.Repeat(TExprStep::ExprEval);
-                        }, column ? column->NotNull : false))
+                        }, column ? (column->NotNull || column->SetNotNullInProgress) : false))
                         {
                             return *status;
                         }

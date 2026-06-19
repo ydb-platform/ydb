@@ -96,9 +96,15 @@ TKeyValueState::TKeyValueState()
     , ReadRequestsInFlightLimit(ReadRequestsInFlightLimit_Base)
     , UsePayload_Base(0, 0, 1)
     , UsePayload(UsePayload_Base)
+    , RejectNonExistentStorageChannel_Base(0, 0, 1)
+    , RejectNonExistentStorageChannel(RejectNonExistentStorageChannel_Base)
 {
     TabletCounters = nullptr;
     Clear();
+}
+
+bool TKeyValueState::RejectNonExistentStorageChannelEnabled(const TActorContext& ctx) {
+    return RejectNonExistentStorageChannel.Update(ctx.Now()) != 0;
 }
 
 void TKeyValueState::Clear() {
@@ -574,11 +580,15 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         ReadRequestsInFlightLimit.ResetControl(ReadRequestsInFlightLimit_Base);
         TControlBoard::RegisterSharedControl(UsePayload_Base, icb->KeyValueVolumeControls.UsePayload);
         UsePayload.ResetControl(UsePayload_Base);
+        TControlBoard::RegisterSharedControl(RejectNonExistentStorageChannel_Base, icb->KeyValueVolumeControls.RejectNonExistentStorageChannel);
+        RejectNonExistentStorageChannel.ResetControl(RejectNonExistentStorageChannel_Base);
 
-        YDB_LOG_DEBUG("Init KeyValue with ICB Marker# KV92",
+        YDB_LOG_DEBUG("Init KeyValue with ICB",
             {"keyValue", TabletId},
             {"usePayload", UsePayload.Update(ctx.Now())},
-            {"readRequestsInFlightLimit", ReadRequestsInFlightLimit.Update(ctx.Now())});
+            {"readRequestsInFlightLimit", ReadRequestsInFlightLimit.Update(ctx.Now())},
+            {"rejectNonExistentStorageChannel", RejectNonExistentStorageChannel.Update(ctx.Now())},
+            {"marker", "KV92"});
     }
 
     // Issue hard barriers
@@ -704,9 +714,10 @@ void TKeyValueState::InitComplete(const TActorContext& ctx, const TTabletStorage
 }
 
 bool TKeyValueState::RegisterInitialCollectResult(const TActorContext &ctx, const TTabletStorageInfo *info) {
-    YDB_LOG_DEBUG("Marker# KV50",
+    YDB_LOG_DEBUG("Dump keyValue, initialCollectsSent, marker",
         {"keyValue", TabletId},
-        {"initialCollectsSent", InitialCollectsSent});
+        {"initialCollectsSent", InitialCollectsSent},
+        {"marker", "KV50"});
     if (--InitialCollectsSent == 0) {
         SendCutHistory(ctx, info);
         return true;
@@ -728,8 +739,9 @@ void TKeyValueState::RegisterInitialGCCompletionComplete(const TActorContext &ct
 }
 
 void TKeyValueState::SendCutHistory(const TActorContext &ctx, const TTabletStorageInfo *info) {
-    YDB_LOG_DEBUG("SendCutHistory Marker# KV51",
-        {"keyValue", TabletId});
+    YDB_LOG_DEBUG("SendCutHistory",
+        {"keyValue", TabletId},
+        {"marker", "KV51"});
 
     using THistoryItem = std::tuple<ui8, ui32>; // channel, fromGeneration
     THashSet<THistoryItem> uselessItems;
@@ -856,10 +868,10 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
         if (intermediate->Generation != StoredState.GetUserGeneration()) {
             TStringStream str;
             YDB_LOG_INFO("Generation mismatch",
-                {"KeyValue", TabletId},
-                {"Requested", intermediate->Generation},
-                {"Actual", StoredState.GetUserGeneration()},
-                {"Marker", "KV17"});
+                {"keyValue", TabletId},
+                {"requested", intermediate->Generation},
+                {"actual", StoredState.GetUserGeneration()},
+                {"marker", "KV17"});
             // All reads done
             intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_REJECTED);
             intermediate->Response.SetErrorReason(str.Str());
@@ -2051,9 +2063,9 @@ bool PrepareOneReadFromRangeReadWithoutData(const TString &key, TIndexRecord &in
             || cmdSizeBytes + metadataSize > cmdLimitBytes) {
         YDB_LOG_TRACE("Went beyond limits",
             {"marker", "KV330"},
-            {"#_intermediate->TotalSize + metadataSize", intermediate->TotalSize + metadataSize},
-            {"#_intermediate->TotalSizeLimit", intermediate->TotalSizeLimit},
-            {"#_cmdSizeBytes + metadataSize", cmdSizeBytes + metadataSize},
+            {"intermediateTotalSizeWithMetadata", intermediate->TotalSize + metadataSize},
+            {"intermediateTotalSizeLimit", intermediate->TotalSizeLimit},
+            {"cmdSizeBytesWithMetadata", cmdSizeBytes + metadataSize},
             {"cmdLimitBytes", cmdLimitBytes});
         return true;
     }
@@ -2389,6 +2401,15 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
                 storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
                 ui32 endChannel = info->Channels.size();
                 if (storageChannelIdx >= endChannel) {
+                    if (RejectNonExistentStorageChannelEnabled(ctx)) {
+                        TStringStream str;
+                        str << "KeyValue# " << TabletId
+                            << " CmdWrite StorageChannel# " << storageChannelOffset
+                            << " doesn't exist Marker# KV96";
+                        ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR,
+                            NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST, intermediate);
+                        return true;
+                    }
                     storageChannelIdx = BLOB_CHANNEL;
                     YDB_LOG_INFO("CmdWrite does not exist, using MAIN",
                         {"keyValue", TabletId},
@@ -2548,6 +2569,15 @@ bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TK
             storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
             ui32 endChannel = info->Channels.size();
             if (storageChannelIdx >= endChannel) {
+                if (RejectNonExistentStorageChannelEnabled(ctx)) {
+                    TStringStream str;
+                    str << "KeyValue# " << TabletId
+                        << " CmdPatch StorageChannel# " << storageChannelOffset
+                        << " doesn't exist Marker# KV97";
+                    ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR,
+                        NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST, intermediate);
+                    return true;
+                }
                 storageChannelIdx = BLOB_CHANNEL;
                 YDB_LOG_INFO("CmdPatch does not exist, using MAIN",
                     {"keyValue", TabletId},
@@ -2563,7 +2593,8 @@ bool TKeyValueState::PrepareCmdPatch(const TActorContext &ctx, NKikimrClient::TK
 
 
 TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
-        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info)
+        NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info,
+        const TActorContext& ctx)
 {
     TString msg;
     if (storageChannel == NKikimrClient::TKeyValueRequest::INLINE) {
@@ -2582,6 +2613,12 @@ TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediat
         ui32 storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
         ui32 endChannel = info->Channels.size();
         if (storageChannelIdx >= endChannel) {
+            if (RejectNonExistentStorageChannelEnabled(ctx)) {
+                msg = TStringBuilder() << "KeyValue# " << TabletId
+                        << " CmdGetStatus StorageChannel# " << storageChannelOffset
+                        << " does not exist Marker# KV98";
+                return {true, msg};
+            }
             storageChannelIdx = BLOB_CHANNEL;
             msg = TStringBuilder() << "KeyValue# " << TabletId
                     << " CmdGetStatus StorageChannel# " << storageChannelOffset
@@ -2595,7 +2632,7 @@ TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediat
     return {false, msg};
 }
 
-bool TKeyValueState::PrepareCmdGetStatus(NKikimrClient::TKeyValueRequest &kvRequest,
+bool TKeyValueState::PrepareCmdGetStatus(const TActorContext& ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
     intermediate->GetStatuses.resize(kvRequest.CmdGetStatusSize());
     for (ui32 i = 0; i < kvRequest.CmdGetStatusSize(); ++i) {
@@ -2608,11 +2645,16 @@ bool TKeyValueState::PrepareCmdGetStatus(NKikimrClient::TKeyValueRequest &kvRequ
         if (request.HasStorageChannel()) {
             storageChannel = request.GetStorageChannel();
         }
-        TPrepareResult result = InitGetStatusCommand(interm, storageChannel, info);
-        if (result.ErrorMsg && !result.WithError) {
-            YDB_LOG_INFO(result.ErrorMsg,
-                {"Marker", "KV76"},
-                {"errorMsg", result.ErrorMsg});
+        TPrepareResult result = InitGetStatusCommand(interm, storageChannel, info, ctx);
+        if (result.WithError) {
+            ReplyError(ctx, result.ErrorMsg, NMsgBusProxy::MSTATUS_ERROR,
+                NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST, intermediate);
+            return true;
+        }
+        if (result.ErrorMsg) {
+            YDB_LOG_INFO("PrepareCmdGetStatus completed with warning",
+                {"resultErrorMsg", result.ErrorMsg},
+                {"marker", "KV76"});
         }
     }
     return false;
@@ -2733,7 +2775,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::CopyRange &request,
 }
 
 TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info, const TEvKeyValue::TEvExecuteTransaction& ev)
+        const TTabletStorageInfo *info, const TActorContext &ctx, const TEvKeyValue::TEvExecuteTransaction& ev)
 {
     intermediate->Commands.emplace_back(TIntermediate::TWrite());
     auto &cmd = std::get<TIntermediate::TWrite>(intermediate->Commands.back());
@@ -2774,7 +2816,20 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THo
         storageChannelIdx = storageChannelOffset + BLOB_CHANNEL;
         ui32 endChannel = info->Channels.size();
         if (storageChannelIdx >= endChannel) {
+            if (RejectNonExistentStorageChannelEnabled(ctx)) {
+                TStringStream str;
+                str << "KeyValue# " << TabletId
+                    << " Write storage_channel# " << storageChannel
+                    << " doesn't exist Marker# KV99";
+                TString msg = str.Str();
+                ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx, msg,
+                    NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST, intermediate, nullptr);
+                return {true, msg};
+            }
             storageChannelIdx = BLOB_CHANNEL;
+            YDB_LOG_INFO("Write does not exist, using MAIN",
+                {"keyValue", TabletId},
+                {"storageChannel", storageChannel});
         }
     }
     SplitIntoBlobs(cmd, isInline, storageChannelIdx);
@@ -2825,7 +2880,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand &request, THolder<TI
     case NKikimrKeyValue::ExecuteTransactionRequest::Command::kConcat:
         return PrepareOneCmd(request.concat(), intermediate);
     case NKikimrKeyValue::ExecuteTransactionRequest::Command::kWrite:
-        return PrepareOneCmd(request.write(), intermediate, info, ev);
+        return PrepareOneCmd(request.write(), intermediate, info, ctx, ev);
     }
 }
 
@@ -2852,7 +2907,7 @@ TPrepareResult TKeyValueState::PrepareCommands(NKikimrKeyValue::ExecuteTransacti
 void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescription,
         NMsgBusProxy::EResponseStatus oldStatus, NKikimrKeyValue::Statuses::ReplyStatus newStatus,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
-    YDB_LOG_INFO("",
+    YDB_LOG_INFO("Reply with error",
         {"errorDescription", errorDescription});
     Y_ABORT_UNLESS(!intermediate->IsReplied);
 
@@ -2901,8 +2956,9 @@ void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescripti
 bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::TEvRead::TPtr &ev,
         THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType)
 {
-    YDB_LOG_DEBUG("PrepareReadRequest Marker# KV53",
-        {"keyValue", TabletId});
+    YDB_LOG_DEBUG("PrepareReadRequest",
+        {"keyValue", TabletId},
+        {"marker", "KV53"});
 
     NKikimrKeyValue::ReadRequest &request = ev->Get()->Record;
     StoredState.SetChannelGeneration(ExecutorGeneration);
@@ -2956,8 +3012,9 @@ bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::T
 bool TKeyValueState::PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyValue::TEvReadRange::TPtr &ev,
         THolder<TIntermediate> &intermediate, TRequestType::EType *outRequestType)
 {
-    YDB_LOG_DEBUG("PrepareReadRangeRequest Marker# KV57",
-        {"keyValue", TabletId});
+    YDB_LOG_DEBUG("PrepareReadRangeRequest",
+        {"keyValue", TabletId},
+        {"marker", "KV57"});
 
     NKikimrKeyValue::ReadRangeRequest &request = ev->Get()->Record;
     StoredState.SetChannelGeneration(ExecutorGeneration);
@@ -3024,8 +3081,9 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
         TEvKeyValue::TEvExecuteTransaction::TPtr &ev, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info)
 {
-    YDB_LOG_DEBUG("PrepareExecuteTransactionRequest Marker# KV72",
-        {"keyValue", TabletId});
+    YDB_LOG_DEBUG("PrepareExecuteTransactionRequest",
+        {"keyValue", TabletId},
+        {"marker", "KV72"});
 
     NKikimrKeyValue::ExecuteTransactionRequest &request = ev->Get()->Record;
     StoredState.SetChannelGeneration(ExecutorGeneration);
@@ -3058,9 +3116,10 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
         DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);
         Y_ABORT_UNLESS(intermediate->RefCountsIncr.empty());
 
-        YDB_LOG_ERROR("PrepareExecuteTransactionRequest return flase, Marker# KV73",
+        YDB_LOG_ERROR("PrepareExecuteTransactionRequest return flase,",
             {"keyValue", TabletId},
-            {"submsg", result.ErrorMsg});
+            {"submsg", result.ErrorMsg},
+            {"marker", "KV73"});
         return false;
     }
 
@@ -3069,7 +3128,7 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
 
 
 TKeyValueState::TPrepareResult TKeyValueState::PrepareOneGetStatus(TIntermediate::TGetStatus &cmd,
-        ui64 publicStorageChannel, const TTabletStorageInfo *info)
+        ui64 publicStorageChannel, const TTabletStorageInfo *info, const TActorContext& ctx)
 {
     NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel = NKikimrClient::TKeyValueRequest::MAIN;
     if (publicStorageChannel == 1) {
@@ -3078,15 +3137,16 @@ TKeyValueState::TPrepareResult TKeyValueState::PrepareOneGetStatus(TIntermediate
         ui32 storageChannelIdx = BLOB_CHANNEL + publicStorageChannel - MainStorageChannelInPublicApi;
         storageChannel = NKikimrClient::TKeyValueRequest::EStorageChannel(storageChannelIdx);
     }
-    return InitGetStatusCommand(cmd, storageChannel, info);;
+    return InitGetStatusCommand(cmd, storageChannel, info, ctx);;
 }
 
 
 bool TKeyValueState::PrepareGetStorageChannelStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStorageChannelStatus::TPtr &ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info)
 {
-    YDB_LOG_DEBUG("PrepareGetStorageChannelStatusRequest Marker# KV78",
-        {"keyValue", TabletId});
+    YDB_LOG_DEBUG("PrepareGetStorageChannelStatusRequest",
+        {"keyValue", TabletId},
+        {"marker", "KV78"});
 
     NKikimrKeyValue::GetStorageChannelStatusRequest &request = ev->Get()->Record;
     StoredState.SetChannelGeneration(ExecutorGeneration);
@@ -3111,11 +3171,16 @@ bool TKeyValueState::PrepareGetStorageChannelStatusRequest(const TActorContext &
 
     intermediate->GetStatuses.resize(request.storage_channel_size());
     for (i32 idx = 0; idx < request.storage_channel_size(); ++idx) {
-        TPrepareResult result = PrepareOneGetStatus(intermediate->GetStatuses[idx], request.storage_channel(idx), info);
-        if (result.ErrorMsg && !result.WithError) {
-            YDB_LOG_INFO(result.ErrorMsg,
-                {"Marker", "KV77"},
-                {"errorMsg", result.ErrorMsg});
+        TPrepareResult result = PrepareOneGetStatus(intermediate->GetStatuses[idx], request.storage_channel(idx), info, ctx);
+        if (result.WithError) {
+            ReplyError(ctx, result.ErrorMsg, NMsgBusProxy::MSTATUS_ERROR,
+                NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST, intermediate);
+            return false;
+        }
+        if (result.ErrorMsg) {
+            YDB_LOG_INFO("PrepareGetStorageChannelStatusRequest completed with warning",
+                {"resultErrorMsg", result.ErrorMsg},
+                {"marker", "KV77"});
         }
     }
     return true;
@@ -3124,8 +3189,9 @@ bool TKeyValueState::PrepareGetStorageChannelStatusRequest(const TActorContext &
 bool TKeyValueState::PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,
         THolder<TIntermediate> &intermediate)
 {
-    YDB_LOG_DEBUG("PrepareAcquireLockRequest Marker# KV79",
-        {"keyValue", TabletId});
+    YDB_LOG_DEBUG("PrepareAcquireLockRequest",
+        {"keyValue", TabletId},
+        {"marker", "KV79"});
 
     StoredState.SetChannelGeneration(ExecutorGeneration);
     StoredState.SetChannelStep(NextLogoBlobStep - 1);
@@ -3168,7 +3234,7 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
         Y_ABORT_UNLESS(newRefCount == 1);
         intermediate->RefCountsIncr.emplace_back(patch.PatchedBlobId, true);
 
-        YDB_LOG_INFO("",
+        YDB_LOG_INFO("Allocated patched blob id",
             {"keyValue", TabletId},
             {"patchedKey", patch.PatchedKey},
             {"blobId", patch.PatchedBlobId});
@@ -3229,24 +3295,27 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
 
     if (PrepareReadRequest(ctx, ev, intermediate, &requestType)) {
         if (requestType == TRequestType::ReadOnlyInline) {
-            YDB_LOG_DEBUG("Create storage inline read request, Marker# KV49",
-                {"keyValue", TabletId});
+            YDB_LOG_DEBUG("Create storage inline read request,",
+                {"keyValue", TabletId},
+                {"marker", "KV49"});
             RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
             ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
             if (IntermediatesInFlight < limit) {
                 ++IntermediatesInFlight;
-                YDB_LOG_DEBUG("Create storage read request, / Marker# KV54",
+                YDB_LOG_DEBUG("Create storage read request, /",
                     {"keyValue", TabletId},
                     {"inFlight", IntermediatesInFlight},
-                    {"limit", limit});
+                    {"limit", limit},
+                    {"marker", "KV54"});
                 RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else {
-                YDB_LOG_DEBUG("Enqueue storage read request / Marker# KV56",
+                YDB_LOG_DEBUG("Enqueue storage read request /",
                     {"keyValue", TabletId},
                     {"intermediatesInFlight", IntermediatesInFlight},
-                    {"limit", limit});
+                    {"limit", limit},
+                    {"marker", "KV56"});
                 PostponeIntermediate<TEvKeyValue::TEvRead>(std::move(intermediate));
             }
         }
@@ -3270,22 +3339,25 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
 
     if (PrepareReadRangeRequest(ctx, ev, intermediate, &requestType)) {
         if (requestType == TRequestType::ReadOnlyInline) {
-            YDB_LOG_DEBUG("Create storage inline read range request, Marker# KV58",
-                {"keyValue", TabletId});
+            YDB_LOG_DEBUG("Create storage inline read range request,",
+                {"keyValue", TabletId},
+                {"marker", "KV58"});
             RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             ++RoInlineIntermediatesInFlight;
         } else {
             ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
             if (IntermediatesInFlight < limit) {
                 ++IntermediatesInFlight;
-                YDB_LOG_DEBUG("Create storage read range request, / Marker# KV66",
+                YDB_LOG_DEBUG("Create storage read range request, /",
                     {"keyValue", TabletId},
                     {"inFlight", IntermediatesInFlight},
-                    {"limit", limit});
+                    {"limit", limit},
+                    {"marker", "KV66"});
                 RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else {
-                YDB_LOG_DEBUG("Enqueue storage read range request, Marker# KV59",
-                    {"keyValue", TabletId});
+                YDB_LOG_DEBUG("Enqueue storage read range request,",
+                    {"keyValue", TabletId},
+                    {"marker", "KV59"});
                 PostponeIntermediate<TEvKeyValue::TEvReadRange>(std::move(intermediate));
             }
         }
@@ -3309,8 +3381,9 @@ void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::
     CountRequestIncoming(requestType);
 
     if (PrepareExecuteTransactionRequest(ctx, ev, intermediate, info)) {
-        YDB_LOG_DEBUG("Create storage request for WO, Marker# KV67",
-            {"keyValue", TabletId});
+        YDB_LOG_DEBUG("Create storage request for WO,",
+            {"keyValue", TabletId},
+            {"marker", "KV67"});
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
 
         CountRequestTakeOffOrEnqueue(requestType);
@@ -3333,8 +3406,9 @@ void TKeyValueState::OnEvGetStorageChannelStatus(TEvKeyValue::TEvGetStorageChann
     CountRequestIncoming(requestType);
 
     if (PrepareGetStorageChannelStatusRequest(ctx, ev, intermediate, info)) {
-        YDB_LOG_DEBUG("Create GetStorageChannelStatus request, Marker# KV75",
-            {"keyValue", TabletId});
+        YDB_LOG_DEBUG("Create GetStorageChannelStatus request,",
+            {"keyValue", TabletId},
+            {"marker", "KV75"});
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
         ++IntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);
@@ -3356,8 +3430,9 @@ void TKeyValueState::OnEvAcquireLock(TEvKeyValue::TEvAcquireLock::TPtr &ev, cons
 
     CountRequestIncoming(requestType);
     if (PrepareAcquireLockRequest(ctx, ev, intermediate)) {
-        YDB_LOG_DEBUG("Create AcquireLock request, Marker# KV80",
-            {"keyValue", TabletId});
+        YDB_LOG_DEBUG("Create AcquireLock request,",
+            {"keyValue", TabletId},
+            {"marker", "KV80"});
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
         ++RoInlineIntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);
@@ -3410,26 +3485,30 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
                 CmdTrimLeakedBlobsUids.insert(intermediate->RequestUid);
             }
             if (requestType == TRequestType::WriteOnly) {
-                YDB_LOG_DEBUG("Create storage request for WO, Marker# KV42",
-                    {"keyValue", TabletId});
+                YDB_LOG_DEBUG("Create storage request for WO,",
+                    {"keyValue", TabletId},
+                    {"marker", "KV42"});
                 RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
             } else if (requestType == TRequestType::ReadOnlyInline) {
-                YDB_LOG_DEBUG("Create storage request for RO_INLINE, Marker# KV45",
-                    {"keyValue", TabletId});
+                YDB_LOG_DEBUG("Create storage request for RO_INLINE,",
+                    {"keyValue", TabletId},
+                    {"marker", "KV45"});
                 RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 ++RoInlineIntermediatesInFlight;
             } else {
                 ui64 limit = ReadRequestsInFlightLimit.Update(ctx.Now());
                 if (IntermediatesInFlight < limit) {
                     ++IntermediatesInFlight;
-                    YDB_LOG_DEBUG("Create storage request for RO/RW, / Marker# KV43",
+                    YDB_LOG_DEBUG("Create storage request for RO/RW, /",
                         {"keyValue", TabletId},
                         {"inFlight", IntermediatesInFlight},
-                        {"limit", limit});
+                        {"limit", limit},
+                        {"marker", "KV43"});
                     RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
                 } else {
-                    YDB_LOG_DEBUG("Enqueue storage request for RO/RW, Marker# KV44",
-                        {"keyValue", TabletId});
+                    YDB_LOG_DEBUG("Enqueue storage request for RO/RW,",
+                        {"keyValue", TabletId},
+                        {"marker", "KV44"});
                     PostponeIntermediate<TEvKeyValue::TEvRequest>(std::move(intermediate));
                 }
             }
@@ -3445,8 +3524,9 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
 
 bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THolder<TIntermediate> &intermediate,
         TRequestType::EType &inOutRequestType, const TActorContext &ctx, const TTabletStorageInfo *info) {
-    YDB_LOG_DEBUG("PrepareIntermediate Marker# KV40",
-        {"keyValue", TabletId});
+    YDB_LOG_DEBUG("PrepareIntermediate",
+        {"keyValue", TabletId},
+        {"marker", "KV40"});
     NKikimrClient::TKeyValueRequest &request = ev->Get()->Record;
 
     StoredState.SetChannelGeneration(ExecutorGeneration);
@@ -3495,7 +3575,7 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     error = error || PrepareCmdDelete(ctx, request, intermediate);
     error = error || PrepareCmdWrite(ctx, request, *ev->Get(), intermediate, info);
     error = error || PrepareCmdPatch(ctx, request, *ev->Get(), intermediate, info);
-    error = error || PrepareCmdGetStatus(request, intermediate, info);
+    error = error || PrepareCmdGetStatus(ctx, request, intermediate, info);
     error = error || PrepareCmdTrimLeakedBlobs(ctx, request, intermediate, info);
     error = error || PrepareCmdSetExecutorFastLogPolicy(ctx, request, intermediate, info);
 
@@ -3509,8 +3589,9 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
         DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);
         Y_ABORT_UNLESS(intermediate->RefCountsIncr.empty());
 
-        YDB_LOG_DEBUG("PrepareIntermediate return flase, Marker# KV41",
-            {"keyValue", TabletId});
+        YDB_LOG_DEBUG("PrepareIntermediate return flase,",
+            {"keyValue", TabletId},
+            {"marker", "KV41"});
         return false;
     }
 

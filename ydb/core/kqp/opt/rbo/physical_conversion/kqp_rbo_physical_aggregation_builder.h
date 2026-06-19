@@ -8,16 +8,17 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 // This class represents a physical builder for OpAggregate, it emits a physical aggreation based on a given OpAggregate.
-class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilderWithMemLimit {
+class TPhysicalAggregationBuilder: public TPhysicalUnaryOpBuilderWithMemLimit {
     // Internal representation of physical aggregation traits.
     struct TPhysicalAggregationTraits {
         TPhysicalAggregationTraits(const TString& aggFieldName, const TString stateFieldName, const TString& aggFunc, const TTypeAnnotationNode* inputItemType,
-                                   const TTypeAnnotationNode* outputItemType)
+                                   const TTypeAnnotationNode* outputItemType, bool unwrap = false)
             : AggFieldName(aggFieldName)
             , StateFieldName(stateFieldName)
             , AggFunc(aggFunc)
             , InputItemType(inputItemType)
-            , OutputItemType(outputItemType) {
+            , OutputItemType(outputItemType)
+            , Unwrap(unwrap) {
         }
 
         TString AggFieldName;
@@ -26,6 +27,7 @@ class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilderWithMemLimit {
         const TTypeAnnotationNode* InputItemType;
         const TTypeAnnotationNode* OutputItemType;
         std::optional<TString> InputAggFunc{std::nullopt};
+        bool Unwrap;
     };
 
     // Internal representation of the decimal type.
@@ -100,6 +102,7 @@ private:
     void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyFields, TVector<TString>& inputFields,
                                         TVector<TPhysicalAggregationTraits>& phyAggTraitsList, THashMap<TString, TString>& projectionMap,
                                         const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType);
+    bool NeedToWrapWithCoalesce(const TPhysicalAggregationTraits& traits, EOpPhase aggregationPhase) const;
     TVector<TString> GetKeyFields() const;
 
     // Helpers for scalar aggregation.

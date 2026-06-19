@@ -111,7 +111,7 @@ public:
                 {"collectGeneration", CollectOperation->Header.CollectGeneration},
                 {"collectStep", CollectOperation->Header.CollectStep},
                 {"keepSize", value.Keep.size()},
-                {"doNotKeep.size", value.DoNotKeep.size()});
+                {"doNotKeepSize", value.DoNotKeep.size()});
             SendToBSProxy(SelfId(), groupId, ev.release(), static_cast<ui64>(groupId) << 8 | channel);
             value.RequestInFlight = true;
         }

@@ -378,17 +378,24 @@ private:
                 messagesSize += sizeof(TWriteSessionMeta);
 
                 for (auto& event : *batch.mutable_message_data()) {
-                    std::string decompressedData;
+                    TDecompressionResult codecResult;
                     std::exception_ptr decompressionException;
                     if (!IsIn({Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_UNSPECIFIED}, static_cast<Ydb::Topic::Codec>(batch.codec()))) {
                         try {
                             const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
-                            decompressedData = codecImpl->Decompress(event.data());
+                            codecResult = codecImpl->DecompressData(event.data());
                         } catch (...) {
                             decompressionException = std::current_exception();
+                            codecResult.Messages.push_back(TDecompressedMessage{
+                                .Data = std::string(event.data()),
+                                .Meta = std::nullopt,
+                            });
                         }
                     } else {
-                        decompressedData = std::move(*event.mutable_data());
+                        codecResult.Messages.push_back(TDecompressedMessage{
+                            .Data = std::move(*event.mutable_data()),
+                            .Meta = std::nullopt,
+                        });
                     }
 
                     auto messageMeta = MakeIntrusive<TMessageMeta>();
@@ -398,20 +405,31 @@ private:
                         messageMeta->Fields.emplace_back(std::move(*item.mutable_key()), std::move(*item.mutable_value()));
                     }
 
-                    messagesSize += decompressedData.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();
-                    Counters->BytesRead->Add(decompressedData.size());
+                    for (const auto& decompressedMsg : codecResult.Messages) {
+                        ui64 offset = event.offset();
+                        ui64 seqNo = event.seq_no();
+                        TInstant createTime = NProtoInterop::CastFromProto(event.created_at());
+                        if (decompressedMsg.Meta) {
+                            offset = static_cast<ui64>(event.offset()) + static_cast<ui64>(decompressedMsg.Meta->OffsetDelta);
+                            seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(decompressedMsg.Meta->SequenceDelta);
+                            createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + decompressedMsg.Meta->TimestampDelta);
+                        }
 
-                    messages.emplace_back(std::move(decompressedData), std::move(decompressionException), TReadSessionEvent::TDataReceivedEvent::TMessageInformation(
-                        event.offset(),
-                        producerId,
-                        event.seq_no(),
-                        NProtoInterop::CastFromProto(event.created_at()),
-                        writtenAt,
-                        writeSessionMeta,
-                        std::move(messageMeta),
-                        event.uncompressed_size(),
-                        std::move(*event.mutable_message_group_id())
-                    ), partitionSession);
+                        messagesSize += decompressedMsg.Data.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();
+                        Counters->BytesRead->Add(decompressedMsg.Data.size());
+
+                        messages.emplace_back(decompressedMsg.Data, decompressionException, TReadSessionEvent::TDataReceivedEvent::TMessageInformation(
+                            offset,
+                            producerId,
+                            seqNo,
+                            createTime,
+                            writtenAt,
+                            writeSessionMeta,
+                            messageMeta,
+                            event.uncompressed_size(),
+                            event.message_group_id()
+                        ), partitionSession);
+                    }
                 }
             }
 

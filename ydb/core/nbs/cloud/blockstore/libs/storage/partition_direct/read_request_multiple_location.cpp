@@ -14,7 +14,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     NActors::TActorSystem const* actorSystem,
-    TChildLogTitle logTitle,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TReadHint readHint,
@@ -22,7 +22,9 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
     : ActorSystem(actorSystem)
-    , LogTitle(std::move(logTitle))
+    , LogTitle(logTitle.GetChildWithTags(
+          GetCycleCount(),
+          {{"t", "MultiRead"}, {"r", request->Headers.Range.Print()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , CallContext(std::move(callContext))
@@ -58,7 +60,7 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
         singleHint.RangeHints.push_back(std::move(hint));
         auto executor = std::make_shared<TReadSingleLocationRequestExecutor>(
             ActorSystem,
-            LogTitle,
+            logTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(singleHint),
@@ -87,12 +89,24 @@ void TReadMultipleLocationRequestExecutor::Run()
 {
     for (size_t i = 0; i < SubRequestExecutors.size(); ++i) {
         auto future = SubRequestExecutors[i]->GetFuture();
-        future.Subscribe([self = shared_from_this(),
-                          i](const NThreading::TFuture<TResponse>& f)
-                         { self->OnSubRequestComplete(f.GetValue(), i); });
+        future.Subscribe([self = shared_from_this(), i]   //
+                         (const NThreading::TFuture<TResponse>& f)
+                         {   //
+                             self->OnSubRequestComplete(f.GetValue(), i);
+                         });
 
         SubRequestExecutors[i]->Run();
     }
+}
+
+TString TReadMultipleLocationRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    result << " Subrequests: " << CompletedCount << "/"
+           << SubRequestExecutors.size();
+    result << (Promise.IsReady() ? " Replied" : "Not replied");
+    return result;
 }
 
 NThreading::TFuture<IReadRequestExecutor::TResponse>
@@ -130,7 +144,7 @@ void TReadMultipleLocationRequestExecutor::Reply(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s Request: %zu, Error: %s",
+            "%s SubRequest: %zu, Error: %s",
             LogTitle.GetWithTime().c_str(),
             index,
             FormatError(error).c_str());

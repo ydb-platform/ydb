@@ -34,11 +34,21 @@ void TOracleMock::OnRequestFailed(
 }
 
 THostIndex TOracleMock::SelectBestPBufferHost(
-    std::span<const THostIndex> hostIndexes,
+    THostMask hosts,
     EOperation operation) const
 {
     Y_UNUSED(operation);
-    return hostIndexes[0];
+    return *hosts.First();
+}
+
+TDuration TOracleMock::GetReadHedgingDelay() const
+{
+    return ReadHedgingDelay;
+}
+
+TDuration TOracleMock::GetReadRequestTimeout() const
+{
+    return ReadRequestTimeout;
 }
 
 TDuration TOracleMock::GetWriteHedgingDelay() const

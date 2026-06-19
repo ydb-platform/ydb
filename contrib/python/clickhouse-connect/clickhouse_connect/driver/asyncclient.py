@@ -45,7 +45,14 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.models import ColumnDef, SettingDef
 from clickhouse_connect.driver.options import check_arrow, check_numpy, check_pandas, check_polars
-from clickhouse_connect.driver.query import QueryContext, QueryResult, TzMode, TzSource, arrow_buffer
+from clickhouse_connect.driver.query import (
+    QueryContext,
+    QueryResult,
+    TzMode,
+    TzSource,
+    arrow_buffer,
+    returns_empty_string_on_empty_body,
+)
 from clickhouse_connect.driver.streaming import StreamingFileAdapter, StreamingInsertSource, StreamingResponseSource
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
@@ -143,6 +150,21 @@ def _release_lease(response: aiohttp.ClientResponse | None) -> None:
     release = getattr(response, "_lease_release", None)
     if release is not None:
         release()
+
+
+_REMOTE_CLOSE_ERRORS = (ConnectionResetError, BrokenPipeError)
+
+
+def _is_retryable_async_connection_error(error: aiohttp.ClientConnectionError) -> bool:
+    if isinstance(error, (aiohttp.ServerTimeoutError, aiohttp.ClientConnectorError, aiohttp.ServerFingerprintMismatch)):
+        return False
+    if isinstance(error, aiohttp.ServerDisconnectedError):
+        return True
+    if isinstance(error, _REMOTE_CLOSE_ERRORS):
+        return True
+    if isinstance(error.__cause__, _REMOTE_CLOSE_ERRORS):
+        return True
+    return isinstance(error.__context__, _REMOTE_CLOSE_ERRORS)
 
 
 class AsyncClient(Client):
@@ -951,6 +973,8 @@ class AsyncClient(Client):
             _release_lease(response)
 
         if not body:
+            if returns_empty_string_on_empty_body(cmd):
+                return ""
             return QuerySummary(summary)
 
         loop = asyncio.get_running_loop()
@@ -984,6 +1008,8 @@ class AsyncClient(Client):
             url = f"{self.url}/ping"
             timeout = aiohttp.ClientTimeout(total=3.0)
             get_kwargs: dict[str, Any] = {"timeout": timeout}
+            if self._proxy_url:
+                get_kwargs["proxy"] = self._proxy_url
             if self.server_host_name:
                 get_kwargs["headers"] = {"Host": self.server_host_name}
                 if self._ssl_context is not None:
@@ -1994,9 +2020,9 @@ class AsyncClient(Client):
                         continue
                 await self._error_handler(response)
 
-            except aiohttp.ServerConnectionError as e:
+            except aiohttp.ClientConnectionError as e:
                 msg = str(e)
-                if "Connection reset" in msg or "Remote end closed" in msg or "Cannot connect" in msg or "Server disconnected" in msg:
+                if _is_retryable_async_connection_error(e):
                     # Always allow at least one retry on a clean connection error so a single stale
                     # keep-alive socket doesn't surface to the caller, and additionally honor the
                     # retries budget when it is larger (e.g. query_retries for reads), so that
@@ -2012,6 +2038,7 @@ class AsyncClient(Client):
                             logger.debug("Retrying after connection error from remote host (attempt %s/%s)", attempts, max_attempts)
                             await asyncio.sleep(0.1 * attempts)
                             continue
+                logger.debug("Non-retryable aiohttp connection error type=%s", type(e).__name__)
                 raise OperationalError(f"Network Error: {msg}") from e
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:

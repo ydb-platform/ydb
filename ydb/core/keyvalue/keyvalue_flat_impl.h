@@ -499,9 +499,10 @@ protected:
     }
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "Handle TEvCollectGarbageResult Marker# KV52",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "Handle TEvCollectGarbageResult",
             {"keyValue", TabletID()},
-            {"cookie", ev->Cookie});
+            {"cookie", ev->Cookie},
+            {"marker", "KV52"});
 
         if (ev->Cookie != (ui64)TKeyValueState::ECollectCookie::SoftInitial &&
                 ev->Cookie != (ui64)TKeyValueState::ECollectCookie::Hard) {

@@ -129,7 +129,12 @@ private:
         EHostState state) const;
     void ApplyConfig();
 
+    void OnCopierStopped(
+        THostIndex hostIndex,
+        TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+
+    [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
@@ -150,6 +155,8 @@ private:
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+
+    TVector<IRequestExecutorWeakPtr> Inflight;
 
     TVChunkCounters Counters;
 

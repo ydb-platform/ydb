@@ -119,10 +119,10 @@ NUdf::TUnboxedValuePod SliceBlockList(
 
             auto sliced = concatArr->Slice(1, arr->length())->data();
 
-            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(std::move(sliced)));
+            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(std::move(sliced)), NYql::DefaultDatumValidationMode);
         }
 
-        items[width] = MakeBlockCount(holderFactory, blockCount);
+        items[width] = MakeBlockCount(holderFactory, blockCount, NYql::DefaultDatumValidationMode);
         newList = newList.Append(std::move(tuple));
     }
 

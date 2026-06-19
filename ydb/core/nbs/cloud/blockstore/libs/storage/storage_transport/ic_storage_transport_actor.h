@@ -142,10 +142,10 @@ private:
         const TEvTransportPrivate::TEvSyncWithPBuffer::TPtr& ev,
         const NActors::TActorContext& ctx);
     void HandleSyncWithPersistentBufferUndelivery(
-        const NKikimr::NDDisk::TEvSyncWithPersistentBuffer::TPtr& ev,
+        const NKikimr::NDDisk::TEvSync::TPtr& ev,
         const NActors::TActorContext& ctx);
     void HandleSyncWithPersistentBufferResult(
-        const NKikimr::NDDisk::TEvSyncWithPersistentBufferResult::TPtr& ev,
+        const NKikimr::NDDisk::TEvSyncResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleListPersistentBuffer(

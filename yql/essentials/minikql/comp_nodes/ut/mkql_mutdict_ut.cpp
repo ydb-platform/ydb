@@ -1,4 +1,5 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 #include <yql/essentials/minikql/mkql_string_util.h>
 
 namespace NKikimr {
@@ -11,19 +12,19 @@ using TTestDictStorage = std::conditional_t<IsSet, THashSet<TString>, THashMap<T
 template <bool IsSet>
 TType* MakeTestDictType(TProgramBuilder& pb) {
     return pb.NewDictType(
-        pb.NewDataType(NUdf::EDataSlot::String),
-        IsSet ? pb.NewVoidType() : pb.NewDataType(NUdf::EDataSlot::Int32),
+        NTest::ConvertToMinikqlType<TStringBuf>(pb),
+        IsSet ? NTest::ConvertToMinikqlType<NTest::TSingularVoid>(pb) : NTest::ConvertToMinikqlType<i32>(pb),
         false);
 }
 
 template <bool IsSet>
 TRuntimeNode MakeTestDict(TProgramBuilder& pb) {
     const auto dictType = pb.NewDictType(
-        pb.NewDataType(NUdf::EDataSlot::String),
-        IsSet ? pb.NewVoidType() : pb.NewDataType(NUdf::EDataSlot::Int32),
+        NTest::ConvertToMinikqlType<TStringBuf>(pb),
+        IsSet ? NTest::ConvertToMinikqlType<NTest::TSingularVoid>(pb) : NTest::ConvertToMinikqlType<i32>(pb),
         false);
-    const auto dict = pb.NewDict(dictType, {{pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"), IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(1)},
-                                            {pb.NewDataLiteral<NUdf::EDataSlot::String>("bar"), IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(2)}});
+    const auto dict = pb.NewDict(dictType, {{NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")), IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(1))},
+                                            {NTest::ConvertValueToLiteralNode(pb, TStringBuf("bar")), IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(2))}});
 
     return dict;
 }
@@ -70,7 +71,7 @@ Y_UNIT_TEST_LLVM_SET(TestCreateEmpty) {
     const auto res = pb.NewResourceType("mdict");
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
-    const auto pgmReturn = pb.MutDictCreate(dictType, mdictType, {pb.NewDataLiteral(ui32(1))});
+    const auto pgmReturn = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto graph = setup.BuildGraph(pgmReturn);
     UNIT_ASSERT(graph->GetValue().IsBoxed());
 }
@@ -81,7 +82,7 @@ Y_UNIT_TEST_LLVM_SET(TestCreateCopy) {
     const auto res = pb.NewResourceType("mdict");
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
-    const auto pgmReturn = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
+    const auto pgmReturn = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto graph = setup.BuildGraph(pgmReturn);
     UNIT_ASSERT(graph->GetValue().IsBoxed());
 }
@@ -92,7 +93,7 @@ Y_UNIT_TEST_LLVM_SET(TestCreateCopyAndBack) {
     const auto res = pb.NewResourceType("mdict");
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
-    const auto pgmReturn = pb.FromMutDict(dict.GetStaticType(), pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))}));
+    const auto pgmReturn = pb.FromMutDict(dict.GetStaticType(), pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))}));
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
     UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), 2);
@@ -106,13 +107,13 @@ Y_UNIT_TEST_LLVM_SET(TestCreateCopyAndBack) {
     const auto fooLookup = value.Lookup(fooStr);
     UNIT_ASSERT(fooLookup);
     if constexpr (!IsSet) {
-        UNIT_ASSERT_VALUES_EQUAL(fooLookup.template Get<i32>(), 1);
+        AssertUnboxedValueElementEqual(fooLookup, i32(1));
     }
 
     const auto barLookup = value.Lookup(barStr);
     UNIT_ASSERT(barLookup);
     if constexpr (!IsSet) {
-        UNIT_ASSERT_VALUES_EQUAL(barLookup.template Get<i32>(), 2);
+        AssertUnboxedValueElementEqual(barLookup, i32(2));
     }
 
     const auto bazLookup = value.Lookup(bazStr);
@@ -149,10 +150,10 @@ Y_UNIT_TEST_LLVM_SET(TestInsert) {
     const auto res = pb.NewResourceType("mdict");
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
-    auto mdict = pb.MutDictCreate(dictType, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictInsert(dictType, mdict,
-                             pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"),
-                             IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(1));
+                             NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")),
+                             IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(1)));
     const auto pgmReturn = pb.FromMutDict(dictType, mdict);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
@@ -165,13 +166,13 @@ Y_UNIT_TEST_LLVM_SET(TestInsertTwice) {
     const auto res = pb.NewResourceType("mdict");
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
-    auto mdict = pb.MutDictCreate(dictType, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictInsert(dictType, mdict,
-                             pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"),
-                             IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(1));
+                             NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")),
+                             IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(1)));
     mdict = pb.MutDictInsert(dictType, mdict,
-                             pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"),
-                             IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(2));
+                             NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")),
+                             IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(2)));
     const auto pgmReturn = pb.FromMutDict(dictType, mdict);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
@@ -184,10 +185,10 @@ Y_UNIT_TEST_LLVM_SET(TestUpsert) {
     const auto res = pb.NewResourceType("mdict");
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
-    auto mdict = pb.MutDictCreate(dictType, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictUpsert(dictType, mdict,
-                             pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"),
-                             IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(1));
+                             NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")),
+                             IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(1)));
     const auto pgmReturn = pb.FromMutDict(dictType, mdict);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
@@ -200,13 +201,13 @@ Y_UNIT_TEST_LLVM_SET(TestUpsertTwice) {
     const auto res = pb.NewResourceType("mdict");
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
-    auto mdict = pb.MutDictCreate(dictType, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictUpsert(dictType, mdict,
-                             pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"),
-                             IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(1));
+                             NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")),
+                             IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(1)));
     mdict = pb.MutDictUpsert(dictType, mdict,
-                             pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"),
-                             IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(2));
+                             NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")),
+                             IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(2)));
     const auto pgmReturn = pb.FromMutDict(dictType, mdict);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
@@ -219,10 +220,10 @@ Y_UNIT_TEST_LLVM_SET(TestUpdateMissing) {
     const auto res = pb.NewResourceType("mdict");
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dictType = MakeTestDictType<IsSet>(pb);
-    auto mdict = pb.MutDictCreate(dictType, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.MutDictCreate(dictType, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictUpdate(dictType, mdict,
-                             pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"),
-                             IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(1));
+                             NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")),
+                             IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(1)));
     const auto pgmReturn = pb.FromMutDict(dictType, mdict);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
@@ -236,10 +237,10 @@ Y_UNIT_TEST_LLVM_SET(TestUpdateExisting) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     mdict = pb.MutDictUpdate(dictType, mdict,
-                             pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"),
-                             IsSet ? pb.NewVoid() : pb.NewDataLiteral<i32>(3));
+                             NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")),
+                             IsSet ? NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}) : NTest::ConvertValueToLiteralNode(pb, i32(3)));
     auto pgmReturn = pb.FromMutDict(dictType, mdict);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
@@ -253,8 +254,8 @@ Y_UNIT_TEST_LLVM_SET(TestRemoveMissing) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
-    mdict = pb.MutDictRemove(dictType, mdict, pb.NewDataLiteral<NUdf::EDataSlot::String>("baz"));
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
+    mdict = pb.MutDictRemove(dictType, mdict, NTest::ConvertValueToLiteralNode(pb, TStringBuf("baz")));
     const auto pgmReturn = pb.FromMutDict(dictType, mdict);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
@@ -268,8 +269,8 @@ Y_UNIT_TEST_LLVM_SET(TestRemoveExisting) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
-    mdict = pb.MutDictRemove(dictType, mdict, pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"));
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
+    mdict = pb.MutDictRemove(dictType, mdict, NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")));
     const auto pgmReturn = pb.FromMutDict(dictType, mdict);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto value = graph->GetValue();
@@ -283,8 +284,8 @@ Y_UNIT_TEST_LLVM_SET(TestPopMissing) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
-    const auto popTuple = pb.MutDictPop(dictType, mdict, pb.NewDataLiteral<NUdf::EDataSlot::String>("baz"));
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
+    const auto popTuple = pb.MutDictPop(dictType, mdict, NTest::ConvertValueToLiteralNode(pb, TStringBuf("baz")));
     mdict = pb.Nth(popTuple, 0);
     const auto popRes = pb.Nth(popTuple, 1);
     const auto pgmReturn = pb.NewTuple({pb.FromMutDict(dictType, mdict), popRes});
@@ -303,8 +304,8 @@ Y_UNIT_TEST_LLVM_SET(TestPopExisting) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
-    const auto popTuple = pb.MutDictPop(dictType, mdict, pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"));
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
+    const auto popTuple = pb.MutDictPop(dictType, mdict, NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")));
     mdict = pb.Nth(popTuple, 0);
     const auto popRes = pb.Nth(popTuple, 1);
     const auto pgmReturn = pb.NewTuple({pb.FromMutDict(dictType, mdict), popRes});
@@ -315,7 +316,7 @@ Y_UNIT_TEST_LLVM_SET(TestPopExisting) {
     UNIT_ASSERT(popValue);
     UNIT_ASSERT(popValue.IsEmbedded());
     if constexpr (!IsSet) {
-        UNIT_ASSERT_VALUES_EQUAL(popValue.template Get<i32>(), 1);
+        AssertUnboxedValueElementEqual(popValue, i32(1));
     }
 
     CheckExpectedDict<IsSet>(value, {{"bar", 2}});
@@ -328,8 +329,8 @@ Y_UNIT_TEST_LLVM_SET(TestContainsMissing) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
-    const auto containsTuple = pb.MutDictContains(dictType, mdict, pb.NewDataLiteral<NUdf::EDataSlot::String>("baz"));
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
+    const auto containsTuple = pb.MutDictContains(dictType, mdict, NTest::ConvertValueToLiteralNode(pb, TStringBuf("baz")));
     mdict = pb.Nth(containsTuple, 0);
     const auto containsRes = pb.Nth(containsTuple, 1);
     const auto pgmReturn = pb.NewTuple({pb.FromMutDict(dictType, mdict), containsRes});
@@ -337,7 +338,7 @@ Y_UNIT_TEST_LLVM_SET(TestContainsMissing) {
     const auto valuePair = graph->GetValue();
     const auto value = valuePair.GetElement(0);
     const auto containsValue = valuePair.GetElement(1);
-    UNIT_ASSERT(!containsValue.template Get<bool>());
+    AssertUnboxedValueElementEqual(containsValue, false);
     UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), 2);
 }
 
@@ -348,8 +349,8 @@ Y_UNIT_TEST_LLVM_SET(TestContainsExisting) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
-    const auto containsTuple = pb.MutDictContains(dictType, mdict, pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"));
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
+    const auto containsTuple = pb.MutDictContains(dictType, mdict, NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")));
     mdict = pb.Nth(containsTuple, 0);
     const auto containsRes = pb.Nth(containsTuple, 1);
     const auto pgmReturn = pb.NewTuple({pb.FromMutDict(dictType, mdict), containsRes});
@@ -357,7 +358,7 @@ Y_UNIT_TEST_LLVM_SET(TestContainsExisting) {
     const auto valuePair = graph->GetValue();
     const auto value = valuePair.GetElement(0);
     const auto containsValue = valuePair.GetElement(1);
-    UNIT_ASSERT(containsValue.template Get<bool>());
+    AssertUnboxedValueElementEqual(containsValue, true);
     UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), 2);
 }
 
@@ -368,8 +369,8 @@ Y_UNIT_TEST_LLVM_SET(TestLookupMissing) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
-    const auto lookupTuple = pb.MutDictLookup(dictType, mdict, pb.NewDataLiteral<NUdf::EDataSlot::String>("baz"));
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
+    const auto lookupTuple = pb.MutDictLookup(dictType, mdict, NTest::ConvertValueToLiteralNode(pb, TStringBuf("baz")));
     mdict = pb.Nth(lookupTuple, 0);
     const auto lookupRes = pb.Nth(lookupTuple, 1);
     const auto pgmReturn = pb.NewTuple({pb.FromMutDict(dictType, mdict), lookupRes});
@@ -388,8 +389,8 @@ Y_UNIT_TEST_LLVM_SET(TestLookupExisting) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
-    const auto lookupTuple = pb.MutDictLookup(dictType, mdict, pb.NewDataLiteral<NUdf::EDataSlot::String>("foo"));
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
+    const auto lookupTuple = pb.MutDictLookup(dictType, mdict, NTest::ConvertValueToLiteralNode(pb, TStringBuf("foo")));
     mdict = pb.Nth(lookupTuple, 0);
     const auto lookupRes = pb.Nth(lookupTuple, 1);
     const auto pgmReturn = pb.NewTuple({pb.FromMutDict(dictType, mdict), lookupRes});
@@ -401,7 +402,7 @@ Y_UNIT_TEST_LLVM_SET(TestLookupExisting) {
     if constexpr (IsSet) {
         UNIT_ASSERT(lookupValue.IsEmbedded());
     } else {
-        UNIT_ASSERT_VALUES_EQUAL(lookupValue.template Get<i32>(), 1);
+        AssertUnboxedValueElementEqual(lookupValue, i32(1));
     }
 
     UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), 2);
@@ -414,7 +415,7 @@ Y_UNIT_TEST_LLVM_SET(TestHasItems) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto hasTuple = pb.MutDictHasItems(dictType, mdict);
     mdict = pb.Nth(hasTuple, 0);
     const auto hasRes = pb.Nth(hasTuple, 1);
@@ -423,7 +424,7 @@ Y_UNIT_TEST_LLVM_SET(TestHasItems) {
     const auto valuePair = graph->GetValue();
     const auto value = valuePair.GetElement(0);
     const auto hasValue = valuePair.GetElement(1);
-    UNIT_ASSERT(hasValue.template Get<bool>());
+    AssertUnboxedValueElementEqual(hasValue, true);
     UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), 2);
 }
 
@@ -434,7 +435,7 @@ Y_UNIT_TEST_LLVM_SET(TestLength) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto lenTuple = pb.MutDictLength(dictType, mdict);
     mdict = pb.Nth(lenTuple, 0);
     const auto lenRes = pb.Nth(lenTuple, 1);
@@ -443,7 +444,7 @@ Y_UNIT_TEST_LLVM_SET(TestLength) {
     const auto valuePair = graph->GetValue();
     const auto value = valuePair.GetElement(0);
     const auto lenValue = valuePair.GetElement(1);
-    UNIT_ASSERT_VALUES_EQUAL(lenValue.template Get<ui64>(), 2);
+    AssertUnboxedValueElementEqual(lenValue, ui64(2));
     UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), 2);
 }
 
@@ -454,7 +455,7 @@ Y_UNIT_TEST_LLVM_SET(TestItems) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto listTuple = pb.MutDictItems(dictType, mdict);
     mdict = pb.Nth(listTuple, 0);
     const auto listRes = pb.Nth(listTuple, 1);
@@ -488,7 +489,7 @@ Y_UNIT_TEST_LLVM_SET(TestKeys) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto listTuple = pb.MutDictKeys(dictType, mdict);
     mdict = pb.Nth(listTuple, 0);
     const auto listRes = pb.Nth(listTuple, 1);
@@ -516,7 +517,7 @@ Y_UNIT_TEST_LLVM_SET(TestPayloads) {
     const auto mdictType = pb.NewLinearType(res, false);
     const auto dict = MakeTestDict<IsSet>(pb);
     const auto dictType = dict.GetStaticType();
-    auto mdict = pb.ToMutDict(dict, mdictType, {pb.NewDataLiteral(ui32(1))});
+    auto mdict = pb.ToMutDict(dict, mdictType, {NTest::ConvertValueToLiteralNode(pb, ui32(1))});
     const auto listTuple = pb.MutDictPayloads(dictType, mdict);
     mdict = pb.Nth(listTuple, 0);
     const auto listRes = pb.Nth(listTuple, 1);

@@ -652,4 +652,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertRLSTablesToStati
     return ConvertSpecificTablesToStatic<TYtReadTable>(node, ctx, [](const TYtTableMetaInfo::TPtr& meta) { return meta->HasRLS; });
 }
 
-}  // namespace NYql
+} // namespace NYql

@@ -322,7 +322,7 @@ public:
             return;
         }
         if (ev->Get()->ResponseSz != request.ReadQueue.size()) {
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("Unexpected TEvGet response size",
                 {"keyValue", TabletInfo->TabletID},
                 {"got", ev->Get()->Print(false)});
             TStringStream str;
@@ -417,7 +417,7 @@ public:
             return false;
         }
 
-        YDB_LOG_DEBUG("UpdateRequest WriteRequestsReplied GetStatusRequestsReplied Marker# KV45",
+        YDB_LOG_DEBUG("UpdateRequest WriteRequestsReplied GetStatusRequestsReplied",
             {"keyValue", TabletInfo->TabletID},
             {"readRequestsReplied", ReadRequestsReplied},
             {"readRequestsSent", ReadRequestsSent},
@@ -426,7 +426,8 @@ public:
             {"getStatusRequestsReplied", GetStatusRequestsReplied},
             {"getStatusRequestsSent", GetStatusRequestsSent},
             {"patchRequestSent", PatchRequestsSent},
-            {"patchRequestReplied", PatchRequestsReplied});
+            {"patchRequestReplied", PatchRequestsReplied},
+            {"marker", "KV45"});
         if (ReadRequestsReplied == ReadRequestsSent &&
                 WriteRequestsReplied == WriteRequestsSent &&
                 GetStatusRequestsReplied == GetStatusRequestsSent &&
@@ -553,8 +554,7 @@ public:
     void ReplyErrorAndDie(const TActorContext &ctx, TString errorDescription,
             NMsgBusProxy::EResponseStatus status = NMsgBusProxy::MSTATUS_INTERNALERROR,
             NLog::EPriority logPriority = NLog::PRI_ERROR) {
-        YDB_LOG_CTX(ctx, logPriority, "",
-            {"errorDescription", errorDescription});
+        YDB_LOG_CTX(ctx, logPriority, errorDescription);
 
         std::unique_ptr<IEventBase> response = MakeErrorResponse(IntermediateResults.Get(), status, errorDescription);
         ctx.Send(IntermediateResults->RespondTo, std::move(response));
@@ -735,11 +735,12 @@ public:
                         const ui32 groupId = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
                         Y_ABORT_UNLESS(groupId != Max<ui32>(), "Put Blob# %s is mapped to an invalid group (-1)!",
                                 logoBlobId.ToString().c_str());
-                        YDB_LOG_DEBUG("Send Marker# KV60",
+                        YDB_LOG_DEBUG("Send",
                             {"keyValue", TabletInfo->TabletID},
                             {"TEvPut", put->ToString()},
                             {"toGroupId", groupId},
-                            {"now", TAppData::TimeProvider->Now().MilliSeconds()});
+                            {"now", TAppData::TimeProvider->Now().MilliSeconds()},
+                            {"marker", "KV60"});
 
                         SendPutToGroup(ctx, groupId, TabletInfo.Get(), std::move(put), i, Span.GetTraceId());
 
@@ -783,11 +784,12 @@ public:
 
                 const ui32 groupId = TabletInfo->GroupFor(request.PatchedBlobId.Channel(), request.PatchedBlobId.Generation());
                 Y_VERIFY_S(groupId != Max<ui32>(), "Patch Blob# " << request.PatchedBlobId.ToString() << " is mapped to an invalid group (-1)!");
-                YDB_LOG_DEBUG("Send Marker# KV69",
+                YDB_LOG_DEBUG("Send",
                     {"keyValue", TabletInfo->TabletID},
                     {"TEvPatch", patch->ToString()},
                     {"toGroupId", groupId},
-                    {"now", TAppData::TimeProvider->Now().MilliSeconds()});
+                    {"now", TAppData::TimeProvider->Now().MilliSeconds()},
+                    {"marker", "KV69"});
 
 
                 SendPatchToGroup(ctx, groupId, TabletInfo.Get(), std::move(patch), i, Span.GetTraceId());

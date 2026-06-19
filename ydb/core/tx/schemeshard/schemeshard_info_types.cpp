@@ -411,8 +411,15 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             bool isChangeNotNullConstraint = col.HasNotNull();
+            bool isChangeSetNotNullInProgress = col.HasSetNotNullInProgress();
 
-            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault() && !col.HasDefaultFromLiteral()) {
+            if (!isChangeNotNullConstraint
+                && !isChangeSetNotNullInProgress
+                && !columnFamily
+                && !col.HasDefaultFromSequence()
+                && !col.HasEmptyDefault()
+                && !col.HasDefaultFromLiteral()) 
+            {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -443,7 +450,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
-                if (isChangeNotNullConstraint || columnFamily) {
+                if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
                     return nullptr;
                 }
@@ -498,12 +505,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column = sourceColumn;
 
             if (isChangeNotNullConstraint) {
-                if (col.GetNotNull()) { // SET NOT NULL
-                    column.NotNull = true;
-                } else { // DROP NOT NULL
-                    column.NotNull = false;
-                }
+                column.NotNull = col.GetNotNull();
+            }
 
+            if (isChangeSetNotNullInProgress) {
+                column.SetNotNullInProgress = col.GetSetNotNullInProgress();
             }
 
             if (columnFamily) {
@@ -589,6 +595,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
             column.IsBuildInProgress = col.GetIsBuildInProgress();
+            column.SetNotNullInProgress = col.GetSetNotNullInProgress();
             if (source)
                 column.CreateVersion = alterData->AlterVersion;
             if (col.HasDefaultFromSequence()) {
@@ -634,10 +641,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
             if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == colName) {
                 errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data());
-                return nullptr;
-            }
-            if (colIt->second.DefaultKind == ETableColumnDefaultKind::FromSequence) {
-                errStr = Sprintf("Can't drop serial column: '%s'", colName.data());
                 return nullptr;
             }
 
@@ -879,6 +882,7 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
                 *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
             }
             colDescr->SetNotNull(column.NotNull);
+            colDescr->SetSetNotNullInProgress(column.SetNotNullInProgress);
             colDescr->SetFamily(column.Family);
         }
         for (auto ci : keyColumnIds) {
@@ -1718,6 +1722,7 @@ void TTableInfo::FinishAlter() {
             oldCol->DefaultKind = cinfo.DefaultKind;
             oldCol->DefaultValue = cinfo.DefaultValue;
             oldCol->NotNull = cinfo.NotNull;
+            oldCol->SetNotNullInProgress = cinfo.SetNotNullInProgress;
         } else {
             Columns[col.first] = cinfo;
             if (cinfo.KeyOrder != (ui32)-1) {

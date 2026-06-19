@@ -104,6 +104,7 @@ static void FillColumns(
         }
         colDescr->SetId(cinfo.Id);
         colDescr->SetNotNull(cinfo.NotNull);
+        colDescr->SetSetNotNullInProgress(cinfo.SetNotNullInProgress);
 
         if (cinfo.Family != 0) {
             colDescr->SetFamily(cinfo.Family);

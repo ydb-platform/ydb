@@ -232,6 +232,7 @@ TExprNode::TPtr GetPgNotNullColumns(
     auto pgNotNullColumns = Build<TCoAtomList>(ctx, pos);
 
     for (const auto& [column, meta] : table.Metadata->Columns) {
+        // TODO(flown4qqqq) check correctness with SetNotNullInProgress
         if (meta.NotNull && table.GetColumnType(column)->GetKind() == ETypeAnnotationKind::Pg) {
             pgNotNullColumns.Add<TCoAtom>()
                 .Value(column).Build();

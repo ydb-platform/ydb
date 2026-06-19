@@ -3,8 +3,8 @@
 #include "abstract.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/formats/arrow/validation/validation.h>
 
@@ -447,6 +447,16 @@ public:
 
     void AddFilter(const TColumnFilter& filter) {
         if (filter.IsTotalAllowFilter()) {
+            // IsTotalAllowFilter() is true for both the sentinel empty filter and a single-span Add(true, N)
+            // carrying row-count metadata; only the latter passes the !IsEmpty() gate below.
+            if (filter.IsEmpty()) {
+                return;
+            }
+            // Exclusive duplicate interval: allow-all over explicit row span. Keep metadata for fetch gates.
+            if (!UseFilter && Filter->IsEmpty()) {
+                *Filter = filter;
+                RecordsCountActual = filter.GetFilteredCount();
+            }
             return;
         }
         if (!UseFilter) {

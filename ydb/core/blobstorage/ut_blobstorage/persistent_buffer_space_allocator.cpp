@@ -207,8 +207,10 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         TPersistentBufferSpaceAllocator allocator;
         allocator.AddNewChunk(11);
 
-        allocator.MarkOccupied({{11, 10, false, 0, 0}, {11, 11, false, 0, 0}, {11, 12, false, 0, 0}});
-        allocator.MarkOccupied({{11, 20, false, 0, 0}, {11, 21, false, 0, 0}, {11, 22, false, 0, 0}});
+        const std::vector<TPersistentBufferSectorInfo> range1 = {{11, 10, false, 0, 0}, {11, 11, false, 0, 0}, {11, 12, false, 0, 0}};
+        const std::vector<TPersistentBufferSectorInfo> range2 = {{11, 20, false, 0, 0}, {11, 21, false, 0, 0}, {11, 22, false, 0, 0}};
+        allocator.MarkOccupied(range1);
+        allocator.MarkOccupied(range2);
         auto result = allocator.Occupy(5);
         UNIT_ASSERT_EQUAL(result[0].SectorIdx, 23);
         result = allocator.Occupy(7);

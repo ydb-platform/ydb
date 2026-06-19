@@ -5,8 +5,9 @@ namespace NKikimr {
 namespace NKeyValue {
 
 void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
-    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded Marker# KV61",
-        {"keyValue", TabletId});
+    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded",
+        {"keyValue", TabletId},
+        {"marker", "KV61"});
 
     VacuumEmptyTrashBins(ctx);
     auto& trashBin = GetCollectingTrashBin();
@@ -269,9 +270,10 @@ void TKeyValueState::StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &kee
 }
 
 void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
-    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible Marker# KV64",
+    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible",
         {"keyValue", TabletId},
-        {"isCollectEventSent", IsCollectEventSent});
+        {"isCollectEventSent", IsCollectEventSent},
+        {"marker", "KV64"});
 
     // there is nothing to collect yet, or the event was already sent
     Y_ABORT_UNLESS(CollectOperation && !IsCollectEventSent);
@@ -330,10 +332,11 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
 
     Y_ABORT_UNLESS(trashGoingToCollect);
 
-    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible Flags Marker# KV65",
+    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible Flags",
         {"keyValue", TabletId},
         {"keepSize", keep.size()},
-        {"doNotKeepSize", doNotKeep.size()});
+        {"doNotKeepSize", doNotKeep.size()},
+        {"marker", "KV65"});
 
     StartGC(ctx, keep, doNotKeep, trashGoingToCollect);
 }

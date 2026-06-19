@@ -27,7 +27,14 @@ void TPhantomFlagStorageState::StartBuilding() {
     Building = true;
 }
 
+<<<<<<< HEAD
 void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit) {
+=======
+void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit,
+        ui64 blobSizeLimit) {
+    Y_DEBUG_ABORT_UNLESS(!Persistent);
+    BlobSizeLimit = blobSizeLimit;
+>>>>>>> 0dfc3c930dd (Configure the size of blobs protected by PhantomFlagStorage (#43892))
     AdjustSize(sizeLimit);
     if (!Active) {
         return;
@@ -58,18 +65,33 @@ void TPhantomFlagStorageState::ProcessBarrierRecordFromNeighbour(ui32 orderNumbe
     }
 }
 
+<<<<<<< HEAD
 void TPhantomFlagStorageState::FinishBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds,
         ui64 sizeLimit) {
+=======
+void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds,
+        ui64 sizeLimit, ui64 blobSizeLimit) {
+>>>>>>> 0dfc3c930dd (Configure the size of blobs protected by PhantomFlagStorage (#43892))
     if (!Active) {
         // PhantomFlagStorage was deactivated while building, do nothing
         return;
     }
 
+<<<<<<< HEAD
     AdjustSize(sizeLimit);
     ui64 flagsAdded = 0;
     for (const TLogoBlobRec& rec : flags) {
         if (!AddFlag(rec)) {
             break;
+=======
+    BlobSizeLimit = blobSizeLimit;
+
+    if (Persistent) {
+        std::vector<TPhantomFlagStorageItem> items;
+        items.reserve(flags.size() + thresholds.GetList().size());
+        for (const TLogoBlobRec& rec : flags) {
+            items.push_back(TPhantomFlagStorageItem::CreateFlag(&rec));
+>>>>>>> 0dfc3c930dd (Configure the size of blobs protected by PhantomFlagStorage (#43892))
         }
         ++flagsAdded;
     }
@@ -164,6 +186,9 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
 }
 
 bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
+    if (BlobSizeLimit && blobRec.LogoBlobID().BlobSize() < BlobSizeLimit) {
+        return true;
+    }
     if (StoredFlags.size() < StoredFlags.capacity()) {
         StoredFlags.emplace_back(blobRec);
         return true;

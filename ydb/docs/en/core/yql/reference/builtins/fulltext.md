@@ -64,7 +64,7 @@ In this example, `Mode` is set to `Keywords` (treating the query as a set of ter
 
 ### Required term (`+`) example {#required-term-example}
 
-Prefix a term with `+` in `Keywords` mode with `DefaultOperator = "Or"` to require it in every result. `MinimumShouldMatch` then counts only the remaining optional terms:
+Prefix a term with `+` in `Keywords` mode with `DefaultOperator = "Or"` to require it in every result. This follows [Lucene's required term syntax](https://lucene.apache.org/core/2_9_4/queryparsersyntax.html#+).
 
 ```yql
 SELECT id
@@ -77,7 +77,7 @@ WHERE FulltextMatch(
 );
 ```
 
-This returns documents that contain "machine" (required) and at least 1 of "learning", "neural", "networks" (optional). If all terms are prefixed with `+`, the query is a strict AND.
+This returns documents that contain "machine" (required) and at least 1 of "learning", "neural", "networks" (optional). `MinimumShouldMatch` counts only the optional terms. If all terms are prefixed with `+`, the query is a strict AND.
 
 ## FulltextScore {#fulltext-score}
 

@@ -146,4 +146,8 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   {% endlist %}
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#238](https://github.com/ydb-platform/ydb-rs-sdk/issues/238)
 {% endlist %}

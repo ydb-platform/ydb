@@ -95,7 +95,8 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
       asyncio.run(main())
       ```
 
-    {% endlist %}
+
+{% endlist %}
 
 - C++
 
@@ -135,6 +136,11 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
     }
     ```
 
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
 {% endlist %}
 
 
@@ -217,7 +223,8 @@ The `String` type is used to store vectors. For details, see the [exact vector s
           print(f"Vector table {table_name} created")
       ```
 
-    {% endlist %}
+
+{% endlist %}
 
 - JavaScript
 
@@ -276,6 +283,11 @@ The `String` type is used to store vectors. For details, see the [exact vector s
     }
     ```
 
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
 {% endlist %}
 
 
@@ -448,7 +460,8 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
           print(f"{len(items)} items inserted")
       ```
 
-    {% endlist %}
+
+{% endlist %}
 
 - C++
 
@@ -788,7 +801,8 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
           print(f"{len(items)} items inserted")
       ```
 
-    {% endlist %}
+
+{% endlist %}
 
 - C++ (alternative)
 
@@ -861,6 +875,11 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
     FROM AS_TABLE($items);`
   ```
 
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
 {% endlist %}
 
 
@@ -1001,7 +1020,8 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
           print(f"Table index {index_name} created.")
       ```
 
-    {% endlist %}
+
+{% endlist %}
 
 - C++
 
@@ -1094,6 +1114,11 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
     ```
 
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
 {% endlist %}
 
 ## Vector search {#search-by-vector}
@@ -1291,7 +1316,8 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
           return items
       ```
 
-    {% endlist %}
+
+{% endlist %}
 
 - C++
 
@@ -1614,7 +1640,8 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
           return items
       ```
 
-    {% endlist %}
+
+{% endlist %}
 
 - C++ (alternative)
 
@@ -1691,6 +1718,11 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
     LIMIT ${unsafe(limit)};
   ```
 
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
 {% endlist %}
 
 ## Full example {#full-example}
@@ -1909,7 +1941,8 @@ The following example combines all the steps above:
           ))
       ```
 
-    {% endlist %}
+
+{% endlist %}
 
     Program output:
 
@@ -2069,4 +2102,9 @@ The following example combines all the steps above:
 
     The output matches the Python example above.
 
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#493](https://github.com/ydb-platform/ydb-rs-sdk/issues/493)
 {% endlist %}

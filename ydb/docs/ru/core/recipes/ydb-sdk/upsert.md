@@ -538,7 +538,7 @@
 
   ```rust
   use ydb::{
-      ydb_params, ydb_struct, AccessTokenCredentials, ClientBuilder, Query, Value, YdbResult,
+      ydb_params, ydb_struct, AccessTokenCredentials, ClientBuilder, Value, YdbResult,
   };
 
   fn series_row(
@@ -591,43 +591,34 @@
           ],
       )?;
 
-      let query = Query::new(
-          r#"
-          PRAGMA TablePathPrefix("/local");
-          DECLARE $seriesData AS List<Struct<
-              series_id: Uint64,
-              title: Utf8,
-              series_info: Utf8,
-              comment: Optional<Utf8>
-          >>;
-
-          UPSERT INTO series
-          (
-              series_id,
-              title,
-              series_info,
-              comment
-          )
-          SELECT
-              series_id,
-              title,
-              series_info,
-              comment
-          FROM AS_TABLE($seriesData);
-          "#,
-      )
-      .with_params(ydb_params!("$seriesData" => series_data));
-
       client
-          .table_client()
-          .retry_transaction(|mut t| {
-              let query = query.clone();
-              async move {
-                  t.query(query).await?;
-                  t.commit().await?;
-                  Ok(())
-              }
-          })
+          .query_client()
+          .exec(
+              r#"
+              PRAGMA TablePathPrefix("/local");
+              DECLARE $seriesData AS List<Struct<
+                  series_id: Uint64,
+                  title: Utf8,
+                  series_info: Utf8,
+                  comment: Optional<Utf8>
+              >>;
+
+              UPSERT INTO series
+              (
+                  series_id,
+                  title,
+                  series_info,
+                  comment
+              )
+              SELECT
+                  series_id,
+                  title,
+                  series_info,
+                  comment
+              FROM AS_TABLE($seriesData);
+              "#,
+          )
+          .params(ydb_params!("$seriesData" => series_data))
           .await?;
 
       Ok(())

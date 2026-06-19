@@ -51,8 +51,8 @@
 
 - Rust
 
-  Функциональность на данный момент не поддерживается
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
 - PHP
 
   Функциональность на данный момент не поддерживается
@@ -121,8 +121,8 @@
 
 - Rust
 
-  Функциональность на данный момент не поддерживается
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
 - PHP
 
   Функциональность на данный момент не поддерживается

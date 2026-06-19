@@ -83,7 +83,7 @@ Below are examples of the code for enabling metrics in Prometheus in different {
       }
       ```
 
-  {% endlist %}
+{% endlist %}
 
 - Java
 
@@ -97,4 +97,8 @@ Below are examples of the code for enabling metrics in Prometheus in different {
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#267](https://github.com/ydb-platform/ydb-rs-sdk/issues/267)
 {% endlist %}

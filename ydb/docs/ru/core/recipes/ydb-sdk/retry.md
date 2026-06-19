@@ -782,10 +782,10 @@
 
 - Rust
 
-  Повторные попытки для запросов к Table API выполняет `TableClient::retry_transaction`: callback получает транзакцию, внутри вызываются `query` и при необходимости `commit`.
+  Повторные попытки для запросов через Query Service выполняет `QueryClient`: one-shot методы (`query_row`, `exec` и т.д.) ретраятся автоматически; для нескольких операций в одной транзакции — `retry_transaction`.
 
   ```rust
-  use ydb::{AccessTokenCredentials, ClientBuilder, Query, YdbResult};
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
 
   #[tokio::main]
   async fn main() -> YdbResult<()> {
@@ -797,19 +797,23 @@
 
       client.wait().await?;
 
-      let row = client
-          .table_client()
-          .retry_transaction(|mut tx| async move {
-              let res = tx
-                  .query(Query::new(
-                      "SELECT series_id, title FROM series WHERE series_id = 1",
-                  ))
+      let mut qc = client.query_client().clone_with_idempotent_operations(true);
+
+      // one-shot: внутренние повторные попытки
+      let mut row = qc
+          .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
+          .await?;
+
+      // несколько операций в одной транзакции с ретраями
+      let title: String = qc
+          .retry_transaction(async |tx| {
+              let mut row = tx
+                  .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
                   .await?;
-              Ok(res.into_only_row()?.remove_field_by_name("title")?)
+              Ok(row.remove_field_by_name("title")?.try_into()?)
           })
           .await?;
 
-      let _title: String = row.try_into()?;
       Ok(())
   }
   ```

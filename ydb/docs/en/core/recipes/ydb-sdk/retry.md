@@ -653,6 +653,44 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   {% endlist %}
 
+- Rust
+
+  `QueryClient` retries one-shot calls (`query_row`, `exec`, etc.) internally. For multiple operations in one transaction, use `retry_transaction`.
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let mut qc = client.query_client().clone_with_idempotent_operations(true);
+
+      // one-shot: internal retries
+      let mut row = qc
+          .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
+          .await?;
+
+      // multiple operations in one retried transaction
+      let title: String = qc
+          .retry_transaction(async |tx| {
+              let mut row = tx
+                  .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
+                  .await?;
+              Ok(row.remove_field_by_name("title")?.try_into()?)
+          })
+          .await?;
+
+      Ok(())
+  }
+  ```
+
 - JavaScript
 
   Retries and reconnections are built into the SDK; you do not need to configure anything separately.

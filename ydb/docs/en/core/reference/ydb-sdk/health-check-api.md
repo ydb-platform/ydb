@@ -43,6 +43,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   await monitoring.selfCheck();
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
 {% endlist %}
 
 ## Call parameters {#call-parameters}
@@ -101,6 +105,10 @@ The complete list of extra parameters is presented below:
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
 {% endlist %}
 
 | Parameter | Type | Description |

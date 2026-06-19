@@ -1,4 +1,4 @@
-#include <ydb/apps/ydb/experimental/ydb/commands/ydb_root.h>
+#include <ydb/apps/ydb_int/ydb/commands/ydb_root.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 
 TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {

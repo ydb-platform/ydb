@@ -46,6 +46,7 @@ enum ECumulativeCounters {
     COUNTER_PICK_CHANNELS_FAILURES = 13 [(NKikimr.CounterOpts) = {Name: "PickChannels/Failures"}];
     COUNTER_S3_PUT_THROTTLE_ACTIVATIONS = 14 [(NKikimr.CounterOpts) = {Name: "S3/Put/ThrottleActivations"}];
     COUNTER_S3_DELETE_THROTTLE_ACTIVATIONS = 15 [(NKikimr.CounterOpts) = {Name: "S3/Delete/ThrottleActivations"}];
+    COUNTER_S3_DELETES_5XX = 16 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/5xx"}];
 }
 
 enum EPercentileCounters {

@@ -11,12 +11,14 @@ namespace NKikimr::NBlobDepot {
         std::vector<TS3Locator> LocatorsOk;
         std::vector<TS3Locator> LocatorsThrottled;
         std::vector<TS3Locator> LocatorsError;
+        size_t ServerErrors = 0;
 
         TEvDeleteResult(std::vector<TS3Locator>&& locatorsOk, std::vector<TS3Locator>&& locatorsThrottled,
-                std::vector<TS3Locator>&& locatorsError)
+                std::vector<TS3Locator>&& locatorsError, size_t serverErrors = 0)
             : LocatorsOk(std::move(locatorsOk))
             , LocatorsThrottled(std::move(locatorsThrottled))
             , LocatorsError(std::move(locatorsError))
+            , ServerErrors(serverErrors)
         {}
     };
 
@@ -49,7 +51,8 @@ namespace NKikimr::NBlobDepot {
             } else if (IsSlowDown(error)) {
                 Finish(error.GetMessage().c_str(), /*throttled=*/true);
             } else {
-                Finish(error.GetMessage().c_str());
+                Finish(error.GetMessage().c_str(), /*throttled=*/false,
+                    static_cast<int>(error.GetResponseCode()) >= 500);
             }
         }
 
@@ -60,6 +63,7 @@ namespace NKikimr::NBlobDepot {
             std::vector<TS3Locator> locatorsThrottled;
             std::vector<TS3Locator> locatorsError;
             bool requestThrottled = false;
+            bool requestServerError = false;
 
             if (msg.IsSuccess()) {
                 auto& result = msg.Result.GetResult();
@@ -103,6 +107,7 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_WARN, BLOB_DEPOT, BDTS20, "S3 SlowDown for batch delete", (Id, LogId),
                     (Error, msg.GetError().GetMessage().c_str()));
             } else {
+                requestServerError = static_cast<int>(msg.GetError().GetResponseCode()) >= 500;
                 STLOG(PRI_WARN, BLOB_DEPOT, BDTS12, "failed to delete object(s) from S3", (Id, LogId),
                     (Error, msg.GetError().GetMessage().c_str()));
             }
@@ -119,7 +124,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsThrottled),
-                std::move(locatorsError)));
+                std::move(locatorsError), requestServerError ? Locators.size() : 0));
             PassAway();
         }
 
@@ -127,7 +132,7 @@ namespace NKikimr::NBlobDepot {
             Finish("event undelivered");
         }
 
-        void Finish(std::optional<TString> error, bool throttled = false) {
+        void Finish(std::optional<TString> error, bool throttled = false, bool serverError = false) {
             if (error) {
                 STLOG(PRI_WARN, BLOB_DEPOT, BDTS03, "failed to delete object(s) from S3", (Id, LogId), (Locators, Locators),
                     (Error, error), (Throttled, throttled));
@@ -147,7 +152,7 @@ namespace NKikimr::NBlobDepot {
                 target->push_back(locator);
             }
             Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsThrottled),
-                std::move(locatorsError)));
+                std::move(locatorsError), serverError ? Locators.size() : 0));
             PassAway();
         }
 
@@ -280,6 +285,7 @@ namespace NKikimr::NBlobDepot {
                 Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_ERROR] += msg.LocatorsError.size();
                 Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_SLOW_DOWN] +=
                     msg.LocatorsThrottled.size();
+                Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_5XX] += msg.ServerErrors;
 
                 if (!msg.LocatorsThrottled.empty()) {
                     // S3 asked us to slow down: requeue, shrink concurrency, and arm exponential backoff.

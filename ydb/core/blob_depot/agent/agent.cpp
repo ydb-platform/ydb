@@ -97,6 +97,8 @@ namespace NKikimr::NBlobDepot {
         S3PutsOk = s3->GetCounter("PutsOk", true);
         S3PutsError = s3->GetCounter("PutsError", true);
         S3PutsSlowDown = s3->GetCounter("PutsSlowDown", true);
+        S3Gets5xx = s3->GetCounter("Gets5xx", true);
+        S3Puts5xx = s3->GetCounter("Puts5xx", true);
 
         S3GetsInFlightCounter = s3->GetCounter("GetsInFlight", false);
         S3GetsMaxInFlightCounter = s3->GetCounter("GetsMaxInFlight", false);

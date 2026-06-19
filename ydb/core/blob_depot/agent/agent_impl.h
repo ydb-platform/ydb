@@ -231,6 +231,8 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3Gets5xx;
+        NMonitoring::TDynamicCounters::TCounterPtr S3Puts5xx;
 
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;

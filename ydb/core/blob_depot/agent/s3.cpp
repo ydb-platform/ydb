@@ -91,6 +91,9 @@ namespace NKikimr::NBlobDepot {
 
                 ++*Agent.S3GetsError;
                 const auto& error = msg.GetError();
+                if (static_cast<int>(error.GetResponseCode()) >= 500) {
+                    ++*Agent.S3Gets5xx;
+                }
 
                 if (IsSlowDown(error)) {
                     ++*Agent.S3GetsSlowDown;
@@ -247,7 +250,8 @@ namespace NKikimr::NBlobDepot {
                     Finish(std::nullopt, false);
                 } else {
                     const auto& error = msg.GetError();
-                    Finish(std::make_optional<TString>(error.GetMessage()), IsSlowDown(error));
+                    Finish(std::make_optional<TString>(error.GetMessage()), IsSlowDown(error),
+                        static_cast<int>(error.GetResponseCode()));
                 }
             }
 
@@ -255,11 +259,14 @@ namespace NKikimr::NBlobDepot {
                 Finish("event undelivered", false);
             }
 
-            void Finish(std::optional<TString>&& error, bool slowDown) {
+            void Finish(std::optional<TString>&& error, bool slowDown, int httpCode = 0) {
                 if (!LifetimeToken.expired()) {
                     InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
                         auto& Agent = Query->Agent;
                         const auto& QueryId = Query->QueryId;
+                        if (httpCode >= 500) {
+                            ++*Agent.S3Puts5xx;
+                        }
                         BDEV_QUERY(BDEV37, "written_to_S3", (BlobId, Id), (Locator, Locator));
                         Query->OnPutS3ObjectResponse(std::move(error), slowDown);
                     });

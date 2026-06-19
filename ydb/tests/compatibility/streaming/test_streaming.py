@@ -72,7 +72,7 @@ class StreamingTestBase:
                 session_pool.execute_with_retries(create_query)
 
                 write_query = f"""
-                    INSERT INTO table_name (key, value) VALUES ('key1', 'value1');
+                    UPSERT INTO table_name (key, value) VALUES ('key1', 'value1');
                 """
                 session_pool.execute_with_retries(write_query)
 
@@ -121,7 +121,7 @@ class StreamingTestBase:
                         host
                 );
 
-                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())){' || $precompute_data' if self.test_precompute_queries else ''}))
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))){' || Unwrap($precompute_data)' if self.test_precompute_queries else ''}
                     FROM $number_errors
                 );
 
@@ -149,7 +149,7 @@ class StreamingTestBase:
                         )
                 );
 
-                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())){' || $precompute_data' if self.test_precompute_queries else ''}))
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))){' || Unwrap($precompute_data)' if self.test_precompute_queries else ''}
                     FROM $input
                 );
 

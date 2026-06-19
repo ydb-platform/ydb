@@ -68,7 +68,7 @@ class Workload():
         )
         self.pool.execute_with_retries(
             f"""
-                INSERT INTO `{self.prefix}/table_name` (key, value) VALUES ('key1', 'value1');
+                UPSERT INTO `{self.prefix}/table_name` (key, value) VALUES ('key1', 'value1');
             """
         )
 
@@ -98,7 +98,7 @@ class Workload():
                         HoppingWindow(CAST(time AS Timestamp), 'PT1S', 'PT1S')
                 );
 
-                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())) || $precompute_data))
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) || Unwrap($precompute_data)
                     FROM $number_errors
                 );
 

@@ -36,6 +36,10 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
 
         indexConfigs.reserve(normalizedSchema.GetIndexes().size());
         for (const auto& indexProto : normalizedSchema.GetIndexes()) {
+            if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex ||
+                indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch) {
+                    continue;
+                }
             NKikimrSchemeOp::TIndexCreationConfig indexConfig;
             if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError,

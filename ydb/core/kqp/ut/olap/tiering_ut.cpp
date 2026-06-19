@@ -4,6 +4,7 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
@@ -581,8 +582,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-another-bucket").GetSize(), 0);
     }
 
-    Y_UNIT_TEST(TieringForIndexes) {
-        TTieringTestHelper tieringHelper;
+    Y_UNIT_TEST(TieringForIndexes, ELocalIndexAsSchemeObject) {
+        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{LocalIndexAsSchemeObject};
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
@@ -678,11 +680,16 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             }
         }
     }
-    Y_UNIT_TEST(TieringViaIndex, EIndexForTTLColumn) {
-        
-        TTieringTestHelper tieringHelper{Arg<0>() != EIndexForTTLColumn::MaxIndex};
+    
+    Y_UNIT_TEST(TieringViaIndex, EIndexForTTLColumn, ELocalIndexAsSchemeObject) {
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{LocalIndexAsSchemeObject};
         auto& csController = tieringHelper.GetCsController();
         auto& testHelper = tieringHelper.GetTestHelper();
+
+        // "inherit_portion_storage": false and "storage_id": "__LOCAL_METADATA" 
+        // are mandatory because ttl only works with min_max index stored in local database, 
+        // and both of these options move data out of local db
         TString createTableQuery = Arg<0>() == EIndexForTTLColumn::MaxIndex ? R"(
         CREATE TABLE `/Root/ColumnWithTTLAndMaxIndex` (
             id Int32 NOT NULL,
@@ -690,7 +697,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             PRIMARY KEY(id)
         ) PARTITION BY HASH (`id`)
         WITH ( STORE = COLUMN );
-        ALTER OBJECT `/Root/ColumnWithTTLAndMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_ts, TYPE=MAX, FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": false, "column_name": "ts"}`);
+        ALTER OBJECT `/Root/ColumnWithTTLAndMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_ts, TYPE=MAX, FEATURES=`{"inherit_portion_storage": false, "column_name": "ts"}`);
         )" 
             : R"(
         CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
@@ -699,7 +706,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             PRIMARY KEY(id)
         ) PARTITION BY HASH (`id`) 
         WITH ( STORE = COLUMN );
-        ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{"column_name": "ts", "inherit_portion_storage": false}`);
+        ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{"inherit_portion_storage": false, "column_name": "ts"}`);
         )";
             
         auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(createTableQuery).GetValueSync();

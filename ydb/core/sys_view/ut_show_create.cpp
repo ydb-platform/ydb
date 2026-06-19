@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/sys_view/ut_common.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
@@ -2049,8 +2050,9 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
     );
 }
 
-Y_UNIT_TEST(TableColumnUpsertIndex) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableLocalIndexAsSchemeObject = false});
+Y_UNIT_TEST(TableColumnUpsertIndex, NKqp::ELocalIndexAsSchemeObject) {
+    const bool LocalIndexAsSchemeObject = (Arg<0>() == NKqp::ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableLocalIndexAsSchemeObject = LocalIndexAsSchemeObject});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);

@@ -13,5 +13,10 @@ enum ELocalIndexAsSchemeObject {
     SchemeObjectEnabled
 };
 
+enum EOlapTableType {
+    Table,
+    TableStore
+};
+
 } // namespace NKqp
 } // namespace NKikimr

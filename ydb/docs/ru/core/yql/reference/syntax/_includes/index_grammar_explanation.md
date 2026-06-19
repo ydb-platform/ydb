@@ -9,7 +9,7 @@
     * `SYNC` - [синхронный](../../../../concepts/query_execution/secondary_indexes.md#sync) индекс. Значение по умолчанию.
     * `ASYNC` - [асинхронный](../../../../concepts/query_execution/secondary_indexes.md#async) индекс.
 
-* `UNIQUE` — признак [уникального вторичного индекса](../../../../concepts/query_execution/secondary_indexes.md#unique). Уникальный индекс должен быть глобальным синхронным (`GLOBAL UNIQUE SYNC`) и не иметь `index_type`.
+* `UNIQUE` — признак [уникального вторичного индекса](../../../../concepts/query_execution/secondary_indexes.md#unique). Уникальный индекс должен быть глобальным синхронным (`GLOBAL UNIQUE SYNC`) и не должен содержать конструкцию `USING <index_type>`.
 * `<index_type>` - тип индекса, в настоящее время поддерживаются:
 
     * `secondary` — вторичный индекс. Для вторичных индексов доступен только режим `GLOBAL`. Это тип индекса по умолчанию.

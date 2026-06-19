@@ -4,12 +4,12 @@
     * `LOCAL` — a local index within a shard of a row-oriented or column-oriented table. Does not require distributed transactions for updates, but does not provide pruning during search.
 
 * `<index_name>` — a unique name of the index that will be used to access data.
+* `UNIQUE` — required to create a [unique index](../../../../concepts/query_execution/secondary_indexes.md#unique). A unique index must always be created as global and synchronous (`GLOBAL UNIQUE SYNC`) and must not specify a `USING <index_type>` clause.
 * `SYNC/ASYNC` — the index synchronization mode.
 
     * `SYNC` — a [synchronous](../../../../concepts/query_execution/secondary_indexes.md#sync) index. This is the default value.
     * `ASYNC` — an [asynchronous](../../../../concepts/query_execution/secondary_indexes.md#async) index.
 
-* `UNIQUE` — required to create a [unique index](../../../../concepts/query_execution/secondary_indexes.md#unique). A unique index must always be created as global and synchronous (`GLOBAL UNIQUE SYNC`) and have no `index_type`.
 * `<index_type>` — index type, currently supported:
 
     * `secondary` — secondary index. Only `GLOBAL` mode is available for secondary indexes. This is the default index type.

@@ -62,7 +62,7 @@ class StreamingTestBase:
             session_pool.execute_with_retries(query)
 
             if self.test_precompute_queries:
-                create_query = f"""
+                create_query = """
                     CREATE TABLE table_name (
                         key Utf8,
                         value Utf8,
@@ -71,7 +71,7 @@ class StreamingTestBase:
                 """
                 session_pool.execute_with_retries(create_query)
 
-                write_query = f"""
+                write_query = """
                     UPSERT INTO table_name (key, value) VALUES ('key1', 'value1');
                 """
                 session_pool.execute_with_retries(write_query)

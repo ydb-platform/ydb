@@ -154,6 +154,61 @@ Y_UNIT_TEST(CannotChangeConsumerType) {
     UNIT_ASSERT_C(issue.contains("Cannot alter consumer type"), issue);
 }
 
+Y_UNIT_TEST(AlterStreamingConsumer) {
+    TPqv1SdkTestSetup setup("AlterStreamingConsumer");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-alter-keep-streaming");
+
+    TCreateTopicSettings createSettings;
+    createSettings.ReadRules({TReadRuleSettings{}.ConsumerName(DEFAULT_STREAMING_CONSUMER)});
+
+    const auto createStatus = CreateTopicViaSdk(client, path, createSettings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
+
+    {
+        const auto describe = DescribeTopicViaSdk(client, path);
+        UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.TopicSettings().ReadRules().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(describe.TopicSettings().ReadRules().at(0).ConsumerName(), DEFAULT_STREAMING_CONSUMER);
+    }
+
+    TAlterTopicSettings alterSettings;
+    alterSettings.ReadRules({
+        TReadRuleSettings{}
+            .ConsumerName(DEFAULT_STREAMING_CONSUMER)
+            .Important(true)
+            .StartingMessageTimestamp(TInstant::MilliSeconds(1000)),
+    });
+
+    const auto alterStatus = AlterTopicViaSdk(client, path, alterSettings);
+    UNIT_ASSERT_C(alterStatus.IsSuccess(), "AlterTopic: " << alterStatus.GetIssues().ToOneLineString());
+
+    const auto describe = DescribeTopicViaSdk(client, path);
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+
+    const auto& topicSettings = describe.TopicSettings();
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).ConsumerName(), DEFAULT_STREAMING_CONSUMER);
+
+    auto& runtime = setup.GetRuntime();
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(
+        runtime.AllocateEdgeActor(),
+        TString(setup.GetBaseSetup().GetDatabase()),
+        {TString(path)}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
+    const auto& topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    const auto* consumer = NPQ::GetConsumer(topic.Info->Description.GetPQTabletConfig(), DEFAULT_STREAMING_CONSUMER);
+    UNIT_ASSERT(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING));
+}
+
 } // Y_UNIT_TEST_SUITE(AlterTopic_PQv1SDK)
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

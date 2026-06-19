@@ -99,6 +99,21 @@ TEST(TSyncSlruCacheTest, EntryWeightUpdate)
     EXPECT_GE(250, cache->GetSize());
 }
 
+TEST(TSyncSlruCacheTest, HeterogeneousLookup)
+{
+    auto config = New<TSlruCacheConfig>();
+    config->Capacity = 100;
+
+    auto cache = New<TTestCache>(config);
+    cache->TryInsert(New<TTestValue>(std::string("alpha")));
+    cache->TryInsert(New<TTestValue>(std::string("beta")));
+
+    // Lookup via TStringBuf must not materialize a std::string key.
+    EXPECT_TRUE(cache->Find(TStringBuf("alpha")));
+    EXPECT_TRUE(cache->Find(TStringBuf("beta")));
+    EXPECT_FALSE(cache->Find(TStringBuf("gamma")));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

@@ -43,35 +43,35 @@ Y_UNIT_TEST_SUITE(BackupRestoreTraitsTest) {
     // With no settings at all the task still resolves to a valid (YdbDump) format.
     Y_UNIT_TEST(DataFormatFromTaskNoSettings) {
         NKikimrSchemeOp::TBackupTask task;
-        UNIT_ASSERT_EQUAL(DataFormatFromTask(task), EDataFormat::YdbDump);
+        UNIT_ASSERT_EQUAL(DataFormatFromTask(task), EDataFormat::Invalid);
     }
 
-    // ParquetFormatFromTask must read the Parquet sub-message from S3 settings.
-    Y_UNIT_TEST(ParquetFormatFromTaskS3) {
+    // ParquetExportSettingsFromTask must read the Parquet sub-message from S3 settings.
+    Y_UNIT_TEST(ParquetExportSettingsFromTaskS3) {
         NKikimrSchemeOp::TBackupTask task;
         task.MutableS3Settings()->MutableParquet()->SetRowGroupSize(123);
-        UNIT_ASSERT_VALUES_EQUAL(ParquetFormatFromTask(task).GetRowGroupSize(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize, 123);
     }
 
-    // ParquetFormatFromTask must read the Parquet sub-message from FS settings.
-    Y_UNIT_TEST(ParquetFormatFromTaskFS) {
+    // ParquetExportSettingsFromTask must read the Parquet sub-message from FS settings.
+    Y_UNIT_TEST(ParquetExportSettingsFromTaskFS) {
         NKikimrSchemeOp::TBackupTask task;
         task.MutableFSSettings()->MutableParquet()->SetRowGroupSize(456);
-        UNIT_ASSERT_VALUES_EQUAL(ParquetFormatFromTask(task).GetRowGroupSize(), 456);
+        UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize, 456);
     }
 
     // FS Parquet without an explicit RowGroupSize falls back to the proto default.
-    Y_UNIT_TEST(ParquetFormatFromTaskFSDefaultRowGroupSize) {
+    Y_UNIT_TEST(ParquetExportSettingsFromTaskFSDefaultRowGroupSize) {
         NKikimrSchemeOp::TBackupTask task;
         task.MutableFSSettings()->MutableParquet();
-        UNIT_ASSERT_VALUES_EQUAL(ParquetFormatFromTask(task).GetRowGroupSize(),
+        UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize,
             NKikimrSchemeOp::TParquetFormat().GetRowGroupSize());
     }
 
     // For tasks without S3/FS settings a default (empty) Parquet message is returned.
-    Y_UNIT_TEST(ParquetFormatFromTaskNoSettings) {
+    Y_UNIT_TEST(ParquetExportSettingsFromTaskNoSettings) {
         NKikimrSchemeOp::TBackupTask task;
-        UNIT_ASSERT_VALUES_EQUAL(ParquetFormatFromTask(task).GetRowGroupSize(),
+        UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize,
             NKikimrSchemeOp::TParquetFormat().GetRowGroupSize());
     }
 

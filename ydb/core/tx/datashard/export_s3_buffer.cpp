@@ -285,11 +285,11 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     auto dataFormatBuffer = DataFormat->Flush(last);
     if (!dataFormatBuffer) {
         ErrorString = DataFormat->GetError();
-        return false;
+        return Nothing();
     }
 
     if (!Append(dataFormatBuffer->Data(), dataFormatBuffer->Size())) {
-        return false;
+        return Nothing();
     }
 
     // Compression finishes compression frame during Flush

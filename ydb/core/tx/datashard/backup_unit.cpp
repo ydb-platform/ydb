@@ -74,6 +74,13 @@ protected:
                 return false;
             }
 
+            if (NBackupRestoreTraits::DataFormatFromTask(backup) == NBackupRestoreTraits::EDataFormat::Parquet) {
+                if (!appData->FeatureFlags.GetEnableParquetForExport()) {
+                    Abort(op, ctx, "Parquet export is disabled by feature flag EnableParquetForExport");
+                    return false;
+                }
+            }
+
             const TStringBuf exportKind = backup.HasFSSettings() ? "FS"sv : "S3"sv;
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
@@ -84,14 +91,6 @@ protected:
             } else {
                 Abort(op, ctx, TStringBuilder() << "Exports to " << exportKind << " are disabled");
                 return false;
-            }
-
-            if ((backup.HasS3Settings() && backup.GetS3Settings().HasParquet()) 
-                || (backup.HasFSSettings() && backup.GetFSSettings().HasParquet())) {
-                if (!appData->FeatureFlags.GetEnableParquetForExport()) {
-                    Abort(op, ctx, "Parquet export is disabled by feature flag EnableParquetForExport");
-                    return false;
-                }
             }
         } else {
             Abort(op, ctx, "Unsupported backup task");

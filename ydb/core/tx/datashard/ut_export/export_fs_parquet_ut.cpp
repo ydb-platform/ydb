@@ -116,7 +116,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(ExportFsParquetTest) {
     // The FS-Parquet code path in TS3Export::CreateBuffer() (DataFormatFromTask /
-    // ParquetFormatFromTask reading FSSettings) must produce a valid Parquet file.
+    // ParquetExportSettingsFromTask reading FSSettings) must produce a valid Parquet file.
     Y_UNIT_TEST(ShouldProduceValidParquetForFsTask) {
         const TVector<std::pair<ui32, TString>> rows = {
             {1, "valueA"},

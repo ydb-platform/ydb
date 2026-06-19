@@ -58,8 +58,8 @@ struct TParquetExportSettings {
         int Level = -1;
     };
 
-    TParquetExportSettings& WithColumns(const IExport::TTableColumns columns) {
-        Columns = std::move(columns);
+    TParquetExportSettings& WithColumns(const IExport::TTableColumns& columns) {
+        Columns = columns;
         return *this;
     }
 
@@ -74,7 +74,7 @@ struct TParquetExportSettings {
     }
 
     IExport::TTableColumns Columns;
-    ui64 RowGroupSize = 0;
+    ui64 RowGroupSize = 1000;
     TMaybe<TCompressionSettings> CompressionSettings;
 };
 

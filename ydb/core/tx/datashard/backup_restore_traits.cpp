@@ -46,6 +46,7 @@ EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task) {
         case NKikimrSchemeOp::TS3Settings::kParquet:
             return EDataFormat::Parquet;
         }
+        break;
     case NKikimrSchemeOp::TBackupTask::kFSSettings:
         switch (task.GetFSSettings().GetFormatCase()) {
         case NKikimrSchemeOp::TFSSettings::FORMAT_NOT_SET:
@@ -54,6 +55,7 @@ EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task) {
         case NKikimrSchemeOp::TFSSettings::kParquet:
             return EDataFormat::Parquet;
         }
+        break;
     case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
     case NKikimrSchemeOp::TBackupTask::kYTSettings:
         return EDataFormat::Invalid;
@@ -87,8 +89,10 @@ TParquetExportSettings ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBac
     switch(task.GetSettingsCase()) {
     case NKikimrSchemeOp::TBackupTask::kS3Settings:        
         taskParquetSettings = task.GetS3Settings().GetParquet();
+        break;
     case NKikimrSchemeOp::TBackupTask::kFSSettings:
         taskParquetSettings = task.GetFSSettings().GetParquet();
+        break;
     case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
     case NKikimrSchemeOp::TBackupTask::kYTSettings:
         return TParquetExportSettings();

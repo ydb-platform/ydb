@@ -144,6 +144,7 @@ namespace {
         TString MetricsAggregationLabel;
         TString MetricsAggregationPeer;
         ui32 ConnectedValue = 0;
+        ui32 RdmaRetryWatchdogPendingValue = 0;
         i64 ClockSkewValue = 0;
         bool MetricsAggregationRegistered = false;
 
@@ -220,6 +221,20 @@ namespace {
                 return;
             }
             *Connected = value;
+        }
+
+        void SetRdmaRetryWatchdogPending(ui32 value) override {
+            if (UseMetricsAggregation) {
+                if (RdmaRetryWatchdogPendingValue != value) {
+                    RdmaRetryWatchdogPendingValue = value;
+                    if (MetricsAggregationRegistered) {
+                        SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateRdmaRetryWatchdogPending>(
+                            Common, MetricsAggregationLabel, MetricsAggregationPeer, RdmaRetryWatchdogPendingValue);
+                    }
+                }
+                return;
+            }
+            *RdmaRetryWatchdogPending = value;
         }
 
         void IncSubscribersCount() override {
@@ -379,6 +394,7 @@ namespace {
 
             if (updatePerSession) {
                 Connected = AdaptiveCounters->GetCounter("Connected");
+                RdmaRetryWatchdogPending = AdaptiveCounters->GetCounter("RdmaRetryWatchdogPendingSessions");
                 Disconnections = AdaptiveCounters->GetCounter("Disconnections", true);
                 ClockSkewMicrosec = AdaptiveCounters->GetCounter("ClockSkewMicrosec");
                 Traffic = AdaptiveCounters->GetCounter("Traffic", true);
@@ -490,12 +506,15 @@ namespace {
             SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvRegisterPeer>(Common, MetricsAggregationLabel, MetricsAggregationPeer);
             SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateConnected>(Common, MetricsAggregationLabel, MetricsAggregationPeer, ConnectedValue);
             SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateClockSkew>(Common, MetricsAggregationLabel, MetricsAggregationPeer, ClockSkewValue);
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateRdmaRetryWatchdogPending>(
+                Common, MetricsAggregationLabel, MetricsAggregationPeer, RdmaRetryWatchdogPendingValue);
         }
 
     private:
         NMonitoring::TDynamicCounters::TCounterPtr SessionDeaths;
         NMonitoring::TDynamicCounters::TCounterPtr HandshakeFails;
         NMonitoring::TDynamicCounters::TCounterPtr Connected;
+        NMonitoring::TDynamicCounters::TCounterPtr RdmaRetryWatchdogPending;
         NMonitoring::TDynamicCounters::TCounterPtr Disconnections;
         NMonitoring::TDynamicCounters::TCounterPtr InflightDataAmount;
         NMonitoring::TDynamicCounters::TCounterPtr InflightRdmaDataAmount;
@@ -677,6 +696,20 @@ namespace {
             Connected_->Set(value);
         }
 
+        void SetRdmaRetryWatchdogPending(ui32 value) override {
+            if (UseMetricsAggregation_) {
+                if (RdmaRetryWatchdogPendingValue_ != value) {
+                    RdmaRetryWatchdogPendingValue_ = value;
+                    if (MetricsAggregationRegistered_) {
+                        SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateRdmaRetryWatchdogPending>(
+                            Common, MetricsAggregationLabel_, MetricsAggregationPeer_, RdmaRetryWatchdogPendingValue_);
+                    }
+                }
+                return;
+            }
+            RdmaRetryWatchdogPending_->Set(value);
+        }
+
         void IncSubscribersCount() override {
             SubscribersCount_->Inc();
         }
@@ -841,6 +874,8 @@ namespace {
 
             if (updatePerSession) {
                 Connected_ = createIntGauge(PerSessionMetrics_, "interconnect.connected");
+                RdmaRetryWatchdogPending_ = createIntGauge(PerSessionMetrics_,
+                    "interconnect.rdma_retry_watchdog_pending_sessions");
                 Disconnections_ = createRate(PerSessionMetrics_, "interconnect.disconnections");
                 ClockSkewMicrosec_ = createIntGauge(PerSessionMetrics_, "interconnect.clock_skew_microsec");
                 Traffic_ = createRate(PerSessionMetrics_, "interconnect.traffic");
@@ -965,6 +1000,8 @@ namespace {
                 MetricsAggregationLabel_, MetricsAggregationPeer_, ConnectedValue_);
             SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateClockSkew>(Common,
                 MetricsAggregationLabel_, MetricsAggregationPeer_, ClockSkewValue_);
+            SendMetricsAggregationEvent<NInterconnectMetricsAggregator::TEvUpdateRdmaRetryWatchdogPending>(
+                Common, MetricsAggregationLabel_, MetricsAggregationPeer_, RdmaRetryWatchdogPendingValue_);
         }
 
     private:
@@ -983,6 +1020,7 @@ namespace {
         TString MetricsAggregationLabel_;
         TString MetricsAggregationPeer_;
         ui32 ConnectedValue_ = 0;
+        ui32 RdmaRetryWatchdogPendingValue_ = 0;
         i64 ClockSkewValue_ = 0;
         bool MetricsAggregationRegistered_ = false;
 
@@ -992,6 +1030,7 @@ namespace {
         NMonitoring::IRate* ScopeErrors_ = nullptr;
         NMonitoring::IRate* Disconnections_ = nullptr;
         NMonitoring::IIntGauge* Connected_ = nullptr;
+        NMonitoring::IIntGauge* RdmaRetryWatchdogPending_ = nullptr;
 
         NMonitoring::IRate* SessionDeaths_;
         NMonitoring::IRate* HandshakeFails_;

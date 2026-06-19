@@ -24,6 +24,7 @@ public:
     virtual void IncSessionDeaths() = 0;
     virtual void IncHandshakeFails() = 0;
     virtual void SetConnected(ui32 value) = 0;
+    virtual void SetRdmaRetryWatchdogPending(ui32 value) = 0;
     virtual void IncSubscribersCount() = 0;
     virtual void SubSubscribersCount(ui32 value) = 0;
     virtual void SubOutputBuffersTotalSize(ui64 value) = 0;

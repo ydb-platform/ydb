@@ -91,6 +91,8 @@ class Workload():
 
     def check_status(self):
         result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path LIKE '{self.database}/{self.prefix}/query_name%'")
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 2
 
         for row in result_sets[0].rows:
             status = row.Status

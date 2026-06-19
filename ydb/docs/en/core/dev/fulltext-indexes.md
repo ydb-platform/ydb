@@ -126,9 +126,9 @@ LIMIT 20;
 
 A `LIKE` / `ILIKE` query uses the same logic as `FulltextMatch(body, ..., "Wildcard" AS Mode)` and accesses the same n-gram index.
 
-### Filtered Fulltext Index {#filtered}
+### Filtered fulltext index {#filtered}
 
-A filtered fulltext index enables fulltext search within each logical partition defined by additional columns. To create such an index, specify one or more filter columns before the text column in the `ON` clause. The last column must be the text column; the others (filter columns) can be of any comparable type:
+A filtered fulltext index enables fulltext search within each logical partition defined by filter columns. To create such an index, specify one or more filter columns before the text column in the `ON` clause. The last column must be the text column; the others can be of any comparable type:
 
 ```yql
 ALTER TABLE articles
@@ -200,4 +200,5 @@ ALTER TABLE articles DROP INDEX ft_index;
 * `FulltextMatch` / `FulltextScore` can't be used with `OR` or `NOT`. Combining them with other predicates via `AND` is supported.
 * A single read through `VIEW` supports only one fulltext predicate: multiple `FulltextScore` calls are not supported, and mixing `FulltextMatch` and `FulltextScore` in the same `WHERE` is not supported.
 * For relevance access, you must include `FulltextScore(...) > 0` in `WHERE` (otherwise the query fails).
-* [Filtered fulltext indexes](#filtered): every filter column needs an equality predicate; filter columns must not be primary key columns.
+* [Filtered fulltext indexes](#filtered): every filter column needs an equality predicate in `WHERE`.
+* [Filtered fulltext indexes](#filtered): filter columns must not be primary key columns.

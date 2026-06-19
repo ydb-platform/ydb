@@ -1,8 +1,5 @@
 #include "pqv1_sdk_test_utils.h"
 
-#include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/utils.h>
-
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests {
@@ -64,10 +61,6 @@ std::string TPqv1SdkTestSetup::MakeTopicPath(const std::string& topicName) {
     return "/Root/" + topicName;
 }
 
-TExpectedTopicSettings MakeDefaultCreateTopicExpectation() {
-    return TExpectedTopicSettings{};
-}
-
 TReadRuleSettings MakeSharedConsumerReadRuleSettings(const std::string& consumerName) {
     TSharedConsumerDeadLetterPolicySettings deadLetterPolicy;
     deadLetterPolicy
@@ -103,135 +96,6 @@ TDescribeTopicResult DescribeTopicViaSdk(
     const std::string& path)
 {
     return client.DescribeTopic(path).GetValueSync();
-}
-
-void AssertStatusSuccess(const TStatus& status, const char* operation) {
-    UNIT_ASSERT_C(status.IsSuccess(), operation << ": " << status.GetIssues().ToOneLineString());
-}
-
-void AssertTopicSettings(
-    const TDescribeTopicResult::TTopicSettings& actual,
-    const TExpectedTopicSettings& expected)
-{
-    UNIT_ASSERT_VALUES_EQUAL(actual.PartitionsCount(), expected.PartitionsCount);
-    UNIT_ASSERT_VALUES_EQUAL(actual.RetentionPeriod(), expected.RetentionPeriod);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(actual.SupportedFormat()), static_cast<int>(expected.SupportedFormat));
-    UNIT_ASSERT_VALUES_EQUAL(actual.MaxPartitionStorageSize(), expected.MaxPartitionStorageSize);
-    UNIT_ASSERT_VALUES_EQUAL(actual.MaxPartitionWriteSpeed(), expected.MaxPartitionWriteSpeed);
-    UNIT_ASSERT_VALUES_EQUAL(actual.MaxPartitionWriteBurst(), expected.MaxPartitionWriteBurst);
-    UNIT_ASSERT_VALUES_EQUAL(actual.ClientWriteDisabled(), expected.ClientWriteDisabled);
-    UNIT_ASSERT_VALUES_EQUAL(actual.AllowUnauthenticatedRead(), expected.AllowUnauthenticatedRead);
-    UNIT_ASSERT_VALUES_EQUAL(actual.AllowUnauthenticatedWrite(), expected.AllowUnauthenticatedWrite);
-
-    if (expected.AbcId.has_value()) {
-        UNIT_ASSERT(actual.AbcId().has_value());
-        UNIT_ASSERT_VALUES_EQUAL(actual.AbcId().value(), expected.AbcId.value());
-    } else {
-        UNIT_ASSERT(!actual.AbcId().has_value());
-    }
-
-    if (expected.AbcSlug.has_value()) {
-        UNIT_ASSERT(actual.AbcSlug().has_value());
-        UNIT_ASSERT_VALUES_EQUAL(actual.AbcSlug().value(), expected.AbcSlug.value());
-    } else {
-        UNIT_ASSERT(!actual.AbcSlug().has_value());
-    }
-
-    if (expected.FederationAccount.has_value()) {
-        UNIT_ASSERT(actual.FederationAccount().has_value());
-        UNIT_ASSERT_VALUES_EQUAL(actual.FederationAccount().value(), expected.FederationAccount.value());
-    } else {
-        UNIT_ASSERT(!actual.FederationAccount().has_value() || actual.FederationAccount()->empty());
-    }
-
-    if (expected.MetricsLevel.has_value()) {
-        UNIT_ASSERT(actual.MetricsLevel().has_value());
-        UNIT_ASSERT_VALUES_EQUAL(actual.MetricsLevel().value(), expected.MetricsLevel.value());
-    } else {
-        UNIT_ASSERT(!actual.MetricsLevel().has_value());
-    }
-
-    if (expected.AdvancedMonitoringSettings.has_value()) {
-        UNIT_ASSERT(actual.AdvancedMonitoringSettings().has_value());
-        UNIT_ASSERT_VALUES_EQUAL(actual.AdvancedMonitoringSettings().value(), expected.AdvancedMonitoringSettings.value());
-    } else {
-        UNIT_ASSERT(!actual.AdvancedMonitoringSettings().has_value());
-    }
-
-    UNIT_ASSERT_VALUES_EQUAL(actual.ReadRules().size(), expected.ReadRules.size());
-    for (size_t i = 0; i < expected.ReadRules.size(); ++i) {
-        const auto& actualRule = actual.ReadRules().at(i);
-        const auto& expectedRule = expected.ReadRules.at(i);
-
-        UNIT_ASSERT_VALUES_EQUAL(actualRule.ConsumerName(), expectedRule.ConsumerName);
-        UNIT_ASSERT_VALUES_EQUAL(actualRule.Important(), expectedRule.Important);
-        UNIT_ASSERT_VALUES_EQUAL(actualRule.AvailabilityPeriod(), expectedRule.AvailabilityPeriod);
-        UNIT_ASSERT_VALUES_EQUAL(actualRule.StartingMessageTimestamp(), expectedRule.StartingMessageTimestamp);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(actualRule.SupportedFormat()), static_cast<int>(expectedRule.SupportedFormat));
-        UNIT_ASSERT_VALUES_EQUAL(actualRule.Version(), expectedRule.Version);
-        if (!expectedRule.ServiceType.empty()) {
-            UNIT_ASSERT_VALUES_EQUAL(actualRule.ServiceType(), expectedRule.ServiceType);
-        }
-    }
-}
-
-void AssertConsumerTypeViaDescriber(
-    NActors::TTestActorRuntime& runtime,
-    const TString& database,
-    const TString& topicPath,
-    const TString& consumerName,
-    NKikimrPQ::TPQTabletConfig::EConsumerType expectedType)
-{
-    runtime.Register(NPQ::NDescriber::CreateDescriberActor(
-        runtime.AllocateEdgeActor(),
-        database,
-        {topicPath}));
-    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
-
-    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
-    const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
-
-    const auto* consumer = NPQ::GetConsumer(topic.Info->Description.GetPQTabletConfig(), consumerName);
-    UNIT_ASSERT(consumer);
-    UNIT_ASSERT_VALUES_EQUAL(
-        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
-        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(expectedType));
-}
-
-void AssertSharedConsumerViaDescriber(
-    NActors::TTestActorRuntime& runtime,
-    const TString& database,
-    const TString& topicPath,
-    const TString& consumerName,
-    const TExpectedSharedConsumer& expected)
-{
-    runtime.Register(NPQ::NDescriber::CreateDescriberActor(
-        runtime.AllocateEdgeActor(),
-        database,
-        {topicPath}));
-    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
-
-    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
-    const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
-
-    const auto& config = topic.Info->Description.GetPQTabletConfig();
-    const auto* consumer = NPQ::GetConsumer(config, consumerName);
-    UNIT_ASSERT(consumer);
-    UNIT_ASSERT_VALUES_EQUAL(consumer->GetImportant(), false);
-    UNIT_ASSERT_VALUES_EQUAL(
-        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
-        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
-    UNIT_ASSERT_VALUES_EQUAL(consumer->GetKeepMessageOrder(), expected.KeepMessagesOrder);
-    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultProcessingTimeoutSeconds(), expected.DefaultProcessingTimeoutSeconds);
-    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultReceiveMessageWaitTimeMs(), expected.ReceiveMessageWaitTimeMs);
-    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultDelayMessageTimeMs(), expected.ReceiveMessageDelayMs);
-    UNIT_ASSERT_VALUES_EQUAL(
-        NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(consumer->GetDeadLetterPolicy()),
-        NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
-    UNIT_ASSERT_VALUES_EQUAL(consumer->GetMaxProcessingAttempts(), expected.MaxProcessingAttempts);
-    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDeadLetterQueue(), expected.DeadLetterQueue);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

@@ -1,9 +1,14 @@
 #include "pqv1_sdk_test_utils.h"
 
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/utils.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests {
 
+using namespace NYdb;
 using namespace NYdb::NPersQueue;
 
 Y_UNIT_TEST_SUITE(CreateTopic_PQv1SDK) {
@@ -16,11 +21,28 @@ Y_UNIT_TEST(CreateTopic) {
 
     TCreateTopicSettings settings;
 
-    AssertStatusSuccess(CreateTopicViaSdk(client, path, settings), "CreateTopic");
+    const auto createStatus = CreateTopicViaSdk(client, path, settings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
 
     const auto describe = DescribeTopicViaSdk(client, path);
-    AssertStatusSuccess(describe, "DescribeTopic");
-    AssertTopicSettings(describe.TopicSettings(), MakeDefaultCreateTopicExpectation());
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+
+    const auto& topicSettings = describe.TopicSettings();
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.PartitionsCount(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.RetentionPeriod(), TDuration::Hours(18));
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(topicSettings.SupportedFormat()), static_cast<int>(EFormat::BASE));
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.MaxPartitionStorageSize(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.MaxPartitionWriteSpeed(), 2_MB);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.MaxPartitionWriteBurst(), 2_MB);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ClientWriteDisabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.AllowUnauthenticatedRead(), false);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.AllowUnauthenticatedWrite(), false);
+    UNIT_ASSERT(!topicSettings.AbcId().has_value());
+    UNIT_ASSERT(!topicSettings.AbcSlug().has_value());
+    UNIT_ASSERT(!topicSettings.FederationAccount().has_value() || topicSettings.FederationAccount()->empty());
+    UNIT_ASSERT(!topicSettings.MetricsLevel().has_value());
+    UNIT_ASSERT(!topicSettings.AdvancedMonitoringSettings().has_value());
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().size(), 0u);
 }
 
 Y_UNIT_TEST(CreateTopicWithStreamingConsumer) {
@@ -32,21 +54,37 @@ Y_UNIT_TEST(CreateTopicWithStreamingConsumer) {
     TCreateTopicSettings settings;
     settings.ReadRules({TReadRuleSettings{}.ConsumerName(DEFAULT_STREAMING_CONSUMER)});
 
-    AssertStatusSuccess(CreateTopicViaSdk(client, path, settings), "CreateTopic");
+    const auto createStatus = CreateTopicViaSdk(client, path, settings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
 
     const auto describe = DescribeTopicViaSdk(client, path);
-    AssertStatusSuccess(describe, "DescribeTopic");
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
 
-    TExpectedTopicSettings expected = MakeDefaultCreateTopicExpectation();
-    expected.ReadRules.push_back({.ConsumerName = DEFAULT_STREAMING_CONSUMER});
-    AssertTopicSettings(describe.TopicSettings(), expected);
+    const auto& topicSettings = describe.TopicSettings();
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).ConsumerName(), DEFAULT_STREAMING_CONSUMER);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).Important(), false);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).AvailabilityPeriod(), TDuration::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).StartingMessageTimestamp(), TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(topicSettings.ReadRules().at(0).SupportedFormat()), static_cast<int>(EFormat::BASE));
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).Version(), 0u);
 
-    AssertConsumerTypeViaDescriber(
-        setup.GetRuntime(),
+    auto& runtime = setup.GetRuntime();
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(
+        runtime.AllocateEdgeActor(),
         TString(setup.GetBaseSetup().GetDatabase()),
-        TString(path),
-        DEFAULT_STREAMING_CONSUMER,
-        NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+        {TString(path)}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
+    const auto& topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    const auto* consumer = NPQ::GetConsumer(topic.Info->Description.GetPQTabletConfig(), DEFAULT_STREAMING_CONSUMER);
+    UNIT_ASSERT(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING));
 }
 
 Y_UNIT_TEST(CreateTopicWithSharedConsumer) {
@@ -58,39 +96,48 @@ Y_UNIT_TEST(CreateTopicWithSharedConsumer) {
     TCreateTopicSettings settings;
     settings.ReadRules({MakeSharedConsumerReadRuleSettings()});
 
-    AssertStatusSuccess(CreateTopicViaSdk(client, path, settings), "CreateTopic");
+    const auto createStatus = CreateTopicViaSdk(client, path, settings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
 
     const auto describe = DescribeTopicViaSdk(client, path);
-    AssertStatusSuccess(describe, "DescribeTopic");
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
 
-    TExpectedTopicSettings expected = MakeDefaultCreateTopicExpectation();
-    expected.ReadRules.push_back({
-        .ConsumerName = DEFAULT_SHARED_CONSUMER,
-        .StartingMessageTimestamp = TInstant::MilliSeconds(1000),
-        .Version = 1,
-    });
-    AssertTopicSettings(describe.TopicSettings(), expected);
+    const auto& topicSettings = describe.TopicSettings();
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).ConsumerName(), DEFAULT_SHARED_CONSUMER);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).Important(), false);
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).AvailabilityPeriod(), TDuration::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).StartingMessageTimestamp(), TInstant::MilliSeconds(1000));
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(topicSettings.ReadRules().at(0).SupportedFormat()), static_cast<int>(EFormat::BASE));
+    UNIT_ASSERT_VALUES_EQUAL(topicSettings.ReadRules().at(0).Version(), 1u);
 
-    AssertConsumerTypeViaDescriber(
-        setup.GetRuntime(),
+    auto& runtime = setup.GetRuntime();
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(
+        runtime.AllocateEdgeActor(),
         TString(setup.GetBaseSetup().GetDatabase()),
-        TString(path),
-        DEFAULT_SHARED_CONSUMER,
-        NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+        {TString(path)}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
 
-    AssertSharedConsumerViaDescriber(
-        setup.GetRuntime(),
-        TString(setup.GetBaseSetup().GetDatabase()),
-        TString(path),
-        DEFAULT_SHARED_CONSUMER,
-        TExpectedSharedConsumer{
-            .KeepMessagesOrder = true,
-            .DefaultProcessingTimeoutSeconds = 3,
-            .ReceiveMessageWaitTimeMs = 5000,
-            .ReceiveMessageDelayMs = 7000,
-            .MaxProcessingAttempts = 11,
-            .DeadLetterQueue = DEFAULT_DEAD_LETTER_QUEUE,
-        });
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
+    const auto& topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    const auto& config = topic.Info->Description.GetPQTabletConfig();
+    const auto* consumer = NPQ::GetConsumer(config, DEFAULT_SHARED_CONSUMER);
+    UNIT_ASSERT(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetImportant(), false);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetKeepMessageOrder(), true);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultProcessingTimeoutSeconds(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultReceiveMessageWaitTimeMs(), 5000u);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultDelayMessageTimeMs(), 7000u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(consumer->GetDeadLetterPolicy()),
+        NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
 }
 
 } // Y_UNIT_TEST_SUITE(CreateTopic_PQv1SDK)

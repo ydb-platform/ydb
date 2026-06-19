@@ -61,9 +61,9 @@ inline NActors::TActorId MakeKqpQueryTextCacheServiceId(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
-inline NActors::TActorId MakeKqpDescribeResourceIdServiceId(ui32 nodeId) {
+inline NActors::TActorId MakeKqpDescribeResourceIdServiceId() {
     const char name[12] = "kqp_dsc_res";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12));
+    return NActors::TActorId(0, TStringBuf(name, 12));
 }
 
 } // namespace NKikimr::NKqp

@@ -2000,7 +2000,7 @@ private:
         auto actor = CreateDescribeResourceIdServiceActor(FederatedQuerySetup->Driver);
         DescribeResourceIdService = TActivationContext::Register(actor);
         TActivationContext::ActorSystem()->RegisterLocalService(
-            MakeKqpDescribeResourceIdServiceId(0), DescribeResourceIdService);
+            MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
     }
 
 private:

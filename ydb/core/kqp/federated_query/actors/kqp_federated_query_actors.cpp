@@ -754,7 +754,7 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
     TActorSystem* actorSystem
 ) {
     auto promise = NThreading::NewPromise<TEvDescribeResourceIdResponse::TDescription>();
-    actorSystem->Send(MakeKqpDescribeResourceIdServiceId(0), new TDescribeResourceIdService::TEvDescribeResourceId(endpoint, database, ssl, caCert, token, promise));
+    actorSystem->Send(MakeKqpDescribeResourceIdServiceId(), new TDescribeResourceIdService::TEvDescribeResourceId(endpoint, database, ssl, caCert, token, promise));
     return promise.GetFuture();
 }
 

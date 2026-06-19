@@ -522,6 +522,10 @@ message StreamReadMessage {
         // All messages with offset less than commit_offset are processed by client.
         // Server will commit this position if this is not done yet.
         optional int64 commit_offset = 3;
+
+        // If max_ofset is set, server will return data only up to max_offset (inclusive)
+        // If set and is less than read_offset, commit_offset or actual committed offset then server will send an error message (status != SUCCESS) and close stream.
+        optional int64 max_offset = 4;
     }
 
     // Command from server to stop and destroy concrete partition session.

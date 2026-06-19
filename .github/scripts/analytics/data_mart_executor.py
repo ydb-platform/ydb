@@ -4,9 +4,9 @@
 import argparse
 import ydb
 import os
-import re
 import time
 from ydb_wrapper import YDBWrapper
+from mart_cleanup import cleanup_window_antijoin_by_date_key, validate_identifier, validate_interval_expression
 
 # Get repository path
 dir = os.path.dirname(__file__)
@@ -81,29 +81,9 @@ def create_table_if_not_exists(ydb_wrapper, table_path, column_types, store_type
     create_table(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key)
 
 
-def _validate_identifier(value: str, arg_name: str) -> None:
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value or ""):
-        raise ValueError(
-            f"Invalid {arg_name}: {value!r}. Allowed pattern: [A-Za-z_][A-Za-z0-9_]*"
-        )
-
-
-def _validate_interval_expression(interval_expr: str) -> None:
-    # Example: 365 * Interval("P1D")
-    if not re.fullmatch(r'\d+\s*\*\s*Interval\("P[0-9A-Z]+"\)', interval_expr or ""):
-        raise ValueError(
-            f"Invalid --cleanup_window_interval: {interval_expr!r}. "
-            'Expected format like: 365 * Interval("P1D")'
-        )
-
-
 def _type_name_for_declare(column_type):
     _, type_name = ydb_type_to_str(column_type, "ROW")
     return type_name.replace("?", "")
-
-
-def _pk_tuple(row, primary_keys):
-    return tuple(row[key] for key in primary_keys)
 
 
 def _collect_pk_type_map(primary_keys, column_types):
@@ -112,99 +92,6 @@ def _collect_pk_type_map(primary_keys, column_types):
     if missing:
         raise ValueError(f"Primary keys not found in query result columns: {missing}")
     return {key: _type_name_for_declare(column_types_map[key]) for key in primary_keys}
-
-
-def _to_typed_param(value, type_name):
-    primitive = getattr(ydb.PrimitiveType, type_name, None)
-    if primitive is None:
-        # Fallback: let SDK infer type when primitive mapping is unavailable.
-        return value
-    return ydb.TypedValue(value=value, value_type=primitive)
-
-
-def _delete_stale_pk_rows(ydb_wrapper, table_path, primary_keys, pk_type_map, stale_rows):
-    if not stale_rows:
-        print("Cleanup mode=window_antijoin: no stale rows to delete")
-        return
-
-    print(f"Cleanup mode=window_antijoin: deleting stale rows: {len(stale_rows)}")
-    preview_limit = 10
-    chunk_size = 100
-    total = len(stale_rows)
-    for idx, row in enumerate(stale_rows, 1):
-        if idx <= preview_limit:
-            preview = ", ".join([f"{key}={row[key]!r}" for key in primary_keys])
-            print(f"Stale row {idx}/{total}: {preview}")
-        if idx == preview_limit + 1:
-            print("Stale row preview limit reached; continuing without per-row logging")
-
-    for start_idx in range(0, total, chunk_size):
-        chunk = stale_rows[start_idx:start_idx + chunk_size]
-        chunk_no = start_idx // chunk_size + 1
-        declare_lines = []
-        predicates = []
-        params = {}
-
-        for row_idx, row in enumerate(chunk):
-            row_param_names = []
-            for key in primary_keys:
-                param_name = f"${key}_{row_idx}"
-                declare_lines.append(f"DECLARE {param_name} AS {pk_type_map[key]};")
-                params[param_name] = _to_typed_param(row[key], pk_type_map[key])
-                row_param_names.append(param_name)
-            predicates.append(
-                "(" + " AND ".join(
-                    [f"`{key}` = {row_param_names[key_idx]}" for key_idx, key in enumerate(primary_keys)]
-                ) + ")"
-            )
-
-        declare_block = "\n".join(declare_lines)
-        delete_query = f"""
-            {declare_block}
-
-            DELETE FROM `{table_path}`
-            WHERE {' OR '.join(predicates)};
-        """
-
-        ydb_wrapper.execute_dml(
-            delete_query,
-            parameters=params,
-            query_name=f"{table_path.split('/')[-1]}_cleanup_stale_pk_chunk_{chunk_no}",
-        )
-
-        deleted = min(start_idx + chunk_size, total)
-        print(f"Deleted stale rows: {deleted}/{total} (chunks: {chunk_no})")
-
-
-def _cleanup_window_antijoin(
-    ydb_wrapper,
-    table_path,
-    results,
-    primary_keys,
-    column_types,
-    window_key,
-    window_interval,
-    query_name,
-):
-    target_pk_projection = ", ".join([f"t.`{key}` AS `{key}`" for key in primary_keys])
-
-    target_pk_query = f"""
-        SELECT {target_pk_projection}
-        FROM `{table_path}` AS t
-        WHERE t.`{window_key}` >= CurrentUtcDate() - {window_interval};
-    """
-
-    target_pk_rows, _ = ydb_wrapper.execute_scan_query_with_metadata(
-        target_pk_query, f"{query_name}_cleanup_target_pks"
-    )
-
-    source_pk_set = {_pk_tuple(row, primary_keys) for row in results}
-    stale_rows = [
-        row for row in target_pk_rows
-        if _pk_tuple(row, primary_keys) not in source_pk_set
-    ]
-    pk_type_map = _collect_pk_type_map(primary_keys, column_types)
-    _delete_stale_pk_rows(ydb_wrapper, table_path, primary_keys, pk_type_map, stale_rows)
 
 
 def cleanup_after_upsert(
@@ -217,16 +104,17 @@ def cleanup_after_upsert(
     window_interval,
     query_name,
 ):
-    _validate_identifier(window_key, "--cleanup_window_key")
-    _validate_interval_expression(window_interval)
+    validate_identifier(window_key, "--cleanup_window_key")
+    validate_interval_expression(window_interval)
     for key in primary_keys:
-        _validate_identifier(key, "--primary_keys")
-    _cleanup_window_antijoin(
+        validate_identifier(key, "--primary_keys")
+    pk_type_map = _collect_pk_type_map(primary_keys, column_types)
+    cleanup_window_antijoin_by_date_key(
         ydb_wrapper,
         table_path,
         results,
         primary_keys,
-        column_types,
+        pk_type_map,
         window_key,
         window_interval,
         query_name,

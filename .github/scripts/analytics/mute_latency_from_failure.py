@@ -15,6 +15,7 @@ python3 .github/scripts/analytics/mute_latency_from_failure.py
 
 # Force reprocess the last N days (overwrites existing rows via upsert):
 python3 ... --force [--timeline-since-days 30]
+# In --force mode stale rows in the window are deleted (window antijoin cleanup).
 """
 
 from __future__ import annotations
@@ -44,6 +45,27 @@ import ydb  # noqa: E402
 from mute_utils import dedicated_relative, pattern_to_re  # noqa: E402
 from constants import get_mute_window_days  # noqa: E402
 from ydb_wrapper import YDBWrapper  # noqa: E402
+from mart_cleanup import cleanup_window_antijoin  # noqa: E402
+
+
+MUTE_LATENCY_PRIMARY_KEYS = (
+    'branch', 'build_type', 'commit_time', 'commit_sha', 'full_name',
+)
+MUTE_EVENTS_PRIMARY_KEYS = (
+    'branch', 'build_type', 'commit_time', 'commit_sha', 'event', 'full_name',
+)
+AFFECTED_PRS_PRIMARY_KEYS = (
+    'branch', 'build_type', 'commit_time', 'commit_sha', 'pull',
+)
+_MUTE_PK_TYPES = {
+    'branch': 'Utf8',
+    'build_type': 'Utf8',
+    'commit_time': 'Timestamp',
+    'commit_sha': 'Utf8',
+}
+MUTE_LATENCY_PK_TYPES = {**_MUTE_PK_TYPES, 'full_name': 'Utf8'}
+MUTE_EVENTS_PK_TYPES = {**_MUTE_PK_TYPES, 'event': 'Utf8', 'full_name': 'Utf8'}
+AFFECTED_PRS_PK_TYPES = {**_MUTE_PK_TYPES, 'pull': 'Utf8'}
 
 
 def _repo_root() -> str:
@@ -691,6 +713,54 @@ def _rows_to_ydb_records(
     ]
 
 
+def _pk_source_rows(
+    records: Sequence[Dict[str, Any]], primary_keys: Sequence[str],
+) -> List[Dict[str, Any]]:
+    return [{key: record[key] for key in primary_keys} for record in records]
+
+
+def _mute_latency_cleanup_predicate(
+    branch: str, build_type: str, since_dt: dt.datetime,
+) -> str:
+    since_ts = _ts_literal(since_dt)
+    return (
+        f"t.`branch` = '{_sql_escape(branch)}' "
+        f"AND t.`build_type` = '{_sql_escape(build_type)}' "
+        f"AND t.`commit_time` >= Timestamp('{since_ts}')"
+    )
+
+
+def _cleanup_mute_tables_in_force_window(
+    ydb_wrapper: YDBWrapper,
+    *,
+    branch: str,
+    build_type: str,
+    since_dt: dt.datetime,
+    mute_latency_table: str,
+    mute_events_table: str,
+    affected_prs_table: str,
+    latency_records: Sequence[Dict[str, Any]],
+    event_records: Sequence[Dict[str, Any]],
+    pr_records: Sequence[Dict[str, Any]],
+) -> None:
+    window_predicate = _mute_latency_cleanup_predicate(branch, build_type, since_dt)
+    cleanup_specs = (
+        (mute_latency_table, latency_records, MUTE_LATENCY_PRIMARY_KEYS, MUTE_LATENCY_PK_TYPES, 'mute_latency'),
+        (mute_events_table, event_records, MUTE_EVENTS_PRIMARY_KEYS, MUTE_EVENTS_PK_TYPES, 'mute_events'),
+        (affected_prs_table, pr_records, AFFECTED_PRS_PRIMARY_KEYS, AFFECTED_PRS_PK_TYPES, 'mute_latency_affected_prs'),
+    )
+    for table_path, records, primary_keys, pk_type_map, query_name in cleanup_specs:
+        cleanup_window_antijoin(
+            ydb_wrapper,
+            table_path,
+            _pk_source_rows(records, primary_keys),
+            primary_keys,
+            pk_type_map,
+            window_predicate,
+            query_name,
+        )
+
+
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
@@ -707,7 +777,7 @@ def main() -> int:
     parser.add_argument(
         '--force', action='store_true', default=False,
         help='Ignore the YDB cursor and reprocess commits from --timeline-since-days (or 90 days). '
-             'Existing rows are overwritten via upsert.',
+             'Existing rows are overwritten via upsert; stale rows in the window are deleted.',
     )
     args = parser.parse_args()
 
@@ -716,6 +786,7 @@ def main() -> int:
 
     _mute_win = get_mute_window_days()
     mute_delta = dt.timedelta(days=_mute_win)
+    force_window_start: Optional[dt.datetime] = None
 
     # ── Phase 1: check YDB for last processed commit (short connection) ───────
     with YDBWrapper() as w:
@@ -730,7 +801,8 @@ def main() -> int:
 
     if args.force:
         fallback_days = args.timeline_since_days or 90
-        since_date = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=fallback_days)).date()
+        force_window_start = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=fallback_days)
+        since_date = force_window_start.date()
         print(f'Force mode: reprocessing last {fallback_days} days', file=sys.stderr)
     elif ydb_since_dt is not None:
         print(f'YDB: last processed commit_time = {ydb_since_dt.isoformat()}', file=sys.stderr)
@@ -741,35 +813,41 @@ def main() -> int:
         since_date = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=fallback_days)).date()
 
     # ── Phase 2: git — collect commits and per-commit added lines (no YDB) ───
+    CommitGitData = List[Tuple[str, dt.datetime, List[str], List[str], List[Tuple[str, str]], List[str]]]
     commits = commits_touching_file(repo, rel_path, since_date, branch=args.branch)
     if ydb_since_dt is not None:
         commits = [(s, c) for s, c in commits if c > ydb_since_dt]
-    if not commits:
-        print('No new commits to process — already up to date.', file=sys.stderr)
-        return 0
-    print(f'{len(commits)} new commits touching {rel_path} since {since_date}', file=sys.stderr)
 
-    # Pre-collect git data for all commits so Phase 3 has no subprocess calls.
-    CommitGitData = List[Tuple[str, dt.datetime, List[str], List[str], List[Tuple[str, str]], List[str]]]
     commit_git_data: CommitGitData = []
-    for i, (sha, ct) in enumerate(commits, 1):
-        added_lines   = added_muted_ya_lines(repo, sha, rel_path)
-        removed_lines = removed_muted_ya_lines(repo, sha, rel_path)
-        if not added_lines and not removed_lines:
-            print(f'  [{i}/{len(commits)}] {sha[:12]} {ct.date()} — no changes, skip', file=sys.stderr)
-            continue
-        exact_pairs, wildcard_sfs = classify_muted_ya_lines(added_lines)
+    if not commits:
+        if not args.force:
+            print('No new commits to process — already up to date.', file=sys.stderr)
+            return 0
         print(
-            f'  [{i}/{len(commits)}] {sha[:12]} {ct.date()} '
-            f'+{len(added_lines)} -{len(removed_lines)} lines '
-            f'({len(exact_pairs)} exact, {len(wildcard_sfs)} wc_sfs)',
+            f'Force mode: no mute commits since {since_date}, will cleanup stale rows only',
             file=sys.stderr,
         )
-        commit_git_data.append((sha, ct, added_lines, removed_lines, exact_pairs, wildcard_sfs))
+    else:
+        print(f'{len(commits)} new commits touching {rel_path} since {since_date}', file=sys.stderr)
 
-    if not commit_git_data:
-        print('No commits with mute changes — nothing to upload.', file=sys.stderr)
-        return 0
+        for i, (sha, ct) in enumerate(commits, 1):
+            added_lines   = added_muted_ya_lines(repo, sha, rel_path)
+            removed_lines = removed_muted_ya_lines(repo, sha, rel_path)
+            if not added_lines and not removed_lines:
+                print(f'  [{i}/{len(commits)}] {sha[:12]} {ct.date()} — no changes, skip', file=sys.stderr)
+                continue
+            exact_pairs, wildcard_sfs = classify_muted_ya_lines(added_lines)
+            print(
+                f'  [{i}/{len(commits)}] {sha[:12]} {ct.date()} '
+                f'+{len(added_lines)} -{len(removed_lines)} lines '
+                f'({len(exact_pairs)} exact, {len(wildcard_sfs)} wc_sfs)',
+                file=sys.stderr,
+            )
+            commit_git_data.append((sha, ct, added_lines, removed_lines, exact_pairs, wildcard_sfs))
+
+        if not commit_git_data and not args.force:
+            print('No commits with mute changes — nothing to upload.', file=sys.stderr)
+            return 0
 
     # ── Phase 3: YDB queries + upload (no subprocess calls) ──────────────────
     all_rows: List[Dict[str, Any]] = []
@@ -822,8 +900,17 @@ def main() -> int:
 
         all_rows.sort(key=lambda r: (r['commit_time'], r['full_name']))
 
-        if all_rows:
-            ydb_records = _rows_to_ydb_records(all_rows, args.branch, args.build_type)
+        ydb_records = _rows_to_ydb_records(all_rows, args.branch, args.build_type)
+        pr_records = [
+            {**r, 'commit_time': _datetime_to_us(r['commit_time'])}
+            for r in all_pr_rows
+        ]
+        event_records = [
+            {**r, 'commit_time': _datetime_to_us(r['commit_time'])}
+            for r in all_event_rows
+        ]
+
+        if ydb_records:
             column_types = (
                 ydb.BulkUpsertColumns()
                 .add_column('branch',               ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -845,11 +932,7 @@ def main() -> int:
         else:
             print('No new rows to upload.', file=sys.stderr)
 
-        if all_pr_rows:
-            pr_records = [
-                {**r, 'commit_time': _datetime_to_us(r['commit_time'])}
-                for r in all_pr_rows
-            ]
+        if pr_records:
             pr_column_types = (
                 ydb.BulkUpsertColumns()
                 .add_column('branch',      ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -864,11 +947,7 @@ def main() -> int:
             )
             print(f'Uploaded {len(pr_records)} rows → YDB {affected_prs_table}', file=sys.stderr)
 
-        if all_event_rows:
-            event_records = [
-                {**r, 'commit_time': _datetime_to_us(r['commit_time'])}
-                for r in all_event_rows
-            ]
+        if event_records:
             event_column_types = (
                 ydb.BulkUpsertColumns()
                 .add_column('branch',       ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -885,6 +964,24 @@ def main() -> int:
                 query_name='mute_events_upload',
             )
             print(f'Uploaded {len(event_records)} rows → YDB {mute_events_table}', file=sys.stderr)
+
+        if args.force and force_window_start is not None:
+            print(
+                f'Force mode: cleaning stale rows since {force_window_start.isoformat()}',
+                file=sys.stderr,
+            )
+            _cleanup_mute_tables_in_force_window(
+                w,
+                branch=args.branch,
+                build_type=args.build_type,
+                since_dt=force_window_start,
+                mute_latency_table=mute_latency_table,
+                mute_events_table=mute_events_table,
+                affected_prs_table=affected_prs_table,
+                latency_records=ydb_records,
+                event_records=event_records,
+                pr_records=pr_records,
+            )
 
     return 0
 

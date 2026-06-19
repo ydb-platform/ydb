@@ -33,50 +33,19 @@ table_service_config:
 
 ### Лимиты памяти выполнения запросов {#query-execution-memory-limits}
 
-В подсекции `resource_manager` также задаются лимиты памяти, которые Resource Manager использует при выполнении запросов на узле базы данных. Параметр `spilling_percent` определяет порог заполнения пула `query_memory_limit`, при котором спиллинг считается предпочтительным.
+В подсекции `resource_manager` задаётся порог спиллинга относительно пула памяти запросов на [узле](../../concepts/glossary.md#node). Размер этого пула регулируется параметрами [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit) в `memory_controller_config`.
 
 ```yaml
 table_service_config:
   resource_manager:
-    query_memory_limit: 32212254720
     spilling_percent: 80
 ```
-
-#### resource_manager.query_memory_limit {#query-memory-limit}
-
-**Тип:** `uint64`  
-**По умолчанию:** `32212254720` (30 GiB)  
-**Описание:** Размер пула оперативной памяти на [узле](../../concepts/glossary.md#node), который Resource Manager использует для выделения памяти запросам. Параметр `spilling_percent` рассчитывается относительно **фактического** размера этого пула (см. ниже).
-
-##### Связь с `memory_controller_config.query_execution_limit_percent`
-
-`query_memory_limit` и `query_execution_limit_percent` задают лимит одного и того же пула памяти запросов, но на разных уровнях конфигурации:
-
-| Параметр | Секция | Роль |
-| --- | --- | --- |
-| `query_memory_limit` | `table_service_config.resource_manager` | Начальное значение пула при старте Resource Manager |
-| `query_execution_limit_percent` / `query_execution_limit_bytes` | `memory_controller_config` | Целевой лимит пула QP как доля (или абсолютное значение) от [жёсткого лимита памяти](memory_controller_config.md#hard-memory-limit) процесса |
-
-При работающем [контроллере памяти](memory_controller_config.md) вычисляется лимит QP:
-
-`query_execution_limit = min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`  
-(если задан только один из параметров — используется он).
-
-Это значение передаётся в Resource Manager через Resource Broker и **заменяет** `query_memory_limit` как фактический размер пула запросов на узле.
-
-Если контроллер памяти не настроил очередь Resource Manager для QP, используется `query_memory_limit` из `table_service_config`.
-
-{% note info %}
-
-На практике при типичной конфигурации с контроллером памяти эффективный пул запросов определяется `query_execution_limit_percent` (по умолчанию 20% от жёсткого лимита), а не `query_memory_limit` (30 GiB). Например, при `hard_limit_bytes = 100 GiB` и `query_execution_limit_percent = 20` фактический пул составит 20 GiB, даже если `query_memory_limit` оставлен по умолчанию.
-
-{% endnote %}
 
 #### resource_manager.spilling_percent {#spilling-percent}
 
 **Тип:** `double`  
 **По умолчанию:** `80`  
-**Описание:** Порог заполнения пула памяти запросов, при котором {{ ydb-short-name }} начинает считать [спиллинг](../../concepts/query_execution/spilling.md) предпочтительным способом управления памятью. Базой для расчёта служит фактический размер пула (см. [`query_memory_limit`](#query-memory-limit) и [`query_execution_limit_percent`](memory_controller_config.md#query-execution-limit)).
+**Описание:** Порог заполнения пула памяти запросов, при котором {{ ydb-short-name }} начинает считать [спиллинг](../../concepts/query_execution/spilling.md) предпочтительным способом управления памятью. Базой для расчёта служит пул Query Processor, размер которого задаётся [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit).
 
 Когда суммарное потребление памяти запросами на узле превышает `spilling_percent` процентов от доступного пула, вычислительные операции, поддерживающие спиллинг (Grace Hash Join, агрегации и др.), получают сигнал выгружать промежуточные данные на диск вместо дальнейшего наращивания потребления RAM.
 
@@ -84,7 +53,7 @@ table_service_config:
 
 Порог применяется:
 
-- к общему пулу памяти запросов на узле (фактический размер — см. [`query_memory_limit`](#query-memory-limit));
+- к общему пулу памяти запросов на узле (размер — см. [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit));
 - к пулу [resource pool](../../concepts/glossary.md#resource-pool), если запрос выполняется в workload-пуле с ограничением `total_memory_limit_percent_per_node`.
 
 {% note info %}
@@ -97,8 +66,7 @@ table_service_config:
 
 | Параметр | Уровень | Роль |
 | --- | --- | --- |
-| `query_memory_limit` | Узел | Начальный размер пула RAM для запросов в `table_service_config` |
-| `query_execution_limit_percent` / `query_execution_limit_bytes` | Узел (QP) | Фактический размер пула запросов при работающем контроллере памяти |
+| `query_execution_limit_percent` / `query_execution_limit_bytes` | Узел (QP) | Размер пула памяти запросов |
 | `spilling_percent` | Запрос / пул | Порог заполнения пула, после которого предпочтителен спиллинг |
 | `activities_limit_percent` | Узел | Общий лимит памяти для всех компонентов-активностей (QP, компактизация и др.) |
 
@@ -108,7 +76,7 @@ table_service_config:
 
 - Уменьшайте `spilling_percent` (например, до `70`), если нужно раньше переводить тяжёлые запросы на диск и снизить риск исчерпания пула памяти.
 - Увеличивайте `spilling_percent` (например, до `90`), если дисковый спиллинг слишком часто снижает производительность, а на узле достаточно RAM.
-- Согласовывайте `query_memory_limit` и [`query_execution_limit_percent`](memory_controller_config.md#query-execution-limit): при активном контроллере памяти именно последний определяет фактический размер пула.
+- Согласовывайте `spilling_percent` с [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit): при увеличении лимита пула запросов можно поднять порог спиллинга, если на узле достаточно RAM.
 
 ## spilling_service_config
 
@@ -215,7 +183,7 @@ table_service_config:
 
 #### Порог спиллинга в resource_manager
 
-Непосредственный рантайм-порог, при котором вычислительные операции переключаются на спиллинг, задаётся параметром [`resource_manager.spilling_percent`](#spilling-percent). Он определяет, при каком заполнении пула `query_memory_limit` промежуточные данные запроса начинают выгружаться на диск. Подробнее о связанных лимитах см. раздел [Лимиты памяти выполнения запросов](#query-execution-memory-limits).
+Непосредственный рантайм-порог, при котором вычислительные операции переключаются на спиллинг, задаётся параметром [`resource_manager.spilling_percent`](#spilling-percent). Он определяет, при каком заполнении пула памяти Query Processor промежуточные данные запроса начинают выгружаться на диск. Размер пула задаётся в [`memory_controller_config`](memory_controller_config.md#query-execution-limit). Подробнее см. раздел [Лимиты памяти выполнения запросов](#query-execution-memory-limits).
 
 #### Влияние на спиллинг
 

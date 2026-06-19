@@ -120,14 +120,16 @@ memory_controller_config:
   query_execution_limit_percent: 25
 ```
 
-#### Relationship with `table_service_config.resource_manager.query_memory_limit` {#query-execution-limit}
+#### Query Processor memory limit {#query-execution-limit}
 
-The parameters `query_execution_limit_percent` / `query_execution_limit_bytes` and [`query_memory_limit`](table_service_config.md#query-memory-limit) refer to the same query memory pool on a node:
+The parameters `query_execution_limit_percent` (20% of the [hard memory limit](#hard-memory-limit) by default) and `query_execution_limit_bytes` set the size of the RAM pool that Resource Manager allocates to queries on a node:
 
-- `query_memory_limit` in `table_service_config` sets the initial Resource Manager pool size.
-- `query_execution_limit_percent` (20% of the [hard memory limit](#hard-memory-limit) by default) computes the target Query Processor limit and, through Resource Broker, **replaces** `query_memory_limit` as the effective pool size when the memory controller is active.
+`query_execution_limit = min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`  
+(if only one parameter is set, that one is used).
 
-The [`spilling_percent`](table_service_config.md#spilling-percent) threshold in `table_service_config` is calculated from this effective pool size, not from the `query_memory_limit` value if it was overridden by the memory controller.
+The computed limit is delivered to Resource Manager through Resource Broker.
+
+The [`spilling_percent`](table_service_config.md#spilling-percent) threshold in `table_service_config` is calculated relative to this pool.
 
 ## Configuration Parameters
 

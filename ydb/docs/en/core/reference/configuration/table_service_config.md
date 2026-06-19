@@ -33,50 +33,19 @@ table_service_config:
 
 ### Query execution memory limits {#query-execution-memory-limits}
 
-The `resource_manager` subsection also defines memory limits that Resource Manager uses for query execution on a database node. The `spilling_percent` parameter sets the fill threshold for the `query_memory_limit` pool at which spilling becomes preferable.
+The `resource_manager` subsection defines the spilling threshold relative to the query memory pool on a [node](../../concepts/glossary.md#node). The pool size is controlled by [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit) in `memory_controller_config`.
 
 ```yaml
 table_service_config:
   resource_manager:
-    query_memory_limit: 32212254720
     spilling_percent: 80
 ```
-
-#### resource_manager.query_memory_limit {#query-memory-limit}
-
-**Type:** `uint64`  
-**Default:** `32212254720` (30 GiB)  
-**Description:** Size of the query memory pool on a [node](../../concepts/glossary.md#node) that Resource Manager uses to allocate memory for queries. The `spilling_percent` parameter is calculated relative to the **effective** pool size (see below).
-
-##### Relationship with `memory_controller_config.query_execution_limit_percent`
-
-`query_memory_limit` and `query_execution_limit_percent` set the limit for the same query memory pool, but at different configuration levels:
-
-| Parameter | Section | Role |
-| --- | --- | --- |
-| `query_memory_limit` | `table_service_config.resource_manager` | Initial pool size when Resource Manager starts |
-| `query_execution_limit_percent` / `query_execution_limit_bytes` | `memory_controller_config` | Target QP pool limit as a fraction (or absolute value) of the process [hard memory limit](memory_controller_config.md#hard-memory-limit) |
-
-When the [memory controller](memory_controller_config.md) is active, the QP limit is calculated as:
-
-`query_execution_limit = min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`  
-(if only one parameter is set, that one is used).
-
-This value is delivered to Resource Manager through Resource Broker and **replaces** `query_memory_limit` as the effective query pool size on the node.
-
-If the memory controller has not configured the Resource Manager queue for QP, `query_memory_limit` from `table_service_config` is used.
-
-{% note info %}
-
-In a typical configuration with the memory controller enabled, the effective query pool is determined by `query_execution_limit_percent` (20% of the hard limit by default), not by `query_memory_limit` (30 GiB). For example, with `hard_limit_bytes = 100 GiB` and `query_execution_limit_percent = 20`, the effective pool is 20 GiB even if `query_memory_limit` is left at its default.
-
-{% endnote %}
 
 #### resource_manager.spilling_percent {#spilling-percent}
 
 **Type:** `double`  
 **Default:** `80`  
-**Description:** Query memory pool fill threshold at which {{ ydb-short-name }} starts treating [spilling](../../concepts/query_execution/spilling.md) as the preferred way to manage memory. The calculation is based on the effective pool size (see [`query_memory_limit`](#query-memory-limit) and [`query_execution_limit_percent`](memory_controller_config.md#query-execution-limit)).
+**Description:** Query memory pool fill threshold at which {{ ydb-short-name }} starts treating [spilling](../../concepts/query_execution/spilling.md) as the preferred way to manage memory. The calculation is based on the Query Processor pool size set by [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit).
 
 When total query memory consumption on a node exceeds `spilling_percent` percent of the available pool, compute operations that support spilling (Grace Hash Join, aggregations, and others) are signaled to offload intermediate data to disk instead of further growing RAM usage.
 
@@ -84,7 +53,7 @@ For example, with the default value of `80`, spilling is triggered when the quer
 
 The threshold applies to:
 
-- the shared query memory pool on the node (effective size — see [`query_memory_limit`](#query-memory-limit));
+- the shared query memory pool on the node (size — see [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit));
 - a [resource pool](../../concepts/glossary.md#resource-pool) pool, if the query runs in a workload pool with `total_memory_limit_percent_per_node`.
 
 {% note info %}
@@ -97,8 +66,7 @@ The threshold applies to:
 
 | Parameter | Scope | Role |
 | --- | --- | --- |
-| `query_memory_limit` | Node | Initial query RAM pool size in `table_service_config` |
-| `query_execution_limit_percent` / `query_execution_limit_bytes` | Node (QP) | Effective query pool size when the memory controller is active |
+| `query_execution_limit_percent` / `query_execution_limit_bytes` | Node (QP) | Query memory pool size |
 | `spilling_percent` | Query / pool | Pool fill threshold after which spilling is preferred |
 | `activities_limit_percent` | Node | Shared memory limit for all activity components (QP, compaction, etc.) |
 
@@ -108,7 +76,7 @@ The threshold applies to:
 
 - Decrease `spilling_percent` (for example, to `70`) to move heavy queries to disk earlier and reduce the risk of exhausting the memory pool.
 - Increase `spilling_percent` (for example, to `90`) if disk spilling hurts performance too often while the node has enough RAM.
-- Align `query_memory_limit` and [`query_execution_limit_percent`](memory_controller_config.md#query-execution-limit): when the memory controller is active, the latter determines the effective pool size.
+- Align `spilling_percent` with [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit): when you increase the query pool limit, you can raise the spilling threshold if the node has enough RAM.
 
 ## spilling_service_config
 
@@ -215,7 +183,7 @@ The key parameter for spilling is **`activities_limit_percent`**, which determin
 
 #### Spilling threshold in resource_manager
 
-The direct runtime threshold at which compute operations switch to spilling is set by [`resource_manager.spilling_percent`](#spilling-percent). It defines at what fill level of the `query_memory_limit` pool intermediate query data starts being offloaded to disk. For related limits, see [Query execution memory limits](#query-execution-memory-limits).
+The direct runtime threshold at which compute operations switch to spilling is set by [`resource_manager.spilling_percent`](#spilling-percent). It defines at what fill level of the Query Processor memory pool intermediate query data starts being offloaded to disk. The pool size is set in [`memory_controller_config`](memory_controller_config.md#query-execution-limit). For details, see [Query execution memory limits](#query-execution-memory-limits).
 
 #### Impact on spilling
 

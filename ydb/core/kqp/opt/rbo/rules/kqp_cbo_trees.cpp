@@ -9,6 +9,10 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 
+#include <util/generic/hash_set.h>
+#include <util/generic/strbuf.h>
+#include <util/string/builder.h>
+
 #include <bitset>
 #include <limits>
 #include <sstream>

@@ -9,7 +9,6 @@ SRCS(
     expand_cbo_tree.cpp
     expand_distinct_aggregation.cpp
     extract_join_expressions.cpp
-    kqp_cbo_trees.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp
     inline_cbo_tree.cpp
@@ -18,6 +17,7 @@ SRCS(
     inline_simple_in_exists_subplan.cpp
     logical_output_pruning.cpp
     inline_generic_in_exists_subplan.cpp
+    kqp_cbo_trees.cpp
     peephole_predicate.cpp
     map/projection_pruning.cpp
     map/projection_pruning_helpers.cpp
@@ -50,6 +50,7 @@ SRCS(
     propagate_topsort_through_stage.cpp
     propagate_limit_through_stage.cpp
     rewrite_right_join.cpp
+    traces/kqp_cbo_trace.cpp
 )
 
 PEERDIR(

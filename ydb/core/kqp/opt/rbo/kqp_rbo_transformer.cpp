@@ -2,11 +2,19 @@
 #include "kqp_operator.h"
 #include "kqp_plan_conversion_utils.h"
 #include "kqp_rbo_rules.h"
+#include "traces/kqp_rbo_trace_output.h"
 
 #include <ydb/core/kqp/host/kqp_transform.h>
 
+#include <util/generic/string.h>
+#include <util/system/env.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <memory>
+#include <optional>
+#include <utility>
 
 namespace NKikimr::NKqp {
 
@@ -70,11 +78,22 @@ void CollectTopLevelSelects(TExprNode::TPtr input, THashSet<TExprNode*>& topLeve
     return;
 }
 
+bool IsRboTraceLogEnabled() {
+    TMaybe<TString> htmlTracePath = TryGetEnv("NEW_RBO_LOG");
+    return htmlTracePath.Defined() && !htmlTracePath->empty();
+}
+
 } // anonymous namespace
 
 IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
+    const bool needTraceText = IsRboTraceLogEnabled();
+    KqpCtx.RboTraceAstBeforeRewriteSelect.reset();
+    KqpCtx.RboTraceAstAfterRewriteSelect.reset();
+    if (needTraceText) {
+        KqpCtx.RboTraceAstBeforeRewriteSelect = KqpExprToPrettyString(TExprBase(input), ctx);
+    }
 
     THashSet<TExprNode*> topLevelSelects;
     THashSet<TExprNode*> visited;
@@ -96,6 +115,10 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
             }
         },
         ctx, settings);
+
+    if (needTraceText && status == TStatus::Ok) {
+        KqpCtx.RboTraceAstAfterRewriteSelect = KqpExprToPrettyString(TExprBase(output), ctx);
+    }
 
     return status;
 }
@@ -288,7 +311,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TKqpOpRoot::Match(node.Get())) {
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+                TRBOTraceOutput traceOutput(rboCtx);
                 auto output = RBO.Optimize(*OpRoot, rboCtx);
+                traceOutput.Flush();
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;
             } else {

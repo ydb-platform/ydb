@@ -1,4 +1,5 @@
 #include "kqp_cbo_trees.h"
+#include "traces/kqp_cbo_trace.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
@@ -10,6 +11,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <optional>
 
@@ -17,10 +19,25 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-bool NeedCoreDqTrace() {
-    return NYql::NLog::YqlLogger().NeedToLog(
-        NYql::NLog::EComponent::CoreDq,
-        NYql::NLog::ELevel::TRACE);
+const TString CboMissingStatsMessage = "Cost Based Optimizer could not be applied to this query: couldn't load statistics";
+
+void LogAndTraceJoinTree(
+    TRBOContext& ctx,
+    const char* title,
+    const std::shared_ptr<IBaseOptimizerNode>& joinTree)
+{
+    std::optional<std::string> formatted;
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
+        formatted = FormatJoinTree(title, joinTree);
+        YQL_CLOG(TRACE, CoreDq) << *formatted;
+    }
+
+    if (!formatted && ctx.NeedToLog()) {
+        formatted = FormatJoinTree(title, joinTree);
+    }
+    if (formatted) {
+        AddCboDetailsTextTrace(ctx, title, *formatted);
+    }
 }
 
 } // anonymous namespace
@@ -56,11 +73,11 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     // Check that all inputs have statistics
     for (auto c : cboTree->Children) {
         if (!c->Props.Statistics.has_value()) {
-            ctx.ExprCtx.AddWarning(
-                YqlIssue(ctx.ExprCtx.GetPosition(cboTree->Pos), TIssuesIds::CBO_MISSING_TABLE_STATS,
-                "Cost Based Optimizer could not be applied to this query: couldn't load statistics"
-            )
-        );
+            AddCboWarning(ctx, CboMissingStatsMessage);
+            ctx.ExprCtx.AddWarning(YqlIssue(
+                ctx.ExprCtx.GetPosition(cboTree->Pos),
+                TIssuesIds::CBO_MISSING_TABLE_STATS,
+                CboMissingStatsMessage));
             return input;
         }
     }
@@ -71,7 +88,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     bool allRowStorage = std::any_of(
         rels.begin(),
         rels.end(),
-        [](std::shared_ptr<TRelOptimizerNode>& r) {return r->Stats.StorageType==EStorageType::RowStorage; });
+        [](std::shared_ptr<TRelOptimizerNode>& r) { return r->Stats.StorageType == EStorageType::RowStorage; });
 
     if (optLevel == 2 && allRowStorage) {
         return input;
@@ -96,6 +113,20 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
             << MaxShuffleEliminationRelationCount;
     }
 
+    auto hints = ctx.KqpCtx.GetOptimizerHints();
+    auto cboRunTiming = AddCboRunTrace(
+        ctx,
+        cboTree,
+        joinTree,
+        leaves,
+        settings,
+        optLevel,
+        enableShuffleElimination,
+        useBlockHashJoin,
+        allRowStorage,
+        hints,
+        shuffleCtx ? shuffleCtx->FSM : nullptr);
+
     auto providerCtx = NOpt::TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(
         providerCtx, settings, ctx.ExprCtx,
@@ -104,18 +135,22 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         shuffleCtx ? &shuffleCtx->TableAliasMap : nullptr)
     );
 
-    if (NeedCoreDqTrace()) {
-        YQL_CLOG(TRACE, CoreDq) << FormatJoinTree("Converted join tree", joinTree);
-    }
+    LogAndTraceJoinTree(ctx, "Converted join tree", joinTree);
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints(), &cboStats);
+        if (cboRunTiming) {
+            const auto startedAt = std::chrono::steady_clock::now();
+            joinTree = opt->JoinSearch(joinTree, hints, &cboStats);
+            const auto finishedAt = std::chrono::steady_clock::now();
+            cboRunTiming->RuntimeNs = static_cast<ui64>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(finishedAt - startedAt).count());
+        } else {
+            joinTree = opt->JoinSearch(joinTree, hints, &cboStats);
+        }
     }
 
-    if (NeedCoreDqTrace()) {
-        YQL_CLOG(TRACE, CoreDq) << FormatJoinTree("Optimizied join tree", joinTree);
-    }
+    LogAndTraceJoinTree(ctx, "Optimized join tree", joinTree);
 
     return ConvertOptimizedTree(joinTree, leaves, cboTree->Pos);
 }

@@ -5,6 +5,11 @@
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 
 #include <memory>
+#include <util/generic/hash.h>
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/system/types.h>
 
 namespace NYql {
 

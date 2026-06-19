@@ -288,6 +288,8 @@ struct TYtColumnsInfo: public TThrRefBase {
         Renames.ConstructInPlace(renames);
     }
 
+    void Apply(const TYtColumnsInfo& other);
+
     const TMaybe<TVector<TColumn>>& GetColumns() const {
         return Columns;
     };

@@ -638,7 +638,9 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     AutopartitioningManager->CleanUp();
 
-    ProcessTxsAndUserActs(ctx);
+    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+        ProcessTxsAndUserActs(ctx);
+    }
 }
 
 void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
@@ -694,7 +696,72 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
     return haveChanges;
 }
 
+bool TPartition::CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
+    if (GetStartOffset() == GetEndOffset() || CompactionBlobEncoder.DataKeysBody.size() <= 1) {
+        return false;
+    }
+    if (Config.GetEnableCompactification()) {
+        return false;
+    }
+    const auto& partConfig = Config.GetPartitionConfig();
+
+    const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
+
+    const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
+    const auto now = ctx.Now();
+
+    bool hasDrop = false;
+    while (CompactionBlobEncoder.DataKeysBody.size() > 1) {
+        const auto& nextKey = CompactionBlobEncoder.DataKeysBody[1];
+        const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
+        if (ImportantConsumersNeedToKeepCurrentKey(firstKey, nextKey, now)) {
+            break;
+        }
+
+        if (hasStorageLimit) {
+            const auto bodySize = CompactionBlobEncoder.BodySize - firstKey.Size;
+            if (bodySize < partConfig.GetStorageLimitBytes()) {
+                break;
+            }
+        } else {
+            if (now < firstKey.Timestamp + lifetimeLimit) {
+                break;
+            }
+        }
+
+        CompactionBlobEncoder.pop_front();
+
+        if (!GapOffsets.empty() && nextKey.Key.GetOffset() == GapOffsets.front().second) {
+            GapSize -= GapOffsets.front().second - GapOffsets.front().first;
+            GapOffsets.pop_front();
+        }
+
+        hasDrop = true;
+    }
+
+    PQ_ENSURE(!CompactionBlobEncoder.DataKeysBody.empty());
+
+    if (!hasDrop) {
+        return false;
+    }
+
+    const auto& lastKey = CompactionBlobEncoder.DataKeysBody.front().Key;
+
+    CompactionBlobEncoder.StartOffset = lastKey.GetOffset();
+    if (lastKey.GetPartNo() > 0) {
+        ++CompactionBlobEncoder.StartOffset;
+    }
+
+    Y_UNUSED(request);
+
+    return true;
+}
+
 bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
+    if (!AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+        return CleanUpBlobsLegacy(request, ctx);
+    }
+
     Y_UNUSED(request);
     if (Config.GetEnableCompactification()) {
         return false;

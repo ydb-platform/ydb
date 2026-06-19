@@ -34,6 +34,12 @@ void SetEnableTopicMessagesBatching(TTestContext& tc) {
     }
 }
 
+void SetEnableTopicRetentionDeleteLastBlob(TTestContext& tc) {
+    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
+    }
+}
+
 TString MakeKafkaBatchPayload(
     const TVector<TString>& values,
     NKafka::ECompressionType compression = NKafka::ECompressionType::NONE)
@@ -3982,6 +3988,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlob) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
+    SetEnableTopicRetentionDeleteLastBlob(tc);
     tc.Runtime->SetScheduledLimit(500);
     tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
 
@@ -4016,6 +4023,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInFwz) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
+    SetEnableTopicRetentionDeleteLastBlob(tc);
     tc.Runtime->SetScheduledLimit(500);
     // Disable async compaction so the blob stays in the fast-write zone.
     tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
@@ -4038,6 +4046,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzb) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
+    SetEnableTopicRetentionDeleteLastBlob(tc);
     tc.Runtime->SetScheduledLimit(5000);
     tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
@@ -4064,6 +4073,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzh) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
+    SetEnableTopicRetentionDeleteLastBlob(tc);
     tc.Runtime->SetScheduledLimit(5000);
     tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
@@ -4098,6 +4108,7 @@ Y_UNIT_TEST(TestRetentionCrossZoneMessages) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
+    SetEnableTopicRetentionDeleteLastBlob(tc);
     tc.Runtime->SetScheduledLimit(5000);
     tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 

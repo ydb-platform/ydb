@@ -746,11 +746,18 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
     Y_ENSURE(PartitionActor->CompactionBlobEncoder.DataKeysBody.size() == oldDataKeys.size() - zeroedKeys);
     Y_ENSURE(currCumulSize == PartitionActor->CompactionBlobEncoder.BodySize - sizeDiff);
     PartitionActor->CompactionBlobEncoder.BodySize = currCumulSize;
-    if (PartitionActor->CompactionBlobEncoder.DataKeysBody.empty()) {
-        const ui64 endOffset = PartitionActor->GetEndOffset();
-        PartitionActor->CompactionBlobEncoder.StartOffset = endOffset;
-        PartitionActor->CompactionBlobEncoder.EndOffset = endOffset;
-        PartitionActor->CompactionBlobEncoder.Head.Offset = endOffset;
+    if (PartitionActor->IsTopicRetentionDeleteLastBlobEnabled()) {
+        if (PartitionActor->CompactionBlobEncoder.DataKeysBody.empty()) {
+            const ui64 endOffset = PartitionActor->GetEndOffset();
+            PartitionActor->CompactionBlobEncoder.StartOffset = endOffset;
+            PartitionActor->CompactionBlobEncoder.EndOffset = endOffset;
+            PartitionActor->CompactionBlobEncoder.Head.Offset = endOffset;
+        } else {
+            PartitionActor->CompactionBlobEncoder.StartOffset = Max(
+                            PartitionActor->CompactionBlobEncoder.StartOffset,
+                            PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
+                                + (ui32)(PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() > 0));
+        }
     } else {
         PartitionActor->CompactionBlobEncoder.StartOffset = Max(
                         PartitionActor->CompactionBlobEncoder.StartOffset,

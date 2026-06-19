@@ -21,14 +21,20 @@ class StreamingTestBase:
             logger.debug("skip test, only available since 25-4")
             pytest.skip("Only available since 25-4")
 
+        extra_feature_flags=[
+            "enable_external_data_sources",
+            "enable_streaming_queries"
+        ]
+
+        if min(self.versions) >= (26, 1) and min(self.versions) < (26, 2):
+            # Feature was explicitly enabled in 26-1, and enabled by default in 26-2
+            extra_feature_flags.append("enable_topics_sql_io_operations")
+
         os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
         os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "15"
         yield from super().setup_cluster(
             disabled_feature_flags=["enable_drain_on_shutdown"],
-            extra_feature_flags=[
-                "enable_external_data_sources",
-                "enable_streaming_queries"
-            ],
+            extra_feature_flags=extra_feature_flags,
             additional_log_configs={
                 'KQP_COMPUTE': LogLevels.TRACE,
                 'STREAMS_CHECKPOINT_COORDINATOR': LogLevels.TRACE,

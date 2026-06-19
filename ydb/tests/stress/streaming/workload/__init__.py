@@ -91,9 +91,11 @@ class Workload():
 
     def check_status(self):
         result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path LIKE '{self.database}/{self.prefix}/query_name%'")
-        status = result_sets[0].rows[0].Status
-        if status != 'RUNNING':
-            raise Exception(f"Unexpected query status: expected 'RUNNING', got '{status}'")
+
+        for row in result_sets[0].rows:
+            status = row.Status
+            if status != 'RUNNING':
+                raise Exception(f"Unexpected query status: expected 'RUNNING', got '{status}'")
 
     def write_to_input_topic(self):
         logger.info("Workload::write_to_input_topic")

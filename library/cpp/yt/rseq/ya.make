@@ -7,11 +7,17 @@ IF (NOT OS_LINUX)
 ENDIF()
 
 SRCS(
+    per_cpu.cpp
     rseq.cpp
 )
 
 PEERDIR(
+    library/cpp/yt/assert
     library/cpp/yt/misc
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    unittests
+)

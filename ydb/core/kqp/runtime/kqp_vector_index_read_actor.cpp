@@ -99,6 +99,11 @@ public:
             MainKeyTypeInfos.push_back(NScheme::TypeInfoFromProto(pk.GetType(), pk.GetTypeInfo()));
         }
 
+        OutputColumnTypeInfos.reserve(Settings.OutputColumnsSize());
+        for (const auto& col : Settings.GetOutputColumns()) {
+            OutputColumnTypeInfos.push_back(NScheme::TypeInfoFromProto(col.GetType(), col.GetTypeInfo()));
+        }
+
         if (PostingCovers) {
             BuildCoveredPostingColumns();
         }
@@ -827,7 +832,10 @@ private:
         i64 totalSize = 0;
         while (!ResultRows.empty() && freeSpace > 0) {
             auto& row = ResultRows.front();
-            const i64 rowSize = sizeof(NUdf::TUnboxedValuePod) * Settings.OutputColumnsSize();
+            i64 rowSize = 0;
+            for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
+                rowSize += NMiniKQL::GetUnboxedValueSize(row.GetElement(i), OutputColumnTypeInfos[i]).AllocatedBytes;
+            }
             batch.emplace_back(std::move(row));
             ResultRows.pop_front();
             totalSize += rowSize;
@@ -925,6 +933,9 @@ private:
     bool Failed = false;
     TString TargetVector;
     TVector<NScheme::TTypeInfo> MainKeyTypeInfos;
+    // Output column types, in OutputColumns order, used to estimate real row
+    // sizes (incl. allocated payloads) when filling the reply batch.
+    TVector<NScheme::TTypeInfo> OutputColumnTypeInfos;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RankClusters;
 
     // Reusable scratch for serializing a posting row's PK during dedup.

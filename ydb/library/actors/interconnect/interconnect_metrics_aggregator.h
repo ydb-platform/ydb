@@ -11,6 +11,7 @@ enum EMetricsAggregatorEvents {
     EvUpdateConnected,
     EvUpdateClockSkew,
     EvUnregisterPeer,
+    EvUpdateRdmaRetryWatchdogPending,
 };
 
 struct TEvRegisterPeer : TEventLocal<TEvRegisterPeer, EvRegisterPeer> {
@@ -44,6 +45,18 @@ struct TEvUpdateClockSkew : TEventLocal<TEvUpdateClockSkew, EvUpdateClockSkew> {
         : PeerLabel(std::move(peerLabel))
         , PeerName(std::move(peerName))
         , ClockSkew(clockSkew)
+    {}
+};
+
+struct TEvUpdateRdmaRetryWatchdogPending : TEventLocal<TEvUpdateRdmaRetryWatchdogPending, EvUpdateRdmaRetryWatchdogPending> {
+    TString PeerLabel;
+    TString PeerName;
+    ui32 Pending = 0;
+
+    TEvUpdateRdmaRetryWatchdogPending(TString peerLabel, TString peerName, ui32 pending)
+        : PeerLabel(std::move(peerLabel))
+        , PeerName(std::move(peerName))
+        , Pending(pending)
     {}
 };
 

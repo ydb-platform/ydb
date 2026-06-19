@@ -554,6 +554,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasRdmaPayloadCopySizeThreshold()) {
         result.RdmaPayloadCopySizeThreshold = config.GetRdmaPayloadCopySizeThreshold();
     }
+    if (config.HasMaxRdmaRetryBackoffLevel()) {
+        result.MaxRdmaRetryBackoffLevel = config.GetMaxRdmaRetryBackoffLevel();
+    }
 
     return result;
 }

@@ -78,6 +78,8 @@ namespace NActors {
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
         ui32 RdmaPayloadCopySizeThreshold = 64 << 10;
+        // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
+        ui32 MaxRdmaRetryBackoffLevel = 8;
     };
 
     struct TWhiteboardSessionStatus {

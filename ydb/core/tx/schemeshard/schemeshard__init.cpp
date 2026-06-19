@@ -5339,7 +5339,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SetColumnConstraint::TableLocalId>()
                     );
 
-                    // Derive DomainPathId from the table path
                     {
                         TPath tablePath = TPath::Init(operationInfo->TablePathId, Self);
                         operationInfo->DomainPathId = tablePath.GetPathIdForDomain();
@@ -5361,7 +5360,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     // LockTxId is stored separately so it survives SubStateTxId overwrites in later phases
                     operationInfo->LockTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::LockTxId>(TTxId());
 
-                    // Map SubStateTxId/Status/Done to the appropriate phase fields
                     switch (operationInfo->OperationState) {
                         case TSetColumnConstraintOperationInfo::EOperationState::Locking:
                             operationInfo->LockTxId = subStateTxId; // still in Locking: SubState is LockTxId
@@ -5411,7 +5409,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
             }
 
-            // Read per-shard validation statuses
+            // Read per-shard validation statuses in SetColumnConstraint
             {
                 auto rowset = db.Table<Schema::SetColumnConstraintDatashardStatuses>().Range().Select();
                 if (!rowset.IsReady()) {
@@ -5444,7 +5442,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     operationInfo.ValidationShards.emplace(shardIdx, std::move(shardStatus));
 
-                    // DONE/BAD_REQUEST go to DoneValidationShards; others to ToValidateShards
                     if (validateStatus == NKikimrSetColumnConstraint::EValidateStatus::DONE ||
                         validateStatus == NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST)
                     {
@@ -5459,7 +5456,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
             }
 
-            // Register all recovered operations and schedule progress
             for (auto& [id, operationInfo] : loadedOperations) {
                 Self->AddSetColumnConstraintOperation(operationInfo);
                 OnComplete.ToProgress(id);

@@ -94,7 +94,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             }
         }
         if (!correct) {
-            errors.AddError(Sprintf("TTL column must either 1) be first PK column 2) be MIN_MAX-indexed 3) be MAX-indexed. all three coditions are not satisfied for %s, so it can't be used as TTL column", colName.c_str()));
+            errors.AddError(Sprintf("TTL column must either (1) be the first PK column, (2) have a MIN_MAX index, or (3) have a MAX index; none of these conditions are satisfied for '%s', so it can't be used as TTL column", colName.c_str()));
             return false;
         }
     }

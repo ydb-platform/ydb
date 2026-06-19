@@ -687,7 +687,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& csController = tieringHelper.GetCsController();
         auto& testHelper = tieringHelper.GetTestHelper();
 
-        // "inherit_portion_storage": false and "storage_id": "__LOCAL_METADATA" 
+        // "inherit_portion_storage": false(defaults to true in alter object ddl) and 
+        // "storage_id": "__LOCAL_METADATA"(defaults to "__LOCAL_METADATA" in alter object ddl) 
         // are mandatory because ttl only works with min_max index stored in local database, 
         // and both of these options move data out of local db
         TString createTableQuery = Arg<0>() == EIndexForTTLColumn::MaxIndex ? R"(

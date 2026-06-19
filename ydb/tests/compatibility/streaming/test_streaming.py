@@ -182,7 +182,7 @@ class TestStreamingMixedCluster(StreamingTestBase, MixedClusterFixture):
     @link_test_case("#27924")
     @pytest.mark.parametrize("external", [True, False])
     def test_mixed_cluster(self, external):
-        self.create_topics()
+        self.create_topics(external)
         self.create_streaming_query()
         self.do_test_part1()
         self.do_test_part2()
@@ -195,8 +195,8 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
 
     @link_test_case("#27924")
     @pytest.mark.parametrize("external", [True, False])
-    def test_restart_to_another_version(self):
-        self.create_topics()
+    def test_restart_to_another_version(self, external):
+        self.create_topics(external)
         self.create_streaming_query()
         self.do_test_part1()
         self.change_cluster_version()
@@ -210,8 +210,8 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
 
     @link_test_case("#27924")
     @pytest.mark.parametrize("external", [True, False])
-    def test_rolling_upgrade(self):
-        self.create_topics()
+    def test_rolling_upgrade(self, external):
+        self.create_topics(external)
         self.create_simple_streaming_query()
 
         for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process

@@ -17,8 +17,10 @@ EAttachStreamReadAction HandleAttachSessionState(
                 client->PessimizeNode(nodeId);
             }
         }
-        if (client) {
-            session->CloseFromServer(client);
+        if (session->GetState() == TKqpSessionCommon::S_IDLE) {
+            if (client) {
+                session->CloseFromServer(client);
+            }
         } else {
             session->MarkAsClosing();
         }

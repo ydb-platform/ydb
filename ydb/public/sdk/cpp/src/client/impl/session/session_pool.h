@@ -130,7 +130,7 @@ public:
 
     void RecordConnectionCreateTime(double seconds);
 
-    void OnCloseSession(TKqpSessionCommon*, std::shared_ptr<ISessionClient> client) override;
+    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient> client) override;
 
 private:
     void UpdateStats();

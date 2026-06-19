@@ -386,7 +386,7 @@ std::int64_t TSessionPool::GetCurrentPoolSize() const {
     return Sessions_.size();
 }
 
-void TSessionPool::OnCloseSession(TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client) {
+void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client) {
     std::unique_ptr<TKqpSessionCommon> session;
     {
         std::lock_guard guard(Mtx_);
@@ -409,8 +409,6 @@ void TSessionPool::OnCloseSession(TKqpSessionCommon* s, std::shared_ptr<ISession
     if (session) {
         Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
         CloseAndDeleteSession(std::move(session), client);
-    } else {
-        s->MarkAsClosing();
     }
 }
 

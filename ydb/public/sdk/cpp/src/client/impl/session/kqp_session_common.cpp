@@ -74,13 +74,11 @@ void TKqpSessionCommon::MarkAsClosing() {
 }
 
 void TKqpSessionCommon::MarkActive() {
-    std::lock_guard guard(Lock_);
     State_ = EState::S_ACTIVE;
     NeedUpdateActiveCounter_ = false;
 }
 
 void TKqpSessionCommon::MarkIdle() {
-    std::lock_guard guard(Lock_);
     State_ = EState::S_IDLE;
     NeedUpdateActiveCounter_ = false;
 }
@@ -151,8 +149,6 @@ void TKqpSessionCommon::CloseFromServer(std::weak_ptr<ISessionClient> client) no
     IServerCloseHandler* h = CloseHandler_.load();
     if (h) {
         h->OnCloseSession(this, strong);
-    } else {
-        MarkAsClosing();
     }
 }
 

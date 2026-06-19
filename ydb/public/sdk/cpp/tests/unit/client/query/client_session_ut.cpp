@@ -30,7 +30,7 @@ public:
 
 class TMockServerCloseHandler : public IServerCloseHandler {
 public:
-    void OnCloseSession(TKqpSessionCommon*, std::shared_ptr<ISessionClient>) override {
+    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) override {
         ++CloseCalls;
     }
 
@@ -69,7 +69,7 @@ Ydb::Query::SessionState MakeNodeShutdownState() {
 
 Y_UNIT_TEST_SUITE(QueryAttachSessionState) {
 
-Y_UNIT_TEST(SessionShutdownMarksSessionClosing) {
+Y_UNIT_TEST(SessionShutdownActiveSessionMarksClosing) {
     TTestKqpSession session(MakeSessionIdWithNodeId(42), "host:2136");
     auto client = std::make_shared<TMockSessionClient>();
 
@@ -92,7 +92,7 @@ Y_UNIT_TEST(SessionShutdownIdleInPoolDelegatesToCloseHandler) {
     UNIT_ASSERT_VALUES_EQUAL(client->PessimizeCalls, 0);
 }
 
-Y_UNIT_TEST(NodeShutdownDeactivatesSessionAndPessimizesNode) {
+Y_UNIT_TEST(NodeShutdownActiveSessionMarksClosingAndPessimizesNode) {
     TTestKqpSession session(MakeSessionIdWithNodeId(42), "host:2136");
     auto client = std::make_shared<TMockSessionClient>();
 

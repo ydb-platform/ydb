@@ -589,9 +589,9 @@ inline bool IsRetryableError(const NYdb::TStatus status) {
 }
 // XXX end duplicated code
 
-class TDescribeResourceIdService : public NActors::TActorBootstrapped<TDescribeResourceIdService> {
+class TDescribeResourceIdService : public NActors::TActor<TDescribeResourceIdService> {
 public:
-    using TBase = NActors::TActorBootstrapped<TDescribeResourceIdService>;
+    using TBase = NActors::TActor<TDescribeResourceIdService>;
     using TRetryPolicy = IRetryPolicy<NYdb::TStatus>;
 
     enum EDescribeResourceEvents {
@@ -640,12 +640,9 @@ public:
     };
 
     explicit TDescribeResourceIdService(std::shared_ptr<NYdb::TDriver> driver)
-        : Driver(std::move(driver))
+        : TBase(&TDescribeResourceIdService::StateFunc)
+        , Driver(std::move(driver))
     {
-    }
-
-    void Bootstrap() {
-        Become(&TDescribeResourceIdService::StateFunc);
     }
 
 private:

@@ -407,32 +407,41 @@ def _required_git_history_days(
     return max(days_span + 14, 30)
 
 
-def ensure_git_history(repo: str, branch: str, since_days: int) -> None:
-    """Fetch enough origin/<branch> history (safe for shallow CI checkouts)."""
+def git_remote_branch_available(repo: str, branch: str) -> bool:
+    try:
+        _git(repo, 'rev-parse', '--verify', f'origin/{branch}')
+        return True
+    except RuntimeError:
+        return False
+
+
+def ensure_git_history(repo: str, branch: str, since_days: int) -> bool:
+    """Fetch enough origin/<branch> history (safe for shallow CI checkouts).
+
+    Returns True when refs/remotes/origin/<branch> is available after fetch.
+    """
     git_ref = f'origin/{branch}'
+    refspec = f'{branch}:refs/remotes/origin/{branch}'
     print(
-        f'Fetching origin/{branch} (--shallow-since="{since_days} days ago")',
+        f'Fetching {refspec} (--shallow-since="{since_days} days ago")',
         file=sys.stderr,
     )
     rc, _, stderr = _git_rc(
-        repo, 'fetch', f'--shallow-since={since_days} days ago', 'origin', branch,
+        repo, 'fetch', f'--shallow-since={since_days} days ago', 'origin', refspec,
     )
     if rc != 0:
         print(
             f'git fetch --shallow-since failed ({stderr.strip()}), trying --deepen=500',
             file=sys.stderr,
         )
-        rc, _, stderr = _git_rc(repo, 'fetch', '--deepen=500', 'origin', branch)
+        rc, _, stderr = _git_rc(repo, 'fetch', '--deepen=500', 'origin', refspec)
         if rc != 0:
-            print(f'WARNING: git fetch failed: {stderr.strip()}', file=sys.stderr)
-            return
-    try:
-        _git(repo, 'rev-parse', '--verify', git_ref)
-    except RuntimeError:
-        print(
-            f'WARNING: {git_ref} not available after fetch — mute git scan may be skipped',
-            file=sys.stderr,
-        )
+            print(f'ERROR: git fetch failed: {stderr.strip()}', file=sys.stderr)
+            return False
+    if git_remote_branch_available(repo, branch):
+        return True
+    print(f'ERROR: {git_ref} not available after fetch', file=sys.stderr)
+    return False
 
 
 def commits_touching_file(
@@ -444,11 +453,9 @@ def commits_touching_file(
     branch is currently checked out.
     """
     git_ref = f'origin/{branch}'
-    try:
-        _git(repo, 'rev-parse', '--verify', git_ref)
-    except RuntimeError:
+    if not git_remote_branch_available(repo, branch):
         print(
-            f'WARNING: {git_ref} not found — skip mute latency git scan '
+            f'ERROR: {git_ref} not found — skip mute latency git scan '
             f'(fetch origin/{branch} before running)',
             file=sys.stderr,
         )
@@ -858,7 +865,14 @@ def main() -> int:
     history_days = _required_git_history_days(
         since_date, force=args.force, timeline_since_days=args.timeline_since_days,
     )
-    ensure_git_history(repo, args.branch, history_days)
+    git_history_available = ensure_git_history(repo, args.branch, history_days)
+    if not git_history_available:
+        print(
+            f'ERROR: origin/{args.branch} unavailable — aborting '
+            f'(refusing unsafe --force cleanup without git history)',
+            file=sys.stderr,
+        )
+        return 1
 
     # ── Phase 2: git — collect commits and per-commit added lines (no YDB) ───
     CommitGitData = List[Tuple[str, dt.datetime, List[str], List[str], List[Tuple[str, str]], List[str]]]
@@ -1013,7 +1027,7 @@ def main() -> int:
             )
             print(f'Uploaded {len(event_records)} rows → YDB {mute_events_table}', file=sys.stderr)
 
-        if args.force and force_window_start is not None:
+        if args.force and force_window_start is not None and git_history_available:
             print(
                 f'Force mode: cleaning stale rows since {force_window_start.isoformat()}',
                 file=sys.stderr,

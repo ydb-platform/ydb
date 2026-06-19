@@ -3951,5 +3951,57 @@ Y_UNIT_TEST(TestSizeLag) {
     });
 }
 
+Y_UNIT_TEST(TestRetentionDeletesLastBlob) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(500);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+
+    constexpr ui32 retentionSeconds = 5;
+    constexpr ui32 wakeTimeoutSeconds = 5;
+
+    auto waitRetentionCleanup = [&]() {
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
+        tc.Runtime->ResetScheduledCount();
+        try {
+            tc.Runtime->DispatchEvents();
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+            tc.Runtime->ResetScheduledCount();
+        }
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
+        tc.Runtime->ResetScheduledCount();
+        try {
+            tc.Runtime->DispatchEvents();
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+            tc.Runtime->ResetScheduledCount();
+        }
+    };
+
+    auto writeSmall = [&](ui64 seqNo, bool isFirst) {
+        TVector<std::pair<ui64, TString>> data;
+        data.push_back({seqNo, TString(100, 'x')});
+        CmdWrite(0, "sourceid", data, tc, false, {}, isFirst);
+    };
+
+    PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .AddDefaultConsumer = false}, {}, tc);
+    PQGetPartInfo(0, 0, tc);
+
+    writeSmall(1, true);
+    PQGetPartInfo(0, 1, tc);
+
+    waitRetentionCleanup();
+    PQGetPartInfo(1, 1, tc);
+
+    PQTabletRestart(tc);
+    PQGetPartInfo(1, 1, tc);
+
+    writeSmall(2, false);
+    PQGetPartInfo(1, 2, tc);
+
+    waitRetentionCleanup();
+    PQGetPartInfo(2, 2, tc);
+}
+
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

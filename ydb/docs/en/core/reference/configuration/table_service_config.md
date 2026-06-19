@@ -54,7 +54,7 @@ For example, with the default value of `80`, spilling is triggered when the quer
 The threshold applies to:
 
 - the shared query memory pool on the node (size — see [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit));
-- a [resource pool](../../concepts/glossary.md#resource-pool) pool, if the query runs in a workload pool with `total_memory_limit_percent_per_node`.
+- a [resource pool](../../concepts/glossary.md#resource-pool), if the query runs in a workload pool with `total_memory_limit_percent_per_node`.
 
 {% note info %}
 

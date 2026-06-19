@@ -124,8 +124,7 @@ memory_controller_config:
 
 The parameters `query_execution_limit_percent` (20% of the [hard memory limit](#hard-memory-limit) by default) and `query_execution_limit_bytes` set the size of the RAM pool that Resource Manager allocates to queries on a node:
 
-`query_execution_limit = min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`  
-(if only one parameter is set, that one is used).
+If both parameters are set, the effective limit is `min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`. If only one parameter is set, that value is used directly.
 
 The computed limit is delivered to Resource Manager through Resource Broker.
 

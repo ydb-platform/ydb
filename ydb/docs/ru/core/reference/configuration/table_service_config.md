@@ -54,7 +54,7 @@ table_service_config:
 Порог применяется:
 
 - к общему пулу памяти запросов на узле (размер — см. [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit));
-- к пулу [resource pool](../../concepts/glossary.md#resource-pool), если запрос выполняется в workload-пуле с ограничением `total_memory_limit_percent_per_node`.
+- к [resource pool](../../concepts/glossary.md#resource-pool), если запрос выполняется в workload-пуле с ограничением `total_memory_limit_percent_per_node`.
 
 {% note info %}
 
@@ -74,8 +74,8 @@ table_service_config:
 
 ##### Рекомендации
 
-- Уменьшайте `spilling_percent` (например, до `70`), если нужно раньше переводить тяжёлые запросы на диск и снизить риск исчерпания пула памяти.
-- Увеличивайте `spilling_percent` (например, до `90`), если дисковый спиллинг слишком часто снижает производительность, а на узле достаточно RAM.
+- Уменьшайте `spilling_percent` (например, до `70`), если нужно раньше переводить тяжёлые запросы на диск и снизить риск исчерпания пула памяти;
+- Увеличивайте `spilling_percent` (например, до `90`), если дисковый спиллинг слишком часто снижает производительность, а на узле достаточно RAM;
 - Согласовывайте `spilling_percent` с [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit): при увеличении лимита пула запросов можно поднять порог спиллинга, если на узле достаточно RAM.
 
 ## spilling_service_config

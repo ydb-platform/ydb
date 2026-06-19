@@ -243,7 +243,7 @@ C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 
 ### Получение групп
 
-Если в секции [`client_certificate_authorization`](../reference/configuration/client_certificate_authorization.md) заданы блоки `client_certificate_definitions`, сертификат принимается при соответствии хотя бы одному из них. Для каждого подходящего блока клиент включается в группы из `member_groups`. Если `member_groups` не указан, используется группа по умолчанию — `default_group` (значение по умолчанию: `DefaultClientAuth@cert`).
+Если в секции [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) заданы блоки `client_certificate_definitions`, сертификат принимается при соответствии хотя бы одному из них. Для каждого подходящего блока клиент включается в группы из `member_groups`. Если `member_groups` не указан, используется группа по умолчанию — `default_group` (значение по умолчанию: `DefaultClientAuth@cert`).
 
 ### Настройка сервера
 

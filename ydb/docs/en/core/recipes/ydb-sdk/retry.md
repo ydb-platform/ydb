@@ -663,7 +663,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   #[tokio::main]
   async fn main() -> YdbResult<()> {
       let client = ClientBuilder::new_from_connection_string(
-          "grpc://localhost:2136?database=local",
+          "grpc://localhost:2136/local",
       )?
       .with_credentials(AccessTokenCredentials::from("..."))
       .client()?;

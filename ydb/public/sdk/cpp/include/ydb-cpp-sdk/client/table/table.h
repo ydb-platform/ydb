@@ -1700,6 +1700,14 @@ struct TTxOnlineSettings {
     FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
 };
 
+struct TTxSerializableSettings {
+    using TSelf = TTxSerializableSettings;
+
+    TTxSerializableSettings() {}
+
+    FLUENT_SETTING_DEFAULT(bool, Strict, false);
+};
+
 class TTxSettings {
     friend class TTableClient;
 
@@ -1709,8 +1717,8 @@ public:
     TTxSettings()
         : Mode_(TS_SERIALIZABLE_RW) {}
 
-    static TTxSettings SerializableRW() {
-        return TTxSettings(TS_SERIALIZABLE_RW);
+    static TTxSettings SerializableRW(const TTxSerializableSettings& settings = TTxSerializableSettings()) {
+        return TTxSettings(TS_SERIALIZABLE_RW).SerializableSettings(settings);
     }
 
     static TTxSettings OnlineRO(const TTxOnlineSettings& settings = TTxOnlineSettings()) {
@@ -1762,6 +1770,7 @@ private:
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
+    FLUENT_SETTING(TTxSerializableSettings, SerializableSettings);
 
 private:
     TTxSettings(ETransactionMode mode)

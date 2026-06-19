@@ -624,7 +624,9 @@ NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel(TKqpTransactionCont
         const auto& txSettings = GetTxControl().begin_tx();
         switch (txSettings.tx_mode_case()) {
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
-                isolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                isolationLevel = txSettings.serializable_read_write().strict()
+                    ? NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
+                    : NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
                 break;
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
                 if (AppData()->FeatureFlags.GetDisableOnlineRO()) {

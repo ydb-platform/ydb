@@ -1298,6 +1298,7 @@ message Query {
 }
 
 message SerializableModeSettings {
+    bool Strict = 1;
 }
 
 message OnlineModeSettings {

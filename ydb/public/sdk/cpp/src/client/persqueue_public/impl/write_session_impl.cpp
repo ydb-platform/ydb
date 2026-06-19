@@ -13,6 +13,8 @@
 
 namespace NYdb::inline Dev::NPersQueue {
 
+namespace NGrpc = NTopic::NWriteSessionGrpc;
+
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1062,8 +1064,27 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     return size;
 }
 
-size_t GetMaxGrpcMessageSize() {
-    return 120_MB;
+template <typename TBlock>
+size_t EstimateWriteRequestBlockSize(const TBlock& block) {
+    static constexpr size_t MaxInt64VarintPayloadSize = 10;
+    const size_t maxRepeatedInt64ItemSize = NGrpc::ProtoPackedInt64FieldSize(1, MaxInt64VarintPayloadSize);
+
+    size_t size = 0;
+    size += block.MessageCount * 4 * maxRepeatedInt64ItemSize; // sequence_numbers, created_at_ms, sent_at_ms, message_sizes
+
+    size += NGrpc::ProtoPackedInt64FieldSize(6, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.Offset)));
+    size += NGrpc::ProtoPackedInt64FieldSize(7, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.PartNumber)));
+    size += NGrpc::ProtoPackedInt64FieldSize(8, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.MessageCount)));
+    size += NGrpc::ProtoPackedInt64FieldSize(9, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.OriginalSize)));
+    size += NGrpc::ProtoBytesFieldSize(10, block.CodecID.size());
+    if (block.Compressed) {
+        size += NGrpc::ProtoBytesFieldSize(11, block.Data.size());
+    } else {
+        for (const auto& buffer : block.OriginalDataRefs) {
+            size += NGrpc::ProtoBytesFieldSize(11, buffer.size());
+        }
+    }
+    return size;
 }
 
 bool TWriteSessionImpl::IsReadyToSendNextImpl() {
@@ -1180,11 +1201,18 @@ void TWriteSessionImpl::SendImpl() {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         auto sentAtMs = TInstant::Now().MilliSeconds();
+        NGrpc::TRequestSizeLimiter sizeLimiter(2);
 
         // Sent blocks while we can without messages reordering
-        while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
+
+            const size_t blockSize = EstimateWriteRequestBlockSize(block);
+            if (!sizeLimiter.CanAdd(blockSize)) {
+                break;
+            }
+
             for (size_t i = 0; i != block.MessageCount; ++i) {
                 Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
@@ -1216,6 +1244,7 @@ void TWriteSessionImpl::SendImpl() {
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
+            sizeLimiter.Add(blockSize);
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,

@@ -1549,8 +1549,85 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     return size;
 }
 
-size_t GetMaxGrpcMessageSize() {
-    return 120_MB;
+namespace NGrpc = NWriteSessionGrpc;
+
+size_t EstimateTimestampFieldSize(ui32 fieldNumber, TInstant timestamp) {
+    const ui64 milliseconds = timestamp.MilliSeconds();
+    const i64 seconds = milliseconds / 1000;
+    const i32 nanos = (milliseconds % 1000) * 1000000;
+    const size_t timestampSize = NGrpc::ProtoInt64FieldSize(1, seconds)
+        + NGrpc::ProtoInt32FieldSize(2, nanos);
+    return NGrpc::ProtoMessageFieldSize(fieldNumber, timestampSize);
+}
+
+size_t EstimateMetadataItemFieldSize(ui32 fieldNumber, const std::pair<std::string, std::string>& item) {
+    const size_t itemSize = NGrpc::ProtoStringFieldSize(1, item.first.size())
+        + NGrpc::ProtoBytesFieldSize(2, item.second.size());
+    return NGrpc::ProtoMessageFieldSize(fieldNumber, itemSize);
+}
+
+size_t EstimateTransactionFieldSize(ui32 fieldNumber, const std::optional<TTransactionId>& tx) {
+    if (!tx) {
+        return 0;
+    }
+    const size_t txSize = NGrpc::ProtoStringFieldSize(1, tx->TxId.size())
+        + NGrpc::ProtoStringFieldSize(2, tx->SessionId.size());
+    return NGrpc::ProtoMessageFieldSize(fieldNumber, txSize);
+}
+
+size_t EstimateTopicMessageDataSize(TInstant createdAt, size_t dataSize, size_t uncompressedSize, size_t metadataSize) {
+    const size_t messageDataSize = NGrpc::ProtoInt64FieldSizeUpperBound(1)
+        + EstimateTimestampFieldSize(2, createdAt)
+        + NGrpc::ProtoBytesFieldSize(3, dataSize)
+        + NGrpc::ProtoInt64FieldSize(4, uncompressedSize)
+        + metadataSize;
+    return NGrpc::ProtoMessageFieldSize(1, messageDataSize);
+}
+
+template <typename TBlock, typename TOriginalMessages>
+size_t EstimateTopicWriteRequestBlockSize(const TBlock& block, TOriginalMessages originalMessages, bool includeRequestFields) {
+    Y_ABORT_UNLESS(!originalMessages.empty());
+
+    size_t size = 0;
+    if (includeRequestFields) {
+        size += NGrpc::ProtoInt32FieldSize(2, static_cast<i32>(block.CodecID));
+        size += EstimateTransactionFieldSize(3, originalMessages.front().Tx);
+    }
+
+    if (block.MessageCount > 1) {
+        size_t metadataSize = 0;
+        const auto firstMessage = originalMessages.front();
+        originalMessages.pop();
+        for (const auto& item : firstMessage.MessageMeta) {
+            metadataSize += EstimateMetadataItemFieldSize(7, item);
+        }
+        for (size_t i = 1; i < block.MessageCount; ++i) {
+            Y_ABORT_UNLESS(!originalMessages.empty());
+            for (const auto& item : originalMessages.front().MessageMeta) {
+                if (item.first == PARTITION_KEY_META_KEY) {
+                    metadataSize += EstimateMetadataItemFieldSize(7, item);
+                }
+            }
+            originalMessages.pop();
+        }
+        size += EstimateTopicMessageDataSize(firstMessage.CreatedAt, block.Data.size(), block.OriginalSize, metadataSize);
+        return size;
+    }
+
+    const auto& message = originalMessages.front();
+    size_t metadataSize = 0;
+    for (const auto& item : message.MessageMeta) {
+        metadataSize += EstimateMetadataItemFieldSize(7, item);
+    }
+
+    if (block.Compressed) {
+        size += EstimateTopicMessageDataSize(message.CreatedAt, block.Data.size(), block.OriginalSize, metadataSize);
+    } else {
+        for (const auto& buffer : block.OriginalDataRefs) {
+            size += EstimateTopicMessageDataSize(message.CreatedAt, buffer.size(), block.OriginalSize, metadataSize);
+        }
+    }
+    return size;
 }
 
 bool TWriteSessionImpl::IsReadyToSendNextImpl() const {
@@ -1717,10 +1794,10 @@ void TWriteSessionImpl::SendImpl() {
 
         ui32 prevCodec = 0;
 
-        ui64 currentSize = 0;
+        NGrpc::TRequestSizeLimiter sizeLimiter(2);
 
         // Send blocks while we can without messages reordering.
-        while (IsReadyToSendNextImpl() && currentSize < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
             if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
@@ -1729,6 +1806,12 @@ void TWriteSessionImpl::SendImpl() {
             if (TxIsChanged(writeRequest)) {
                 break;
             }
+
+            const size_t blockSize = EstimateTopicWriteRequestBlockSize(block, OriginalMessagesToSend, sizeLimiter.Empty());
+            if (!sizeLimiter.CanAdd(blockSize)) {
+                break;
+            }
+
             prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
 
@@ -1744,8 +1827,7 @@ void TWriteSessionImpl::SendImpl() {
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
-
-            currentSize += writeRequest->ByteSizeLong();
+            sizeLimiter.Add(blockSize);
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,

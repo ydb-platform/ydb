@@ -4,8 +4,11 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
 
 #include <util/thread/pool.h>
+#include <util/system/types.h>
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+
+#include <google/protobuf/wire_format_lite.h>
 
 #include <queue>
 #include <condition_variable>
@@ -20,6 +23,88 @@ void Cancel(NYdbGrpc::IQueueClientContextPtr& context);
 NYdb::NIssue::TIssues MakeIssueWithSubIssues(const std::string& description, const NYdb::NIssue::TIssues& subissues);
 
 std::string IssuesSingleLineString(const NYdb::NIssue::TIssues& issues);
+
+namespace NWriteSessionGrpc {
+
+inline size_t GetMaxGrpcMessageSize() {
+    return 120 * 1024 * 1024;
+}
+
+using TWireFormatLite = google::protobuf::internal::WireFormatLite;
+
+inline size_t ProtoInt32FieldSize(ui32 fieldNumber, i32 value) {
+    if (value == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT32)
+        + TWireFormatLite::Int32Size(value);
+}
+
+inline size_t ProtoInt64FieldSize(ui32 fieldNumber, i64 value) {
+    if (value == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT64)
+        + TWireFormatLite::Int64Size(value);
+}
+
+inline size_t ProtoInt64FieldSizeUpperBound(ui32 fieldNumber) {
+    static constexpr size_t MaxInt64VarintPayloadSize = 10;
+
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT64)
+        + MaxInt64VarintPayloadSize;
+}
+
+inline size_t ProtoPackedInt64FieldSize(ui32 fieldNumber, size_t dataSize) {
+    if (dataSize == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT64)
+        + TWireFormatLite::LengthDelimitedSize(dataSize);
+}
+
+inline size_t ProtoBytesFieldSize(ui32 fieldNumber, size_t size) {
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_BYTES)
+        + TWireFormatLite::LengthDelimitedSize(size);
+}
+
+inline size_t ProtoStringFieldSize(ui32 fieldNumber, size_t size) {
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_STRING)
+        + TWireFormatLite::LengthDelimitedSize(size);
+}
+
+inline size_t ProtoMessageFieldSize(ui32 fieldNumber, size_t size) {
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_MESSAGE)
+        + TWireFormatLite::LengthDelimitedSize(size);
+}
+
+class TRequestSizeLimiter {
+public:
+    explicit TRequestSizeLimiter(ui32 envelopeFieldNumber, size_t maxSize = GetMaxGrpcMessageSize())
+        : EnvelopeFieldNumber(envelopeFieldNumber)
+        , MaxSize(maxSize)
+    {
+    }
+
+    bool Empty() const {
+        return BodySize == 0;
+    }
+
+    bool CanAdd(size_t deltaSize) const {
+        return Empty() || ProtoMessageFieldSize(EnvelopeFieldNumber, BodySize + deltaSize) <= MaxSize;
+    }
+
+    void Add(size_t deltaSize) {
+        BodySize += deltaSize;
+    }
+
+private:
+    size_t BodySize = 0;
+    ui32 EnvelopeFieldNumber;
+    size_t MaxSize;
+};
+
+} // namespace NWriteSessionGrpc
 
 template <typename TEvent>
 size_t CalcDataSize(const typename TEvent::TEvent& event) {

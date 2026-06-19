@@ -90,7 +90,7 @@ class Workload():
         )
 
     def check_status(self):
-        result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path = '{self.database}/{self.prefix}/query_name'")
+        result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path LIKE '{self.database}/{self.prefix}/query_name%'")
         status = result_sets[0].rows[0].Status
         if status != 'RUNNING':
             raise Exception(f"Unexpected query status: expected 'RUNNING', got '{status}'")
@@ -148,8 +148,8 @@ class Workload():
                     count += 1
                 except TimeoutError:
                     break
-        expected = self.duration  # Group by HOP 1s
-        if count / 2 < expected * 0.7:
+        expected = 2 * self.duration  # Group by HOP 1s X two queries
+        if count < expected * 0.7:
             raise Exception(f"Insufficient data in output topic: expected ~{expected} messages, got {count}")
 
     def loop(self):

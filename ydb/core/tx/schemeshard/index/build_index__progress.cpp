@@ -1453,8 +1453,9 @@ private:
         TColumnTypes baseColumnTypes;
         TString error;
         Y_ENSURE(ExtractTypes(mainTableInfo, baseColumnTypes, error), error);
-        Y_ENSURE(buildInfo.IndexColumns.size() == 1);
-        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns[0]);
+        // Fulltext index columns are [prefix..., text]; the text column is always last.
+        Y_ENSURE(!buildInfo.IndexColumns.empty());
+        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns.back());
 
         auto types = std::make_shared<NTxProxy::TUploadTypes>(2);
         Ydb::Type type;

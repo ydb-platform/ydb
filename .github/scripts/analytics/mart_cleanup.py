@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import ydb
 
@@ -50,7 +50,7 @@ def delete_stale_pk_rows(
     primary_keys: Sequence[str],
     pk_type_map: Dict[str, str],
     stale_rows: Sequence[Dict[str, Any]],
-    query_name_prefix: str | None = None,
+    query_name_prefix: Optional[str] = None,
 ) -> None:
     if not stale_rows:
         print("Cleanup mode=window_antijoin: no stale rows to delete")
@@ -115,7 +115,11 @@ def cleanup_window_antijoin(
     window_predicate: str,
     query_name: str,
 ) -> None:
-    """Delete table rows in window that are absent from source_rows (by primary key)."""
+    """Delete table rows in window that are absent from source_rows (by primary key).
+
+    ``window_predicate`` is interpolated into SQL as-is; callers must build it from
+    validated identifiers / escaped literals (see ``validate_identifier``, ``_sql_escape``).
+    """
     for key in primary_keys:
         validate_identifier(key, "primary_keys")
 

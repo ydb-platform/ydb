@@ -417,7 +417,9 @@ def _required_git_history_days(
 ) -> int:
     """How many days of origin/<branch> history to fetch for reliable mute diffs."""
     if force or timeline_since_days is not None:
-        return timeline_since_days or 90
+        base = timeline_since_days or 90
+        # Same parent-commit buffer as the normal path (commit_touches_file needs sha^1).
+        return base + 14
     days_span = (dt.datetime.now(dt.timezone.utc).date() - since_date).days
     # Extra buffer so parent commits are available for git show/diff-tree.
     return max(days_span + 14, 30)

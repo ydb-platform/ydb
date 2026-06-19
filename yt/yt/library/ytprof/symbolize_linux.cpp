@@ -648,14 +648,6 @@ std::string GetVersion()
 
 class TSymbolIndexSymbolizer
 {
-private:
-    struct TSymbolizedFunction
-    {
-        ui64 Name;
-        ui64 SystemName;
-        const void* Ip;
-    };
-
 public:
     explicit TSymbolIndexSymbolizer(NProto::Profile* profile)
         : Profile_(profile)
@@ -684,7 +676,7 @@ public:
 
                 void* ip = reinterpret_cast<void*>(function->id());
 
-                if (auto symbolized = SymbolizeFunction(ip); symbolized) {
+                if (auto symbolized = SymbolizeFunction(ip)) {
                     function->set_name(symbolized->Name);
                     function->set_system_name(symbolized->SystemName);
                 }
@@ -696,10 +688,9 @@ public:
                 auto* location = Profile_->mutable_location(index);
                 void* locationIp = reinterpret_cast<void*>(location->address());
 
-                auto functionId = AddFunction(locationIp);
-                if (functionId) {
+                if (auto functionId = AddFunction(locationIp)) {
                     auto* line = location->add_line();
-                    line->set_function_id(reinterpret_cast<ui64>(*functionId));
+                    line->set_function_id(reinterpret_cast<ui64>(functionId));
                     line->set_line(0);
                 }
             }
@@ -707,6 +698,13 @@ public:
     }
 
 private:
+    struct TSymbolizedFunction
+    {
+        ui64 Name = 0;
+        ui64 SystemName = 0;
+        const void* IP = nullptr;
+    };
+
     NProto::Profile* const Profile_;
 
     TSymbolIndex SymbolIndex_;
@@ -728,14 +726,14 @@ private:
         return id;
     }
 
-    std::optional<const void*> AddFunction(const void* locationIp)
+    const void* AddFunction(const void* locationIp)
     {
         auto symbolized = SymbolizeFunction(locationIp);
         if (!symbolized) {
-            return {};
+            return nullptr;
         }
 
-        const void* ip = symbolized->Ip;
+        const void* ip = symbolized->IP;
         if (!Functions_.contains(ip)) {
             Functions_.insert(ip);
             auto* function = Profile_->add_function();
@@ -753,7 +751,7 @@ private:
             return TSymbolizedFunction{
                 .Name = AddString(CppDemangle(symbol->Name)),
                 .SystemName = AddString(symbol->Name),
-                .Ip = symbol->AddressBegin,
+                .IP = symbol->AddressBegin,
             };
         } else if (auto object = SymbolIndex_.FindObject(ip)) {
             auto offset = reinterpret_cast<intptr_t>(ip) - reinterpret_cast<intptr_t>(object->AddressBegin);
@@ -764,7 +762,7 @@ private:
             return TSymbolizedFunction{
                 .Name = nameId,
                 .SystemName = nameId,
-                .Ip = ip,
+                .IP = ip,
             };
         }
 

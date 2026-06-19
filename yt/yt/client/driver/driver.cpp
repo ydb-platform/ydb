@@ -99,14 +99,14 @@ void TDriverRequest::Reset()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCommandDescriptor IDriver::GetCommandDescriptor(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptor(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     YT_VERIFY(descriptor);
     return *descriptor;
 }
 
-TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     if (!descriptor) {
@@ -498,7 +498,7 @@ public:
             .Run();
     }
 
-    std::optional<TCommandDescriptor> FindCommandDescriptor(const TString& commandName) const override
+    std::optional<TCommandDescriptor> FindCommandDescriptor(const std::string& commandName) const override
     {
         auto it = CommandNameToEntry_.find(commandName);
         return it == CommandNameToEntry_.end() ? std::nullopt : std::make_optional(it->second.Descriptor);
@@ -578,7 +578,7 @@ private:
         TExecuteCallback Execute;
     };
 
-    THashMap<TString, TCommandEntry> CommandNameToEntry_;
+    THashMap<std::string, TCommandEntry> CommandNameToEntry_;
 
 
     template <class TCommand>

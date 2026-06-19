@@ -1,7 +1,5 @@
 #pragma once
 
-#include "public.h"
-
 #include <yt/yt/library/profiling/tag.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
@@ -22,7 +20,8 @@ NProfiling::TTagSet GetBucketTags(
 NProfiling::TTagSet GetQueueTags(
     const std::string& threadName,
     const std::string& bucketName,
-    const std::string& queueName);
+    const std::string& queueName,
+    const NProfiling::TTagSet& extraTags = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -431,17 +431,20 @@ public:
 
 struct TOpAggregationTraits {
     TOpAggregationTraits() = default;
-    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, const TInfoUnit& resultColName, bool distinct = false)
+    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, const TInfoUnit& resultColName, bool distinct = false,
+                         bool unwrap = false)
         : OriginalColName(originalColName)
         , AggFunction(aggFunction)
         , ResultColName(resultColName)
-        , Distinct(distinct) {
+        , Distinct(distinct)
+        , Unwrap(unwrap) {
     }
 
     TInfoUnit OriginalColName;
     TString AggFunction;
     TInfoUnit ResultColName;
     bool Distinct;
+    bool Unwrap;
 };
 
 class TOpAggregate: public IUnaryOperator {

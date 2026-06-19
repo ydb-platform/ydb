@@ -294,14 +294,18 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
     const auto& altCase = core.Alt_case();
     if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
-                                                             altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
+                                                             altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 &&  // import
+                                                             altCase != TRule_sql_stmt_core::kAltSqlStmtCore18 &&  // define_action_or_subquery
+                                                             altCase != TRule_sql_stmt_core::kAltSqlStmtCore70)) { // materialize
         Error() << statementName.Human << " statement is not supported in limited views";
         return false;
     }
 
     if (Mode_ == NSQLTranslation::ESqlMode::SUBQUERY && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
-                                                         altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore6 &&
-                                                         altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
+                                                         altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 &&  // import
+                                                         altCase != TRule_sql_stmt_core::kAltSqlStmtCore6 &&   // use
+                                                         altCase != TRule_sql_stmt_core::kAltSqlStmtCore18 &&  // define_action_or_subquery
+                                                         altCase != TRule_sql_stmt_core::kAltSqlStmtCore70)) { // materialize
         Error() << statementName.Human << " statement is not supported in subqueries";
         return false;
     }
@@ -2348,6 +2352,53 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             TTruncateTableParameters params{};
 
             AddStatementToBlocks(blocks, BuildTruncateTable(Ctx_.Pos(), tr, params, Ctx_.Scoped));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore70: {
+            Ctx_.BodyPart();
+            const auto& rule = core.GetAlt_sql_stmt_core70().GetRule_materialize_stmt1();
+            Token(rule.GetToken1()); // MATERIALIZE
+
+            TSourcePtr source = TSqlSelect(*this).NamedSingleSource(rule.GetRule_named_single_source2(), false);
+            if (!source) {
+                return false;
+            }
+
+            TString service = Ctx_.Scoped->CurrService;
+            TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
+            if (rule.HasBlock3()) {
+                if (!ClusterExpr(rule.GetBlock3().GetRule_cluster_expr2(), false, service, cluster)) {
+                    return false;
+                }
+            }
+            if (cluster.Empty()) {
+                Error() << "USE statement is missing or cluster not specified in MATERIALIZE";
+                return false;
+            }
+            TNodePtr clusterNode = Ctx_.Scoped->WrapCluster(cluster, Ctx_);
+
+            TTableHints hints;
+            if (rule.HasBlock4()) {
+                auto tmp = TableHintsImpl(rule.GetBlock4().GetRule_table_hints1(), service, "");
+                if (!tmp) {
+                    return false;
+                }
+                hints = std::move(*tmp);
+            }
+
+            TString varName;
+            TPosition intoPos = Ctx_.Pos();
+            if (!NamedNodeImpl(rule.GetRule_bind_parameter6(), varName, *this)) {
+                return false;
+            }
+
+            TString alias = Ctx_.MakeName("materializenode");
+            TString ref = Ctx_.MakeName("materialize");
+            auto materializeNode = BuildMaterialize(Ctx_.Pos(), std::move(source), service, clusterNode, std::move(hints), std::move(alias), Ctx_.Scoped);
+            materializeNode->SetLabel(ref);
+            blocks.push_back(materializeNode);
+            auto refNode = BuildYqlSubqueryRef(materializeNode, ref);
+            PushNamedNode(intoPos, varName, refNode);
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:
@@ -5001,6 +5052,10 @@ bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom>& result
 
 bool IsYqlSelectCompatiblePragma(TStringBuf prefix, TStringBuf pragma) {
     if (!prefix.empty()) {
+        return true;
+    }
+
+    if (pragma == "dqengine" || pragma == "blockengine") {
         return true;
     }
 

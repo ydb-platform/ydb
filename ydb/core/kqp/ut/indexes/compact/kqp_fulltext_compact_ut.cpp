@@ -22,6 +22,18 @@ void ExecuteQuery(NQuery::TQueryClient& db, const TString& query) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+TString FulltextSearch(NQuery::TQueryClient& db, const TString& searchQuery) {
+    TString query = Sprintf(R"sql(
+        SELECT `Key`, `Text`, `Data`
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(`Text`, "%s")
+        ORDER BY `Key`;
+    )sql", searchQuery.c_str());
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    return NYdb::FormatResultSetYson(result.GetResultSet(0));
+}
+
 TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTable") {
     TString query = Sprintf(R"sql(
         SELECT * FROM `/Root/Texts/fulltext_idx/%s`;
@@ -116,6 +128,548 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
     ])", NYdb::FormatResultSetYson(index));
 }
 
+Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, WithRelevance ? "fulltext_relevance" : "fulltext_plain");
+    auto index = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "indexImplTable: " << index << Endl;
+    if (WithRelevance) {
+        auto docs = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DocsTable));
+        auto dict = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DictTable));
+        auto stats = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::StatsTable));
+        Cerr << "indexImplDocsTable: " << docs << Endl;
+        Cerr << "indexImplDictTable: " << dict << Endl;
+        Cerr << "indexImplStatsTable: " << stats << Endl;
+        CompareYson(R"([
+            [%true;4294967295u;100u;"\xE4\1\2";"cats"];
+            [%true;4294967295u;200u;"\x88\3";"dogs"];
+            [%true;4294967295u;200u;"\x88\3";"foxes"];
+            [%true;4294967295u;200u;"\xA4\1\xA4\1";"love"]
+        ])", index);
+        CompareYson(R"([
+            [[100u];3u];
+            [[200u];3u]
+        ])", docs);
+        CompareYson(R"([
+            [1u;"cats"];
+            [1u;"dogs"];
+            [1u;"foxes"];
+            [2u;"love"]
+        ])", dict);
+        CompareYson(R"([
+            [2u;0u;6u]
+        ])", stats);
+    } else {
+        CompareYson(R"([
+            [%true;4294967295u;100u;"d";"cats"];
+            [%true;4294967295u;200u;"\xC8\1";"dogs"];
+            [%true;4294967295u;200u;"\xC8\1";"foxes"];
+            [%true;4294967295u;200u;"dd";"love"]
+        ])", index);
+    }
+
+    { // InsertRow
+        TString query = R"sql(
+            INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+                (150, "Foxes love cats.", "foxes data")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    index = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "indexImplTable: " << index << Endl;
+    if (WithRelevance) {
+        auto docs = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DocsTable));
+        auto dict = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DictTable));
+        auto stats = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::StatsTable));
+        Cerr << "indexImplDocsTable: " << docs << Endl;
+        Cerr << "indexImplDictTable: " << dict << Endl;
+        Cerr << "indexImplStatsTable: " << stats << Endl;
+        CompareYson(R"([
+            [%true;4294967295u;100u;"\xE4\1\2";"cats"];
+            [%true;4294967295u;18446744073709551615u;"\x96\2";"cats"];
+            [%true;4294967295u;200u;"\x88\3";"dogs"];
+            [%true;4294967290u;200u;"\x96\2";"foxes"];
+            [%true;4294967295u;200u;"\x88\3";"foxes"];
+            [%true;4294967290u;200u;"\x96\2";"love"];
+            [%true;4294967295u;200u;"\xA4\1\xA4\1";"love"]
+        ])", index);
+        CompareYson(R"([
+            [[100u];3u];
+            [[150u];3u];
+            [[200u];3u]
+        ])", docs);
+        CompareYson(R"([
+            [2u;"cats"];
+            [1u;"dogs"];
+            [2u;"foxes"];
+            [3u;"love"]
+        ])", dict);
+        CompareYson(R"([
+            [3u;0u;9u]
+        ])", stats);
+    } else {
+        CompareYson(R"([
+            [%true;4294967295u;100u;"d";"cats"];
+            [%true;4294967295u;18446744073709551615u;"\x96\1";"cats"];
+            [%true;4294967295u;200u;"\xC8\1";"dogs"];
+            [%true;4294967290u;200u;"\x96\1";"foxes"];
+            [%true;4294967295u;200u;"\xC8\1";"foxes"];
+            [%true;4294967290u;200u;"\x96\1";"love"];
+            [%true;4294967295u;200u;"dd";"love"]
+        ])", index);
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`, `Data`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "foxes cats")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[150u];["Foxes love cats."];["foxes data"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+}
+
+Y_UNIT_TEST_TWIN(InsertMultipleTimes, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // First batch insert
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data"),
+            (151, "Wolves love foxes.", "cows data")
+    )sql");
+
+    // Second insert
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, "Rabbits love foxes.", "rabbit data")
+    )sql");
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["cows data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "foxes"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["cows data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "love"));
+
+    if (WithRelevance) {
+        auto stats = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::StatsTable));
+        CompareYson(R"([[5u;0u;15u]])", stats);
+    }
+}
+
+Y_UNIT_TEST(UpsertNewRow) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, "fulltext_plain");
+
+    // Upsert a new row (no existing key conflict - same as INSERT path)
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "love"));
+}
+
+Y_UNIT_TEST(UpsertNewRowRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, "fulltext_relevance");
+
+    // Upsert a new row (no existing key conflict)
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    auto dict = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DictTable));
+    CompareYson(R"([
+        [2u;"cats"];
+        [1u;"dogs"];
+        [2u;"foxes"];
+        [3u;"love"]
+    ])", dict);
+
+    auto stats = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::StatsTable));
+    CompareYson(R"([[3u;0u;9u]])", stats);
+}
+
+Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Upsert modify existing row - change text content
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, "Birds love rabbits.", "birds data")
+    )sql");
+
+    // "cats" no longer matches key 100
+    CompareYson(R"([])", FulltextSearch(db, "cats"));
+
+    // "birds" now matches key 100
+    CompareYson(R"([
+        [[100u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "birds"));
+
+    // "love" matches both rows
+    CompareYson(R"([
+        [[100u];["Birds love rabbits."];["birds data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "love"));
+}
+
+Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Upsert: key 100 exists (modify), keys 150/151 are new (insert)
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, "Birds love rabbits.", "birds data"),
+            (150, "Foxes love cats.", "foxes data"),
+            (151, "Wolves love foxes.", "cows data")
+    )sql");
+
+    // key 100 was modified, "cats" removed from it
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[100u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "birds"));
+
+    CompareYson(R"([
+        [[151u];["Wolves love foxes."];["cows data"]]
+    ])", FulltextSearch(db, "wolves"));
+}
+
+Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndex(db, indexType);
+
+    // Verify initial state via search
+    CompareYson(R"([
+        [[100u];["Cats chase small animals."];["cats data"]];
+        [[200u];["Dogs chase small cats."];["dogs data"]]
+    ])", FulltextSearch(db, "chase"));
+
+    // Delete one row
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 100
+    )sql");
+
+    // "chase" should now only match key 200
+    CompareYson(R"([
+        [[200u];["Dogs chase small cats."];["dogs data"]]
+    ])", FulltextSearch(db, "chase"));
+
+    // "animals" should return nothing
+    CompareYson(R"([])", FulltextSearch(db, "animals"));
+
+    // "cats" should still match keys 200 and 300
+    CompareYson(R"([
+        [[200u];["Dogs chase small cats."];["dogs data"]];
+        [[300u];["Cats love cats."];["cats cats data"]]
+    ])", FulltextSearch(db, "cats"));
+}
+
+Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndex(db, indexType);
+
+    // Delete multiple rows one by one
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 100
+    )sql");
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 200
+    )sql");
+
+    // "chase" should be empty (both rows with "chase" deleted)
+    CompareYson(R"([])", FulltextSearch(db, "chase"));
+
+    // "small" should be empty
+    CompareYson(R"([])", FulltextSearch(db, "small"));
+
+    // "cats" should only match key 300
+    CompareYson(R"([
+        [[300u];["Cats love cats."];["cats cats data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    // "love" should match keys 300 and 400
+    CompareYson(R"([
+        [[300u];["Cats love cats."];["cats cats data"]];
+        [[400u];["Foxes love dogs."];["foxes data"]]
+    ])", FulltextSearch(db, "love"));
+}
+
+Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Update row text
+    ExecuteQuery(db, R"sql(
+        UPDATE `/Root/Texts` SET Text = "Birds love rabbits.", Data = "birds data" WHERE Key = 100
+    )sql");
+
+    // "cats" should now return empty
+    CompareYson(R"([])", FulltextSearch(db, "cats"));
+
+    // "birds" should match key 100
+    CompareYson(R"([
+        [[100u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "birds"));
+
+    // "rabbits" should match key 100
+    CompareYson(R"([
+        [[100u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "rabbits"));
+}
+
+Y_UNIT_TEST_TWIN(ReplaceRow, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Replace with new row
+    ExecuteQuery(db, R"sql(
+        REPLACE INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Wolves love foxes.", "wolves data")
+    )sql");
+
+    CompareYson(R"([
+        [[150u];["Wolves love foxes."];["wolves data"]]
+    ])", FulltextSearch(db, "wolves"));
+
+    // Replace existing row
+    ExecuteQuery(db, R"sql(
+        REPLACE INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, "Birds love foxes.", "birds data")
+    )sql");
+
+    // "cats" should now be empty
+    CompareYson(R"([])", FulltextSearch(db, "cats"));
+
+    // "birds" should match
+    CompareYson(R"([
+        [[100u];["Birds love foxes."];["birds data"]]
+    ])", FulltextSearch(db, "birds"));
+
+    // "foxes" should match keys 100, 150, 200
+    CompareYson(R"([
+        [[100u];["Birds love foxes."];["birds data"]];
+        [[150u];["Wolves love foxes."];["wolves data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "foxes"));
+}
+
+Y_UNIT_TEST(AddIndexCoveredCompact) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndexCovered(db, "fulltext_plain");
+
+    auto index = ReadIndex(db);
+    Cerr << "covered compact index: " << NYdb::FormatResultSetYson(index) << Endl;
+
+    // Verify search works with covered index
+    CompareYson(R"([
+        [[100u];["Cats chase small animals."];["cats data"]];
+        [[200u];["Dogs chase small cats."];["dogs data"]]
+    ])", FulltextSearch(db, "chase"));
+}
+
+Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Set low compaction thresholds to trigger compaction
+    NDataShard::gFulltextMaxDelta = 2;
+    NDataShard::gFulltextMaxSegment = 2;
+
+    // Insert enough rows to trigger compaction
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (151, "Wolves love foxes.", "wolves data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, "Rabbits love foxes.", "rabbit data")
+    )sql");
+
+    // Reset to defaults
+    NDataShard::gFulltextMaxDelta = 10000;
+    NDataShard::gFulltextMaxSegment = 10000;
+
+    // Despite compaction, search should still work correctly
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "foxes"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Wolves love foxes."];["wolves data"]];
+        [[152u];["Rabbits love foxes."];["rabbit data"]];
+        [[200u];["Dogs love foxes."];["dogs data"]]
+    ])", FulltextSearch(db, "love"));
+
+    // Verify index table has multiple segments (compaction splits)
+    auto index = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index after compaction: " << index << Endl;
+}
+
+Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    NDataShard::gFulltextMaxDelta = 2;
+    NDataShard::gFulltextMaxSegment = 2;
+
+    // Insert, then delete
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (151, "Birds love rabbits.", "birds data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 200
+    )sql");
+
+    NDataShard::gFulltextMaxDelta = 10000;
+    NDataShard::gFulltextMaxSegment = 10000;
+
+    // Verify correctness after compaction with delete
+    CompareYson(R"([])", FulltextSearch(db, "dogs"));
+
+    CompareYson(R"([
+        [[151u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "birds"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]];
+        [[151u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "love"));
+}
+
 } // Y_UNIT_TEST_SUITE(KqpFulltextCompact)
 
 Y_UNIT_TEST_SUITE(KqpJsonCompact) {
@@ -160,6 +714,170 @@ Y_UNIT_TEST(AddJsonCompactIndex) {
     Cerr << "json index: " << indexStr << Endl;
 
     NYdb::TResultSetParser parser(index);
+    UNIT_ASSERT(parser.RowsCount() > 0);
+}
+
+Y_UNIT_TEST(JsonCompactInsertRow) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteQuery(db, R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text Json,
+            Data String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, '"hello"', "data1"),
+            (200, '"world"', "data2")
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX json_idx
+            GLOBAL USING json ON (Text)
+    )sql");
+
+    auto indexBefore = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index before insert: " << indexBefore << Endl;
+
+    // Insert new row
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, '{"nested":"value"}', "data3")
+    )sql");
+
+    auto indexAfter = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index after insert: " << indexAfter << Endl;
+
+    NYdb::TResultSetParser parser(ReadIndex(db));
+    UNIT_ASSERT(parser.RowsCount() > 0);
+}
+
+Y_UNIT_TEST(JsonCompactUpsertModify) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteQuery(db, R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text Json,
+            Data String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, '"hello"', "data1"),
+            (200, '"world"', "data2")
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX json_idx
+            GLOBAL USING json ON (Text)
+    )sql");
+
+    // Upsert: modify existing
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, '{"changed":"yes"}', "data1_modified")
+    )sql");
+
+    auto index = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index after upsert modify: " << index << Endl;
+
+    NYdb::TResultSetParser parser(ReadIndex(db));
+    UNIT_ASSERT(parser.RowsCount() > 0);
+}
+
+Y_UNIT_TEST(JsonCompactDeleteRow) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteQuery(db, R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text Json,
+            Data String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, '"hello"', "data1"),
+            (200, '"world"', "data2"),
+            (300, '42', "data3")
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX json_idx
+            GLOBAL USING json ON (Text)
+    )sql");
+
+    auto indexBefore = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index before delete: " << indexBefore << Endl;
+
+    // Delete row
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 100
+    )sql");
+
+    auto indexAfter = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "index after delete: " << indexAfter << Endl;
+}
+
+Y_UNIT_TEST(JsonCompactCompaction) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteQuery(db, R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text Json,
+            Data String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, '"hello"', "data1"),
+            (200, '"world"', "data2")
+    )sql");
+
+    ExecuteQuery(db, R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX json_idx
+            GLOBAL USING json ON (Text)
+    )sql");
+
+    NDataShard::gFulltextMaxDelta = 2;
+    NDataShard::gFulltextMaxSegment = 2;
+
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, '{"a":"b"}', "data3")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (151, '{"c":"d"}', "data4")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, '"test"', "data5")
+    )sql");
+
+    NDataShard::gFulltextMaxDelta = 10000;
+    NDataShard::gFulltextMaxSegment = 10000;
+
+    auto index = NYdb::FormatResultSetYson(ReadIndex(db));
+    Cerr << "json_compact index after compaction: " << index << Endl;
+
+    NYdb::TResultSetParser parser(ReadIndex(db));
     UNIT_ASSERT(parser.RowsCount() > 0);
 }
 

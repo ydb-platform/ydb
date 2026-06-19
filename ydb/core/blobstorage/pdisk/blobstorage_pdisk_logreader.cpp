@@ -430,7 +430,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
             }
             if (IsInitial) {
                 PDisk->LogChunks.push_back(TLogChunkInfo(ChunkIdx, (ui32)PDisk->OwnerData.size()));
-                PDisk->Mon.LogChunks->Inc();
+                *PDisk->Mon.LogChunks = PDisk->LogChunks.size();
                 ChunkInfo = &PDisk->LogChunks.back();
                 ChunkInfo->IsEndOfSplice = std::exchange(OnEndOfSplice, false);
                 if (PDisk->LogChunks.size() > 1) {

@@ -209,6 +209,60 @@ Y_UNIT_TEST(TableHintsSelect) {
     UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
 }
 
+Y_UNIT_TEST(SelectStarStripsConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings("SELECT * FROM plato.Input;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 1);
+}
+
+Y_UNIT_TEST(SelectSystemColumnIsNotStrippedConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings("SELECT __ydb_row_id FROM plato.Input;", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 0);
+}
+
+Y_UNIT_TEST(SelectStarKeepsDefaultCleanupWithoutSystemColumnPrefixes) {
+    auto res = SqlToYql("SELECT * FROM plato.Input;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"RemoveSystemMembers", "RemovePrefixMembers"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemoveSystemMembers"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 0);
+}
+
+Y_UNIT_TEST(QualifiedAsteriskStripsConfiguredSystemColumnPrefixes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};
+    auto res = SqlToYqlWithSettings(
+        "PRAGMA DisableSimpleColumns;"
+        "SELECT interested_table.* FROM plato.Input AS interested_table;",
+        settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "RemovePrefixMembers") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table._yql_"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table.__ydb_row_id"));
+        }
+    };
+    TWordCountHive stat = {{TString("RemovePrefixMembers"), 0}};
+    VerifyProgram(res, stat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(stat["RemovePrefixMembers"], 1);
+}
+
 Y_UNIT_TEST(TableHintsValues) {
     ExpectFailWithError(
         R"sql(
@@ -8856,7 +8910,7 @@ Y_UNIT_TEST(MultilineComments) {
 #if ANTLR_VER == 3
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token '*' : cannot match to any predicted input...\n\n");
 #else
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, MATERIALIZE, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES, WITH}\n");
 #endif
     res = SqlToYqlWithAnsiLexer(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -14996,6 +15050,229 @@ Y_UNIT_TEST(PragmaUnsupportedAuto) {
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)
+
+Y_UNIT_TEST_SUITE(YqlSelectWithCTE) {
+
+void Parse(TString query) {
+    NYql::TAstParseResult r = SqlToYql(query);
+    TString e = Err2Str(r);
+    UNIT_ASSERT_C(!e.contains("Fatal"), e);
+    UNIT_ASSERT_C(!e.contains("ambiguity"), e);
+    UNIT_ASSERT_C(!e.contains("extraneous input"), e);
+    UNIT_ASSERT_C(!e.contains("mismatched input"), e);
+}
+
+Y_UNIT_TEST(NoSyntaxAmbiguity) {
+    Parse(R"sql(
+        WITH x AS (SELECT 1) SELECT * FROM x;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (VALUES (1)) SELECT * FROM x;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (SELECT 1), y AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH x(a) AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH x(a,b) AS (SELECT 1) SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        WITH
+            RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            ),
+            RECURSIVE b(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM b
+                WHERE n < 5
+            )
+        SELECT * FROM a UNION SELECT * FROM b;
+    )sql");
+    Parse(R"sql(
+        WITH x AS (SELECT 1), SELECT * FROM x;
+        WITH x AS (SELECT 1), y AS (SELECT 1), SELECT * FROM x, y;
+    )sql");
+    Parse(R"sql(
+        $x =
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        ;
+    )sql");
+    Parse(R"sql(
+        $x = (
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        );
+    )sql");
+    Parse(R"sql(
+        SELECT (
+            WITH RECURSIVE a(n) AS (
+                SELECT 1
+                UNION ALL
+                SELECT n + 1 FROM a
+                WHERE n < 5
+            )
+            SELECT * FROM a UNION SELECT * FROM b
+        );
+    )sql");
+    Parse(R"sql(
+        INSERT INTO x (b)
+        WITH RECURSIVE a(n) AS (
+            SELECT 1
+            UNION ALL
+            SELECT n + 1 FROM a
+            WHERE n < 5
+        )
+        SELECT * FROM a;
+    )sql");
+}
+
+Y_UNIT_TEST(Columns) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH x(a) AS (SELECT 1) SELECT * FROM x;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "CTE columns are not implemented yet");
+}
+
+Y_UNIT_TEST(LinearVisibilityOK) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH
+            x AS (SELECT 0 + 1 AS a       ),
+            y AS (SELECT a + 1 AS a FROM x),
+        SELECT * FROM y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+}
+
+Y_UNIT_TEST(LinearVisibilityErr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH
+            y AS (SELECT a + 1 AS a FROM x),
+            x AS (SELECT 0 + 1 AS a       )
+        SELECT * FROM y;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":3:42: Error: No cluster name given");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "If 'x' is meant to be a CTE");
+}
+
+Y_UNIT_TEST(UnusedCTETrivial) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH x AS (SELECT 1) SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:14: Warning: CTE Symbol x is not used");
+}
+
+Y_UNIT_TEST(UnusedCTEUnwinding) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH x AS (
+            WITH y AS (
+                WITH z AS (
+                    SELECT 1)
+                SELECT 1)
+            SELECT 1)
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:14: Warning: CTE Symbol x is not used");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":3:18: Warning: CTE Symbol y is not used");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:22: Warning: CTE Symbol z is not used");
+}
+
+Y_UNIT_TEST(ScopeErr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH
+            y AS (
+                WITH x AS (
+                    SELECT 0 + 1 AS a
+                )
+                SELECT a + 1 AS a FROM x
+            ),
+            z AS (
+                SELECT a + 2 AS a FROM x
+            )
+        SELECT a + 3 AS a FROM z;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":10:40: Error: No cluster name given");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "If 'x' is meant to be a CTE");
+}
+
+Y_UNIT_TEST(OnlySelectAllowed) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        SELECT (WITH a AS (SELECT 1) 123);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:17: Error: A WITH clause can only be used before a SELECT statement");
+}
+
+Y_UNIT_TEST(Redefinition) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        WITH
+            x AS (SELECT 0 + 1 AS a       ),
+            x AS (SELECT a + 1 AS a FROM x),
+            x AS (SELECT a + 1 AS a FROM x),
+        SELECT * FROM x;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:13: Error: Bad CTE: Redefinition is forbidden: x");
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelectWithCTE)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {
 

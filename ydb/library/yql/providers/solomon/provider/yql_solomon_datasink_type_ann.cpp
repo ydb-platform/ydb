@@ -183,7 +183,7 @@ private:
             const TDataExprType* itemType = nullptr;
 
             bool isOptional = false;
-            if (!IsDataOrOptionalOfData(structItem->GetItemType(), isOptional, itemType)) {
+            if (!EnsureDataOrOptionalOfData(position, structItem->GetItemType(), isOptional, itemType, ctx)) {
                 return false;
             }
 

@@ -64,7 +64,7 @@ using NYT::FromProto;
 
 constexpr i64 MaxTracingTagLength = 1'000;
 constexpr i64 MinQueryTailPartSize = 100;
-static const TString DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
+static const std::string DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
 
 std::string SanitizeTracingTag(TStringBuf originalTag)
 {

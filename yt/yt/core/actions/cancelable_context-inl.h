@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "cancelable_context.h"
 #endif
-#undef CANCELABLE_CONTEXT_INL_H_
 
 namespace NYT {
 

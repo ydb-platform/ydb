@@ -9,10 +9,12 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const auto DefaultTraceSamplePeriod = TDuration::MicroSeconds(1000);
-const auto DefaultPBufferReplyTimeout = TDuration::MicroSeconds(50000);
-const auto DefaultHedgingDelay = TDuration::MicroSeconds(1000);
-const auto DefaultWriteRequestTimeout = TDuration::MilliSeconds(10000);
+const auto DefaultTraceSamplePeriod = TDuration::MilliSeconds(1);
+const auto DefaultPBufferReplyTimeout = TDuration::MilliSeconds(50);
+const auto DefaultReadHedgingDelay = TDuration::MilliSeconds(1);
+const auto DefaultReadRequestTimeout = TDuration::Seconds(10);
+const auto DefaultWriteHedgingDelay = TDuration::MilliSeconds(1);
+const auto DefaultWriteRequestTimeout = TDuration::Seconds(10);
 
 }   // namespace
 
@@ -153,12 +155,28 @@ TDuration TStorageConfig::GetTraceSamplePeriod() const
                : DefaultTraceSamplePeriod;
 }
 
+TDuration TStorageConfig::GetReadHedgingDelay() const
+{
+    return StorageServiceConfig.HasReadHedgingDelay()
+               ? TDuration::MicroSeconds(
+                     StorageServiceConfig.GetReadHedgingDelay())
+               : DefaultReadHedgingDelay;
+}
+
+TDuration TStorageConfig::GetReadRequestTimeout() const
+{
+    return StorageServiceConfig.HasReadRequestTimeout()
+               ? TDuration::MilliSeconds(
+                     StorageServiceConfig.GetReadRequestTimeout())
+               : DefaultReadRequestTimeout;
+}
+
 TDuration TStorageConfig::GetWriteHedgingDelay() const
 {
     return StorageServiceConfig.HasWriteHedgingDelay()
                ? TDuration::MicroSeconds(
                      StorageServiceConfig.GetWriteHedgingDelay())
-               : DefaultHedgingDelay;
+               : DefaultWriteHedgingDelay;
 }
 
 TDuration TStorageConfig::GetWriteRequestTimeout() const

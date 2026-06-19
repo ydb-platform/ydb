@@ -138,7 +138,11 @@ public:
             },
             State_->Types->RuntimeLogLevel);
 
-        auto secureParamsProvider = NKikimr::NMiniKQL::MakeSimpleSecureParamsProvider(State_->Setting.SecureParams);
+        THashMap<TString, TString> secureParams;
+        State_->Types->Credentials->ForEach([&secureParams](const TString& name, const TCredential& cred) {
+            secureParams[TString("token:") + name] = cred.Content;
+        });
+        auto secureParamsProvider = NKikimr::NMiniKQL::MakeSimpleSecureParamsProvider(secureParams);
 
         TComputationPatternOpts patternOpts(alloc.Ref(),
                                             env,
@@ -278,8 +282,8 @@ TIntrusivePtr<IDataProvider> CreatePureProvider(const TPureState::TPtr& state) {
     return MakeIntrusive<TPureProvider>(state);
 }
 
-TDataProviderInitializer GetPureDataProviderInitializer(TPureProviderSettings settings) {
-    return [settings = std::move(settings)](
+TDataProviderInitializer GetPureDataProviderInitializer() {
+    return [](
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -306,7 +310,6 @@ TDataProviderInitializer GetPureDataProviderInitializer(TPureProviderSettings se
         auto state = MakeIntrusive<TPureState>();
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
-        state->Setting = std::move(settings);
 
         info.Source = CreatePureProvider(state);
         info.OpenSession = [state](

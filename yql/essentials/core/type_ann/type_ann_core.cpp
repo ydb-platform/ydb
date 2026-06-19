@@ -16166,6 +16166,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CommonJoinCore"] = &CommonJoinCoreWrapper;
         Functions["GraceJoinCore"] = &GraceJoinCoreWrapper;
         Functions["GraceSelfJoinCore"] = &GraceSelfJoinCoreWrapper;
+        Functions["ListJoinCore"] = &ListJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
         Functions["EquiJoin"] = &EquiJoinWrapper;
@@ -16808,6 +16809,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         IGraphTransformer::TStatus ValidateProviderWriteResult(const TExprNode::TPtr& input, TExprContext& ctx) {
             if (!input->GetTypeAnn() || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad datasink write result"));
+                return TStatus::Error;
+            }
+            return TStatus::Ok;
+        }
+
+        IGraphTransformer::TStatus ValidateProviderMaterializeResult(const TExprNode::TPtr& input, TExprContext& ctx) {
+            if (!input->GetTypeAnn() ||
+                input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple ||
+                input->GetTypeAnn()->Cast<TTupleExprType>()->GetSize() != 2 ||
+                input->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->GetKind() != ETypeAnnotationKind::World) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad datasink materialize result"));
                 return TStatus::Error;
             }
             return TStatus::Ok;

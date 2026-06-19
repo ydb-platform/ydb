@@ -29,7 +29,7 @@ public:
     // Note: in some obscure cases there may be two active builders simultaneously
     // It shouldn't make any difference though, we just add more flags
     void FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit);
-    void Recover(TPhantomFlagStorageSnapshot&& snapshot);
+    void Recover(TPhantomFlagThresholds&& thresholdsBatch, bool eof);
     void Deactivate();
 
     // Read everything from storage

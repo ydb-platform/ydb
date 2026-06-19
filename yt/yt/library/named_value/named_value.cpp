@@ -122,7 +122,7 @@ void FormatValue(TStringBuilderBase* builder, const TNamedValue& value, TStringB
     using namespace NYson;
 
     builder->AppendFormat("%Qv=", value.Name_);
-    auto text = std::visit([] (const auto& value) -> TString {
+    auto text = std::visit([] (const auto& value) -> std::string {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, TNamedValue::TAny>) {
             auto result = TString("<type=any>");

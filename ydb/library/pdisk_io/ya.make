@@ -34,6 +34,7 @@ ENDIF(OS_WINDOWS)
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/wilson
+    library/cpp/containers/stack_vector
     library/cpp/monlib/dynamic_counters
     ydb/core/debug
     ydb/library/pdisk_io/protos

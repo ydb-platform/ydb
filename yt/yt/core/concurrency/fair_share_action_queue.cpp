@@ -33,7 +33,8 @@ public:
         const std::vector<std::string>& queueNames,
         const THashMap<std::string, std::vector<std::string>>& bucketToQueues,
         TThreadOptions threadOptions,
-        NProfiling::IRegistryPtr registry)
+        NProfiling::IRegistryPtr registry,
+        const NProfiling::TTagSet& extraTags)
         : ShutdownCookie_(RegisterShutdownCallback(
             Format("FairShareActionQueue(%v)", threadName),
             BIND_NO_PROPAGATE(&TFairShareActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
@@ -56,7 +57,7 @@ public:
             auto& bucketDescription = bucketDescriptions.emplace_back();
             for (int bucketQueueIndex = 0; bucketQueueIndex < std::ssize(bucketQueues); ++bucketQueueIndex) {
                 const auto& queueName = bucketQueues[bucketQueueIndex];
-                bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, bucketName, queueName));
+                bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, bucketName, queueName, extraTags));
                 bucketDescription.QueueProfilerTags.push_back(New<NYTProf::TProfilerTag>("queue", queueName));
 
                 {
@@ -76,7 +77,7 @@ public:
             }
 
             auto& bucketDescription = bucketDescriptions.emplace_back();
-            bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, queueName, queueName));
+            bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, queueName, queueName, extraTags));
             bucketDescription.QueueProfilerTags.push_back(New<NYTProf::TProfilerTag>("queue", queueName));
 
             {
@@ -184,14 +185,16 @@ IFairShareActionQueuePtr CreateFairShareActionQueue(
     const std::vector<std::string>& queueNames,
     const THashMap<std::string, std::vector<std::string>>& bucketToQueues,
     TThreadOptions threadOptions,
-    NProfiling::IRegistryPtr registry)
+    IRegistryPtr registry,
+    const TTagSet& extraTags)
 {
     return New<TFairShareActionQueue>(
         threadName,
         queueNames,
         bucketToQueues,
         threadOptions,
-        std::move(registry));
+        std::move(registry),
+        extraTags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

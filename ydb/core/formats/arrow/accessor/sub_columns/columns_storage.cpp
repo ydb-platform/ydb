@@ -1,6 +1,7 @@
 #include "columns_storage.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/container/filterable/filterable.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <yql/essentials/types/binary_json/read.h>
 
@@ -31,8 +32,7 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
     if (!Stats.GetColumnsCount()) {
         return *this;
     }
-    auto records = Records;
-    filter.Apply(records);
+    auto records = NArrow::ApplyFilter(filter, Records);
     if (records->GetRecordsCount()) {
         TDictStats::TBuilder builder;
         ui32 idx = 0;

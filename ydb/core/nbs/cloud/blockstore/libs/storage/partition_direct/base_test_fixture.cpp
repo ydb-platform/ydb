@@ -66,7 +66,7 @@ void TBaseFixture::Init()
     {
         Y_UNUSED(traceId);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
-        UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
+        UNIT_ASSERT_VALUES_EQUAL(ExpectedHost, hostIndex);
 
         if (RangeData.empty()) {
             RangeData = GenerateRandomString(CopyRangeSize);

@@ -9,6 +9,13 @@
 /CLAUDE.md @ydb-platform/ai-reviewers
 
 /.cursorindexingignore-personal @ydb-platform/ai-reviewers
+
+/.github/ @ydb-platform/ci
+/.github/workflows/docs_*
+/.github/workflows/ydbdoc-*
+/.github/config/muted_ya*
+/.github/CODEOWNERS
+/.github/TESTOWNERS
 /.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/ci

@@ -29,20 +29,22 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
     TPath srcPath = TPath::Resolve(srcStr, context.SS);
     {
-        if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
-            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables")};
-        }
-        if (srcPath->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
-            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
-        }
         TPath::TChecker checks = srcPath.Check();
         checks.IsResolved()
               .NotDeleted()
               .NotAsyncReplicaTable()
+              .NotReadOnlyColumnTable()
               .IsCommonSensePath();
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+
+        if (!srcPath.Base()->IsTable() && !srcPath.Base()->IsColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables")};
+        }
+        if (srcPath.Base()->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
         }
     }
 

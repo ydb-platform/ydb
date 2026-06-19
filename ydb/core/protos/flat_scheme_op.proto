@@ -117,6 +117,9 @@ message TColumnDescription {
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
     optional TColumnCompression Compression = 13;
+    // flag that indicates that SET NOT NULL operation is currently in progress
+    // for this column (full scan is running to verify no nulls exist).
+    optional bool SetNotNullInProgress = 14 [default = false];
 }
 
 message TStorageSettings {
@@ -1354,6 +1357,10 @@ message TVectorIndexKmeansTreeDescription {
 
 message TFulltextIndexDescription {
     optional Ydb.Table.FulltextIndexSettings Settings = 1;
+    // When true, the fulltext index uses the __ydb_row_id Uint64 column of the main table as doc_id
+    // instead of the main table PK. A unique secondary index on __ydb_row_id is required and is used
+    // at read time to resolve __ydb_row_id back to the main table PK.
+    optional bool UseRowIdAsDocId = 2;
 }
 
 message TIndexDescription {

@@ -20,6 +20,12 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_ENUM(EClientPriority,
+    ((Local)            (0))
+    ((Remote)           (1))
+    ((Undefined)        (2))
+);
+
 struct TMutatingOptions
 {
     NRpc::TMutationId MutationId;
@@ -179,7 +185,7 @@ struct TSelectRowsOptions
     //! If null then connection defaults are used.
     std::optional<i64> OutputRowLimit;
     //! Execution pool.
-    std::optional<TString> ExecutionPool;
+    std::optional<std::string> ExecutionPool;
     //! Used to prioritize requests.
     TUserWorkloadDescriptor WorkloadDescriptor;
     //! Memory limit per execution node.

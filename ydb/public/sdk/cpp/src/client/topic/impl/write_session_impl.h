@@ -233,6 +233,7 @@ private:
         size_t OriginalMemoryUsage = 0;
         ui32 CodecID = static_cast<ui32>(ECodec::RAW);
         mutable std::vector<std::string_view> OriginalDataRefs;
+        mutable std::vector<TInstant> CreatedAt;
         mutable TBuffer Data;
         bool Compressed = false;
         mutable bool Valid = true;
@@ -250,11 +251,13 @@ private:
             OriginalMemoryUsage = rhs.OriginalMemoryUsage;
             CodecID = rhs.CodecID;
             OriginalDataRefs.swap(rhs.OriginalDataRefs);
+            CreatedAt.swap(rhs.CreatedAt);
             Data.Swap(rhs.Data);
             Compressed = rhs.Compressed;
 
             rhs.Data.Clear();
             rhs.OriginalDataRefs.clear();
+            rhs.CreatedAt.clear();
         }
     };
 
@@ -405,6 +408,8 @@ private:
     uint64_t GetSeqNoImpl(uint64_t id);
     uint64_t GetIdImpl(uint64_t seqNo);
     void SendImpl();
+    void SendBatchBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
+    void SendStandardBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues);
     void CloseImpl(EStatus statusCode, const std::string& message);
@@ -468,12 +473,13 @@ private:
     std::queue<TBlock> SentPackedMessage;
 
     const size_t MaxBlockSize = std::numeric_limits<size_t>::max();
-    const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility
+    const size_t MaxBlockMessageCount;
     bool Connected = false;
     bool Started = false;
     std::atomic<bool> SendImplScheduled = false;
     std::atomic<int> Aborting = 0;
     bool SessionEstablished = false;
+    bool BatchingSupported = false;
     ui32 PartitionId = 0;
     TPartitionLocation PreferredPartitionLocation = {};
     uint64_t NextId = 0;

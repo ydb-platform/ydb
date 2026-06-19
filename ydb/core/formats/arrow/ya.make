@@ -1,3 +1,8 @@
+RECURSE(
+    container
+    filter
+)
+
 RECURSE_FOR_TESTS(
     ut
 )
@@ -34,13 +39,12 @@ SRCS(
     arrow_batch_builder.cpp
     arrow_helpers.cpp
     arrow_helpers_minikql.cpp
-    arrow_filter.cpp
     converter.cpp
     converter.h
     permutations.cpp
+    process_columns.cpp
     size_calcer.cpp
     special_keys.cpp
-    process_columns.cpp
 )
 
 END()

@@ -1,6 +1,6 @@
 #include "accessor.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 namespace NKikimr::NArrow::NAccessor {

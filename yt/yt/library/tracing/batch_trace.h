@@ -19,7 +19,7 @@ public:
 
     void Join(const TTraceContextPtr& context);
 
-    std::pair<TTraceContextPtr, bool> StartSpan(const TString& spanName);
+    std::pair<TTraceContextPtr, bool> StartSpan(const std::string& spanName);
 
 private:
     std::vector<TTraceContextPtr> Clients_;

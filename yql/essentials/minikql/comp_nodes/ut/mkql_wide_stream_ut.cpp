@@ -1,6 +1,7 @@
 #include "mkql_computation_node_ut.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -11,14 +12,11 @@ Y_UNIT_TEST_LLVM(TestSimple) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<ui64>(10)});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<ui64>(20)});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<ui64>(30)});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui64, ui64>>{
+                                                               {ui64(1), ui64(10)},
+                                                               {ui64(2), ui64(20)},
+                                                               {ui64(3), ui64(30)},
+                                                           });
     const auto flow = pb.ToFlow(list);
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
@@ -34,20 +32,11 @@ Y_UNIT_TEST_LLVM(TestSimple) {
     const auto pgmReturn = pb.Collect(narrowFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 9);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 18);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 27);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{
+                                                          ui64(9),
+                                                          ui64(18),
+                                                          ui64(27),
+                                                      });
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideStreamTest)
 

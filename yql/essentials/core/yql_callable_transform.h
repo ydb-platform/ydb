@@ -19,11 +19,28 @@
 
 namespace NYql {
 
+class TCallableTransformerParsers : public TGraphTransformerBase {
+public:
+    explicit TCallableTransformerParsers(TTypeAnnotationContext& types)
+        : Types_(types)
+    {}
+
+protected:
+    IDataProvider* ParseCommit(const TExprNode& input, TExprContext& ctx, bool& isUniversal);
+    IDataProvider* ParseRead(const TExprNode& input, TExprContext& ctx);
+    IDataProvider* ParseWrite(const TExprNode& input, TExprContext& ctx);
+    IDataProvider* ParseMaterialize(const TExprNode& input, TExprContext& ctx);
+    IDataProvider* ParseConfigure(const TExprNode& input, TExprContext& ctx, bool& isUniversal);
+
+protected:
+    TTypeAnnotationContext& Types_;
+};
+
 template <class TDerived>
-class TCallableTransformerBase : public TGraphTransformerBase {
+class TCallableTransformerBase : public TCallableTransformerParsers {
 public:
     TCallableTransformerBase(TTypeAnnotationContext& types, bool instantOnly)
-        : Types_(types)
+        : TCallableTransformerParsers(types)
         , InstantOnly_(instantOnly)
     {}
 
@@ -77,6 +94,16 @@ public:
                     status = ProcessDataProviderAnnotation(*datasink, input, output, ctx);
                     if (status == TStatus::Ok) {
                         status = static_cast<TDerived*>(this)->ValidateProviderWriteResult(input, ctx);
+                    }
+                }
+            } else if (name == MaterializeName) {
+                auto datasink = ParseMaterialize(*input, ctx);
+                if (!datasink) {
+                    status = TStatus::Error;
+                } else {
+                    status = ProcessDataProviderAnnotation(*datasink, input, output, ctx);
+                    if (status == TStatus::Ok) {
+                        status = static_cast<TDerived*>(this)->ValidateProviderMaterializeResult(input, ctx);
                     }
                 }
             } else if (name == ConfigureName) {
@@ -146,161 +173,6 @@ public:
     }
 
 protected:
-    IDataProvider* ParseCommit(const TExprNode& input, TExprContext& ctx, bool& isUniversal) {
-        isUniversal = false;
-        if (!EnsureMinArgsCount(input, 2, ctx)) {
-            return nullptr;
-        }
-
-        if (!EnsureMaxArgsCount(input, 3, ctx)) {
-            return nullptr;
-        }
-
-        if (input.Child(0)->GetTypeAnn() && input.Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-            isUniversal = true;
-            return nullptr;
-        }
-
-        if (!EnsureWorldType(*input.Child(0), ctx)) {
-            return nullptr;
-        }
-
-        if (input.Child(1)->GetTypeAnn() && input.Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-            isUniversal = true;
-            return nullptr;
-        }
-
-        if (!EnsureDataSink(*input.Child(1), ctx)) {
-            return nullptr;
-        }
-
-        if (input.ChildrenSize() == 3) {
-            if (input.Child(2)->GetTypeAnn() && input.Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-                isUniversal = true;
-                return nullptr;
-            }
-
-            if (!EnsureTuple(*input.Child(2), ctx)) {
-                return nullptr;
-            }
-
-            for (auto& setting : input.Child(2)->Children()) {
-                if (!EnsureTupleSize(*setting, 2, ctx)) {
-                    return nullptr;
-                }
-
-                auto nameNode = setting->Child(0);
-                if (!EnsureAtom(*nameNode, ctx)) {
-                    return nullptr;
-                }
-            }
-        }
-
-        auto datasinkName = input.Child(1)->Child(0)->Content();
-        auto datasink = Types_.DataSinkMap.FindPtr(datasinkName);
-        if (!datasink) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
-            return nullptr;
-        }
-
-        return (*datasink).Get();
-    }
-
-    IDataProvider* ParseRead(const TExprNode& input, TExprContext& ctx) {
-        if (!EnsureMinArgsCount(input, 2, ctx)) {
-            return nullptr;
-        }
-
-        if (!EnsureWorldType(*input.Child(0), ctx)) {
-            return nullptr;
-        }
-
-        if (!EnsureDataSource(*input.Child(1), ctx)) {
-            return nullptr;
-        }
-
-        auto datasourceName = input.Child(1)->Child(0)->Content();
-        auto datasource = Types_.DataSourceMap.FindPtr(datasourceName);
-        if (!datasource) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasource: " << datasourceName));
-            return nullptr;
-        }
-
-        return (*datasource).Get();
-    }
-
-    IDataProvider* ParseWrite(const TExprNode& input, TExprContext& ctx) {
-        if (!EnsureMinArgsCount(input, 2, ctx)) {
-            return nullptr;
-        }
-
-        if (!EnsureWorldType(*input.Child(0), ctx)) {
-            return nullptr;
-        }
-
-        if (!EnsureDataSink(*input.Child(1), ctx)) {
-            return nullptr;
-        }
-
-        auto datasinkName = input.Child(1)->Child(0)->Content();
-        auto datasink = Types_.DataSinkMap.FindPtr(datasinkName);
-        if (!datasink) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
-            return nullptr;
-        }
-
-        return (*datasink).Get();
-    }
-
-    IDataProvider* ParseConfigure(const TExprNode& input, TExprContext& ctx, bool& isUniversal) {
-        isUniversal= false;
-        if (!EnsureMinArgsCount(input, 2, ctx)) {
-            return nullptr;
-        }
-
-        if (input.Child(0)->GetTypeAnn() && input.Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-            isUniversal = true;
-            return nullptr;
-        }
-
-        if (!EnsureWorldType(*input.Child(0), ctx)) {
-            return nullptr;
-        }
-
-        if (input.Child(1)->GetTypeAnn() && input.Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-            isUniversal = true;
-            return nullptr;
-        }
-
-        if (!EnsureDataProvider(*input.Child(1), ctx)) {
-            return nullptr;
-        }
-
-        if (input.Child(1)->IsCallable("DataSource")) {
-            auto datasourceName = input.Child(1)->Child(0)->Content();
-            auto datasource = Types_.DataSourceMap.FindPtr(datasourceName);
-            if (!datasource) {
-                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasource: " << datasourceName));
-                return nullptr;
-            }
-
-            return (*datasource).Get();
-        }
-
-        if (input.Child(1)->IsCallable("DataSink")) {
-            auto datasinkName = input.Child(1)->Child(0)->Content();
-            auto datasink = Types_.DataSinkMap.FindPtr(datasinkName);
-            if (!datasink) {
-                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
-                return nullptr;
-            }
-
-            return (*datasink).Get();
-        }
-
-        YQL_ENSURE(false, "Unexpected provider class");
-    }
-
     IGraphTransformer::TStatus ProcessDataProviderAnnotation(IDataProvider& dataProvider,
         const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         auto status = static_cast<TDerived*>(this)->GetTransformer(dataProvider).Transform(input, output, ctx);
@@ -318,7 +190,6 @@ protected:
     }
 
 protected:
-    TTypeAnnotationContext& Types_;
     const bool InstantOnly_;
     TNodeMap<std::pair<TExprNode::TPtr, IDataProvider*>> PendingNodes_;
 };

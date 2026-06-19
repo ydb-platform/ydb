@@ -98,20 +98,15 @@ void TSysLogReader::Start() {
     TVector<TBuffer *> bufferParts;
     completionParts.reserve(partsToRead);
     bufferParts.reserve(partsToRead);
-    auto *cumulativeCompletion = new TCumulativeCompletionHolder();
-    for (ui32 idx = 0; idx < partsToRead; ++idx) {
-        const ui32 offset = idx * bufferSize;
-        const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset);
-        bufferParts.push_back(PDisk->BufferPool->Pop());
-        completionParts.push_back(new TSysLogReadCompletionPart(cumulativeCompletion, &Data,
-                bufferParts[idx], sizeToReadPart, offset));
-    }
+    auto *cumulativeCompletion = new TCumulativeCompletionHolder(partsToRead);
     cumulativeCompletion->SetCompletionAction(finalCompletion);
     for (ui32 idx = 0; idx < partsToRead; ++idx) {
         const ui32 offset = idx * bufferSize;
         const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset);
-        PDisk->BlockDevice->PreadAsync(bufferParts[idx]->Data(), sizeToReadPart, BeginSectorIdx * format.SectorSize + offset,
-                completionParts[idx], ReqId, {});
+        bufferParts.push_back(PDisk->BufferPool->Pop());
+        completionParts.push_back(new TSysLogReadCompletionPart(cumulativeCompletion, &Data, bufferParts[idx], sizeToReadPart, offset));
+        PDisk->BlockDevice->PreadAsync(bufferParts[idx]->Data(), sizeToReadPart,
+            BeginSectorIdx * format.SectorSize + offset, completionParts[idx], ReqId, {});
     }
 }
 

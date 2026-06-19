@@ -107,6 +107,16 @@ TExportToS3Response::TExportToS3Response(TStatus&& status, Ydb::Operations::Oper
         Metadata_.Settings.Compression(metadata.settings().compression());
     }
 
+    switch (metadata.settings().format_case()) {
+    case Ydb::Export::ExportToS3Settings::FORMAT_NOT_SET:
+    case Ydb::Export::ExportToS3Settings::kYdbDump:
+        Metadata_.Settings.Format(TProtoAccessor::FromProto(metadata.settings().ydb_dump()));
+        break;
+    case Ydb::Export::ExportToS3Settings::kParquet:
+        Metadata_.Settings.Format(TProtoAccessor::FromProto(metadata.settings().parquet()));
+        break;
+    }
+
     // progress
     Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
     Metadata_.ItemsProgress = ItemsProgressFromProto(metadata.items_progress());
@@ -241,7 +251,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
             auto parquet = request.mutable_settings()->mutable_parquet();
             parquet->set_row_group_size(format.RowGroupSize_);
         }
-    }, settings.Format);
+    }, settings.Format_);
 
     for (const auto& item : settings.Item_) {
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();

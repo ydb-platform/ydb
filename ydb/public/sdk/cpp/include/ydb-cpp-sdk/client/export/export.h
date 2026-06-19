@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
+#include <variant>
 
 namespace NYdb::inline Dev {
 namespace NExport {
@@ -112,8 +113,9 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPrefix);
     FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
-    
-    std::variant<TYdbDumpFormat, TParquetFormat> Format;
+
+    using FormatVariant = std::variant<TYdbDumpFormat, TParquetFormat>;
+    FLUENT_SETTING(FormatVariant, Format);
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
         EncryptionAlgorithm_ = algorithm;

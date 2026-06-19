@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             UNIT_ASSERT(header);
             UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, static_cast<i32>(messageCount));
 
-            auto [error, maxSeqNo] = NKafka::GetMaxSeqNo(*header, message.GetSeqNo());
+            auto [error, maxSeqNo] = NKafka::GetBatchMaxSeqNo(*header, message.GetSeqNo());
             UNIT_ASSERT_VALUES_EQUAL(error, NKafka::EKafkaErrors::NONE_ERROR);
             UNIT_ASSERT_VALUES_EQUAL(maxSeqNo, firstSeqNo + messageCount - 1);
 

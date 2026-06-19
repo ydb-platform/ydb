@@ -1206,6 +1206,54 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST(VectorIndexEmptyChildClusters) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting})
+            .SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        const int flags = F_NON_PARTITIONED;
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] () { return DoOnlyCreateTableForVectorIndex(db, flags); });
+        kikimr.RunCall([&] () { return DoCreateVectorIndex(session, flags); });
+
+        bool emptied = false;
+        auto observerHolder = runtime.AddObserver<TEvDataShard::TEvReadResult>([&](typename TEvDataShard::TEvReadResult::TPtr& ev) {
+            static ui64 child = 9223372036854775810lu; // Search for cluster with this child ID
+            auto& msg = *ev->Get();
+            if (msg.GetRowsCount() == 1) {
+                auto cells = msg.GetCells(0);
+                if (cells.size() == 3
+                    && cells[1].Size() == sizeof(child)
+                    && memcmp(&child, cells[1].Data(), sizeof(child)) == 0)
+                {
+                    msg.Record.SetRowCount(0); // Empty read results
+                    emptied = true;
+                }
+            }
+        });
+        {
+            TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                (10, "\x11\x62\x02", "10");
+            )"));
+
+            auto result = kikimr.RunCall([&] () {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT(result.IsSuccess());
+        }
+        UNIT_ASSERT(emptied);
+    }
+
     Y_UNIT_TEST_TWIN(CoveredVectorIndexWithFollowers, StaleRO) {
         const TString mainTableName = "/Root/TestTable";
         const TString levelTableName = "/Root/TestTable/index/indexImplLevelTable";

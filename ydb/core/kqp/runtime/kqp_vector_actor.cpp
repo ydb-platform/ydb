@@ -405,11 +405,9 @@ private:
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
-        if (!FetchedClusters.size()) {
+        if (!ReadingChildClustersOf && !FetchedClusters.size()) {
             // Index is empty
-            if (!ReadingChildClustersOf) {
-                EmptyIndex = true;
-            }
+            EmptyIndex = true;
             ContinueResolveClusters();
             return;
         }
@@ -419,7 +417,7 @@ private:
             clusterIds.push_back(pp.first);
             clusterRows.push_back(std::move(pp.second));
         }
-        if (!clusters->SetClusters(std::move(clusterRows))) {
+        if (!clusterRows.empty() && !clusters->SetClusters(std::move(clusterRows))) {
             // Clusters are invalid for some reason
             RuntimeError("Child clusters of "+std::to_string(ReadingChildClustersOf)+" are invalid", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;

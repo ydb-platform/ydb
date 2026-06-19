@@ -11,7 +11,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
-#include <ydb/library/actors/retro_tracing/retro_collector.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
 static auto& Cconf = Cnull;
 

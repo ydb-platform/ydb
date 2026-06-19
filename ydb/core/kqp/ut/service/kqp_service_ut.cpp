@@ -189,6 +189,160 @@ Y_UNIT_TEST_SUITE(KqpService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
     }
 
+    // Verifies issue #39166: the executer must terminate every still-running compute actor
+    // when the query is aborted (e.g. session close, client lost), via TEvAbortExecution.
+    // Compute actors no longer arm their own timeout timer (the planner now passes an empty
+    // Deadline to the CA factory, matching kqp_query_control_plane.cpp), so the executer's
+    // broadcast is the sole mechanism that stops them on cancellation. This test asserts:
+    //   (a) every CA that registered with the executer received TEvAbortExecution, and
+    //   (b) no CA ever called Schedule(... TEvWakeup(TimeoutTag) ...) on itself.
+    // (b) is checked at schedule time via SetScheduledEventFilter, not at delivery time:
+    // the cancel arrives within seconds, while any plausible CA self-timeout would be far
+    // longer, so delivery-time observation would silently pass even on the old code.
+    Y_UNIT_TEST(CancelTerminatesAllComputeActors) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
+
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+            auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+            kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+        }
+
+        // Origin tracking: a KQP compute actor is uniquely characterised by being the sender
+        // of TEvDqCompute::TEvState whose recipient is the query's executer. We capture the
+        // executer from the first TEvState we see (only one query runs in this test), then
+        // accept further events only if they tie back to that exact executer:
+        //   - TEvState        : recipient must be `executerActor` (else: foreign CA, rejected)
+        //   - TEvAbortExecution: sender must be `executerActor` AND recipient a tracked CA
+        // The scheduled-event filter records every TimeoutTag wakeup as it is armed; we
+        // intersect that set with the CA set at the end of the test (Bootstrap schedules
+        // the timer before the "Hello" TEvState, so recipients are not yet known when the
+        // schedule happens). EEvWakeupTag::TimeoutTag = 1 in dq_compute_actor_impl.h.
+        constexpr ui64 timeoutWakeupTag = 1;
+        TActorId executerActor;
+        THashSet<TActorId> computeActors;
+        THashSet<TActorId> abortedComputeActors;
+        THashSet<TActorId> timeoutTagScheduleRecipients;
+        ui32 stateEvents = 0;
+        ui32 foreignStateEvents = 0;
+        ui32 foreignAbortEvents = 0;
+
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                const auto recipient = ev->GetRecipientRewrite();
+                if (!executerActor) {
+                    executerActor = recipient;
+                }
+                if (recipient == executerActor) {
+                    computeActors.insert(ev->Sender);
+                    ++stateEvents;
+                } else {
+                    ++foreignStateEvents;
+                }
+            } else if (type == TEvKqp::TEvAbortExecution::EventType) {
+                if (computeActors.contains(ev->GetRecipientRewrite())) {
+                    if (ev->Sender == executerActor) {
+                        abortedComputeActors.insert(ev->GetRecipientRewrite());
+                    } else {
+                        ++foreignAbortEvents;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        // Filter fires inside Schedule(...) before the event enters the queue. Returning
+        // false keeps the event scheduled (we observe, we don't drop). We can't yet tell
+        // whether the recipient is a CA at this point, so record all candidates and
+        // resolve against `computeActors` after the test completes.
+        auto prevScheduledFilter = runtime->SetScheduledEventFilter(
+            [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev, TDuration, TInstant&) {
+                if (ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+                    if (auto* msg = ev->Get<NActors::TEvents::TEvWakeup>(); msg && msg->Tag == timeoutWakeupTag) {
+                        timeoutTagScheduleRecipients.insert(ev->GetRecipientRewrite());
+                    }
+                }
+                return false;
+            });
+        Y_DEFER { runtime->SetScheduledEventFilter(prevScheduledFilter); };
+
+        // Stall reads so the query hangs with all its compute actors alive.
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER { NDataShard::gSkipReadIteratorResultFailPoint.Disable(); };
+
+        auto session = kikimr.RunCall([&] { return db.GetSession().ExtractValueSync().GetSession(); });
+
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteQuery("select * from `/Root/LargeTable`",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
+
+        // Wait until at least a few compute actors have come up.
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return stateEvents >= 3; });
+            runtime->DispatchEvents(opts);
+        }
+
+        const auto computeActorsBeforeCancel = computeActors;
+        UNIT_ASSERT_C(!computeActorsBeforeCancel.empty(),
+            "Expected at least one compute actor to register before cancel");
+        UNIT_ASSERT_C(executerActor, "Failed to capture executer actor id from TEvState recipient");
+        UNIT_ASSERT_VALUES_EQUAL_C(foreignStateEvents, 0u,
+            "Observed TEvDqCompute::TEvState events with recipient != executerActor "
+            "(unexpected second executer in test). executer=" << executerActor);
+
+        // Trigger cancellation: session close -> session actor -> executer ->
+        //   TerminateComputeActors -> TEvAbortExecution to every alive CA.
+        auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+        close->Record.MutableRequest()->SetSessionId(TString(session.GetId()));
+        auto sender = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeKqpProxyID(runtime->GetNodeId(0)), sender, close.release()));
+
+        auto result = runtime->WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
+
+        // Every CA that registered before cancel must have received TEvAbortExecution.
+        TVector<TActorId> notAborted;
+        for (const auto& ca : computeActorsBeforeCancel) {
+            if (!abortedComputeActors.contains(ca)) {
+                notAborted.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(notAborted.empty(),
+            "Compute actors not terminated by executer broadcast: "
+                << JoinSeq(", ", notAborted)
+                << " (registered=" << computeActorsBeforeCancel.size()
+                << ", aborted=" << abortedComputeActors.size()
+                << ", executer=" << executerActor << ")");
+        UNIT_ASSERT_VALUES_EQUAL_C(foreignAbortEvents, 0u,
+            "Observed TEvAbortExecution to a tracked CA from a sender other than executerActor "
+            "(" << executerActor << "); CAs must be terminated by their own executer.");
+
+        // Fix verification: no compute actor armed its own TimeoutTag timer. Checked at
+        // schedule time, not delivery time — see header comment.
+        TVector<TActorId> selfTimedCAs;
+        for (const auto& ca : computeActors) {
+            if (timeoutTagScheduleRecipients.contains(ca)) {
+                selfTimedCAs.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(selfTimedCAs.empty(),
+            "Compute actors armed their own TimeoutTag timer (see issue #39166): "
+                << JoinSeq(", ", selfTimedCAs));
+    }
+
     TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {
         TVector<TAsyncDataQueryResult> futures;
         for (ui32 i = 0; i < count; ++i) {

@@ -113,6 +113,76 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildAvgAggregationInitialStateForO
     // clang-format on
 }
 
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode) {
+    Y_ENSURE(!IsDecimalType(typeNode), "Decimals not supported for variance");
+    Y_ENSURE(Aggregate->GetAggregationPhase() != EOpPhase::Undefined);
+
+    TExprNode::TPtr dataTypeForAccumulator = GetDataTypeForAccumulator(typeNode);
+    // Create a tuple.
+    if (Aggregate->GetAggregationPhase() == EOpPhase::Intermediate) {
+        // clang-format off
+        return Ctx.Builder(Pos)
+            .List()
+                .Callable(0, "SafeCast")
+                    .Add(0, lambdaArg)
+                    .Add(1, dataTypeForAccumulator)
+                .Seal()
+                .Callable(1, "Double")
+                    .Atom(0, "1")
+                .Seal()
+                .Callable(2, "Double")
+                    .Atom(0, "0")
+                .Seal()
+            .Seal().Build();
+        // clang-format on
+    }
+
+    // Already tuple.
+    return lambdaArg;
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceAggregationInitialStateOptionalType(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode) {
+    Y_ENSURE(!IsDecimalType(typeNode), "Decimals not supported for variance.");
+    Y_ENSURE(Aggregate->GetAggregationPhase() != EOpPhase::Undefined);
+
+    TExprNode::TPtr dataTypeForAccumulator = GetDataTypeForAccumulator(typeNode);
+    if (Aggregate->GetAggregationPhase() == EOpPhase::Intermediate) {
+        TExprNodeList tupleTypes{dataTypeForAccumulator, dataTypeForAccumulator, dataTypeForAccumulator};
+        // clang-format off
+        return Ctx.Builder(Pos)
+            .Callable("IfPresent")
+                .Add(0, lambdaArg)
+                .Lambda(1)
+                    .Param("init_param")
+                    .Callable(0, "Just")
+                        .List(0)
+                            .Callable(0, "SafeCast")
+                                .Arg(0, "init_param")
+                                .Add(1, dataTypeForAccumulator)
+                            .Seal()
+                            .Callable(1, "Double")
+                                .Atom(0, "1")
+                            .Seal()
+                            .Callable(2, "Double")
+                                .Atom(0, "0")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Callable(2, "Nothing")
+                    .Callable(0, "OptionalType")
+                        .Callable(0, "TupleType")
+                            .Add(std::move(tupleTypes))
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+        // clang-format on
+    }
+
+    return lambdaArg;
+}
+
 TExprNode::TPtr TPhysicalAggregationBuilder::GetDataTypeForSumAggregation(const TTypeAnnotationNode* itemType) const {
     Y_ENSURE(itemType);
     const auto* type = itemType;
@@ -322,6 +392,249 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildAvgAggregationUpdateState(TExp
     }
 }
 
+TExprNode::TPtr TPhysicalAggregationBuilder::GetNth(TExprNode::TPtr input, TString&& offset) {
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("Nth")
+            .Add(0, input)
+            .Atom(1, offset)
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceUpdateComputeIntermediate(TExprNode::TPtr fieldArg, TExprNode::TPtr prevCounter, TExprNode::TPtr mean,
+                                                                                    TExprNode::TPtr aggState, const TTypeAnnotationNode* typeNode) {
+    // clang-format off
+    auto delta = Ctx.Builder(Pos)
+        .Callable("-")
+            .Callable(0, "SafeCast")
+                .Add(0, fieldArg)
+                .Add(1, GetDataTypeForAccumulator(typeNode))
+            .Seal()
+            .Add(1, mean)
+        .Seal().Build();
+
+    auto currentCounter = Ctx.Builder(Pos)
+        .Callable("Inc")
+            .Add(0, prevCounter)
+        .Seal().Build();
+
+    auto newMean = Ctx.Builder(Pos)
+        .Callable("AggrAdd")
+            .Add(0, mean)
+            .Callable(1, "/")
+                .Add(0, delta)
+                .Add(1, currentCounter)
+            .Seal()
+        .Seal().Build();
+
+    auto newAggState = Ctx.Builder(Pos)
+        .Callable("AggrAdd")
+            .Add(0, aggState)
+            .Callable(1, "/")
+                .Callable(0, "*")
+                    .Callable(0, "*")
+                        .Add(0, delta)
+                        .Add(1, delta)
+                    .Seal()
+                    .Add(1, prevCounter)
+                .Seal()
+                .Add(1, currentCounter)
+            .Seal()
+        .Seal().Build();
+
+    return Ctx.Builder(Pos)
+        .List()
+            .Add(0, newMean)
+            .Add(1, currentCounter)
+            .Add(2, newAggState)
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceUpdateComputeFinal(TExprNode::TPtr fieldMean, TExprNode::TPtr fieldPrevCounter,
+                                                                             TExprNode::TPtr fieldAggState, TExprNode::TPtr stateMean,
+                                                                             TExprNode::TPtr statePrevCounter, TExprNode::TPtr stateAggState) {
+    // clang-format off
+    auto counter = Ctx.Builder(Pos)
+        .Callable("AggrAdd")
+            .Add(0, fieldPrevCounter)
+            .Add(1, statePrevCounter)
+        .Seal().Build();
+
+    auto mean = Ctx.Builder(Pos)
+        .Callable("-")
+            .Add(0, fieldMean)
+            .Add(1, stateMean)
+        .Seal().Build();
+
+    auto newMean = Ctx.Builder(Pos)
+        .Callable("/")
+            .Callable(0, "AggrAdd")
+                .Callable(0, "*")
+                    .Add(0, fieldMean)
+                    .Add(1, fieldPrevCounter)
+                .Seal()
+                .Callable(1, "*")
+                    .Add(0, stateMean)
+                    .Add(1, statePrevCounter)
+                .Seal()
+            .Seal()
+            .Add(1, counter)
+        .Seal().Build();
+
+    auto newState = Ctx.Builder(Pos)
+        .Callable("AggrAdd")
+            .Callable(0, "AggrAdd")
+                .Add(0, fieldAggState)
+                .Add(1, stateAggState)
+            .Seal()
+            .Callable(1, "/")
+                .Callable(0, "*")
+                    .Callable(0, "*")
+                        .Callable(0, "*")
+                            .Add(0, mean)
+                            .Add(1, mean)
+                        .Seal()
+                        .Add(1, fieldPrevCounter)
+                    .Seal()
+                    .Add(1, statePrevCounter)
+                .Seal()
+                .Add(1, counter)
+            .Seal()
+        .Seal().Build();
+
+    return Ctx.Builder(Pos)
+        .List()
+            .Add(0, newMean)
+            .Add(1, counter)
+            .Add(2, newState)
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField,
+                                                                                 const TTypeAnnotationNode* typeNode) {
+    Y_ENSURE(!IsDecimalType(typeNode), "Decimals not supported for variance.");
+    Y_ENSURE(Aggregate->GetAggregationPhase() != EOpPhase::Undefined);
+
+    if (Aggregate->GetAggregationPhase() == EOpPhase::Intermediate) {
+        auto mean = GetNth(lambdaArgState, "0");
+        auto prevCounter = GetNth(lambdaArgState, "1");
+        auto aggState = GetNth(lambdaArgState, "2");
+
+        return BuildVarianceUpdateComputeIntermediate(lambdaArgField, prevCounter, mean, aggState, typeNode);
+    }
+
+    auto fieldMean = GetNth(lambdaArgField, "0");
+    auto fieldPrevCounter = GetNth(lambdaArgField, "1");
+    auto fieldAggState = GetNth(lambdaArgField, "2");
+    auto stateMean = GetNth(lambdaArgState, "0");
+    auto statePrevCounter = GetNth(lambdaArgState, "1");
+    auto stateAggState = GetNth(lambdaArgState, "2");
+
+   return BuildVarianceUpdateComputeFinal(fieldMean, fieldPrevCounter, fieldAggState, stateMean, statePrevCounter, stateAggState);
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceAggregationUpdateStateOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField,
+                                                                                             const TTypeAnnotationNode* typeNode) {
+    Y_ENSURE(!IsDecimalType(typeNode), "Decimals not supported for variance.");
+    Y_ENSURE(Aggregate->GetAggregationPhase() != EOpPhase::Undefined);
+
+    TExprNode::TPtr dataTypeForAccumulator = GetDataTypeForAccumulator(typeNode);
+    auto stateArg = Ctx.NewArgument(Pos, "state_arg");
+    auto fieldArg = Ctx.NewArgument(Pos, "field_arg");
+    auto stateMean = GetNth(stateArg, "0");
+    auto statePrevCounter = GetNth(stateArg, "1");
+    auto stateAggState = GetNth(stateArg, "2");
+
+    if (Aggregate->GetAggregationPhase() == EOpPhase::Intermediate) {
+        // clang-format off
+        auto innerBody = Ctx.Builder(Pos)
+            .Callable("Just")
+                .Add(0, BuildVarianceUpdateComputeIntermediate(fieldArg, statePrevCounter, stateMean, stateAggState, typeNode))
+            .Seal().Build();
+
+        auto innerLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {fieldArg}), std::move(innerBody));
+
+        auto wrappedLambdaArgField = Ctx.Builder(Pos)
+            .Callable("IfPresent")
+                .Add(0, lambdaArgField)
+                .Lambda(1)
+                    .Param("lambda_arg_field")
+                    .Callable(0, "Just")
+                        .List(0)
+                            .Callable(0, "SafeCast")
+                                .Arg(0, "lambda_arg_field")
+                                .Add(1, dataTypeForAccumulator)
+                            .Seal()
+                            .Callable(1, "Double")
+                                .Atom(0, "1")
+                            .Seal()
+                            .Callable(2, "Double")
+                                .Atom(0, "0")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Callable(2, "Nothing")
+                    .Callable(0, "OptionalType")
+                        .Callable(0, "TupleType")
+                            .Add({dataTypeForAccumulator, dataTypeForAccumulator, dataTypeForAccumulator})
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+
+        auto outerBody = Ctx.Builder(Pos)
+            .Callable("IfPresent")
+                .Add(0, lambdaArgField)
+                .Add(1, innerLambda)
+                .Callable(2, "Just")
+                    .Add(0, stateArg)
+                .Seal()
+            .Seal().Build();
+
+        auto outerLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {stateArg}), std::move(outerBody));
+
+        return Ctx.Builder(Pos)
+            .Callable("IfPresent")
+                .Add(0, lambdaArgState)
+                .Add(1, outerLambda)
+                .Add(2, wrappedLambdaArgField)
+            .Seal().Build();
+        // clang-format on
+    }
+
+    auto fieldMean = GetNth(fieldArg, "0");
+    auto fieldPrevCounter = GetNth(fieldArg, "1");
+    auto fieldAggState = GetNth(fieldArg, "2");
+
+    auto innerBody = Ctx.Builder(Pos)
+        .Callable("Just")
+            .Add(0, BuildVarianceUpdateComputeFinal(fieldMean, fieldPrevCounter, fieldAggState, stateMean, statePrevCounter, stateAggState))
+        .Seal().Build();
+
+    auto innerLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {fieldArg}), std::move(innerBody));
+
+    auto outerBody = Ctx.Builder(Pos)
+        .Callable("IfPresent")
+            .Add(0, lambdaArgField)
+            .Add(1, innerLambda)
+            .Add(2, lambdaArgState)
+        .Seal().Build();
+
+    auto outerLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {stateArg}), std::move(outerBody));
+
+    return Ctx.Builder(Pos)
+        .Callable("IfPresent")
+            .Add(0, lambdaArgState)
+            .Add(1, outerLambda)
+            .Add(2, lambdaArgField)
+        .Seal().Build();
+    // clang-format on
+}
+
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField,
                                                                             const TTypeAnnotationNode* itemType) {
     // clang-format off
@@ -395,6 +708,96 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildAvgAggregationFinishStateForOp
                     .Seal()
                 .Seal()
             .Seal()
+            .Callable(2, "Nothing")
+                .Callable(0, "OptionalType")
+                    .Add(0, dataTypeForAccumulator)
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceFinishCompute(TExprNode::TPtr counter, TExprNode::TPtr aggState) {
+    // clang-format off
+    TExprNode::TPtr sqrt = Ctx.Builder(Pos)
+        .Callable("Udf")
+            .Atom(0, "Math.Sqrt")
+            .Callable(1, "Void").Seal()
+            .Callable(2, "VoidType").Seal()
+            .Atom(3, "")
+            .Callable(4, "CallableType")
+                .List(0).Seal()
+                .List(1)
+                    .Callable(0, "DataType")
+                        .Atom(0, "Double")
+                    .Seal()
+                .Seal()
+                .List(2)
+                    .Callable(0, "DataType")
+                        .Atom(0, "Double")
+                    .Seal()
+                    .Atom(1, "")
+                    .Atom(2, "1")
+                .Seal()
+            .Seal()
+            .Callable(5, "VoidType").Seal()
+            .Atom(6, "")
+        .Seal().Build();
+
+    return Ctx.Builder(Pos)
+        .Callable("Apply")
+            .Add(0, sqrt)
+            .Callable(1, "/")
+                .Add(0, aggState)
+                .Callable(1, "Dec")
+                    .Add(0, counter)
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceAggregationFinishState(TExprNode::TPtr lambdaArgState, const TTypeAnnotationNode* typeNode) {
+    Y_ENSURE(!IsDecimalType(typeNode), "Variance for decimals is not supported.");
+    Y_ENSURE(Aggregate->GetAggregationPhase() != EOpPhase::Undefined);
+
+    if (Aggregate->GetAggregationPhase() == EOpPhase::Intermediate) {
+        return lambdaArgState;
+    }
+
+    auto counter = GetNth(lambdaArgState, "1");
+    auto aggState = GetNth(lambdaArgState, "2");
+
+    return BuildVarianceFinishCompute(counter, aggState);
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceAggregationFinishStateOptionalType(TExprNode::TPtr lambdaArgState,
+                                                                                             const TTypeAnnotationNode* typeNode) {
+    Y_ENSURE(!IsDecimalType(typeNode), "Variance for decimals is not supported.");
+    Y_ENSURE(Aggregate->GetAggregationPhase() != EOpPhase::Undefined);
+    if (Aggregate->GetAggregationPhase() == EOpPhase::Intermediate) {
+        return lambdaArgState;
+    }
+
+    auto dataTypeForAccumulator = GetDataTypeForAccumulator(typeNode);
+    auto stateArg = Ctx.NewArgument(Pos, "state_arg");
+    auto counter = GetNth(stateArg, "1");
+    auto aggState = GetNth(stateArg, "2");
+
+    auto apply = BuildVarianceFinishCompute(counter, aggState);
+
+    // clang-format off
+    auto body = Ctx.Builder(Pos)
+        .Callable("Just")
+            .Add(0, apply)
+        .Seal().Build();
+
+    auto lambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {stateArg}), std::move(body));
+
+    return Ctx.Builder(Pos)
+        .Callable("IfPresent")
+            .Add(0, lambdaArgState)
+            .Add(1, lambda)
             .Callable(2, "Nothing")
                 .Callable(0, "OptionalType")
                     .Add(0, dataTypeForAccumulator)
@@ -503,6 +906,9 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildInitHandlerLambda(const TVecto
             initState = BuildSumAggregationInitialState(initState, itemType);
         } else if (aggFunction == "distinct") {
             continue;
+        } else if (aggFunction == "variance_1_1") {
+            initState =
+                isOptional ? BuildVarianceAggregationInitialStateOptionalType(initState, itemType) : BuildVarianceAggregationInitialState(initState, itemType);
         }
         lambdaResults.push_back(initState);
     }
@@ -561,6 +967,10 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
             updateState = BuildSumAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
         } else if (aggFunction == "distinct") {
             continue;
+        } else if (aggFunction == "variance_1_1") {
+            updateState = isOptional ? BuildVarianceAggregationUpdateStateOptionalType(lambdaArgState, lambdaArgField, aggTraits.InputItemType)
+                                     : BuildVarianceAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
+
         } else {
             auto it = AggregationFunctionToAggregationCallable.find(aggFunction);
             Y_ENSURE(it != AggregationFunctionToAggregationCallable.end());
@@ -582,14 +992,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
 // This lambda returns aggregation result.
 // It has arguments in the following order - keys, states.
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVector<TString>& keyFields,
-                                                                      const TVector<TPhysicalAggregationTraits>& aggTraitsList,
-                                                                      bool isDistinct) {
+                                                                      const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool isDistinct) {
     ui32 lambdaArgsCounter = 0;
     TVector<TExprNode::TPtr> lambdaArgs;
     THashMap<TString, ui32> lambdaArgsMap;
     for (ui32 i = 0; i < keyFields.size(); ++i) {
         lambdaArgs.push_back(Ctx.NewArgument(Pos, "param" + ToString(lambdaArgsCounter)));
-        lambdaArgsMap.insert({keyFields[i],  lambdaArgsCounter++});
+        lambdaArgsMap.insert({keyFields[i], lambdaArgsCounter++});
     }
 
     TVector<TExprNode::TPtr> lambdaResults;
@@ -599,23 +1008,48 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVec
     }
 
     if (!isDistinct) {
+        bool needOriginalDecimalType = false;
         for (ui32 i = 0; i < aggTraitsList.size(); ++i) {
             lambdaArgs.push_back(Ctx.NewArgument(Pos, "param" + ToString(lambdaArgsCounter)));
             lambdaArgsMap.insert({aggTraitsList[i].StateFieldName, lambdaArgsCounter++});
+            const auto& traits = aggTraitsList[i];
+            if (!needOriginalDecimalType && traits.AggFunc == "avg") {
+                auto typeNode = traits.InputItemType;
+                if (auto fieldType = &RemoveOptionality(*typeNode); fieldType->GetKind() == ETypeAnnotationKind::Tuple && IsDecimalType(fieldType)) {
+                    needOriginalDecimalType = true;
+                }
+            }
+        }
+
+        THashMap<TString, const TTypeAnnotationNode*> colTypeMap;
+        if (Aggregate->GetAggregationPhase() == EOpPhase::Final && needOriginalDecimalType) {
+            colTypeMap = GetIntermediateAggregationInputType();
         }
 
         for (const auto& aggTraits : aggTraitsList) {
-            const auto& aggFuncName = aggTraits.AggFunc;
+            const auto& aggFunction = aggTraits.AggFunc;
             const auto& stateName = aggTraits.StateFieldName;
+            const auto& originalColName = aggTraits.OriginalColName;
             const bool inputIsOptional = aggTraits.InputItemType->IsOptionalOrNull();
             const bool outputIsOptional = aggTraits.OutputItemType->IsOptionalOrNull();
-            const TTypeAnnotationNode* typeNode = aggTraits.InputItemType;
-            auto it = lambdaArgsMap.find(stateName);
+            const bool unwrap = aggTraits.Unwrap;
+            auto typeNode = aggTraits.InputItemType;
+
+            if (needOriginalDecimalType) {
+                const auto it = colTypeMap.find(originalColName);
+                Y_ENSURE(it != colTypeMap.end());
+                typeNode = it->second;
+            }
+
+            const auto it = lambdaArgsMap.find(stateName);
             TExprNode::TPtr finishState = lambdaArgs[it->second];
 
-            if (aggFuncName == "avg") {
+            if (aggFunction == "avg") {
                 finishState = inputIsOptional ? BuildAvgAggregationFinishStateForOptionalType(finishState, typeNode)
                                               : BuildAvgAggregationFinishState(finishState, typeNode);
+            } else if (aggFunction == "variance_1_1") {
+                finishState = inputIsOptional ? BuildVarianceAggregationFinishStateOptionalType(finishState, typeNode)
+                                              : BuildVarianceAggregationFinishState(finishState, typeNode);
             }
 
             // Input is not optional, but output is optional - wraph with just.
@@ -623,6 +1057,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVec
                 // clang-format off
                 finishState = Build<TCoJust>(Ctx, Pos)
                     .Input(finishState)
+                .Done().Ptr();
+                // clang-format on
+            // For scalar aggregation we have `coalesce` in condense.
+            } else if (unwrap && !IsScalarAggregation()) {
+                // clang-format off
+                finishState = Build<TCoUnwrap>(Ctx, Pos)
+                    .Optional(finishState)
                 .Done().Ptr();
                 // clang-format on
             }
@@ -657,6 +1098,8 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
         // clang-format on
     }
 
+    const auto outputs = NPhysicalConvertionUtils::BuildNameSet(Aggregate->GetOutputIUs());
+
     // clang-format off
     return Ctx.Builder(Pos)
         .Callable("NarrowMap")
@@ -665,6 +1108,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
                 .Params("wide_param", outputFields.size())
                 .Callable(0, "AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    ui32 outputIndex = 0;
                     for (ui32 i = 0; i < outputFields.size(); ++i) {
                         // Apply rename.
                         auto fieldName = outputFields[i];
@@ -672,7 +1116,10 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
                         if (it != renameMap.end()) {
                             fieldName = it->second;
                         }
-                        parent.List(i)
+                        if (!outputs.contains(fieldName)) {
+                            continue;
+                        }
+                        parent.List(outputIndex++)
                             .Atom(0, fieldName)
                             .Arg(1, "wide_param", i)
                         .Seal();
@@ -725,14 +1172,15 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
         }
     }
 
-    THashMap<TString, TVector<std::tuple<TString, TString, const TTypeAnnotationNode*, const TTypeAnnotationNode*>>> aggColumns;
+    THashMap<TString, TVector<std::tuple<TString, TString, const TTypeAnnotationNode*, const TTypeAnnotationNode*, bool>>> aggColumns;
     for (const auto& aggregationTraits : aggregationTraitsList) {
         const TString originalColName = aggregationTraits.OriginalColName.GetFullName();
         const TString resultColName = aggregationTraits.ResultColName.GetFullName();
         const TTypeAnnotationNode* inputItemType = inputStructType->FindItemType(originalColName);
         const TTypeAnnotationNode* outputItemType = outputStructType->FindItemType(resultColName);
         Y_ENSURE(inputItemType && outputItemType, "Cannot find type for item");
-        aggColumns[originalColName].push_back(std::make_tuple(aggregationTraits.AggFunction, resultColName, inputItemType, outputItemType));
+        aggColumns[originalColName].push_back(
+            std::make_tuple(aggregationTraits.AggFunction, resultColName, inputItemType, outputItemType, aggregationTraits.Unwrap));
     }
 
     THashMap<TString, TString> aggFieldsMap;
@@ -748,6 +1196,7 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
                 const auto& resultColName = std::get<1>(tupleTraits);
                 const auto* inputType = std::get<2>(tupleTraits);
                 const auto* outputType = std::get<3>(tupleTraits);
+                const auto unwrap = std::get<4>(tupleTraits);
 
                 auto stateName = "__kqp_agg_state_" + aggFunction + "_" + originalColName + ToString(j);
                 // No renames for distinct, we want to process only keys.
@@ -764,7 +1213,7 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
                     inputField = aggFieldsMap[originalColName];
                 }
 
-                TPhysicalAggregationTraits phyTraits(inputField, stateName, aggFunction, inputType, outputType);
+                TPhysicalAggregationTraits phyTraits(inputField, stateName, originalColName, resultColName, aggFunction, inputType, outputType, unwrap);
                 if (inputColumnsToAggFunction.contains(originalColName)) {
                     phyTraits.InputAggFunc = inputColumnsToAggFunction[originalColName];
                 }
@@ -792,19 +1241,72 @@ TVector<TString> TPhysicalAggregationBuilder::GetKeyFields() const {
     return keyFields;
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType) {
-    Y_ENSURE(aggType);
-    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+TExprNode::TPtr TPhysicalAggregationBuilder::CreateNothingForEmptyInput(const TVector<TPhysicalAggregationTraits>& phyTraitsList) {
+    auto aggType = Aggregate->Type;
+    const auto aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto newAggStructType = aggStructType;
+
+    bool processTuple = false;
+    if (Aggregate->GetAggregationPhase() == EOpPhase::Final) {
+        for (const auto& item : aggStructType->GetItems()) {
+            auto itemType = item->Cast<TItemExprType>();
+            auto originalFieldType = itemType->GetItemType();
+            if (auto fieldType = &RemoveOptionality(*originalFieldType); fieldType->GetKind() == ETypeAnnotationKind::Tuple) {
+                processTuple = true;
+                break;
+            }
+        }
+    }
+
+    if (processTuple) {
+        THashMap<TString, const TTypeAnnotationNode*> colTypeMap;
+        colTypeMap = GetIntermediateAggregationInputType();
+
+        TVector<const TItemExprType*> newItems;
+        for (const auto& traits : phyTraitsList) {
+            const auto inputType = traits.InputItemType;
+            const auto outputType = traits.OutputItemType;
+            const auto& originalColName = traits.OriginalColName;
+            const auto& resultColName = traits.ResultColName;
+            if (auto fieldType = &RemoveOptionality(*inputType); fieldType->GetKind() == ETypeAnnotationKind::Tuple) {
+                auto tupleType = fieldType->Cast<TTupleExprType>()->GetItems();
+                Y_ENSURE(tupleType.size() == 2);
+                auto newFieldType = tupleType.front();
+                if (IsDecimalType(newFieldType)) {
+                    const auto it = colTypeMap.find(originalColName);
+                    Y_ENSURE(it != colTypeMap.end(), TStringBuilder() << "Cannot find a col name: " << originalColName;);
+                    newFieldType = it->second;
+                }
+                if (inputType->IsOptionalOrNull()) {
+                    newFieldType = Ctx.MakeType<TOptionalExprType>(newFieldType);
+                }
+                newItems.emplace_back(Ctx.MakeType<TItemExprType>(resultColName, newFieldType));
+            } else {
+                newItems.emplace_back(Ctx.MakeType<TItemExprType>(resultColName, outputType));
+            }
+        }
+
+        newAggStructType = Ctx.MakeType<TStructExprType>(newItems);
+    }
+
     // clang-format off
     return Build<TCoNothing>(Ctx, Pos)
         .OptionalType<TCoOptionalType>()
-            .ItemType(ExpandType(Pos, *aggStructType, Ctx))
+            .ItemType(ExpandType(Pos, *newAggStructType, Ctx))
         .Build()
     .Done().Ptr();
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
+bool TPhysicalAggregationBuilder::NeedToWrapWithCoalesce(const TPhysicalAggregationTraits& traits, EOpPhase aggregationPhase) const {
+    // count -> intermediate::count() + final::sum()
+    const auto& aggFunc = traits.AggFunc;
+    auto maybeInputAggFunc = traits.InputAggFunc;
+    return aggFunc == "count" || (aggregationPhase == EOpPhase::Final && aggFunc == "sum" && maybeInputAggFunc.has_value() && *maybeInputAggFunc == "count") ||
+           traits.Unwrap;
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traitsList,
                                                                const THashMap<TString, TString>& renameMap, EOpPhase aggregationPhase) {
     // clang-format off
      return Ctx.Builder(Pos)
@@ -814,17 +1316,15 @@ TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr i
                 .Param("arg")
                 .Callable(0, "AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                    for (ui32 i = 0; i < traits.size(); ++i) {
+                    for (ui32 i = 0; i < traitsList.size(); ++i) {
                         // Apply rename.
-                        auto fieldName = traits[i].StateFieldName;
+                        auto fieldName = traitsList[i].StateFieldName;
                         auto it = renameMap.find(fieldName);
                         if (it != renameMap.end()) {
                             fieldName = it->second;
                         }
-                        const auto& aggFunc = traits[i].AggFunc;
-                        auto maybeInputAggFunc = traits[i].InputAggFunc;
-                        // count -> intermediate::count() + final::sum()
-                        if (aggFunc == "count" || (aggregationPhase == EOpPhase::Final && aggFunc == "sum" && maybeInputAggFunc.has_value() && *maybeInputAggFunc == "count")) {
+
+                        if (NeedToWrapWithCoalesce(traitsList[i], aggregationPhase)) {
                             parent.List(i)
                                 .Atom(0, fieldName)
                                 .Callable(1, "Coalesce")
@@ -856,13 +1356,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::MapCondenseOutput(TExprNode::TPtr i
 }
 
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildCondenseForAggregationOutputWithEmptyKeys(TExprNode::TPtr input,
-                                                                                            const TVector<TPhysicalAggregationTraits>& traits,
+                                                                                            const TVector<TPhysicalAggregationTraits>& traitsList,
                                                                                             const THashMap<TString, TString>& renameMap,
-                                                                                            const TTypeAnnotationNode* type, EOpPhase aggregationPhase) {
+                                                                                            EOpPhase aggregationPhase) {
     // clang-format off
     input = Build<TCoCondense>(Ctx, Pos)
         .Input(input)
-        .State(CreateNothingForEmptyInput(type))
+        .State(CreateNothingForEmptyInput(traitsList))
         .SwitchHandler()
             .Args({"item", "state"})
             .Body(MakeBool<false>(Pos, Ctx))
@@ -876,7 +1376,41 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildCondenseForAggregationOutputWi
     .Done().Ptr();
     // clang-format on
 
-    return MapCondenseOutput(input, traits, renameMap, aggregationPhase);
+    return MapCondenseOutput(input, traitsList, renameMap, aggregationPhase);
+}
+
+void TPhysicalAggregationBuilder::PopulateAggregateColTypeMap(const TIntrusivePtr<TOpAggregate>& aggregate, const TStructExprType* structType,
+                                                              THashMap<TString, const TTypeAnnotationNode*>& colTypeMap) const {
+    for (const auto& traits : aggregate->GetAggregationTraits()) {
+        const auto resultColName = traits.ResultColName.GetFullName();
+        const auto originalColName = traits.OriginalColName.GetFullName();
+        auto fieldType = structType->FindItemType(originalColName);
+        Y_ENSURE(fieldType, TStringBuilder() << "Caanot find column in input type: " << originalColName);
+        fieldType = &RemoveOptionality(*fieldType);
+        colTypeMap.insert({resultColName, fieldType});
+    }
+}
+
+THashMap<TString, const TTypeAnnotationNode*> TPhysicalAggregationBuilder::GetIntermediateAggregationInputType() const {
+    THashMap<TString, const TTypeAnnotationNode*> colTypeMap;
+    if (Aggregate->GetInput()->GetKind() == EOperator::UnionAll) {
+        const auto unionAll = CastOperator<TOpUnionAll>(Aggregate->GetInput());
+        const auto leftInput = unionAll->GetLeftInput();
+        const auto rightInput = unionAll->GetRightInput();
+        if (leftInput->GetKind() == EOperator::Map && rightInput->GetKind() == EOperator::Map) {
+            const auto leftMap = CastOperator<TOpMap>(leftInput);
+            const auto rightMap = CastOperator<TOpMap>(rightInput);
+            if (leftMap->GetInput()->GetKind() == EOperator::Aggregate && rightMap->GetInput()->GetKind() == EOperator::Aggregate) {
+                const auto leftAggregate = CastOperator<TOpAggregate>(leftMap->GetInput());
+                const auto rightAggregate = CastOperator<TOpAggregate>(rightMap->GetInput());
+                auto leftStructType = leftAggregate->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                auto rightStructType = rightAggregate->GetInput()->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                PopulateAggregateColTypeMap(leftAggregate, leftStructType, colTypeMap);
+                PopulateAggregateColTypeMap(rightAggregate, rightStructType, colTypeMap);
+            }
+        }
+    }
+    return colTypeMap;
 }
 
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) {
@@ -926,7 +1460,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     // For scalar aggregation result we need to wrap it with Condense.
     if (IsScalarAggregation() && aggregationPhase != EOpPhase::Intermediate) {
         physicalAggregation =
-            BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, renameMap, outputType, aggregationPhase);
+            BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, renameMap, aggregationPhase);
     }
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical aggregation] " << KqpExprToPrettyString(TExprBase(physicalAggregation), Ctx);
@@ -940,7 +1474,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
 }
 
 bool TPhysicalAggregationBuilder::IsDecimalType(const TTypeAnnotationNode* typeNode) const {
-    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(*typeNode).Cast<TDataExprType>()->GetSlot()).Features;
+    auto type = &RemoveOptionality(*typeNode);
+    if (type->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto items = type->Cast<TTupleExprType>()->GetItems();
+        Y_ENSURE(items.size() == 2);
+        type = items.front();
+    }
+    const auto features = NUdf::GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()).Features;
     bool isdecimal = (features & NUdf::EDataTypeFeatures::DecimalType);
     return isdecimal;
 }
@@ -950,6 +1490,11 @@ TPhysicalAggregationBuilder::TDecimalType TPhysicalAggregationBuilder::GetDecima
     if (itemType->IsOptionalOrNull()) {
         itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
     }
+
+    if (itemType->GetKind() == ETypeAnnotationKind::Tuple) {
+        itemType = itemType->Cast<TTupleExprType>()->GetItems().front();
+    }
+
     auto dataExprParams = dynamic_cast<const TDataExprParamsType*>(itemType);
     Y_ENSURE(dataExprParams);
     return TDecimalType(TString(dataExprParams->GetParamOne()), TString(dataExprParams->GetParamTwo()));

@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NKqp {
 
 namespace {
-const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg"};
+const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg", "variance_1_1"};
 
 bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connection) {
     return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection);
@@ -46,7 +46,7 @@ bool IsSuitableToPropagateAggregateThroughStage(const TIntrusivePtr<IOperator>& 
 }
 
 std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
-    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg") {
+    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1") {
         return std::make_pair(aggFunc, aggFunc);
     }
     if (aggFunc == "count") {

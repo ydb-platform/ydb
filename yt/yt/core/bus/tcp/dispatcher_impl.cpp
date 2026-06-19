@@ -346,7 +346,7 @@ void TDispatcher::TImpl::OnPeriodicCheck()
     });
 }
 
-std::optional<TString> TDispatcher::TImpl::GetBusCertsDirectoryPath() const
+std::optional<std::string> TDispatcher::TImpl::GetBusCertsDirectoryPath() const
 {
     return Config_.Acquire()->BusCertsDirectoryPath;
 }

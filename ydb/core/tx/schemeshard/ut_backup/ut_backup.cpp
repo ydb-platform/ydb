@@ -84,13 +84,14 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         return std::make_pair(partsUploaded, objectsPut);
     }
 
-    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnStandaloneColumnTableWithLocalBloomIndexes) {
+    Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldSucceedOnStandaloneColumnTableWithLocalBloomIndexes, EnableLocalIndexAsSchemeObject) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(EnableLocalIndexAsSchemeObject);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

@@ -64,6 +64,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
+    const TString& diskId,
     ui64 tabletId,
     ui32 generation,
     size_t directBlockGroupIndex,
@@ -79,6 +80,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TDirectBlockGroup{
+              .DiskId = diskId,
               .TabletId = TabletId,
               .Generation = generation,
               .DirectBlockGroupIndex = DirectBlockGroupIndex,
@@ -166,7 +168,6 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
 void TDirectBlockGroup::Run(IPartitionDirectService* service)
 {
     Service = service;
-    LogTitle.SetDiskId(Service->GetVolumeConfig()->DiskId);
 
     ScheduleOracleThinking();
 
@@ -567,9 +568,8 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
                 } else {
                     callback(
                         TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
-                            E_FAIL,
-                            "WriteBlocksToManyPBuffersResponse: DBG is "
-                            "destroyed already."));
+                            E_CANCELLED,
+                            "DBG is destroyed"));
                 }
             });
     };
@@ -691,7 +691,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          segmentCount = segments.size()]   //
-        (const TFuture<TEvSyncWithPersistentBufferResult>& f) mutable
+        (const TFuture<TEvSyncResult>& f) mutable
         {
             // ActorSystem thread
 
@@ -735,7 +735,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 }
 
 TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
-    const TEvSyncWithPersistentBufferResult& response,
+    const TEvSyncResult& response,
     size_t segmentCount)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -755,13 +755,11 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "SyncWithPBufferResult: Segment count: %d, %d. Error %s, status: "
-            "%d, error reason: %s",
+            "%s SyncWithPBufferResult: Segment count: %d. Response %s %s",
+            LogTitle.GetWithTime().c_str(),
             segmentCount,
-            response.SegmentResultsSize(),
             response.ShortUtf8DebugString().c_str(),
-            response.GetStatus(),
-            response.GetErrorReason().c_str());
+            FormatError(TranslateError(response)).c_str());
 
         for (size_t i = 0; i < segmentCount; ++i) {
             result.Errors.push_back(
@@ -772,7 +770,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
     return result;
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
+NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     const TVector<TPBufferSegment>& segments,
@@ -795,11 +793,12 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         lsns.push_back(segment.Lsn);
     }
 
-    auto childSpan = CreateChildSpan(traceId, "NbsPartition.EraseFromPBuffer");
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.BatchEraseFromPBuffer");
 
     OnRequest(hostIndex, EOperation::Erase);
 
-    auto future = StorageTransport->EraseFromPBuffer(
+    auto future = StorageTransport->BatchEraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
         std::move(selectors),
         std::move(lsns),
@@ -849,6 +848,121 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
         });
 
     return result;
+}
+
+void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
+{
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), lsn]()
+        {
+            auto self = weakSelf.lock();
+            if (!self) {
+                return;
+            }
+            LOG_DEBUG(
+                *self->ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s barrier-erase lsn=%lu on %lu PBuffer hosts",
+                self->LogTitle.GetWithTime().c_str(),
+                lsn,
+                self->PBufferConnections.size());
+
+            auto span = self->Service->CreteRootSpan(
+                "NbsPartition.BarrierEraseFromPBuffer");
+
+            for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
+                self->DoBarrierEraseFromPBuffer(h, lsn, span.GetTraceId());
+            }
+        });
+}
+
+void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
+    THostIndex hostIndex,
+    ui64 lsn,
+    const NWilson::TTraceId& traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvErasePersistentBufferResult =
+        NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
+
+    const auto startAt = TMonotonic::Now();
+
+    auto childSpan =
+        CreateChildSpan(traceId, "NbsPartition.DoBarrierEraseFromPBuffer");
+
+    OnRequest(hostIndex, EOperation::BarrierErase);
+
+    auto future = StorageTransport->BarrierEraseFromPBuffer(
+        PBufferConnections[hostIndex].HostConnection,
+        lsn,
+        childSpan.get());
+
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         childSpan = std::move(childSpan),
+         hostIndex,
+         startAt,
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TFuture<TEvErasePersistentBufferResult>& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [weakSelf,
+                 childSpan = std::move(childSpan),
+                 hostIndex,
+                 startAt,
+                 threadChecker,
+                 result = UnsafeExtractValue(f)]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    auto self = weakSelf.lock();
+                    if (!self) {
+                        return;
+                    }
+                    self->OnResponse(
+                        hostIndex,
+                        TMonotonic::Now() - startAt,
+                        EOperation::BarrierErase,
+                        TranslateError(result));
+                });
+        });
+}
+
+NThreading::TFuture<std::optional<ui64>>
+TDirectBlockGroup::GatherSafeBarrierForErase()
+{
+    auto promise = NewPromise<std::optional<ui64>>();
+    auto future = promise.GetFuture();
+
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), promise]() mutable
+        {
+            auto self = weakSelf.lock();
+            if (!self) {
+                promise.SetValue(std::nullopt);
+                return;
+            }
+
+            std::optional<ui64> safeBarrier;
+            for (const auto& weakVChunk: self->VChunks) {
+                auto vChunk = weakVChunk.lock();
+                if (!vChunk) {
+                    continue;
+                }
+                const auto lsn = vChunk->GetSafeBarrierForErase();
+                if (lsn && (!safeBarrier || *lsn < *safeBarrier)) {
+                    safeBarrier = lsn;
+                }
+            }
+            promise.SetValue(safeBarrier);
+        });
+
+    return future;
 }
 
 NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(
@@ -957,8 +1071,9 @@ void TDirectBlockGroup::SetHostState(
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "Host[%ld] state changed: %s -> %s",
-        static_cast<ui64>(hostIndex),
+        "%s %s state changed: %s -> %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(hostIndex).c_str(),
         ToString(oldState).c_str(),
         ToString(newState).c_str());
 

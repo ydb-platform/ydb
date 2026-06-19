@@ -667,7 +667,7 @@ public:
     TDqTypeAnnotationTransformer()
         : TVisitorTransformerBase(/* failOnUnknown */ true)
     {
-        AddHandler({"BlockHashJoinCore"}, Hndl(&AnnotateDqBlockHashJoinCore)); // Handle BlockHashJoinCore callable (from peephole)
+        AddHandler({TDqBlockHashJoinCore::CallableName()}, Hndl(&AnnotateDqBlockHashJoinCore)); // Handle BlockHashJoinCore callable (from peephole)
         AddHandler({TDqStage::CallableName()}, Hndl(&AnnotateDqStage));
         AddHandler({TDqPhyStage::CallableName()}, Hndl(&AnnotateDqPhyStage));
         AddHandler({TDqOutput::CallableName()}, Hndl(&AnnotateDqOutput));

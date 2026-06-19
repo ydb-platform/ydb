@@ -324,6 +324,12 @@ namespace {
                 result.Data.emplace_back(GenerateTestData(codec, keyPrefix, count));
             }
             break;
+        case EPathTypeColumnTable:
+            result.Scheme = typedScheme.Scheme;
+            for (const auto& [keyPrefix, count] : shardsConfig) {
+                result.Data.emplace_back(GenerateTestData(codec, keyPrefix, count));
+            }
+            break;
         case EPathTypeView:
         case EPathTypeReplication:
         case EPathTypeTransfer:
@@ -367,7 +373,8 @@ namespace {
             }
 
             switch (item.Type) {
-            case EPathTypeTable: {
+            case EPathTypeTable:
+            case EPathTypeColumnTable: {
                 auto schemeKey = prefix + "/scheme.pb";
                 result.emplace(schemeKey, item.Scheme);
                 if (withChecksum) {
@@ -2828,7 +2835,7 @@ value {
             result << hex[i];
             result << hex[i + 1];
         }
-        return std::move(result);
+        return result;
     }
 
     // Test that checks different combinations of:
@@ -3533,7 +3540,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ShouldSucceedOnIndexedTable(1, "");
     }
 
-    Y_UNIT_TEST(ImportStandaloneColumnTableWithLocalBloomIndexes) {
+    Y_UNIT_TEST_FLAG(ImportStandaloneColumnTableWithLocalBloomIndexes, EnableLocalIndexAsSchemeObject) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -3546,6 +3553,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalBloomNgramFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(EnableLocalIndexAsSchemeObject);
 
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
@@ -9075,6 +9083,107 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         ShouldSucceed<IsFs>(t, schemes, {
             {"ExternalTable", "/MyRoot/ExternalTable"},
             {"DataSource", "/MyRoot/DataSource"}
+        });
+    }
+
+    // Column Table (OLAP)
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
+        const TTypedScheme columnTableScheme = {
+            EPathTypeColumnTable,
+            R"(
+                columns {
+                    name: "timestamp"
+                    type { type_id: TIMESTAMP }
+                    not_null: true
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "timestamp"
+            )"
+        };
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        bucketContent.emplace("", GenerateTestData(columnTableScheme, {{"", 0}}, "", R"({"version": 1})"));
+
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), {{"", "/MyRoot/ColumnTable"}});
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                env.SetupRuntime(runtime);
+                runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
+        const TTypedScheme columnTableScheme = {
+            EPathTypeColumnTable,
+            R"(
+                columns {
+                    name: "timestamp"
+                    type { type_id: TIMESTAMP }
+                    not_null: true
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "timestamp"
+            )"
+        };
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        bucketContent.emplace("", GenerateTestData(columnTableScheme, {{"", 0}}, "", R"({"version": 1})"));
+
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), {{"", "/MyRoot/ColumnTable"}});
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                env.SetupRuntime(runtime);
+                runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
+
+            t.TestEnv->ReliablePropose(runtime, CancelImportRequest(++t.TxId, "/MyRoot", importId), {
+                Ydb::StatusIds::SUCCESS,
+                Ydb::StatusIds::NOT_FOUND
+            });
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                const auto response = TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::CANCELLED,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+                const auto& entry = response.GetResponse().GetEntry();
+                if (entry.GetStatus() == Ydb::StatusIds::CANCELLED) {
+                    UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(entry.GetIssues()), "Cancelled manually");
+                }
+            }
         });
     }
 }

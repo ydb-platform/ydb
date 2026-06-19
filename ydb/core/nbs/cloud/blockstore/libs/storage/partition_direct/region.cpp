@@ -4,6 +4,7 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -94,7 +95,6 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
 NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
     const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
@@ -102,7 +102,6 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        lsn,
         traceId);
 }
 

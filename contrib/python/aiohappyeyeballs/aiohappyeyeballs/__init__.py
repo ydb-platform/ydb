@@ -1,4 +1,4 @@
-__version__ = "2.6.1"
+__version__ = "2.6.2"
 
 from .impl import start_connection
 from .types import AddrInfoType, SocketFactoryType

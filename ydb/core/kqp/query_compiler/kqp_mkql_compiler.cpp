@@ -426,7 +426,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
         });
 
-    compiler->AddCallable("BlockHashJoinCore",
+    compiler->AddCallable(TDqBlockHashJoinCore::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
 
@@ -570,6 +570,13 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             auto modeArg = ctx.PgmBuilder().NewDataLiteral<ui32>(modeValue);
 
             return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
+        });
+
+    compiler->AddCallable("KqpStreamEnumerate",
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 1, "KqpStreamEnumerate should have 1 argument");
+            auto input = MkqlBuildExpr(*node.Child(0), buildCtx);
+            return ctx.PgmBuilder().KqpStreamEnumerate(input);
         });
 
     return compiler;

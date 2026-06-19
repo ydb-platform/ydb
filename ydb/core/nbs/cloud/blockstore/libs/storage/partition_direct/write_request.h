@@ -2,6 +2,9 @@
 
 #include "public.h"
 
+#include "request_executor.h"
+#include "write_request_bundle.h"
+
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
@@ -14,107 +17,87 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
-#include <functional>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBaseWriteRequestExecutor
-    : public std::enable_shared_from_this<TBaseWriteRequestExecutor>
+class TWriteRequestExecutor
+    : public IRequestExecutor
+    , public std::enable_shared_from_this<TWriteRequestExecutor>
 {
 public:
-    struct TResponse
-    {
-        NProto::TError Error;
-        ui64 Lsn = 0;
-        // The PBuffer hosts where the attempt was made to write the data.
-        THostMask RequestedWrites;
-        // The PBuffer hosts where exactly the data was written and confirmed.
-        THostMask CompletedWrites;
-    };
-
-    using TReplyCallback = std::function<void(TResponse)>;
-    using TNotifyBelatedCallback = std::function<void(THostMask, ui64)>;
-
-    TBaseWriteRequestExecutor(
+    TWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
-        TChildLogTitle logTitle,
+        const TLogTitle& logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlockRange64 vChunkRange,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
-        NWilson::TTraceId traceId);
+        std::shared_ptr<TWriteRequestBundle> bundle);
 
-    virtual ~TBaseWriteRequestExecutor();
+    ~TWriteRequestExecutor() override;
 
-    void SetReplyCallback(TReplyCallback callback);
-    void SetNotifyBelatedCallback(TNotifyBelatedCallback callback);
+    // Implementation of IRequestExecutor
+    void Run() override;
+    TString Print() override;
 
-    [[nodiscard]] bool IsAlreadyReplied() const;
+private:
+    void SendIndirectWriteRequest(THostMask hosts);
+    void OnIndirectWriteResponse(
+        const TDBGWriteBlocksToManyPBuffersResponse& response);
+    void SendAdditionalDirectWrites();
+    void SendDirectWriteRequestsToDesired(size_t count);
+    void SendDirectWriteRequestsToHandoffs(size_t count);
+    void SendDirectWriteRequest(THostIndex host);
+    void OnDirectWriteResponse(
+        THostIndex host,
+        const TDBGWriteBlocksResponse& response,
+        std::shared_ptr<NWilson::TSpan> span);
 
-    virtual void Run() = 0;
-
-protected:
     void ReplyOrNotifyBelated(
         NProto::TError error,
         THostMask completedOnCurrentResponse);
     void Reply(NProto::TError error);
     void NotifyBelated(THostMask completedOnCurrentResponse);
 
-    void SendWriteRequest(THostIndex host);
+    void ScheduleHedging();
+    void ScheduleRequestTimeout();
+    void OnHedgingTimeout();
+    void OnRequestTimeout();
 
-    virtual void OnWriteResponse(
-        THostIndex host,
-        const TDBGWriteBlocksResponse& response,
-        std::shared_ptr<NWilson::TSpan> span);
-
-    void ScheduleRequestTimeoutCallback();
-    void RequestTimeoutCallback();
     [[nodiscard]] bool ShouldReplyOk() const;
+    [[nodiscard]] bool IsQuorumReachable() const;
+    [[nodiscard]] size_t GetQuorumDeficit() const;
+    [[nodiscard]] THostMask GetRunningDirectWrites() const;
 
-    TVector<THostIndex> GetAvailableHandOffHosts() const;
-    virtual TString ExtendedDebugState() const;
-
-    virtual void ScheduleHedging() = 0;
+    TString ExtendedDebugState() const;
 
     NActors::TActorSystem* ActorSystem;
+    const EWriteMode WriteMode;
     const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const TBlockRange64 VChunkRange;
-    const TCallContextPtr CallContext;
-    const std::shared_ptr<TWriteBlocksLocalRequest> Request;
-    const NWilson::TTraceId TraceId;
-    const ui64 Lsn;
+    const TWriteRequestBundlePtr Bundle;
     const TDuration HedgingDelay;
     const TDuration RequestTimeout;
+    const TDuration IndirectWriteReplyTimeout;
 
-    THostMask RequestedWrites;
+    THostMask IndirectCoordinator;
+    THostMask RequestedIndirectWrites;
+    THostMask RequestedDirectWrites;
     THostMask CompletedWrites;
-
-private:
-    TReplyCallback ReplyCallback;
-    TNotifyBelatedCallback NotifyBelatedCallback;
+    THostMask FailedWrites;
     bool IsReplied = false;
 };
 
-using TBaseWriteRequestExecutorPtr = std::shared_ptr<TBaseWriteRequestExecutor>;
+using TWriteRequestExecutorPtr = std::shared_ptr<TWriteRequestExecutor>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
-    NActors::TActorSystem* actorSystem,
+TWriteRequestExecutorPtr CreateWriteRequestExecutor(
+    NActors::TActorSystem* const actorSystem,
     const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TBlockRange64 vChunkRange,
-    TCallContextPtr callContext,
-    std::shared_ptr<TWriteBlocksLocalRequest> request,
-    ui64 lsn,
-    NWilson::TTraceId traceId);
+    std::shared_ptr<TWriteRequestBundle> bundle);
 
 ////////////////////////////////////////////////////////////////////////////////
 

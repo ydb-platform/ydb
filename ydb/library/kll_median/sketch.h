@@ -171,24 +171,22 @@ namespace NKikimr::NKll {
             Levels_.clear();
         }
 
-        void Merge(const TKllSketch<T>& other) {
-            if (other.Levels_.empty()) {
+        void Merge(const TKllSketch<T>& other, size_t startLevel = 0) {
+            if (other.Levels_.empty() || startLevel >= other.Levels_.size()) {
                 return;
             }
 
             Y_ENSURE(Cap_ == other.Cap_, "Cannot merge sketches with different capacities");
-
             const ui64 thisBaseWeight = Levels_.empty() ? CurrentWeight_ : Levels_.front().Weight;
-            const ui64 otherBaseWeight = other.Levels_.front().Weight;
+            const ui64 otherBaseWeight = other.Levels_[startLevel].Weight;
             Y_ENSURE(thisBaseWeight == otherBaseWeight, "Cannot merge sketches with different level weights");
 
             N_ += other.N_;
-            size_t currentLevel = other.Levels_.size() - 1;
-            for (auto iter = other.Levels_.rbegin(); iter != other.Levels_.rend(); ++iter) {
-                for (const auto& item : iter->Items) {
-                    AddToLevel(currentLevel, item);
+            for (size_t otherLevel = other.Levels_.size(); otherLevel-- > startLevel;) {
+                const size_t thisLevel = otherLevel - startLevel;
+                for (const auto& item : other.Levels_[otherLevel].Items) {
+                    AddToLevel(thisLevel, item);
                 }
-                currentLevel--;
             }
         }
 

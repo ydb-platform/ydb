@@ -382,6 +382,42 @@ void ValidateNoAutoSelect(TQueryClient& db, const std::string& predicate, const 
     UNIT_ASSERT_C(CountPlanNodesByKv(planJson, "Index", indexName) == 0, indexName + " was autoselected for: " + predicate);
 }
 
+void ValidateAutoSelectWithDecl(TQueryClient& db, const std::string& declares, const std::string& predicate,
+    const TString& indexName, const std::string& tableName)
+{
+    const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    const auto query = declares + "\nSELECT * FROM " + tableName + " WHERE " + predicate + ";";
+
+    const auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "Predicate: " + predicate + ", error: " + result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.GetStats(), "Stats are empty for: " + predicate);
+
+    const auto plan = result.GetStats()->GetPlan();
+    UNIT_ASSERT_C(plan, "Plan is empty for: " + predicate);
+
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*plan, &planJson, true), "Failed to parse plan JSON");
+    UNIT_ASSERT_C(CountPlanNodesByKv(planJson, "Index", indexName) == 1, indexName + " was not autoselected for: " + predicate);
+}
+
+void ValidateNoAutoSelectWithDecl(TQueryClient& db, const std::string& declares, const std::string& predicate,
+    const TString& indexName, const std::string& tableName)
+{
+    const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    const auto query = declares + "\nSELECT * FROM " + tableName + " WHERE " + predicate + ";";
+
+    const auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "Predicate: " + predicate + ", error: " + result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.GetStats(), "Stats are empty for: " + predicate);
+
+    const auto plan = result.GetStats()->GetPlan();
+    UNIT_ASSERT_C(plan, "Plan is empty for: " + predicate);
+
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*plan, &planJson, true), "Failed to parse plan JSON");
+    UNIT_ASSERT_C(CountPlanNodesByKv(planJson, "Index", indexName) == 0, indexName + " was autoselected for: " + predicate);
+}
+
 void TestJsonIndexAlterTableWithIntegerPk(const std::string& pkType) {
     auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
     auto db = kikimr.GetQueryClient();

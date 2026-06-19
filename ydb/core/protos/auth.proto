@@ -63,6 +63,8 @@ message TAuthConfig {
     optional string AccessServiceSslTargetNameOverride = 87;
     optional string UserAccountServiceSslTargetNameOverride = 88;
     optional string ServiceAccountServiceSslTargetNameOverride = 89;
+    optional string ExternalIdpAuthenticationDomain = 90 [default = "sso"];
+    optional TExternalIdpConfig ExternalIdpConfig = 91;
 }
 
 message TUserRegistryConfig {
@@ -185,4 +187,42 @@ message TTokenManager {
     optional string RefreshCheckPeriod = 2 [default = "1s"];
     optional TVmMetadataProvider VmMetadataProvider = 3;
     optional TTokenAgentProvider TokenAgentProvider = 4;
+}
+
+message TExternalIdpConfig {
+    message TPeriodicSettings {
+        optional string SuccessRefreshPeriod = 1 [default = "1h"];
+        optional string MinErrorRefreshPeriod = 2 [default = "1s"];
+        optional string MaxErrorRefreshPeriod = 3 [default = "5m"];
+        optional string RequestTimeout = 4 [default = "15s"];
+    }
+
+    message TJwksCacheSettings {
+       optional string Timeout = 1 [default = "2h"];
+    }
+
+    // Expected issuer (iss) claim value in the JWT token
+    // OIDC discovery URL will be built via concatenating Issuer and "/.well-known/openid-configuration"
+    optional string Issuer = 1;
+
+    // Expected audience (aud) claim value in the JWT token
+    optional string Audience = 2;
+
+    // Allowed clock skew for JWT validation (exp, nbf, iat claims)
+    optional string AllowedClockSkew = 3 [default = "30s"];
+
+    // JWT claim name to use as the user subject identifier
+    optional string SubjectClaimName = 4 [default = "sub"];
+
+    // JWT claim name to use as the list of groups
+    optional string GroupsClaimName = 5 [default = "groups"];
+
+    // How often to refresh discovery info from the IdP
+    optional TPeriodicSettings DiscoveryPeriodicSettings = 6;
+
+    // How often to refresh the JWKS keys from the IdP
+    optional TPeriodicSettings JwksPeriodicSettings = 7;
+
+    // Cache settings for JWKS keys
+    optional TJwksCacheSettings JwksCacheSettings = 8;
 }

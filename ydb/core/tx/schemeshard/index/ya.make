@@ -16,6 +16,8 @@ SRCS(
     build_index__progress.cpp
     build_index_tx_base.cpp
     build_index_tx_base.h
+    common.h
+    common.cpp
     index_build_info.cpp
     index_build_info.h
     index_utils.cpp
@@ -31,7 +33,6 @@ SRCS(
     operation_initiate_build_index.cpp
     operation_move_index.cpp
     operation_move_table_index.cpp
-    operation_prepare_index_validation.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(index_build_info.h)

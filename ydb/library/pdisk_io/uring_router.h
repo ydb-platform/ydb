@@ -108,7 +108,11 @@ public:
 
     // --- Submission (call from a single thread, e.g., DDisk actor) ---
 
-    // Submit a read operation. op->Iov and op->DiskOffset must be initialized.
+    // Submit a vectored read (Read) or write (Write) operation.
+    // op->Iov and op->DiskOffset must be initialized before calling:
+    //   single buffer:      PrepareIov(buf, size, offset)
+    //   scatter-gather:     PrepareScatterGather(count, offset) + AddIov() × count
+    // op->OperationType must also be set via SetOperationType().
     // op must remain alive until op->OnComplete is called.
     // Returns true if SQE was written to the ring, false if SQ is full.
     bool Read(TUringOperationBase* op);

@@ -1,11 +1,15 @@
 #include "mock_pq_gateway.h"
 
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/testlib/common/test_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
 #include <util/string/join.h>
+#include <util/system/mutex.h>
+
+#include <queue>
 
 namespace NTestUtils {
 
@@ -172,8 +176,8 @@ public:
         FillPromise();
     }
 
-    void AddStartSessionEvent() final {
-        AddEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0));
+    void AddStartSessionEvent(ui64 endOffset) final {
+        AddEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(PartitionSession, 0, endOffset));
     }
 
     void AddDataReceivedEvent(ui64 offset, const TString& data) final {

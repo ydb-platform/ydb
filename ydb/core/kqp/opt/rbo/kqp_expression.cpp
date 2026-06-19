@@ -1,4 +1,5 @@
 #include "kqp_expression.h"
+#include "kqp_rbo_utils.h"
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -15,6 +16,12 @@ namespace {
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
+
+void AddUniqueInfoUnit(TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
+    if (!ContainsInfoUnit(ius, iu)) {
+        ius.push_back(iu);
+    }
+}
 
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx) {
     if (input->IsCallable("Member")) {
@@ -765,14 +772,19 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanPro
         auto member = TCoMember(node);
         auto iu = TInfoUnit(member.Name().StringValue());
         if (props.Subplans.PlanMap.contains(iu)){
+            const auto& subplan = props.Subplans.PlanMap.at(iu);
             if (withSubplanContext) {
                 iu.SetSubplanContext(true);
-                iu.AddDependencies(props.Subplans.PlanMap.at(iu).Tuple);
+                iu.AddDependencies(subplan.Tuple);
+                iu.AddDependencies(subplan.DependentIUs);
                 IUs.push_back(iu);
             }
             if (withDependencies) {
-                for (auto dep : props.Subplans.PlanMap.at(iu).Tuple) {
-                    IUs.push_back(dep);
+                for (const auto& dep : subplan.Tuple) {
+                    AddUniqueInfoUnit(IUs, dep);
+                }
+                for (const auto& dep : subplan.DependentIUs) {
+                    AddUniqueInfoUnit(IUs, dep);
                 }
             }
         }

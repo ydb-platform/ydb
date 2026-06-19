@@ -12,10 +12,6 @@ ELSE()
         typing.py
         type_base.py
     )
-    # TODO(YQLSUPPORT-13903): Remove six after yql/essentials/udfs/common/python/bindings/typing.py
-    PEERDIR(
-        contrib/python/six
-    )
 ENDIF()
 
 END()

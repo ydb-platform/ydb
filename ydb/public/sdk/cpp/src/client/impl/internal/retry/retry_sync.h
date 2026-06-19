@@ -130,6 +130,7 @@ protected:
     }
 
     TStatusType RunOperation() override {
+        TInRetryOperationContextClientGuard guard(this->Client_);
         if constexpr (TFunctionArgs<TOperation>::Length == 1) {
             return Operation_(this->Client_);
         } else {
@@ -180,6 +181,7 @@ protected:
     }
 
     TStatusType RunOperation() override {
+        TInRetryOperationContextClientGuard guard(this->Client_);
         if constexpr (TFunctionArgs<TOperation>::Length == 1) {
             return Operation_(this->Session_.value());
         } else {

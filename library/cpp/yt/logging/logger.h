@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/misc/port.h>
+
 #include <library/cpp/yt/string/format.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -12,7 +14,7 @@
 
 #include <library/cpp/yt/misc/guid.h>
 
-#include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/system/thread_name.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 

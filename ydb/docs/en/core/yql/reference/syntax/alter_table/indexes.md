@@ -18,6 +18,13 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
+Parameters for all index types:
+
+* `parallel` - maximum number of parallel [partition](../../../../concepts/glossary.md#partition)-based workers used during index build (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
+  - If not specified, currently defaults to `32` or `MaxBuildIndexShardsInFlight` if it's lower. Default `MaxBuildIndexShardsInFlight` is `1000`. Default parallelism selection logic may be changed in future versions.
+  - You may set a smaller limit to reduce the impact of index build on the DB performance.
+  - You may also set a larger limit to speed up the index build if you have enough hardware resources.
+
 Parameters specific to vector indexes:
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}

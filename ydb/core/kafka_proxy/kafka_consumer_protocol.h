@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
-#include "kafka.h"
+#include <ydb/library/kafka/kafka.h>
 
 namespace NKafka {
 

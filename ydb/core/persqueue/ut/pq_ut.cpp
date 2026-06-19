@@ -7,12 +7,17 @@
 #include <ydb/core/security/ticket_parser.h>
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/library/kafka/kafka_records.h>
 
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/stream/mem.h>
+#include <util/stream/output.h>
+#include <util/stream/zlib.h>
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
 
@@ -27,6 +32,112 @@ void SetEnableTopicMessagesBatching(TTestContext& tc) {
         tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicMessagesBatching(true);
         tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
     }
+}
+
+TString MakeKafkaBatchPayload(
+    const TVector<TString>& values,
+    NKafka::ECompressionType compression = NKafka::ECompressionType::NONE)
+{
+    NKafka::TKafkaRecordBatch batch;
+    batch.BaseOffset = 0;
+    batch.Magic = 2;
+    batch.Attributes = static_cast<NKafka::TKafkaRecordBatch::AttributesMeta::Type>(compression);
+    batch.LastOffsetDelta = values.size() - 1;
+    batch.BaseTimestamp = 1000;
+    batch.MaxTimestamp = 1000 + values.size() - 1;
+    batch.ProducerId = 42;
+    batch.ProducerEpoch = 0;
+    batch.BaseSequence = 1;
+
+    batch.Records.reserve(values.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        NKafka::TKafkaRecord record;
+        record.TimestampDelta = i;
+        record.OffsetDelta = i;
+        record.SetValue(TString{values[i]});
+        record.Length = record.Size(2)
+            - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
+        batch.Records.push_back(std::move(record));
+    }
+    batch.BatchLength = batch.Size(2) - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type) - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
+    return NKafka::WriteKafkaRecordBatch(batch);
+}
+
+
+void CmdWriteKafkaBatch(
+    const ui32 partition,
+    const TString& sourceId,
+    ui64 seqNo,
+    const TVector<TString>& values,
+    TTestContext& tc,
+    i64 offset = -1,
+    NKafka::ECompressionType batchCompression = NKafka::ECompressionType::NONE)
+{
+    TAutoPtr<IEventHandle> handle;
+    TEvPersQueue::TEvResponse* result = nullptr;
+    ui32& msgSeqNo = tc.MsgSeqNoMap[partition];
+    TString& cookie = tc.OwnerCookieMap[partition];
+
+    for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
+        try {
+            THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+            tc.Runtime->ResetScheduledCount();
+            auto* req = request->Record.MutablePartitionRequest();
+            req->SetPartition(partition);
+            req->SetOwnerCookie(cookie);
+            req->SetMessageNo(msgSeqNo);
+            if (offset >= 0) {
+                req->SetCmdWriteOffset(offset);
+            }
+
+            auto* write = req->AddCmdWrite();
+            write->SetSourceId(sourceId);
+            write->SetSeqNo(seqNo);
+            const TString kafkaBatchPayload = MakeKafkaBatchPayload(values, batchCompression);
+            NKikimrPQClient::TDataChunk dataChunk;
+            dataChunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
+            dataChunk.SetCodec(static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1));
+            dataChunk.SetData(kafkaBatchPayload);
+            TString serializedDataChunk;
+            Y_ENSURE(dataChunk.SerializeToString(&serializedDataChunk));
+            write->SetData(std::move(serializedDataChunk));
+            write->SetMessageCount(values.size());
+            write->SetIsBatch(true);
+            write->SetMaxSeqNo(seqNo + values.size() - 1);
+
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
+                [](const TEvPersQueue::TEvResponse& ev) {
+                    return ev.Record.HasPartitionResponse()
+                        && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0
+                        || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
+                });
+
+            UNIT_ASSERT(result);
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                tc.Runtime->DispatchEvents();
+                retriesLeft = 3;
+                continue;
+            }
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE) {
+                cookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition).first;
+                msgSeqNo = 0;
+                retriesLeft = 3;
+                continue;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                static_cast<ui32>(result->Record.GetErrorCode()),
+                static_cast<ui32>(NPersQueue::NErrorCode::OK),
+                result->Record.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1u);
+            retriesLeft = 0;
+        } catch (NActors::TSchedulingLimitReachedException) {
+            UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
+            retriesLeft = 3;
+        }
+    }
+    ++msgSeqNo;
 }
 
 void CmdWriteBatchedPart(
@@ -215,7 +326,7 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
-Y_UNIT_TEST(BatchedMessagesWriteWithInconsistentMaxSeqNoFails) {
+Y_UNIT_TEST(BatchedMessagesWriteWithSparseSeqNoSucceeds) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
@@ -224,12 +335,12 @@ Y_UNIT_TEST(BatchedMessagesWriteWithInconsistentMaxSeqNoFails) {
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
-    CmdWriteBatched(0, "sourceid_batch_inconsistent_max_seqno", 1, TString(16, 'a'), 5, tc,
-        -1, false, 10, NPersQueue::NErrorCode::BAD_REQUEST);
+    CmdWriteBatched(0, "sourceid_batch_sparse_seqno", 1, TString(16, 'a'), 5, tc,
+        -1, false, 10);
 
-    CmdWriteBatched(0, "sourceid_batch_inconsistent_max_seqno", 1, TString(16, 'b'), 5, tc);
+    CmdWriteBatched(0, "sourceid_batch_sparse_seqno", 11, TString(16, 'b'), 5, tc);
 
-    PQGetPartInfo(0, 5, tc);
+    PQGetPartInfo(0, 10, tc);
 }
 
 Y_UNIT_TEST(BatchedMessagesWriteWithPartialSeqNoOverlapFails) {
@@ -266,6 +377,165 @@ Y_UNIT_TEST(BatchedMessagesWriteWithInvalidBatchFieldsFails) {
         -1, false, static_cast<ui64>(-1), NPersQueue::NErrorCode::BAD_REQUEST);
 
     PQGetPartInfo(0, 0, tc);
+}
+
+Y_UNIT_TEST(KafkaBatchReadWithoutBatchSupportIsCut) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_kafka_batch_cut";
+    const TVector<TString> values = {"value0", "value1", "value2"};
+
+    CmdWriteKafkaBatch(0, sourceId, 1, values, tc, 0);
+    PQGetPartInfo(0, values.size(), tc);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, static_cast<ui32>(values.size()), 16_MB, static_cast<ui32>(values.size()), false, {0, 1, 2}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), values.size());
+    for (ui32 i = 0; i < values.size(); ++i) {
+        const auto& msg = readResult.GetResult(i);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), i);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u + i);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), 1u);
+        NKikimrPQClient::TDataChunk dataChunk;
+        Y_ENSURE(dataChunk.ParseFromString(msg.GetData()));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetChunkType()), static_cast<ui32>(NKikimrPQClient::TDataChunk::REGULAR));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetCodec()), static_cast<ui32>(NPersQueueCommon::RAW));
+        UNIT_ASSERT_VALUES_EQUAL(dataChunk.GetData(), values[i]);
+    }
+}
+
+void AssertKafkaBatchCutMessage(
+    const NKikimrClient::TCmdReadResult::TResult& msg,
+    ui64 expectedOffset,
+    ui64 expectedSeqNo,
+    const TString& expectedValue,
+    NPersQueueCommon::ECodec expectedCodec = NPersQueueCommon::RAW)
+{
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), expectedOffset);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), expectedSeqNo);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), 1u);
+    UNIT_ASSERT(!msg.HasUncompressedSize());
+
+    NKikimrPQClient::TDataChunk dataChunk;
+    Y_ENSURE(dataChunk.ParseFromString(msg.GetData()));
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetChunkType()), static_cast<ui32>(NKikimrPQClient::TDataChunk::REGULAR));
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetCodec()), static_cast<ui32>(expectedCodec));
+
+    TString actualValue;
+    if (expectedCodec == NPersQueueCommon::RAW) {
+        actualValue = dataChunk.GetData();
+    } else if (expectedCodec == NPersQueueCommon::GZIP) {
+        TMemoryInput input(dataChunk.GetData().data(), dataChunk.GetData().size());
+        TZLibDecompress gzip(&input, ZLib::GZip);
+        actualValue = gzip.ReadAll();
+    } else {
+        ythrow yexception() << "unsupported expected codec in test: " << static_cast<int>(expectedCodec);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(actualValue, expectedValue);
+}
+
+Y_UNIT_TEST(KafkaBatchReadFromMiddleOfBatchIsCut) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_kafka_batch_cut_middle";
+    const TVector<TString> values = {"value0", "value1", "value2"};
+
+    CmdWriteKafkaBatch(0, sourceId, 1, values, tc, 0);
+    PQGetPartInfo(0, values.size(), tc);
+
+    TPQCmdReadSettings readSettings{"", 0, 1, 2, 16_MB, 2, false, {1, 2}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 2u);
+    AssertKafkaBatchCutMessage(readResult.GetResult(0), 1, 2, values[1]);
+    AssertKafkaBatchCutMessage(readResult.GetResult(1), 2, 3, values[2]);
+}
+
+Y_UNIT_TEST(KafkaBatchReadCountLimitAfterCutIsApplied) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_kafka_batch_cut_count";
+    const TVector<TString> values = {"value0", "value1", "value2"};
+
+    CmdWriteKafkaBatch(0, sourceId, 1, values, tc, 0);
+    PQGetPartInfo(0, values.size(), tc);
+
+    TPQCmdReadSettings readSettings{"", 0, 1, 1, 16_MB, 1, false, {1}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 1u);
+    AssertKafkaBatchCutMessage(readResult.GetResult(0), 1, 2, values[1]);
+}
+
+Y_UNIT_TEST(KafkaBatchReadLastOffsetAfterCutIsApplied) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_kafka_batch_cut_last_offset";
+    const TVector<TString> values = {"value0", "value1", "value2"};
+
+    CmdWriteKafkaBatch(0, sourceId, 1, values, tc, 0);
+    PQGetPartInfo(0, values.size(), tc);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, 10, 16_MB, 2, false, {0, 1}, 0, 0, "user1", 2};
+    readSettings.CanReadBatches = false;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 2u);
+    AssertKafkaBatchCutMessage(readResult.GetResult(0), 0, 1, values[0]);
+    AssertKafkaBatchCutMessage(readResult.GetResult(1), 1, 2, values[1]);
+}
+
+Y_UNIT_TEST(KafkaBatchReadGzipCompressedBatchIsCut) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    SetEnableTopicMessagesBatching(tc);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_kafka_batch_cut_gzip";
+    const TVector<TString> values = {"value0", "value1", "value2"};
+
+    CmdWriteKafkaBatch(0, sourceId, 1, values, tc, 0, NKafka::ECompressionType::GZIP);
+    PQGetPartInfo(0, values.size(), tc);
+
+    TPQCmdReadSettings readSettings{"", 0, 0, static_cast<ui32>(values.size()), 16_MB, static_cast<ui32>(values.size()), false, {0, 1, 2}, 0, 0, "user1"};
+    readSettings.CanReadBatches = false;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), values.size());
+    for (ui32 i = 0; i < values.size(); ++i) {
+        AssertKafkaBatchCutMessage(readResult.GetResult(i), i, 1u + i, values[i], NPersQueueCommon::GZIP);
+    }
 }
 
 Y_UNIT_TEST(BatchedMessagesWriteRead) {
@@ -343,7 +613,6 @@ Y_UNIT_TEST(BatchedMessageWithMultiplePartsWriteRead) {
     UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 0u);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), messageCount);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(msg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
     UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), part0 + part1);
 
     readSettings.Offset = 3;
@@ -353,7 +622,6 @@ Y_UNIT_TEST(BatchedMessageWithMultiplePartsWriteRead) {
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetOffset(), 0u);
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetSeqNo(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetMessageCount(), messageCount);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(middleMsg.GetMessageFormat()), static_cast<ui32>(NKikimrClient::STANDARD));
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetData(), part0 + part1);
 }
 
@@ -2165,6 +2433,58 @@ Y_UNIT_TEST(TestPQRead) {
         CmdRead(0, 24, 1000, 512_KB, 1, false, tc); //from head
 
         CmdRead(0, 23, 1000, 98_MB, 3, false, tc);
+    });
+}
+
+Y_UNIT_TEST(TestPQReadWithoutReadToBlobEnd) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
+
+        activeZone = false;
+        TVector<std::pair<ui64, TString>> data;
+
+        ui32 pp =  4 + 8 + 2 + 9 + 100 + 40; //pp is for size of meta
+        TString tmp{1_MB - pp - 2, '-'};
+        char k = 0;
+        for (ui32 i = 0; i < 26_MB;) { //3 full blobs and 2 in head
+            TString ss = "";
+            ss += k;
+            ss += tmp;
+            ss += char((i + 1) % 256);
+            ++k;
+            data.push_back({i + 1, ss});
+            i += ss.size() + pp;
+        }
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
+        PQGetPartInfo(0, 26, tc);
+
+        CmdReadWithoutReadToBlobEnd(0, 26, Max<i32>(), Max<i32>(), 0, true, tc);
+
+        CmdReadWithoutReadToBlobEnd(0, 0, Max<i32>(), Max<i32>(), 25, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 0, 10, 100_MB, 10, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 9, 1, 100_MB, 1, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 23, 3, 100_MB, 3, false, tc);
+
+        CmdReadWithoutReadToBlobEnd(0, 3, 1000, 511_KB, 1, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 3, 1000, 1_KB, 1, false, tc); //at least one message will be readed always
+        CmdReadWithoutReadToBlobEnd(0, 25, 1000, 1_KB, 1, false, tc); //at least one message will be readed always, from head
+
+        // activeZone = true;
+        CmdReadWithoutReadToBlobEnd(0, 9, 1000, 3_MB, 3, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 9, 1000, 3_MB - 10_KB, 2, false, tc);
+        CmdReadWithoutReadToBlobEnd(0, 25, 1000, 512_KB, 1, false, tc); //from head
+        CmdReadWithoutReadToBlobEnd(0, 24, 1000, 512_KB, 1, false, tc); //from head
+
+        CmdReadWithoutReadToBlobEnd(0, 23, 1000, 98_MB, 3, false, tc);
     });
 }
 

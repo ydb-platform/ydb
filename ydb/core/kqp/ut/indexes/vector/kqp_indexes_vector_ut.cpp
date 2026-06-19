@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -1096,6 +1097,55 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateClosesReadIterators, Covered, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        const int flags = F_NULLABLE | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, flags);
+
+        // Update that changes the cluster (triggers VectorResolveActor to read level table)
+        {
+            const TString query(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=9;)"));
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Do a second update to exercise a different code path (insert new row)
+        {
+            const TString query(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (20, "\x11\x62\x02", "20");
+            )"));
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Check that all read iterators are closed at the data shard side.
+        WaitForZeroReadIterators(kikimr.GetTestServer(), "/Root/TestTable/index1/indexImplLevelTable");
+
+        // Also check that KqpReadActors spawned by VectorResolveActor are destroyed.
+        {
+            NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+            int wait = 10;
+            auto count = counters.ReadActorsCount->Val();
+            while (count != 0 && wait > 0) {
+                wait--;
+                Sleep(TDuration::Seconds(1));
+                count = counters.ReadActorsCount->Val();
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(count, 0, "KqpReadActors are not destroyed");
+        }
+    }
+
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
     Y_UNIT_TEST_QUAD(EmptyVectorIndexUpdate, Partitioned, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -1783,6 +1833,41 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    const TTtlNotAllowedIndexTestConfig VectorTtlNotAllowedConfig{
+        .IndexInCreateTable = R"(INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
+            WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),)",
+        .AlterAddIndex = R"(
+            ALTER TABLE TestTable ADD INDEX vector_idx
+                GLOBAL USING vector_kmeans_tree ON (Text)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+        )",
+        .ExpectedError = "Table with EIndexTypeGlobalVectorKmeansTree index doesn't support TTL",
+    };
+
+    Y_UNIT_TEST(TtlNotAllowed_Both) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        TestTtlNotAllowedBoth(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
+    }
 }
 
 }

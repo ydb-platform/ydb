@@ -241,6 +241,7 @@ void RegisterCustomProtobufConverter(
 struct TProtobufMessageBytesFieldConverter
 {
     std::function<void(IYsonConsumer* consumer, TStringBuf bytes)> Serializer;
+    // TODO(babenko): migrate to std::string
     std::function<void(TString* bytes, const NYTree::INodePtr& node)> Deserializer;
 };
 
@@ -293,12 +294,12 @@ void RegisterCustomProtobufUIntFieldConverter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString YsonStringToProto(
+std::string YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     EUnknownYsonFieldsMode unknownFieldsMode);
 
-TString YsonStringToProto(
+std::string YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     TProtobufWriterOptions options);

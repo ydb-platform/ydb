@@ -49,7 +49,7 @@ See [team_leads_example.json](team_leads_example.json) for example configuration
 
 ### 1. Secrets (Settings → Secrets and variables → Actions → Secrets)
 - `TELEGRAM_BOT_TOKEN` - your bot token
-- `TELEGRAM_YDBOT_TOKEN` - YDB bot token (used in workflow)
+- `YDBOT_TELEGRAM_BOT_TOKEN` - YDB bot token (used in workflow)
 
 ### 2. Variables (Settings → Secrets and variables → Actions → Variables)
 - `TELEGRAM_MUTE_CHAT_ID` - channel ID in format "chat_id/thread_id" (e.g., "2018419243/1")

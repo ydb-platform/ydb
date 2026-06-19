@@ -6,8 +6,10 @@ SRCS(
     yql_pq_datasink_io_discovery.cpp
     yql_pq_datasink_type_ann.cpp
     yql_pq_datasource.cpp
+    yql_pq_datasource_constraints.cpp
     yql_pq_datasource_type_ann.cpp
     yql_pq_dq_integration.cpp
+    yql_pq_helpers.cpp
     yql_pq_io_discovery.cpp
     yql_pq_load_meta.cpp
     yql_pq_logical_opt.cpp
@@ -17,7 +19,6 @@ SRCS(
     yql_pq_provider_impl.cpp
     yql_pq_settings.cpp
     yql_pq_topic_key_parser.cpp
-    yql_pq_helpers.cpp
     yql_pq_ytflow_integration.cpp
     yql_pq_ytflow_optimize.cpp
 )

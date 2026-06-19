@@ -66,39 +66,39 @@ Create the file `inventory/group_vars/ydb/all.yaml` and fill it.
 
   ```yaml
   # Ansible
-    ansible_user: username
-    ansible_ssh_private_key_file: "/path/to/your/id_rsa"
+  ansible_user: username
+  ansible_ssh_private_key_file: "/path/to/your/id_rsa"
   
   # System
-    system_timezone: UTC
-    system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
+  system_timezone: UTC
+  system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
   
   # Database
-    ydb_user: root
-    ydb_dbname: db
+  ydb_user: root
+  ydb_dbname: db
 
   # Storage
-    ydb_disks:
-      - name: /dev/vdb
-        label: ydb_disk_1
-      - name: /dev/vdc
-        label: ydb_disk_2
-      - name: /dev/vdd
-        label: ydb_disk_3
-    ydb_pool_kind: ssd
-    ydb_allow_format_drives: true
-    ydb_skip_data_loss_confirmation_prompt: false
-    ydbops_local: true
-    ydb_cores_dynamic: 2
-    ydb_dynnodes:
-      - {"instance": "a", offset: 1}
-    ydb_cores_static:  2
-  
-  # Authorization settings
-    ydb_enforce_user_token_requirement: true
+  ydb_disks:
+    - name: /dev/vdb
+      label: ydb_disk_1
+    - name: /dev/vdc
+      label: ydb_disk_2
+    - name: /dev/vdd
+      label: ydb_disk_3
+  ydb_pool_kind: ssd
+  ydbops_local: true
+  ydb_cores_dynamic: 2
+  ydb_dynnodes:
+    - {"instance": "a", offset: 1}
+  ydb_cores_static:  2
 
-  # Nodes
-    ydb_version: "system_version"
+  # YDB
+  ydb_version: "system_version"
+  ydb_archive: "{{ ansible_config_file | dirname }}/files/ydbd.tar.gz"
+
+  # Additional parameters
+  ydb_allow_format_drives: true
+  ydb_skip_data_loss_confirmation_prompt: false
    ```
 
 {% endlist %}
@@ -130,11 +130,7 @@ This file contains the password that Ansible will use to encrypt and decrypt sen
 Next, set the password for the initial user specified in the `ydb_user` setting (default `root`). This user will have full access rights in the cluster initially; you can change this later if needed. Create `inventory/group_vars/ydb/vault.yaml` with the following content (replace `<password>` with the actual password):
 
 ```yaml
-all:
-  children:
-    ydb:
-      vars:
-        ydb_password: <password>
+ydb_password: <password>
 ```
 
 Encrypt this file with the command `ansible-vault encrypt inventory/group_vars/ydb/vault.yaml`.
@@ -159,16 +155,16 @@ Create the file `files/config.yaml` and fill it.
     self_management_config:
       enabled: true
     default_disk_type: SSD
-  host_configs:
+    host_configs:
     - host_config_id: 1
       drive:
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-          type: SSD
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-          type: SSD
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-          type: SSD
-  hosts:
+      - path: /dev/disk/by-partlabel/ydb_disk_1
+        type: SSD
+      - path: /dev/disk/by-partlabel/ydb_disk_2
+        type: SSD
+      - path: /dev/disk/by-partlabel/ydb_disk_3
+        type: SSD
+    hosts:
     - host: ydb-node-zone-a.local
       host_config_id: 1
       location:
@@ -181,54 +177,54 @@ Create the file `files/config.yaml` and fill it.
         body: 2
         data_center: 'zone-b'
         rack: '1'
-    - host: ydb-node-zone-d.local
+    - host: ydb-node-zone-c.local
       host_config_id: 1
       location:
         body: 3
-        data_center: 'zone-d'
+        data_center: 'zone-c'
         rack: '1'
-  actor_system_config:
-    use_auto_config: true
-    cpu_count: 1
-  interconnect_config:
-    start_tcp: true
-    encryption_mode: OPTIONAL
-    path_to_certificate_file: "/opt/ydb/certs/node.crt"
-    path_to_private_key_file: "/opt/ydb/certs/node.key"
-    path_to_ca_file: "/opt/ydb/certs/ca.crt"
-  grpc_config:
-    cert: "/opt/ydb/certs/node.crt"
-    key: "/opt/ydb/certs/node.key"
-    ca: "/opt/ydb/certs/ca.crt"
-    services_enabled:
-    - legacy
-  security_config:
-    enforce_user_token_requirement: true
-  client_certificate_authorization:
-    request_client_certificate: true
-    client_certificate_definitions:
-    - member_groups: ["ADMINS"]
-      subject_terms:
-      - short_name: "O"
-        values: ["YDB"]
-  domains_config:
+    actor_system_config:
+      use_auto_config: true
+      cpu_count: 1
+    interconnect_config:
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
+    grpc_config:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
+      - legacy
     security_config:
-      monitoring_allowed_sids:
-      - "root"
-      - "ADMINS"
-      - "DATABASE-ADMINS"
-      administration_allowed_sids:
-      - "root"
-      - "ADMINS"
-      - "DATABASE-ADMINS"
-      viewer_allowed_sids:
-      - "root"
-      - "ADMINS"
-      - "DATABASE-ADMINS"
-      register_dynamic_node_allowed_sids:
-      - databaseNodes@cert
-      - root@builtin  
-    ```
+      enforce_user_token_requirement: true
+    client_certificate_authorization:
+      request_client_certificate: true
+      client_certificate_definitions:
+      - member_groups: ["databaseNodes@cert"]
+        subject_terms:
+        - short_name: "O"
+          values: ["YDB"]
+    domains_config:
+      security_config:
+        monitoring_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+        administration_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+        viewer_allowed_sids:
+        - "root"
+        - "ADMINS"
+        - "DATABASE-ADMINS"
+        register_dynamic_node_allowed_sids:
+        - databaseNodes@cert
+        - root@builtin
+  ```
 
 {% endlist %}
 
@@ -255,11 +251,11 @@ To speed up and simplify the initial {{ ydb-short-name }} deployment, the config
   host_configs:
   - host_config_id: 1
     drive:
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+    - path: /dev/disk/by-partlabel/ydb_disk_1
       type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+    - path: /dev/disk/by-partlabel/ydb_disk_2
       type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+    - path: /dev/disk/by-partlabel/ydb_disk_3
       type: SSD
   ...
   ```
@@ -307,7 +303,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-Running the `ydb_platform.ydb.initial_setup` playbook creates a {{ ydb-short-name }} cluster. It will contain a [domain](../../../../concepts/glossary.md#domain) named from the `ydb_domain` setting (default `Root`), a [database](../../../../concepts/glossary.md#database) named from the `ydb_dbname` setting (default `database`), and an initial [user](../../../../concepts/glossary.md#access-user) named from the `ydb_user` setting (default `root`).
+Running the `ydb_platform.ydb.initial_setup` playbook creates a {{ ydb-short-name }} cluster. It will contain a [domain](../../../../concepts/glossary.md#domain) named from the `ydb_domain` setting (default `Root`), a [database](../../../../concepts/glossary.md#database) named from the `ydb_dbname` setting (default `db`), and an initial [user](../../../../concepts/glossary.md#access-user) named from the `ydb_user` setting (default `root`).
 
 ## Additional steps {#additional-steps}
 

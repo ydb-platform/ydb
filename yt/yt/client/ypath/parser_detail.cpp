@@ -161,7 +161,7 @@ void ParseColumns(NYson::TTokenizer& tokenizer, IAttributeDictionary* attributes
 
     tokenizer.ParseNext();
     while (tokenizer.GetCurrentType() != EndColumnSelectorToken) {
-        TString begin;
+        std::string begin;
         switch (tokenizer.GetCurrentType()) {
             case NYson::ETokenType::String:
                 begin.assign(tokenizer.CurrentToken().GetStringValue());
@@ -484,7 +484,7 @@ std::pair<TYPath, IAttributeDictionaryPtr> ParseRichYPathImpl(TStringBuf str)
     return {std::move(path), attributes};
 }
 
-TString ConvertToString(const TYPath& path, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
+std::string ConvertToString(const TYPath& path, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
 {
     TStringBuilder builder;
     AppendAttributes(&builder, attributes, ysonFormat, sortAttributes);

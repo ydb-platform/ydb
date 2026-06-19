@@ -1,21 +1,30 @@
 #pragma once
 
-#include <ydb/library/yql/dq/opt/dq_opt_join.h>
-#include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
-#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+
+namespace NYql {
+
+struct TTypeAnnotationContext;
+
+} // namespace NYql
 
 namespace NKikimr::NKqp {
 
-NYql::NNodes::TExprBase KqpRewriteEquiJoin(
+class TKqpStatsStore;
+struct TOptimizerHints;
+
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteEquiJoin(
     const NYql::NNodes::TExprBase& node,
     NYql::NDq::EHashJoinMode mode,
     bool useCBO,
     NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typeCtx,
     TKqpStatsStore& kqpStats,
-    const TOptimizerHints& hints = {});
+    const TOptimizerHints& hints);
 
-NYql::NNodes::TExprBase KqpRewriteEquiJoin(
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteEquiJoin(
     const NYql::NNodes::TExprBase& node,
     NYql::NDq::EHashJoinMode mode,
     bool useCBO,
@@ -23,6 +32,6 @@ NYql::NNodes::TExprBase KqpRewriteEquiJoin(
     NYql::TTypeAnnotationContext& typeCtx,
     TKqpStatsStore& kqpStats,
     int& joinCounter,
-    const TOptimizerHints& hints = {});
+    const TOptimizerHints& hints);
 
 } // namespace NKikimr::NKqp

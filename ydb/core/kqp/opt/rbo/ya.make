@@ -14,11 +14,16 @@ SRCS(
     kqp_rbo.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
+    analysis/logical_aliases.cpp
+    analysis/logical_liveness.cpp
+    analysis/logical_name_constraints.cpp
+    logical_renames.cpp
 )
 
 PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/opt/cbo
+    ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical

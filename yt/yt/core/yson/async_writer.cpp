@@ -117,12 +117,12 @@ TFuture<TYsonString> TAsyncYsonWriter::Finish()
             }
         }
 
-        TString result;
+        std::string result;
         result.reserve(length);
         for (const auto& [ysonStr, trailingSeparator] : segments) {
             result.append(ysonStr.AsStringBuf());
             if (trailingSeparator) {
-                result.append(NDetail::ItemSeparatorSymbol);
+                result.push_back(NDetail::ItemSeparatorSymbol);
             }
         }
 

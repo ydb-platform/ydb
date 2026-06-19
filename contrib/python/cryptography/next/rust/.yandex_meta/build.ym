@@ -12,6 +12,7 @@ devtools/yamaker/libym2/scripts/python3
 {% block platforms %}
 x86_64-unknown-linux-gnu
 x86_64-unknown-linux-musl
+x86_64-apple-darwin
 {% endblock %}
 
 {% block msan_platforms %}
@@ -23,6 +24,7 @@ _rust
 _openssl
 {% endblock %}
 
+{% block rust_version %}nightly-2026-06-04{% endblock %}
 {% block current_version %}41.0.6{% endblock %}
 {% block current_url %}https://github.com/pyca/cryptography/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
 
@@ -36,6 +38,7 @@ sed -e 's|cdylib|staticlib|' -i Cargo.toml
 export CC_{{p.replace('-', '_')}}=target-cc
 {% endfor %}
 export CC_x86_64_unknown_linux_musl=musl-gcc
+export CC_x86_64_apple_darwin=mac-target-cc
 export DEP_OPENSSL_INCLUDE={{arcadia_root}}/contrib/libs/openssl/include
 export PYO3_CROSS_PYTHON_VERSION=3.12
 
@@ -46,11 +49,10 @@ cd src/rust
 {% for p in self.msan_platforms().strip().split('\n') %}
 export CC_{{p.replace('-', '_')}}=target-cc-msan
 {% endfor %}
-export RUSTFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -C target-feature=-crt-static"
-export RUSTC_BOOTSTRAP=1
+export RUSTFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -Ctarget-feature=-crt-static -Cunsafe-allow-abi-mismatch=sanitizer -Ccodegen-units=1"
 
 {% for arch in self.msan_platforms().strip().split('\n') %}
-cargo {{self.cargo_flags().strip()}} build {{self.cargo_build_flags().strip()}} --release --target {{arch}} {{self.binary_type().strip()}} --target-dir ${BUILD}-msan \
+LD_PRELOAD=${BIN}/getrandom.so cargo {{self.cargo_flags().strip()}} build {{self.cargo_build_flags().strip()}} --release --target {{arch}} {{self.binary_type().strip()}} --target-dir ${BUILD}-msan \
     {% if self.cargo_target() %}
 --package {{self.cargo_target().strip()}}
     {% endif %}
@@ -98,6 +100,7 @@ cp ${SRC}/autogen_cffi/_openssl.c ${OUTPUT}/
 cp ${OUTPUT}/patches/msan.cpp ${OUTPUT}/
 
 cat {{arcadia_root}}/contrib/libs/openssl/redef.h | awk '/#define/{print $2" "$3}' > ${OUTPUT}/openssl_redefines.txt
+cat {{arcadia_root}}/contrib/libs/openssl/redef.h | awk '/#define/{print "_"$2" _"$3}' >> ${OUTPUT}/openssl_redefines.txt
 
 find ${OUTPUT} -name '*.a' | xargs -L1 llvm-objcopy --redefine-syms=${OUTPUT}/openssl_redefines.txt
 rm ${OUTPUT}/openssl_redefines.txt
@@ -141,6 +144,11 @@ rm -rf ${OUTPUT}/a/{{p}}-msan/release/build
 {{super()}}
 export CLANG=$(ya tool c++ --print-path)
 
+MACOS_SDK="${TMPDIR}/macos_sdk"
+ya download --untar sbr:8156037824 "${MACOS_SDK}"
+
+# linux
+
 cat << EOF > ${BIN}/musl-gcc
 #!/usr/bin/env sh
 exec ${CLANG} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${@}"
@@ -157,4 +165,31 @@ exec ${CLANG} -DUSE_PYTHON3 -fsanitize=memory -I{{arcadia_root}} -I{{arcadia_roo
 EOF
 
 chmod +x ${BIN}/musl-gcc ${BIN}/target-cc ${BIN}/target-cc-msan
+
+# macOS
+
+cat << EOF > ${BIN}/mac-target-cc
+#!/bin/bash
+FILTERED_ARGS=()
+SKIP_NEXT=0
+for arg in "\$@"; do
+  if [ \$SKIP_NEXT -eq 1 ]; then
+    SKIP_NEXT=0
+    continue
+  fi
+  case "\$arg" in
+    -arch)
+      SKIP_NEXT=1
+      ;;
+    -m64|-m32)
+      ;;
+    *)
+      FILTERED_ARGS+=("\$arg")
+      ;;
+  esac
+done
+exec ${CLANG} -target x86_64-apple-darwin -isysroot ${MACOS_SDK} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${FILTERED_ARGS[@]}"
+EOF
+chmod +x ${BIN}/mac-target-cc
+
 {% endblock %}

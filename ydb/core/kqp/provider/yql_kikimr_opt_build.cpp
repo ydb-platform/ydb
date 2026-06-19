@@ -209,11 +209,13 @@ struct TKiExploreTxResults {
                 YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
                 dataTable = indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
+                index.Type == TIndexDescription::EType::GlobalFulltextCompact) {
                 YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
                 dataTable = indexTable = indexTables[0];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                 YQL_ENSURE(indexTables.size() == 4, "Global fulltext relevance index should have 4 tables");
                 indexTable = indexTables[3];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
@@ -228,7 +230,8 @@ struct TKiExploreTxResults {
 
             if (!isUpdate) {
                 ops[indexTable] = TPrimitiveYdbOperation::Write;
-                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                    index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                     ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                 }
             } else {
@@ -236,7 +239,8 @@ struct TKiExploreTxResults {
                     if (updateColumns.contains(column)) {
                         // delete old index values and upsert rows into index table
                         ops[indexTable] = TPrimitiveYdbOperation::Write;
-                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
+                            index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
                             ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                         }
                         break;

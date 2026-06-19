@@ -64,6 +64,8 @@ items:
   - name: Enable metrics in Prometheus
     href: debug-prometheus.md
   - name: Tracing with OpenTelemetry
-    href: debug-otel.md
+    href: debug-otel-tracing.md
+  - name: Metrics with OpenTelemetry
+    href: debug-otel-metrics.md
   - name: Enable tracing in Jaeger
     href: debug-jaeger.md

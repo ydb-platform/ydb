@@ -149,34 +149,64 @@ bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(const TIntrusivePtr<IO
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op) {
     if (MatchOperator<TOpFilter>(op)) {
         CollectTablesAndColumnsNames(CastOperator<TOpFilter>(op)->FilterExpr, op->Props);
+    } else if (MatchOperator<TOpJoin>(op)) {
+        // Fetching statistics for join cardinality correction.
+        CollectJoinKeysColumns(CastOperator<TOpJoin>(op), op->Props);
+    } else if (MatchOperator<TOpRead>(op)) {
+        // Fetching statistics for filters already pushed down into the read.
+        const auto read = CastOperator<TOpRead>(op);
+        if (read->OriginalPredicate.has_value()) {
+            CollectTablesAndColumnsNames(read->OriginalPredicate.value(), op->Props);
+        }
     }
 }
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props) {
     const auto& mapping = props.Metadata->ColumnLineage.Mapping;
     auto lambda = TCoLambda(expr.GetLambda());
-    const auto members = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
 
-    TVector<TInfoUnit> colNames;
-    for (const auto& member : members) {
-        const auto memberName = TCoMember(member).Name().StringValue();
-        const auto pos = memberName.find(".");
-        if (pos != TString::npos) {
-            const auto aliasName = memberName.substr(0, pos);
-            Y_ENSURE(pos + 1 < memberName.size());
-            const auto colName = memberName.substr(pos + 1);
-            colNames.emplace_back(aliasName, colName);
+    // Request only the statistic each filter predicate actually consumes during selectivity estimation: 
+    // equality predicates probe the count-min sketch, while 
+    // range/inequality predicates use the equi-width histogram.
+    TPredicateSelectivityComputer computer(nullptr, true);
+    computer.Compute(lambda.Body());
+
+    using TUsedMember = TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
+    for (const auto& item : computer.GetColumnStatsUsedMembers().Data) {
+        const auto it = mapping.find(TInfoUnit(item.Member.Name().StringValue()));
+        if (it == mapping.end() || it->second.TableName == "") {
+            continue;
+        }
+        const auto& tableName = it->second.TableName;
+        const auto& colName = it->second.ColumnName;
+        switch (item.PredicateType) {
+            case TUsedMember::EEquality:
+                CMColumnsByTableName[tableName].insert(colName);
+                break;
+            case TUsedMember::EInequality:
+                HistColumnsByTableName[tableName].insert(colName);
+                break;
         }
     }
+}
 
-    for (const auto& column : colNames) {
-        const auto it = mapping.find(column.GetFullName());
-        if (it != mapping.end() && it->second.TableName != "") {
-            const auto& tableName = it->second.TableName;
-            const auto& colName = it->second.ColumnName;
-            CMColumnsByTableName[tableName].insert(colName);
-            HistColumnsByTableName[tableName].insert(colName);
+void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>& join, const TPhysicalOpProps& props) {
+    const auto& mapping = props.Metadata->ColumnLineage.Mapping;
+
+    // For join cardinality correction, only the equi-width histogram of both join-key columns are needed.
+    auto requestHistogram = [&](const TInfoUnit& key) {
+        const auto it = mapping.find(TInfoUnit(key.GetFullName()));
+        if (it == mapping.end() || it->second.TableName == "") {
+            return;
         }
+        const auto& tableName = it->second.TableName;
+        const auto& colName = it->second.ColumnName;
+        HistColumnsByTableName[tableName].insert(colName);
+    };
+
+    for (const auto& [lhsKey, rhsKey] : join->JoinKeys) {
+        requestHistogram(lhsKey);
+        requestHistogram(rhsKey);
     }
 }
 
@@ -334,41 +364,76 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 }
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
+    auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
+        rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+        rules.emplace_back(std::make_unique<TPushAppendIntoMapRule>());
+        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>(pushAppendsUnderFilter));
+        rules.emplace_back(std::make_unique<TPushAppendThroughAggregateRule>());
+        rules.emplace_back(std::make_unique<TPushAppendThroughJoinRule>());
+        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
+        rules.emplace_back(std::make_unique<TPushRenameIntoReadRule>());
+        rules.emplace_back(std::make_unique<TPushRenameIntoMapProducerRule>());
+        rules.emplace_back(std::make_unique<TPushRenameIntoAggregateResultRule>());
+        rules.emplace_back(std::make_unique<TPushRenameThroughTransparentUnaryRule>(pushAppendsUnderFilter));
+        rules.emplace_back(std::make_unique<TPushRenameThroughPassThroughMapRule>());
+        rules.emplace_back(std::make_unique<TPushRenameThroughAggregateKeyRule>());
+        rules.emplace_back(std::make_unique<TPushRenameThroughJoinSideRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
+    };
+
     // Initial stages.
+    // Expand aggregation.
+    TVector<std::unique_ptr<IRule>> expandAggregationRules;
+    expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
+
     // Inline join filters. FIXME: Move after inlining when adding support for more advanced decorelation
     TVector<std::unique_ptr<IRule>> joinFiltersInlineRules;
     joinFiltersInlineRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     joinFiltersInlineRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline join filters", std::move(joinFiltersInlineRules)));
 
-    // Predicate pull-up stage.
+    // Predicate pull-up and subplan inlining and decorelation stages.
     TVector<std::unique_ptr<IRule>> filterPullUpRules;
     filterPullUpRules.emplace_back(std::make_unique<TPullUpCorrelatedFilterRule>());
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicate pullup", std::move(filterPullUpRules)));
 
     TVector<std::unique_ptr<IRule>> inlineScalarSubPlanStageRules;
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineScalarSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
-    RBO.AddStage(std::make_unique<TRenameStage>());
     RBO.AddStage(std::make_unique<TConstantFoldingStage>());
+
+    TVector<std::unique_ptr<IRule>> inlineSimpleSubPlanStageRules;
+    inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
+    inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineGenericInExistsSubplanRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline in/exists subplans", std::move(inlineSimpleSubPlanStageRules)));
+
+    // Rewrite all right joins into left joins
+    TVector<std::unique_ptr<IRule>> rewriteRightJoinsStageRules;
+    rewriteRightJoinsStageRules.emplace_back(std::make_unique<TRewriteRightJoinRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Rewrite right joins", std::move(rewriteRightJoinsStageRules)));
+
+    // Normalize aliases and simple maps before the broader logical rewrites start.
+    TVector<std::unique_ptr<IRule>> mapAliasRules;
+    addMapAliasRules(mapAliasRules, /*pushAppendsUnderFilter*/ true);
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize maps and aliases", std::move(mapAliasRules)));
 
     // Logical stage.
     TVector<std::unique_ptr<IRule>> logicalStageRules;
+    addMapAliasRules(logicalStageRules, /*pushAppendsUnderFilter*/ false);
     logicalStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStageRules.emplace_back(std::make_unique<TFuseFiltersRule>());
-    logicalStageRules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
     logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
-    logicalStageRules.emplace_back(std::make_unique<TPushMapRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    logicalStageRules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
-    logicalStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
-
-    // Prune column stage.
-    RBO.AddStage(std::make_unique<TPruneColumnsStage>());
 
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
@@ -391,6 +456,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     TVector<std::unique_ptr<IRule>> cleanUpCBOStageRules;
     cleanUpCBOStageRules.emplace_back(std::make_unique<TInlineCBOTreeRule>());
     cleanUpCBOStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+    cleanUpCBOStageRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Clean up after CBO", std::move(cleanUpCBOStageRules)));
 
     // Assign physical stages.
@@ -404,6 +470,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
+
+    RBO.AddStage(std::make_unique<TLogicalOutputPruningStage>());
 
     RBO.AddStage(std::make_unique<TPropagateHashFuncStage>());
 }

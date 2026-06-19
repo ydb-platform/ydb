@@ -10,9 +10,6 @@
 #include <util/generic/queue.h>
 #include <util/generic/hash_set.h>
 
-#define IHLOG_DEBUG(CTX, ...) LOG_DEBUG_S((CTX), NKikimrServices::BS_INCRHUGE, LogPrefix << Sprintf(__VA_ARGS__))
-#define IHLOG_INFO(CTX, ...) LOG_INFO_S((CTX), NKikimrServices::BS_INCRHUGE, LogPrefix << Sprintf(__VA_ARGS__))
-
 namespace NKikimr {
     namespace NIncrHuge {
 

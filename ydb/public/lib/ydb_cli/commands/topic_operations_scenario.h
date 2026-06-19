@@ -42,6 +42,7 @@ public:
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
     void EnsureRatesIsValid() const;
+    void EnsureCodecOptionsAreValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;
@@ -93,6 +94,10 @@ public:
     size_t PartitionMaxInflightBytes = 0; // zero means no limit
     bool DirectRead = false;
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
+    TDuration BatchFlushInterval = TDuration::Seconds(1);
+    std::optional<ui64> BatchFlushSizeBytes;
+    ui32 BatchFlushMessageCount = 1;
+    TString BatchInnerCodecStr;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;
     size_t ConfigConsumerCount = 0;

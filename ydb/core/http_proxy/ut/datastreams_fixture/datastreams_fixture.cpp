@@ -1,4 +1,5 @@
 #include "datastreams_fixture.h"
+#include "sqs_xml_ut_helpers.h"
 
 #include <ydb/core/http_proxy/auth_actors.h>
 
@@ -208,6 +209,63 @@ THttpResult THttpProxyTestMock::SendHttpRequestRaw(const TString& handler, const
     return {httpCode, description, responseBody};
 }
 
+THttpResult THttpProxyTestMock::SendHttpRequestXmlRaw(const TString& handler, const IOutputStream::TPart& body,
+                                const TString& authorizationStr, const TString& securityToken) {
+    TNetworkAddress addr("::", HttpServicePort);
+    TSocket sock(addr);
+    TSocketOutput so(sock);
+    THttpOutput output(&so);
+
+    output.EnableKeepAlive(false);
+    output.EnableCompression(false);
+
+    std::vector<IOutputStream::TPart> parts = {
+            IOutputStream::TPart(TStringBuf("POST ")),
+            IOutputStream::TPart(TStringBuf(handler)),
+            IOutputStream::TPart(TStringBuf(" HTTP/1.1")),
+            IOutputStream::TPart::CrLf(),
+            IOutputStream::TPart(TStringBuf("Host:")),
+            IOutputStream::TPart(TStringBuf("example.amazonaws.com")),
+            IOutputStream::TPart::CrLf(),
+            IOutputStream::TPart(TStringBuf("X-Amz-Date:")),
+            IOutputStream::TPart(TStringBuf("20150830T123600Z")),
+            IOutputStream::TPart::CrLf()
+    };
+    if (!authorizationStr.empty()) {
+        parts.push_back(IOutputStream::TPart(TStringBuf(authorizationStr)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
+    if (!securityToken.empty()) {
+        parts.push_back(IOutputStream::TPart(TStringBuf("x-amz-security-token:")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(securityToken)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
+    parts.push_back(IOutputStream::TPart(TStringBuf("Content-Type:")));
+    parts.push_back(IOutputStream::TPart(TStringBuf("application/x-www-form-urlencoded")));
+    parts.push_back(IOutputStream::TPart::CrLf());
+    parts.push_back(IOutputStream::TPart::CrLf());
+    parts.push_back(body);
+
+    Cerr << (TStringBuilder() << ">>>>> Http request BODY: " << std::string_view(static_cast<const char*>(body.buf), body.len) << Endl);
+
+    output.Write(&parts[0], parts.size());
+    output.Finish();
+
+    TSocketInput si(sock);
+    THttpInput input(&si);
+
+    bool gotRequestId{false};
+    for (auto& header : input.Headers()) {
+        gotRequestId |= header.Name() == "x-amzn-requestid";
+    }
+    Y_ABORT_UNLESS(gotRequestId);
+    ui32 httpCode = ParseHttpRetCode(input.FirstLine());
+    TString description(StripString(TStringBuf(input.FirstLine()).After(' ').After(' ')));
+    TString responseBody = input.ReadAll();
+    Cerr << "Http output full " << responseBody << Endl;
+    return {httpCode, description, responseBody};
+}
+
 THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handler, const TString& target,
                                 const TString& host, const TString& date, const TString& userAgent,
                                 const TString& acceptEncoding,
@@ -343,6 +401,16 @@ NJson::TJsonMap THttpProxyTestMock::SendJsonRequestWithRetries(TString method, N
 
     UNIT_FAIL("SendJsonRequestWithRetries: failed to send request after " << retries << " retries");
     return {};
+}
+
+NJson::TJsonMap THttpProxyTestMock::SendXmlRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode) {
+    const TString body = EncodeSqsXmlRequest(method, request);
+    auto res = SendHttpRequestXmlRaw("/Root", {body.data(), body.size()}, FormAuthorizationStr("ru-central1"));
+    if (expectedHttpCode != 0) {
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, TStringBuilder() << "REQUEST: " << method << " " << body << "\nRESPONSE: " << res.Body);
+    }
+    Cerr << (TStringBuilder() << ">>>>> Http response BODY: " << res.Body << Endl);
+    return ParseSqsXmlResponse(res.Body);
 }
 
 

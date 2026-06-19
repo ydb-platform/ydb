@@ -135,6 +135,10 @@ enum ESimpleCounters : int;
     item(TxReadOnlyCopyColumnTable, 118) \
     item(TxPrepareIndexValidation, 119) \
     item(TxCreateFullBackupOp, 120) \
+    item(TxCreateLocalIndex, 121) \
+    item(TxDropLocalIndex, 122) \
+    item(TxAlterLocalIndex, 123) \
+    item(TxMoveLocalIndex, 124) \
 
 // TX_STATE_TYPE_ENUM
 

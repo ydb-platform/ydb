@@ -6,9 +6,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 class BaseColumnTableCompatibilityTest:
     def get_column_table_config(self):
         return {
-            "extra_feature_flags": {
-                "enable_olap_schema_operations": True,
-            },
+            "extra_feature_flags": ["enable_olap_schema_operations"],
             "column_shard_config": {
                 "disabled_on_scheme_shard": False,
             },

@@ -18,8 +18,8 @@ bool TRestoreTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
     const auto& columns = schema->GetIndexInfo().GetColumns();
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(txBody.GetRestoreTask().GetTableId());
-    ImportTask = std::make_shared<NOlap::NImport::TImportTask>(schemeShardLocalPathId,
-        TVector<NOlap::TNameTypeInfo>{ columns.begin(), columns.end() }, txBody.GetRestoreTask(), schema->GetVersion(), GetTxId());
+    ImportTask =
+        std::make_shared<NOlap::NImport::TImportTask>(schemeShardLocalPathId, columns, txBody.GetRestoreTask(), schema->GetVersion(), GetTxId());
     NOlap::NBackground::TTask task(
         ::ToString(schemeShardLocalPathId.GetRawValue()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ImportTask);
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {

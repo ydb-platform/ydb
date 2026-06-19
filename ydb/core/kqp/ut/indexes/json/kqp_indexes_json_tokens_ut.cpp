@@ -3404,6 +3404,76 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                 TParamsBuilder().AddParam("$p").Utf8("x").Build().Build());
         });
     }
+
+    Y_UNIT_TEST(Unicode) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // Unicode string VALUE in JSON (ASCII key, Unicode value)
+            // Equality in JSONPath filter: path + strSuffix with unicode bytes
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key ? (@ == "Привет")'))",
+                {"\4key" + strSuffix("Привет")});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.key == "Мир")'))",
+                {"\4key" + strSuffix("Мир")});
+            // Inequality/range in JSONPath filter: path only (no value suffix)
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key ? (@ != "Привет")'))", {"\4key"});
+
+            // Unicode string value at YQL level (JSON_VALUE equality)
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "Привет"u)",
+                {"\3k1" + strSuffix("Привет")});
+            // Inequality at YQL level: path only
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) != "Привет"u)", {"\3k1"});
+
+            // Unicode KEY in JSONPath (quoted key form, no unquoted Unicode identifiers)
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$."кл"'))", {"\5кл"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$."кл"' RETURNING Utf8) == "val"u)",
+                {"\5кл" + strSuffix("val")});
+
+            // Unicode KEY and unicode VALUE together
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$."кл"' RETURNING Utf8) == "значение"u)",
+                {"\5кл" + strSuffix("значение")});
+
+            // Nested unicode keys: $."ключ"."поле"
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"."поле"' RETURNING Utf8) == "v"u)",
+                {"\x09ключ\x09поле" + strSuffix("v")});
+
+            // Unicode in JSONPath filter: starts with (not equality -> path only)
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.key starts with "При")'))", {"\4key"});
+
+            // Unicode in JSONPath filter: like_regex (pattern match -> path only)
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.key like_regex "При.*")'))", {"\4key"});
+
+            // Unicode value via PASSING variable
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == $var)' PASSING "Привет"u AS var))",
+                {"\3k1\3k2" + strSuffix("Привет")});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 != $var)' PASSING "Привет"u AS var))",
+                {"\3k1\3k2"});
+
+            // Unicode at YQL level: range comparisons (path only)
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) > "А"u)", {"\3k1"});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) < "Я"u)", {"\3k1"});
+
+            // Unicode at YQL level: BETWEEN
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) BETWEEN "А"u AND "Я"u)", {"\3k1"});
+
+            // Unicode at YQL level: StartsWith (path only)
+            ValidateTokens(db, R"(StartsWith(JSON_VALUE(Text, '$.k1' RETURNING Utf8), "При"u))", {"\3k1"});
+
+            // Unicode values in AND/OR combinations
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "Привет"u AND JSON_EXISTS(Text, '$.k2'))",
+                {"\3k1" + strSuffix("Привет"), "\3k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "Привет"u OR JSON_VALUE(Text, '$.k2' RETURNING Utf8) == "Мир"u)",
+                {"\3k1" + strSuffix("Привет"), "\3k2" + strSuffix("Мир")}, "or");
+
+            // Unicode key with AND/OR
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$."кл"' RETURNING Utf8) == "a"u AND JSON_EXISTS(Text, '$.k2'))",
+                {"\5кл" + strSuffix("a"), "\3k2"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$."кл"' RETURNING Utf8) == "значение"u OR JSON_EXISTS(Text, '$.k2'))",
+                {"\5кл" + strSuffix("значение"), "\3k2"}, "or");
+        });
+    }
 }
 
 }  // namespace NKikimr::NKqp

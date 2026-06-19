@@ -794,16 +794,14 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                     }
                     break;
                 }
-                case EYtSettingType::QLFilter: {
-                    for (const auto& p : section.Paths()) {
-                        TYtPathInfo pathInfo(p);
-                        if (pathInfo.QLFilter) {
-                            GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
-                        }
-                    }
-                }
                 default:
                     break;
+                }
+            }
+            for (const auto& path: section.Paths()) {
+                const TYtPathInfo pathInfo(path);
+                if (pathInfo.QLFilter) {
+                    GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
                 }
             }
         }

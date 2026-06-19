@@ -1,6 +1,8 @@
 #include "s3.h"
 #include "blocks.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     using TS3Manager = TBlobDepot::TS3Manager;
@@ -124,10 +126,14 @@ namespace NKikimr::NBlobDepot {
         const bool concurrencyThrottled = S3WritesInFlight >= CurrentMaxWritesInFlight;
 
         if (timeThrottled || concurrencyThrottled) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS23, "TEvPrepareWriteS3 queued", (Id, Self->GetLogId()),
-                (TimeThrottled, timeThrottled), (ConcurrencyThrottled, concurrencyThrottled),
-                (S3WritesInFlight, S3WritesInFlight), (CurrentMaxWritesInFlight, CurrentMaxWritesInFlight),
-                (QueueSize, PendingPrepareWrites.size()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3 queued",
+                {"marker", "BDTS23"},
+                {"id", Self->GetLogId()},
+                {"timeThrottled", timeThrottled},
+                {"concurrencyThrottled", concurrencyThrottled},
+                {"S3WritesInFlight", S3WritesInFlight},
+                {"currentMaxWritesInFlight", CurrentMaxWritesInFlight},
+                {"queueSize", PendingPrepareWrites.size()});
             PendingPrepareWrites.push_back(std::move(ev));
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
             if (timeThrottled && !PutWakeupScheduled) {
@@ -140,8 +146,11 @@ namespace NKikimr::NBlobDepot {
 
         auto& agent = Self->GetAgent(ev->Recipient);
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, Self->GetLogId()),
-            (AgentId, agent.Connection->NodeId), (Msg, ev->Get()->Record));
+        YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3",
+            {"marker", "BDTS07"},
+            {"id", Self->GetLogId()},
+            {"agentId", agent.Connection->NodeId},
+            {"msg", ev->Get()->Record});
 
         Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
             std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
@@ -157,11 +166,18 @@ namespace NKikimr::NBlobDepot {
         const TDuration delay = PutBackoff.Next();
         PutThrottleUntil = TActivationContext::Monotonic() + delay;
 
-        STLOG(PRI_WARN, BLOB_DEPOT, BDTS22, "S3 put throttled", (Id, Self->GetLogId()),
-            (Delay, delay), (CurrentMaxWritesInFlight, CurrentMaxWritesInFlight),
-            (S3WritesInFlight, S3WritesInFlight), (QueueSize, PendingPrepareWrites.size()));
-        BDEV(BDEV42, "S3_put_throttled", (BDT, Self->TabletID()), (DelayMs, delay.MilliSeconds()),
-            (QueueSize, PendingPrepareWrites.size()));
+        YDB_LOG_WARN_COMP(BLOB_DEPOT, "S3 put throttled",
+            {"marker", "BDTS22"},
+            {"id", Self->GetLogId()},
+            {"delay", delay},
+            {"currentMaxWritesInFlight", CurrentMaxWritesInFlight},
+            {"S3WritesInFlight", S3WritesInFlight},
+            {"queueSize", PendingPrepareWrites.size()});
+        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_put_throttled",
+            {"marker", "BDEV42"},
+            {"BDT", Self->TabletID()},
+            {"delayMs", delay.MilliSeconds()},
+            {"queueSize", PendingPrepareWrites.size()});
 
         if (!PutWakeupScheduled) {
             TActivationContext::Schedule(PutThrottleUntil, new IEventHandle(TEvPrivate::EvPutThrottleWakeup,
@@ -191,8 +207,11 @@ namespace NKikimr::NBlobDepot {
             PendingPrepareWrites.pop_front();
 
             auto& agent = Self->GetAgent(ev->Recipient);
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, Self->GetLogId()),
-                (AgentId, agent.Connection->NodeId), (Msg, ev->Get()->Record));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3",
+                {"marker", "BDTS07"},
+                {"id", Self->GetLogId()},
+                {"agentId", agent.Connection->NodeId},
+                {"msg", ev->Get()->Record});
 
             Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
                 std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));

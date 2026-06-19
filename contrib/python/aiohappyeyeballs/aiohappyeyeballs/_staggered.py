@@ -1,20 +1,10 @@
 import asyncio
 import contextlib
-
-# PY3.9: Import Callable from typing until we drop Python 3.9 support
-# https://github.com/python/cpython/issues/87131
+from collections.abc import Awaitable, Callable, Iterable
 from typing import (
     TYPE_CHECKING,
     Any,
-    Awaitable,
-    Callable,
-    Iterable,
-    List,
-    Optional,
-    Set,
-    Tuple,
     TypeVar,
-    Union,
 )
 
 _T = TypeVar("_T")
@@ -51,10 +41,10 @@ async def _wait_one(
 
 async def staggered_race(
     coro_fns: Iterable[Callable[[], Awaitable[_T]]],
-    delay: Optional[float],
+    delay: float | None,
     *,
-    loop: Optional[asyncio.AbstractEventLoop] = None,
-) -> Tuple[Optional[_T], Optional[int], List[Optional[BaseException]]]:
+    loop: asyncio.AbstractEventLoop | None = None,
+) -> tuple[_T | None, int | None, list[BaseException | None]]:
     """
     Run coroutines with staggered start times and take the first to finish.
 
@@ -109,14 +99,14 @@ async def staggered_race(
 
     """
     loop = loop or asyncio.get_running_loop()
-    exceptions: List[Optional[BaseException]] = []
-    tasks: Set[asyncio.Task[Optional[Tuple[_T, int]]]] = set()
+    exceptions: list[BaseException | None] = []
+    tasks: set[asyncio.Task[tuple[_T, int] | None]] = set()
 
     async def run_one_coro(
         coro_fn: Callable[[], Awaitable[_T]],
         this_index: int,
         start_next: "asyncio.Future[None]",
-    ) -> Optional[Tuple[_T, int]]:
+    ) -> tuple[_T, int] | None:
         """
         Run a single coroutine.
 
@@ -139,10 +129,10 @@ async def staggered_race(
 
         return result, this_index
 
-    start_next_timer: Optional[asyncio.TimerHandle] = None
-    start_next: Optional[asyncio.Future[None]]
-    task: asyncio.Task[Optional[Tuple[_T, int]]]
-    done: Union[asyncio.Future[None], asyncio.Task[Optional[Tuple[_T, int]]]]
+    start_next_timer: asyncio.TimerHandle | None = None
+    start_next: asyncio.Future[None] | None
+    task: asyncio.Task[tuple[_T, int] | None]
+    done: asyncio.Future[None] | asyncio.Task[tuple[_T, int] | None]
     coro_iter = iter(coro_fns)
     this_index = -1
     try:

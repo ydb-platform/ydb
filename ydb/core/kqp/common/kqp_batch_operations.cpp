@@ -13,6 +13,9 @@ bool IsIndexSupported(NYql::TIndexDescription::EType type, bool enabledIndexStre
         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
         case NYql::TIndexDescription::EType::GlobalJson:
+        case NYql::TIndexDescription::EType::GlobalFulltextCompact:
+        case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
+        case NYql::TIndexDescription::EType::GlobalJsonCompact:
         case NYql::TIndexDescription::EType::LocalBloomFilter:
         case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
         case NYql::TIndexDescription::EType::LocalMinMax:

@@ -79,6 +79,9 @@ def get_host(
     elif server is not None:
         host = server[0]
 
+        if ":" in host and host[0] != "[":
+            host = f"[{host}]"
+
         if server[1] is not None:
             host = f"{host}:{server[1]}"
 

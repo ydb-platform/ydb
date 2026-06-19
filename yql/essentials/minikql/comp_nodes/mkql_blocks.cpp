@@ -49,7 +49,7 @@ public:
             builder->Add(result);
         }
 
-        return ctx.HolderFactory.CreateArrowBlock(builder->Build(true));
+        return ctx.HolderFactory.CreateArrowBlock(builder->Build(true), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -84,14 +84,14 @@ struct TWideToBlocksState: public TBlockState {
         Builders_[idx]->Add(value);
     }
 
-    void MakeBlocks(const THolderFactory& holderFactory) {
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
+    void MakeBlocks(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)), validationMode);
         Rows_ = 0;
         BuilderAllocatedSize_ = 0;
 
         for (size_t i = 0; i < Builders_.size(); ++i) {
             if (const auto builder = Builders_[i].get()) {
-                Values[i] = holderFactory.CreateArrowBlock(builder->Build(IsFinished_));
+                Values[i] = holderFactory.CreateArrowBlock(builder->Build(IsFinished_), validationMode);
             }
         }
 
@@ -119,7 +119,8 @@ public:
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       std::move(state),
                                                       std::move(Stream_->GetValue(ctx)),
-                                                      MaxLength_);
+                                                      MaxLength_,
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -129,12 +130,13 @@ private:
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
                      NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
-                     const size_t maxLength)
+                     const size_t maxLength, NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , BlockState_(blockState)
             , Stream_(stream)
             , MaxLength_(maxLength)
             , HolderFactory_(holderFactory)
+            , ValidationMode_(validationMode)
         {
         }
 
@@ -163,7 +165,7 @@ private:
                     } while (++blockState.Rows_ < MaxLength_ && blockState.BuilderAllocatedSize_ <= blockState.MaxBuilderAllocatedSize_);
                 }
                 if (blockState.Rows_) {
-                    blockState.MakeBlocks(HolderFactory_);
+                    blockState.MakeBlocks(HolderFactory_, ValidationMode_);
                 } else {
                     return NUdf::EFetchStatus::Finish;
                 }
@@ -180,6 +182,7 @@ private:
         NUdf::TUnboxedValue Stream_;
         const size_t MaxLength_;
         const THolderFactory& HolderFactory_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {
@@ -220,8 +223,8 @@ public:
         Rows_++;
     }
 
-    void MakeBlocks(const THolderFactory& holderFactory) {
-        Values[BlockLengthIndex_] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)));
+    void MakeBlocks(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
+        Values[BlockLengthIndex_] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Rows_)), validationMode);
         Rows_ = 0;
         BuilderAllocatedSize_ = 0;
 
@@ -229,7 +232,7 @@ public:
             if (i == BlockLengthIndex_) {
                 continue;
             }
-            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_), validationMode);
         }
         FillArrays();
     }
@@ -311,11 +314,12 @@ private:
     public:
         class TIterator: public TComputationValue<TIterator> {
         public:
-            TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& iter)
+            TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& iter, NYql::EDatumValidationMode validationMode)
                 : TComputationValue<TIterator>(memInfo)
                 , HolderFactory_(holderFactory)
                 , BlockState_(std::move(blockState))
                 , Iter_(std::move(iter))
+                , ValidationMode_(validationMode)
             {
             }
 
@@ -335,7 +339,7 @@ private:
                     if (blockState.IsEmpty()) {
                         return false;
                     }
-                    blockState.MakeBlocks(HolderFactory_);
+                    blockState.MakeBlocks(HolderFactory_, ValidationMode_);
                 }
 
                 NUdf::TUnboxedValue* items = nullptr;
@@ -351,11 +355,10 @@ private:
 
         private:
             const THolderFactory& HolderFactory_;
-
             const NUdf::TUnboxedValue BlockState_;
             const NUdf::TUnboxedValue Iter_;
-
             NUdf::TUnboxedValue Row_;
+            const NYql::EDatumValidationMode ValidationMode_;
         };
 
         TListToBlocksValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
@@ -366,13 +369,14 @@ private:
             , BlockLengthIndex_(blockLengthIndex)
             , List_(std::move(list))
             , MaxLength_(maxLength)
+            , ValidationMode_(ctx.RuntimeSettings.DatumValidation.Get())
         {
         }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
             auto state = CompCtx_.HolderFactory.Create<TState>(CompCtx_, Types_, BlockLengthIndex_, MaxLength_);
-            return CompCtx_.HolderFactory.Create<TIterator>(CompCtx_.HolderFactory, std::move(state), List_.GetListIterator());
+            return CompCtx_.HolderFactory.Create<TIterator>(CompCtx_.HolderFactory, std::move(state), List_.GetListIterator(), ValidationMode_);
         }
 
         bool HasListItems() const final {
@@ -390,6 +394,7 @@ private:
 
         NUdf::TUnboxedValue List_;
         const size_t MaxLength_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {
@@ -938,7 +943,7 @@ private:
     }
 
     NUdf::TUnboxedValuePod AsScalar(const NUdf::TUnboxedValuePod value, TComputationContext& ctx) const {
-        return ctx.HolderFactory.CreateArrowBlock(DoAsScalar(value, ctx));
+        return ctx.HolderFactory.CreateArrowBlock(DoAsScalar(value, ctx), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
     void RegisterDependencies() const final {
@@ -1000,7 +1005,7 @@ private:
     }
 
     NUdf::TUnboxedValuePod Replicate(const NUdf::TUnboxedValuePod value, const NUdf::TUnboxedValuePod count, TComputationContext& ctx) const {
-        return ctx.HolderFactory.CreateArrowBlock(DoReplicate(value, count, ctx));
+        return ctx.HolderFactory.CreateArrowBlock(DoReplicate(value, count, ctx), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
     void RegisterDependencies() const final {
@@ -1185,6 +1190,7 @@ class TBlockExpandChunkedStreamWrapper: public TMutableComputationNode<TBlockExp
             , HolderFactory_(ctx.HolderFactory)
             , State_(ctx.HolderFactory.Create<TBlockState>(width))
             , Stream_(stream)
+            , ValidationMode_(ctx.RuntimeSettings.DatumValidation.Get())
         {
         }
 
@@ -1210,6 +1216,7 @@ class TBlockExpandChunkedStreamWrapper: public TMutableComputationNode<TBlockExp
         const THolderFactory& HolderFactory_;
         NUdf::TUnboxedValue State_;
         NUdf::TUnboxedValue Stream_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
 public:

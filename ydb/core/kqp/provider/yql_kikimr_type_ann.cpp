@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
@@ -46,6 +47,23 @@ static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
     }
     return result;
 }();
+
+void MaybeAutoBindRowIdSequence(NYql::TKikimrTableMetadata& meta) {
+    auto it = meta.Columns.find(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+    if (it == meta.Columns.end()) {
+        return;
+    }
+    auto& col = it->second;
+    if (col.Type != "Uint64" || !col.NotNull || col.IsDefaultKindDefined()) {
+        return;
+    }
+    // Use the dedicated RowIdSequenceName so the sequence is named identically no matter how the
+    // column was provisioned (CREATE TABLE here, ALTER ADD, or schemeshard auto-provisioning). A
+    // generic "_serial_column_<col>" name would also make the SDK report __ydb_row_id as a Serial
+    // column, which the auto-provision path does not do - keep the representation consistent.
+    col.DefaultFromSequence = NKikimr::NTableIndex::NFulltext::RowIdSequenceName;
+    col.SetDefaultFromSequence();
+}
 
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
@@ -651,6 +669,8 @@ private:
             return TStatus::Error;
         }
 
+        MaybeAutoBindRowIdSequence(*table->Metadata);
+
         auto pos = ctx.GetPosition(node.Pos());
         if (auto maybeTuple = node.Input().Maybe<TExprList>()) {
             auto tuple = maybeTuple.Cast();
@@ -774,11 +794,17 @@ private:
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
-                if (meta.NotNull) {
+                if (meta.NotNull || meta.SetNotNullInProgress) {
                     if (!rowType->FindItem(name) && !meta.IsDefaultKindDefined()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                            << "Missing not null column in input: " << name
-                            << ". All not null columns should be initialized"));
+                        if (meta.SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                                << "Missing column in input: " << name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                                << "Missing not null column in input: " << name
+                                << ". All not null columns should be initialized"));
+                        }
                         return TStatus::Error;
                     }
 
@@ -789,9 +815,15 @@ private:
                     }
 
                     if (itemType && itemType->HasOptionalOrNull()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                            << "Can't set NULL or optional value to not null column: " << name
-                            << ". All not null columns should be initialized"));
+                        if (meta.SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to column: " << name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to not null column: " << name
+                                << ". All not null columns should be initialized"));
+                        }
                         return TStatus::Error;
                     }
                 }
@@ -806,9 +838,15 @@ private:
                 auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
                 YQL_ENSURE(column);
                 if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
-                    if (column->NotNull && item->HasOptionalOrNull()) {
-                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                            << "Can't set NULL or optional value to not null column: " << column->Name));
+                    if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
+                        if (column->SetNotNullInProgress) {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to column: " << column->Name
+                                << ". `SET NOT NULL` operation is currently in progress for this column"));
+                        } else {
+                            ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                                << "Can't set NULL or optional value to not null column: " << column->Name));
+                        }
                         return TStatus::Error;
                     }
                 }
@@ -923,6 +961,8 @@ private:
             return TStatus::Error;
         }
 
+        MaybeAutoBindRowIdSequence(*table->Metadata);
+
         auto rowType = table->SchemeNode;
         auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter);
         if (!UpdateLambdaAllArgumentsTypes(filterLambda, {rowType}, ctx)) {
@@ -969,19 +1009,31 @@ private:
                 return TStatus::Error;
             }
 
-            if (column->IsBuildInProgress) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-                    << "Column '" << item->GetName() << "' is under the build operation '" << node.Table().Value() << "'."));
+            if (column->IsBuildInProgress || column->SetNotNullInProgress) {
+                if (column->SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                        << "Column '" << item->GetName() << "' is under `SET NOT NULL` operation for table '"
+                        << node.Table().Value() << "'."));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                        << "Column '" << item->GetName() << "' is under the build operation '" << node.Table().Value() << "'."));
+                }
                 return TStatus::Error;
             }
 
-            if (column->NotNull && item->HasOptionalOrNull()) {
+            if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
                 if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg) {
                     //no type-level notnull check for pg types.
                     continue;
                 }
-                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                    << "Can't set NULL or optional value to not null column: " << column->Name));
+                if (column->SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set NULL or optional value to column: " << column->Name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set NULL or optional value to not null column: " << column->Name));
+                }
                 return TStatus::Error;
             }
         }
@@ -1201,6 +1253,8 @@ private:
             }
         }
 
+        MaybeAutoBindRowIdSequence(*meta);
+
         if (meta->TableType == ETableType::Table) {
             for (auto&& setting : create.TableSettings()) {
                 if (setting.Name().Value() == "storeType") {
@@ -1234,13 +1288,21 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltextPlain;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalFulltextCompact;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalFulltextPlain;
+                }
             } else if (type == "globalFulltextRelevance") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalFulltextCompactRelevance;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+                }
             } else if (type == "globalJson") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
@@ -1250,7 +1312,11 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index is not supported on column tables"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalJson;
+                if (SessionCtx->Config().FeatureFlags.GetEnableCompactFulltextIndex()) {
+                    indexType = TIndexDescription::EType::GlobalJsonCompact;
+                } else {
+                    indexType = TIndexDescription::EType::GlobalJson;
+                }
             } else if (type == "localBloomFilter") {
                 if (meta->StoreType == EStoreType::Column &&
                     !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
@@ -1313,11 +1379,45 @@ private:
                 dataColums.emplace_back(TString(dataCol.Value()));
             }
 
+            const bool isFulltextIndex =
+                indexType == TIndexDescription::EType::GlobalFulltextPlain ||
+                indexType == TIndexDescription::EType::GlobalFulltextRelevance ||
+                indexType == TIndexDescription::EType::GlobalFulltextCompact ||
+                indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance;
+            // Fulltext index key columns are [prefix..., text]; the text column is the last one.
+            // More than one key column means the index has prefix columns.
+            if (isFulltextIndex && indexColums.size() > 1) {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndexPrefix()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                        "Fulltext index prefix columns support is disabled"));
+                    return TStatus::Error;
+                }
+                // Relevance scoring uses a corpus-global dictionary keyed by token only; with prefix
+                // columns as the leading sort key the same token scatters across prefix groups, which
+                // the streaming dictionary/borders build cannot aggregate. Not supported yet.
+                if (indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                        "Fulltext index prefix columns are not supported for compact relevance indexes"));
+                    return TStatus::Error;
+                }
+                // Prefix columns must be disjoint from the primary key (doc-id) columns:
+                // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
+                const THashSet<TString> pkColumns{meta->KeyColumnNames.begin(), meta->KeyColumnNames.end()};
+                for (size_t i = 0; i + 1 < indexColums.size(); ++i) {
+                    if (pkColumns.contains(indexColums[i])) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
+                            << "Fulltext index prefix column '" << indexColums[i]
+                            << "' must not be a primary key column"));
+                        return TStatus::Error;
+                    }
+                }
+            }
+
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDescription;
             TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
-            // fulltext index has per-column analyzers settings, single value for now
+            // fulltext index has per-column analyzers settings; the text column is the last index column
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
                 indexColums.empty() ? "<none>" : indexColums.back()
             );
@@ -1334,7 +1434,9 @@ private:
                         break;
                     }
                     case TIndexDescription::EType::GlobalFulltextPlain:
-                    case TIndexDescription::EType::GlobalFulltextRelevance: {
+                    case TIndexDescription::EType::GlobalFulltextRelevance:
+                    case TIndexDescription::EType::GlobalFulltextCompact:
+                    case TIndexDescription::EType::GlobalFulltextCompactRelevance: {
                         NKikimr::NFulltext::FillSetting(
                             *fulltextIndexDescription.MutableSettings(),
                             nameLower, value.StringValue(), error);
@@ -1372,6 +1474,7 @@ private:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique:
                 case TIndexDescription::EType::GlobalJson:
+                case TIndexDescription::EType::GlobalJsonCompact:
                     // no specialized index description
                     // no settings validation
                     break;
@@ -1384,16 +1487,10 @@ private:
                     specializedIndexDescription = std::move(vectorIndexKmeansTreeDescription);
                     break;
                 }
-                case TIndexDescription::EType::GlobalFulltextPlain: {
-                    TString error;
-                    if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-                    specializedIndexDescription = std::move(fulltextIndexDescription);
-                    break;
-                }
-                case TIndexDescription::EType::GlobalFulltextRelevance: {
+                case TIndexDescription::EType::GlobalFulltextPlain:
+                case TIndexDescription::EType::GlobalFulltextRelevance:
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance: {
                     TString error;
                     if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
@@ -1854,6 +1951,12 @@ private:
                     if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
                         return TStatus::Error;
                     }
+
+                    if (table->Metadata->IsOlap() && !columnMeta.Families.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                            "Column FAMILY is not supported for column tables"));
+                        return TStatus::Error;
+                    }
                 }
             } else if (name == "dropColumns") {
                 auto listNode = action.Value().Cast<TCoAtomList>();
@@ -1917,6 +2020,11 @@ private:
                             }
                         }
                     } else if (alterColumnAction == "setFamily") {
+                        if (table->Metadata->IsOlap()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                "Column FAMILY is not supported for column tables"));
+                            return TStatus::Error;
+                        }
                         auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                         if (families.Size() > 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
@@ -1987,7 +2095,7 @@ private:
                         if (auto status = ValidateDefaultColumn(columnType, defaultType, defaultExpr, nameNode.Pos(), name, table, ctx, Types, [&](TExprNode::TPtr expr) {
                             alterColumnList.Ptr()->ChildRef(1) = std::move(expr);
                             ctx.Step.Repeat(TExprStep::ExprEval);
-                        }, column ? column->NotNull : false))
+                        }, column ? (column->NotNull || column->SetNotNullInProgress) : false))
                         {
                             return *status;
                         }
@@ -2125,9 +2233,13 @@ private:
                         return TStatus::Error;
                     }
                 }
-            } else if (name != "addColumnFamilies"
-                    && name != "alterColumnFamilies"
-                    && name != "setTableSettings"
+            } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
+                if (table->Metadata->IsOlap()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                        "Column FAMILY is not supported for column tables"));
+                    return TStatus::Error;
+                }
+            } else if (name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"

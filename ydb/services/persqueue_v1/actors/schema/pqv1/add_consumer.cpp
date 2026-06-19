@@ -53,7 +53,7 @@ public:
         Become(&TAddConsumerActor::StateWork);
 
         Register(NPQ::NSchema::CreateAlterTopicOperationActor(SelfId(), {
-            .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
+            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
             .Strategy = std::make_unique<TAddConsumerStrategy>(GetProtoRequest()->read_rule(), GetProtoRequest()->path()),
@@ -61,7 +61,7 @@ public:
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         auto status = ev->Get()->Status;
         if (status == Ydb::StatusIds::SUCCESS) {
             ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::PersQueue::V1::AddReadRuleResponse());
@@ -72,7 +72,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

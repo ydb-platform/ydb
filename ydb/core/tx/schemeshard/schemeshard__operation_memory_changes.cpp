@@ -36,6 +36,16 @@ void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TTableInfo>(pathId, ss->Tables, Tables);
 }
 
+void TMemoryChanges::GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId) {
+    Y_ABORT_UNLESS(!ss->ColumnTables.contains(pathId));
+    ColumnTables.emplace(pathId, nullptr);
+}
+
+void TMemoryChanges::GrabColumnTable(TSchemeShard* ss, const TPathId& pathId) {
+    Y_ABORT_UNLESS(ss->ColumnTables.contains(pathId));
+    ColumnTables.emplace(pathId, std::make_shared<TColumnTableInfo>(*ss->ColumnTables.GetVerified(pathId)));
+}
+
 void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
     Shards.emplace(shardId, nullptr);
 }
@@ -97,8 +107,16 @@ void TMemoryChanges::GrabLongLock(TSchemeShard* ss, const TPathId& pathId, TTxId
     LockedPaths.emplace(pathId, lockTxId); // will be restored on UnDo()
 }
 
+void TMemoryChanges::GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->ExternalTables, ExternalTables);
+}
+
 void TMemoryChanges::GrabExternalTable(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TExternalTableInfo>(pathId, ss->ExternalTables, ExternalTables);
+}
+
+void TMemoryChanges::GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->ExternalDataSources, ExternalDataSources);
 }
 
 void TMemoryChanges::GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
@@ -111,6 +129,10 @@ void TMemoryChanges::GrabNewView(TSchemeShard* ss, const TPathId& pathId) {
 
 void TMemoryChanges::GrabView(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TViewInfo>(pathId, ss->Views, Views);
+}
+
+void TMemoryChanges::GrabNewResourcePool(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->ResourcePools, ResourcePools);
 }
 
 void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
@@ -172,6 +194,22 @@ void TMemoryChanges::GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& path
 
 void TMemoryChanges::GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TStreamingQueryInfo>(pathId, ss->StreamingQueries, StreamingQueries);
+}
+
+void TMemoryChanges::GrabNewSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId) {
+    auto shardIt = ss->SharedShards.find(shardIdx);
+    if (shardIt != ss->SharedShards.end()) {
+        Y_ABORT_UNLESS(!shardIt->second.contains(pathId));
+    }
+    SharedShardEntries.emplace(shardIdx, pathId, std::nullopt);
+}
+
+void TMemoryChanges::GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId) {
+    auto shardIt = ss->SharedShards.find(shardIdx);
+    Y_ABORT_UNLESS(shardIt != ss->SharedShards.end());
+    auto pathIt = shardIt->second.find(pathId);
+    Y_ABORT_UNLESS(pathIt != shardIt->second.end());
+    SharedShardEntries.emplace(shardIdx, pathId, pathIt->second);
 }
 
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
@@ -251,6 +289,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->Tables.erase(id);
         }
         Tables.pop();
+    }
+
+    while (ColumnTables) {
+        const auto& [id, elem] = ColumnTables.top();
+        // Drop current entry first (if any), then re-create with the saved value (if any)
+        ss->ColumnTables.Drop(id);
+        if (elem) {
+            ss->ColumnTables.BuildNew(id, elem);
+        }
+        ColumnTables.pop();
     }
 
     while (Shards) {
@@ -403,6 +451,22 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->StreamingQueries.erase(id);
         }
         StreamingQueries.pop();
+    }
+
+    while (SharedShardEntries) {
+        const auto& [shardIdx, pathId, elem] = SharedShardEntries.top();
+        if (elem) {
+            ss->SharedShards[shardIdx][pathId] = *elem;
+        } else {
+            auto shardIt = ss->SharedShards.find(shardIdx);
+            if (shardIt != ss->SharedShards.end()) {
+                shardIt->second.erase(pathId);
+                if (shardIt->second.empty()) {
+                    ss->SharedShards.erase(shardIt);
+                }
+            }
+        }
+        SharedShardEntries.pop();
     }
 }
 

@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
+#include <ydb/public/lib/ydb_cli/common/utf8_utils.h>
 
 #include <library/cpp/archive/yarchive.h>
 #include <library/cpp/resource/resource.h>
@@ -597,6 +598,10 @@ Searches and retrieves YDB documentation pages from a bundled docs archive.
 Use this tool to look up authoritative information about YDB concepts, YQL syntax,
 configuration, deployment, and other topics described in the official documentation.
 
+The returned pages are raw Markdown/YAML. Do not paste large fragments verbatim: extract the relevant facts and
+re-express them following the system prompt's OUTPUT FORMATTING rules (plain text, with language-tagged fenced code
+blocks for code or queries and Markdown tables for tabular data).
+
 Supported actions:
 - "list": returns the catalog of all documentation pages. Each entry contains:
     * "path" — archive-relative path to the page (e.g., "core/concepts/architecture.md").
@@ -873,9 +878,13 @@ private:
             for (size_t i = entry.Content.find(Pattern); i < entry.Content.size(); i = entry.Content.find(Pattern, right + 1)) {
                 ++matchesCount;
 
-                const ui64 left = i - std::min(FIND_WINDOW_SIZE / 2, i);
-                right = std::min(i + Pattern.size() + FIND_WINDOW_SIZE / 2, entry.Content.size() - 1);
-                matches.emplace_back(entry.Content.substr(left, right - left + 1));
+                const size_t rawBegin = i - std::min(FIND_WINDOW_SIZE / 2, i);
+                const size_t rawEnd = std::min(i + Pattern.size() + FIND_WINDOW_SIZE / 2 + 1, entry.Content.size());
+                // Snap the window to UTF-8 char boundaries: docs contain Cyrillic, and cutting a
+                // multibyte char mid-sequence yields invalid UTF-8 that the model API rejects.
+                const auto [begin, end] = WidenToUtf8CharBoundaries(entry.Content, rawBegin, rawEnd);
+                right = end - 1;
+                matches.emplace_back(entry.Content.substr(begin, end - begin));
 
                 if ((payloadSize += matches.back().size()) >= FIND_SIZE_LIMIT) {
                     truncated = true;

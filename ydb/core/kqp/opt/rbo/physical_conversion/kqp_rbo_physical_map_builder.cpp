@@ -20,21 +20,28 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     TVector<TExprNode::TPtr> lambdaResults;
 
     TVector<TString> outputColumns;
-    THashMap<ui32, TString> renameMap;
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
     for (ui32 i = 0; i < inputColumns.size(); ++i) {
         lambdaArgs.push_back(Ctx.NewArgument(Pos, "arg_" + ToString(i)));
         colNamesToIndices.emplace(inputColumns[i].GetFullName(), i);
     }
 
-    if (!Map->Project) {
-        for (const auto& input : inputColumns) {
-            const auto& fullName = input.GetFullName();
-            auto it = colNamesToIndices.find(fullName);
-            Y_ENSURE(it != colNamesToIndices.end());
-            lambdaResults.push_back(lambdaArgs[it->second]);
-            outputColumns.push_back(fullName);
+    for (const auto& mapElement : Map->MapElements) {
+        if (mapElement.IsRename()) {
+            renameSources.insert(mapElement.GetRename());
         }
+    }
+
+    for (const auto& input : inputColumns) {
+        if (renameSources.contains(input)) {
+            continue;
+        }
+        const auto& fullName = input.GetFullName();
+        auto it = colNamesToIndices.find(fullName);
+        Y_ENSURE(it != colNamesToIndices.end());
+        lambdaResults.push_back(lambdaArgs[it->second]);
+        outputColumns.push_back(fullName);
     }
 
     for (const auto& mapElement : Map->MapElements) {
@@ -68,7 +75,6 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         }
 
         const auto outColName = mapElement.GetElementName().GetFullName();
-        renameMap.emplace(outputColumns.size(), outColName);
         outputColumns.push_back(outColName);
     }
 
@@ -82,7 +88,7 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, renameMap, Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, NPhysicalConvertionUtils::BuildNameSet(Map->GetOutputIUs()), Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

@@ -1,7 +1,103 @@
 # -*- coding: utf-8 -*-
-"""Shared KiKiMR config for functional/security tests, kept in a regular module for explicit imports."""
+
+import os
+import subprocess
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+
+
+def generate_certificates(certs_tmp_dir):
+    ca_key = os.path.join(certs_tmp_dir, 'server_ca.key')
+    ca_crt = os.path.join(certs_tmp_dir, 'server_ca.crt')
+
+    subprocess.run(['openssl', 'genrsa', '-out', ca_key, '2048'], check=True, capture_output=True)
+
+    subprocess.run(
+        [
+            'openssl',
+            'req',
+            '-x509',
+            '-new',
+            '-nodes',
+            '-key',
+            ca_key,
+            '-sha256',
+            '-days',
+            '3650',
+            '-out',
+            ca_crt,
+            '-subj',
+            '/CN=Monitoring CA/O=YDB/C=RU',
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    server_key = os.path.join(certs_tmp_dir, 'server.key')
+    server_crt = os.path.join(certs_tmp_dir, 'server.crt')
+    server_csr = os.path.join(certs_tmp_dir, 'server.csr')
+    server_conf = os.path.join(certs_tmp_dir, 'server.conf')
+
+    subprocess.run(['openssl', 'genrsa', '-out', server_key, '2048'], check=True, capture_output=True)
+
+    with open(server_conf, 'w') as config_file:
+        config_file.write('[req]\n')
+        config_file.write('distinguished_name = req_distinguished_name\n')
+        config_file.write('req_extensions = v3_req\n')
+        config_file.write('\n')
+        config_file.write('[req_distinguished_name]\n')
+        config_file.write('\n')
+        config_file.write('[v3_req]\n')
+        config_file.write('subjectAltName=DNS:localhost,DNS:test-server,IP:127.0.0.1\n')
+
+    subprocess.run(
+        [
+            'openssl',
+            'req',
+            '-new',
+            '-key',
+            server_key,
+            '-out',
+            server_csr,
+            '-subj',
+            '/CN=test-server/O=YDB/C=RU',
+            '-config',
+            server_conf,
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    subprocess.run(
+        [
+            'openssl',
+            'x509',
+            '-req',
+            '-in',
+            server_csr,
+            '-CA',
+            ca_crt,
+            '-CAkey',
+            ca_key,
+            '-CAcreateserial',
+            '-out',
+            server_crt,
+            '-days',
+            '3650',
+            '-sha256',
+            '-extensions',
+            'v3_req',
+            '-extfile',
+            server_conf,
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    return {
+        'server_cert': server_crt,
+        'server_key': server_key,
+    }
 
 
 def create_ydb_configurator(
@@ -10,12 +106,15 @@ def create_ydb_configurator(
     require_counters_authentication=None,
     require_healthcheck_authentication=None,
     enable_tablet_dev_ui_secure_path=None,
+    binary_paths=None,
     extra_feature_flags=None,
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
         'enforce_user_token_requirement': enforce_user_token_requirement,
     }
+    if binary_paths is not None:
+        cluster_config['binary_paths'] = binary_paths
     if extra_feature_flags:
         cluster_config['extra_feature_flags'] = extra_feature_flags
     config_generator = KikimrConfigGenerator(**cluster_config)

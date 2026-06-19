@@ -1243,6 +1243,15 @@ void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPath
 
 }  // namespace NForceDrop
 
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {
+    if (parentPath.Base()->HasActiveChanges()) {
+        const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
+                                    ? parentPath.Base()->CreateTxId
+                                    : parentPath.Base()->LastTxId;
+        context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
+    }
+}
+
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete) {
     auto parent = path.Parent();
     if (parent.Base()->IsDirectory() || parent.Base()->IsDomainRoot()) {
@@ -1340,6 +1349,19 @@ NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& 
     auto operation = scheme.MutableMoveTableIndex();
     operation->SetSrcPath(src.PathString());
     operation->SetDstPath(dst.PathString());
+
+    return scheme;
+}
+
+NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName) {
+    NKikimrSchemeOp::TModifyScheme scheme;
+
+    scheme.SetWorkingDir(tablePath);
+    scheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+    auto operation = scheme.MutableMoveIndex();
+    operation->SetTablePath(tablePath);
+    operation->SetSrcPath(srcIndexPath);
+    operation->SetDstPath(dstIndexName);
 
     return scheme;
 }

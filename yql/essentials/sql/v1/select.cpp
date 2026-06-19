@@ -38,6 +38,9 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         YQL_ENSURE(!src, "Source not expected for subquery node");
         Source_->UseAsInner();
+        if (PreserveSort_) {
+            Source_->PreserveSort();
+        }
         if (!Source_->Init(ctx, nullptr)) {
             return false;
         }
@@ -58,7 +61,7 @@ public:
             source = Y("EnsureTupleSize", source, Q(ToString(EnsureTupleSize_)));
         }
 
-        Node_ = Y("let", Alias_, Y("block", Q(L(tables, Y("return", Q(Y("world", source)))))));
+        Node_ = Y("let", Alias_, Y("block", Q(L(tables, Y("return", Y("Cons!", "world", source))))));
         IsUsed_ = true;
         return true;
     }
@@ -124,7 +127,7 @@ public:
         for (TNodePtr& dependency : dependencies) {
             block->Add(std::move(dependency));
         }
-        block->Add(Y("return", Q(Y("world", Source_))));
+        block->Add(Y("return", Y("Cons!", "world", Source_)));
 
         Node_ = Y("let", Alias_, Y("block", Q(std::move(block))));
         IsUsed_ = true;
@@ -188,6 +191,9 @@ public:
 
         if (AsInner_) {
             Source_->UseAsInner();
+        }
+        if (PreserveSort_) {
+            Source_->PreserveSort();
         }
 
         if (!Source_->Init(ctx, src)) {
@@ -702,6 +708,9 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         // independent subquery should not connect source
         Subquery_->UseAsInner();
+        if (PreserveSort_) {
+            Subquery_->PreserveSort();
+        }
         if (!Subquery_->Init(ctx, nullptr)) {
             return false;
         }
@@ -843,6 +852,96 @@ TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref) {
 
 bool IsYqlSubqueryRef(const TNodePtr& source) {
     return dynamic_cast<const TYqlSubqueryRefNode*>(source.Get()) != nullptr;
+}
+
+class TMaterializeNode: public INode {
+public:
+    TMaterializeNode(TPosition pos, TSourcePtr source, TString service, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped)
+        : INode(pos)
+        , Source_(std::move(source))
+        , Service_(std::move(service))
+        , ClusterNode_(std::move(cluster))
+        , Hints_(std::move(hints))
+        , Alias_(std::move(alias))
+        , Scoped_(std::move(scoped))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+
+        if (!ctx.EnsureAvailable(GetPos(), NYql::NFeature::Materialize)) {
+            return false;
+        }
+
+        Source_->UseAsInner();
+        Source_->PreserveSort();
+
+        if (!Source_->Init(ctx, nullptr)) {
+            return false;
+        }
+
+        TTableList tableList;
+        Source_->GetInputTables(tableList);
+
+        auto tables = BuildInputTables(Pos_, tableList, false, Scoped_);
+        if (!tables->Init(ctx, Source_.Get())) {
+            return false;
+        }
+
+        auto sourceData = Source_->Build(ctx);
+        if (!sourceData) {
+            return false;
+        }
+
+        if (!ClusterNode_->Init(ctx, nullptr)) {
+            return false;
+        }
+
+        auto datasink = Y("DataSink", BuildQuotedAtom(Pos_, Service_), ClusterNode_);
+
+        TNodePtr options = BuildInputOptions(Pos_, Hints_);
+        if (!options) {
+            options = Q(Y());
+        }
+
+        Node_ = Y("let", Alias_, Y("block", Q(L(tables, Y("return", Y("Materialize!", "world", datasink, sourceData, options))))));
+        IsUsed_ = true;
+
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const final {
+        return Node_->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TMaterializeNode(GetPos(), Source_->CloneSource(), Service_, ClusterNode_->Clone(), Hints_, Alias_, Scoped_);
+    }
+
+    // Is used at the TYqlProgramNode
+    const TString* SubqueryAlias() const final {
+        return &Alias_;
+    }
+
+    // Is used at the TYqlProgramNode
+    bool UsedSubquery() const final {
+        return IsUsed_;
+    }
+
+private:
+    TSourcePtr Source_;
+    TString Service_;
+    TNodePtr ClusterNode_;
+    TTableHints Hints_;
+    TString Alias_;
+    TScopedStatePtr Scoped_;
+    bool IsUsed_ = false;
+    TNodePtr Node_;
+};
+
+TNodePtr BuildMaterialize(TPosition pos, TSourcePtr source, const TString& serviceId, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped) {
+    return new TMaterializeNode(pos, std::move(source), serviceId, std::move(cluster), std::move(hints), std::move(alias), std::move(scoped));
 }
 
 class TInvalidSubqueryRefNode: public ISource {
@@ -1072,6 +1171,9 @@ public:
         source->SetLabel(Label_);
         if (!NewSource_) {
             Node_->UseAsInner();
+            if (PreserveSort_) {
+                Node_->PreserveSort();
+            }
             if (!Node_->Init(ctx, nullptr)) {
                 return false;
             }
@@ -2010,22 +2112,38 @@ public:
 
     TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label) override {
         TNodePtr cleanup;
+        auto removeSystemMembers = [&ctx, this](const TString& src) -> TNodePtr {
+            TNodePtr expr = Y("RemoveSystemMembers", src);
+            if (!ctx.Settings.ExtraSystemColumnPrefixes.empty()) {
+                TNodePtr prefixes = Y();
+                for (const auto& prefix : ctx.Settings.ExtraSystemColumnPrefixes) {
+                    prefixes = L(prefixes, Q(prefix));
+                }
+                expr = Y("RemovePrefixMembers", expr, Q(prefixes));
+            }
+            return expr;
+        };
         if (ctx.EnableSystemColumns && ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             if (Columns_.All) {
-                cleanup = Y("let", label, Y("RemoveSystemMembers", label));
+                cleanup = Y("let", label, removeSystemMembers(label));
             } else if (!Columns_.List.empty()) {
                 const bool isJoin = Source_->GetJoin();
                 if (!isJoin && Columns_.QualifiedAll) {
                     if (ctx.SimpleColumns) {
-                        cleanup = Y("let", label, Y("RemoveSystemMembers", label));
+                        cleanup = Y("let", label, removeSystemMembers(label));
                     } else {
                         TNodePtr members;
+                        auto addPrefix = [&members, this](const TString& prefix) {
+                            members = members ? L(members, Q(prefix)) : Y(Q(prefix));
+                        };
                         for (auto& term : Terms_) {
                             if (term->IsAsterisk()) {
                                 auto sourceName = term->GetSourceName();
                                 YQL_ENSURE(*sourceName && !sourceName->empty());
-                                auto prefix = *sourceName + "._yql_";
-                                members = members ? L(members, Q(prefix)) : Y(Q(prefix));
+                                addPrefix(*sourceName + "._yql_");
+                                for (const auto& prefix : ctx.Settings.ExtraSystemColumnPrefixes) {
+                                    addPrefix(*sourceName + "." + prefix);
+                                }
                             }
                         }
                         if (members) {
@@ -3328,7 +3446,7 @@ public:
 
 protected:
     bool IgnoreSort() const {
-        return AsInner_ && !SkipTake_ && EOrderKind::Sort == Source_->GetOrderKind();
+        return AsInner_ && !PreserveSort_ && !SkipTake_ && EOrderKind::Sort == Source_->GetOrderKind();
     }
 
     TSourcePtr Source_;
@@ -3546,10 +3664,10 @@ public:
         }
         TNodePtr presortDirection;
         TNodePtr presortKeySelector;
-        Source_->FillSortParts(Presort_, presortDirection, presortKeySelector);
+        FillSortParts(Presort_, presortDirection, presortKeySelector);
         if (!Presort_.empty()) {
-            presortKeySelector = BuildLambda(Pos_, Source_->Y("row"),
-                                             Source_->Y("SqlExtractKey", "row", presortKeySelector));
+            presortKeySelector = BuildLambda(Pos_, Y("row"),
+                                             Y("SqlExtractKey", "row", presortKeySelector));
         }
 
         TMap<TString, TNodePtr> extraColumns;
@@ -3557,17 +3675,16 @@ public:
         if (!extraColumns.empty()) {
             TNodePtr extraMembers = Y();
             for (const auto& [name, node] : extraColumns) {
-                const auto addMember = Source_->Y("AddMember", "row", BuildQuotedAtom(node->GetPos(), name), node);
-                extraMembers = Source_->L(extraMembers, Source_->Y("let", "row", addMember));
+                const auto newMember = Y("let", "row", Y("AddMember", "row", BuildQuotedAtom(node->GetPos(), name), node));
+                extraMembers = L(extraMembers, newMember);
             }
-            const auto extraMembersLambda = BuildLambda(Pos_, Source_->Y("row"), extraMembers, "row");
-            input = Source_->Y(ctx.UseUnordered(*Source_) ? "OrderedMap" : "Map", input, extraMembersLambda);
+            const auto extraMembersLambda = BuildLambda(Pos_, Y("row"), extraMembers, "row");
+            input = Y(ctx.UseUnordered(*Source_) ? "OrderedMap" : "Map", input, extraMembersLambda);
         }
 
-        return Source_->Y("SqlCombineInput", input,
-                          presortKeySelector, presortDirection,
-                          BuildLambda(Pos_, Source_->Y("row"), extractKey),
-                          BuildLambda(Pos_, Source_->Y("row"), Arg_));
+        return Y("SqlCombineInput", input, presortKeySelector, presortDirection,
+                 BuildLambda(Pos_, Y("row"), extractKey),
+                 BuildLambda(Pos_, Y("row"), Arg_));
     }
 
     TPtr CloneCombineInputSource() const {
@@ -3593,19 +3710,19 @@ private:
                 keyName = ctx.MakeName("_yql_combine_column_");
                 extraColumns.insert({keyName, key});
             }
-            return Source_->Y("PersistableRepr", Source_->Y("Member", "row", BuildQuotedAtom(Pos_, keyName)));
+            return Y("PersistableRepr", Y("Member", "row", BuildQuotedAtom(Pos_, keyName)));
         };
 
-        auto keysTuple = Source_->Y();
+        auto keysTuple = Y();
         if (Keys_.size() == 1) {
             keysTuple = emitGetKey(Keys_.back(), extraColumns, ctx);
         } else {
             for (const auto& key : Keys_) {
-                keysTuple = Source_->L(keysTuple, emitGetKey(key, extraColumns, ctx));
+                keysTuple = L(keysTuple, emitGetKey(key, extraColumns, ctx));
             }
-            keysTuple = Source_->Q(keysTuple);
+            keysTuple = Q(keysTuple);
         }
-        return Y("SqlExtractKey", "row", BuildLambda(Pos_, Source_->Y("row"), keysTuple));
+        return Y("SqlExtractKey", "row", BuildLambda(Pos_, Y("row"), keysTuple));
     }
 
     TSourcePtr Source_;
@@ -3652,6 +3769,8 @@ public:
         if (!Udf_->Init(ctx, src)) {
             return false;
         }
+
+        Columns_.SetAll();
 
         if (!InitCombineKeyExpr(ctx, src)) {
             return false;

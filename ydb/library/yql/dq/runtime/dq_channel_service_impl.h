@@ -265,13 +265,14 @@ class TNodeState;
 class TOutputDescriptor {
 public:
     TOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferBytes,
-        ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxInflightBytes, ui64 minInflightBytes)
+        ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxInflightBytes, ui64 minInflightBytes, ui64 coldInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
         , OutputBufferBytes(outputBufferBytes)
         , OutputBufferChunks(outputBufferChunks)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
+        , ColdInflightBytes(coldInflightBytes)
         , QuotaManager(quotaManager)
     {
         PushStats.Level = info.Level;
@@ -320,6 +321,7 @@ public:
     std::atomic<ui64> PushBytes = 0;
     std::atomic<ui64> RemotePopBytes = 0;
     std::atomic<ui64> SpilledBytes = 0;
+    std::atomic<ui64> SeqNo = 0;
 
     std::atomic<bool> NeedToNotifyOutput = false;
     std::atomic<bool> EarlyFinished = false;
@@ -334,6 +336,7 @@ public:
 
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
+    const ui64 ColdInflightBytes;
 
     IMemoryQuotaManager::TPtr QuotaManager;
 };
@@ -361,8 +364,9 @@ public:
     TDataChunk Data;
     std::shared_ptr<TOutputDescriptor> Descriptor;
     std::atomic<EState> State;
-    ui64 SeqNo;
-    bool Leading;
+    ui64 SeqNo = 0;
+    bool Leading = false;
+    ui64 ChannelSeqNo = 0;
 };
 
 class TOutputBuffer : public IChannelBuffer {
@@ -442,6 +446,7 @@ public:
     std::atomic<ui64> QueueBytes = 0;
     mutable std::queue<TInputItem> Queue;
     std::atomic<ui64> InflightBytes = 0;
+    std::atomic<ui64> SeqNo = 0;
 
     std::atomic<bool> NeedToNotifyInput = false;
     std::atomic<bool> FinishPushed = false;
@@ -533,6 +538,8 @@ struct TEvPrivate {
     };
 };
 
+const int ReconciliationLogSize = 40;
+
 class TNodeState {
 public:
     TNodeState(NActors::TActorSystem* actorSystem, ui32 nodeId, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits)
@@ -553,10 +560,13 @@ public:
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
         InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
-        LastActivity.store(TInstant::Now());
+        auto now = TInstant::Now();
+        LastPeerActivity.store(now);
+        LastCleanup = now;
     }
 
     virtual ~TNodeState();
+    void FailDescriptors();
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -584,8 +594,10 @@ public:
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
-    void StartReconciliation(bool major);
-    void DoReconciliation();
+    void StartReconciliation(bool major, char logSymbol);
+    void DoReconciliation(char logSymbol);
+    void AddReconciliationLog(char logSymbol);
+    TString GetReconciliationLog();
     void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
 
     NActors::TActorId NodeActorId;
@@ -634,13 +646,16 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
-    const TDuration ReconciliationTimeout = TDuration::MilliSeconds(250);
+    const TDuration ReconciliationTimeout = TDuration::MilliSeconds(1000);
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;
-    std::atomic<TInstant> LastActivity;
+    std::atomic<TInstant> LastPeerActivity;
+    TInstant LastCleanup;
     std::atomic<bool> Terminating = false;
     std::atomic<bool> ResendAsked = false;
+    std::deque<char> ReconciliationLog;
+    TChannelInfo LastLostInfo = TChannelInfo(0,  NActors::TActorId{}, NActors::TActorId{});
 };
 
 class TDebugNodeState : public TNodeState {
@@ -958,22 +973,6 @@ public:
         return PausedByCheckpoint;
     }
 
-    void AddWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    void PauseByWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    void ResumeByWatermark(TInstant) override {
-        Y_ENSURE(false);
-    }
-
-    bool IsPausedByWatermark() const override {
-        Y_ENSURE(false);
-    }
-
 // IDqInputChannel
 
     ui64 GetChannelId() const override {
@@ -1267,4 +1266,3 @@ public:
 };
 
 }
-

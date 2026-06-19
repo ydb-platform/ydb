@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlsplit
 
@@ -7,11 +8,15 @@ from library.python.port_manager import PortManager
 from support_links_env import (
     ABSOLUTE_GRAFANA_DASHBOARD_URL,
     CLUSTER_NAME,
+    DATABASE_WITH_NODE_OR_HOST_ERROR,
     DATABASE_NAME,
     DATASOURCE_ID,
+    DATASOURCE_LOGGING_ID,
+    HOST_NAME,
     MISSING_CLUSTER_ERROR,
     MISSING_CLUSTER_NAME,
     MISSING_CLUSTER_PARAMETER_ERROR,
+    NODE_ID,
     WORKSPACE_NAME,
     start_cluster_with_meta_table,
     start_meta_support_links_service,
@@ -63,6 +68,46 @@ def assert_bad_request_response(payload, message_substring):
     assert len(payload["errors"]) == 1
     assert payload["errors"][0]["source"] == "meta"
     assert message_substring in payload["errors"][0]["message"]
+
+
+def assert_logging_link(link, expected_title, expected_expr):
+    assert link["title"] == expected_title
+
+    actual_url = link["url"]
+    actual_split = urlsplit(actual_url)
+    assert actual_split.scheme == "https"
+    assert actual_split.netloc == "grafana.example.test"
+    assert actual_split.path == "/explore"
+
+    query = dict(parse_qsl(actual_split.query, keep_blank_values=True))
+    assert query["schemaVersion"] == "1"
+    assert query["orgId"] == "1"
+
+    panes = json.loads(query["panes"])
+    assert list(panes.keys()) == ["x"]
+    pane = panes["x"]
+    assert pane["datasource"] == DATASOURCE_LOGGING_ID
+    assert pane["range"] == {"from": "now-1h", "to": "now"}
+    assert pane["queries"][0]["expr"] == expected_expr
+    assert pane["queries"][0]["queryType"] == "range"
+    assert pane["queries"][0]["direction"] == "backward"
+    assert pane["queries"][0]["datasource"] == {
+        "type": "loki",
+        "uid": DATASOURCE_LOGGING_ID,
+    }
+
+
+def assert_logging_support_links_response(payload, expected_title, expected_expr):
+    assert len(payload["links"]) == 1
+    assert_logging_link(payload["links"][0], expected_title, expected_expr)
+    assert "errors" not in payload
+
+
+def assert_multiple_logging_support_links_response(payload, expected_links):
+    assert len(payload["links"]) == len(expected_links)
+    for link, expected in zip(payload["links"], expected_links):
+        assert_logging_link(link, expected[0], expected[1])
+    assert "errors" not in payload
 
 
 def assert_urls_match(actual_url, expected_url):
@@ -131,6 +176,51 @@ def test_meta_support_links_returns_grafana_link(meta_support_links_env, case):
     )
 
 
+def test_meta_support_links_returns_logging_link_for_node_id(meta_support_links_env):
+    assert_logging_support_links_response(
+        meta_support_links_env.get_ok_support_links_payload(CLUSTER_NAME, node=NODE_ID),
+        "Node Logs",
+        f'{{cluster="{CLUSTER_NAME}", node="{NODE_ID}"}}',
+    )
+
+
+def test_meta_support_links_returns_logging_link_for_host(meta_support_links_env):
+    assert_logging_support_links_response(
+        meta_support_links_env.get_ok_support_links_payload(CLUSTER_NAME, host=HOST_NAME),
+        "Host Logs",
+        f'{{cluster="{CLUSTER_NAME}", host="{HOST_NAME}"}}',
+    )
+
+
+def test_meta_support_links_combines_node_and_host_groups(meta_support_links_env):
+    assert_multiple_logging_support_links_response(
+        meta_support_links_env.get_ok_support_links_payload(
+            CLUSTER_NAME,
+            node=NODE_ID,
+            host=HOST_NAME,
+        ),
+        [
+            ("Node Logs", f'{{cluster="{CLUSTER_NAME}", node="{NODE_ID}"}}'),
+            ("Host Logs", f'{{cluster="{CLUSTER_NAME}", host="{HOST_NAME}"}}'),
+        ],
+    )
+
+
+def test_meta_support_links_skips_additional_and_foreign_identity_params_for_logging(meta_support_links_env):
+    assert_multiple_logging_support_links_response(
+        meta_support_links_env.get_ok_support_links_payload(
+            CLUSTER_NAME,
+            node=NODE_ID,
+            host=HOST_NAME,
+            extra_params={"custom_label": "kept"},
+        ),
+        [
+            ("Node Logs", f'{{cluster="{CLUSTER_NAME}", node="{NODE_ID}"}}'),
+            ("Host Logs", f'{{cluster="{CLUSTER_NAME}", host="{HOST_NAME}"}}'),
+        ],
+    )
+
+
 def test_meta_support_links_returns_error_for_missing_cluster(meta_support_links_env):
     assert_support_links_response_with_error(
         meta_support_links_env.get_ok_support_links_payload(MISSING_CLUSTER_NAME),
@@ -190,4 +280,22 @@ def test_meta_support_links_requires_cluster_parameter(meta_support_links_env):
     assert_bad_request_response(
         meta_support_links_env.get_bad_request_support_links_payload(database=DATABASE_NAME),
         MISSING_CLUSTER_PARAMETER_ERROR,
+    )
+
+
+def test_meta_support_links_requires_cluster_parameter_for_node_and_host(meta_support_links_env):
+    assert_bad_request_response(
+        meta_support_links_env.get_bad_request_support_links_payload(node=NODE_ID, host=HOST_NAME),
+        MISSING_CLUSTER_PARAMETER_ERROR,
+    )
+
+
+def test_meta_support_links_rejects_database_with_node_or_host(meta_support_links_env):
+    assert_bad_request_response(
+        meta_support_links_env.get_bad_request_support_links_payload(
+            cluster_name=CLUSTER_NAME,
+            database=DATABASE_NAME,
+            node=NODE_ID,
+        ),
+        DATABASE_WITH_NODE_OR_HOST_ERROR,
     )

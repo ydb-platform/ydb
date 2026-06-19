@@ -74,7 +74,7 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, NPhysicalConvertionUtils::BuildNameSet(Filter->GetOutputIUs()), Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

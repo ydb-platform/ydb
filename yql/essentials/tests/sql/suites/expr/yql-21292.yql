@@ -1,0 +1,25 @@
+
+PRAGMA config.flags("TransformCycleDetector","10");
+
+$variant_to_struct = ($v) -> {
+    $make_visitor = ($fname) -> (
+        ($nothing_struct) -> (
+            ($i) -> (StructUnion(SpreadMembers([($fname, Just($i))], [$fname]), $nothing_struct))
+        )
+    );
+    $nothing_struct = StaticMap(
+        InstanceOf(VariantUnderlyingType(TypeOf($v))),
+        ($i) -> (Nothing(OptionalType(TypeOf($i))))
+    );
+    RETURN EvaluateCode(
+        LambdaCode(
+            ($v_code) -> (FuncCode('Visit', $v_code, ListFlatMap(
+                StructMembers(InstanceOf(VariantUnderlyingType(TypeOf($v)))),
+                ($fname) -> ([AtomCode($fname), QuoteCode($make_visitor($fname)($nothing_struct))])
+            )))
+        )
+    )($v);
+};
+$struct = $variant_to_struct(Variant(1, 'a', Variant<a: Int32>));
+SELECT Unwrap(CAST(FormatType(TypeOf(GatherMembers($struct))) AS Utf8)) AS X;
+

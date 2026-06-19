@@ -1,4 +1,6 @@
-#include "kafka_messages_int.h"
+#include "kafka_consumer_protocol.h"
+
+#include <ydb/library/kafka/kafka_messages_int.h>
 
 
 namespace NKafka {

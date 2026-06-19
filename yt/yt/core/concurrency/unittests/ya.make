@@ -21,6 +21,7 @@ SRCS(
     fair_share_thread_pool_ut.cpp
     fair_throttler_ut.cpp
     fls_ut.cpp
+    hazard_ptr_reclaim_ut.cpp
     invoker_alarm_ut.cpp
     invoker_pool_ut.cpp
     nonblocking_batcher_ut.cpp

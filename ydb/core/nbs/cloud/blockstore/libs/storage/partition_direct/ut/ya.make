@@ -6,8 +6,8 @@ SRCS(
     direct_block_group_impl_ut.cpp
     read_request_ut.cpp
     vchunk_ut.cpp
+    write_request_test_fixture.cpp
     write_request_ut.cpp
-    write_with_pb_test_fixture.cpp
 )
 
 PEERDIR(

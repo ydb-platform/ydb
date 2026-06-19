@@ -3,7 +3,7 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <library/cpp/json/writer/json_value.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>

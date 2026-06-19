@@ -651,7 +651,7 @@ private:
         return inRoot && !description.Repeated && !description.IsOneofAlternative();
     }
 
-    TString GetPathString(int offset = 0)
+    std::string GetPathString(int offset = 0)
     {
         TStringStream stream;
         stream << "<root>";
@@ -687,7 +687,7 @@ private:
     } Length_;
     ui32 ExpectedBytes_ = sizeof(ui32);
 
-    TString Data_;
+    std::string Data_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

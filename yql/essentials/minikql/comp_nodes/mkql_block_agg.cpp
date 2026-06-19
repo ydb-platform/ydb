@@ -854,7 +854,7 @@ public:
             for (const auto& p : AggsParams_) {
                 const auto& columnDatum = TArrowBlock::From(UnwrappedValues_[p.Column_]).GetDatum();
                 MKQL_ENSURE(columnDatum.is_array(), "Expected array");
-                UnwrappedValues_[p.Column_] = holderFactory.CreateArrowBlock(Unwrap(*columnDatum.array(), p.StateType_));
+                UnwrappedValues_[p.Column_] = holderFactory.CreateArrowBlock(Unwrap(*columnDatum.array(), p.StateType_), NYql::EDatumValidationMode::None);
             }
         }
 
@@ -1010,7 +1010,7 @@ public:
         return true;
     }
 
-    bool FillOutput(const THolderFactory& holderFactory) {
+    bool FillOutput(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
         bool exit = false;
         while (WritingOutput_) {
             if constexpr (UseSet) {
@@ -1020,7 +1020,7 @@ public:
                     }
 
                     if (OutputBlockSize_ == MaxBlockLen_) {
-                        Flush(false, holderFactory);
+                        Flush(false, holderFactory, validationMode);
                         // return EFetchResult::One;
                         exit = true;
                         break;
@@ -1039,7 +1039,7 @@ public:
                 if (done) {
                     break;
                 }
-                Flush(false, holderFactory);
+                Flush(false, holderFactory, validationMode);
                 exit = true;
                 break;
             }
@@ -1051,7 +1051,7 @@ public:
             if (!OutputBlockSize_) {
                 return false;
             }
-            Flush(true, holderFactory);
+            Flush(true, holderFactory, validationMode);
         }
 
         FillArrays();
@@ -1073,13 +1073,13 @@ private:
         }
     }
 
-    void Flush(bool final, const THolderFactory& holderFactory) {
+    void Flush(bool final, const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
         if (!OutputBlockSize_) {
             return;
         }
 
         for (size_t i = 0; i < Builders_.size(); ++i) {
-            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(final));
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(final), validationMode);
         }
 
         if constexpr (!UseSet) {
@@ -1091,7 +1091,7 @@ private:
             }
         }
 
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)), validationMode);
         OutputBlockSize_ = 0;
     }
 
@@ -1268,7 +1268,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(KeyLength_, StreamIndex_, Width_, OutputWidth_, FilterColumn_, AggsParams_, Streams_, Keys_, MaxBlockLen_, ctx);
-        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory, std::move(state), std::move(Stream_->GetValue(ctx)));
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory, std::move(state), std::move(Stream_->GetValue(ctx)), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -1277,11 +1277,13 @@ private:
 
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
-                     NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream)
+                     NUdf::TUnboxedValue&& state, NUdf::TUnboxedValue&& stream,
+                     NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , State_(state)
             , Stream_(stream)
             , HolderFactory_(holderFactory)
+            , ValidationMode_(validationMode)
         {
         }
 
@@ -1316,7 +1318,7 @@ private:
                     }
                 }
 
-                if (!state.FillOutput(HolderFactory_)) {
+                if (!state.FillOutput(HolderFactory_, ValidationMode_)) {
                     return NUdf::EFetchStatus::Finish;
                 }
             }
@@ -1332,6 +1334,7 @@ private:
         NUdf::TUnboxedValue State_;
         NUdf::TUnboxedValue Stream_;
         const THolderFactory& HolderFactory_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
 private:

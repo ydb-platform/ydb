@@ -212,6 +212,9 @@ message GetDatabaseStatusResult {
     DatabaseQuotas database_quotas = 10;
     // Current scale recommender policies
     ScaleRecommenderPolicies scale_recommender_policies = 11;
+    // Outstanding problems related to database resources
+    // (e.g. storage pool allocation failures).
+    repeated Ydb.Issue.IssueMessage issues = 12;
 }
 
 // Change resources allocated for database.

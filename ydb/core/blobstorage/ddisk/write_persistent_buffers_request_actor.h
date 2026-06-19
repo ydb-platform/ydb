@@ -60,7 +60,7 @@ namespace NKikimr::NDDisk {
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER;
+            return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER_RA;
         }
 
         TWritePersistentBuffersRequestActor(TActorId parentId);

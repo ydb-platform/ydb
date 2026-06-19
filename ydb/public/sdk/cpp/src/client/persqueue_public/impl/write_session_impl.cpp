@@ -30,8 +30,8 @@ TWriteSessionImpl::TWriteSessionImpl(
     , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
-            Settings.BatchFlushInterval_.value_or(TDuration::Zero()) ?
-                std::min(Settings.BatchFlushInterval_.value_or(TDuration::Seconds(1)) / 5, TDuration::MilliSeconds(100))
+            Settings.BatchFlushInterval_ != TDuration::Zero() ?
+                std::min(Settings.BatchFlushInterval_ / 5, TDuration::MilliSeconds(100))
                 :
                 TDuration::MilliSeconds(100)
     )
@@ -992,7 +992,7 @@ void TWriteSessionImpl::FlushWriteIfRequiredImpl() {
 
     if (!CurrentBatch.Empty() && !CurrentBatch.FlushRequested) {
         MessagesAcquired += static_cast<ui64>(CurrentBatch.Acquire());
-        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_.value_or(TDuration::Zero())
+        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_
             || CurrentBatch.CurrentSize >= Settings.BatchFlushSizeBytes_.value_or(0)
             || CurrentBatch.CurrentSize >= MaxBlockSize
             || CurrentBatch.Messages.size() >= MaxBlockMessageCount

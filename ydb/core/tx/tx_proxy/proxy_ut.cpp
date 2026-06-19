@@ -3,6 +3,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include <library/cpp/retry/retry.h>
+
 using namespace NKikimr;
 using namespace NTxProxyUT;
 using namespace NHelpers;
@@ -1051,7 +1053,16 @@ Y_UNIT_TEST_SUITE(TModifyUserTest) {
             client.Grant("/", "dc-1", "user1", NACLib::EAccessRights::AlterSchema);
 
             // user1 can change password for user2. user1 has ydb.granular.alter_schema permission
-            UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", { .User = "user2", .Password = "pas2user"}, user1Token), NMsgBusProxy::MSTATUS_OK);
+            // ACL publication to SchemeBoard is async; retry until the proxy cache sees the new effective ACL
+            NMsgBusProxy::EResponseStatus status = NMsgBusProxy::MSTATUS_ERROR;
+            const bool success = DoWithRetryOnRetCode(
+                [&] {
+                    status = client.ModifyUser("/dc-1", { .User = "user2", .Password = "pas2user"}, user1Token);
+                    return status == NMsgBusProxy::MSTATUS_OK;
+                },
+                TRetryOptions(10, TDuration::MilliSeconds(100))
+            );
+            UNIT_ASSERT_C(success, "Failed to modify user after retries, final status: " << status);
         }
 
         // user2 login with new password

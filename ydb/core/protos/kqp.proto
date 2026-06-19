@@ -193,6 +193,8 @@ message TIndexDescriptionProto {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
         NKikimrSchemeOp.TFulltextIndexDescription FulltextIndexDescription = 10;
+        NKikimrSchemeOp.TBloomFilter BloomFilterDescription = 11;
+        NKikimrSchemeOp.TBloomNGrammFilter BloomNGrammFilterDescription = 12;
     }
 };
 
@@ -841,6 +843,20 @@ message TKqpTableSinkIndexSettings {
     optional TKqpTableSinkSettings.EType OperationType = 7;
     optional bool NeedDeleteOldRows = 8;
     optional string IndexName = 9;
+    optional NKqpProto.EKqpFullTextIndexType IndexType = 10;
+    optional Ydb.Table.FulltextIndexSettings FulltextSettings = 11;
+    repeated TKqpColumnMetadataProto ImplColumns = 12;
+    optional NKqpProto.TKqpPhyTableId DocsTable = 13;
+    repeated TKqpColumnMetadataProto DocsColumns = 14;
+    optional NKqpProto.TKqpPhyTableId DictTable = 15;
+    repeated TKqpColumnMetadataProto DictColumns = 16;
+    optional NKqpProto.TKqpPhyTableId StatsTable = 17;
+    repeated TKqpColumnMetadataProto StatsColumns = 18;
+}
+
+enum EInputRowFormat {
+    INPUT_ROW_FORMAT_FLAT = 0;
+    INPUT_ROW_FORMAT_STRUCT_OF_ROWS = 1;
 }
 
 message TKqpTableSinkSettings {
@@ -881,6 +897,7 @@ message TKqpTableSinkSettings {
     optional string UserSID = 26;
     optional bool NeedLookup = 27;
     optional bool SkipMissingRows = 28;
+    optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
 }
 
 message TReadVectorTopK {
@@ -923,6 +940,14 @@ message TKqpFullTextSourceSettings {
         optional string Query = 2;
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
         repeated bytes Tokens = 3;
+
+        // Resolved equality bindings for the index prefix columns (KeyColumnNames[0..n-2]).
+        // Value is a single TCell serialized with TSerializedCellVec, typed as Column.
+        message TPrefixColumn {
+            optional TKqpColumnMetadataProto Column = 1;
+            optional bytes Value = 2;
+        }
+        repeated TPrefixColumn PrefixColumns = 4;
     }
 
     message TIndexTable {
@@ -939,6 +964,10 @@ message TKqpFullTextSourceSettings {
     repeated TKqpColumnMetadataProto Columns = 5;
 
     repeated TIndexTable IndexTables = 6;
+
+    // When fulltext index uses __ydb_row_id as doc_id, this is the unique secondary index impl table
+    // (keyed by __ydb_row_id, value = main-table PK columns) used to resolve __ydb_row_id -> PK at read time.
+    optional TIndexTable UniqueIndexImplTable = 19;
 
     optional uint64 SkipLimit = 7;
     optional uint64 Limit = 8;

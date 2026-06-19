@@ -69,7 +69,8 @@
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
             "Children": [
-                {"Index": 0, "Name": "Name", "Type": "TCoAtom"}
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "OutputIndex", "Type": "TCoAtom"}
             ]
         },
         {
@@ -77,7 +78,7 @@
             "Base": "TYtflowSinkBase",
             "Match": {"Type": "Callable", "Name": "YtflowIntermediateSink"},
             "Children": [
-                {"Index": 1, "Name": "RowType", "Type": "TExprBase"}
+                {"Index": 2, "Name": "RowType", "Type": "TExprBase"}
             ]
         },
         {
@@ -85,7 +86,7 @@
             "Base": "TYtflowSinkBase",
             "Match": {"Type": "Callable", "Name": "YtflowPersistentSink"},
             "Children": [
-                {"Index": 1, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"}
             ]
         },
         {

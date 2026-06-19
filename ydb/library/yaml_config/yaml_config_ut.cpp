@@ -406,7 +406,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -453,7 +452,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -507,7 +505,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -554,7 +551,6 @@ config:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -816,7 +812,6 @@ allowed_labels:
 incompatibility_overrides:
   disable_rules:
     - builtin_branch_must_have_value
-    - builtin_configuration_version_must_have_value
     - builtin_dynamic_must_have_value
     - builtin_node_host_must_have_value
     - builtin_node_id_must_have_value
@@ -1271,6 +1266,125 @@ TMap<TSet<TVector<NYamlConfig::TLabel>>, TVector<int>> ExpectedResolved =
         TVector<int>{0,   5,   9,   12},
     },
 };
+
+Y_UNIT_TEST_SUITE(YamlConfigOpaqueConfigMarker) {
+
+    Y_UNIT_TEST(OpaqueConfigFieldsIncludesExistingOpaqueFields) {
+        const auto& fields = NYaml::OpaqueConfigFields();
+
+        bool found = false;
+        for (const auto& f : fields) {
+            if (f.Name == "private_database_config") {
+                found = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found,
+            "expected 'private_database_config' in OpaqueConfigFields()");
+    }
+
+    Y_UNIT_TEST(OpaqueConfigFieldsAreStable) {
+        // The list is computed once and cached; consecutive calls must return
+        // the same vector by reference.
+        const auto& a = NYaml::OpaqueConfigFields();
+        const auto& b = NYaml::OpaqueConfigFields();
+        UNIT_ASSERT_EQUAL(&a, &b);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsReplacesMessageSubtreeWithEmptyMap) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        auto& sub = cfg["private_database_config"];
+        sub.SetType(NJson::JSON_MAP);
+        sub["some_unknown_field"] = 42;
+        sub["some_unknown_struct"]["field_1"] = 1;
+        sub["some_unknown_struct"]["field_2"] = "abc";
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg.Has("private_database_config"));
+        const auto& captured = cfg["private_database_config"];
+        UNIT_ASSERT_C(captured.IsMap(),
+            "private_database_config must remain a map after capture");
+        UNIT_ASSERT_C(captured.GetMap().empty(),
+            "private_database_config must be replaced with an empty map");
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsLeavesOtherFieldsUntouched) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["private_database_config"]["dropped"] = "value";
+        cfg["feature_flags"]["enable_something"] = true;
+        cfg["actor_system_config"]["sys_executor"] = 0;
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg["private_database_config"].IsMap());
+        UNIT_ASSERT(cfg["private_database_config"].GetMap().empty());
+
+        UNIT_ASSERT(cfg["feature_flags"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["feature_flags"]["enable_something"].GetBoolean(), true);
+
+        UNIT_ASSERT(cfg["actor_system_config"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["actor_system_config"]["sys_executor"].GetInteger(), 0);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsIsNoopWhenFieldAbsent) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["feature_flags"]["enable_something"] = true;
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(!cfg.Has("private_database_config"));
+        UNIT_ASSERT(cfg["feature_flags"].IsMap());
+        UNIT_ASSERT_EQUAL(cfg["feature_flags"]["enable_something"].GetBoolean(), true);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsIsNoopOnNonMap) {
+        // Non-map inputs must not crash and must remain unchanged.
+        NJson::TJsonValue arr(NJson::JSON_ARRAY);
+        arr.AppendValue(1);
+        arr.AppendValue(2);
+        NYaml::CaptureOpaqueConfigFields(arr);
+        UNIT_ASSERT(arr.IsArray());
+        UNIT_ASSERT_VALUES_EQUAL(arr.GetArray().size(), 2u);
+
+        NJson::TJsonValue scalar(42);
+        NYaml::CaptureOpaqueConfigFields(scalar);
+        UNIT_ASSERT_EQUAL(scalar.GetInteger(), 42);
+    }
+
+    Y_UNIT_TEST(CaptureOpaqueConfigFieldsHandlesAlreadyEmptyMap) {
+        NJson::TJsonValue cfg(NJson::JSON_MAP);
+        cfg["private_database_config"].SetType(NJson::JSON_MAP);
+
+        NYaml::CaptureOpaqueConfigFields(cfg);
+
+        UNIT_ASSERT(cfg["private_database_config"].IsMap());
+        UNIT_ASSERT(cfg["private_database_config"].GetMap().empty());
+    }
+
+    Y_UNIT_TEST(ParseAcceptsUnknownOpaqueFieldSubtree) {
+        // End-to-end: the parser must accept unknown content under an
+        // opaque top-level field without allow_unknown_fields, because
+        // CaptureOpaqueConfigFields() strips the subtree before the
+        // proto merge.
+        const TString yaml = R"(---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  private_database_config:
+    some_unknown_field: 42
+    some_unknown_struct:
+      field_1: 1
+      field_2: abc
+)";
+        NKikimrConfig::TAppConfig cfg;
+        UNIT_ASSERT_NO_EXCEPTION(cfg = NYaml::Parse(yaml, /*transform=*/ false));
+        // The merge stored an empty message for the opaque field; nothing
+        // from the YAML sub-tree leaked into the proto.
+        UNIT_ASSERT(cfg.HasPrivateDatabaseConfig());
+    }
+}
 
 Y_UNIT_TEST_SUITE(YamlConfig) {
     Y_UNIT_TEST(CollectLabels) {

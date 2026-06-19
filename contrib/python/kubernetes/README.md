@@ -1,11 +1,11 @@
 # Kubernetes Python Client
 
-[![Build Status](https://travis-ci.org/kubernetes-client/python.svg?branch=master)](https://travis-ci.org/kubernetes-client/python)
+[![CI](https://github.com/kubernetes-client/python/workflows/Kubernetes%20Python%20Client%20-%20Validation/badge.svg)](https://github.com/kubernetes-client/python/actions/workflows/test.yaml)
 [![PyPI version](https://badge.fury.io/py/kubernetes.svg)](https://badge.fury.io/py/kubernetes)
 [![codecov](https://codecov.io/gh/kubernetes-client/python/branch/master/graph/badge.svg)](https://codecov.io/gh/kubernetes-client/python "Non-generated packages only")
 [![pypi supported versions](https://img.shields.io/pypi/pyversions/kubernetes.svg)](https://pypi.python.org/pypi/kubernetes)
-[![Client Capabilities](https://img.shields.io/badge/Kubernetes%20client-Silver-blue.svg?style=flat&colorB=C0C0C0&colorA=306CE8)](http://bit.ly/kubernetes-client-capabilities-badge)
-[![Client Support Level](https://img.shields.io/badge/kubernetes%20client-beta-green.svg?style=flat&colorA=306CE8)](http://bit.ly/kubernetes-client-support-badge)
+[![Client Capabilities](https://img.shields.io/badge/Kubernetes%20client-Silver-blue.svg?style=flat&colorB=C0C0C0&colorA=306CE8)](https://github.com/kubernetes/design-proposals-archive/blob/main/api-machinery/csi-new-client-library-procedure.md)
+[![Client Support Level](https://img.shields.io/badge/kubernetes%20client-beta-green.svg?style=flat&colorA=306CE8)](https://github.com/kubernetes/design-proposals-archive/blob/main/api-machinery/csi-new-client-library-procedure.md)
 
 Python client for the [kubernetes](http://kubernetes.io/) API.
 
@@ -16,7 +16,7 @@ From source:
 ```
 git clone --recursive https://github.com/kubernetes-client/python.git
 cd python
-python setup.py install
+python -m pip install --upgrade .
 ```
 
 From [PyPI](https://pypi.python.org/pypi/kubernetes/) directly:
@@ -40,6 +40,35 @@ print("Listing pods with their IPs:")
 ret = v1.list_pod_for_all_namespaces(watch=False)
 for i in ret.items:
     print("%s\t%s\t%s" % (i.status.pod_ip, i.metadata.namespace, i.metadata.name))
+```
+
+list all pods using asyncio:
+
+```python
+import asyncio
+from kubernetes.aio import client, config
+from kubernetes.aio.client.api_client import ApiClient
+
+
+async def main():
+    # Configs can be set in Configuration class directly or using helper
+    # utility. If no argument provided, the config will be loaded from
+    # default location.
+    await config.load_kube_config()
+
+    # use the context manager to close http sessions automatically
+    async with ApiClient() as api:
+
+        v1 = client.CoreV1Api(api)
+        print("Listing pods with their IPs:")
+        ret = await v1.list_pod_for_all_namespaces()
+
+        for i in ret.items:
+            print(i.status.pod_ip, i.metadata.namespace, i.metadata.name)
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
 ```
 
 watch on namespace object:
@@ -105,6 +134,7 @@ supported versions of Kubernetes clusters.
 - [client 33.y.z](https://pypi.org/project/kubernetes/33.1.0/): Kubernetes 1.32 or below (+-), Kubernetes 1.33 (✓), Kubernetes 1.34 or above (+-)
 - [client 34.y.z](https://pypi.org/project/kubernetes/34.1.0/): Kubernetes 1.33 or below (+-), Kubernetes 1.34 (✓), Kubernetes 1.35 or above (+-)
 - [client 35.y.z](https://pypi.org/project/kubernetes/35.0.0/): Kubernetes 1.34 or below (+-), Kubernetes 1.35 (✓), Kubernetes 1.36 or above (+-)
+- [client 36.y.z](https://pypi.org/project/kubernetes/36.0.1/): Kubernetes 1.35 or below (+-), Kubernetes 1.36 (✓), Kubernetes 1.37 or above (+-)
 
 
 > See [here](#homogenizing-the-kubernetes-python-client-versions) for an explanation of why there is no v13-v16 release.
@@ -175,11 +205,13 @@ between client-python versions.
 | 32.0 Alpha/Beta | Kubernetes main repo, 1.32 branch    | ✗                             |
 | 32.1            | Kubernetes main repo, 1.32 branch    | ✗                             |
 | 33.1 Alpha/Beta | Kubernetes main repo, 1.33 branch    | ✗                             |
-| 33.1            | Kubernetes main repo, 1.33 branch    | ✓                             |
+| 33.1            | Kubernetes main repo, 1.33 branch    | ✗                             |
 | 34.1 Alpha/Beta | Kubernetes main repo, 1.34 branch    | ✗                             |
 | 34.1            | Kubernetes main repo, 1.34 branch    | ✓                             |
 | 35.0 Alpha/Beta | Kubernetes main repo, 1.35 branch    | ✗                             |
 | 35.0            | Kubernetes main repo, 1.35 branch    | ✓                             |
+| 36.0 Alpha/Beta | Kubernetes main repo, 1.36 branch    | ✗                             |
+| 36.0            | Kubernetes main repo, 1.36 branch    | ✓                             |
 
 > See [here](#homogenizing-the-kubernetes-python-client-versions) for an explanation of why there is no v13-v16 release.
 

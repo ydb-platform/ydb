@@ -14,7 +14,6 @@ SRCS(
     remote.cpp
     sensor_service.cpp
     sensor_set.cpp
-    sensor.cpp
     tag_registry.cpp
 
     sensor_dump.proto

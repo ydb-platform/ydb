@@ -521,6 +521,7 @@ public:
         read->SetTimeoutMs(0);
         read->SetBytes(Min<ui32>(fetchRequest.MaxBytes, FetchRequestBytesLeft));
         read->SetReadTimestampMs(fetchRequest.ReadTimestampMs);
+        read->SetCanReadBatches(Settings.CanReadBatches);
         read->SetExternalOperation(true);
 
         return request;

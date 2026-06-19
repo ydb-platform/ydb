@@ -559,6 +559,7 @@ public:
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                const TActorId& writeQuoterActorId,
+               const TActorId& batchProcessorActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                bool newPartition = false);
 
@@ -1047,6 +1048,7 @@ private:
 
     TActorId ReadQuotaTrackerActor;
     const TActorId WriteQuotaTrackerActor;
+    const TActorId BatchProcessorActor;
     THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter;
     TInstant QuotaDeadline = TInstant::Zero();
 
@@ -1200,6 +1202,7 @@ private:
     void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
+    size_t WriteNewMessagesFromSupportivePartitions = 0;
 
     bool TryAddDeleteHeadKeysToPersistRequest();
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request) const;

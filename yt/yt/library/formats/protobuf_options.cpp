@@ -457,18 +457,18 @@ TProtobufMessageOptions GetMessageOptions(const Descriptor* descriptor)
     return options;
 }
 
-TString GetColumnName(const FieldDescriptor* field)
+std::string GetColumnName(const FieldDescriptor* field)
 {
     const auto& options = field->options();
     const auto columnName = options.GetExtension(column_name);
     if (!columnName.empty()) {
-        return TString(columnName);
+        return columnName;
     }
     const auto keyColumnName = options.GetExtension(key_column_name);
     if (!keyColumnName.empty()) {
-        return TString(keyColumnName);
+        return keyColumnName;
     }
-    return TString(field->name());
+    return field->name();
 }
 
 void ValidateProtobufType(const FieldDescriptor* fieldDescriptor, ESpecialProtobufType protobufType)

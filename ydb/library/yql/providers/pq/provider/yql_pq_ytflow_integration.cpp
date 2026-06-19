@@ -1,4 +1,5 @@
 #include "yql_pq_ytflow_integration.h"
+#include "yql_pq_settings.h"
 
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
@@ -8,6 +9,8 @@
 namespace NYql {
 
 using namespace NNodes;
+
+namespace {
 
 class TPqYtflowIntegration : public TEmptyYtflowIntegration {
 public:
@@ -165,6 +168,8 @@ public:
 private:
     TPqState* State_;
 };
+
+} // anonymous namespace
 
 THolder<IYtflowIntegration> CreatePqYtflowIntegration(const TPqState::TPtr& state) {
     YQL_ENSURE(state);

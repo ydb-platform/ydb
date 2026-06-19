@@ -1064,13 +1064,19 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     return size;
 }
 
+size_t EstimatePackedInt64FieldUpperBound(ui32 fieldNumber, size_t itemsCount) {
+    static constexpr size_t MaxInt64VarintPayloadSize = 10;
+
+    return NGrpc::ProtoPackedInt64FieldSize(fieldNumber, itemsCount * MaxInt64VarintPayloadSize);
+}
+
 template <typename TBlock>
 size_t EstimateWriteRequestBlockSize(const TBlock& block) {
-    static constexpr size_t MaxInt64VarintPayloadSize = 10;
-    const size_t maxRepeatedInt64ItemSize = NGrpc::ProtoPackedInt64FieldSize(1, MaxInt64VarintPayloadSize);
-
     size_t size = 0;
-    size += block.MessageCount * 4 * maxRepeatedInt64ItemSize; // sequence_numbers, created_at_ms, sent_at_ms, message_sizes
+    size += EstimatePackedInt64FieldUpperBound(2, block.MessageCount); // sequence_numbers
+    size += EstimatePackedInt64FieldUpperBound(3, block.MessageCount); // created_at_ms
+    size += EstimatePackedInt64FieldUpperBound(4, block.MessageCount); // sent_at_ms
+    size += EstimatePackedInt64FieldUpperBound(5, block.MessageCount); // message_sizes
 
     size += NGrpc::ProtoPackedInt64FieldSize(6, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.Offset)));
     size += NGrpc::ProtoPackedInt64FieldSize(7, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.PartNumber)));

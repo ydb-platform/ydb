@@ -1597,7 +1597,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
     // shard alive and only removes the copy's PathId from SharedShards.
     Y_UNIT_TEST(DropCopySharedShardCleanup) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableColumnTablesBackup(true));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
@@ -1670,7 +1670,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
     // (new owner, shardIdx) entry from SharedShards.
     Y_UNIT_TEST(DropOwnerWithSharersTransfersOwnership) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableColumnTablesBackup(true));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
@@ -1738,7 +1738,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
     // Dropping the owner last must then delete the shards.
     Y_UNIT_TEST(DropAllSharersThenOwnerCleansAllSharedShards) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableColumnTablesBackup(true));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
@@ -1795,7 +1795,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
     // and the drop logic must still behave correctly.
     Y_UNIT_TEST(DropCopyAfterRebootKeepsSharedShardsConsistent) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableColumnTablesBackup(true));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");

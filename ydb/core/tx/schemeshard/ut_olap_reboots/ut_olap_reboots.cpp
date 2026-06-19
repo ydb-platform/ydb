@@ -696,6 +696,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // The source table's shard must survive and SharedShards must be cleaned up.
     Y_UNIT_TEST(DropCopySharedShardCleanupWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -731,6 +732,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // Ownership must be transferred to the copy.
     Y_UNIT_TEST(DropOwnerWithSharerTransfersOwnershipWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -775,6 +777,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // (T3, the last intermediate) is tested with reboots.
     Y_UNIT_TEST(ChainedCopyDropOriginalsWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             const int chainLen = 4;
 
@@ -841,6 +844,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // up correctly at each step.
     Y_UNIT_TEST(ChainedCopyDropInReverseOrderWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             const int chainLen = 4;
 
@@ -894,6 +898,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // drop the intermediate, and so on.
     Y_UNIT_TEST(InterleavedCopyDropOwnershipChainWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -962,6 +967,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // copies must still be in SharedShards.
     Y_UNIT_TEST(MultipleCopiesDropOwnerWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -1020,6 +1026,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // then drop the owner. SharedShards must be cleaned up at each step.
     Y_UNIT_TEST(MultipleCopiesDropAllCopiesThenOwnerWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -1076,6 +1083,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // drops with reboots.
     Y_UNIT_TEST(ChainedCopyConcurrentDropWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -1122,6 +1130,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     // outward. Tests that ownership transfers correctly through a deep chain.
     Y_UNIT_TEST(DeepChainedCopyDropFromMiddleWithReboots) {
         TTestWithReboots t(false);
+        t.GetTestEnvOptions().EnableColumnTablesBackup(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             const int chainLen = 6;
 

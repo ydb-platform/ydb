@@ -1026,4 +1026,110 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TestModificationResults(runtime, txId,
             {{NKikimrScheme::StatusInvalidParameter, "Cannot alter serial column 'key'"}});
     }
+
+    Y_UNIT_TEST(GetResponseSimple) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Must be declared before the lambda so it is in scope for [&] capture.
+        ui64 setConstraintTxId = 0;
+
+        auto doGetRequest = [&]() -> NKikimrSetColumnConstraint::TSetColumnConstraint {
+            auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
+                new TEvSetColumnConstraint::TEvGetRequest(root, setConstraintTxId));
+            TAutoPtr<IEventHandle> handle;
+            auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvGetResponse>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                event->Record.GetStatus(),
+                Ydb::StatusIds::SUCCESS,
+                event->Record.ShortDebugString());
+            return event->Record.GetSetColumnConstraint();
+        };
+
+        // SetColumnConstraintState is a proto message; its state field is of the nested enum type
+        // SetColumnConstraintState_State (e.g. STATE_PREPARING).
+        using TConstraintState = Ydb::Table::SetColumnConstraintState_State;
+        std::vector<TConstraintState> answers;
+        std::vector<TConstraintState> expectedAnswers = {
+            Ydb::Table::SetColumnConstraintState::STATE_PREPARING,
+            Ydb::Table::SetColumnConstraintState::STATE_PREPARING,
+            Ydb::Table::SetColumnConstraintState::STATE_VALIDATING,
+            Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
+            Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
+            Ydb::Table::SetColumnConstraintState::STATE_DONE
+        };
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            // 1 [EOperationState::Locking]           => TEvModifySchemeTransaction, STATE_PREPARING
+            // 2 [EOperationState::LockingNullWrites] => TEvModifySchemeTransaction, STATE_PREPARING
+            // 3 [EOperationState::Validating]        => TEvValidateRowConditionRequest, STATE_VALIDATING
+            // 4 [EOperationState::Finishing]         => TEvModifySchemeTransaction, STATE_APPLYING
+            // 5 [EOperationState::Unlocking]         => TEvModifySchemeTransaction, STATE_APPLYING
+
+            if (ev->GetTypeRewrite() == TEvSchemeShard::TEvModifySchemeTransaction::EventType ||
+                ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                answers.push_back(doGetRequest().GetState());
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        setConstraintTxId = ++txId;
+        auto response = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            response.ShortDebugString());
+
+        // TestSetColumnConstraint returns as soon as the TEvCreateResponse arrives (after the Locking
+        // phase). The remaining phases (LockingNullWrites, Validating, Finishing, Unlocking) run
+        // asynchronously. Wait here so the observer can collect answers[1..4].
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        // STATE_DONE: operation is fully finished.
+        answers.push_back(doGetRequest().GetState());
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            answers.size(),
+            expectedAnswers.size(),
+            TStringBuilder() << "Wrong number of observed states: got " << answers.size()
+                << ", expected " << expectedAnswers.size());
+        for (size_t i = 0; i < expectedAnswers.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                static_cast<int>(answers[i]),
+                static_cast<int>(expectedAnswers[i]),
+                TStringBuilder() << "State mismatch at index " << i
+                    << ": got " << static_cast<int>(answers[i])
+                    << " (" << Ydb::Table::SetColumnConstraintState_State_Name(answers[i]) << ")"
+                    << ", expected " << static_cast<int>(expectedAnswers[i])
+                    << " (" << Ydb::Table::SetColumnConstraintState_State_Name(expectedAnswers[i]) << ")");
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

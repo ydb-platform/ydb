@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <ydb/library/aws_init/aws.h>
+#include <ydb/core/util/aws.h>
 
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>

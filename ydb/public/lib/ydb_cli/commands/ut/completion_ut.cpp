@@ -161,6 +161,8 @@ Y_UNIT_TEST_SUITE(CompletionGraphJson) {
         opts.AddLongOption("verbose").NoArgument();
         opts.AddLongOption("endpoint").RequiredArgument("ENDPOINT");
         opts.AddLongOption("input").RequiredArgument("FILE").Completer(NLastGetopt::NComp::File());
+        opts.AddLongOption("dir").RequiredArgument("DIR").Completer(NLastGetopt::NComp::Directory());
+        opts.AddLongOption("default").RequiredArgument("X").Completer(NLastGetopt::NComp::Default());
         opts.AddLongOption("host").RequiredArgument("HOST").Completer(NLastGetopt::NComp::Host());
         opts.AddLongOption("format").RequiredArgument("FORMAT").Choices(TVector<TString>{"json", "csv"});
 
@@ -174,6 +176,11 @@ Y_UNIT_TEST_SUITE(CompletionGraphJson) {
         UNIT_ASSERT_VALUES_EQUAL(options["--endpoint"].GetStringSafe(), "file");
         // An explicit File() completer is also local files.
         UNIT_ASSERT_VALUES_EQUAL(options["--input"].GetStringSafe(), "file");
+        // Directory() and Default() also list local filesystem entries (their zsh
+        // actions start with _files/_default); guards CompletesLocalFiles() against
+        // those action strings changing.
+        UNIT_ASSERT_VALUES_EQUAL(options["--dir"].GetStringSafe(), "file");
+        UNIT_ASSERT_VALUES_EQUAL(options["--default"].GetStringSafe(), "file");
         // A non-file completer (host) is reported as an opaque value.
         UNIT_ASSERT_VALUES_EQUAL(options["--host"].GetStringSafe(), "value");
         // Choices are listed and sorted.
@@ -193,12 +200,21 @@ Y_UNIT_TEST_SUITE(CompletionGraphJson) {
             o.SetFreeArgsNum(1);
             o.GetFreeArgSpec(0).Completer(NLastGetopt::NComp::Host());
         });
+        // Unbounded args (the TOpts default max) with only a trailing completer set
+        // and no title/help: exercises the trailing-arg branch in
+        // WriteFreeArgsValue and the IsDefault()/Completer_ guard -- without that
+        // guard this would be misreported as null.
+        TConfigurableLeaf trailingCustom([](NLastGetopt::TOpts& o) {
+            o.SetFreeArgsMax(NLastGetopt::TOpts::UNLIMITED_ARGS);
+            o.GetTrailingArgSpec().Completer(NLastGetopt::NComp::Host());
+        });
 
         TModChooser chooser;
         chooser.AddMode("undeclared", &undeclared, "");
         chooser.AddMode("no-args", &noArgs, "");
         chooser.AddMode("file-arg", &fileArg, "");
         chooser.AddMode("custom-arg", &customArg, "");
+        chooser.AddMode("trailing-custom", &trailingCustom, "");
 
         NLastGetopt::TOpts rootOpts;
         auto root = GenerateAndParse(chooser, rootOpts);
@@ -210,6 +226,7 @@ Y_UNIT_TEST_SUITE(CompletionGraphJson) {
         UNIT_ASSERT(handlers["no-args"]["free_args"].IsNull());
         UNIT_ASSERT_VALUES_EQUAL(handlers["file-arg"]["free_args"].GetStringSafe(), "file");
         UNIT_ASSERT_VALUES_EQUAL(handlers["custom-arg"]["free_args"].GetStringSafe(), "value");
+        UNIT_ASSERT_VALUES_EQUAL(handlers["trailing-custom"]["free_args"].GetStringSafe(), "value");
         // Leaves expose no subcommands.
         UNIT_ASSERT(handlers["file-arg"]["handlers"].GetMapSafe().empty());
     }

@@ -109,11 +109,15 @@ void WriteOpts(NJsonWriter::TBuf& json, const TOpts& opts) {
 //               scheme path).
 void WriteFreeArgsValue(NJsonWriter::TBuf& json, const TOpts& opts) {
     const ui32 maxArgs = opts.GetFreeArgsMax();
+    // TFreeArgSpec::IsDefault() inspects only Title_/Help_, not the completer, so
+    // check Completer_ explicitly: a trailing completer set without a title/help
+    // is a declared positional and must not be mistaken for the untouched default.
     const bool untouchedDefault =
         maxArgs == TOpts::UNLIMITED_ARGS &&
         opts.GetFreeArgsMin() == 0 &&
         opts.GetFreeArgSpecs().empty() &&
-        opts.GetTrailingArgSpec().IsDefault();
+        opts.GetTrailingArgSpec().IsDefault() &&
+        !opts.GetTrailingArgSpec().Completer_;
     if (maxArgs == 0 || untouchedDefault) {
         json.WriteNull();
         return;

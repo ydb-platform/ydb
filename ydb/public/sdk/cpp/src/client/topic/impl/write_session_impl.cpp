@@ -50,8 +50,6 @@ bool ValidateWriteSessionSettings(const TWriteSessionSettings& settings, NYdb::N
 }
 using TTxIdOpt = std::optional<TTxId>;
 
-static constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
-
 TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
 {
     Y_ABORT_UNLESS(request.messages_size());
@@ -1551,85 +1549,6 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
 
 namespace NGrpc = NWriteSessionGrpc;
 
-size_t EstimateTimestampFieldSize(ui32 fieldNumber, TInstant timestamp) {
-    const ui64 milliseconds = timestamp.MilliSeconds();
-    const i64 seconds = milliseconds / 1000;
-    const i32 nanos = (milliseconds % 1000) * 1000000;
-    const size_t timestampSize = NGrpc::ProtoInt64FieldSize(1, seconds)
-        + NGrpc::ProtoInt32FieldSize(2, nanos);
-    return NGrpc::ProtoMessageFieldSize(fieldNumber, timestampSize);
-}
-
-size_t EstimateMetadataItemFieldSize(ui32 fieldNumber, const std::pair<std::string, std::string>& item) {
-    const size_t itemSize = NGrpc::ProtoStringFieldSize(1, item.first.size())
-        + NGrpc::ProtoBytesFieldSize(2, item.second.size());
-    return NGrpc::ProtoMessageFieldSize(fieldNumber, itemSize);
-}
-
-size_t EstimateTransactionFieldSize(ui32 fieldNumber, const std::optional<TTransactionId>& tx) {
-    if (!tx) {
-        return 0;
-    }
-    const size_t txSize = NGrpc::ProtoStringFieldSize(1, tx->TxId.size())
-        + NGrpc::ProtoStringFieldSize(2, tx->SessionId.size());
-    return NGrpc::ProtoMessageFieldSize(fieldNumber, txSize);
-}
-
-size_t EstimateTopicMessageDataSize(TInstant createdAt, size_t dataSize, size_t uncompressedSize, size_t metadataSize) {
-    const size_t messageDataSize = NGrpc::ProtoInt64FieldSizeUpperBound(1)
-        + EstimateTimestampFieldSize(2, createdAt)
-        + NGrpc::ProtoBytesFieldSize(3, dataSize)
-        + NGrpc::ProtoInt64FieldSize(4, uncompressedSize)
-        + metadataSize;
-    return NGrpc::ProtoMessageFieldSize(1, messageDataSize);
-}
-
-template <typename TBlock, typename TOriginalMessages>
-size_t EstimateTopicWriteRequestBlockSize(const TBlock& block, const TOriginalMessages& originalMessages, bool includeRequestFields) {
-    Y_ABORT_UNLESS(!originalMessages.empty());
-
-    size_t size = 0;
-    if (includeRequestFields) {
-        size += NGrpc::ProtoInt32FieldSize(2, static_cast<i32>(block.CodecID));
-        size += EstimateTransactionFieldSize(3, originalMessages.front().Tx);
-    }
-
-    if (block.MessageCount > 1) {
-        size_t metadataSize = 0;
-        auto message = originalMessages.begin();
-        for (const auto& item : message->MessageMeta) {
-            metadataSize += EstimateMetadataItemFieldSize(7, item);
-        }
-        ++message;
-        for (size_t i = 1; i < block.MessageCount; ++i) {
-            Y_ABORT_UNLESS(!originalMessages.empty());
-            for (const auto& item : message->MessageMeta) {
-                if (item.first == PARTITION_KEY_META_KEY) {
-                    metadataSize += EstimateMetadataItemFieldSize(7, item);
-                }
-            }
-            ++message;
-        }
-        size += EstimateTopicMessageDataSize(message->CreatedAt, block.Data.size(), block.OriginalSize, metadataSize);
-        return size;
-    }
-
-    const auto& message = originalMessages.front();
-    size_t metadataSize = 0;
-    for (const auto& item : message.MessageMeta) {
-        metadataSize += EstimateMetadataItemFieldSize(7, item);
-    }
-
-    if (block.Compressed) {
-        size += EstimateTopicMessageDataSize(message.CreatedAt, block.Data.size(), block.OriginalSize, metadataSize);
-    } else {
-        for (const auto& buffer : block.OriginalDataRefs) {
-            size += EstimateTopicMessageDataSize(message.CreatedAt, buffer.size(), block.OriginalSize, metadataSize);
-        }
-    }
-    return size;
-}
-
 bool TWriteSessionImpl::IsReadyToSendNextImpl() const {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
@@ -1725,7 +1644,7 @@ void TWriteSessionImpl::SendBatchBlock(
     }
     for (size_t i = 1; i < batchMessages.size(); ++i) {
         for (auto& [k, v] : batchMessages[i].MessageMeta) {
-            if (k != PARTITION_KEY_META_KEY) {
+            if (k != NGrpc::PARTITION_KEY_META_KEY) {
                 continue;
             }
             auto* pair = msgData->add_metadata_items();
@@ -1807,7 +1726,7 @@ void TWriteSessionImpl::SendImpl() {
                 break;
             }
 
-            const size_t blockSize = EstimateTopicWriteRequestBlockSize(block, OriginalMessagesToSend, sizeLimiter.Empty());
+            const size_t blockSize = NGrpc::EstimateTopicWriteRequestBlockSize(block, OriginalMessagesToSend, sizeLimiter.Empty());
             if (!sizeLimiter.CanAdd(blockSize)) {
                 break;
             }

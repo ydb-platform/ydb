@@ -1,6 +1,6 @@
 # client_certificate_authorization
 
-Секция `client_certificate_authorization` задаёт правила проверки клиентских SSL-сертификатов и назначения [SID](../../concepts/glossary.md#access-sid) пользователей. Настройки указываются в [статической конфигурации](./index.md) кластера.
+Секция `client_certificate_authorization` задаёт правила проверки клиентских SSL-сертификатов и формирования [SID](../../concepts/glossary.md#access-sid) пользователей. Настройки указываются в [статической конфигурации](./index.md) кластера.
 
 Раздел `client_certificate_definitions` определяет требования к заполнению полей «Subject» и «Subject Alternative Name» клиентских сертификатов, а также список присваиваемых групп (SID групп).
 

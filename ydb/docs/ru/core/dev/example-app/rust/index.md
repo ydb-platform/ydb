@@ -113,4 +113,4 @@ stream.close().await?;
 
 {% include [steps/10_transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
-Явные режимы изоляции: `.with_tx_mode(QueryTxMode::SnapshotReadOnly)` (one-shot) или [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) для интерактивных транзакций. По умолчанию one-shot — implicit: сервер выбирает изоляцию из SQL.
+Явные режимы изоляции: `.with_tx_mode(QueryTxMode::SnapshotReadOnly)` (для запросов на query-клиенте) или [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) для интерактивных транзакций. По умолчанию для запросов на query-клиенте используется ImplicitTx, реальный режим изоляции определяет серверная сторона {{ ydb-short-name }}.

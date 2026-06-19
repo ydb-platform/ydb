@@ -1600,6 +1600,7 @@ size_t EstimateTopicWriteRequestBlockSize(const TBlock& block, const TOriginalMe
         for (const auto& item : message->MessageMeta) {
             metadataSize += EstimateMetadataItemFieldSize(7, item);
         }
+        ++message;
         for (size_t i = 1; i < block.MessageCount; ++i) {
             Y_ABORT_UNLESS(!originalMessages.empty());
             for (const auto& item : message->MessageMeta) {

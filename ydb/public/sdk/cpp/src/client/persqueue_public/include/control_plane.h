@@ -42,6 +42,24 @@ private:
     Ydb::PersQueue::V1::Credentials Credentials_;
 };
 
+struct TSharedConsumerDeadLetterPolicySettings {
+    using TSelf = TSharedConsumerDeadLetterPolicySettings;
+
+    FLUENT_SETTING_DEFAULT(bool, Enabled, false);
+    FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 0);
+    FLUENT_SETTING(std::string, DeadLetterQueue);
+};
+
+struct TSharedConsumerSettings {
+    using TSelf = TSharedConsumerSettings;
+
+    FLUENT_SETTING_DEFAULT(bool, KeepMessagesOrder, false);
+    FLUENT_SETTING_DEFAULT(TDuration, DefaultProcessingTimeout, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageWaitTime, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageDelay, TDuration::Zero());
+    FLUENT_SETTING(TSharedConsumerDeadLetterPolicySettings, DeadLetterPolicy);
+};
+
 
 // Result for describe resource request.
 struct TDescribeTopicResult : public TStatus {
@@ -65,6 +83,7 @@ struct TDescribeTopicResult : public TStatus {
             }
             GETTER(ui32, Version);
             GETTER(std::string, ServiceType);
+            GETTER(std::optional<TSharedConsumerSettings>, SharedConsumer);
 
         private:
             std::string ConsumerName_;
@@ -75,6 +94,7 @@ struct TDescribeTopicResult : public TStatus {
             std::vector<ECodec> SupportedCodecs_;
             ui32 Version_;
             std::string ServiceType_;
+            std::optional<TSharedConsumerSettings> SharedConsumer_;
         };
 
         struct TRemoteMirrorRule {
@@ -178,24 +198,6 @@ using TAsyncDescribeTopicResult = NThreading::TFuture<TDescribeTopicResult>;
 
 const std::vector<ECodec>& GetDefaultCodecs();
 
-struct TSharedConsumerDeadLetterPolicySettings {
-    using TSelf = TSharedConsumerDeadLetterPolicySettings;
-
-    FLUENT_SETTING_DEFAULT(bool, Enabled, false);
-    FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 0);
-    FLUENT_SETTING(std::string, DeadLetterQueue);
-};
-
-struct TSharedConsumerSettings {
-    using TSelf = TSharedConsumerSettings;
-
-    FLUENT_SETTING_DEFAULT(bool, KeepMessagesOrder, false);
-    FLUENT_SETTING_DEFAULT(TDuration, DefaultProcessingTimeout, TDuration::Zero());
-    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageWaitTime, TDuration::Zero());
-    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageDelay, TDuration::Zero());
-    FLUENT_SETTING(TSharedConsumerDeadLetterPolicySettings, DeadLetterPolicy);
-};
-
 struct TReadRuleSettings {
     TReadRuleSettings() {}
     using TSelf = TReadRuleSettings;
@@ -222,6 +224,10 @@ struct TReadRuleSettings {
         }
         Version_ = settings.Version();
         ServiceType_ = settings.ServiceType();
+        SharedConsumer_.reset();
+        if (const auto& sharedConsumer = settings.SharedConsumer()) {
+            SharedConsumer_ = sharedConsumer;
+        }
         return *this;
     }
 

@@ -10,6 +10,43 @@
 
 namespace NYdb::inline Dev::NPersQueue {
 
+namespace {
+
+TDuration ProtoDurationToTDuration(const google::protobuf::Duration& duration) {
+    return TDuration::Seconds(duration.seconds()) + TDuration::MicroSeconds(duration.nanos() / 1000);
+}
+
+TSharedConsumerSettings ConvertProtoToSharedConsumerSettings(
+    const Ydb::PersQueue::V1::TopicSettings::SharedConsumerType& shared)
+{
+    TSharedConsumerSettings settings;
+    settings.KeepMessagesOrder(shared.keep_messages_order());
+    if (shared.has_default_processing_timeout()) {
+        settings.DefaultProcessingTimeout(ProtoDurationToTDuration(shared.default_processing_timeout()));
+    }
+    if (shared.has_receive_message_wait_time()) {
+        settings.ReceiveMessageWaitTime(ProtoDurationToTDuration(shared.receive_message_wait_time()));
+    }
+    if (shared.has_receive_message_delay()) {
+        settings.ReceiveMessageDelay(ProtoDurationToTDuration(shared.receive_message_delay()));
+    }
+    if (shared.has_dead_letter_policy()) {
+        const auto& policy = shared.dead_letter_policy();
+        TSharedConsumerDeadLetterPolicySettings deadLetterPolicy;
+        deadLetterPolicy.Enabled(policy.enabled());
+        if (policy.has_condition()) {
+            deadLetterPolicy.MaxProcessingAttempts(policy.condition().max_processing_attempts());
+        }
+        if (policy.has_move_action()) {
+            deadLetterPolicy.DeadLetterQueue(policy.move_action().dead_letter_queue());
+        }
+        settings.DeadLetterPolicy(deadLetterPolicy);
+    }
+    return settings;
+}
+
+} // namespace
+
 class TCommonCodecsProvider {
 public:
     TCommonCodecsProvider() {
@@ -150,6 +187,9 @@ TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const Ydb::PersQueue:
     }
     Version_ = settings.version();
     ServiceType_ = settings.service_type();
+    if (settings.has_shared_consumer_type()) {
+        SharedConsumer_ = ConvertProtoToSharedConsumerSettings(settings.shared_consumer_type());
+    }
 }
 
 TDescribeTopicResult::TTopicSettings::TRemoteMirrorRule::TRemoteMirrorRule(const Ydb::PersQueue::V1::TopicSettings::RemoteMirrorRule& settings)

@@ -352,6 +352,24 @@ def _git(repo: str, *args: str) -> str:
     return r.stdout
 
 
+def _git_rc(repo: str, *args: str) -> Tuple[int, str, str]:
+    r = subprocess.run(['git', *args], cwd=repo, capture_output=True, text=True, check=False)
+    return r.returncode, r.stdout, r.stderr
+
+
+def commit_touches_file(repo: str, sha: str, rel_path: str) -> bool:
+    """True iff sha actually modifies rel_path (uses commit tree, not file history).
+
+    With a shallow clone and no parent commit, ``git rev-list -- path`` can falsely
+    list HEAD as touching the file, while ``git show`` may treat the whole file as
+    newly added. ``git diff-tree`` does not have this problem.
+    """
+    rc, stdout, _ = _git_rc(repo, 'diff-tree', '--no-commit-id', '--name-only', '-r', sha)
+    if rc != 0 or not stdout.strip():
+        return False
+    return rel_path in stdout.splitlines()
+
+
 def commits_touching_file(
     repo: str, rel_path: str, since_date: dt.date, branch: str = 'main'
 ) -> List[Tuple[str, dt.datetime]]:
@@ -361,11 +379,15 @@ def commits_touching_file(
     branch is currently checked out.
     """
     git_ref = f'origin/{branch}'
-    # Fall back to HEAD if origin/<branch> is not available (e.g. offline / shallow)
     try:
         _git(repo, 'rev-parse', '--verify', git_ref)
     except RuntimeError:
-        git_ref = 'HEAD'
+        print(
+            f'WARNING: {git_ref} not found — skip mute latency git scan '
+            f'(fetch origin/{branch} before running)',
+            file=sys.stderr,
+        )
+        return []
     raw = _git(
         repo,
         'rev-list', '--reverse', f'--since={since_date.isoformat()}', git_ref, '--', rel_path,
@@ -376,6 +398,8 @@ def commits_touching_file(
     for sha in raw.splitlines():
         sha = sha.strip()
         if not sha:
+            continue
+        if not commit_touches_file(repo, sha, rel_path):
             continue
         date_s = _git(repo, 'show', '-s', '--format=%cI', sha).strip()
         parsed = dt.datetime.fromisoformat(date_s.replace('Z', '+00:00')).astimezone(dt.timezone.utc)

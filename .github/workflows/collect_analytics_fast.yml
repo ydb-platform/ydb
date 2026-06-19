@@ -126,5 +126,6 @@ jobs:
     - name: Upload mute latency data
       continue-on-error: true
       run: |
-        git fetch --shallow-since="90 days ago" origin HEAD
+        # checkout uses fetch-depth=1; deepen main so mute diffs have parents.
+        git fetch --shallow-since="90 days ago" origin main
         python3 .github/scripts/analytics/mute_latency_from_failure.py

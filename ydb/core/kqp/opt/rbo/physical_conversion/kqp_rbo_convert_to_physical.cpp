@@ -185,7 +185,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
 
-            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp, bool left) {
+            auto projectInput = [&](TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) {
                 const auto inputOutput = inputOp->GetOutputIUs();
                 THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
                 inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
@@ -195,10 +195,9 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 bool identity = inputOutput.size() == unionOutput.size();
                 for (size_t i = 0; i < unionAll->Columns.size(); ++i) {
                     const auto& column = unionAll->Columns[i];
-                    const auto& source = left ? column.LeftSource : column.RightSource;
-                    Y_ENSURE(inputOutputSet.contains(source), "UnionAll source column " << source.GetFullName() << " is not visible");
-                    renames.emplace_back(source.GetFullName(), column.Output.GetFullName());
-                    identity = identity && inputOutput[i] == source && source == column.Output;
+                    Y_ENSURE(inputOutputSet.contains(column), "UnionAll column " << column.GetFullName() << " is not visible");
+                    renames.emplace_back(column.GetFullName(), column.GetFullName());
+                    identity = identity && inputOutput[i] == column;
                 }
 
                 if (identity) {
@@ -208,8 +207,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             };
 
             TVector<TExprNode::TPtr> extendArgs{
-                projectInput(leftArg, unionAll->GetLeftInput(), /*left=*/true),
-                projectInput(rightArg, unionAll->GetRightInput(), /*left=*/false)
+                projectInput(leftArg, unionAll->GetLeftInput()),
+                projectInput(rightArg, unionAll->GetRightInput())
             };
 
             if (unionAll->Ordered) {

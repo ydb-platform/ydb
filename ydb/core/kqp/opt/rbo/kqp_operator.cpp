@@ -779,20 +779,15 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
  */
 
 TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
-                         TVector<TUnionAllColumnMapping> columns, bool ordered)
+                         TVector<TInfoUnit> columns, bool ordered)
     : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput)
     , Columns(std::move(columns))
     , Ordered(ordered) {
-    Y_ENSURE(!Columns.empty(), "UnionAll must have output columns");
+    Y_ENSURE(!Columns.empty(), "UnionAll must have columns");
 }
 
 TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
-    TVector<TInfoUnit> result;
-    result.reserve(Columns.size());
-    for (const auto& column : Columns) {
-        result.push_back(column.Output);
-    }
-    return result;
+    return Columns;
 }
 
 TString TOpUnionAll::ToString(TExprContext& ctx) {
@@ -809,9 +804,7 @@ NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags) {
         if (i != 0) {
             columns << ", ";
         }
-        columns << Columns[i].Output.GetFullName()
-            << ": " << Columns[i].LeftSource.GetFullName()
-            << " | " << Columns[i].RightSource.GetFullName();
+        columns << Columns[i].GetFullName();
     }
     columns << "}";
     res["Columns"] = columns;

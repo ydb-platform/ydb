@@ -156,7 +156,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             rename,
             map,
             subplan->Pos,
-            TVector<TUnionAllColumnMapping>{{scalarIU, scalarIU, scalarIU}},
+            TVector<TInfoUnit>{scalarIU},
             true
         );
 

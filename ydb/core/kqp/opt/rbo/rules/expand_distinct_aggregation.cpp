@@ -220,14 +220,14 @@ TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& 
             BuildNullMapElementsExceptOneColumn(partialResult, aggregate->GetInput()->Type, aggTraitsList, aggTraits, intermediateColumnPrefix, props, ctx);
 
         if (unionAllResult) {
-            TVector<TUnionAllColumnMapping> columns;
+            TVector<TInfoUnit> columns;
             columns.reserve(aggregate->GetKeyColumns().size() + aggTraitsList.size());
             for (const auto& keyColumn : aggregate->GetKeyColumns()) {
-                columns.push_back({keyColumn, keyColumn, keyColumn});
+                columns.push_back(keyColumn);
             }
             for (const auto& unionAggTraits : aggTraitsList) {
                 const auto column = TInfoUnit(intermediateColumnPrefix + unionAggTraits.ResultColName.GetFullName());
-                columns.push_back({column, column, column});
+                columns.push_back(column);
             }
 
             unionAllResult = MakeIntrusive<TOpUnionAll>(unionAllResult, partialResult, aggregate->Pos, std::move(columns));

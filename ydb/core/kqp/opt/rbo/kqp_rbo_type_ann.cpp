@@ -306,15 +306,13 @@ TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
     TVector<const TItemExprType*> resultItems;
     resultItems.reserve(unionAll->Columns.size());
     for (const auto& column : unionAll->Columns) {
-        const auto* leftType = leftStructType->FindItemType(column.LeftSource.GetFullName());
-        const auto* rightType = rightStructType->FindItemType(column.RightSource.GetFullName());
-        Y_ENSURE(leftType, "Missing UnionAll left source type: " << column.LeftSource.GetFullName());
-        Y_ENSURE(rightType, "Missing UnionAll right source type: " << column.RightSource.GetFullName());
+        const auto* leftType = leftStructType->FindItemType(column.GetFullName());
+        const auto* rightType = rightStructType->FindItemType(column.GetFullName());
+        Y_ENSURE(leftType, "Missing UnionAll left source type: " << column.GetFullName());
+        Y_ENSURE(rightType, "Missing UnionAll right source type: " << column.GetFullName());
         Y_ENSURE(IsSameAnnotation(*leftType, *rightType),
-            "UnionAll source type mismatch for " << column.Output.GetFullName()
-            << ": " << column.LeftSource.GetFullName()
-            << " vs " << column.RightSource.GetFullName());
-        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(column.Output.GetFullName(), leftType));
+            "UnionAll source type mismatch for " << column.GetFullName());
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(column.GetFullName(), leftType));
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resultItems);

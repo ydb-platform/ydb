@@ -202,11 +202,11 @@ void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
     TInfoUnitSet leftLive;
     TInfoUnitSet rightLive;
     for (const auto& column : Columns) {
-        if (!liveOut.contains(column.Output)) {
+        if (!liveOut.contains(column)) {
             continue;
         }
-        AddInfoUnit(leftLive, column.LeftSource);
-        AddInfoUnit(rightLive, column.RightSource);
+        AddInfoUnit(leftLive, column);
+        AddInfoUnit(rightLive, column);
     }
     ctx.AddLiveColumns(GetLeftInput(), leftLive);
     ctx.AddLiveColumns(GetRightInput(), rightLive);

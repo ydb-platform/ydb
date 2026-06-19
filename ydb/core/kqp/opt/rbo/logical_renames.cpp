@@ -174,21 +174,13 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
 void TOpUnionAll::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                             const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
+    Y_UNUSED(stopList);
 
-    auto rename = [&](TInfoUnit& iu, bool checkStopList = false) {
-        if (checkStopList && stopList.contains(iu)) {
-            return;
-        }
+    for (auto& iu : Columns) {
         const auto it = renameMap.find(iu);
         if (it != renameMap.end()) {
             iu = it->second;
         }
-    };
-
-    for (auto& column : Columns) {
-        rename(column.Output);
-        rename(column.LeftSource, true);
-        rename(column.RightSource, true);
     }
 }
 

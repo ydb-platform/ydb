@@ -3146,7 +3146,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             identityMap,
             rightRead,
             pos,
-            TVector<TUnionAllColumnMapping>{{TInfoUnit("column0"), TInfoUnit("column0"), TInfoUnit("column0")}}
+            TVector<TInfoUnit>{TInfoUnit("column0")}
         );
         TOpRoot root(unionAll, pos, {"column0"});
 

@@ -234,12 +234,15 @@ void RepairUnionAllOutputIUs(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprCo
     const auto rightOutput = unionAll->GetRightInput()->GetOutputIUs();
 
     for (auto& column : unionAll->Columns) {
-        RepairInfoUnitReference(column.LeftSource, leftOutput);
-        RepairInfoUnitReference(column.RightSource, rightOutput);
-        Y_ENSURE(ContainsInfoUnit(leftOutput, column.LeftSource),
-            "UnionAll left source column " << column.LeftSource.GetFullName() << " is not visible");
-        Y_ENSURE(ContainsInfoUnit(rightOutput, column.RightSource),
-            "UnionAll right source column " << column.RightSource.GetFullName() << " is not visible");
+        const auto leftColumn = ResolveVisibleIUByColumnName(leftOutput, column);
+        const auto rightColumn = ResolveVisibleIUByColumnName(rightOutput, column);
+        Y_ENSURE(leftColumn, "UnionAll left column " << column.GetFullName() << " is not visible");
+        Y_ENSURE(rightColumn, "UnionAll right column " << column.GetFullName() << " is not visible");
+        Y_ENSURE(*leftColumn == *rightColumn,
+            "UnionAll column " << column.GetFullName()
+            << " resolves to different left and right columns: "
+            << leftColumn->GetFullName() << " vs " << rightColumn->GetFullName());
+        column = *leftColumn;
     }
     ValidateUniqueOutputIUs(unionAll, ctx);
 }
@@ -674,18 +677,13 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
 
     if (setOpKind == "union_all" || setOpKind == "union") {
         const auto outputIUs = GetStructIUs(node->GetTypeAnn());
-        const auto leftSourceIUs = GetStructIUs(leftInputPtr->GetTypeAnn());
-        const auto rightSourceIUs = GetStructIUs(rightInputPtr->GetTypeAnn());
-        Y_ENSURE(outputIUs.size() == leftSourceIUs.size(), "UnionAll output and left input column counts mismatch");
-        Y_ENSURE(outputIUs.size() == rightSourceIUs.size(), "UnionAll output and right input column counts mismatch");
 
-        TVector<TUnionAllColumnMapping> columns;
-        columns.reserve(outputIUs.size());
-        for (size_t i = 0; i < outputIUs.size(); ++i) {
-            columns.push_back({outputIUs[i], leftSourceIUs[i], rightSourceIUs[i]});
-        }
+        const auto lhsSourceIUs = GetStructIUs(leftInputPtr->GetTypeAnn());
+        const auto rhsSourceIUs = GetStructIUs(rightInputPtr->GetTypeAnn());
+        Y_ENSURE(outputIUs.size() == lhsSourceIUs.size(), "UnionAll output and left input column counts mismatch");
+        Y_ENSURE(outputIUs.size() == rhsSourceIUs.size(), "UnionAll output and right input column counts mismatch");
 
-        result = MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos(), std::move(columns));
+        result = MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos(), outputIUs);
     } else if (setOpKind == "intersect" || setOpKind == "except" ) {
 
         auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();

@@ -532,16 +532,10 @@ public:
     TVector<TExpression> JoinFilters;
 };
 
-struct TUnionAllColumnMapping {
-    TInfoUnit Output;
-    TInfoUnit LeftSource;
-    TInfoUnit RightSource;
-};
-
 class TOpUnionAll: public IBinaryOperator {
 public:
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos,
-                TVector<TUnionAllColumnMapping> columns, bool ordered = false);
+                TVector<TInfoUnit> columns, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
@@ -554,7 +548,7 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
-    TVector<TUnionAllColumnMapping> Columns;
+    TVector<TInfoUnit> Columns;
     bool Ordered;
 };
 

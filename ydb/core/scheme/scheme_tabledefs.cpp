@@ -95,10 +95,8 @@ void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) {
 }
 
 struct TSystemColumnsData {
-    const TString PartitionColumnName = "_yql_partition_id";
-
     const TMap<TString, TSystemColumnInfo> SystemColumns = {
-        {PartitionColumnName, {TKeyDesc::EColumnIdDataShard, NScheme::NTypeIds::Uint64}}
+        {YqlPartitionColumnName, {TKeyDesc::EColumnIdDataShard, NScheme::NTypeIds::Uint64}}
     };
 };
 

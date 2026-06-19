@@ -1,5 +1,8 @@
 #include "pqv1_sdk_test_utils.h"
 
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/utils.h>
+
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests {
@@ -133,7 +136,45 @@ void AssertTopicSettings(
         UNIT_ASSERT(!actual.AdvancedMonitoringSettings().has_value());
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(actual.ReadRules().size(), expected.ReadRulesCount);
+    UNIT_ASSERT_VALUES_EQUAL(actual.ReadRules().size(), expected.ReadRules.size());
+    for (size_t i = 0; i < expected.ReadRules.size(); ++i) {
+        const auto& actualRule = actual.ReadRules().at(i);
+        const auto& expectedRule = expected.ReadRules.at(i);
+
+        UNIT_ASSERT_VALUES_EQUAL(actualRule.ConsumerName(), expectedRule.ConsumerName);
+        UNIT_ASSERT_VALUES_EQUAL(actualRule.Important(), expectedRule.Important);
+        UNIT_ASSERT_VALUES_EQUAL(actualRule.AvailabilityPeriod(), expectedRule.AvailabilityPeriod);
+        UNIT_ASSERT_VALUES_EQUAL(actualRule.StartingMessageTimestamp(), expectedRule.StartingMessageTimestamp);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(actualRule.SupportedFormat()), static_cast<int>(expectedRule.SupportedFormat));
+        UNIT_ASSERT_VALUES_EQUAL(actualRule.Version(), expectedRule.Version);
+        if (!expectedRule.ServiceType.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(actualRule.ServiceType(), expectedRule.ServiceType);
+        }
+    }
+}
+
+void AssertConsumerTypeViaDescriber(
+    NActors::TTestActorRuntime& runtime,
+    const TString& database,
+    const TString& topicPath,
+    const TString& consumerName,
+    NKikimrPQ::TPQTabletConfig::EConsumerType expectedType)
+{
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(
+        runtime.AllocateEdgeActor(),
+        database,
+        {topicPath}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
+    const auto& topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    const auto* consumer = NPQ::GetConsumer(topic.Info->Description.GetPQTabletConfig(), consumerName);
+    UNIT_ASSERT(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(expectedType));
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

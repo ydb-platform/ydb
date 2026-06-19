@@ -23,6 +23,32 @@ Y_UNIT_TEST(CreateTopic) {
     AssertTopicSettings(describe.TopicSettings(), MakeDefaultCreateTopicExpectation());
 }
 
+Y_UNIT_TEST(CreateTopicWithStreamingConsumer) {
+    TPqv1SdkTestSetup setup("CreateTopicWithStreamingConsumer");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-streaming");
+
+    TCreateTopicSettings settings;
+    settings.ReadRules({TReadRuleSettings{}.ConsumerName(DEFAULT_STREAMING_CONSUMER)});
+
+    AssertStatusSuccess(CreateTopicViaSdk(client, path, settings), "CreateTopic");
+
+    const auto describe = DescribeTopicViaSdk(client, path);
+    AssertStatusSuccess(describe, "DescribeTopic");
+
+    TExpectedTopicSettings expected = MakeDefaultCreateTopicExpectation();
+    expected.ReadRules.push_back({.ConsumerName = DEFAULT_STREAMING_CONSUMER});
+    AssertTopicSettings(describe.TopicSettings(), expected);
+
+    AssertConsumerTypeViaDescriber(
+        setup.GetRuntime(),
+        TString(setup.GetBaseSetup().GetDatabase()),
+        TString(path),
+        DEFAULT_STREAMING_CONSUMER,
+        NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+}
+
 } // Y_UNIT_TEST_SUITE(CreateTopic_PQv1SDK)
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
 
@@ -14,6 +16,17 @@
 namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests {
 
 inline constexpr const char* DEFAULT_TEST_TOPIC = "topic1";
+inline constexpr const char* DEFAULT_STREAMING_CONSUMER = "test_consumer";
+
+struct TExpectedReadRule {
+    std::string ConsumerName;
+    bool Important = false;
+    TDuration AvailabilityPeriod = TDuration::Zero();
+    TInstant StartingMessageTimestamp = TInstant::Zero();
+    NYdb::NPersQueue::EFormat SupportedFormat = NYdb::NPersQueue::EFormat::BASE;
+    ui32 Version = 0;
+    std::string ServiceType;
+};
 
 struct TExpectedTopicSettings {
     ui32 PartitionsCount = 1;
@@ -32,7 +45,7 @@ struct TExpectedTopicSettings {
     std::optional<std::string> FederationAccount;
     std::optional<ui32> MetricsLevel;
     std::optional<std::string> AdvancedMonitoringSettings;
-    size_t ReadRulesCount = 0;
+    std::vector<TExpectedReadRule> ReadRules;
 };
 
 class TPqv1SdkTestSetup {
@@ -70,5 +83,12 @@ void AssertStatusSuccess(const NYdb::TStatus& status, const char* operation);
 void AssertTopicSettings(
     const NYdb::NPersQueue::TDescribeTopicResult::TTopicSettings& actual,
     const TExpectedTopicSettings& expected);
+
+void AssertConsumerTypeViaDescriber(
+    NActors::TTestActorRuntime& runtime,
+    const TString& database,
+    const TString& topicPath,
+    const TString& consumerName,
+    NKikimrPQ::TPQTabletConfig::EConsumerType expectedType);
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

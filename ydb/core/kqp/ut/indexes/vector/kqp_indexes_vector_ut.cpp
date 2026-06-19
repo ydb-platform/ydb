@@ -706,6 +706,46 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST(OrderByCosineParametricLimit) {
+        // LIMIT (top-K) passed as a query parameter rather than a literal must be honored by
+        // both the legacy StreamLookup lowering and the new vector index read actor. Regression
+        // guard: the read actor used to silently compile TopK=0 for a non-literal LIMIT, which
+        // made it return an empty result set.
+        for (bool enableVectorIndexRead : {false, true}) {
+            NKikimrConfig::TFeatureFlags featureFlags;
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetFeatureFlags(featureFlags)
+                .SetKqpSettings({setting});
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorIndexRead(enableVectorIndexRead);
+
+            TKikimrRunner kikimr(serverSettings);
+            auto db = kikimr.GetTableClient();
+            auto session = DoCreateTableAndVectorIndex(db);
+
+            const TString query(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                DECLARE $topK AS Uint64;
+                $target = "\x67\x71\x02";
+                SELECT pk FROM `/Root/TestTable` VIEW index1
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT $topK;
+            )"));
+
+            auto params = TParamsBuilder()
+                .AddParam("$topK").Uint64(3).Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(
+                query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "enableVectorIndexRead=" << enableVectorIndexRead << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), 3,
+                "enableVectorIndexRead=" << enableVectorIndexRead);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(BuildIndexTimesAndUser, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();

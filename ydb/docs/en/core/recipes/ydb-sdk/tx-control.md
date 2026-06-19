@@ -241,7 +241,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   ```rust
   let mut qc = client.query_client();
-  // ImplicitTx is the default for QueryClient one-shot calls:
+  // ImplicitTx is the default for QueryClient methods that execute a single SQL statement:
   // the server picks isolation from SQL (SELECT → snapshot RO, DML → serializable RW).
   let mut row = qc.query_row("SELECT 1 AS one").await?;
   ```
@@ -1113,7 +1113,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   use ydb::QueryTxMode;
 
   let mut qc = client.query_client();
-  // Stale Read-Only is supported for one-shot calls only (not for retry_transaction).
+  // Stale Read-Only is supported only for QueryClient methods that execute a single SQL statement (not for retry_transaction).
   let mut row = qc
       .query_row("SELECT 1 AS one")
       .with_tx_mode(QueryTxMode::StaleReadOnly)

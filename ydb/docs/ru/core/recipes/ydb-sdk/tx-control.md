@@ -264,7 +264,7 @@
 
   ```rust
   let mut qc = client.query_client();
-  // ImplicitTx — режим по умолчанию для one-shot вызовов QueryClient:
+  // ImplicitTx — режим по умолчанию для вспомогательных методов QueryClient, выполняющих один транзакционный SQL-запрос:
   // сервер выбирает изоляцию по типу SQL (SELECT → snapshot RO, DML → serializable RW).
   let mut row = qc.query_row("SELECT 1 AS one").await?;
   ```
@@ -1276,7 +1276,7 @@
   use ydb::QueryTxMode;
 
   let mut qc = client.query_client();
-  // Режим Stale Read-Only поддерживается только для one-shot вызовов (не для retry_transaction).
+  // Режим Stale Read-Only поддерживается только для таких вызовов на query-клиенте (не для retry_transaction).
   let mut row = qc
       .query_row("SELECT 1 AS one")
       .with_tx_mode(QueryTxMode::StaleReadOnly)

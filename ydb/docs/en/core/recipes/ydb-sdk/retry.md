@@ -655,7 +655,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
 - Rust
 
-  `QueryClient` retries one-shot calls (`query_row`, `exec`, etc.) internally. For multiple operations in one transaction, use `retry_transaction`.
+  `QueryClient` automatically retries methods that execute a single transactional SQL statement (`query_row`, `exec`, and similar). For multiple operations in one transaction, use `retry_transaction`.
 
   ```rust
   use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
@@ -672,7 +672,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
       let mut qc = client.query_client().clone_with_idempotent_operations(true);
 
-      // one-shot: internal retries
+      // query_row / exec: internal retries
       let mut row = qc
           .query_row("SELECT series_id, title FROM series WHERE series_id = 1")
           .await?;

@@ -45,7 +45,7 @@ By default, anonymous authentication is used for local Docker. For token auth, u
 
 ## Query Service client {#query-client}
 
-One-shot queries use awaitable builders on [`QueryClient`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html):
+To run a single transactional SQL statement, use awaitable builders on [`QueryClient`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html):
 
 - `qc.exec(yql)` — statement with no result set (DDL, DML).
 - `qc.query_row(yql)` — exactly one row.
@@ -113,4 +113,4 @@ Per-call parameters use `.param(name, value)` or the `ydb_params!` macro.
 
 {% include [steps/10_transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
-Explicit isolation modes are set with `.with_tx_mode(QueryTxMode::SnapshotReadOnly)` (one-shot) or [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) for interactive transactions. Default one-shot mode is implicit — the server infers isolation from the SQL statement.
+Explicit isolation modes are set with `.with_tx_mode(QueryTxMode::SnapshotReadOnly)` (for QueryClient methods that execute one SQL statement) or [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) for interactive transactions. By default, such calls use implicit transaction control — the server infers isolation from the SQL statement.

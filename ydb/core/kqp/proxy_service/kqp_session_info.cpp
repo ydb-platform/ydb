@@ -119,7 +119,7 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
     }
 
     if (fieldsMap.NeedField(VSessions::TraceId::ColumnId)) { // 21
-        if (State == TKqpSessionInfo::EXECUTING) {
+        if (State == TKqpSessionInfo::EXECUTING && !TraceId.empty()) {
             proto->SetTraceId(TraceId);
         }
     }

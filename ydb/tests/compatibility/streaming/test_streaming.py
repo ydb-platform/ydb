@@ -21,7 +21,7 @@ class StreamingTestBase:
             logger.debug("skip test, only available since 25-4")
             pytest.skip("Only available since 25-4")
 
-        extra_feature_flags=[
+        extra_feature_flags = [
             "enable_external_data_sources",
             "enable_streaming_queries"
         ]

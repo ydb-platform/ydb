@@ -3,11 +3,8 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
->>>>>>> 428c2e38e9b (Min max index prints chunk values for trivial reader and __DEFAULT storage_id (#42337))
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 #include <library/cpp/json/writer/json.h>
@@ -255,10 +252,6 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             }
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-<<<<<<< HEAD
-            Y_UNUSED(i);
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
-=======
             TString data;
             if (auto* stringData = i.GetBlobDataOptional()) {
                 const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
@@ -292,7 +285,6 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                 }
             }
             NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
->>>>>>> 428c2e38e9b (Min max index prints chunk values for trivial reader and __DEFAULT storage_id (#42337))
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

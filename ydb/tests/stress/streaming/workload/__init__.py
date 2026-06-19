@@ -59,7 +59,7 @@ class Workload():
         logger.info("Workload::create_table")
         self.pool.execute_with_retries(
             f"""
-                CREATE TABLE table_name (
+                CREATE TABLE `{self.prefix}/table_name` (
                     key Utf8,
                     value Utf8,
                     PRIMARY KEY (key)
@@ -68,7 +68,7 @@ class Workload():
         )
         self.pool.execute_with_retries(
             f"""
-                INSERT INTO table_name (key, value) VALUES ('key1', 'value1');
+                INSERT INTO `{self.prefix}/table_name` (key, value) VALUES ('key1', 'value1');
             """
         )
 
@@ -78,7 +78,7 @@ class Workload():
         self.pool.execute_with_retries(
             f"""
                 CREATE STREAMING QUERY `{self.prefix}/query_name_{'ext' if external else 'loc'}` AS DO BEGIN
-                $precompute_data = SELECT value FROM table_name LIMIT 1;
+                $precompute_data = SELECT value FROM `{self.prefix}/table_name` LIMIT 1;
 
                 $input = (
                     SELECT * FROM
@@ -178,6 +178,7 @@ class Workload():
     def loop(self):
         self.create_topics()
         self.create_external_data_source()
+        self.create_table()
         self.create_streaming_query(external=True)
         self.create_streaming_query(external=False)
         self.check_status()

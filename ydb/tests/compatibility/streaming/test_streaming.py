@@ -49,32 +49,32 @@ class StreamingTestBase:
             logger.debug("skip local topics, only available since 26-1")
             pytest.skip("Local topics only available since 26-1")
 
-        self.test_precompute_queries = min(self.versions) >= (26, 1)
-        if self.test_precompute_queries:
-            create_query = f"""
-                CREATE TABLE table_name (
-                    key Utf8,
-                    value Utf8,
-                    PRIMARY KEY (key)
-                );
-            """
-            session_pool.execute_with_retries(create_query)
-
-            write_query = f"""
-                INSERT INTO table_name (key, value) VALUES ('key1', 'value1');
-            """
-            session_pool.execute_with_retries(write_query)
-
         logger.debug("create_objects")
         self.input_topic = 'streaming_recipe/input_topic'
         self.output_topic = 'streaming_recipe/output_topic'
         self.consumer_name = 'consumer_name'
+        self.test_precompute_queries = min(self.versions) >= (26, 1)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
                 CREATE TOPIC `{self.input_topic}`;
                 CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name});
             """
             session_pool.execute_with_retries(query)
+
+            if self.test_precompute_queries:
+                create_query = f"""
+                    CREATE TABLE table_name (
+                        key Utf8,
+                        value Utf8,
+                        PRIMARY KEY (key)
+                    );
+                """
+                session_pool.execute_with_retries(create_query)
+
+                write_query = f"""
+                    INSERT INTO table_name (key, value) VALUES ('key1', 'value1');
+                """
+                session_pool.execute_with_retries(write_query)
 
         if external:
             self.create_external_data_source()
@@ -241,12 +241,13 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
     def test_rolling_upgrade(self, external):
         self.create_objects(external)
         self.create_simple_streaming_query()
+        suffix = 'value1' if self.test_precompute_queries else ''
 
         for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
             #
             # 2. check written data is correct during rolling upgrade
             #
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
-            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}']
+            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
             self.do_write_read(input, expected_data)
             time.sleep(0.5)

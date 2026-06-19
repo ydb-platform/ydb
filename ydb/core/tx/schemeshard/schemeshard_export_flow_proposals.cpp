@@ -254,20 +254,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     auto& task = *modifyScheme.MutableBackup();
 
     if (item.ParentIdx == Max<ui32>()) {
-        const TPath sourcePath = TPath::Init(item.SourcePathId, ss);
-        TString exportPathName;
-        TString tableName;
-        if (sourcePath.IsResolved() && sourcePath->IsColumnTable()) {
-            exportPathName = sourcePath.Parent().PathString();
-            tableName = sourcePath->Name;
-        } else {
-            exportPathName = exportPath.PathString();
-            tableName = ToString(itemIdx);
-        }
-        modifyScheme.SetWorkingDir(exportPathName);
-        task.SetTableName(tableName);
+        modifyScheme.SetWorkingDir(exportPath.PathString());
+        task.SetTableName(ToString(itemIdx));
 
-        FillTableDescription(ss, task, sourcePath, exportPath.Child(ToString(itemIdx)));
+        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 

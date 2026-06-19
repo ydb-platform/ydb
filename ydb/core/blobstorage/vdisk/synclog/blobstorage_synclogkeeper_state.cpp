@@ -544,8 +544,8 @@ namespace NKikimr {
             PhantomFlagStorageState.FinishInitialBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
         }
 
-        void TSyncLogKeeperState::RecoverPhantomFlagStorage(TPhantomFlagStorageSnapshot&& snapshot) {
-            PhantomFlagStorageState.Recover(std::move(snapshot));
+        void TSyncLogKeeperState::RecoverPhantomFlagStorage(TPhantomFlagThresholds&& thresholdsBatch, bool eof) {
+            PhantomFlagStorageState.Recover(std::move(thresholdsBatch), eof);
         }
 
         void TSyncLogKeeperState::RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const {
@@ -553,6 +553,14 @@ namespace NKikimr {
                 request->Get()->SyncLogSnapshot = SyncLogPtr->GetSnapshot();
             }
             PhantomFlagStorageState.RequestSnapshot(request);
+        }
+
+        void TSyncLogKeeperState::ContinuePhantomFlagStorageSnapshot(
+                std::unique_ptr<TEvPhantomFlagStorageGetSnapshot> request) const {
+            Y_ABORT_UNLESS(PhantomFlagStorageState.IsPersistent());
+            request->SyncLogSnapshot = SyncLogPtr->GetSnapshot();
+            TActivationContext::Send(new IEventHandle(
+                    PhantomFlagStorageState.GetProcessorId(), SelfId, request.release()));
         }
 
         void TSyncLogKeeperState::ProcessLocalSyncData(ui32 orderNumber, const TString& data) {

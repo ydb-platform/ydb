@@ -16814,6 +16814,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return TStatus::Ok;
         }
 
+        IGraphTransformer::TStatus ValidateProviderMaterializeResult(const TExprNode::TPtr& input, TExprContext& ctx) {
+            if (!input->GetTypeAnn() ||
+                input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple ||
+                input->GetTypeAnn()->Cast<TTupleExprType>()->GetSize() != 2 ||
+                input->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->GetKind() != ETypeAnnotationKind::World) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad datasink materialize result"));
+                return TStatus::Error;
+            }
+            return TStatus::Ok;
+        }
+
         IGraphTransformer::TStatus ValidateProviderConfigureResult(const TExprNode::TPtr& input, TExprContext& ctx) {
             if (!input->GetTypeAnn() || input->GetTypeAnn()->GetKind() != input->Head().GetTypeAnn()->GetKind()) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad provider configure result"));

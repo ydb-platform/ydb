@@ -58,6 +58,9 @@ namespace NKikimr {
             CHECK_PDISK_RESPONSE(LogCutterCtx.VCtx, ev, ctx);
 
             WriteInProgress = false;
+            if (LogCutterCtx.NotifyId) {
+                ctx.Send(LogCutterCtx.NotifyId, new TEvRecoveryLogCutDone(FirstLsnToKeepLastWritten));
+            }
             Process(ctx);
         }
 
@@ -149,7 +152,9 @@ namespace NKikimr {
                 ui8 signature = TLogSignature::SignatureHullCutLog;
                 ctx.Send(LogCutterCtx.LoggerId,
                     new NPDisk::TEvLog(LogCutterCtx.PDiskCtx->Dsk->Owner,
-                        LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr));
+                        LogCutterCtx.PDiskCtx->Dsk->OwnerRound, signature, commitRec, TRcBuf(), seg, nullptr,
+                        TWriteSource::LogCutterCutLog,
+                        NPDisk::TEvLog::TCallback()));
                 WriteInProgress = true;
                 FirstLsnToKeepLastWritten = curLsn;
 

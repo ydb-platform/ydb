@@ -1601,6 +1601,8 @@ struct TFullTextApplyParseResult {
 
     TNodeOnNodeOwnedMap Replaces;
     std::vector<TFulltextQuery> Queries;
+    // Equality bindings for the index prefix columns: (column name, value expr).
+    TVector<std::pair<TString, TExprNode::TPtr>> PrefixColumns;
 
     ui64 FulltextMatch = 0;
     ui64 FulltextScore = 0;
@@ -1614,16 +1616,29 @@ struct TFullTextApplyParseResult {
     TVector<TCoNameValueTuple> Settings(TExprContext& ctx, TPositionHandle pos) {
         TVector<TCoNameValueTuple> settings;
         auto& query = Queries[0];
-        if (!query.NamedOptions) return settings;
-        for(auto& arg : query.NamedOptions->Children()) {
-            auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
-            TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
-            TString name = nameValueTuple.Name().StringValue();
+        if (query.NamedOptions) {
+            for(auto& arg : query.NamedOptions->Children()) {
+                auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
+                TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
+                TString name = nameValueTuple.Name().StringValue();
+                settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                    .Name<TCoAtom>()
+                        .Value(nameValueTuple.Name().StringValue())
+                        .Build()
+                    .Value(value)
+                    .Done());
+            }
+        }
+
+        for (const auto& [colName, value] : PrefixColumns) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name<TCoAtom>()
-                    .Value(nameValueTuple.Name().StringValue())
+                    .Value(TKqpReadTableFullTextIndexSettings::PrefixColumnSettingName)
                     .Build()
-                .Value(value)
+                .Value<TExprList>()
+                    .Add<TCoAtom>().Value(colName).Build()
+                    .Add(TExprBase(value))
+                .Build()
                 .Done());
         }
 
@@ -1699,9 +1714,12 @@ void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitP
 }
 
 TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName, bool isNgram,
-    const THashSet<TString>& indexedColumns = {})
+    const THashSet<TString>& indexedColumns = {}, const TVector<TString>& prefixColumns = {},
+    const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns = {})
 {
     TFullTextApplyParseResult result;
+    result.PrefixColumns = seedPrefixColumns;
+    const THashSet<TString> prefixColumnsSet{prefixColumns.begin(), prefixColumns.end()};
     static const THashSet<TString> AllowedFulltextExprs = {
         "And",
         "Member",
@@ -1710,9 +1728,42 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         "AsStruct",
         ">",
         "<",
+        "==",
         "Apply",
         "AssumeStrict",
         "Coalesce",
+    };
+
+    // Extract an equality binding for a prefix column from an `==` node: one side must be
+    // Member(row, prefixCol), the other a parameter or literal. Returns true if captured.
+    auto tryExtractPrefixEq = [&] (const TExprNode::TPtr& expr) {
+        if (prefixColumnsSet.empty()) {
+            return;
+        }
+        auto eq = TExprBase(expr).Maybe<TCoCmpEqual>();
+        if (!eq) {
+            return;
+        }
+        auto trySide = [&] (TExprBase member, TExprBase value) {
+            auto m = member.Maybe<TCoMember>();
+            if (!m) {
+                return false;
+            }
+            TString col = m.Cast().Name().StringValue();
+            if (!prefixColumnsSet.contains(col)) {
+                return false;
+            }
+            auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+            if (!inner.Maybe<TCoParameter>() && !inner.Maybe<TCoDataCtor>()) {
+                return false;
+            }
+            if (AnyOf(result.PrefixColumns, [&](const auto& p) { return p.first == col; })) {
+                return true; // already captured
+            }
+            result.PrefixColumns.emplace_back(col, value.Ptr());
+            return true;
+        };
+        trySide(eq.Cast().Left(), eq.Cast().Right()) || trySide(eq.Cast().Right(), eq.Cast().Left());
     };
 
     TNodeSet visitedNodes;
@@ -1724,6 +1775,8 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         } else {
             isGreenNode = false;
         }
+
+        tryExtractPrefixEq(expr);
 
         if (auto match = TFulltextQuery::Match(expr, ctx, indexedColumns) ; match.IsValid()) {
             if (match.IsScoreQuery()) {
@@ -1798,6 +1851,9 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
     } else if (result.FulltextScore > 0 && !scoreRestrictionFound) {
         result.HasErrors = true;
         explain = " Score restriction is not found in the predicate. It's required to put FulltextScore() > 0 constraint in the where clause.";
+    } else if (result.PrefixColumns.size() < prefixColumnsSet.size()) {
+        result.HasErrors = true;
+        explain = " Prefixed fulltext index requires an equality predicate (column = <value>) on every prefix column.";
     }
 
     if (result.HasErrors) {
@@ -1809,6 +1865,22 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, subIssue);
         baseIssue.AddSubIssue(MakeIntrusive<TIssue>(std::move(subIssue)));
         ctx.AddError(baseIssue);
+    }
+
+    // Prefix bindings are collected in predicate traversal order, but downstream they are serialized
+    // and consumed positionally as the leading key cells in index key order ([prefix..., __ydb_token, doc_id...]).
+    // Reorder them to match the index prefix column order so the posting-table read keys are correct.
+    if (!result.HasErrors && !prefixColumnsSet.empty()) {
+        THashMap<TString, TExprNode::TPtr> byName;
+        for (auto& [name, value] : result.PrefixColumns) {
+            byName[name] = value;
+        }
+        TVector<std::pair<TString, TExprNode::TPtr>> ordered;
+        ordered.reserve(prefixColumns.size());
+        for (const auto& col : prefixColumns) {
+            ordered.emplace_back(col, byName.at(col));
+        }
+        result.PrefixColumns = std::move(ordered);
     }
 
     return result;
@@ -1905,7 +1977,32 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         indexedColumns.insert(analyzer.column());
     }
 
-    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns);
+    // Fulltext index key columns are [prefix..., text]; the text column is the last one.
+    TVector<TString> prefixColumns;
+    if (indexDesc->KeyColumns.size() > 1) {
+        prefixColumns.assign(indexDesc->KeyColumns.begin(), indexDesc->KeyColumns.end() - 1);
+    }
+
+    // An equality predicate on a prefix (leading key) column is usually pushed into the index read
+    // as a point key range (KqlReadTableIndex with PointPrefixLen). Extract those values here; any
+    // prefix equality that stayed in the lambda is picked up by FindMatchingApply below.
+    TVector<std::pair<TString, TExprNode::TPtr>> seedPrefixColumns;
+    if (!prefixColumns.empty() && read.Read.IsValid()) {
+        auto range = read.Read.Cast().Range();
+        auto from = range.From();
+        auto to = range.To();
+        if (from.Maybe<TKqlKeyInc>() && from.Raw() == to.Raw() && from.ArgCount() >= prefixColumns.size()) {
+            for (size_t i = 0; i < prefixColumns.size(); ++i) {
+                auto value = from.Arg(i);
+                auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+                if (inner.Maybe<TCoParameter>() || inner.Maybe<TCoDataCtor>()) {
+                    seedPrefixColumns.emplace_back(prefixColumns[i], value.Ptr());
+                }
+            }
+        }
+    }
+
+    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns, prefixColumns, seedPrefixColumns);
     if (result.HasErrors) {
         return {};
     }

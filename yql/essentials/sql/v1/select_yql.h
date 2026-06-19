@@ -5,6 +5,7 @@
 namespace NSQLTranslationV1 {
 
 struct TYqlSourceAlias {
+    TPosition Position;
     TString Name;
     TVector<TString> Columns;
 };

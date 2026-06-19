@@ -998,4 +998,103 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         tryToUpsert();
     }
 
+    Y_UNIT_TEST(DirectModifySchemeSetNotNullRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "value" NotNull: true }
+        )", {{NKikimrScheme::StatusInvalidParameter,
+              "Cannot set NotNull to true on column 'value' in a ModifyScheme request — Internal flag is not set. "
+              "To override, set Internal = true. This is dangerous: only do this if you know what you are doing"}});
+    }
+
+    Y_UNIT_TEST(DirectModifySchemeSetNotNullInProgressRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "value" SetNotNullInProgress: true }
+        )", {{NKikimrScheme::StatusInvalidParameter,
+              "Cannot set NotNullInProgress on column 'value' in a ModifyScheme request — Internal flag is not set. "
+              "To override, set Internal = true. This is dangerous: only do this if you know what you are doing"}});
+    }
+
+    Y_UNIT_TEST(DirectModifySchemeSetNotNullOnSerialColumnRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+              TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+              }
+              SequenceDescription {
+                  Name: "myseq"
+              }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard,
+            InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+                  Name: "Table"
+                  Columns { Name: "key" NotNull: true }
+            )")));
+        TestModificationResults(runtime, txId,
+            {{NKikimrScheme::StatusInvalidParameter, "Cannot alter serial column 'key'"}});
+    }
+
+    Y_UNIT_TEST(DirectModifySchemeSetNotNullInProgressOnSerialColumnRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+              TableDescription {
+                  Name: "Table"
+                  Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+              }
+              SequenceDescription {
+                  Name: "myseq"
+              }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard,
+            InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+                  Name: "Table"
+                  Columns { Name: "key" SetNotNullInProgress: true }
+            )")));
+        TestModificationResults(runtime, txId,
+            {{NKikimrScheme::StatusInvalidParameter, "Cannot alter serial column 'key'"}});
+    }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

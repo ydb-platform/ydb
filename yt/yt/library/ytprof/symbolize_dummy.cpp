@@ -15,7 +15,7 @@ std::pair<void*, void*> GetVdsoRange()
     return {nullptr, nullptr};
 }
 
-TString GetVersion()
+std::string GetVersion()
 {
     return "0.2";
 }
@@ -25,7 +25,7 @@ void AddBuildInfo(NProto::Profile* profile, const TBuildInfo& buildInfo)
     Y_UNUSED(profile, buildInfo);
 }
 
-std::optional<TString> GetBuildId()
+std::optional<std::string> GetBuildId()
 {
     return {};
 }

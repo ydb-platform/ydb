@@ -815,6 +815,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         ReadTimestampMs = 0; // read_from per topic only
         ReadOnlyLocal = true;
         DirectRead = init.direct_read();
+        BatchingSupported = init.is_batching_supported();
         if (init.reader_name()) {
             PeerName = init.reader_name();
         }
@@ -1170,13 +1171,21 @@ bool TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
 
     for (const auto& [topicName, topic] : Topics) {
         if (ReadWithoutConsumer) {
-            if (topic->Groups.size() == 0) {
-                CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer", ctx);
-                return false;
-            }
-            for (auto group : topic->Groups) {
-                if (!SendLockPartitionToSelf(group-1, topicName, topic, ctx)) {
+            if (topic->Groups.empty()) {
+                if (!AutoPartitioningSupport) {
+                    CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer by non-autoscale aware client", ctx);
                     return false;
+                }
+                for (auto partitionId : topic->GetPartitionGraph()->GetRootPartitions()) {
+                    if (!SendLockPartitionToSelf(partitionId, topicName, topic, ctx)) {
+                        return false;
+                    }
+                }
+            } else {
+                for (auto group : topic->Groups) {
+                    if (!SendLockPartitionToSelf(group-1, topicName, topic, ctx)) {
+                        return false;
+                    }
                 }
             }
         } else {
@@ -1314,7 +1323,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, ClientDC, RangesMode,
         converterIter->second, database, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs,
-        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes));
+        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes, BatchingSupported));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
@@ -2470,6 +2479,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
             }
             for (auto p : msg->ChildPartitionIds) {
                 r->add_child_partition_ids(p);
+                if (ReadWithoutConsumer && topic->Groups.empty()) {
+                    if (!SendLockPartitionToSelf(p, it->first, topic, ctx)) {
+                        return;
+                    }
+                }
             }
 
             LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client end partition stream event");

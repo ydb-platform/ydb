@@ -1620,7 +1620,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         db = kikimr.GetTableClient();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
-        std::vector<std::string> queriesOnEmptyColumns = {
+        const std::vector<std::string> queriesOnEmptyColumns = {
             R"(
                 select count(*) from `/Root/t1` as t1;
             )",
@@ -1645,10 +1645,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 select count(distinct t1.a), count(distinct t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                select avg(distinct t1.a), avg(distinct t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                select avg(distinct t2.e), avg(distinct t2.d) from `/Root/t2` as t2;
             )"
         };
 
-        std::vector<std::string> resultsEmptyColumns = {
+        const std::vector<std::string> resultsEmptyColumns = {
             R"([[0u]])",
             R"([[0u;0u]])",
             R"([[#;#]])",
@@ -1657,6 +1663,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[#;#]])",
             R"([[#;#]])",
             R"([[0u;0u]])",
+            R"([[#;#]])",
+            R"([[#;#]])"
         };
 
         for (ui32 i = 0; i < queriesOnEmptyColumns.size(); ++i) {
@@ -1886,6 +1894,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select min(distinct t1.a) as r0, max(distinct t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by r0, r1;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select avg(distinct t1.a) as r0, avg(distinct t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
             /*
             R"(
                 select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
@@ -1945,6 +1957,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[2u;2u];[3u;3u]])",
                                             R"([[2u;1u];[3u;1u]])",
                                             R"([[0;[2]];[1;[2]]])",
+                                            R"([[2.;[2.]];[2.;[2.]]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -1978,7 +1991,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                SELECT stddev_samp(t1.a) as res, t1.b from `/Root/t1` as t1 group by t1.b order by res, t1.b;
+                SELECT stddev_samp(t1.a) as res, t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -4194,7 +4207,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 29, 30, 31, 32, 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48,
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48,
                                                                       50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83,
                                                                       84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
                            /*rbo never finish*/{}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,

@@ -169,4 +169,6 @@ constexpr bool DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE = false;
 
 constexpr bool DEFAULT_PARSE_EXPRESSION_COLUMNS = false;
 
+constexpr TDuration DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD = TDuration::Days(10);
+
 } // NYql

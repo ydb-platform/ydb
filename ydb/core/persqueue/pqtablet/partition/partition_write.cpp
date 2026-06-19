@@ -1481,7 +1481,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TClientBlob blob(TString{p.Msg.SourceId}, p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                      TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
                      p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey),
-                     p.Msg.MessageCount, p.Msg.MessageFormat); //remove curOffset when LB will report CTime
+                     p.Msg.MessageCount, p.Msg.IsBatch); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();

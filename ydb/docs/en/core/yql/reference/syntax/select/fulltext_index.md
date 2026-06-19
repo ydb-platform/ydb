@@ -43,7 +43,7 @@ Only the first two arguments can be positional. Additional parameters must be pa
   * `Wildcard` — wildcard search: `%` matches any substring, `_` matches a single character (similar to `LIKE`); requires an n-gram index
 * `DefaultOperator` (String): term combination operator in `Keywords` mode:
   * `And` (default) — all query terms must be present in the text
-  * `Or` — terms split into **required** (prefixed with `+`, must appear in every result) and **optional** (no prefix, count toward `MinimumShouldMatch`). Without any `+` prefix, all terms are optional and at least one must match
+  * `Or` — terms split into **required** (prefixed with `+`, must appear in every result) and **optional** (no prefix, count toward `MinimumShouldMatch`). Without any `+` prefix, all terms are optional and at least one must match (see [example](../../builtins/fulltext.md#required-term-example))
 * `MinimumShouldMatch` (String): minimum number of **optional** terms that must match when `DefaultOperator = "Or"` — specified as an absolute number (for example, `"3"`) or a percentage of the optional terms (for example, `"50%"`). Required (`+`) terms are not counted
 
 ### `Wildcard` mode and `%` / `_` patterns (requires n-grams)

@@ -33,14 +33,12 @@ table_service_config:
 
 ### Query execution memory limits {#query-execution-memory-limits}
 
-The `resource_manager` subsection also defines memory limits that Resource Manager uses for query execution on a database node. These parameters control the query memory pool size, initial MKQL program limits, and the threshold at which spilling becomes preferable.
+The `resource_manager` subsection also defines memory limits that Resource Manager uses for query execution on a database node. The `spilling_percent` parameter sets the fill threshold for the `query_memory_limit` pool at which spilling becomes preferable.
 
 ```yaml
 table_service_config:
   resource_manager:
     query_memory_limit: 32212254720
-    mkql_light_program_memory_limit: 1048576
-    mkql_heavy_program_memory_limit: 31457280
     spilling_percent: 80
 ```
 
@@ -48,19 +46,7 @@ table_service_config:
 
 **Type:** `uint64`  
 **Default:** `32212254720` (30 GiB)  
-**Description:** Maximum amount of RAM on a [node](../../concepts/glossary.md#node) that Resource Manager can allocate for query execution (the query memory pool). As tasks grow, they request additional memory from this pool.
-
-#### resource_manager.mkql_light_program_memory_limit
-
-**Type:** `uint64`  
-**Default:** `1048576` (1 MiB)  
-**Description:** Initial MKQL allocator limit for "light" compute tasks — tasks whose program does not contain a map join.
-
-#### resource_manager.mkql_heavy_program_memory_limit
-
-**Type:** `uint64`  
-**Default:** `31457280` (30 MiB)  
-**Description:** Initial MKQL allocator limit for "heavy" compute tasks — tasks whose program contains a map join. If more memory is needed, the limit can grow from the `query_memory_limit` pool until the `spilling_percent` threshold is reached.
+**Description:** Maximum amount of RAM on a [node](../../concepts/glossary.md#node) that Resource Manager can allocate for query execution (the query memory pool). The `spilling_percent` parameter is calculated relative to this pool.
 
 #### resource_manager.spilling_percent {#spilling-percent}
 
@@ -88,11 +74,10 @@ The threshold applies to:
 | Parameter | Scope | Role |
 | --- | --- | --- |
 | `query_memory_limit` | Node | Query RAM pool size |
-| `mkql_light_program_memory_limit` / `mkql_heavy_program_memory_limit` | Task | Initial MKQL allocator limit |
 | `spilling_percent` | Query / pool | Pool fill threshold after which spilling is preferred |
 | `memory_controller_config.query_execution_limit_percent` | Node (QP) | Share of process memory available to Query Processor overall |
 
-The `mkql_*_program_memory_limit` parameters define the starting memory size for each task. `spilling_percent` defines when the shared query pool on the node is full enough that further growth in RAM should give way to spilling.
+`spilling_percent` defines when the shared query pool on the node is full enough that further growth in RAM should give way to spilling.
 
 ##### Recommendations
 

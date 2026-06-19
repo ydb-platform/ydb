@@ -19,7 +19,7 @@
 ```mermaid
 sequenceDiagram
     participant Топик
-    participant Запрос as Потоковый запрос
+    participant Приёмник
     participant Приемник
 
     Топик->>Запрос: событие, ts = 10с

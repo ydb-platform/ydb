@@ -21,7 +21,6 @@ void TActor::HandleRetryTimer() {
             action->OnRetryExecute();
             action->RetryRead(pending.Range);
         } else {
-            AFL_VERIFY(false)("error", "RetryS3ReadNoAction")("blob_range", pending.Range)("storage_id", pending.StorageId);
             bool aborted = false;
             ACFL_ERROR("event", "RetryS3ReadNoAction")("blob_range", pending.Range)("storage_id", pending.StorageId);
             WaitingBlobsCount.Sub(Task->GetWaitingRangesCount());

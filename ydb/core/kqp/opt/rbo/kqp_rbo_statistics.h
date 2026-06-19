@@ -111,7 +111,6 @@ public:
     double ERows = 0;
     double EBytes = 0;
     double Selectivity = 1.0;
-    TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> ColumnStatistics;
 
     TString ToString(ui32 printOptions);
 };

@@ -60,7 +60,6 @@ TInfoUnit TRBOMetadata::MapColumn(const TInfoUnit& key) {
 }
 
 TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx) {
-    Y_UNUSED(typeCtx);
     TVector<TInfoUnit> mappedKeyColumns;
     TVector<TString> keyColumnNames;
 
@@ -95,13 +94,11 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
     THashMap<TString, TColumnStatistics> columnStatsMap;
 
     if (attributes.size() && typeCtx.ColumnStatisticsByTableName.contains(table)) {
-        auto globalMap = typeCtx.ColumnStatisticsByTableName.at(table)->Data;
+        const auto& globalMap = typeCtx.ColumnStatisticsByTableName.at(table)->Data;
 
         for (const auto& columnName : attributes) {
-            TInfoUnit iu(table, columnName);
-
-            if (globalMap.contains(iu.GetFullName())) {
-                columnStatsMap.insert({columnName, globalMap.at(iu.GetFullName())});
+            if (globalMap.contains(columnName)) {
+                columnStatsMap.insert({columnName, globalMap.at(columnName)});
             }    
         }
 

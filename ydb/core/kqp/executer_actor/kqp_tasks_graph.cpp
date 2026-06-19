@@ -1113,7 +1113,12 @@ void TKqpTasksGraph::BuildVectorIndexReadChannels(const TStageInfo& stageInfo, u
     settings->SetOverlapClusters(vectorIndexRead.GetOverlapClusters());
     settings->SetOverlapRatio(vectorIndexRead.GetOverlapRatio());
     settings->SetIndexLevels(vectorIndexRead.GetLevels());
-    settings->SetTopK(vectorIndexRead.GetTopK());
+    {
+        // TopK (LIMIT) may be a literal or a query parameter; resolve it to a value here.
+        const auto guard = TxAlloc->TypeEnv.BindAllocator();
+        settings->SetTopK((ui32)ExtractPhyValue(stageInfo, vectorIndexRead.GetTopK(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>());
+    }
     settings->SetIsDesc(vectorIndexRead.GetIsDesc());
     settings->SetLevelTop(vectorIndexRead.GetLevelTop());
     settings->SetVectorColumnIndex(vectorIndexRead.GetVectorColumnIndex());

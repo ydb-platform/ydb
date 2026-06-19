@@ -2978,12 +2978,9 @@ private:
             YQL_ENSURE(hasEmbedding, "Vector index read output columns must contain the embedding column: " << embeddingColumn);
             proto.SetVectorColumnIndex(vectorColumnIndex);
 
-            // Search parameters
-            ui64 topK = 0;
-            if (auto literal = vectorIndexRead.TopK().Maybe<TCoUint64>()) {
-                topK = FromString<ui64>(literal.Cast().Literal().Value());
-            }
-            proto.SetTopK(topK);
+            // Search parameters. TopK (LIMIT) may be a literal or a query parameter;
+            // resolve it to an actual value at execution time (see BuildVectorIndexReadChannels).
+            SetVectorTopKLimit(proto.MutableTopK(), vectorIndexRead.TopK().Ptr());
             proto.SetIsDesc(vectorIndexRead.IsDesc().Value() == "true");
 
             // Prefixed index: the transform input carries the per-group root __ydb_parent.

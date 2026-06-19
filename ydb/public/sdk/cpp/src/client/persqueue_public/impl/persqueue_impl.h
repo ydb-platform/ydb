@@ -33,6 +33,42 @@ public:
     {
     }
 
+    static void SetProtoDuration(google::protobuf::Duration* proto, TDuration duration) {
+        proto->set_seconds(duration.Seconds());
+        proto->set_nanos(duration.NanoSecondsOfSecond());
+    }
+
+    static void ConvertSharedConsumerToProto(
+        const TSharedConsumerSettings& settings,
+        Ydb::PersQueue::V1::TopicSettings::SharedConsumerType& shared)
+    {
+        shared.set_keep_messages_order(settings.KeepMessagesOrder_);
+        if (settings.DefaultProcessingTimeout_ != TDuration::Zero()) {
+            SetProtoDuration(shared.mutable_default_processing_timeout(), settings.DefaultProcessingTimeout_);
+        }
+        if (settings.ReceiveMessageWaitTime_ != TDuration::Zero()) {
+            SetProtoDuration(shared.mutable_receive_message_wait_time(), settings.ReceiveMessageWaitTime_);
+        }
+        if (settings.ReceiveMessageDelay_ != TDuration::Zero()) {
+            SetProtoDuration(shared.mutable_receive_message_delay(), settings.ReceiveMessageDelay_);
+        }
+
+        const auto& deadLetterPolicy = settings.DeadLetterPolicy_;
+        if (deadLetterPolicy.Enabled_) {
+            auto& protoDeadLetterPolicy = *shared.mutable_dead_letter_policy();
+            protoDeadLetterPolicy.set_enabled(true);
+            if (deadLetterPolicy.MaxProcessingAttempts_) {
+                protoDeadLetterPolicy.mutable_condition()->set_max_processing_attempts(deadLetterPolicy.MaxProcessingAttempts_);
+            }
+            if (!deadLetterPolicy.DeadLetterQueue_.empty()) {
+                protoDeadLetterPolicy.mutable_move_action()->set_dead_letter_queue(
+                    TStringType{deadLetterPolicy.DeadLetterQueue_});
+            } else {
+                protoDeadLetterPolicy.mutable_delete_action();
+            }
+        }
+    }
+
     template<class TReadRule>
     static void ConvertToProtoReadRule(const TReadRule& readRule, Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps) {
         rrProps.set_consumer_name(TStringType{readRule.ConsumerName_});
@@ -48,6 +84,9 @@ public:
             rrProps.add_supported_codecs((static_cast<Ydb::PersQueue::V1::Codec>(codec)));
         }
         rrProps.set_service_type(TStringType{readRule.ServiceType_});
+        if (readRule.SharedConsumer_) {
+            ConvertSharedConsumerToProto(readRule.SharedConsumer_.value(), *rrProps.mutable_shared_consumer_type());
+        }
     }
 
     template <class TRequest, class TSettings>

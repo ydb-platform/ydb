@@ -68,6 +68,28 @@ TExpectedTopicSettings MakeDefaultCreateTopicExpectation() {
     return TExpectedTopicSettings{};
 }
 
+TReadRuleSettings MakeSharedConsumerReadRuleSettings(const std::string& consumerName) {
+    TSharedConsumerDeadLetterPolicySettings deadLetterPolicy;
+    deadLetterPolicy
+        .Enabled(true)
+        .MaxProcessingAttempts(11)
+        .DeadLetterQueue(DEFAULT_DEAD_LETTER_QUEUE);
+
+    TSharedConsumerSettings sharedConsumer;
+    sharedConsumer
+        .KeepMessagesOrder(true)
+        .DefaultProcessingTimeout(TDuration::Seconds(3))
+        .ReceiveMessageWaitTime(TDuration::Seconds(5))
+        .ReceiveMessageDelay(TDuration::Seconds(7))
+        .DeadLetterPolicy(deadLetterPolicy);
+
+    return TReadRuleSettings{}
+        .ConsumerName(consumerName)
+        .StartingMessageTimestamp(TInstant::MilliSeconds(1000))
+        .Version(1)
+        .SharedConsumer(std::make_optional(sharedConsumer));
+}
+
 TStatus CreateTopicViaSdk(
     TPersQueueClient& client,
     const std::string& path,
@@ -175,6 +197,41 @@ void AssertConsumerTypeViaDescriber(
     UNIT_ASSERT_VALUES_EQUAL(
         NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
         NKikimrPQ::TPQTabletConfig::EConsumerType_Name(expectedType));
+}
+
+void AssertSharedConsumerViaDescriber(
+    NActors::TTestActorRuntime& runtime,
+    const TString& database,
+    const TString& topicPath,
+    const TString& consumerName,
+    const TExpectedSharedConsumer& expected)
+{
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(
+        runtime.AllocateEdgeActor(),
+        database,
+        {topicPath}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
+    const auto& topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    const auto& config = topic.Info->Description.GetPQTabletConfig();
+    const auto* consumer = NPQ::GetConsumer(config, consumerName);
+    UNIT_ASSERT(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetImportant(), false);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetKeepMessageOrder(), expected.KeepMessagesOrder);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultProcessingTimeoutSeconds(), expected.DefaultProcessingTimeoutSeconds);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultReceiveMessageWaitTimeMs(), expected.ReceiveMessageWaitTimeMs);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultDelayMessageTimeMs(), expected.ReceiveMessageDelayMs);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(consumer->GetDeadLetterPolicy()),
+        NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetMaxProcessingAttempts(), expected.MaxProcessingAttempts);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDeadLetterQueue(), expected.DeadLetterQueue);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

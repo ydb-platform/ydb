@@ -178,6 +178,24 @@ using TAsyncDescribeTopicResult = NThreading::TFuture<TDescribeTopicResult>;
 
 const std::vector<ECodec>& GetDefaultCodecs();
 
+struct TSharedConsumerDeadLetterPolicySettings {
+    using TSelf = TSharedConsumerDeadLetterPolicySettings;
+
+    FLUENT_SETTING_DEFAULT(bool, Enabled, false);
+    FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 0);
+    FLUENT_SETTING(std::string, DeadLetterQueue);
+};
+
+struct TSharedConsumerSettings {
+    using TSelf = TSharedConsumerSettings;
+
+    FLUENT_SETTING_DEFAULT(bool, KeepMessagesOrder, false);
+    FLUENT_SETTING_DEFAULT(TDuration, DefaultProcessingTimeout, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageWaitTime, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageDelay, TDuration::Zero());
+    FLUENT_SETTING(TSharedConsumerDeadLetterPolicySettings, DeadLetterPolicy);
+};
+
 struct TReadRuleSettings {
     TReadRuleSettings() {}
     using TSelf = TReadRuleSettings;
@@ -190,6 +208,7 @@ struct TReadRuleSettings {
 
     FLUENT_SETTING_DEFAULT(ui32, Version, 0);
     FLUENT_SETTING(std::string, ServiceType);
+    FLUENT_SETTING_OPTIONAL(TSharedConsumerSettings, SharedConsumer);
 
     TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
         ConsumerName_ = settings.ConsumerName();

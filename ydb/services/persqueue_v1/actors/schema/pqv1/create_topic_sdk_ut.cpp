@@ -49,6 +49,50 @@ Y_UNIT_TEST(CreateTopicWithStreamingConsumer) {
         NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
 }
 
+Y_UNIT_TEST(CreateTopicWithSharedConsumer) {
+    TPqv1SdkTestSetup setup("CreateTopicWithSharedConsumer");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-shared");
+
+    TCreateTopicSettings settings;
+    settings.ReadRules({MakeSharedConsumerReadRuleSettings()});
+
+    AssertStatusSuccess(CreateTopicViaSdk(client, path, settings), "CreateTopic");
+
+    const auto describe = DescribeTopicViaSdk(client, path);
+    AssertStatusSuccess(describe, "DescribeTopic");
+
+    TExpectedTopicSettings expected = MakeDefaultCreateTopicExpectation();
+    expected.ReadRules.push_back({
+        .ConsumerName = DEFAULT_SHARED_CONSUMER,
+        .StartingMessageTimestamp = TInstant::MilliSeconds(1000),
+        .Version = 1,
+    });
+    AssertTopicSettings(describe.TopicSettings(), expected);
+
+    AssertConsumerTypeViaDescriber(
+        setup.GetRuntime(),
+        TString(setup.GetBaseSetup().GetDatabase()),
+        TString(path),
+        DEFAULT_SHARED_CONSUMER,
+        NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+
+    AssertSharedConsumerViaDescriber(
+        setup.GetRuntime(),
+        TString(setup.GetBaseSetup().GetDatabase()),
+        TString(path),
+        DEFAULT_SHARED_CONSUMER,
+        TExpectedSharedConsumer{
+            .KeepMessagesOrder = true,
+            .DefaultProcessingTimeoutSeconds = 3,
+            .ReceiveMessageWaitTimeMs = 5000,
+            .ReceiveMessageDelayMs = 7000,
+            .MaxProcessingAttempts = 11,
+            .DeadLetterQueue = DEFAULT_DEAD_LETTER_QUEUE,
+        });
+}
+
 } // Y_UNIT_TEST_SUITE(CreateTopic_PQv1SDK)
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

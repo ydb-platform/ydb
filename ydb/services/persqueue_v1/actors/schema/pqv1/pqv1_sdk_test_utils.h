@@ -17,6 +17,8 @@ namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests {
 
 inline constexpr const char* DEFAULT_TEST_TOPIC = "topic1";
 inline constexpr const char* DEFAULT_STREAMING_CONSUMER = "test_consumer";
+inline constexpr const char* DEFAULT_SHARED_CONSUMER = "test_shared_consumer";
+inline constexpr const char* DEFAULT_DEAD_LETTER_QUEUE = "test_dead_letter_queue";
 
 struct TExpectedReadRule {
     std::string ConsumerName;
@@ -26,6 +28,15 @@ struct TExpectedReadRule {
     NYdb::NPersQueue::EFormat SupportedFormat = NYdb::NPersQueue::EFormat::BASE;
     ui32 Version = 0;
     std::string ServiceType;
+};
+
+struct TExpectedSharedConsumer {
+    bool KeepMessagesOrder = false;
+    ui32 DefaultProcessingTimeoutSeconds = 0;
+    ui32 ReceiveMessageWaitTimeMs = 0;
+    ui32 ReceiveMessageDelayMs = 0;
+    ui32 MaxProcessingAttempts = 0;
+    std::string DeadLetterQueue;
 };
 
 struct TExpectedTopicSettings {
@@ -69,6 +80,9 @@ private:
 
 TExpectedTopicSettings MakeDefaultCreateTopicExpectation();
 
+NYdb::NPersQueue::TReadRuleSettings MakeSharedConsumerReadRuleSettings(
+    const std::string& consumerName = DEFAULT_SHARED_CONSUMER);
+
 NYdb::TStatus CreateTopicViaSdk(
     NYdb::NPersQueue::TPersQueueClient& client,
     const std::string& path,
@@ -90,5 +104,12 @@ void AssertConsumerTypeViaDescriber(
     const TString& topicPath,
     const TString& consumerName,
     NKikimrPQ::TPQTabletConfig::EConsumerType expectedType);
+
+void AssertSharedConsumerViaDescriber(
+    NActors::TTestActorRuntime& runtime,
+    const TString& database,
+    const TString& topicPath,
+    const TString& consumerName,
+    const TExpectedSharedConsumer& expected);
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

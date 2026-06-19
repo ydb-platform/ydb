@@ -72,6 +72,8 @@ namespace NKikimr {
             // PERFORM ACTIONS
             ////////////////////////////////////////////////////////////////////////
             void PerformActions(const TActorContext &ctx) {
+                KeepState.UpdateAtomics(TActivationContext::Now());
+
                 if (auto v = KeepState.GetChunksToForget(); !v.empty()) {
                     Send(SlCtx->PDiskCtx->PDiskId, new NPDisk::TEvChunkForget(SlCtx->PDiskCtx->Dsk->Owner,
                         SlCtx->PDiskCtx->Dsk->OwnerRound, std::move(v)));

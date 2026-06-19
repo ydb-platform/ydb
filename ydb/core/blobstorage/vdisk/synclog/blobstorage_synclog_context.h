@@ -60,6 +60,7 @@ public:
 
     TControlWrapper EnablePhantomFlagStorage;
     TControlWrapper PhantomFlagStorageLimit;
+    TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
 
     TSyncLogCtx(TIntrusivePtr<TVDiskContext> vctx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
@@ -74,7 +75,8 @@ public:
             std::shared_ptr<TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
             bool isReadOnlyVDisk,
             const TControlWrapper& enablePhantomFlagStorage,
-            const TControlWrapper& phantomFlagStorageLimit)
+            const TControlWrapper& phantomFlagStorageLimit,
+            const TControlWrapper& volatilePhantomFlagStorageBlobSizeLimit)
         : VCtx(std::move(vctx))
         , LsnMngr(std::move(lsnMngr))
         , PDiskCtx(std::move(pdiskCtx))
@@ -92,6 +94,7 @@ public:
         , IsReadOnlyVDisk(isReadOnlyVDisk)
         , EnablePhantomFlagStorage(enablePhantomFlagStorage)
         , PhantomFlagStorageLimit(phantomFlagStorageLimit)
+        , VolatilePhantomFlagStorageBlobSizeLimit(volatilePhantomFlagStorageBlobSizeLimit)
     {}
 };
 

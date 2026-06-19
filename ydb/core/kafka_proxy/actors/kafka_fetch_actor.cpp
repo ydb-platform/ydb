@@ -199,8 +199,8 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         }
     }
 
+    TString kafkaBatchRecords;
     if (allResultsAreKafkaBatches) {
-        TString kafkaBatchRecords;
         for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
             const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
             kafkaBatchRecords += dataChunk.GetData();
@@ -213,7 +213,6 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     }
 
     TKafkaRecordBatch recordsBatch;
-
     ui64 baseOffset = 0;
     ui64 baseTimestamp = 0;
     ui64 baseSequense = 0;
@@ -221,6 +220,34 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     ui64 maxTimestamp = 0;
     bool first = true;
     messagesCount = 0;
+
+    auto flushRecordsBatch = [&]() {
+        if (first) {
+            return;
+        }
+
+        recordsBatch.Magic = KafkaMagic;
+        recordsBatch.BaseOffset = baseOffset;
+        recordsBatch.LastOffsetDelta = lastOffset - baseOffset;
+        recordsBatch.BaseTimestamp = baseTimestamp;
+        recordsBatch.MaxTimestamp = maxTimestamp;
+        recordsBatch.BaseSequence = baseSequense;
+        //recordsBatch.Attributes https://kafka.apache.org/documentation/#recordbatch
+
+        recordsBatch.BatchLength = recordsBatch.Size(TKafkaRecordBatch::MessageMeta::PresentVersions.Max) - BatchFirstTwoFieldsSize;
+        KAFKA_LOG_D("Fetch actor: RecordBatch info. BaseOffset: " << recordsBatch.BaseOffset << ", LastOffsetDelta: " << recordsBatch.LastOffsetDelta <<
+            ", BaseTimestamp: " << recordsBatch.BaseTimestamp << ", MaxTimestamp: " << recordsBatch.MaxTimestamp <<
+            ", BaseSequence: " << recordsBatch.BaseSequence << ", BatchLength: " << recordsBatch.BatchLength);
+
+        kafkaBatchRecords += WriteKafkaRecordBatch(recordsBatch);
+        recordsBatch = TKafkaRecordBatch();
+        baseOffset = 0;
+        baseTimestamp = 0;
+        baseSequense = 0;
+        lastOffset = 0;
+        maxTimestamp = 0;
+        first = true;
+    };
 
     auto addRecord = [&](TKafkaRecord record, ui64 offset, ui64 timestamp, ui64 seqNo) {
         if (first) {
@@ -248,15 +275,9 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         const bool isKafkaBatch = dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec();
         if (isKafkaBatch) {
-            auto batch = ReadRecordBatch(dataChunk.GetData());
-            for (ui64 recordIndex = 0; recordIndex < batch.Records.size(); ++recordIndex) {
-                auto& record = batch.Records[recordIndex];
-                const ui64 offset = result.GetOffset() + record.OffsetDelta;
-                const ui64 timestamp = timestampType == MESSAGE_TIMESTAMP_LOG_APPEND
-                    ? result.GetWriteTimestampMS()
-                    : batch.BaseTimestamp + record.TimestampDelta;
-                addRecord(std::move(record), offset, timestamp, result.GetSeqNo() + recordIndex);
-            }
+            flushRecordsBatch();
+            kafkaBatchRecords += dataChunk.GetData();
+            messagesCount += result.GetMessageCount();
             continue;
         }
 
@@ -299,21 +320,11 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         addRecord(std::move(record), baseOffset, baseTimestamp, baseSequense);
     }
 
-    recordsBatch.Magic = KafkaMagic;
-    recordsBatch.BaseOffset = baseOffset;
-    recordsBatch.LastOffsetDelta = lastOffset - baseOffset;
-    recordsBatch.BaseTimestamp = baseTimestamp;
-    recordsBatch.MaxTimestamp = maxTimestamp;
-    recordsBatch.BaseSequence = baseSequense;
-    //recordsBatch.Attributes https://kafka.apache.org/documentation/#recordbatch
+    flushRecordsBatch();
 
-    recordsBatch.BatchLength = recordsBatch.Size(TKafkaRecordBatch::MessageMeta::PresentVersions.Max) - BatchFirstTwoFieldsSize;
-    KAFKA_LOG_D("Fetch actor: RecordBatch info. BaseOffset: " << recordsBatch.BaseOffset << ", LastOffsetDelta: " << recordsBatch.LastOffsetDelta <<
-        ", BaseTimestamp: " << recordsBatch.BaseTimestamp << ", MaxTimestamp: " << recordsBatch.MaxTimestamp <<
-        ", BaseSequence: " << recordsBatch.BaseSequence << ", BatchLength: " << recordsBatch.BatchLength);
     auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, partPQResponse.GetTopic());
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(messagesCount, BuildLabels(Context, "", topicWithoutDb, "api.kafka.fetch.messages", "")));
-    records = WriteKafkaRecordBatch(recordsBatch);
+    records = std::move(kafkaBatchRecords);
 }
 
 void TKafkaFetchActor::RespondIfRequired(const TActorContext& ctx) {

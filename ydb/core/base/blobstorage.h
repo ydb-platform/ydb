@@ -963,15 +963,12 @@ struct TEvBlobStorage {
         EvNodeWardenNotifyConfigMismatch,
         EvNodeWardenUpdateConfigFromPeer,
         EvNodeWardenNotifySyncerFinished,
-<<<<<<< HEAD
-=======
         EvInterpilePut,
         EvInterpilePutResult,
         EvNodeWardenListLocalDDisks,
         EvNodeWardenListLocalDDisksResult,
         EvNodeWardenAcquireBlobDepotS3Router,
         EvNodeWardenReleaseBlobDepotS3Router,
->>>>>>> fa642b7a29e... Introduce S3 balancer support in BlobDepot (#41048)
 
         // Other
         EvRunActor = EvPut + 15 * 512,

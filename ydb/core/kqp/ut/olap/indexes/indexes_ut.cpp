@@ -493,34 +493,44 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             return res;
         };
+        
+        {
+            TQueryResult tierNamesStr = runQuery(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_str_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with String column type");
+            for(auto& tierName: tierNamesStr) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over String column");
+            }            
+        }
+        {
+            TQueryResult tierNamesUtf8 = runQuery(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_utf_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesUtf8.size(), 0, "portions are not min_max indexed with Utf8 column type");
+            for(auto& tierName: tierNamesUtf8) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over Utf8 column");
+            }
 
-        TQueryResult tierNamesStr = runQuery(R"(
-            SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_str_mm";
-        )");
-        UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with String column type");
-        for(auto& tierName: tierNamesStr) {
-            UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over String column");
         }
-        TQueryResult tierNamesUtf8 = runQuery(R"(
-            SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_utf_mm";
-        )");
-        UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with Utf8 column type");
-        for(auto& tierName: tierNamesUtf8) {
-            UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over Utf8 column");
+        {
+            TQueryResult tierNamesInt = runQuery(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_int_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesInt.size(), 0, "portions are not min_max indexed with Int32 column type");
+            for(auto& tierName: tierNamesInt) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Int32 column");
+            }
         }
-        TQueryResult tierNamesInt = runQuery(R"(
-            SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_int_mm";
-        )");
-        UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with Int32 column type");
-        for(auto& tierName: tierNamesInt) {
-            UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Int32 column");
-        }
-        TQueryResult tierNamesTs = runQuery(R"(
-            SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_ts_mm";
-        )");
-        UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with Timestamp column type");
-        for(auto& tierName: tierNamesTs) {
-            UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Timestamp column");
+        {
+            TQueryResult tierNamesTs = runQuery(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_ts_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesTs.size(), 0, "portions are not min_max indexed with Timestamp column type");
+            for(auto& tierName: tierNamesTs) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Timestamp column");
+            }
+
         }
     }
 

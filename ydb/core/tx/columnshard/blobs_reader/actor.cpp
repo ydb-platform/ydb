@@ -21,14 +21,20 @@ void TActor::HandleRetryTimer() {
             action->OnRetryExecute();
             action->RetryRead(pending.Range);
         } else {
+            AFL_VERIFY(false)("error", "RetryS3ReadNoAction")("blob_range", pending.Range)("storage_id", pending.StorageId);
+            bool aborted = false;
             ACFL_ERROR("event", "RetryS3ReadNoAction")("blob_range", pending.Range)("storage_id", pending.StorageId);
             WaitingBlobsCount.Sub(Task->GetWaitingRangesCount());
             if (!Task->AddError(pending.StorageId, pending.Range,
                     IBlobsReadingAction::TErrorStatus::Fail(NKikimrProto::EReplyStatus::ERROR, "cannot retry read: storage action not found"))) {
                 Task = nullptr;
+                aborted = true;
             }
-            PassAway();
-            return;
+            if (aborted || Task->IsFinished()) {
+                Task = nullptr;
+                PassAway();
+                return;
+            }
         }
     }
 

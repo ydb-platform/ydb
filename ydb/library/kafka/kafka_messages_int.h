@@ -456,6 +456,64 @@ public:
     }
 };
 
+template<typename Meta>
+class TypeStrategy<Meta, TKafkaBytesHolder, TKafkaBytesDesc> {
+public:
+    inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TKafkaBytesHolder& value) {
+        if (value) {
+            const auto& v = *value;
+            WriteArraySize<Meta>(writable, version, v.size());
+            writable.write(v.data(), v.size());
+        } else {
+            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
+                WriteArraySize<Meta>(writable, version, -1);
+            } else {
+                ythrow yexception() << "non-nullable field " << Meta::Name << " serializing as null";
+            }
+        }
+    }
+
+    inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TKafkaBytesHolder& value) {
+        const auto& v = *value;
+        WriteArraySize<Meta>(writable, version, v.size());
+        writable.write(v.data(), v.size());
+    }
+
+    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaBytesHolder& value) {
+        TKafkaInt32 length = ReadArraySize<Meta>(readable, version);
+        if (length < 0) {
+            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
+                value = std::nullopt;
+            } else {
+                ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
+            }
+        } else {
+            TString data;
+            data.ReserveAndResize(length);
+            readable.read(const_cast<char*>(data.data()), length);
+            value = std::move(data);
+        }
+    }
+
+    inline static i64 DoSize(TKafkaVersion version, const TKafkaBytesHolder& value) {
+        if (value) {
+            return value->size() + ArraySize<Meta>(version, value->size());
+        } else {
+            if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+                return 1;
+            } else {
+                return sizeof(TKafkaInt32);
+            }
+        }
+    }
+
+    inline static void DoLog(const TKafkaBytesHolder& value) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' type BytesHolder. Size " << (value ? value->size() : 0) << Endl;
+        }
+    }
+};
+
 
 //
 // TKafkaRecords

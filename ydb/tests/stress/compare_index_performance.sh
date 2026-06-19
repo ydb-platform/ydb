@@ -18,6 +18,9 @@
 #   --current-ydbd PATH    Path to pre-built current branch ydbd (skips building)
 #   --ref REF              S3 ref to download ydbd from (default: main)
 #   --workload WORKLOAD    Run only specified workload: vector, fulltext, or all (default: all)
+#   --targets N            Number of query vectors for vector select (default: 100)
+#   --iterations N         Number of iterations per workload (default: 3)
+#   --warmup SECONDS       Warmup duration before each measured run (default: 30)
 
 set -euo pipefail
 
@@ -29,6 +32,9 @@ CURRENT_YDBD=""
 S3_REF="main"
 BUILD_PRESET="relwithdebinfo"
 WORKLOAD="all"
+TARGETS=100
+ITERATIONS=3
+WARMUP=30
 RESULTS_DIR="$REPO_ROOT/benchmark_results"
 S3_BASE_URL="https://storage.yandexcloud.net/ydb-builds"
 
@@ -36,10 +42,13 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --duration) DURATION="$2"; shift 2 ;;
         --build-preset) BUILD_PRESET="$2"; shift 2 ;;
-        --main-ydbd) MAIN_YDBD="$2"; shift 2 ;;
-        --current-ydbd) CURRENT_YDBD="$2"; shift 2 ;;
+        --main-ydbd) MAIN_YDBD="$(realpath "$2")"; shift 2 ;;
+        --current-ydbd) CURRENT_YDBD="$(realpath "$2")"; shift 2 ;;
         --ref) S3_REF="$2"; shift 2 ;;
         --workload) WORKLOAD="$2"; shift 2 ;;
+        --targets) TARGETS="$2"; shift 2 ;;
+        --iterations) ITERATIONS="$2"; shift 2 ;;
+        --warmup) WARMUP="$2"; shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -56,6 +65,9 @@ echo "=== Performance comparison: $S3_REF vs $CURRENT_BRANCH ==="
 echo "Build preset: $BUILD_PRESET"
 echo "Duration per run: ${DURATION}s"
 echo "Workload: $WORKLOAD"
+echo "Vector targets: $TARGETS"
+echo "Iterations: $ITERATIONS"
+echo "Warmup: ${WARMUP}s"
 echo ""
 
 # --- Download ydbd from S3 if not provided ---
@@ -94,14 +106,13 @@ for binary in "$MAIN_YDBD" "$CURRENT_YDBD"; do
     fi
 done
 
-# --- Run tests and capture output ---
+# --- Helper functions ---
 run_test() {
     local label="$1"
     local ydbd_path="$2"
     local test_path="$3"
     local log_file="$4"
     shift 4
-    # Remaining arguments are extra --test-param flags
     local extra_params=("$@")
 
     echo "--- Running $test_path with $label ydbd ---"
@@ -116,16 +127,52 @@ run_test() {
 
 extract_total_txs_sec() {
     local log_dir="$1"
-    # Find the test log and extract the Total Txs/Sec line
     local test_log
     test_log=$(find "$log_dir" -name "*.log" -path "*/testing_out_stuff/*" 2>/dev/null | head -1)
     if [[ -z "$test_log" ]]; then
         echo "N/A"
         return
     fi
-    # The Total line format: "10          980 98.0    0       0       5       9       14      18"
-    # We want the Txs/Sec column (3rd field in the Total summary line)
     grep -A1 "^Total" "$test_log" | tail -1 | awk '{print $3}'
+}
+
+median() {
+    # Read values from arguments, sort numerically, return median
+    local -a vals=("$@")
+    local n=${#vals[@]}
+    if [[ $n -eq 0 ]]; then
+        echo "N/A"
+        return
+    fi
+    local sorted
+    sorted=($(printf '%s\n' "${vals[@]}" | sort -n))
+    local mid=$((n / 2))
+    if (( n % 2 == 1 )); then
+        echo "${sorted[$mid]}"
+    else
+        awk "BEGIN { printf \"%.3f\", (${sorted[$mid-1]} + ${sorted[$mid]}) / 2 }"
+    fi
+}
+
+mean() {
+    local -a vals=("$@")
+    local n=${#vals[@]}
+    if [[ $n -eq 0 ]]; then
+        echo "N/A"
+        return
+    fi
+    awk "BEGIN { s=0 } { s+=\$1 } END { printf \"%.3f\", s/NR }" < <(printf '%s\n' "${vals[@]}")
+}
+
+stddev() {
+    # Sample standard deviation
+    local -a vals=("$@")
+    local n=${#vals[@]}
+    if [[ $n -lt 2 ]]; then
+        echo "0"
+        return
+    fi
+    awk "BEGIN { s=0; ss=0; n=0 } { s+=\$1; ss+=\$1*\$1; n++ } END { m=s/n; printf \"%.3f\", sqrt((ss - n*m*m)/(n-1)) }" < <(printf '%s\n' "${vals[@]}")
 }
 
 calc_diff() {
@@ -138,6 +185,57 @@ calc_diff() {
     awk "BEGIN { diff = ($current_val - $main_val) / $main_val * 100; printf \"%+.1f%%\", diff }"
 }
 
+calc_significance() {
+    # Check statistical significance using 3-sigma rule on the difference of means.
+    # Uses pooled standard error: SE = sqrt(s1^2/n1 + s2^2/n2)
+    # Returns "SIGNIFICANT (<diff> > 3σ=<threshold>)" or "not significant (<diff> <= 3σ=<threshold>)"
+    local main_mean="$1"
+    local current_mean="$2"
+    local main_stddev="$3"
+    local current_stddev="$4"
+    local main_n="$5"
+    local current_n="$6"
+
+    if [[ "$main_mean" == "N/A" || "$current_mean" == "N/A" ]]; then
+        echo "N/A"
+        return
+    fi
+    if [[ $main_n -lt 2 || $current_n -lt 2 ]]; then
+        echo "N/A (need >= 2 iterations)"
+        return
+    fi
+
+    awk "BEGIN {
+        se = sqrt(($main_stddev)^2/$main_n + ($current_stddev)^2/$current_n)
+        diff = $current_mean - $main_mean
+        absdiff = (diff < 0) ? -diff : diff
+        threshold = 3 * se
+        pct = diff / $main_mean * 100
+        if (threshold > 0 && absdiff > threshold) {
+            printf \"SIGNIFICANT (%+.1f%%, |diff|=%.1f > 3sigma=%.1f)\", pct, absdiff, threshold
+        } else if (threshold > 0) {
+            printf \"not significant (%+.1f%%, |diff|=%.1f <= 3sigma=%.1f)\", pct, absdiff, threshold
+        } else {
+            printf \"N/A (zero variance)\"
+        }
+    }"
+}
+
+format_values() {
+    # Format array of values as "median [v1, v2, ...]"
+    local median_val="$1"
+    shift
+    local -a vals=("$@")
+    if [[ ${#vals[@]} -le 1 ]]; then
+        echo "$median_val"
+        return
+    fi
+    local joined
+    joined=$(printf ", %s" "${vals[@]}")
+    joined="${joined:2}"  # remove leading ", "
+    echo "$median_val [$joined]"
+}
+
 VECTOR_MAIN_TXS="N/A"
 VECTOR_CURRENT_TXS="N/A"
 FULLTEXT_MAIN_TXS="N/A"
@@ -147,43 +245,121 @@ FULLTEXT_CURRENT_TXS="N/A"
 if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
     echo ""
     echo "=========================================="
-    echo "  Vector workload"
+    echo "  Vector workload ($ITERATIONS iterations, interleaved)"
     echo "=========================================="
 
     VECTOR_TEST="ydb/tests/stress/vector_workload/tests"
     VECTOR_DATA_DIR="$RESULTS_DIR/vector_data"
 
-    # Main: generate data + dump to files
-    run_test "$S3_REF" "$MAIN_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_main.log" \
-        --test-param vector_mode=generate \
-        --test-param vector_data_dir="$VECTOR_DATA_DIR"
-    VECTOR_MAIN_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
-    VECTOR_MAIN_TXS=$(extract_total_txs_sec "$VECTOR_MAIN_LOG_DIR")
+    VECTOR_MAIN_VALUES=()
+    VECTOR_CURRENT_VALUES=()
 
-    # Current: load data from dump
-    run_test "current" "$CURRENT_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_current.log" \
-        --test-param vector_mode=load \
-        --test-param vector_data_dir="$VECTOR_DATA_DIR"
-    VECTOR_CURRENT_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
-    VECTOR_CURRENT_TXS=$(extract_total_txs_sec "$VECTOR_CURRENT_LOG_DIR")
+    # First iteration: generate mode creates the query table
+    # Subsequent iterations: load mode reuses the query table
+    for i in $(seq 1 "$ITERATIONS"); do
+        echo ""
+        echo "=== Vector iteration $i/$ITERATIONS ==="
+
+        # Run main
+        local_mode="load"
+        if [[ $i -eq 1 ]]; then
+            local_mode="generate"
+        fi
+        run_test "$S3_REF" "$MAIN_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_main_${i}.log" \
+            --test-param vector_mode="$local_mode" \
+            --test-param vector_data_dir="$VECTOR_DATA_DIR" \
+            --test-param vector_targets="$TARGETS" \
+            --test-param vector_warmup="$WARMUP"
+        VECTOR_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
+        val=$(extract_total_txs_sec "$VECTOR_LOG_DIR")
+        if [[ "$val" != "N/A" && -n "$val" ]]; then
+            VECTOR_MAIN_VALUES+=("$val")
+        fi
+        echo "  $S3_REF iteration $i: $val Txs/Sec"
+
+        # Run current
+        run_test "current" "$CURRENT_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_current_${i}.log" \
+            --test-param vector_mode=load \
+            --test-param vector_data_dir="$VECTOR_DATA_DIR" \
+            --test-param vector_targets="$TARGETS" \
+            --test-param vector_warmup="$WARMUP"
+        VECTOR_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
+        val=$(extract_total_txs_sec "$VECTOR_LOG_DIR")
+        if [[ "$val" != "N/A" && -n "$val" ]]; then
+            VECTOR_CURRENT_VALUES+=("$val")
+        fi
+        echo "  current iteration $i: $val Txs/Sec"
+    done
+
+    if [[ ${#VECTOR_MAIN_VALUES[@]} -gt 0 ]]; then
+        VECTOR_MAIN_TXS=$(median "${VECTOR_MAIN_VALUES[@]}")
+        VECTOR_MAIN_MEAN=$(mean "${VECTOR_MAIN_VALUES[@]}")
+        VECTOR_MAIN_STDDEV=$(stddev "${VECTOR_MAIN_VALUES[@]}")
+    fi
+    if [[ ${#VECTOR_CURRENT_VALUES[@]} -gt 0 ]]; then
+        VECTOR_CURRENT_TXS=$(median "${VECTOR_CURRENT_VALUES[@]}")
+        VECTOR_CURRENT_MEAN=$(mean "${VECTOR_CURRENT_VALUES[@]}")
+        VECTOR_CURRENT_STDDEV=$(stddev "${VECTOR_CURRENT_VALUES[@]}")
+    fi
+    VECTOR_MAIN_DETAIL=$(format_values "$VECTOR_MAIN_TXS" "${VECTOR_MAIN_VALUES[@]}")
+    VECTOR_CURRENT_DETAIL=$(format_values "$VECTOR_CURRENT_TXS" "${VECTOR_CURRENT_VALUES[@]}")
+    VECTOR_SIGNIFICANCE=$(calc_significance \
+        "${VECTOR_MAIN_MEAN:-N/A}" "${VECTOR_CURRENT_MEAN:-N/A}" \
+        "${VECTOR_MAIN_STDDEV:-0}" "${VECTOR_CURRENT_STDDEV:-0}" \
+        "${#VECTOR_MAIN_VALUES[@]}" "${#VECTOR_CURRENT_VALUES[@]}")
 fi
 
 # --- Run fulltext workload ---
 if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
     echo ""
     echo "=========================================="
-    echo "  Fulltext workload"
+    echo "  Fulltext workload ($ITERATIONS iterations, interleaved)"
     echo "=========================================="
 
     FULLTEXT_TEST="ydb/tests/stress/fulltext_workload/tests"
 
-    run_test "$S3_REF" "$MAIN_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_main.log"
-    FULLTEXT_MAIN_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
-    FULLTEXT_MAIN_TXS=$(extract_total_txs_sec "$FULLTEXT_MAIN_LOG_DIR")
+    FULLTEXT_MAIN_VALUES=()
+    FULLTEXT_CURRENT_VALUES=()
 
-    run_test "current" "$CURRENT_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_current.log"
-    FULLTEXT_CURRENT_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
-    FULLTEXT_CURRENT_TXS=$(extract_total_txs_sec "$FULLTEXT_CURRENT_LOG_DIR")
+    for i in $(seq 1 "$ITERATIONS"); do
+        echo ""
+        echo "=== Fulltext iteration $i/$ITERATIONS ==="
+
+        # Run main
+        run_test "$S3_REF" "$MAIN_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_main_${i}.log"
+        FULLTEXT_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
+        val=$(extract_total_txs_sec "$FULLTEXT_LOG_DIR")
+        if [[ "$val" != "N/A" && -n "$val" ]]; then
+            FULLTEXT_MAIN_VALUES+=("$val")
+        fi
+        echo "  $S3_REF iteration $i: $val Txs/Sec"
+
+        # Run current
+        run_test "current" "$CURRENT_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_current_${i}.log"
+        FULLTEXT_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
+        val=$(extract_total_txs_sec "$FULLTEXT_LOG_DIR")
+        if [[ "$val" != "N/A" && -n "$val" ]]; then
+            FULLTEXT_CURRENT_VALUES+=("$val")
+        fi
+        echo "  current iteration $i: $val Txs/Sec"
+    done
+
+    if [[ ${#FULLTEXT_MAIN_VALUES[@]} -gt 0 ]]; then
+        FULLTEXT_MAIN_TXS=$(median "${FULLTEXT_MAIN_VALUES[@]}")
+        FULLTEXT_MAIN_MEAN=$(mean "${FULLTEXT_MAIN_VALUES[@]}")
+        FULLTEXT_MAIN_STDDEV=$(stddev "${FULLTEXT_MAIN_VALUES[@]}")
+    fi
+    if [[ ${#FULLTEXT_CURRENT_VALUES[@]} -gt 0 ]]; then
+        FULLTEXT_CURRENT_TXS=$(median "${FULLTEXT_CURRENT_VALUES[@]}")
+        FULLTEXT_CURRENT_MEAN=$(mean "${FULLTEXT_CURRENT_VALUES[@]}")
+        FULLTEXT_CURRENT_STDDEV=$(stddev "${FULLTEXT_CURRENT_VALUES[@]}")
+    fi
+    FULLTEXT_MAIN_DETAIL=$(format_values "$FULLTEXT_MAIN_TXS" "${FULLTEXT_MAIN_VALUES[@]}")
+    FULLTEXT_CURRENT_DETAIL=$(format_values "$FULLTEXT_CURRENT_TXS" "${FULLTEXT_CURRENT_VALUES[@]}")
+    FULLTEXT_SIGNIFICANCE=$(calc_significance \
+        "${FULLTEXT_MAIN_MEAN:-N/A}" "${FULLTEXT_CURRENT_MEAN:-N/A}" \
+        "${FULLTEXT_MAIN_STDDEV:-0}" "${FULLTEXT_CURRENT_STDDEV:-0}" \
+        "${#FULLTEXT_MAIN_VALUES[@]}" "${#FULLTEXT_CURRENT_VALUES[@]}")
 fi
 
 # --- Print comparison ---
@@ -194,6 +370,7 @@ echo ""
 echo "=========================================="
 echo "  Performance Comparison Results"
 echo "  Build preset: $BUILD_PRESET"
+echo "  Iterations: $ITERATIONS (median reported)"
 echo "=========================================="
 echo ""
 printf "%-20s %15s %15s %10s\n" "Workload" "$S3_REF (Txs/Sec)" "$CURRENT_BRANCH (Txs/Sec)" "Diff"
@@ -205,6 +382,19 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
     printf "%-20s %15s %15s %10s\n" "fulltext select" "$FULLTEXT_MAIN_TXS" "$FULLTEXT_CURRENT_TXS" "$FULLTEXT_DIFF"
 fi
 echo ""
+if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
+    echo "Vector details:"
+    echo "  $S3_REF:   ${VECTOR_MAIN_DETAIL:-N/A}  (mean=${VECTOR_MAIN_MEAN:-N/A}, σ=${VECTOR_MAIN_STDDEV:-N/A})"
+    echo "  current: ${VECTOR_CURRENT_DETAIL:-N/A}  (mean=${VECTOR_CURRENT_MEAN:-N/A}, σ=${VECTOR_CURRENT_STDDEV:-N/A})"
+    echo "  3σ test: ${VECTOR_SIGNIFICANCE:-N/A}"
+fi
+if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
+    echo "Fulltext details:"
+    echo "  $S3_REF:   ${FULLTEXT_MAIN_DETAIL:-N/A}  (mean=${FULLTEXT_MAIN_MEAN:-N/A}, σ=${FULLTEXT_MAIN_STDDEV:-N/A})"
+    echo "  current: ${FULLTEXT_CURRENT_DETAIL:-N/A}  (mean=${FULLTEXT_CURRENT_MEAN:-N/A}, σ=${FULLTEXT_CURRENT_STDDEV:-N/A})"
+    echo "  3σ test: ${FULLTEXT_SIGNIFICANCE:-N/A}"
+fi
+echo ""
 echo "Detailed logs: $RESULTS_DIR/"
 
 # --- Write markdown report ---
@@ -212,15 +402,15 @@ REPORT_FILE="$RESULTS_DIR/report.md"
 {
     echo "## Performance Comparison: \`$S3_REF\` vs \`$CURRENT_BRANCH\`"
     echo ""
-    echo "**Build preset:** \`$BUILD_PRESET\` | **Duration:** ${DURATION}s per workload"
+    echo "**Build preset:** \`$BUILD_PRESET\` | **Duration:** ${DURATION}s per workload | **Iterations:** $ITERATIONS (median reported)"
     echo ""
-    echo "| Workload | $S3_REF (Txs/Sec) | $CURRENT_BRANCH (Txs/Sec) | Diff |"
-    echo "|---|---|---|---|"
+    echo "| Workload | $S3_REF (Txs/Sec) | $CURRENT_BRANCH (Txs/Sec) | Diff | 3σ significance |"
+    echo "|---|---|---|---|---|"
     if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
-        echo "| vector select | $VECTOR_MAIN_TXS | $VECTOR_CURRENT_TXS | $VECTOR_DIFF |"
+        echo "| vector select | ${VECTOR_MAIN_DETAIL:-N/A} | ${VECTOR_CURRENT_DETAIL:-N/A} | $VECTOR_DIFF | ${VECTOR_SIGNIFICANCE:-N/A} |"
     fi
     if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
-        echo "| fulltext select | $FULLTEXT_MAIN_TXS | $FULLTEXT_CURRENT_TXS | $FULLTEXT_DIFF |"
+        echo "| fulltext select | ${FULLTEXT_MAIN_DETAIL:-N/A} | ${FULLTEXT_CURRENT_DETAIL:-N/A} | $FULLTEXT_DIFF | ${FULLTEXT_SIGNIFICANCE:-N/A} |"
     fi
 } > "$REPORT_FILE"
 echo ""

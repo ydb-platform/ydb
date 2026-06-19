@@ -21,6 +21,18 @@ on:
         description: 'S3 ref to compare against (e.g. main, stable-26-1-1)'
         required: false
         default: 'main'
+      targets:
+        description: 'Number of query vectors for vector select'
+        required: false
+        default: '100'
+      iterations:
+        description: 'Number of iterations per workload (median reported)'
+        required: false
+        default: '3'
+      warmup:
+        description: 'Warmup duration in seconds before each measured run'
+        required: false
+        default: '30'
 
 jobs:
   compare:
@@ -36,7 +48,10 @@ jobs:
           ./ydb/tests/stress/compare_index_performance.sh \
             --duration ${{ inputs.duration || '600' }} \
             --build-preset ${{ inputs.build_preset || 'relwithdebinfo' }} \
-            --ref ${{ inputs.ref || 'main' }}
+            --ref ${{ inputs.ref || 'main' }} \
+            --targets ${{ inputs.targets || '100' }} \
+            --iterations ${{ inputs.iterations || '3' }} \
+            --warmup ${{ inputs.warmup || '30' }}
 
       - name: Post results to job summary
         if: always()

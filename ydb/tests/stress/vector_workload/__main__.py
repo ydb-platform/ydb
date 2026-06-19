@@ -13,6 +13,8 @@ if __name__ == '__main__':
     parser.add_argument('--mode', default='standalone', choices=['standalone', 'generate', 'load'],
                         help='Mode: standalone (default), generate (generate + dump), load (restore + run)')
     parser.add_argument('--data-dir', default=None, help='Directory for dump/restore data (required for generate/load modes)')
+    parser.add_argument('--targets', default=100, type=int, help='Number of query vectors for run select (default: 100)')
+    parser.add_argument('--warmup', default=0, type=int, help='Warmup duration in seconds before measured run (default: 0, disabled)')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
 
     args = parser.parse_args()
@@ -30,6 +32,7 @@ if __name__ == '__main__':
         )
 
     workload = YdbVectorWorkload(args.endpoint, args.database, duration=args.duration,
-                                 mode=args.mode, data_dir=args.data_dir)
+                                 mode=args.mode, data_dir=args.data_dir, targets=args.targets,
+                                 warmup=args.warmup)
     workload.start()
     workload.join()

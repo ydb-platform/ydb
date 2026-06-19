@@ -200,7 +200,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
     using TEvReadResultFuture =
         TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult>;
 
-    if (!TryWaitForSessionLock(hostIndex)) {
+    if (!WaitForSessionLock(hostIndex)) {
         return MakeFuture<TDBGReadBlocksResponse>(
             {.Error =
                  MakeError(E_REJECTED, "DDisk session is not established")});
@@ -351,7 +351,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 
     const auto startAt = TMonotonic::Now();
 
-    if (!TryWaitForSessionLock(hostIndex)) {
+    if (!WaitForSessionLock(hostIndex)) {
         return MakeFuture<TDBGWriteBlocksResponse>(
             {.Error =
                  MakeError(E_REJECTED, "DDisk session is not established")});
@@ -642,19 +642,14 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto& ddiskConn = DDiskConnections[ddiskHostIndex];
-    if (ddiskConn.SessionState != EDDiskSessionState::Locked) {
-        const auto sessionReadyFuture = GetSessionReadyFuture(ddiskHostIndex);
-        Executor->WaitFor(sessionReadyFuture);
-        if (ddiskConn.SessionState != EDDiskSessionState::Locked) {
-            TDBGFlushResponse rejectResponse;
-            rejectResponse.Errors.reserve(segments.size());
-            for (size_t i = 0; i < segments.size(); ++i) {
-                rejectResponse.Errors.push_back(
-                    MakeError(E_REJECTED, "DDisk session is not established"));
-            }
-            return MakeFuture<TDBGFlushResponse>(std::move(rejectResponse));
+    if (!WaitForSessionLock(ddiskHostIndex)) {
+        TDBGFlushResponse rejectResponse;
+        rejectResponse.Errors.reserve(segments.size());
+        for (size_t i = 0; i < segments.size(); ++i) {
+            rejectResponse.Errors.push_back(
+                MakeError(E_REJECTED, "DDisk session is not established"));
         }
+        return MakeFuture<TDBGFlushResponse>(std::move(rejectResponse));
     }
 
     const auto startAt = TMonotonic::Now();
@@ -1178,7 +1173,17 @@ void TDirectBlockGroup::OnConnectionEstablished(
     // ConnectPromise resolves both "connection ready" and "session ready" in
     // this phase. Unblocks waiters in ReadFromDDisk/WriteToDDisk/ListPBuffers.
     connection.ConnectPromise.SetValue(error);
-    SetInitialReadyIfQuorum();
+    if (!InitialReadyPromise.HasValue() && HasLockedQuorum() &&
+        HasPBufferQuorum())
+    {
+        InitialReadyPromise.SetValue();
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s DBG reached initial locked quorum (>= %zu sessions)",
+            LogTitle.GetWithTime().c_str(),
+            MinLockedDDiskSessionsToStart);
+    }
 }
 
 bool TDirectBlockGroup::HasPBufferQuorum() const
@@ -1205,31 +1210,6 @@ bool TDirectBlockGroup::HasLockedQuorum() const
         }
     }
     return lockedCount >= MinLockedDDiskSessionsToStart;
-}
-
-void TDirectBlockGroup::SetInitialReadyIfQuorum()
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    if (!InitialReadyPromise.HasValue() && HasLockedQuorum() &&
-        HasPBufferQuorum())
-    {
-        InitialReadyPromise.SetValue();
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s DBG reached initial locked quorum (>= %zu sessions)",
-            LogTitle.GetWithTime().c_str(),
-            MinLockedDDiskSessionsToStart);
-    }
-}
-
-NThreading::TFuture<NProto::TError> TDirectBlockGroup::GetSessionReadyFuture(
-    THostIndex hostIndex)
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return DDiskConnections[hostIndex].GetFuture();
 }
 
 void TDirectBlockGroup::DoListPBuffers()
@@ -1359,11 +1339,11 @@ void TDirectBlockGroup::ScheduleOracleThinking()
         });
 }
 
-bool TDirectBlockGroup::TryWaitForSessionLock(THostIndex hostIndex)
+bool TDirectBlockGroup::WaitForSessionLock(THostIndex hostIndex)
 {
     const auto& conn = DDiskConnections[hostIndex];
     if (conn.SessionState != EDDiskSessionState::Locked) {
-        const auto sessionReadyFuture = GetSessionReadyFuture(hostIndex);
+        const auto sessionReadyFuture = conn.GetFuture();
         Executor->WaitFor(sessionReadyFuture);
         return conn.SessionState == EDDiskSessionState::Locked;
     }

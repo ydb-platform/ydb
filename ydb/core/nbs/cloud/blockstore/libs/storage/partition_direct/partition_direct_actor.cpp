@@ -284,11 +284,9 @@ void TPartitionActor::Start(
     // Synchronous start mode - requests pass as the initial quorum of Locked
     // DDisk sessions across all DBGs is achieved.
     // TODO: make optional via StorageConfig after implementation of async mode.
-    auto* actorSystem = TActivationContext::ActorSystem();
-    auto selfId = SelfId();
     FastPathService->Run().Subscribe(
-        [actorSystem,
-         selfId]   //
+        [actorSystem = TActivationContext::ActorSystem(),
+         selfId = SelfId()]   //
         (const NThreading::TFuture<void>&) mutable
         {
             // This callback runs OUTSIDE the actor thread - on the DBG's

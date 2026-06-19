@@ -174,9 +174,6 @@ private:
 
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
-    void SetInitialReadyIfQuorum();
-    [[nodiscard]] NThreading::TFuture<NProto::TError> GetSessionReadyFuture(
-        THostIndex hostIndex);
 
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);
@@ -219,7 +216,7 @@ private:
     void Thinking();
     void ScheduleOracleThinking();
 
-    [[nodiscard]] bool TryWaitForSessionLock(THostIndex hostIndex);
+    [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
 

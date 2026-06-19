@@ -4,8 +4,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
-#include <ydb/public/api/protos/ydb_export.pb.h>
-
 namespace NYdb::inline Dev {
 namespace NExport {
 
@@ -35,21 +33,12 @@ struct TEncryptionAlgorithm {
 };
 
 struct TYdbDumpFormat {
-    void Serialize(Ydb::Export::YdbDumpFormat&) const {
-    }
 };
 
 struct TParquetFormat {
-    void Serialize(Ydb::Export::ParquetFormat& proto) const {
-        proto.set_row_group_size(RowGroupSize);
-    }
+    using TSelf = TParquetFormat;
 
-    TParquetFormat& WithRowGroupSize(uint32_t rowGroupSize) {
-        RowGroupSize = rowGroupSize;
-        return *this;
-    }
-
-    uint32_t RowGroupSize = 1000;
+    FLUENT_SETTING_DEFAULT(uint32_t, RowGroupSize, 1000);
 };
 
 /// YT

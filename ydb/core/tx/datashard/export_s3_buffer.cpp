@@ -440,11 +440,9 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
         {
             bufferSettings.WithoutCompression();
             
-            auto taskParquetSettings = ParquetFormatFromTask(Task);
-            TParquetExportSettings settings;
+            auto settings = ParquetExportSettingsFromTask(Task);
             settings
-                .WithColumns(Columns)
-                .WithRowGroupSize(taskParquetSettings.GetRowGroupSize());
+                .WithColumns(Columns);
             
             switch (CodecFromTask(Task)) {
             case ECompressionCodec::None:

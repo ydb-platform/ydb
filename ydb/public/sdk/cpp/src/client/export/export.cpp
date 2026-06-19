@@ -239,7 +239,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
         },
         [&request](const TParquetFormat& format) {
             auto parquet = request.mutable_settings()->mutable_parquet();
-            parquet->set_row_group_size(format.RowGroupSize);
+            parquet->set_row_group_size(format.RowGroupSize_);
         }
     }, settings.Format);
 

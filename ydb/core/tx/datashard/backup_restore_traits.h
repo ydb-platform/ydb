@@ -1,8 +1,9 @@
 #pragma once
 
+#include <ydb/core/tx/datashard/export_data_format.h>
+
 #include <util/generic/string.h>
 #include <util/string/printf.h>
-#include <ydb/core/protos/data_format_settings.pb.h>
 
 namespace NKikimrSchemeOp {
     class TBackupTask;
@@ -27,7 +28,7 @@ enum class ECompressionCodec: int {
 bool TryCodecFromTask(const NKikimrSchemeOp::TBackupTask& task, ECompressionCodec& codec);
 ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task);
 EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task);
-NKikimrSchemeOp::TParquetFormat ParquetFormatFromTask(const NKikimrSchemeOp::TBackupTask& task);
+TParquetExportSettings ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBackupTask& task);
 
 EDataFormat NextDataFormat(EDataFormat cur);
 ECompressionCodec NextCompressionCodec(ECompressionCodec cur);

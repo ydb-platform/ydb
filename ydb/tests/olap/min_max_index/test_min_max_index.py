@@ -123,6 +123,9 @@ class TestYdbMinMaxIndex(TestBase):
                 'optimizer_freshness_check_duration_ms': 0,
                 'small_portion_detect_size_limit': 0,
             },
+            extra_feature_flags={
+                'enable_local_min_max_index': True
+            },
         ))
 
         cls.cluster.start()

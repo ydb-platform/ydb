@@ -233,7 +233,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 Чтобы аутентифицироваться по сертификату, клиент не должен передавать токен: ни в заголовке `Authorization` (HTTP), ни через механизмы SDK/CLI для IAM, логина и пароля и т.п.
 
-### Получение SID
+### Формирование SID
 
 Успешная аутентификация по сертификату создаёт SID пользователя с суффиксом `@<domain>`, где `<domain>` — [значение параметра](../reference/configuration/auth_config.md#certificate-auth-config) `certificate_authentication_domain` в секции `auth_config` (по умолчанию: `cert`). Имя формируется из всех атрибутов поля Subject сертификата в нотации `Имя=Значение,...@<domain>`. Порядок атрибутов соответствует порядку полей в сертификате. Пример:
 

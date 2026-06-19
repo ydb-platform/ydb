@@ -1417,15 +1417,15 @@ void TWriteSessionImpl::ResetForRetryImpl() {
         SentPackedMessage.pop();
     }
     uint64_t minId = PackedMessagesToSend.empty() ? NextId + 1 : PackedMessagesToSend.top().Offset;
-    std::queue<TOriginalMessage> freshOriginalMessagesToSend;
+    std::deque<TOriginalMessage> freshOriginalMessagesToSend;
     OriginalMessagesToSend.swap(freshOriginalMessagesToSend);
     while (!SentOriginalMessages.empty()) {
-        OriginalMessagesToSend.emplace(std::move(SentOriginalMessages.front()));
+        OriginalMessagesToSend.emplace_back(std::move(SentOriginalMessages.front()));
         SentOriginalMessages.pop();
     }
     while (!freshOriginalMessagesToSend.empty()) {
-        OriginalMessagesToSend.emplace(std::move(freshOriginalMessagesToSend.front()));
-        freshOriginalMessagesToSend.pop();
+        OriginalMessagesToSend.emplace_back(std::move(freshOriginalMessagesToSend.front()));
+        freshOriginalMessagesToSend.pop_front();
     }
     if (!OriginalMessagesToSend.empty() && OriginalMessagesToSend.front().Id < minId)
         minId = OriginalMessagesToSend.front().Id;
@@ -1525,11 +1525,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             }
             (*Counters->MessagesInflight)++;
             if (!currMessage.MessageMeta.empty()) {
-                OriginalMessagesToSend.emplace(id, createTs, datum.size(),
+                OriginalMessagesToSend.emplace_back(id, createTs, datum.size(),
                                                std::move(currMessage.MessageMeta),
                                                std::move(currMessage.Tx));
             } else {
-                OriginalMessagesToSend.emplace(id, createTs, datum.size(),
+                OriginalMessagesToSend.emplace_back(id, createTs, datum.size(),
                                                std::move(currMessage.Tx));
             }
         }
@@ -1585,7 +1585,7 @@ size_t EstimateTopicMessageDataSize(TInstant createdAt, size_t dataSize, size_t 
 }
 
 template <typename TBlock, typename TOriginalMessages>
-size_t EstimateTopicWriteRequestBlockSize(const TBlock& block, TOriginalMessages originalMessages, bool includeRequestFields) {
+size_t EstimateTopicWriteRequestBlockSize(const TBlock& block, const TOriginalMessages& originalMessages, bool includeRequestFields) {
     Y_ABORT_UNLESS(!originalMessages.empty());
 
     size_t size = 0;
@@ -1596,21 +1596,20 @@ size_t EstimateTopicWriteRequestBlockSize(const TBlock& block, TOriginalMessages
 
     if (block.MessageCount > 1) {
         size_t metadataSize = 0;
-        const auto firstMessage = originalMessages.front();
-        originalMessages.pop();
-        for (const auto& item : firstMessage.MessageMeta) {
+        auto message = originalMessages.begin();
+        for (const auto& item : message->MessageMeta) {
             metadataSize += EstimateMetadataItemFieldSize(7, item);
         }
         for (size_t i = 1; i < block.MessageCount; ++i) {
             Y_ABORT_UNLESS(!originalMessages.empty());
-            for (const auto& item : originalMessages.front().MessageMeta) {
+            for (const auto& item : message->MessageMeta) {
                 if (item.first == PARTITION_KEY_META_KEY) {
                     metadataSize += EstimateMetadataItemFieldSize(7, item);
                 }
             }
-            originalMessages.pop();
+            ++message;
         }
-        size += EstimateTopicMessageDataSize(firstMessage.CreatedAt, block.Data.size(), block.OriginalSize, metadataSize);
+        size += EstimateTopicMessageDataSize(message->CreatedAt, block.Data.size(), block.OriginalSize, metadataSize);
         return size;
     }
 
@@ -1703,7 +1702,7 @@ void TWriteSessionImpl::SendBatchBlock(
     for (size_t i = 0; i < block.MessageCount; ++i) {
         Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
         batchMessages.emplace_back(std::move(OriginalMessagesToSend.front()));
-        OriginalMessagesToSend.pop();
+        OriginalMessagesToSend.pop_front();
     }
 
     const auto& firstMessage = batchMessages.front();
@@ -1771,7 +1770,7 @@ void TWriteSessionImpl::SendStandardBlock(
             pair->set_value(TStringType{v});
         }
         SentOriginalMessages.emplace(std::move(message));
-        OriginalMessagesToSend.pop();
+        OriginalMessagesToSend.pop_front();
 
         msgData->set_uncompressed_size(block.OriginalSize);
         if (block.Compressed) {

@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
 
+#include <util/generic/size_literals.h>
 #include <util/thread/pool.h>
 #include <util/system/types.h>
 

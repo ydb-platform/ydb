@@ -44,4 +44,9 @@ NYdb::NPersQueue::TDescribeTopicResult DescribeTopicViaSdk(
     NYdb::NPersQueue::TPersQueueClient& client,
     const std::string& path);
 
+NYdb::TStatus AlterTopicViaSdk(
+    NYdb::NPersQueue::TPersQueueClient& client,
+    const std::string& path,
+    const NYdb::NPersQueue::TAlterTopicSettings& settings = {});
+
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

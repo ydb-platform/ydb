@@ -98,4 +98,12 @@ TDescribeTopicResult DescribeTopicViaSdk(
     return client.DescribeTopic(path).GetValueSync();
 }
 
+TStatus AlterTopicViaSdk(
+    TPersQueueClient& client,
+    const std::string& path,
+    const TAlterTopicSettings& settings)
+{
+    return client.AlterTopic(path, settings).GetValueSync();
+}
+
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1::NTests

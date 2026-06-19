@@ -671,7 +671,7 @@ private:
             LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
                     "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << state->Database << " at " << state->Endpoint << (state->Ssl ? " (Ssl)" : ""));
             NYdb::NTable::TTableClient tableClient(*Driver, settings);
-            tableClient.GetSession().Subscribe([actorSystem, selfId, state](const NYdb::NTable::TAsyncCreateSessionResult& future) {
+            tableClient.GetSession().Subscribe([actorSystem, selfId, state](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
                 try {
                     auto& result = future.GetValue();
                     if (!result.IsSuccess()) {
@@ -680,7 +680,8 @@ private:
                                 << ", issues# " << result.GetIssues().ToOneLineString()
                                 << ", iteration# " << state->Backoff.GetIteration());
                         if (IsRetryableError(result) && state->Backoff.HasMore()) {
-                            actorSystem->Schedule(state->Backoff.Next(),
+                            auto delay = state->Backoff.Next();
+                            actorSystem->Schedule(delay,
                                     new NActors::IEventHandle(selfId, TActorId(), new TEvDescribeResourceId(std::move(state))));
                         } else {
                             state->Promise.SetValue(
@@ -701,7 +702,8 @@ private:
                                           << ", iteration# " << state->Backoff.GetIteration());
 
                                       if (IsRetryableError(result) && state->Backoff.HasMore()) {
-                                          actorSystem->Schedule(state->Backoff.Next(),
+                                          auto delay = state->Backoff.Next();
+                                          actorSystem->Schedule(delay,
                                                   new NActors::IEventHandle(selfId, TActorId(), new TEvDescribeResourceId(std::move(state))));
                                       } else {
                                           state->Promise.SetValue(

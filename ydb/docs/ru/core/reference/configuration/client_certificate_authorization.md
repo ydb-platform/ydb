@@ -52,7 +52,7 @@ client_certificate_authorization:
         values: ["YDB"]
 ```
 
-Следующий фрагмент конфигурации требует клиентский сертификат с компонентами `OU=cluster1` и `O=YDB` в поле "Subject". Дополнительно проверяется, что поле "Subject Alternative Name" содержит имя хоста, заканчивающееся на суффикс `.cluster1.ydb.company.net`. Для сертификата с Subject `OU=cluster1, O=YDB` будет сформирован SID пользователя `OU=cluster1,O=YDB@cert`, а подключению будет назначена группа `group@cert`:
+Следующий фрагмент конфигурации требует клиентский сертификат с компонентами `OU=cluster1` и `O=YDB` в поле "Subject". Дополнительно проверяется, что поле "Subject Alternative Name" содержит имя хоста, заканчивающееся на суффикс `.cluster1.ydb.company.net`. Для сертификата с Subject `OU=cluster1, O=YDB` будет сформирован SID пользователя `OU=cluster1,O=YDB@cert` и будет назначена группа `group@cert`:
 
 ```yaml
 client_certificate_authorization:

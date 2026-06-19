@@ -9,16 +9,6 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
-    /*
-    todo:
-    IF (BUILD_TYPE == "DEBUG" OR SANITIZER_TYPE)
-        SIZE(LARGE)
-        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    ELSE()
-        SIZE(MEDIUM)
-    ENDIF()
-    */
-
     Y_UNIT_TEST_WITH_REBOOTS(SetNotNullOnSingleColumn) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

@@ -22,7 +22,8 @@ enum Codec {
     CODEC_GZIP = 2;
     CODEC_LZOP = 3;
     CODEC_ZSTD = 4;
-    reserved 5 to 9999;
+    CODEC_KAFKA_BATCH = 5;
+    reserved 6 to 9999;
     // User-defined codecs from 10000 to 19999
     CODEC_CUSTOM = 10000;
     reserved 20000 to max;
@@ -138,6 +139,9 @@ message StreamWriteMessage {
         // Client can only use compression codecs from this set to write messages to topic.
         // Otherwise session will be closed with BAD_REQUEST.
         SupportedCodecs supported_codecs = 4;
+
+        // Indicates that server supports batching.
+        bool is_batching_supported = 5;
     }
 
     // Represents portion of client messages.
@@ -151,7 +155,7 @@ message StreamWriteMessage {
         optional TransactionIdentity tx = 3;
 
         message MessageData {
-            // Message sequence number, provided by client for deduplication.
+            // Message sequence number, provided by client for deduplication. Max sequence number for batch messages.
             // Starts at 1
             int64 seq_no = 1;
             // Creation timestamp.
@@ -343,6 +347,9 @@ message StreamReadMessage {
             // Read only messages with 'written_at' value greater or equal than this timestamp.
             google.protobuf.Timestamp read_from = 4;
         }
+
+        // Indicates that client supports batching.
+        bool is_batching_supported = 7;
     }
 
     // Handshake response.
@@ -381,7 +388,7 @@ message StreamReadMessage {
         message MessageData {
             // Partition offset in partition that assigned for message.
             int64 offset = 1; //unique value for client side deduplication - Topic:Partition:Offset
-            // Sequence number that provided with message on write from client.
+            // Sequence number that provided with message on write from client. Max sequence number for batch messages.
             int64 seq_no = 2;
             // Timestamp of creation of message provided on write from client.
             google.protobuf.Timestamp created_at = 3;

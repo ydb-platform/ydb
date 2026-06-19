@@ -450,6 +450,34 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
     return GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
 }
 
+NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,
+    const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const {
+    if (chunks.empty()) {
+        return TConclusionStatus::Success();
+    }
+    ui32 checkRecordsCount = 0;
+    for (auto&& chunk : chunks) {
+        checkRecordsCount += chunk->GetRecordsCountVerified();
+    }
+    AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
+    const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
+    auto opStorage = operators->GetOperatorVerified(indexStorageId);
+    for (auto&& chunk : chunks) {
+        if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+            return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
+                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" +
+                                           ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
+        }
+    }
+    if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
+        AFL_VERIFY(chunks.size() == 1);
+        AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
+    } else {
+        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
+    }
+    return TConclusionStatus::Success();
+}
+
 NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
     const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
     TSecondaryData& result) const {
@@ -467,22 +495,7 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
         std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
-    const TString indexStorageId = GetIndexStorageId(indexId, specialTier);
-    auto opStorage = operators->GetOperatorVerified(indexStorageId);
-    for (auto&& chunk : chunks) {
-        if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-            return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
-                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" +
-                                           ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
-        }
-    }
-    if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
-        AFL_VERIFY(chunks.size() == 1);
-        AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
-    } else {
-        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
-    }
-    return TConclusionStatus::Success();
+    return ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
 }
 
 std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui32 columnId) const {

@@ -58,6 +58,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TDirectBlockGroupMockPtr DirectBlockGroup;
     TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};
 
+    THostIndex ExpectedHost = 0;
     TBlockRange64 ExpectedRange;
     TString RangeData;
 

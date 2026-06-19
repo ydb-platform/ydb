@@ -216,7 +216,7 @@ namespace NKikimr::NBlobDepot {
                 {"groupId", groupId},
                 {"issuerGuid", IssuerGuid});
             SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
-                IssuerGuid), groupId);
+                IssuerGuid, TWriteSource::BlobDepotBlock), groupId);
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {

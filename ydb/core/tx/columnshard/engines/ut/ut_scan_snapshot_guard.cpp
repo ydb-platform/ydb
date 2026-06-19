@@ -164,16 +164,19 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         const auto roTablePathId = TSchemeShardLocalPathId::FromRawValue(70);
         translator.Add(internalPathId, { roTablePathId });
 
-        const auto copySnapshot = Step(500);
+        const ui64 marginMs = FreshnessMarginMs(longTxConfig);
+        const auto oldestCollectionTimeMs = 30000;
+        const auto copySnapshot = Step(oldestCollectionTimeMs - 2000);
+        const auto border = TRowVersion(oldestCollectionTimeMs - 1000, 0);
         translator.SetCopyVersion(roTablePathId, copySnapshot);
 
-        auto registry = CreateSnapshotRegistry(TRowVersion(900, 0));
+        auto registry = CreateSnapshotRegistry(border, {}, TInstant::MilliSeconds(oldestCollectionTimeMs + marginMs));
 
         const NOlap::TSnapshot lastCleanupSnapshot = NOlap::TSnapshot::Zero();
         auto guard = CreateRegistryScanSnapshotGuard(
             /*passedStep*/ 200000, schemeShardId, lastCleanupSnapshot, translator, registry, longTxConfig);
 
-        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), 900);
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetMinSnapshotForNewReads().GetPlanStep(), border.Step);
         UNIT_ASSERT(guard->MayStartScanAt(copySnapshot, roTablePathId));
     }
 

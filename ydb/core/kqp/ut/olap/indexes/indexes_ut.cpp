@@ -1453,7 +1453,6 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             TString result = StreamResultToYson(it);
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
             ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
         }

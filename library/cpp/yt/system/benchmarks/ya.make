@@ -3,6 +3,7 @@ G_BENCHMARK()
 SRCS(
     process.cpp
     thread.cpp
+    tscp.cpp
 )
 
 IF (OS_LINUX)

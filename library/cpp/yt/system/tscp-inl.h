@@ -4,6 +4,8 @@
 #include "tscp.h"
 #endif
 
+#include "cpu_id.h"
+
 #include <util/system/cpu_id.h>
 
 namespace NYT::NProfiling {
@@ -53,6 +55,14 @@ inline TTscp TTscp::Get()
     return TTscp{
         .Instant = static_cast<TCpuInstant>(t),
         .ProcessorId = static_cast<int>(c) & (MaxProcessorId - 1)
+    };
+}
+
+inline TTscp TTscp::GetApproximate()
+{
+    return TTscp{
+        .Instant = GetApproximateCpuInstant(),
+        .ProcessorId = NYT::GetCurrentCpuId() & (MaxProcessorId - 1),
     };
 }
 

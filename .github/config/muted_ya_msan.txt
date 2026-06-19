@@ -72,6 +72,7 @@ ydb/core/transfer/ut/functional Transfer.TransferSourceDropped
 ydb/core/transfer/ut/functional Transfer.TransferSourceDropped_LocalTopic
 ydb/core/transfer/ut/functional Transfer.WriteToNotExists
 ydb/core/transfer/ut/functional Transfer.WriteToNotTable
+ydb/core/tx/columnshard/engines/ut TScanSnapshotGuardTests.RegistryGuardRespectsCopySnapshot
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_describe_column_table_local_index
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession

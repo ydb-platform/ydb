@@ -103,7 +103,7 @@ namespace NKikimr::NBlobDepot {
             const bool del = Barrier.Generation() == Max<ui32>() && Barrier.Step() == Max<ui32>();
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
                 TabletId, Max<ui32>(), del ? Max<ui32>() : PerGenerationCounter, Channel, true, Barrier.Generation(),
-                Barrier.Step(), nullptr, nullptr, TInstant::Max(), false, /*hard=*/ true
+                Barrier.Step(), nullptr, nullptr, TInstant::Max(), false, TWriteSource::BlobDepotGC, /*hard=*/ true
             );
             ev->Decommission = true;
             TActivationContext::Send(ParentId, std::move(ev), 0, PerGenerationCounter);
@@ -552,7 +552,12 @@ namespace NKikimr::NBlobDepot {
                         const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
                         const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
                         const ui64 putId = NextPutId++;
-                        SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, TRcBuf(resp.Buffer), TInstant::Max()), putId);
+                        SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                            .BlobId = id,
+                            .Buffer = TRope(TRcBuf(resp.Buffer)),
+                            .Deadline = TInstant::Max(),
+                            .WriteSource = TWriteSource::BlobDepotPut,
+                        }), putId);
                         const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
                         Y_ABORT_UNLESS(inserted);
                         const bool inserted1 = Puts.try_emplace(putId, TData::TKey(resp.Id), it->first).second;

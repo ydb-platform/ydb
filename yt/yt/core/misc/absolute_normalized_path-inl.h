@@ -40,6 +40,26 @@ TAbsoluteNormalizedPath TAbsoluteNormalizedPath::operator/(const TSource& path)
     return TAbsoluteNormalizedPath(Path_ / path);
 }
 
+template <class TSource>
+    requires (std::constructible_from<TAbsoluteNormalizedPath, TSource>)
+bool TAbsoluteNormalizedPath::IsAncestorOf(const TSource& descendantPath, bool treatEqualPathAsAncestor) const
+{
+    TAbsoluteNormalizedPath normalizedDescendantPath(descendantPath);
+    if (Path_.string() == "/" && normalizedDescendantPath.Path_.string() != "/") {
+        return true;
+    }
+    if (normalizedDescendantPath.Path().string().starts_with(Path_.string())) {
+        if (treatEqualPathAsAncestor && normalizedDescendantPath.Path().string().size() == Path_.string().size()) {
+            return true;
+        }
+        if (normalizedDescendantPath.Path().string().size() > Path_.string().size() &&
+            normalizedDescendantPath.Path().string()[Path_.string().size()] == '/') {
+            return true;
+        }
+    }
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

@@ -88,29 +88,27 @@ qc.exec("UPSERT INTO ... FROM AS_TABLE($seriesData);")
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Streaming read with snapshot read-only isolation:
+Read materialized result with snapshot read-only isolation:
 
 ```rust
 use ydb::QueryTxMode;
 
-let mut stream = qc
+let mut result = qc
     .query("SELECT series_id, title, release_date FROM `native/query/series`")
     .with_tx_mode(QueryTxMode::SnapshotReadOnly)
     .idempotent(true)
     .await?;
 
-while let Some(result_set) = stream.next_result_set().await? {
+while let Some(result_set) = result.next_result_set().await? {
     for mut row in result_set {
         // extract columns from row
     }
 }
-stream.close().await?;
+result.close().await?;
 ```
 
 {% include [steps/06_param_queries.md](../_includes/steps/06_param_queries.md) %}
 
 Per-call parameters use `.param(name, value)` or the `ydb_params!` macro.
-
-{% include [steps/10_transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
 Explicit isolation modes are set with `.with_tx_mode(QueryTxMode::SnapshotReadOnly)` (for QueryClient methods that execute one SQL statement) or [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) for interactive transactions. By default, such calls use implicit transaction control — the server infers isolation from the SQL statement.

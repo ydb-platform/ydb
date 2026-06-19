@@ -88,29 +88,27 @@ qc.exec("UPSERT INTO ... FROM AS_TABLE($seriesData);")
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Потоковое чтение в режиме изоляции snapshot read-only:
+Чтение материализованного результата в режиме изоляции snapshot read-only:
 
 ```rust
 use ydb::QueryTxMode;
 
-let mut stream = qc
+let mut result = qc
     .query("SELECT series_id, title, release_date FROM `native/query/series`")
     .with_tx_mode(QueryTxMode::SnapshotReadOnly)
     .idempotent(true)
     .await?;
 
-while let Some(result_set) = stream.next_result_set().await? {
+while let Some(result_set) = result.next_result_set().await? {
     for mut row in result_set {
         // извлечение колонок из row
     }
 }
-stream.close().await?;
+result.close().await?;
 ```
 
 {% include [steps/06_param_queries.md](../_includes/steps/06_param_queries.md) %}
 
-Параметры: `.param(name, value)` или макрос `ydb_params!`.
+Параметры задаются функцией `.param(name, value)` или макросом `ydb_params!`.
 
-{% include [steps/10_transaction_control.md](../_includes/steps/10_transaction_control.md) %}
-
-Явные режимы изоляции: `.with_tx_mode(QueryTxMode::SnapshotReadOnly)` (для запросов на query-клиенте) или [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) для интерактивных транзакций. По умолчанию для запросов на query-клиенте используется ImplicitTx, реальный режим изоляции определяет серверная сторона {{ ydb-short-name }}.
+В Rust SDK явное управление транзакциями (через `Begin` и `Commit`) недоступно для клиентского кода. Вместо этого предлагается использовать ретраер `retry_transaction`, в котором можно задать режим изоляции [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) для интерактивных транзакций. Для одиночных вызовов на query-клиенте  можно поменять режим изоляции по умолчанию с помощью опции `.with_tx_mode(QueryTxMode::SnapshotReadOnly)`. По умолчанию для запросов на query-клиенте используется режим ImplicitTx, реальный режим изоляции определяет серверная сторона {{ ydb-short-name }}.

@@ -5610,6 +5610,64 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(FilterPushdownThroughJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+	            b Int64,
+                c Int64,
+                primary key(a)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                primary key(a)
+            ) WITH (STORE = column);
+        )";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        const std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a FROM `/Root/t1` as t1 where t1.b > 1 and t1.a in (select t2.a from `/Root/t2` as t2);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a FROM `/Root/t1` as t1 where t1.b > 1 and t1.a not in (select t2.a from `/Root/t2` as t2);
+            )",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            Y_ENSURE(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Filter not pushed down.");
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
     Y_UNIT_TEST(PropagateAggregateThroughStages) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

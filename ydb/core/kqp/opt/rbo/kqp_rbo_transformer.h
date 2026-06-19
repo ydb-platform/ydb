@@ -95,7 +95,7 @@ private:
     TString Cluster;
     TString Database;
     NActors::TActorSystem* ActorSystem;
-    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
+    std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;

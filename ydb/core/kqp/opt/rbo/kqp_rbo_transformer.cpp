@@ -234,33 +234,41 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
         return TStatus::Ok;
     }
 
-    ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply([this, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
-        for (auto& fut : futures) {
-            if (fut.HasException()) {
-                fut.TryRethrow();
-            }
+    auto sharedState = std::make_shared<TColumnStatisticsSharedState>();
+    ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply(
+        [weakSharedState = std::weak_ptr{sharedState}, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
+            for (auto& fut : futures) {
+                if (fut.HasException()) {
+                    fut.TryRethrow();
+                }
 
-            auto newStats = fut.ExtractValue();
-            if (!ColumnStatisticsResponse) {
-                ColumnStatisticsResponse = std::move(newStats);
-            } else {
-                // merge statistics
-                for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
-                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
-                    for (const auto& [column, newStat] : column2Stat.Data) {
-                        auto& oldStat = oldColumn2Stat.Data[column];
-                        if (newStat.CountMinSketch) {
-                            oldStat.CountMinSketch = newStat.CountMinSketch;
-                        }
-                        if (newStat.EqWidthHistogramEstimator) {
-                            oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                auto newStats = fut.ExtractValue();
+                auto sharedState = weakSharedState.lock();
+                if (!sharedState) {
+                    // parent already deleted, just return
+                    return;
+                }
+                if (!sharedState->Response.has_value()) {
+                    sharedState->Response = std::move(newStats);
+                } else {
+                    // merge statistics
+                    for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
+                        auto& oldColumn2Stat = sharedState->Response->ColumnStatisticsByTableName[table];
+                        for (const auto& [column, newStat] : column2Stat.Data) {
+                            auto& oldStat = oldColumn2Stat.Data[column];
+                            if (newStat.CountMinSketch) {
+                                oldStat.CountMinSketch = newStat.CountMinSketch;
+                            }
+                            if (newStat.EqWidthHistogramEstimator) {
+                                oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                            }
                         }
                     }
                 }
             }
-        }
-    });
+        });
 
+    SharedState = sharedState;
     return TStatus::Async;
 }
 
@@ -294,12 +302,12 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
 
 void TKqpNewRBOTransformer::ApplyColumnStatistics() {
     Y_ENSURE(ColumnStatisticsReadiness.IsReady());
-    if (!ColumnStatisticsResponse->Issues().Empty()) {
+    if (!SharedState->Response->Issues().Empty()) {
         TStringStream ss;
-        ColumnStatisticsResponse->Issues().PrintTo(ss);
+        SharedState->Response->Issues().PrintTo(ss);
         YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
     } else {
-        for (auto&& [tableName, columnStatistics] : ColumnStatisticsResponse->ColumnStatisticsByTableName) {
+        for (auto&& [tableName, columnStatistics] : SharedState->Response->ColumnStatisticsByTableName) {
             TypeCtx.ColumnStatisticsByTableName.insert({std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))});
         }
     }

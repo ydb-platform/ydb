@@ -783,6 +783,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         return ret
 
     def stop(self, kill=False):
+        self.reset_clients()
         saved_exceptions_queue = Queue()
 
         def stop_node(node, kill):

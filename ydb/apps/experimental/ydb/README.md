@@ -11,7 +11,7 @@ any time without prior notice.
 
 ## Relationship with the official `ydb` client
 
-| Aspect                      | `ydb/apps/ydb`                  | `ydb/apps/ydb/experimental/ydb`   |
+| Aspect                      | `ydb/apps/ydb`                  | `ydb/apps/experimental/ydb`   |
 |-----------------------------|---------------------------------|-----------------------------------|
 | Audience                    | End users                       | YDB developers, contributors      |
 | Distribution                | Official releases, packages     | Built locally from source         |
@@ -27,10 +27,10 @@ largely matches the official `ydb` client.
 ## Building
 
 ```bash
-./ya make --build relwithdebinfo ydb/apps/ydb/experimental/ydb
+./ya make --build relwithdebinfo ydb/apps/experimental/ydb
 ```
 
-The resulting binary is placed at `ydb/apps/ydb/experimental/ydb/ydb`.
+The resulting binary is placed at `ydb/apps/experimental/ydb/ydb`.
 
 ## Running
 
@@ -38,7 +38,7 @@ The invocation mirrors the official `ydb` client; the only difference is the
 extra `experimental` command tree:
 
 ```bash
-./ydb/apps/ydb/experimental/ydb/ydb experimental --help
+./ydb/apps/experimental/ydb/ydb experimental --help
 ```
 
 ### Interactive transactions (draft)
@@ -177,8 +177,8 @@ a library that is not already pulled in transitively, add it to `PEERDIR`.
 ### 5. Build and verify
 
 ```bash
-./ya make --build relwithdebinfo ydb/apps/ydb/experimental/ydb
-./ydb/apps/ydb/experimental/ydb/ydb experimental my-feature --help
+./ya make --build relwithdebinfo ydb/apps/experimental/ydb
+./ydb/apps/experimental/ydb/ydb experimental my-feature --help
 ```
 
 ## Requirements and conventions

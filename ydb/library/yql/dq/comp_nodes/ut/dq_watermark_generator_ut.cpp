@@ -61,7 +61,7 @@ private:
     size_t Index_ = 0;
 };
 
-THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<ui64>& partitions) {
+THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<std::string>& partitions) {
     auto& pgmBuilder = setup.GetDqProgramBuilder();
     auto stringType = pgmBuilder.NewDataType(NYql::NProto::String);
     auto ui64Type = pgmBuilder.NewDataType(NYql::NProto::Uint64);
@@ -73,7 +73,7 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<
     auto sourceNodeType = pgmBuilder.NewStreamType(structType);
     auto sourceNode = TCallableBuilder(pgmBuilder.GetTypeEnvironment(), "ExternalNode", sourceNodeType).Build();
 
-    auto partitionsNodeType = pgmBuilder.NewListType(ui64Type);
+    auto partitionsNodeType = pgmBuilder.NewListType(stringType);
     auto partitionsNode = TCallableBuilder(pgmBuilder.GetTypeEnvironment(), "ExternalNode", partitionsNodeType).Build();
 
     auto pgm = pgmBuilder.DqWatermarkGenerator(
@@ -85,11 +85,10 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<
                 {"partition_id", pgmBuilder.Member(item, "partition_id")},
             });
         },
-        TConstArrayRef<std::pair<std::string_view, std::string_view>>({
+        TConstArrayRef<std::pair<std::string, std::string>>({
             {"WatermarksGranularityUs", "1000000"},
             {"WatermarksLateArrivalDelayUs", "0"},
             {"WatermarksIdleTimeoutUs", "100000000"},
-            {"FederatedClusters", Clusters},
         }),
         TRuntimeNode(partitionsNode, false)
     );
@@ -99,7 +98,7 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<
     NUdf::TUnboxedValue* itemsPtr;
     auto partitionsValue = graph->GetHolderFactory().CreateDirectArrayHolder(partitions.size(), itemsPtr);
     for (size_t i = 0; i < partitions.size(); ++i) {
-        itemsPtr[i] = NUdf::TUnboxedValuePod(partitions[i]);
+        itemsPtr[i] = NUdf::TUnboxedValuePod::Embedded(partitions[i]);
     }
     graph->GetEntryPoint(1, true)->SetValue(graph->GetContext(), std::move(partitionsValue));
 
@@ -108,7 +107,7 @@ THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<
 
 void TestImpl(
     const std::vector<TInputItem>& input,
-    const std::vector<ui64>& partitions,
+    const std::vector<std::string>& partitions,
     const std::vector<TOutputItem>& expected
 ) {
     TWatermark watermark;
@@ -153,7 +152,7 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
                 {Cluster, 0, TInstant::Seconds(2)},
                 {Cluster, 0, TInstant::Seconds(3)},
             },
-            {0},
+            {"0@cluster"},
             {
                 TInstant::Seconds(1),
                 TInstant::Seconds(2),
@@ -169,7 +168,7 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
                 {Cluster, 0, TInstant::Seconds(3)},
                 {Cluster, 1, TInstant::Seconds(2)},
             },
-            {0, 1},
+            {"0@cluster", "1@cluster"},
             {
                 Nothing(),
                 Nothing(),
@@ -185,7 +184,7 @@ Y_UNIT_TEST_SUITE(TDqWatermarkGeneratorTest) {
                 {Cluster, 0, TInstant::Seconds(2)},
                 {Cluster, 0, TInstant::Seconds(3)},
             },
-            {0, 1},
+            {"0@cluster", "1@cluster"},
             {
                 Nothing(),
                 Nothing(),

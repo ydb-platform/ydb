@@ -89,6 +89,13 @@ size_t BuildTopicWriteRequestBlockSize(
     return request.ByteSizeLong();
 }
 
+void AssertEstimateCloseToActual(size_t estimate, size_t actual) {
+    static constexpr size_t MaxAllowedOverestimate = 16;
+
+    UNIT_ASSERT_GE_C(estimate, actual, "estimate=" << estimate << ", actual=" << actual);
+    UNIT_ASSERT_LE_C(estimate, actual + MaxAllowedOverestimate, "estimate=" << estimate << ", actual=" << actual);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(WriteSessionGrpcSize) {
@@ -126,7 +133,7 @@ Y_UNIT_TEST_SUITE(WriteSessionGrpcSize) {
 
         const size_t estimate = NGrpc::EstimateTopicWriteRequestBlockSize(block, messages, true);
         const size_t actual = BuildTopicWriteRequestBlockSize(block, messages, true);
-        UNIT_ASSERT_GE(estimate, actual);
+        AssertEstimateCloseToActual(estimate, actual);
     }
 
     Y_UNIT_TEST(EstimateTopicWriteRequestBatchBlockSize) {
@@ -157,7 +164,7 @@ Y_UNIT_TEST_SUITE(WriteSessionGrpcSize) {
 
         const size_t estimate = NGrpc::EstimateTopicWriteRequestBlockSize(block, messages, true);
         const size_t actual = BuildTopicWriteRequestBlockSize(block, messages, true);
-        UNIT_ASSERT_GE(estimate, actual);
+        AssertEstimateCloseToActual(estimate, actual);
     }
 }
 

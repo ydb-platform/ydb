@@ -116,7 +116,7 @@ namespace NActors {
 
         NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
             if (!CodedOutputStream) {
-                CodedOutputStream.reset(new NProtoBuf::io::CodedOutputStream(this));
+                CodedOutputStream.reset(new NProtoBuf::io::CodedOutputStream(this, false));
             }
             return CodedOutputStream.get();
         }

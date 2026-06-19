@@ -2459,43 +2459,31 @@ public:
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
-            auto promise = NewPromise<TGenericResult>();
+            auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
 
-            auto future = LoadTableMetadata(cluster, req.path(), TLoadTableMetadataSettings());
+            NKikimrSchemeOp::TModifyScheme schemeTx;
 
-            future.Subscribe( [this, req, promise] (const TFuture<TTableMetadataResult> &future) mutable {
-                auto meta = future.GetValue();
-                NKikimrSchemeOp::TModifyScheme schemeTx;
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, metadata, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                return MakeFuture(errResult);
+            }
 
-                Ydb::StatusIds::StatusCode code;
-                TString error;
-                if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, meta.Metadata, code, error)) {
-                    IKqpGateway::TGenericResult errResult;
-                    errResult.AddIssue(NYql::TIssue(error));
-                    errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-                    promise.SetValue(errResult);
-                    return;
-                }
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
 
-                if (IsPrepare()) {
-                    auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-                    auto& phyTx = *phyQuery.AddTransactions();
-                    phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-                    phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
-
-                    TGenericResult result;
-                    result.SetSuccess();
-                    promise.SetValue(result);
-                } else {
-                    auto modifyFuture = Gateway->ModifyScheme(std::move(schemeTx));
-                    modifyFuture.Subscribe([promise](const TFuture<TGenericResult>& res) mutable {
-                        promise.SetValue(res.GetValue());
-                    });
-                }
-
-            });
-
-            return promise.GetFuture();
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
+            }
         }
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));

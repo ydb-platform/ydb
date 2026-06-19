@@ -138,7 +138,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
+    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes
+        | ERuleProperties::RequireStatistics | ERuleProperties::RequireLiveness;
     ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);

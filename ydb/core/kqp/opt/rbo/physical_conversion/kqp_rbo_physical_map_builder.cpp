@@ -4,6 +4,22 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+TVector<TInfoUnit> TPhysicalMapBuilder::GetPhysicalOutputIUs() const {
+    const auto outputIUs = Map->GetOutputIUs();
+    if (!LiveOut) {
+        return outputIUs;
+    }
+
+    TVector<TInfoUnit> physicalOutputIUs;
+    physicalOutputIUs.reserve(outputIUs.size());
+    for (const auto& output : outputIUs) {
+        if (LiveOut->contains(output)) {
+            physicalOutputIUs.push_back(output);
+        }
+    }
+    return physicalOutputIUs;
+}
+
 TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     const auto inputColumns = Map->GetInput()->GetOutputIUs();
 
@@ -88,7 +104,8 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, NPhysicalConvertionUtils::BuildNameSet(Map->GetOutputIUs()), Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(
+        input, outputColumns, NPhysicalConvertionUtils::BuildNameSet(GetPhysicalOutputIUs()), Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

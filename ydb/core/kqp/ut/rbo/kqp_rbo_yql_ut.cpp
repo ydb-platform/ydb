@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
+#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_map_builder.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
@@ -305,6 +306,16 @@ TMapElement MakeTestAppend(const TString& to, const TString& from, TPositionHand
 
 TMapElement MakeTestConstantAppend(const TString& to, TPositionHandle pos, NYql::TExprContext& exprCtx) {
     return TMapElement(TInfoUnit(to), MakeConstant("Int32", "1", pos, &exprCtx), false);
+}
+
+void CollectCallableNodes(const TExprNode::TPtr& node, TStringBuf callableName, TExprNode::TListType& result) {
+    if (node->IsCallable(callableName)) {
+        result.push_back(node);
+    }
+
+    for (const auto& child : node->ChildrenList()) {
+        CollectCallableNodes(child, callableName, result);
+    }
 }
 
 void ComputeLogicalTestProps(TOpRoot& root) {
@@ -3177,6 +3188,35 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("key")) != readOutput.end());
         UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("value")) != readOutput.end());
         UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("dead_value")) == readOutput.end());
+    }
+
+    Y_UNIT_TEST(PhysicalMapUsesLivenessForOutputColumns) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("b"), TInfoUnit("payload")}, pos);
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("a", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(map, pos, {"a"});
+
+        ComputeLogicalTestProps(root);
+        const auto liveIt = root.PlanProps.LiveOut.find(map.get());
+        UNIT_ASSERT_C(liveIt != root.PlanProps.LiveOut.end(), root.PlanToString(testContext.ExprCtx));
+
+        auto physical = TPhysicalMapBuilder(map, testContext.ExprCtx, pos, &liveIt->second)
+            .BuildPhysicalOp(testContext.ExprCtx.NewArgument(pos, "input"));
+
+        TExprNode::TListType narrowMaps;
+        CollectCallableNodes(physical, "NarrowMap", narrowMaps);
+        UNIT_ASSERT_VALUES_EQUAL(narrowMaps.size(), 1);
+
+        const auto narrowMap = narrowMaps.front();
+        const auto body = TCoLambda(narrowMap->ChildPtr(1)).Body().Ptr();
+        UNIT_ASSERT_C(body->IsCallable("AsStruct"), KqpExprToPrettyString(TExprBase(physical), testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL_C(body->ChildrenSize(), 1, KqpExprToPrettyString(TExprBase(physical), testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(TString(body->Child(0)->Child(0)->Content()), "a");
     }
 
     Y_UNIT_TEST(PruneDeadAggregateTraitsEnablesReadColumnPruning) {

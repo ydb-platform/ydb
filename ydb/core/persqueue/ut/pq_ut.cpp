@@ -288,31 +288,26 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
     return Nothing();
 }
 
-void WaitRetentionCleanup(TTestContext& tc, ui32 retentionSeconds = 5, ui32 wakeTimeoutSeconds = 5) {
-    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
-    tc.Runtime->ResetScheduledCount();
-    try {
-        tc.Runtime->DispatchEvents();
-    } catch (const NActors::TSchedulingLimitReachedException&) {
+void DispatchWithRetry(TTestContext& tc, i32 retriesLeft = 2) {
+    while (retriesLeft-- > 0) {
         tc.Runtime->ResetScheduledCount();
-    }
-    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
-    tc.Runtime->ResetScheduledCount();
-    try {
-        tc.Runtime->DispatchEvents();
-    } catch (const NActors::TSchedulingLimitReachedException&) {
-        tc.Runtime->ResetScheduledCount();
+        try {
+            tc.Runtime->DispatchEvents();
+            return;
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+        }
     }
 }
 
 void DispatchPartitionWakeup(TTestContext& tc, ui32 wakeTimeoutSeconds = 5) {
     tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
-    tc.Runtime->ResetScheduledCount();
-    try {
-        tc.Runtime->DispatchEvents();
-    } catch (const NActors::TSchedulingLimitReachedException&) {
-        tc.Runtime->ResetScheduledCount();
-    }
+    DispatchWithRetry(tc);
+}
+
+void WaitRetentionCleanup(TTestContext& tc, ui32 retentionSeconds = 5, ui32 wakeTimeoutSeconds = 5) {
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
+    DispatchWithRetry(tc);
+    DispatchPartitionWakeup(tc, wakeTimeoutSeconds);
 }
 
 Y_UNIT_TEST(TestCompaction) {

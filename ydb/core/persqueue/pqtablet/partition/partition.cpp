@@ -495,10 +495,13 @@ void TPartition::FinalizeEmptyBlobEncoder(TPartitionBlobEncoder& encoder, ui64 s
     encoder.BodySize = 0;
     encoder.Head.Clear();
     encoder.Head.PartNo = 0;
+    encoder.NewHead.Clear();
+    encoder.NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
     encoder.StartOffset = startOffset;
     if (updateEndOffset) {
         encoder.EndOffset = startOffset;
         encoder.Head.Offset = startOffset;
+        encoder.NewHead.Offset = startOffset;
     }
     for (ui32 i = 0; i < TotalLevels; ++i) {
         encoder.DataKeysHead[i].Clear();

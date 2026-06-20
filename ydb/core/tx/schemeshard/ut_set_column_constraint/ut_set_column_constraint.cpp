@@ -1130,6 +1130,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             expectedAnswers.size(),
             TStringBuilder() << "Wrong number of observed states: got " << answers.size()
                 << ", expected " << expectedAnswers.size());
+
         for (size_t i = 0; i < expectedAnswers.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(
                 static_cast<int>(answers[i]),

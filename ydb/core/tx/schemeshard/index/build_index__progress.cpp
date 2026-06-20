@@ -2389,21 +2389,6 @@ private:
         return true;
     }
 
-    bool CanProgressBuilding(const TIndexBuildInfo& buildInfo) const {
-        if (!buildInfo.IsBuildColumns()) {
-            return true;
-        }
-        if (Self->EnableAddColumsWithDefaults) {
-            return true;
-        }
-        for (const auto& col : buildInfo.BuildColumns) {
-            if (!col.IsFromSequence()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
 public:
     explicit TTxProgress(TSelf* self, TIndexBuildId buildId)
         : TTxBase(self, buildId, TXTYPE_PROGRESS_INDEX_BUILD)
@@ -2539,19 +2524,14 @@ public:
 
             break;
         case TIndexBuildInfo::EState::Filling: {
-            bool canProgress = CanProgressBuilding(buildInfo);
             bool cancel = buildInfo.IsCancellationRequested();
             bool fillRes = false;
-            if (canProgress && !cancel) {
+            if (!cancel) {
                 fillRes = FillIndex(txc, buildInfo);
             }
-            if (!canProgress || cancel || fillRes) {
+            if (cancel || fillRes) {
                 auto nextState = TIndexBuildInfo::EState::Applying;
-                if (!canProgress) {
-                    Y_ENSURE(buildInfo.IsBuildColumns());
-                    buildInfo.AddIssue(TStringBuilder() << "Adding columns with defaults is disabled");
-                    nextState = TIndexBuildInfo::EState::Rejection_DroppingColumns;
-                } else if (cancel) {
+                if (cancel) {
                     nextState = buildInfo.IsBuildColumns()
                         ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
                         : TIndexBuildInfo::EState::Cancellation_Applying;

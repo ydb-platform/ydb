@@ -10,7 +10,6 @@ class TestYdbWorkload(StressFixture):
     def setup(self):
         yield from self.setup_cluster(
             extra_feature_flags=[
-                "enable_add_colums_with_defaults",
                 "enable_table_cache_modes",
                 "enable_set_drop_default_value",
                 "enable_forced_compactions",

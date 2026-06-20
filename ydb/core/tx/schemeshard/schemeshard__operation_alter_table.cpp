@@ -143,11 +143,6 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         const bool hasLiteralDefault = col.HasDefaultFromLiteral();
         const bool hasSequenceDefault = col.HasDefaultFromSequence();
         const bool hasDefault = hasLiteralDefault || hasSequenceDefault;
-        if (hasLiteralDefault && !context.SS->EnableAddColumsWithDefaults) {
-            errStr = Sprintf("Adding columns with defaults is disabled");
-            status = NKikimrScheme::StatusInvalidParameter;
-            return nullptr;
-        }
 
         auto colId = table->GetColumnIdByNameSlow(col.GetName());
         bool altersExistingColumn = (colId != TTableInfo::InvalidColumnId);

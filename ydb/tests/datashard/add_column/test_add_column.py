@@ -33,7 +33,6 @@ class TestYdbAddColumnWorkload(TestBase):
         cls.database = "/Root"
         cls.cluster = KiKiMR(KikimrConfigGenerator(
             erasure=cls.get_cluster_configuration(),
-            extra_feature_flags=["enable_add_colums_with_defaults"],
             additional_log_configs={'TX_TIERING': LogLevels.DEBUG})
         )
 

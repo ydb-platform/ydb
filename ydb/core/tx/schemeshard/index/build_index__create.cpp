@@ -249,17 +249,6 @@ public:
                 }
             }
         } else if (settings.has_column_build_operation()) {
-            bool allFromSequence = settings.column_build_operation().column_size() > 0;
-            for (int i = 0; i < settings.column_build_operation().column_size(); i++) {
-                if (settings.column_build_operation().column(i).default_from_sequence().empty()) {
-                    allFromSequence = false;
-                    break;
-                }
-            }
-            if (!Self->EnableAddColumsWithDefaults && !allFromSequence) {
-                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
-            }
-
             buildInfo->TargetName = tablePath.PathString();
             // put some validation here for the build operation
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;

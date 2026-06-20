@@ -1376,7 +1376,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 - PHP
@@ -1528,7 +1527,6 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
@@ -1771,7 +1769,6 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
@@ -2280,7 +2277,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
@@ -2404,7 +2400,6 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
@@ -2686,7 +2681,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
@@ -2825,7 +2819,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
@@ -2937,7 +2930,6 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
@@ -3276,7 +3268,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
@@ -3395,7 +3386,6 @@
   Rust SDK обрабатывает события остановки и закрытия partition session внутренне; публичного API для настройки мягкого или жёсткого прерывания чтения пока нет.
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
@@ -3636,7 +3626,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#311](https://github.com/ydb-platform/ydb-rs-sdk/issues/311)
 
 - PHP
@@ -3782,7 +3771,6 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 

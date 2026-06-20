@@ -1297,7 +1297,6 @@
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Отслеживать прогресс или проголосовать за поддержку: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
 {% endlist %}

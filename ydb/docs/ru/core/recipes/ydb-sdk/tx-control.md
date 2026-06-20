@@ -1974,8 +1974,6 @@
 
   {% note info %}
 
-  Режим Snapshot Read-Write доступен не на всех кластерах {{ ydb-short-name }}.
-
   {% endnote %}
 
 - PHP

@@ -1720,8 +1720,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   {% note info %}
 
-  Snapshot Read-Write mode is not available on all {{ ydb-short-name }} clusters.
-
   {% endnote %}
 
 - PHP

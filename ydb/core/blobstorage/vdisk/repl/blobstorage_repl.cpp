@@ -172,7 +172,7 @@ namespace NKikimr {
         TInstant LastReplQuantumEnd;
         TQueueActorMapPtr QueueActorMapPtr;
         TBlobIdQueuePtr BlobsToReplicatePtr;
-        TBlobIdQueuePtr UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
+        TBlobIdQueuePtr UnreplicatedBlobsPtr;
         TUnreplicatedBlobRecords UnreplicatedBlobRecords;
         TMilestoneQueue MilestoneQueue;
         TActorId ReplJobActorId;
@@ -209,6 +209,7 @@ namespace NKikimr {
         }
 
         void Bootstrap() {
+            UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>(TMemoryConsumer(ReplCtx->VCtx->Replication));
             QueueActorMapPtr = std::make_shared<TQueueActorMap>();
             auto replInterconnectChannel = static_cast<TInterconnectChannels::EInterconnectChannels>(
                     ReplCtx->VDiskCfg->ReplInterconnectChannel);
@@ -434,7 +435,8 @@ namespace NKikimr {
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
-                BlobsToReplicatePtr = std::exchange(UnreplicatedBlobsPtr, std::make_shared<TBlobIdQueue>());
+                BlobsToReplicatePtr = std::exchange(UnreplicatedBlobsPtr,
+                    std::make_shared<TBlobIdQueue>(TMemoryConsumer(ReplCtx->VCtx->Replication)));
 
 #ifndef NDEBUG
                 Y_VERIFY_DEBUG_S(BlobsToReplicatePtr->GetNumItems() == UnreplicatedBlobRecords.size(),

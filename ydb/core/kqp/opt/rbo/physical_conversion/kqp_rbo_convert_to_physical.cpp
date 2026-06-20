@@ -27,6 +27,10 @@ namespace NKikimr::NKqp {
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
 
+    if (rboCtx.NeedToLog()) {
+        rboCtx.TraceLog.stage("Physical AST generation");
+    }
+
     THashMap<ui32, TExprNode::TPtr> stages;
     THashMap<ui32, TVector<TExprNode::TPtr>> stageArgs;
     THashMap<ui32, TPositionHandle> stagePos;

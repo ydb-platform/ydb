@@ -126,7 +126,7 @@ Y_UNIT_TEST(AddSharedConsumer) {
     UNIT_ASSERT_VALUES_EQUAL(consumer->GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
 }
 
-Y_UNIT_TEST(CannotChangeConsumerType) {
+Y_UNIT_TEST(CannotChangeConsumerType_StreamingToShared) {
     TPqv1SdkTestSetup setup("CannotChangeConsumerType");
 
     auto& client = setup.GetPersQueueClient();
@@ -153,6 +153,36 @@ Y_UNIT_TEST(CannotChangeConsumerType) {
     UNIT_ASSERT_C(!alterStatus.IsSuccess(), issue);
     UNIT_ASSERT_C(issue.contains("Cannot alter consumer type"), issue);
 }
+
+Y_UNIT_TEST(CannotChangeConsumerType_SharedToStreaming) {
+    TPqv1SdkTestSetup setup("CannotChangeConsumerType_SharedToStreaming");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-alter-change-type-shared-to-streaming");
+
+    TCreateTopicSettings createSettings;
+    createSettings.ReadRules({MakeSharedConsumerReadRuleSettings()});
+
+    const auto createStatus = CreateTopicViaSdk(client, path, createSettings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
+
+    {
+        const auto describe = DescribeTopicViaSdk(client, path);
+        UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.TopicSettings().ReadRules().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(describe.TopicSettings().ReadRules().at(0).ConsumerName(), DEFAULT_SHARED_CONSUMER);
+        UNIT_ASSERT(describe.TopicSettings().ReadRules().at(0).SharedConsumer().has_value());
+    }
+
+    TAlterTopicSettings alterSettings;
+    alterSettings.ReadRules({TReadRuleSettings{}.ConsumerName(DEFAULT_SHARED_CONSUMER)});
+
+    const auto alterStatus = AlterTopicViaSdk(client, path, alterSettings);
+    const auto issue = alterStatus.GetIssues().ToOneLineString();
+    UNIT_ASSERT_C(!alterStatus.IsSuccess(), issue);
+    UNIT_ASSERT_C(issue.contains("Cannot alter consumer type"), issue);
+}
+
 
 Y_UNIT_TEST(AlterStreamingConsumer) {
     TPqv1SdkTestSetup setup("AlterStreamingConsumer");

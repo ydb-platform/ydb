@@ -44,7 +44,8 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
                 const bool newIsShared = readRule.has_shared_consumer_type();
                 const bool oldIsShared = existingConsumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
                 if (newIsShared != oldIsShared) {
-                    return {Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type"};
+                    return {Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Cannot alter consumer type for consumer '" << consumerName << "'"};
                 }
             }
         }

@@ -1047,8 +1047,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Must be declared before the lambda so it is in scope for [&] capture.
-        ui64 setConstraintTxId = 0;
+        ui64 setConstraintTxId;
 
         auto doGetRequest = [&]() -> NKikimrSetColumnConstraint::TSetColumnConstraint {
             auto sender = runtime.AllocateEdgeActor();
@@ -1064,8 +1063,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             return event->Record.GetSetColumnConstraint();
         };
 
-        // SetColumnConstraintState is a proto message; its state field is of the nested enum type
-        // SetColumnConstraintState_State (e.g. STATE_PREPARING).
         using TConstraintState = Ydb::Table::SetColumnConstraintState_State;
         std::vector<TConstraintState> answers;
         std::vector<TConstraintState> expectedAnswers = {
@@ -1107,9 +1104,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::StatusIds::SUCCESS,
             response.ShortDebugString());
 
-        // TestSetColumnConstraint returns as soon as the TEvCreateResponse arrives (after the Locking
-        // phase). The remaining phases (LockingNullWrites, Validating, Finishing, Unlocking) run
-        // asynchronously. Wait here so the observer can collect answers[1..4].
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
         // STATE_DONE: operation is fully finished.

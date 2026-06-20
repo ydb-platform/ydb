@@ -15,7 +15,11 @@ namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
-using TRawCTE = std::tuple<TYqlSourceAlias, const TRule_cte_value*>;
+struct TRawCTE {
+    TYqlSourceAlias Alias;
+    const TRule_cte_value* ParseTree = nullptr;
+    bool IsRecursive = false;
+};
 
 class TYqlSelect final: public TSqlTranslation {
 public:
@@ -24,6 +28,8 @@ public:
     {
         SetYqlSelectProduced(true);
     }
+
+    TYqlSelect(const TYqlSelect& that) = default;
 
     TNodeResult Build(const TRule_select_stmt& rule) {
         return WithForkedNamespace([&](TYqlSelect& that) {
@@ -71,7 +77,9 @@ public:
     }
 
     TNodeResult Build(const TRule_exists_expr& rule) {
-        return Build(rule.GetBlock3()).transform([](auto x) {
+        TYqlSelect that(*this);
+        that.CurrentCTE_ = Nothing();
+        return that.Build(rule.GetBlock3()).transform([](auto x) {
             return TNonNull(BuildYqlExistsSubquery(std::move(x)));
         });
     }
@@ -83,8 +91,8 @@ private:
             return std::unexpected(bindings.error());
         }
 
-        for (auto& [alias, value] : *bindings) {
-            auto result = Build(std::move(alias), *value);
+        for (auto& binding : *bindings) {
+            auto result = Build(std::move(binding));
             if (!result) {
                 return std::unexpected(result.error());
             }
@@ -114,19 +122,19 @@ private:
     }
 
     TSQLResult<TRawCTE> Build(const TRule_cte_binding& rule) {
-        if (rule.HasBlock1()) {
-            Token(rule.GetBlock1().GetToken1());
-            Ctx_.Error() << "RECURSIVE CTE is not implemented yet";
-            return std::unexpected(ESQLError::Basic);
-        }
+        bool isRecursive = rule.HasBlock1();
 
         auto alias = Build(rule.GetRule_cte_key2());
         if (!alias) {
             return std::unexpected(alias.error());
         }
 
-        const auto& value = rule.GetRule_cte_value5();
-        return std::make_tuple(std::move(*alias), &value);
+        const auto& tree = rule.GetRule_cte_value5();
+        return TRawCTE{
+            .Alias = std::move(*alias),
+            .ParseTree = &tree,
+            .IsRecursive = isRecursive,
+        };
     }
 
     TSQLResult<TYqlSourceAlias> Build(const TRule_cte_key& rule) {
@@ -148,17 +156,49 @@ private:
         };
     }
 
-    TSQLStatus Build(TYqlSourceAlias alias, const TRule_cte_value& rule) {
-        auto result = Build(rule);
+    TSQLStatus Build(const TRawCTE& binding) {
+        TString name = binding.Alias.Name;
+        TPosition position = binding.Alias.Position;
+
+        const auto define = [&](TReadyCTE cte) -> bool {
+            auto old = CTEs_->Exchange(name, std::move(cte));
+            if (old && !old->IsRecursiveNotReady()) {
+                Ctx_.Error(position)
+                    << "Bad CTE: "
+                    << "Redefinition is forbidden: "
+                    << name;
+                return false;
+            }
+
+            return true;
+        };
+
+        if (binding.IsRecursive) {
+            TReadyCTE cte = {
+                .Alias = binding.Alias,
+                .Node = nullptr,
+            };
+
+            if (!define(std::move(cte))) {
+                return std::unexpected(ESQLError::Basic);
+            }
+        }
+
+        TNodeResult result = [&] {
+            TYqlSelect that(*this);
+            that.CurrentCTE_ = name;
+            return that.Build(*binding.ParseTree);
+        }();
         if (!result) {
             return std::unexpected(result.error());
         }
 
-        TString name = alias.Name;
-        TPosition position = alias.Position;
+        TReadyCTE cte = {
+            .Alias = std::move(binding.Alias),
+            .Node = std::move(*result),
+        };
 
-        if (auto status = CTEs_->Put(name, TReadyCTE(std::move(alias), std::move(*result))); !status) {
-            Ctx_.Error(position) << "Bad CTE: " << status.error();
+        if (!define(std::move(cte))) {
             return std::unexpected(ESQLError::Basic);
         }
 
@@ -978,9 +1018,12 @@ private:
         switch (rule.GetAltCase()) {
             case NSQLv1Generated::TRule_single_source::kAltSingleSource1:
                 return Build(rule.GetAlt_single_source1().GetRule_table_ref1());
-            case NSQLv1Generated::TRule_single_source::kAltSingleSource2:
-                return Build(rule.GetAlt_single_source2().GetRule_select_stmt2())
+            case NSQLv1Generated::TRule_single_source::kAltSingleSource2: {
+                TYqlSelect that(*this);
+                that.CurrentCTE_ = Nothing();
+                return that.Build(rule.GetAlt_single_source2().GetRule_select_stmt2())
                     .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
+            }
             case NSQLv1Generated::TRule_single_source::kAltSingleSource3:
                 return Build(rule.GetAlt_single_source3().GetRule_values_stmt2())
                     .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
@@ -990,19 +1033,8 @@ private:
     }
 
     TSQLResult<TYqlSource> Build(const TRule_table_ref& rule) {
-        if (const auto* name = GetCTERef(rule)) {
-            TString id = Id(*name, *this);
-            if (id.empty()) {
-                return std::unexpected(ESQLError::Basic);
-            }
-
-            if (const TReadyCTE* cte = CTEs_->Get(id)) {
-                const auto& [alias, value] = *cte;
-                return TYqlSource{
-                    .Node = value,
-                    .Alias = alias,
-                };
-            }
+        if (auto maybe = TryBuildCTE(rule)) {
+            return std::move(*maybe);
         }
 
         const bool isClusterExplicit = rule.HasBlock1();
@@ -1027,7 +1059,49 @@ private:
             isClusterExplicit);
     }
 
-    TSQLResult<TYqlSource> Build(
+    TMaybe<TSQLResult<TYqlSource>> TryBuildCTE(const TRule_table_ref& rule) {
+        const auto* name = GetCTERef(rule);
+        if (!name) {
+            return Nothing();
+        }
+
+        TString id = Id(*name, *this);
+        if (id.empty()) {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        const TReadyCTE* cte = CTEs_->Get(id);
+        if (!cte) {
+            return Nothing();
+        }
+
+        if (cte->IsRecursiveNotReady() && cte->Alias.Name != CurrentCTE_) {
+            TString current =
+                CurrentCTE_
+                    .Transform([](auto&& x) { return "'" + x + "'"; })
+                    .GetOrElse("undefined");
+
+            Ctx_.Error() << "Can't reference outer RECURSIVE CTE '" << cte->Alias.Name << "'. "
+                         << "Recursion only with a current CTE is allowed, "
+                         << "which is " << current << " here";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        TNodePtr node;
+        if (cte->IsRecursiveNotReady()) {
+            node = BuildYqlSelf(cte->Alias.Position);
+        } else {
+            node = cte->Node;
+        }
+
+        return TYqlSource{
+            .Node = std::move(node),
+            .Alias = cte->Alias,
+        };
+    }
+
+    TSQLResult<TYqlSource>
+    Build(
         const TRule_table_ref::TBlock3& block,
         TString service,
         TDeferredAtom cluster,
@@ -1593,6 +1667,8 @@ private:
 
         return result;
     }
+
+    TMaybe<TString> CurrentCTE_ = Nothing();
 };
 
 NYql::TLangVersion YqlSelectLangVersion() {

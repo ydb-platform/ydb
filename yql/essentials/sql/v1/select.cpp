@@ -666,7 +666,7 @@ public:
                 block = L(block, Y("let", ref, filter));
             }
             if (ctx.EnableSystemColumns) {
-                block = L(block, Y("let", ref, Y("RemoveSystemMembers", ref)));
+                block = L(block, Y("let", ref, RemoveSystemColumns(AstNode(ref), ctx.Settings.ExtraSystemColumnPrefixes)));
             }
         }
         return GroundWithExpr(block, Y("Mux", Q(muxArgs)));
@@ -1432,7 +1432,7 @@ public:
         }
 
         if (ctx.EnableSystemColumns) {
-            block = L(block, Y("let", "core", Y("RemoveSystemMembers", "core")));
+            block = L(block, Y("let", "core", RemoveSystemColumns(AstNode(TString("core")), ctx.Settings.ExtraSystemColumnPrefixes)));
         }
         block = L(block, Y("let", "core", Y("AutoDemux", partitionByKey)));
         if (Having_) {
@@ -2793,7 +2793,7 @@ public:
         if (!With_) {
             auto res = input;
             if (ctx.EnableSystemColumns) {
-                res = Y("RemoveSystemMembers", res);
+                res = RemoveSystemColumns(res, ctx.Settings.ExtraSystemColumnPrefixes);
             }
 
             return res;
@@ -2809,7 +2809,7 @@ public:
         }
 
         if (WithExtFunction_) {
-            auto preTransform = Y("RemoveSystemMembers", inputLabel);
+            auto preTransform = RemoveSystemColumns(AstNode(TString(inputLabel)), ctx.Settings.ExtraSystemColumnPrefixes);
             if (!Terms_.empty()) {
                 preTransform = Y("Map", preTransform, BuildLambda(Pos_, Y("row"), Q(Terms_[0])));
             }

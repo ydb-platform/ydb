@@ -1254,6 +1254,7 @@ message TStreamingQueriesConfig {
     reserved 2;
     optional TExternalStorageConfig ExternalStorage = 3;
     optional TExternalTopicsSettings TopicSdkSettings = 4;
+    optional bool ForbidYqlSysColumnsAndSystemMetadata = 5 [default = true];
 }
 
 message TQueryServiceConfig {

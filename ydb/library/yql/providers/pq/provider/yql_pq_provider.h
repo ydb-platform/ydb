@@ -52,6 +52,7 @@ public:
     bool UseYtflowEngine = false;
     bool EnableTopicsPredicatePushdown = false;
     bool EnablePqConstraintsTransformer = false;
+    bool ForbidYqlSysColumnsAndSystemMetadata = false;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

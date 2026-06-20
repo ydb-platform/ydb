@@ -2338,7 +2338,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetEnableAddColumsWithDefaults(true)
-            .SetEnableShowCreate(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -2454,7 +2453,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetEnableAddColumsWithDefaults(true)
-            .SetEnableShowCreate(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();

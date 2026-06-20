@@ -1277,7 +1277,6 @@ For more details on using data compression for topics, see [here](../../concepts
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 {% endlist %}
@@ -1318,7 +1317,6 @@ For more details on using data compression for topics, see [here](../../concepts
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
@@ -1459,7 +1457,6 @@ All the metadata provided when writing a message is sent to a consumer with the 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
@@ -1693,7 +1690,6 @@ All the metadata provided when writing a message is sent to a consumer with the 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
@@ -2174,7 +2170,6 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
@@ -2294,7 +2289,6 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
@@ -2674,7 +2668,6 @@ Instead of committing messages, the client application may track reading progres
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
@@ -2761,7 +2754,6 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
@@ -3086,7 +3078,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
@@ -3197,7 +3188,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
   The Rust SDK handles partition session stop and close events internally; there is no public API to customize soft or hard interruption handling yet.
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
@@ -3388,7 +3378,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#311](https://github.com/ydb-platform/ydb-rs-sdk/issues/311)
 
 {% endlist %}
@@ -3494,7 +3483,6 @@ Most often, committing is conveniently done within the reader that has read the 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 

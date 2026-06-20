@@ -138,7 +138,6 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -304,7 +303,6 @@ The `String` type is used to store vectors. For details, see the [exact vector s
     Vector search examples for the .NET SDK are not available yet.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 

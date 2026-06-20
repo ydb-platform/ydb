@@ -298,11 +298,28 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAddDependencies> addDeps, TRBOContext& ctx
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
-    Y_UNUSED(ctx);
     auto leftInputType = unionAll->GetLeftInput()->Type;
+    auto rightInputType = unionAll->GetRightInput()->Type;
+    const auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-    // TODO: Add sanity checks.
-    unionAll->Type = leftInputType;
+    TVector<const TItemExprType*> resultItems;
+    resultItems.reserve(unionAll->Columns.size());
+    for (const auto& column : unionAll->Columns) {
+        const auto* leftType = leftStructType->FindItemType(column.GetFullName());
+        const auto* rightType = rightStructType->FindItemType(column.GetFullName());
+        Y_ENSURE(leftType, "Missing UnionAll left source type: " << column.GetFullName());
+        Y_ENSURE(rightType, "Missing UnionAll right source type: " << column.GetFullName());
+
+        // FIXME: This currently does not pass after UnionAll semantic update
+        // Y_ENSURE(IsSameAnnotation(*leftType, *rightType),
+        //     "UnionAll source type mismatch for " << column.GetFullName());
+
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(column.GetFullName(), leftType));
+    }
+
+    auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resultItems);
+    unionAll->Type = ctx.ExprCtx.MakeType<TListExprType>(resultItemType);
     return TStatus::Ok;
 }
 

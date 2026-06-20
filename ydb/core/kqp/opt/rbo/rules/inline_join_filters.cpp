@@ -122,6 +122,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
 
     // We only support various left joins now
     if (join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
+        Y_ENSURE(false, TStringBuilder() << "Join filter in unsupported join type: " << join->JoinKind);
         return input;
     }
 
@@ -165,10 +166,12 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     // We don't support nullable keys at this stage
     auto keyColumns = join->GetLeftInput()->Props.Metadata->KeyColumns;
     if (keyColumns.empty()) {
+        Y_ENSURE(false, "No key columns when inlining join filter");
         return input;
     }
 
     if (!CheckNonNullKeys(join->GetLeftInput(), keyColumns)) {
+        Y_ENSURE(false, "During join filter inlining the keys on the left side cannot be null");
         return input;
     }
 

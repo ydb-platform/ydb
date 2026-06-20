@@ -56,7 +56,7 @@ void AddReadOriginalPredicateDeps(const TOpRead& read, TInfoUnitSet& requiredCol
 
 } // anonymous namespace
 
-TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TPlanProps& props) {
+TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TPlanProps& props, const TInfoUnitSet& keepKeyColumns) {
     TVector<TMapElement> newElements;
     newElements.reserve(map->MapElements.size());
 
@@ -64,10 +64,10 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
         const auto to = mapElement.GetElementName();
         if (mapElement.IsRename()) {
             const auto from = mapElement.GetRename();
-            if (liveOut.contains(to) || props.NameConstraints.IsForbiddenAtOutput(map.get(), from)) {
+            if (liveOut.contains(to) || keepKeyColumns.contains(to) || props.NameConstraints.IsForbiddenAtOutput(map.get(), from)) {
                 newElements.push_back(mapElement);
             }
-        } else if (liveOut.contains(to)) {
+        } else if (liveOut.contains(to) || keepKeyColumns.contains(to)) {
             newElements.push_back(mapElement);
         }
     }
@@ -75,12 +75,12 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
     return newElements;
 }
 
-TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInfoUnitSet& liveOut) {
+TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInfoUnitSet& keepKeyColumns, const TInfoUnitSet& liveOut) {
     TVector<TInfoUnit> newColumns;
     newColumns.reserve(columns.size());
 
     for (const auto& column : columns) {
-        if (liveOut.contains(column)) {
+        if (liveOut.contains(column) || keepKeyColumns.contains(column)) {
             newColumns.push_back(column);
         }
     }

@@ -183,6 +183,115 @@ Y_UNIT_TEST(CannotChangeConsumerType_SharedToStreaming) {
     UNIT_ASSERT_C(issue.contains("Cannot alter consumer type"), issue);
 }
 
+Y_UNIT_TEST(AlterSharedConsumer) {
+    TPqv1SdkTestSetup setup("AlterSharedConsumer");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-alter-keep-shared");
+
+    TCreateTopicSettings createSettings;
+    createSettings.ReadRules({MakeSharedConsumerReadRuleSettings()});
+
+    const auto createStatus = CreateTopicViaSdk(client, path, createSettings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
+
+    {
+        const auto describe = DescribeTopicViaSdk(client, path);
+        UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.TopicSettings().ReadRules().size(), 1u);
+        UNIT_ASSERT(describe.TopicSettings().ReadRules().at(0).SharedConsumer().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(
+            describe.TopicSettings().ReadRules().at(0).SharedConsumer()->GetDefaultProcessingTimeout(),
+            TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(
+            describe.TopicSettings().ReadRules().at(0).SharedConsumer()->GetKeepMessagesOrder(),
+            true);
+    }
+
+    TSharedConsumerDeadLetterPolicySettings deadLetterPolicy;
+    deadLetterPolicy
+        .Enabled(true)
+        .MaxProcessingAttempts(5)
+        .DeleteAction();
+
+    TSharedConsumerSettings sharedConsumer;
+    sharedConsumer
+        .KeepMessagesOrder(true)
+        .DefaultProcessingTimeout(TDuration::Seconds(10))
+        .ReceiveMessageWaitTime(TDuration::Seconds(2))
+        .ReceiveMessageDelay(TDuration::Seconds(4))
+        .DeadLetterPolicy(deadLetterPolicy);
+
+    TAlterTopicSettings alterSettings;
+    alterSettings.ReadRules({
+        TReadRuleSettings{}
+            .ConsumerName(DEFAULT_SHARED_CONSUMER)
+            .StartingMessageTimestamp(TInstant::MilliSeconds(1000))
+            .Version(1)
+            .SharedConsumer(std::make_optional(sharedConsumer)),
+    });
+
+    const auto alterStatus = AlterTopicViaSdk(client, path, alterSettings);
+    UNIT_ASSERT_C(alterStatus.IsSuccess(), "AlterTopic: " << alterStatus.GetIssues().ToOneLineString());
+
+    const auto describe = DescribeTopicViaSdk(client, path);
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+
+    const auto& readRule = describe.TopicSettings().ReadRules().at(0);
+    UNIT_ASSERT(readRule.SharedConsumer().has_value());
+
+    const auto updatedSharedConsumer = readRule.SharedConsumer().value();
+    UNIT_ASSERT_VALUES_EQUAL(updatedSharedConsumer.GetKeepMessagesOrder(), true);
+    UNIT_ASSERT_VALUES_EQUAL(updatedSharedConsumer.GetDefaultProcessingTimeout(), TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(updatedSharedConsumer.GetReceiveMessageWaitTime(), TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(updatedSharedConsumer.GetReceiveMessageDelay(), TDuration::Seconds(4));
+
+    const auto& updatedDeadLetterPolicy = updatedSharedConsumer.GetDeadLetterPolicy();
+    UNIT_ASSERT_VALUES_EQUAL(updatedDeadLetterPolicy.GetEnabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(updatedDeadLetterPolicy.GetMaxProcessingAttempts(), 5u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        updatedDeadLetterPolicy.GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Delete);
+    UNIT_ASSERT_VALUES_EQUAL(updatedDeadLetterPolicy.GetDeadLetterQueue(), "");
+
+    TReadRuleSettings roundTrip;
+    roundTrip.SetSettings(readRule);
+    UNIT_ASSERT(roundTrip.GetSharedConsumer().has_value());
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetKeepMessagesOrder(), true);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDefaultProcessingTimeout(), TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetReceiveMessageWaitTime(), TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetReceiveMessageDelay(), TDuration::Seconds(4));
+    UNIT_ASSERT_VALUES_EQUAL(
+        roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Delete);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetMaxProcessingAttempts(), 5u);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetDeadLetterQueue(), "");
+
+    auto& runtime = setup.GetRuntime();
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(
+        runtime.AllocateEdgeActor(),
+        TString(setup.GetBaseSetup().GetDatabase()),
+        {TString(path)}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
+    const auto& topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    const auto* consumer = NPQ::GetConsumer(topic.Info->Description.GetPQTabletConfig(), DEFAULT_SHARED_CONSUMER);
+    UNIT_ASSERT(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
+        NKikimrPQ::TPQTabletConfig::EConsumerType_Name(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetKeepMessageOrder(), true);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultProcessingTimeoutSeconds(), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultReceiveMessageWaitTimeMs(), 2000u);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetDefaultDelayMessageTimeMs(), 4000u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(consumer->GetDeadLetterPolicy()),
+        NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE));
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetMaxProcessingAttempts(), 5u);
+}
 
 Y_UNIT_TEST(AlterStreamingConsumer) {
     TPqv1SdkTestSetup setup("AlterStreamingConsumer");

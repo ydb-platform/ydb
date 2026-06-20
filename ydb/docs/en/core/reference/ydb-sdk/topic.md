@@ -1273,19 +1273,10 @@ For more details on using data compression for topics, see [here](../../concepts
 
 - Rust
 
-  ```rust
-  use ydb::{TopicWriter, TopicWriterOptionsBuilder, YdbResult};
+  Per-writer message compression codec is not configurable in the Rust SDK yet; messages are sent with the `Raw` codec.
 
-  let writer: TopicWriter = topic_client
-      .create_writer_with_params(
-          TopicWriterOptionsBuilder::default()
-              .topic_path("/local/my-topic".into())
-              .producer_id("group-id".into())
-              .message_group_id("group-id".into())
-              .build()?,
-      )
-      .await?;
-  ```
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 {% endlist %}
 
@@ -1855,6 +1846,16 @@ Topic can have several Consumers and for each of them server stores its own read
   });
   ```
 
+- Rust
+
+  ```rust
+  use ydb::YdbResult;
+
+  let mut reader = topic_client
+      .create_reader("my-consumer", "/local/my-topic")
+      .await?;
+  ```
+
 {% endlist %}
 
 Additional options are used to specify multiple topics and other parameters.
@@ -1978,14 +1979,22 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
 - Rust
 
   ```rust
-  use ydb::{Codec, CreateTopicOptionsBuilder, YdbResult};
+  use std::time::{Duration, SystemTime};
 
-  topic_client
-      .create_topic(
-          "/local/my-topic".into(),
-          CreateTopicOptionsBuilder::default()
-              .min_active_partitions(3)
-              .supported_codecs(vec![Codec::Raw, Codec::Zstd])
+  use ydb::{TopicReaderOptionsBuilder, TopicSelector, TopicSelectors, YdbResult};
+
+  let mut reader = topic_client
+      .create_reader_with_params(
+          TopicReaderOptionsBuilder::default()
+              .consumer("my-consumer".into())
+              .topic(TopicSelectors(vec![
+                  TopicSelector::new("/local/my-topic"),
+                  TopicSelector {
+                      path: "/local/my-specific-topic".into(),
+                      partition_ids: None,
+                      read_from: Some(SystemTime::now() - Duration::from_secs(3600)),
+                  },
+              ]))
               .build()?,
       )
       .await?;
@@ -2520,7 +2529,7 @@ If a commit fails with an error, the application should log it and continue; it 
   ```rust
   let batch = reader.read_batch().await?;
   reader.commit(batch.get_commit_marker())?;
-  // или с ожиданием ack от сервера:
+  // or with waiting for server acknowledgment:
   reader.commit_with_ack(batch.get_commit_marker()).await?;
   ```
 
@@ -3041,13 +3050,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 - Rust
 
-  ```rust
-  use ydb::YdbResult;
+  The Rust SDK handles partition session stop and close events internally; there is no public API to customize soft or hard interruption handling yet.
 
-  let mut reader = topic_client
-      .create_reader("my-consumer", "/local/my-topic")
-      .await?;
-  ```
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
 
@@ -3154,13 +3160,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 - Rust
 
-  ```rust
-  use ydb::YdbResult;
+  The Rust SDK handles partition session stop and close events internally; there is no public API to customize soft or hard interruption handling yet.
 
-  let mut reader = topic_client
-      .create_reader("my-consumer", "/local/my-topic")
-      .await?;
-  ```
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
 

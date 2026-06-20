@@ -1323,19 +1323,10 @@
 
 - Rust
 
-  ```rust
-  use ydb::{TopicWriter, TopicWriterOptionsBuilder, YdbResult};
+  Выбор кодека сжатия при записи в Rust SDK пока недоступен; сообщения отправляются с кодеком `Raw`.
 
-  let writer: TopicWriter = topic_client
-      .create_writer_with_params(
-          TopicWriterOptionsBuilder::default()
-              .topic_path("/local/my-topic".into())
-              .producer_id("group-id".into())
-              .message_group_id("group-id".into())
-              .build()?,
-      )
-      .await?;
-  ```
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 - PHP
 
@@ -1967,16 +1958,10 @@
 - Rust
 
   ```rust
-  use ydb::{Codec, CreateTopicOptionsBuilder, YdbResult};
+  use ydb::YdbResult;
 
-  topic_client
-      .create_topic(
-          "/local/my-topic".into(),
-          CreateTopicOptionsBuilder::default()
-              .min_active_partitions(3)
-              .supported_codecs(vec![Codec::Raw, Codec::Zstd])
-              .build()?,
-      )
+  let mut reader = topic_client
+      .create_reader("my-consumer", "/local/my-topic")
       .await?;
   ```
 
@@ -2108,14 +2093,22 @@
 - Rust
 
   ```rust
-  use ydb::{Codec, CreateTopicOptionsBuilder, YdbResult};
+  use std::time::{Duration, SystemTime};
 
-  topic_client
-      .create_topic(
-          "/local/my-topic".into(),
-          CreateTopicOptionsBuilder::default()
-              .min_active_partitions(3)
-              .supported_codecs(vec![Codec::Raw, Codec::Zstd])
+  use ydb::{TopicReaderOptionsBuilder, TopicSelector, TopicSelectors, YdbResult};
+
+  let mut reader = topic_client
+      .create_reader_with_params(
+          TopicReaderOptionsBuilder::default()
+              .consumer("my-consumer".into())
+              .topic(TopicSelectors(vec![
+                  TopicSelector::new("/local/my-topic"),
+                  TopicSelector {
+                      path: "/local/my-specific-topic".into(),
+                      partition_ids: None,
+                      read_from: Some(SystemTime::now() - Duration::from_secs(3600)),
+                  },
+              ]))
               .build()?,
       )
       .await?;
@@ -3262,13 +3255,10 @@
 
 - Rust
 
-  ```rust
-  use ydb::YdbResult;
+  Rust SDK обрабатывает события остановки и закрытия partition session внутренне; публичного API для настройки мягкого или жёсткого прерывания чтения пока нет.
 
-  let mut reader = topic_client
-      .create_reader("my-consumer", "/local/my-topic")
-      .await?;
-  ```
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
 
@@ -3383,13 +3373,10 @@
 
 - Rust
 
-  ```rust
-  use ydb::YdbResult;
+  Rust SDK обрабатывает события остановки и закрытия partition session внутренне; публичного API для настройки мягкого или жёсткого прерывания чтения пока нет.
 
-  let mut reader = topic_client
-      .create_reader("my-consumer", "/local/my-topic")
-      .await?;
-  ```
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
 

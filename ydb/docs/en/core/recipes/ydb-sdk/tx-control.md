@@ -1718,10 +1718,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   .await?;
   ```
 
-  {% note info %}
-
-  {% endnote %}
-
 - PHP
 
   Snapshot Read-Write mode is not supported in the PHP SDK.

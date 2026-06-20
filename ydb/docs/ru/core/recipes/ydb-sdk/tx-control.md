@@ -1972,10 +1972,6 @@
   .await?;
   ```
 
-  {% note info %}
-
-  {% endnote %}
-
 - PHP
 
   Режим Snapshot Read-Write не поддерживается в PHP SDK.

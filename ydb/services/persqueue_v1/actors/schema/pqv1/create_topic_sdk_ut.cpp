@@ -168,6 +168,9 @@ Y_UNIT_TEST(DescribeTopicReturnsSharedConsumerSettings) {
     const auto& deadLetterPolicy = sharedConsumer.GetDeadLetterPolicy();
     UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetEnabled(), true);
     UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        deadLetterPolicy.GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Move);
     UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
 
     TReadRuleSettings roundTrip;
@@ -176,6 +179,100 @@ Y_UNIT_TEST(DescribeTopicReturnsSharedConsumerSettings) {
     UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetKeepMessagesOrder(), true);
     UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDefaultProcessingTimeout(), TDuration::Seconds(3));
     UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
+}
+
+Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionUnspecified) {
+    TPqv1SdkTestSetup setup("DescribeTopicPreservesDeadLetterActionUnspecified");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-dlp-unspecified");
+
+    TCreateTopicSettings settings;
+    settings.ReadRules({
+        MakeSharedConsumerReadRuleSettings(
+            DEFAULT_SHARED_CONSUMER,
+            TSharedConsumerDeadLetterPolicySettings::EAction::Unspecified),
+    });
+
+    const auto createStatus = CreateTopicViaSdk(client, path, settings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
+
+    const auto describe = DescribeTopicViaSdk(client, path);
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+
+    const auto& readRule = describe.TopicSettings().ReadRules().at(0);
+    UNIT_ASSERT(readRule.SharedConsumer().has_value());
+
+    const auto& deadLetterPolicy = readRule.SharedConsumer()->GetDeadLetterPolicy();
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetEnabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        deadLetterPolicy.GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Unspecified);
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetDeadLetterQueue(), "");
+}
+
+Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionDelete) {
+    TPqv1SdkTestSetup setup("DescribeTopicPreservesDeadLetterActionDelete");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-dlp-delete");
+
+    TCreateTopicSettings settings;
+    settings.ReadRules({
+        MakeSharedConsumerReadRuleSettings(
+            DEFAULT_SHARED_CONSUMER,
+            TSharedConsumerDeadLetterPolicySettings::EAction::Delete),
+    });
+
+    const auto createStatus = CreateTopicViaSdk(client, path, settings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
+
+    const auto describe = DescribeTopicViaSdk(client, path);
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+
+    const auto& readRule = describe.TopicSettings().ReadRules().at(0);
+    UNIT_ASSERT(readRule.SharedConsumer().has_value());
+
+    const auto& deadLetterPolicy = readRule.SharedConsumer()->GetDeadLetterPolicy();
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetEnabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        deadLetterPolicy.GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Delete);
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetDeadLetterQueue(), "");
+}
+
+Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionMove) {
+    TPqv1SdkTestSetup setup("DescribeTopicPreservesDeadLetterActionMove");
+
+    auto& client = setup.GetPersQueueClient();
+    const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-dlp-move");
+
+    TCreateTopicSettings settings;
+    settings.ReadRules({
+        MakeSharedConsumerReadRuleSettings(
+            DEFAULT_SHARED_CONSUMER,
+            TSharedConsumerDeadLetterPolicySettings::EAction::Move,
+            DEFAULT_DEAD_LETTER_QUEUE),
+    });
+
+    const auto createStatus = CreateTopicViaSdk(client, path, settings);
+    UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
+
+    const auto describe = DescribeTopicViaSdk(client, path);
+    UNIT_ASSERT_C(describe.IsSuccess(), "DescribeTopic: " << describe.GetIssues().ToOneLineString());
+
+    const auto& readRule = describe.TopicSettings().ReadRules().at(0);
+    UNIT_ASSERT(readRule.SharedConsumer().has_value());
+
+    const auto& deadLetterPolicy = readRule.SharedConsumer()->GetDeadLetterPolicy();
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetEnabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        deadLetterPolicy.GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Move);
+    UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
 }
 
 } // Y_UNIT_TEST_SUITE(CreateTopic_PQv1SDK)

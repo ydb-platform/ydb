@@ -61,12 +61,25 @@ std::string TPqv1SdkTestSetup::MakeTopicPath(const std::string& topicName) {
     return "/Root/" + topicName;
 }
 
-TReadRuleSettings MakeSharedConsumerReadRuleSettings(const std::string& consumerName) {
+TReadRuleSettings MakeSharedConsumerReadRuleSettings(
+    const std::string& consumerName,
+    TSharedConsumerDeadLetterPolicySettings::EAction deadLetterAction,
+    const std::string& deadLetterQueue)
+{
     TSharedConsumerDeadLetterPolicySettings deadLetterPolicy;
     deadLetterPolicy
         .Enabled(true)
-        .MaxProcessingAttempts(11)
-        .DeadLetterQueue(DEFAULT_DEAD_LETTER_QUEUE);
+        .MaxProcessingAttempts(11);
+    switch (deadLetterAction) {
+        case TSharedConsumerDeadLetterPolicySettings::EAction::Move:
+            deadLetterPolicy.MoveAction(deadLetterQueue);
+            break;
+        case TSharedConsumerDeadLetterPolicySettings::EAction::Delete:
+            deadLetterPolicy.DeleteAction();
+            break;
+        case TSharedConsumerDeadLetterPolicySettings::EAction::Unspecified:
+            break;
+    }
 
     TSharedConsumerSettings sharedConsumer;
     sharedConsumer

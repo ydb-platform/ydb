@@ -37,8 +37,10 @@ TSharedConsumerSettings ConvertProtoToSharedConsumerSettings(
         if (policy.has_condition()) {
             deadLetterPolicy.MaxProcessingAttempts(policy.condition().max_processing_attempts());
         }
-        if (policy.has_move_action()) {
-            deadLetterPolicy.DeadLetterQueue(policy.move_action().dead_letter_queue());
+        if (policy.has_delete_action()) {
+            deadLetterPolicy.DeleteAction();
+        } else if (policy.has_move_action()) {
+            deadLetterPolicy.MoveAction(policy.move_action().dead_letter_queue());
         }
         settings.DeadLetterPolicy(deadLetterPolicy);
     }

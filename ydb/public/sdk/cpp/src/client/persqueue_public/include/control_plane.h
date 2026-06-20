@@ -45,13 +45,32 @@ private:
 struct TSharedConsumerDeadLetterPolicySettings {
     using TSelf = TSharedConsumerDeadLetterPolicySettings;
 
+    enum class EAction {
+        Unspecified = 0,
+        Move = 1,
+        Delete = 2,
+    };
+
     FLUENT_SETTING_DEFAULT(bool, Enabled, false);
     FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 0);
     FLUENT_SETTING(std::string, DeadLetterQueue);
+    FLUENT_SETTING_DEFAULT(EAction, Action, EAction::Unspecified);
 
     bool GetEnabled() const { return Enabled_; }
     ui32 GetMaxProcessingAttempts() const { return MaxProcessingAttempts_; }
     const std::string& GetDeadLetterQueue() const { return DeadLetterQueue_; }
+    EAction GetAction() const { return Action_; }
+
+    TSelf& DeleteAction() {
+        Action_ = EAction::Delete;
+        return *this;
+    }
+
+    TSelf& MoveAction(const std::string& deadLetterQueue) {
+        Action_ = EAction::Move;
+        DeadLetterQueue_ = deadLetterQueue;
+        return *this;
+    }
 };
 
 struct TSharedConsumerSettings {

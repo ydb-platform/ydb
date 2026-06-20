@@ -60,11 +60,16 @@ public:
             if (deadLetterPolicy.MaxProcessingAttempts_) {
                 protoDeadLetterPolicy.mutable_condition()->set_max_processing_attempts(deadLetterPolicy.MaxProcessingAttempts_);
             }
-            if (!deadLetterPolicy.DeadLetterQueue_.empty()) {
-                protoDeadLetterPolicy.mutable_move_action()->set_dead_letter_queue(
-                    TStringType{deadLetterPolicy.DeadLetterQueue_});
-            } else {
-                protoDeadLetterPolicy.mutable_delete_action();
+            switch (deadLetterPolicy.Action_) {
+                case TSharedConsumerDeadLetterPolicySettings::EAction::Move:
+                    protoDeadLetterPolicy.mutable_move_action()->set_dead_letter_queue(
+                        TStringType{deadLetterPolicy.DeadLetterQueue_});
+                    break;
+                case TSharedConsumerDeadLetterPolicySettings::EAction::Delete:
+                    protoDeadLetterPolicy.mutable_delete_action();
+                    break;
+                case TSharedConsumerDeadLetterPolicySettings::EAction::Unspecified:
+                    break;
             }
         }
     }

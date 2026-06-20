@@ -33,7 +33,10 @@ private:
 };
 
 NYdb::NPersQueue::TReadRuleSettings MakeSharedConsumerReadRuleSettings(
-    const std::string& consumerName = DEFAULT_SHARED_CONSUMER);
+    const std::string& consumerName = DEFAULT_SHARED_CONSUMER,
+    NYdb::NPersQueue::TSharedConsumerDeadLetterPolicySettings::EAction deadLetterAction =
+        NYdb::NPersQueue::TSharedConsumerDeadLetterPolicySettings::EAction::Move,
+    const std::string& deadLetterQueue = DEFAULT_DEAD_LETTER_QUEUE);
 
 NYdb::TStatus CreateTopicViaSdk(
     NYdb::NPersQueue::TPersQueueClient& client,

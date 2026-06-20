@@ -399,7 +399,7 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
         rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(false));
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
         rules.emplace_back(std::make_unique<TPushAppendIntoMapRule>());
         rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>(pushAppendsUnderFilter));
@@ -413,7 +413,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         rules.emplace_back(std::make_unique<TPushRenameThroughPassThroughMapRule>());
         rules.emplace_back(std::make_unique<TPushRenameThroughAggregateKeyRule>());
         rules.emplace_back(std::make_unique<TPushRenameThroughJoinSideRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(false));
         rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
     };
 
@@ -423,7 +423,6 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
 
-    // Inline join filters. FIXME: Move after inlining when adding support for more advanced decorelation
     TVector<std::unique_ptr<IRule>> joinFiltersInlineRules;
     joinFiltersInlineRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     joinFiltersInlineRules.emplace_back(std::make_unique<TFuseFiltersRule>());
@@ -467,6 +466,12 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStageRules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
     logicalStageRules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
+
+    // Prune all columns, including key columns
+    TVector<std::unique_ptr<IRule>> finalPruningStageRules;
+    finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+    finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Final pruning", std::move(finalPruningStageRules)));
 
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;

@@ -110,7 +110,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     }
 
                     if (needToLog && rule->LogRule) {
-                        YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
+                        YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx, EPrintPlanOptions::PrintBasicMetadata);
                     }
 
                     ComputeRequiredProps(root, Props, ctx, StageName);

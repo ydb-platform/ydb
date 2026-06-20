@@ -6,6 +6,7 @@ RECURSE(
     partcheck
     query_replay
     query_replay_yt
+    ssh_ya
     stress_tool
     tsserver
     tstool

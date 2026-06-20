@@ -178,6 +178,9 @@ Y_UNIT_TEST(DescribeTopicReturnsSharedConsumerSettings) {
     UNIT_ASSERT(roundTrip.GetSharedConsumer().has_value());
     UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetKeepMessagesOrder(), true);
     UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDefaultProcessingTimeout(), TDuration::Seconds(3));
+    UNIT_ASSERT_VALUES_EQUAL(
+        roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Move);
     UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
 }
 
@@ -210,6 +213,16 @@ Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionUnspecified) {
         deadLetterPolicy.GetAction(),
         TSharedConsumerDeadLetterPolicySettings::EAction::Unspecified);
     UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetDeadLetterQueue(), "");
+
+    TReadRuleSettings roundTrip;
+    roundTrip.SetSettings(readRule);
+    UNIT_ASSERT(roundTrip.GetSharedConsumer().has_value());
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetEnabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Unspecified);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetDeadLetterQueue(), "");
 }
 
 Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionDelete) {
@@ -241,6 +254,16 @@ Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionDelete) {
         deadLetterPolicy.GetAction(),
         TSharedConsumerDeadLetterPolicySettings::EAction::Delete);
     UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetDeadLetterQueue(), "");
+
+    TReadRuleSettings roundTrip;
+    roundTrip.SetSettings(readRule);
+    UNIT_ASSERT(roundTrip.GetSharedConsumer().has_value());
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetEnabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Delete);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetDeadLetterQueue(), "");
 }
 
 Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionMove) {
@@ -273,6 +296,16 @@ Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionMove) {
         deadLetterPolicy.GetAction(),
         TSharedConsumerDeadLetterPolicySettings::EAction::Move);
     UNIT_ASSERT_VALUES_EQUAL(deadLetterPolicy.GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
+
+    TReadRuleSettings roundTrip;
+    roundTrip.SetSettings(readRule);
+    UNIT_ASSERT(roundTrip.GetSharedConsumer().has_value());
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetEnabled(), true);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetMaxProcessingAttempts(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetAction(),
+        TSharedConsumerDeadLetterPolicySettings::EAction::Move);
+    UNIT_ASSERT_VALUES_EQUAL(roundTrip.GetSharedConsumer()->GetDeadLetterPolicy().GetDeadLetterQueue(), DEFAULT_DEAD_LETTER_QUEUE);
 }
 
 } // Y_UNIT_TEST_SUITE(CreateTopic_PQv1SDK)

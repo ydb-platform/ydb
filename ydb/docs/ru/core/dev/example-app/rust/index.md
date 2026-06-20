@@ -6,7 +6,7 @@
 
 ## Получение и запуск {#download}
 
-Нужны [Git](https://git-scm.com/downloads) и [Rust](https://www.rust-lang.org/tools/install) 1.85+. Установка SDK — в [документации](../../../reference/ydb-sdk/install.md).
+Нужны [Git](https://git-scm.com/downloads) и [Rust](https://www.rust-lang.org/tools/install) 1.85+. Об установке SDK — см. [{#T}](../../../reference/ydb-sdk/install.md).
 
 Клонируйте репозиторий:
 

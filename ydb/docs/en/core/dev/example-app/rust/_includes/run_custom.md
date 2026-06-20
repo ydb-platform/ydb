@@ -1,6 +1,6 @@
 To run the example against any available {{ ydb-short-name }} database, provide the [endpoint](../../../../concepts/connect.md#endpoint) and the [database path](../../../../concepts/connect.md#database).
 
-If authentication is enabled, choose an [authentication mode](../../../../security/authentication.md) and set the corresponding environment variable.
+If authentication is enabled, choose an [authentication mode](../../../../security/authentication.md) and set the corresponding environment variables.
 
 ```bash
 ( export <auth_mode_var>="<auth_mode_value>" && \

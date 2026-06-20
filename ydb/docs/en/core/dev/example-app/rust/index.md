@@ -6,7 +6,7 @@ This page provides a detailed description of the code for a [test app](https://g
 
 ## Downloading and starting {#download}
 
-The instructions below assume that [Git](https://git-scm.com/downloads) and [Rust](https://www.rust-lang.org/tools/install) (1.85+) are installed. Install the SDK from crates.io or clone the repository — see [Installing the SDK](../../../reference/ydb-sdk/install.md).
+[Git](https://git-scm.com/downloads) and [Rust](https://www.rust-lang.org/tools/install) 1.85+ are required. For SDK installation, see [{#T}](../../../reference/ydb-sdk/install.md).
 
 Clone the repository:
 

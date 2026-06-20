@@ -58,6 +58,8 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     TVector<TExpression> pushRight;
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
 
+    bool canPushRight = join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly";
+
     for (const auto& conj : conjuncts) {
         if (conj.MaybeEquiJoinCondition()) {
             TEquiJoinCondition cond(conj);
@@ -73,7 +75,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
 
         if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {
             pushLeft.push_back(conj);
-        } else if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty()) {
+        } else if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty() && canPushRight) {
             pushRight.push_back(conj);
         } else {
             topLevelPreds.push_back(conj);
@@ -116,9 +118,6 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
             } else if (!pushLeft.size()) {
                 return input;
             }
-        } else if (join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly") {
-            // Keep on top.
-            topLevelPreds.insert(topLevelPreds.end(), pushRight.begin(), pushRight.end());
         } else {
             auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
             rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);

@@ -1476,7 +1476,7 @@
         String connectionUrl = args[0];
 
         try (Connection connection = DriverManager.getConnection(connectionUrl)) {
-            connection.setAutoCommit(false); 
+            connection.setAutoCommit(false);
             connection.setReadOnly(true); // Будет использован  Snapshot Read-Only
             connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
 
@@ -1799,7 +1799,7 @@
         props.setProperty("repeatableReadEnabled", "true"); // Режим REPEATABLE_READ не доступен по умолчанию
 
         try (Connection connection = DriverManager.getConnection(connectionUrl, props)) {
-            connection.setAutoCommit(false); 
+            connection.setAutoCommit(false);
             connection.setReadOnly(false);
             connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
 

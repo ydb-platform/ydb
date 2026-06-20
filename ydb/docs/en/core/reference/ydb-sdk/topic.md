@@ -245,7 +245,7 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
     producer: "demo-producer",
   });
   ```
-  
+
 - Rust
 
   ```rust
@@ -1276,6 +1276,8 @@ For more details on using data compression for topics, see [here](../../concepts
   Per-writer message compression codec is not configurable in the Rust SDK yet; messages are sent with the `Raw` codec.
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 {% endlist %}
@@ -1285,30 +1287,45 @@ For more details on using data compression for topics, see [here](../../concepts
 {% list tabs group=lang %}
 
 - C++
+  If no ProducerId is specified on write session setup, the session runs in no-deduplication mode. The example below demonstrates such a session setup:
 
-If no ProducerId is specified on write session setup, the session runs in no-deduplication mode. The example below demonstrates such a session setup:
+  ```cpp
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
+      .Path(myTopicPath);
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
 
-```cpp
-auto settings = NYdb::NTopic::TWriteSessionSettings()
-    .Path(myTopicPath);
-
-auto session = topicClient.CreateWriteSession(settings);
-```
-
-If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
+  If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
 
 - Go
-
   In **ydb-go-sdk**, when you create a writer without explicitly passing `topicoptions.WithWriterProducerID`, the SDK still assigns a producer ID (it generates one automatically). A mode equivalent to omitting `ProducerId` in the C++ example above is not available in the current SDK version.
 
 - Java
-
   This functionality is not currently supported.
+
+- Python
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Using message metadata feature {#messagemeta}
@@ -1442,7 +1459,10 @@ All the metadata provided when writing a message is sent to a consumer with the 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
 {% endlist %}
 
 ### Write in a transaction {#write-tx}
@@ -1673,7 +1693,10 @@ All the metadata provided when writing a message is sent to a consumer with the 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
 {% endlist %}
 
 ## Reading messages {#reading}
@@ -2150,7 +2173,10 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 {% endlist %}
 
 #### Reading message batches
@@ -2268,7 +2294,10 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 {% endlist %}
 
 ### Reading with a commit {#commit}
@@ -2644,8 +2673,10 @@ Instead of committing messages, the client application may track reading progres
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-  
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 {% endlist %}
 
 ### Reading without a Consumer {#no-consumer}
@@ -2730,8 +2761,10 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-  
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 {% endlist %}
 
 ### Reading in a transaction {#read-tx}
@@ -2985,7 +3018,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
        processBatch(batch)
        _ = r.Commit(batch.Context(), batch)
    }
-
    ```
 
 - Python
@@ -3053,6 +3085,8 @@ In case of a _hard interruption_, the client receives a notification that it is 
   The Rust SDK handles partition session stop and close events internally; there is no public API to customize soft or hard interruption handling yet.
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
@@ -3163,6 +3197,8 @@ In case of a _hard interruption_, the client receives a notification that it is 
   The Rust SDK handles partition session stop and close events internally; there is no public API to customize soft or hard interruption handling yet.
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
@@ -3252,7 +3288,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
     "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
     "github.com/ydb-platform/ydb-go-sdk/v3/topic/topictypes"
   )
-  
+
   // full support mode (autoscaling processing in SDK, by default)
   reader, err := db.Topic().StartReader(
     "consumer",
@@ -3351,7 +3387,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#311](https://github.com/ydb-platform/ydb-rs-sdk/issues/311)
+
 {% endlist %}
 
 ### Commit outside the reader {#commit-outside-the-reader}
@@ -3455,5 +3494,8 @@ Most often, committing is conveniently done within the reader that has read the 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 {% endlist %}

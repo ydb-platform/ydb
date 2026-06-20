@@ -201,5 +201,7 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
+
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#239](https://github.com/ydb-platform/ydb-rs-sdk/issues/239)
+
 {% endlist %}

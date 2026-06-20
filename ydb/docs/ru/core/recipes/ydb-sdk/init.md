@@ -19,7 +19,7 @@
       auto driverConfig = NYdb::TDriverConfig("grpc://localhost:2136/local");
 
       NYdb::TDriver driver(driverConfig);
-      
+
       // ...
 
       driver.Stop();

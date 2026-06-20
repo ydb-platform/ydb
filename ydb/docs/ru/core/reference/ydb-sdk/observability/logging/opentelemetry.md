@@ -262,14 +262,14 @@
   #include <library/cpp/logger/backend.h>
   #include <library/cpp/logger/record.h>
   #include <memory>
-  
+
   namespace otlp     = opentelemetry::exporter::otlp;
   namespace logs_sdk = opentelemetry::sdk::logs;
   namespace logs_api = opentelemetry::logs;
   namespace resource = opentelemetry::sdk::resource;
-  
+
   namespace {
-  
+
   class TOtelLogBackend final : public TLogBackend {
   public:
     explicit TOtelLogBackend(opentelemetry::nostd::shared_ptr<logs_api::Logger> logger)
@@ -300,7 +300,7 @@
     opentelemetry::nostd::shared_ptr<logs_api::Logger> Logger_;
   };
   } // namespace
-  
+
   int main() {
     // 1. Настраиваем провайдер логов OTel с OTLP-экспортёром
     otlp::OtlpGrpcLogRecordExporterOptions exporterOpts;
@@ -336,4 +336,5 @@
   {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)
+
 {% endlist %}

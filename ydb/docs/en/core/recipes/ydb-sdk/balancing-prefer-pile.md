@@ -46,7 +46,6 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#491](https://github.com/ydb-platform/ydb-rs-sdk/issues/491)
 
 {% endlist %}

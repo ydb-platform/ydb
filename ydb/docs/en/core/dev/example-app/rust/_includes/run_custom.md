@@ -3,10 +3,10 @@ To run the example against any available {{ ydb-short-name }} database, provide 
 If authentication is enabled, choose an [authentication mode](../../../../security/authentication.md) and set the corresponding environment variables.
 
 ```bash
-  export <auth_mode_var>="<auth_mode_value>"
-  export YDB_CONNECTION_STRING="<endpoint>/<database>"
-  cd ydb-rs-sdk/ydb
-  cargo run --example basic
+export <auth_mode_var>="<auth_mode_value>"
+export YDB_CONNECTION_STRING="<endpoint>/<database>"
+cd ydb-rs-sdk/ydb
+cargo run --example basic
 ```
 
 where
@@ -19,8 +19,8 @@ where
 For example:
 
 ```bash
-  export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..."
-  export YDB_CONNECTION_STRING="grpcs://ydb.example.com:2135/somepath/somelocation"
-  cd ydb-rs-sdk/ydb
-  cargo run --example basic
+export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..."
+export YDB_CONNECTION_STRING="grpcs://ydb.example.com:2135/somepath/somelocation"
+cd ydb-rs-sdk/ydb
+cargo run --example basic
 ```

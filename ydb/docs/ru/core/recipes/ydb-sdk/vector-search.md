@@ -138,7 +138,6 @@
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Отслеживать прогресс или проголосовать за поддержку: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -167,7 +166,6 @@
     Примеры векторного поиска для PHP SDK пока недоступны.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Отслеживать прогресс или проголосовать за поддержку: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 

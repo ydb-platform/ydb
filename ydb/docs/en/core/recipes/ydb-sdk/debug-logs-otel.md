@@ -347,7 +347,6 @@ The log collection method depends on the language and infrastructure — there i
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)
 
 {% endlist %}

@@ -168,7 +168,6 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
 {% endlist %}
@@ -339,7 +338,6 @@ The `String` type is used to store vectors. For details, see the [exact vector s
     Vector search examples for the PHP SDK are not available yet.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
@@ -925,7 +923,6 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -1023,7 +1020,6 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
     Vector search examples for the PHP SDK are not available yet.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
@@ -1260,7 +1256,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -1268,7 +1263,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     Vector index creation and a full end-to-end program for the JavaScript SDK are not available yet.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Track progress or vote for support: [ydb-js-sdk#627](https://github.com/ydb-platform/ydb-js-sdk/issues/627)
 
@@ -1296,7 +1290,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     Vector search examples for the PHP SDK are not available yet.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
@@ -1911,7 +1904,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -1979,7 +1971,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
     Vector search examples for the PHP SDK are not available yet.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
@@ -2362,7 +2353,6 @@ The following example combines all the steps above:
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -2370,7 +2360,6 @@ The following example combines all the steps above:
     Vector index creation and a full end-to-end program for the JavaScript SDK are not available yet.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Track progress or vote for support: [ydb-js-sdk#627](https://github.com/ydb-platform/ydb-js-sdk/issues/627)
 
@@ -2395,7 +2384,6 @@ The following example combines all the steps above:
     Vector search examples for the PHP SDK are not available yet.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 

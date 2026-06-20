@@ -88,7 +88,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    if (!joinConditions.empty()) {
+    if (join->JoinKind == "Cross" && !joinConditions.empty()) {
         join->JoinKind = "Inner";
     }
 

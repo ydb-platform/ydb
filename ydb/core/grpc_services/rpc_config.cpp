@@ -375,8 +375,7 @@ private:
 
         if (metadata.Database) {
             TargetDatabase = metadata.Database;
-        }
-        else {
+        } else {
             Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata",
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
             return;
@@ -388,6 +387,19 @@ private:
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
             return;
         }
+
+        {
+            const auto& maybeDatabaseName = Request_->GetDatabaseName();
+            if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
+                if (NKikimr::CanonizePath(*TargetDatabase) != NKikimr::CanonizePath(maybeDatabaseName.GetRef())) {
+                    Reply(Ydb::StatusIds::BAD_REQUEST,
+                        "Database in config metadata does not match the requested database.",
+                        NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+                    return;
+                }
+            }
+        }
+
         bool isAdministrator = NKikimr::IsAdministrator(AppData(), Request_->GetSerializedToken());
         if (!isAdministrator) {
             auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();

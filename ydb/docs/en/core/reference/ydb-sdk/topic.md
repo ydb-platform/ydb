@@ -2635,6 +2635,7 @@ Instead of committing messages, the client application may track reading progres
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 {% endlist %}
 
@@ -2720,6 +2721,7 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 {% endlist %}
 

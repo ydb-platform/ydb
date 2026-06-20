@@ -18,7 +18,8 @@ where
 For example:
 
 ```bash
-( export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." && \
-  export YDB_CONNECTION_STRING="grpcs://ydb.example.com:2135/somepath/somelocation" && \
-  cd ydb-rs-sdk/ydb && cargo run --example basic )
+  export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..."
+  export YDB_CONNECTION_STRING="grpcs://ydb.example.com:2135/somepath/somelocation"
+  cd ydb-rs-sdk/ydb
+  cargo run --example basic
 ```

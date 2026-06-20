@@ -162,6 +162,7 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  
   Для распределённой трассировки используйте [`tracing`](https://docs.rs/tracing) и экспорт через OpenTelemetry ([#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)).
 
 - PHP

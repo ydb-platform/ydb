@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -881,10 +882,24 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    // TODO: flown4qqqq. Need to remove.
-    TFuture<TGenericResult> SetConstraint(const TString&, TVector<TSetColumnConstraintSettings>&&) override {
-        TString error = "NotImplemented";
-        return MakeFuture<TGenericResult>(ResultFromError<TGenericResult>(error));
+    TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) override {
+        CHECK_PREPARED_DDL(SetConstraint);
+
+        auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+        auto& phyTx = *phyQuery.AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+        auto* setConstraintOp = phyTx.MutableSchemeOperation()->MutableSetConstraint();
+        setConstraintOp->SetTablePath(tableName);
+        for (auto& s : settings) {
+            if (s.GetConstraint() == TSetColumnConstraintSettings::NOT_NULL) {
+                setConstraintOp->AddNotNullColumns(s.GetColumnName());
+            }
+        }
+
+        TGenericResult result;
+        result.SetSuccess();
+        return MakeFuture(result);
     }
 
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {

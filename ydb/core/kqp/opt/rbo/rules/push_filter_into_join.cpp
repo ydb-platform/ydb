@@ -66,6 +66,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
 
             // We cannot push filter into join conditions of a LeftOnly join - will break semantics
             if(join->JoinKind == "LeftOnly") {
+                topLevelPreds.push_back(conj);
                 continue;
             }
 

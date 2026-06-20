@@ -19,8 +19,8 @@
 ```mermaid
 sequenceDiagram
     participant Топик
+    participant Запрос as Потоковый запрос
     participant Приёмник
-    participant Приемник
 
     Топик->>Запрос: событие, ts = 10с
     Note over Запрос: watermark = 5с
@@ -28,7 +28,7 @@ sequenceDiagram
     Note over Запрос: watermark = 7с
     Топик->>Запрос: событие, ts = 18с
     Note over Запрос: watermark = 13с<br/>Окно [0, 10) закрыто
-    Запрос->>Приемник: результат окна [0, 10)
+    Запрос->>Приёмник: результат окна [0, 10)
     Топик->>Запрос: событие, ts = 8с
     Note over Запрос: ts=8 меньше watermark=13<br/>Событие будет отброшено
 ```

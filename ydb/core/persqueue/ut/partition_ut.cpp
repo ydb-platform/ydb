@@ -146,6 +146,8 @@ protected:
         TMaybe<size_t> Count;
         TMaybe<ui64> PlanStep;
         TMaybe<ui64> TxId;
+        TMaybe<ui64> MetaStartOffset;
+        TMaybe<ui64> MetaEndOffset;
         THashMap<size_t, TUserInfoMatcher> UserInfos;
         THashMap<size_t, TDeleteRangeMatcher> DeleteRanges;
     };
@@ -573,12 +575,27 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
     Cerr << "Got cmd write: \n" << event->Record.DebugString() << Endl;
+    bool metaFound = false;
     for (unsigned i = 0; i < event->Record.CmdWriteSize(); ++i) {
         auto& cmd = event->Record.GetCmdWrite(i);
         TString key = cmd.GetKey();
 
         UNIT_ASSERT(key.size() >= 1);
         switch (key[0]) {
+        case TKeyPrefix::TypeMeta: {
+            NKikimrPQ::TPartitionMeta meta;
+            UNIT_ASSERT(meta.ParseFromString(cmd.GetValue()));
+            if (matcher.MetaStartOffset.Defined()) {
+                UNIT_ASSERT(meta.HasStartOffset());
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaStartOffset, meta.GetStartOffset());
+            }
+            if (matcher.MetaEndOffset.Defined()) {
+                UNIT_ASSERT(meta.HasEndOffset());
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaEndOffset, meta.GetEndOffset());
+            }
+            metaFound = true;
+            break;
+        }
         case TKeyPrefix::TypeTxMeta: {
             NKikimrPQ::TPartitionTxMeta meta;
             UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
@@ -657,6 +674,10 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
             TString consumer = key.substr(12);
             UNIT_ASSERT_VALUES_EQUAL(*deleteRange.Consumer, consumer);
         }
+    }
+
+    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined()) {
+        UNIT_ASSERT(metaFound);
     }
 }
 

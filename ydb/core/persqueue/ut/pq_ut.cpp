@@ -40,6 +40,36 @@ void SetEnableTopicRetentionDeleteLastBlob(TTestContext& tc) {
     }
 }
 
+void TestPartitionMetaOffsetsSurviveRestart(TTestContext& tc, bool enableRetentionDeleteLastBlob) {
+    if (enableRetentionDeleteLastBlob) {
+        SetEnableTopicRetentionDeleteLastBlob(tc);
+    }
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+    // Retention behaviour is covered by *TestRetention*; here we only check meta round-trip.
+    PQTabletPrepare({.deleteTime = 10'000, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
+    PQGetPartInfo(0, 0, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(7_MB, 'x'));
+    CmdWrite(0, "sourceid_czh_1", data, tc, false, {}, true, "", -1, 100);
+
+    CmdRunCompaction(0, tc);
+
+    data[0].second = TString(1_KB, 'x');
+    ++data[0].first;
+    CmdWrite(0, "sourceid_czh_2", data, tc, false, {}, true, "", -1, 200);
+    ++data[0].first;
+    CmdWrite(0, "sourceid_czh_3", data, tc, false, {}, true, "", -1, 201);
+
+    CmdRunCompaction(0, tc);
+    PQGetPartInfo(100, 202, tc);
+
+    PQTabletRestart(tc);
+    PQGetPartInfo(100, 202, tc);
+}
+
 TString MakeKafkaBatchPayload(
     const TVector<TString>& values,
     NKafka::ECompressionType compression = NKafka::ECompressionType::NONE)
@@ -4100,6 +4130,21 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzh) {
     PQGetPartInfo(100, 202, tc);
     WaitRetentionCleanup(tc, retentionSeconds);
     PQGetPartInfo(202, 202, tc);
+}
+
+Y_UNIT_TEST(TestPartitionMetaOffsetsSurviveRestartWithoutRetentionFlag) {
+    // AddMetaKey / meta load are not gated by EnableTopicRetentionDeleteLastBlob.
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    TestPartitionMetaOffsetsSurviveRestart(tc, false);
+}
+
+Y_UNIT_TEST(TestPartitionMetaOffsetsSurviveRestartWithRetentionFlag) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    TestPartitionMetaOffsetsSurviveRestart(tc, true);
 }
 
 Y_UNIT_TEST(TestRetentionCrossZoneMessages) {

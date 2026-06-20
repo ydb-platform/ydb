@@ -15,7 +15,14 @@ using namespace NSQLv1Generated;
 
 class TSqlTranslation;
 
-using TReadyCTE = std::tuple<TYqlSourceAlias, TNodePtr>;
+struct TReadyCTE {
+    TYqlSourceAlias Alias;
+    TNodePtr Node;
+
+    [[nodiscard]] bool IsRecursiveNotReady() const {
+        return !Node;
+    }
+};
 
 // Do not use it to get a position for a SQL hint.
 // Use TContext::TokenPosition instead.

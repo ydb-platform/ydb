@@ -4,7 +4,6 @@
 #include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
-#include "blobs_reader/events.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"

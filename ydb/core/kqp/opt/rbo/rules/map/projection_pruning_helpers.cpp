@@ -75,7 +75,7 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
     return newElements;
 }
 
-TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInfoUnitSet& keepKeyColumns, const TInfoUnitSet& liveOut) {
+TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns) {
     TVector<TInfoUnit> newColumns;
     newColumns.reserve(columns.size());
 

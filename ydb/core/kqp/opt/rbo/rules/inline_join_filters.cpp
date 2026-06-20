@@ -167,12 +167,10 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     auto keyColumns = join->GetLeftInput()->Props.Metadata->KeyColumns;
     if (keyColumns.empty()) {
         Y_ENSURE(false, "No key columns when inlining join filter");
-        return input;
     }
 
     if (!CheckNonNullKeys(join->GetLeftInput(), keyColumns)) {
         Y_ENSURE(false, "During join filter inlining the keys on the left side cannot be null");
-        return input;
     }
 
     TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;

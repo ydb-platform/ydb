@@ -288,6 +288,9 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
     return Nothing();
 }
 
+// TSchedulingLimitReachedException means the scheduled-event budget was exhausted,
+// not that dispatch failed. PQ UT relies on partial progress here (see pq_ut_common.cpp).
+// Retention tests assert the outcome via PQGetPartInfo after WaitRetentionCleanup.
 void DispatchWithRetry(TTestContext& tc, i32 retriesLeft = 2) {
     while (retriesLeft-- > 0) {
         tc.Runtime->ResetScheduledCount();

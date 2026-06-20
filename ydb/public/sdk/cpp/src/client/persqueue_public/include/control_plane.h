@@ -112,7 +112,7 @@ struct TDescribeTopicResult : public TStatus {
             }
             GETTER(ui32, Version);
             GETTER(std::string, ServiceType);
-            GETTER(std::optional<TSharedConsumerSettings>, SharedConsumer);
+            const std::optional<TSharedConsumerSettings>& SharedConsumer() const { return SharedConsumer_; }
 
         private:
             std::string ConsumerName_;

@@ -402,96 +402,95 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    void DoTestOrderByCosine(ui32 indexLevels, int flags) {
-        // Run the same scenario through both the legacy StreamLookup lowering and the new specialized
-        // vector index read actor (TableServiceConfig.EnableVectorIndexRead, off by default), so both
-        // read paths are verified identically against the same brute-force ground truth.
-        for (bool enableVectorIndexRead : {false, true}) {
-            Cerr << "DoTestOrderByCosine: indexLevels=" << indexLevels << " flags=" << flags
-                 << " enableVectorIndexRead=" << enableVectorIndexRead << Endl;
+    void DoTestOrderByCosine(ui32 indexLevels, int flags, bool enableVectorIndexRead) {
+        // The same scenario is run through both the legacy StreamLookup lowering and the new specialized
+        // vector index read actor (TableServiceConfig.EnableVectorIndexRead, off by default), selected via
+        // enableVectorIndexRead, so both read paths are verified identically against the same brute-force
+        // ground truth.
+        Cerr << "DoTestOrderByCosine: indexLevels=" << indexLevels << " flags=" << flags
+             << " enableVectorIndexRead=" << enableVectorIndexRead << Endl;
 
-            NKikimrConfig::TFeatureFlags featureFlags;
-            auto setting = NKikimrKqp::TKqpSetting();
-            auto serverSettings = TKikimrSettings()
-                .SetFeatureFlags(featureFlags)
-                .SetKqpSettings({setting});
-            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorIndexRead(enableVectorIndexRead);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorIndexRead(enableVectorIndexRead);
 
-            TKikimrRunner kikimr(serverSettings);
-            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-            auto db = kikimr.GetTableClient();
-            auto session = DoCreateTableForPrefixedVectorIndex(db, flags);
-            DoCreatePrefixedVectorIndex(session, indexLevels, flags);
-            {
-                auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-                const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-                UNIT_ASSERT_EQUAL(indexes.size(), 1);
-                UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-                std::vector<std::string> indexKeyColumns{"user", "emb"};
-                UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-                if (flags & F_COVERING) {
-                    std::vector<std::string> indexDataColumns{"emb", "data"};
-                    UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
-                }
-                const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-                UNIT_ASSERT_EQUAL(settings.Settings.Metric, (flags & F_SIMILARITY)
-                    ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
-                    : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
-                UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-                UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-                UNIT_ASSERT_EQUAL(settings.Levels, indexLevels);
-                UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-                UNIT_ASSERT_EQUAL(settings.OverlapClusters, (flags & F_OVERLAP) ? 2 : 0);
-                UNIT_ASSERT_EQUAL(settings.OverlapRatio, 0);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, flags);
+        DoCreatePrefixedVectorIndex(session, indexLevels, flags);
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            std::vector<std::string> indexKeyColumns{"user", "emb"};
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
+            if (flags & F_COVERING) {
+                std::vector<std::string> indexDataColumns{"emb", "data"};
+                UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
             }
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, (flags & F_SIMILARITY)
+                ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
+                : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
+            UNIT_ASSERT_EQUAL(settings.Levels, indexLevels);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+            UNIT_ASSERT_EQUAL(settings.OverlapClusters, (flags & F_OVERLAP) ? 2 : 0);
+            UNIT_ASSERT_EQUAL(settings.OverlapRatio, 0);
+        }
 
-            if (flags & F_OVERLAP) {
-                DoCheckOverlap(session, "index");
-            }
+        if (flags & F_OVERLAP) {
+            DoCheckOverlap(session, "index");
+        }
 
-            DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, flags);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, flags);
 
-            {
-                const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
-                auto result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            }
+        {
+            const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
+            auto result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel1, Nullable, UseSimilarity) {
-        DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
+    Y_UNIT_TEST_OCTO(OrderByCosineLevel1, Nullable, UseSimilarity, EnableVectorIndexRead) {
+        DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorIndexRead);
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithOverlap, Nullable, Covered) {
-        DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    Y_UNIT_TEST_OCTO(OrderByCosineLevel1WithOverlap, Nullable, Covered, EnableVectorIndexRead) {
+        DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorIndexRead);
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel2, Nullable, UseSimilarity) {
-        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
+    Y_UNIT_TEST_OCTO(OrderByCosineLevel2, Nullable, UseSimilarity, EnableVectorIndexRead) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorIndexRead);
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel2WithOverlap, Nullable, Covered) {
-        DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    Y_UNIT_TEST_OCTO(OrderByCosineLevel2WithOverlap, Nullable, Covered, EnableVectorIndexRead) {
+        DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorIndexRead);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
-        DoTestOrderByCosine(3, 0);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3, EnableVectorIndexRead) {
+        DoTestOrderByCosine(3, 0, EnableVectorIndexRead);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3WithOverlap) {
-        DoTestOrderByCosine(3, F_OVERLAP);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3WithOverlap, EnableVectorIndexRead) {
+        DoTestOrderByCosine(3, F_OVERLAP, EnableVectorIndexRead);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel4) {
-        DoTestOrderByCosine(4, 0);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel4, EnableVectorIndexRead) {
+        DoTestOrderByCosine(4, 0, EnableVectorIndexRead);
     }
 
-    Y_UNIT_TEST_TWIN(OrderByCosineDistanceWithCover, Nullable) {
-        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING);
+    Y_UNIT_TEST_QUAD(OrderByCosineDistanceWithCover, Nullable, EnableVectorIndexRead) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING, EnableVectorIndexRead);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineOnlyVectorCovered, Nullable, Overlap) {
@@ -522,12 +521,12 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
     }
 
-    Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffix, Nullable, Covered) {
-        DoTestOrderByCosine(2, F_SUFFIX_PK | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    Y_UNIT_TEST_OCTO(CosineDistanceWithPkSuffix, Nullable, Covered, EnableVectorIndexRead) {
+        DoTestOrderByCosine(2, F_SUFFIX_PK | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorIndexRead);
     }
 
-    Y_UNIT_TEST_TWIN(CosineDistanceWithPkSuffixWithOverlap, Covered) {
-        DoTestOrderByCosine(2, F_SUFFIX_PK | F_OVERLAP | (Covered ? F_COVERING : 0));
+    Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffixWithOverlap, Covered, EnableVectorIndexRead) {
+        DoTestOrderByCosine(2, F_SUFFIX_PK | F_OVERLAP | (Covered ? F_COVERING : 0), EnableVectorIndexRead);
     }
 
     Y_UNIT_TEST(SubPrefix) {

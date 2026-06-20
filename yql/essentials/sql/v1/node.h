@@ -275,6 +275,21 @@ public:
         return copy;
     }
 
+    // Strips system columns (the built-in "_yql_" prefix via RemoveSystemMembers) and, additionally,
+    // any columns matching the provided extra system column prefixes (e.g. provider-specific
+    // "__ydb_"-prefixed topic metadata). Keeps explicitly referenced columns intact.
+    TPtr RemoveSystemColumns(TPtr input, const TVector<TString>& extraSystemColumnPrefixes) const {
+        TPtr result = Y("RemoveSystemMembers", input);
+        if (!extraSystemColumnPrefixes.empty()) {
+            TPtr prefixes = Y();
+            for (const auto& prefix : extraSystemColumnPrefixes) {
+                prefixes = L(prefixes, Q(prefix));
+            }
+            result = Y("RemovePrefixMembers", result, Q(prefixes));
+        }
+        return result;
+    }
+
     TPtr Clone() const;
 
 protected:

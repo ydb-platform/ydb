@@ -86,7 +86,7 @@ class TestStreamingInYdb(StreamingTestBase):
         sql = f"""SELECT
     field1,
     field2,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+    Unwrap(DictLookup(__ydb_user_attributes, "trace_id")) AS trace_id
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -143,7 +143,7 @@ LIMIT 1"""
                     SELECT
                         field1,
                         field2,
-                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+                        Unwrap(DictLookup(__ydb_user_attributes, "trace_id")) AS trace_id
                     FROM {inp}
                     WITH (
                         FORMAT="json_each_row",
@@ -183,8 +183,8 @@ LIMIT 1"""
 
         sql = f"""SELECT
     field1,
-    DictLookup(SystemMetadata("user_attributes"), "missing_key") AS missing_val,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "present_key")) AS present_val
+    DictLookup(__ydb_user_attributes, "missing_key") AS missing_val,
+    Unwrap(DictLookup(__ydb_user_attributes, "present_key")) AS present_val
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -207,14 +207,14 @@ LIMIT 1"""
 
     # --- Issue #40507: When no user attribute provided returns empty dict ---
     def test_ua_no_attributes_returns_empty_dict(self, kikimr, entity_name):
-        """When a message has no metadata_items, SystemMetadata("user_attributes") must be an empty Dict."""
+        """When a message has no metadata_items, __ydb_user_attributes must be an empty Dict."""
         inp, endpoint = self.get_input_name(
             kikimr, "ua_empty", True, entity_name, partitions_count=1,
         )
 
         sql = f"""SELECT
     field1,
-    DictLength(SystemMetadata("user_attributes")) AS dict_len
+    DictLength(__ydb_user_attributes) AS dict_len
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -243,8 +243,8 @@ LIMIT 1"""
 
         sql = f"""SELECT
     field1,
-    DictLength(SystemMetadata("user_attributes")) AS dict_len,
-    DictLookup(SystemMetadata("user_attributes"), "any_key") AS any_val
+    DictLength(__ydb_user_attributes) AS dict_len,
+    DictLookup(__ydb_user_attributes, "any_key") AS any_val
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -275,10 +275,10 @@ LIMIT 1"""
 
         sql = f"""SELECT
     field1,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key1")) AS val1,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key2")) AS val2,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key3")) AS val3,
-    DictLength(SystemMetadata("user_attributes")) AS dict_len
+    Unwrap(DictLookup(__ydb_user_attributes, "key1")) AS val1,
+    Unwrap(DictLookup(__ydb_user_attributes, "key2")) AS val2,
+    Unwrap(DictLookup(__ydb_user_attributes, "key3")) AS val3,
+    DictLength(__ydb_user_attributes) AS dict_len
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -303,15 +303,15 @@ LIMIT 1"""
 
     # --- Issue #40510: All user attributes must be accessible as dictionary ---
     def test_ua_all_attributes_accessible(self, kikimr, entity_name):
-        """The full dictionary returned by SystemMetadata("user_attributes") must contain all written pairs."""
+        """The full dictionary returned by __ydb_user_attributes must contain all written pairs."""
         inp, endpoint = self.get_input_name(
             kikimr, "ua_all_access", True, entity_name, partitions_count=1,
         )
 
         sql = f"""SELECT
     field1,
-    DictKeys(SystemMetadata("user_attributes")) AS keys,
-    DictLength(SystemMetadata("user_attributes")) AS dict_len
+    DictKeys(__ydb_user_attributes) AS keys,
+    DictLength(__ydb_user_attributes) AS dict_len
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -343,9 +343,9 @@ LIMIT 1"""
 
         sql = f"""SELECT
     field1,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "ключ")) AS val_ru,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key with spaces")) AS val_spaces,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "emoji🔑")) AS val_emoji
+    Unwrap(DictLookup(__ydb_user_attributes, "ключ")) AS val_ru,
+    Unwrap(DictLookup(__ydb_user_attributes, "key with spaces")) AS val_spaces,
+    Unwrap(DictLookup(__ydb_user_attributes, "emoji🔑")) AS val_emoji
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -386,7 +386,7 @@ LIMIT 1"""
                 FROM (
                     SELECT
                         field1,
-                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "msg_id")) AS msg_id
+                        Unwrap(DictLookup(__ydb_user_attributes, "msg_id")) AS msg_id
                     FROM {inp}
                     WITH (
                         FORMAT="json_each_row",
@@ -432,7 +432,7 @@ LIMIT 1"""
                 FROM (
                     SELECT
                         field1,
-                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+                        Unwrap(DictLookup(__ydb_user_attributes, "trace_id")) AS trace_id
                     FROM {inp}
                     WITH (
                         FORMAT="json_each_row",
@@ -481,13 +481,13 @@ LIMIT 1"""
                 FROM (
                     SELECT
                         field1,
-                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "priority")) AS priority
+                        Unwrap(DictLookup(__ydb_user_attributes, "priority")) AS priority
                     FROM {inp}
                     WITH (
                         FORMAT="json_each_row",
                         SCHEMA=(field1 String NOT NULL)
                     )
-                    WHERE Unwrap(DictLookup(SystemMetadata("user_attributes"), "priority")) = "high"
+                    WHERE Unwrap(DictLookup(__ydb_user_attributes, "priority")) = "high"
                 );
             END DO;'''
 
@@ -518,8 +518,8 @@ LIMIT 1"""
 
         sql = f"""SELECT
     field1,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id,
-    SystemMetadata("message_group_id") AS producer_id
+    Unwrap(DictLookup(__ydb_user_attributes, "trace_id")) AS trace_id,
+    __ydb_message_group_id AS producer_id
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -551,7 +551,7 @@ LIMIT 1"""
         sql = f"""SELECT
     name,
     age,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "source")) AS source
+    Unwrap(DictLookup(__ydb_user_attributes, "source")) AS source
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -581,7 +581,7 @@ LIMIT 1"""
 
         sql = f"""SELECT
     field1,
-    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+    Unwrap(DictLookup(__ydb_user_attributes, "trace_id")) AS trace_id
 FROM {inp}
 WITH (
     STREAMING = "TRUE",
@@ -601,9 +601,9 @@ LIMIT 1"""
         assert row["field1"] == b"remote_v1"
         assert row["trace_id"] == b"tid-remote"
 
-    # --- Issue #40518: NEG Reading SystemMetadata("user_attributes") FROM some_table fails ---
+    # --- Issue #40518: NEG Reading __ydb_user_attributes FROM some_table fails ---
     def test_ua_neg_from_table_fails(self, kikimr, entity_name):
-        """SystemMetadata("user_attributes") must fail when used on a regular table (not a topic)."""
+        """__ydb_user_attributes must fail when used on a regular table (not a topic)."""
         table_name = entity_name("ua_neg_table")
         kikimr.ydb_client.query(f"""
             CREATE TABLE `{table_name}` (
@@ -615,7 +615,7 @@ LIMIT 1"""
 
         sql = f"""SELECT
     id,
-    SystemMetadata("user_attributes") AS ua
+    __ydb_user_attributes AS ua
 FROM `{table_name}`"""
 
         with pytest.raises(ydb.issues.GenericError):

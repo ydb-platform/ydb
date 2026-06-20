@@ -423,6 +423,11 @@ public:
                 return TStatus::Error;
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
+            if (State_->ForbidYqlSysColumnsAndSystemMetadata && SkipPqSystemPrefix(metadataSysColumnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
+                    << "_yql_sys_ columns are not allowed, use __ydb_-prefixed columns instead"));
+                return TStatus::Error;
+            }
             const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
                 metadataSysColumnName,
                 State_->EnableUserAttributesInTopicQuery);
@@ -478,6 +483,11 @@ public:
                 return TStatus::Error;
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
+            if (State_->ForbidYqlSysColumnsAndSystemMetadata && SkipPqSystemPrefix(metadataSysColumnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
+                    << "_yql_sys_ columns are not allowed, use __ydb_-prefixed columns instead"));
+                return TStatus::Error;
+            }
             const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
                 metadataSysColumnName,
                 State_->EnableUserAttributesInTopicQuery);
@@ -494,6 +504,12 @@ public:
     }
 
     TStatus HandleMetadata(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (State_->ForbidYqlSysColumnsAndSystemMetadata) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"));
+            return TStatus::Error;
+        }
+
         const auto key = input->ChildPtr(0);
         if (!EnsureCallable(*key, ctx)) {
             return TStatus::Error;

@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         };
 
         TTopicSdkTestSetup setup = createSetup();
-        const std::string topicName = topicsAreFirstClassCitizen ? TEST_TOPIC : "rt3.dc1--test--" + TEST_TOPIC;
+        const std::string topicName = TEST_TOPIC;
         setup.CreateTopic(topicName, TEST_CONSUMER, 1);
 
         TVector<TInstant> createTimestamps;

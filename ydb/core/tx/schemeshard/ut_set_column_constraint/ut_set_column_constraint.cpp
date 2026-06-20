@@ -1123,7 +1123,11 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
+<<<<<<< HEAD
         // STATE_DONE_SUCCESSFUL/STATE_DONE_FAILED: operation is fully finished.
+=======
+        // STATE_DONE: operation is fully finished.
+>>>>>>> 28c574266ea (add unit)
         answers.push_back(DoGetRequest(setConstraintTxId, runtime, root).GetState());
 
         UNIT_ASSERT_VALUES_EQUAL_C(
@@ -1131,6 +1135,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             expectedAnswers.size(),
             TStringBuilder() << "Wrong number of observed states: got " << answers.size()
                 << ", expected " << expectedAnswers.size());
+
         for (size_t i = 0; i < expectedAnswers.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(
                 static_cast<int>(answers[i]),

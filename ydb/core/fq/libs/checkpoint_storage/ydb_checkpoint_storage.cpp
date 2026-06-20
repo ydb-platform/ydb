@@ -1,6 +1,6 @@
 #include "ydb_checkpoint_storage.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -11,6 +11,8 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::STREAMS_STORAGE_SERVICE
 
 namespace NFq {
 
@@ -680,7 +682,7 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
         .SetPrimaryKeyColumn("graph_id")
         .Build();
     auto f1 = CreateTable(YdbConnection, CoordinatorsSyncTable, std::move(graphDesc), acl);
-    
+
     // TODO: graph_id could be just secondary index, but API forbids it,
     // so we set it primary key column to have index
     auto checkpointDesc = TTableBuilder()
@@ -708,7 +710,7 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
 
     auto promise = NThreading::NewPromise<TIssues>();
     auto voidFuture = NThreading::WaitAll(futures);
-    
+
     return voidFuture.Apply([futures = std::move(futures), promise](const auto& ) mutable {
         TIssues issues;
         auto check = [&issues] (const NYdb::TStatus& status) {
@@ -1140,7 +1142,10 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                         auto status = TStatus(queryResult);
 
                         if (!queryResult.IsSuccess()) {
-                            LOG_STREAMS_STORAGE_SERVICE_AS_ERROR(*actorSystem, TStringBuilder() << "GetTotalCheckpointsStateSize: can't get total graph's checkpoints size [" << graphId << "] " << queryResult.GetIssues().ToString());                            return status;
+                            YDB_LOG_ERROR_CTX(*actorSystem, "GetTotalCheckpointsStateSize: can't get total graph's checkpoints size",
+                                {"graphId", graphId},
+                                {"issues", queryResult.GetIssues()});
+                            return status;
                         }
 
                         TResultSetParser parser = queryResult.GetResultSetParser(0);

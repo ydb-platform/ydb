@@ -149,34 +149,64 @@ bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(const TIntrusivePtr<IO
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op) {
     if (MatchOperator<TOpFilter>(op)) {
         CollectTablesAndColumnsNames(CastOperator<TOpFilter>(op)->FilterExpr, op->Props);
+    } else if (MatchOperator<TOpJoin>(op)) {
+        // Fetching statistics for join cardinality correction.
+        CollectJoinKeysColumns(CastOperator<TOpJoin>(op), op->Props);
+    } else if (MatchOperator<TOpRead>(op)) {
+        // Fetching statistics for filters already pushed down into the read.
+        const auto read = CastOperator<TOpRead>(op);
+        if (read->OriginalPredicate.has_value()) {
+            CollectTablesAndColumnsNames(read->OriginalPredicate.value(), op->Props);
+        }
     }
 }
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props) {
     const auto& mapping = props.Metadata->ColumnLineage.Mapping;
     auto lambda = TCoLambda(expr.GetLambda());
-    const auto members = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
 
-    TVector<TInfoUnit> colNames;
-    for (const auto& member : members) {
-        const auto memberName = TCoMember(member).Name().StringValue();
-        const auto pos = memberName.find(".");
-        if (pos != TString::npos) {
-            const auto aliasName = memberName.substr(0, pos);
-            Y_ENSURE(pos + 1 < memberName.size());
-            const auto colName = memberName.substr(pos + 1);
-            colNames.emplace_back(aliasName, colName);
+    // Request only the statistic each filter predicate actually consumes during selectivity estimation: 
+    // equality predicates probe the count-min sketch, while 
+    // range/inequality predicates use the equi-width histogram.
+    TPredicateSelectivityComputer computer(nullptr, true);
+    computer.Compute(lambda.Body());
+
+    using TUsedMember = TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
+    for (const auto& item : computer.GetColumnStatsUsedMembers().Data) {
+        const auto it = mapping.find(TInfoUnit(item.Member.Name().StringValue()));
+        if (it == mapping.end() || it->second.TableName == "") {
+            continue;
+        }
+        const auto& tableName = it->second.TableName;
+        const auto& colName = it->second.ColumnName;
+        switch (item.PredicateType) {
+            case TUsedMember::EEquality:
+                CMColumnsByTableName[tableName].insert(colName);
+                break;
+            case TUsedMember::EInequality:
+                HistColumnsByTableName[tableName].insert(colName);
+                break;
         }
     }
+}
 
-    for (const auto& column : colNames) {
-        const auto it = mapping.find(column.GetFullName());
-        if (it != mapping.end() && it->second.TableName != "") {
-            const auto& tableName = it->second.TableName;
-            const auto& colName = it->second.ColumnName;
-            CMColumnsByTableName[tableName].insert(colName);
-            HistColumnsByTableName[tableName].insert(colName);
+void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>& join, const TPhysicalOpProps& props) {
+    const auto& mapping = props.Metadata->ColumnLineage.Mapping;
+
+    // For join cardinality correction, only the equi-width histogram of both join-key columns are needed.
+    auto requestHistogram = [&](const TInfoUnit& key) {
+        const auto it = mapping.find(TInfoUnit(key.GetFullName()));
+        if (it == mapping.end() || it->second.TableName == "") {
+            return;
         }
+        const auto& tableName = it->second.TableName;
+        const auto& colName = it->second.ColumnName;
+        HistColumnsByTableName[tableName].insert(colName);
+    };
+
+    for (const auto& [lhsKey, rhsKey] : join->JoinKeys) {
+        requestHistogram(lhsKey);
+        requestHistogram(rhsKey);
     }
 }
 
@@ -204,33 +234,41 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
         return TStatus::Ok;
     }
 
-    ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply([this, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
-        for (auto& fut : futures) {
-            if (fut.HasException()) {
-                fut.TryRethrow();
-            }
+    auto sharedState = std::make_shared<TColumnStatisticsSharedState>();
+    ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply(
+        [weakSharedState = std::weak_ptr{sharedState}, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
+            for (auto& fut : futures) {
+                if (fut.HasException()) {
+                    fut.TryRethrow();
+                }
 
-            auto newStats = fut.ExtractValue();
-            if (!ColumnStatisticsResponse) {
-                ColumnStatisticsResponse = std::move(newStats);
-            } else {
-                // merge statistics
-                for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
-                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
-                    for (const auto& [column, newStat] : column2Stat.Data) {
-                        auto& oldStat = oldColumn2Stat.Data[column];
-                        if (newStat.CountMinSketch) {
-                            oldStat.CountMinSketch = newStat.CountMinSketch;
-                        }
-                        if (newStat.EqWidthHistogramEstimator) {
-                            oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                auto newStats = fut.ExtractValue();
+                auto sharedState = weakSharedState.lock();
+                if (!sharedState) {
+                    // parent already deleted, just return
+                    return;
+                }
+                if (!sharedState->Response.has_value()) {
+                    sharedState->Response = std::move(newStats);
+                } else {
+                    // merge statistics
+                    for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
+                        auto& oldColumn2Stat = sharedState->Response->ColumnStatisticsByTableName[table];
+                        for (const auto& [column, newStat] : column2Stat.Data) {
+                            auto& oldStat = oldColumn2Stat.Data[column];
+                            if (newStat.CountMinSketch) {
+                                oldStat.CountMinSketch = newStat.CountMinSketch;
+                            }
+                            if (newStat.EqWidthHistogramEstimator) {
+                                oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                            }
                         }
                     }
                 }
             }
-        }
-    });
+        });
 
+    SharedState = sharedState;
     return TStatus::Async;
 }
 
@@ -264,12 +302,12 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
 
 void TKqpNewRBOTransformer::ApplyColumnStatistics() {
     Y_ENSURE(ColumnStatisticsReadiness.IsReady());
-    if (!ColumnStatisticsResponse->Issues().Empty()) {
+    if (!SharedState->Response->Issues().Empty()) {
         TStringStream ss;
-        ColumnStatisticsResponse->Issues().PrintTo(ss);
+        SharedState->Response->Issues().PrintTo(ss);
         YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
     } else {
-        for (auto&& [tableName, columnStatistics] : ColumnStatisticsResponse->ColumnStatisticsByTableName) {
+        for (auto&& [tableName, columnStatistics] : SharedState->Response->ColumnStatisticsByTableName) {
             TypeCtx.ColumnStatisticsByTableName.insert({std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))});
         }
     }
@@ -369,7 +407,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Predicate pull-up and subplan inlining and decorelation stages.
     TVector<std::unique_ptr<IRule>> filterPullUpRules;
     filterPullUpRules.emplace_back(std::make_unique<TPullUpCorrelatedFilterRule>());
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicate pullup", std::move(filterPullUpRules)));
 
     TVector<std::unique_ptr<IRule>> inlineScalarSubPlanStageRules;
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());

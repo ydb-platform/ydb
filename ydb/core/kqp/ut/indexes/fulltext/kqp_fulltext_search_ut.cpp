@@ -3441,6 +3441,48 @@ Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
     UNIT_ASSERT_VALUES_EQUAL(rowIds[3], 400u);
 }
 
+Y_UNIT_TEST(RowIdHiddenFromSelectStarButExplicitlySelectable) {
+    // __ydb_row_id is a system column: SELECT * must not surface it, but selecting it by name must
+    // still work (and return the stored values).
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+
+    {
+        // SELECT * must expose only the user-visible columns, never __ydb_row_id.
+        auto result = db.ExecuteQuery(
+            "SELECT * FROM `/Root/RowIdTexts` ORDER BY Pk;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        const auto& columns = resultSet.GetColumnsMeta();
+        for (const auto& col : columns) {
+            UNIT_ASSERT_C(col.Name != "__ydb_row_id",
+                "SELECT * leaked the __ydb_row_id system column");
+        }
+        // Only the three user columns must be present.
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
+    }
+
+    {
+        // Explicitly naming the system column must keep working and return the stored values.
+        auto result = db.ExecuteQuery(
+            "SELECT Pk, __ydb_row_id FROM `/Root/RowIdTexts` ORDER BY __ydb_row_id;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("__ydb_row_id").GetUint64(), 100u);
+    }
+}
+
 Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
     // ALTER TABLE t ADD COLUMN __ydb_row_id Uint64 NOT NULL on a table without a sequence default
     // must be accepted: schemeshard creates a sequence, the column-build scan backfills every
@@ -4486,9 +4528,8 @@ static void SetupPrefixedRowIdDocs(NYdb::NQuery::TQueryClient& db) {
 
 // INSERT works for a prefixed __ydb_row_id fulltext index: a brand-new row has no prior __ydb_row_id,
 // so the value comes straight from the sequence default and the index is maintained correctly.
-// UPSERT/REPLACE/UPDATE (below) must instead reconcile an existing row's __ydb_row_id, which online
-// write maintenance does not yet thread into the index input set — they fail at query compilation with
-// kqp_opt_phy_fulltext_index.cpp: requirement inputColumns.contains(column) failed.
+// UPSERT/REPLACE/UPDATE (below) reconcile an existing row's __ydb_row_id; write maintenance threads the
+// stored doc-id (and the prefix columns) into the index input set, so the index stays consistent.
 
 Y_UNIT_TEST(PrefixedRowIdInsertSupported) {
     auto kikimr = KikimrPrefixRowId();
@@ -4509,44 +4550,192 @@ Y_UNIT_TEST(PrefixedRowIdInsertSupported) {
     UNIT_ASSERT_VALUES_EQUAL("[[\"a1\"];[\"a2\"]]", NYdb::FormatResultSetYson(select.GetResultSet(0)));
 }
 
-Y_UNIT_TEST(PrefixedRowIdUpsertNotSupported) {
+// UPSERT/REPLACE/UPDATE on a prefixed __ydb_row_id fulltext index reconcile an existing row's
+// __ydb_row_id, which write maintenance now threads into the index input set alongside the prefix
+// columns. The seeded row a1 uses Tenant "red"; searches below are scoped to that prefix.
+namespace {
+TString PrefixedRowIdSearch(NYdb::NQuery::TQueryClient& db, const TString& tenant, const TString& term) {
+    TString query = TStringBuilder() <<
+        "SELECT Pk FROM `/Root/Docs` VIEW `fulltext_idx` "
+        "WHERE Tenant = \"" << tenant << "\" AND FulltextMatch(Text, \"" << term << "\") ORDER BY Pk;";
+    auto r = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+    NYdb::TResultSetParser parser(r.GetResultSet(0));
+    TVector<TString> pks;
+    while (parser.TryNextRow()) {
+        pks.push_back(TString{parser.ColumnParser("Pk").GetUtf8()});
+    }
+    return JoinSeq(",", pks);
+}
+}
+
+Y_UNIT_TEST(PrefixedRowIdUpsertSupported) {
     auto kikimr = KikimrPrefixRowId();
     auto db = kikimr.GetQueryClient();
     SetupPrefixedRowIdDocs(db);
 
+    // UPSERT a brand-new row: fresh doc-id from the sequence, indexed under its prefix.
     auto r = db.ExecuteQuery(R"sql(
         UPSERT INTO `/Root/Docs` (Org, Pk, Tenant, Text) VALUES ("acme"u, "a2"u, "red"u, "cats are fast"u);
     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_C(r.GetStatus() != EStatus::SUCCESS,
-        "UPSERT into a prefixed __ydb_row_id fulltext-indexed table unexpectedly succeeded");
-    UNIT_ASSERT_STRING_CONTAINS(r.GetIssues().ToString(), "inputColumns.contains");
+    UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "cats"), "a1,a2");
+
+    // UPSERT the existing seeded row with new text: doc-id reused, old postings replaced.
+    r = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Docs` (Org, Pk, Tenant, Text) VALUES ("acme"u, "a1"u, "red"u, "dogs sleep"u);
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "cats"), "a2");
+    UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "dogs"), "a1");
 }
 
-Y_UNIT_TEST(PrefixedRowIdReplaceNotSupported) {
+Y_UNIT_TEST(PrefixedRowIdReplaceSupported) {
     auto kikimr = KikimrPrefixRowId();
     auto db = kikimr.GetQueryClient();
     SetupPrefixedRowIdDocs(db);
 
     auto r = db.ExecuteQuery(R"sql(
-        REPLACE INTO `/Root/Docs` (Org, Pk, Tenant, Text) VALUES ("acme"u, "a2"u, "red"u, "cats are fast"u);
+        REPLACE INTO `/Root/Docs` (Org, Pk, Tenant, Text) VALUES ("acme"u, "a1"u, "red"u, "owls hoot"u);
     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_C(r.GetStatus() != EStatus::SUCCESS,
-        "REPLACE into a prefixed __ydb_row_id fulltext-indexed table unexpectedly succeeded");
-    UNIT_ASSERT_STRING_CONTAINS(r.GetIssues().ToString(), "inputColumns.contains");
+    UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "cats"), "");
+    UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "owls"), "a1");
 }
 
-Y_UNIT_TEST(PrefixedRowIdUpdateNotSupported) {
+Y_UNIT_TEST(PrefixedRowIdUpdateSupported) {
     auto kikimr = KikimrPrefixRowId();
     auto db = kikimr.GetQueryClient();
     SetupPrefixedRowIdDocs(db);
 
-    // Updates the indexed text column of the seeded row, which triggers index maintenance.
+    // Update the indexed text column of the seeded row: in-place maintenance, doc-id stable.
     auto r = db.ExecuteQuery(R"sql(
-        UPDATE `/Root/Docs` SET Text = "cats are refreshed" WHERE Org = "acme" AND Pk = "a1";
+        UPDATE `/Root/Docs` SET Text = "dogs run" WHERE Org = "acme" AND Pk = "a1";
     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_C(r.GetStatus() != EStatus::SUCCESS,
-        "UPDATE of a prefixed __ydb_row_id fulltext-indexed table unexpectedly succeeded");
-    UNIT_ASSERT_STRING_CONTAINS(r.GetIssues().ToString(), "inputColumns.contains");
+    UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "cats"), "");
+    UNIT_ASSERT_VALUES_EQUAL(PrefixedRowIdSearch(db, "red", "dogs"), "a1");
+}
+
+namespace {
+
+// Runs a query and asserts success.
+void ExecOk(NQuery::TQueryClient& db, const TString& query) {
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+// Fulltext search by a single term, returns the matched PKs sorted+joined for easy comparison.
+TString SearchPks(NQuery::TQueryClient& db, const TString& term) {
+    TString query = TStringBuilder() <<
+        "SELECT Pk FROM `/Root/RowIdTexts` VIEW `fulltext_idx` "
+        "WHERE FulltextMatch(Text, \"" << term << "\") ORDER BY Pk;";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    NYdb::TResultSetParser parser(result.GetResultSet(0));
+    TVector<TString> pks;
+    while (parser.TryNextRow()) {
+        pks.push_back(TString{parser.ColumnParser("Pk").GetUtf8()});
+    }
+    return JoinSeq(",", pks);
+}
+
+// Reads the stored __ydb_row_id of a single row by PK.
+ui64 RowIdOf(NQuery::TQueryClient& db, const TString& pk) {
+    TString query = TStringBuilder() <<
+        "SELECT __ydb_row_id FROM `/Root/RowIdTexts` WHERE Pk = \"" << pk << "\"u;";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    NYdb::TResultSetParser parser(result.GetResultSet(0));
+    UNIT_ASSERT(parser.TryNextRow());
+    return parser.ColumnParser("__ydb_row_id").GetUint64();
+}
+
+}
+
+Y_UNIT_TEST(DmlMaintainsFulltextRowIdIndex_Plain) {
+    // UPSERT/UPDATE/REPLACE/DELETE on a table whose fulltext index uses __ydb_row_id as its doc-id
+    // must maintain the inverted index. __ydb_row_id is generated server-side and must stay stable
+    // across in-place updates so old postings are replaced (not orphaned) and reads keep resolving.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    AddFulltextIndexPlain(db);
+
+    // Seed via INSERT (the rowid INSERT path already works).
+    ExecOk(db, R"sql(
+        INSERT INTO `/Root/RowIdTexts` (Pk, Text, Data) VALUES
+            ("pk-1"u, "cats love cats"u,  "d1"u),
+            ("pk-2"u, "dogs chase cats"u, "d2"u),
+            ("pk-3"u, "small birds"u,     "d3"u);
+    )sql");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "cats"), "pk-1,pk-2");
+
+    // UPSERT an existing row with new text: old tokens gone, new tokens found, doc-id unchanged.
+    const ui64 id1 = RowIdOf(db, "pk-1");
+    ExecOk(db, R"sql( UPSERT INTO `/Root/RowIdTexts` (Pk, Text) VALUES ("pk-1"u, "foxes only"u); )sql");
+    UNIT_ASSERT_VALUES_EQUAL_C(RowIdOf(db, "pk-1"), id1, "UPSERT must keep a stable __ydb_row_id");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "cats"), "pk-2");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "foxes"), "pk-1");
+
+    // UPSERT a brand-new row: gets a fresh doc-id and is searchable.
+    ExecOk(db, R"sql( UPSERT INTO `/Root/RowIdTexts` (Pk, Text, Data) VALUES ("pk-4"u, "cats again"u, "d4"u); )sql");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "cats"), "pk-2,pk-4");
+
+    // UPDATE ... SET Text: in-place, doc-id stable, postings swapped.
+    const ui64 id2 = RowIdOf(db, "pk-2");
+    ExecOk(db, R"sql( UPDATE `/Root/RowIdTexts` SET Text = "wolves" WHERE Pk = "pk-2"u; )sql");
+    UNIT_ASSERT_VALUES_EQUAL_C(RowIdOf(db, "pk-2"), id2, "UPDATE must keep a stable __ydb_row_id");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "cats"), "pk-4");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "wolves"), "pk-2");
+
+    // REPLACE an existing row: row fully replaced, old postings removed.
+    ExecOk(db, R"sql( REPLACE INTO `/Root/RowIdTexts` (Pk, Text, Data) VALUES ("pk-4"u, "owls hoot"u, "d4"u); )sql");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "cats"), "");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "owls"), "pk-4");
+
+    // DELETE: postings removed.
+    ExecOk(db, R"sql( DELETE FROM `/Root/RowIdTexts` WHERE Pk = "pk-1"u; )sql");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "foxes"), "");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "owls"), "pk-4");
+}
+
+Y_UNIT_TEST(DmlMaintainsFulltextRowIdIndex_Relevance) {
+    // Same as the plain case but on a relevance index, which additionally maintains the per-doc
+    // length (docs table) and corpus stats keyed by __ydb_row_id. In particular UPDATE must source
+    // the stored doc-id from the table lookup when building doc rows.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    AddFulltextIndexRelevance(db);
+
+    ExecOk(db, R"sql(
+        INSERT INTO `/Root/RowIdTexts` (Pk, Text, Data) VALUES
+            ("pk-1"u, "cats love cats"u,  "d1"u),
+            ("pk-2"u, "dogs chase cats"u, "d2"u),
+            ("pk-3"u, "small birds"u,     "d3"u);
+    )sql");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "cats"), "pk-1,pk-2");
+
+    // UPSERT existing row, doc-id stable, postings + docs/stats updated.
+    const ui64 id1 = RowIdOf(db, "pk-1");
+    ExecOk(db, R"sql( UPSERT INTO `/Root/RowIdTexts` (Pk, Text) VALUES ("pk-1"u, "foxes only"u); )sql");
+    UNIT_ASSERT_VALUES_EQUAL(RowIdOf(db, "pk-1"), id1);
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "cats"), "pk-2");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "foxes"), "pk-1");
+
+    // UPDATE in place.
+    ExecOk(db, R"sql( UPDATE `/Root/RowIdTexts` SET Text = "wolves howl" WHERE Pk = "pk-2"u; )sql");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "cats"), "");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "wolves"), "pk-2");
+
+    // DELETE removes postings + doc row.
+    ExecOk(db, R"sql( DELETE FROM `/Root/RowIdTexts` WHERE Pk = "pk-1"u; )sql");
+    UNIT_ASSERT_VALUES_EQUAL(SearchPks(db, "foxes"), "");
 }
 
 }

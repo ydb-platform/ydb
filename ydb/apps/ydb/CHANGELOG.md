@@ -1,3 +1,5 @@
+* Added `--no-consumer` option to `ydb topic read` command.
+* Added an AI mode to the `ydb` interactive mode. Press Ctrl+T to switch to it.
 * Added `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size`, and `--batch-flush-message-count` options to `ydb workload topic run write|full` commands.
 * `ydb scheme describe` now prints a human-readable description for external data sources (source type, location, auth method, database, properties and creation time) instead of empty output.
 * Added `--partition-max-inflight-bytes` option to `ydb topic workload`

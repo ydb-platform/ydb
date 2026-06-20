@@ -326,7 +326,7 @@ Y_UNIT_TEST(BatchedMessagesWriteWithoutMaxSeqNoFails) {
     PQGetPartInfo(0, 0, tc);
 }
 
-Y_UNIT_TEST(BatchedMessagesWriteWithInconsistentMaxSeqNoFails) {
+Y_UNIT_TEST(BatchedMessagesWriteWithSparseSeqNoSucceeds) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
@@ -335,12 +335,12 @@ Y_UNIT_TEST(BatchedMessagesWriteWithInconsistentMaxSeqNoFails) {
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
-    CmdWriteBatched(0, "sourceid_batch_inconsistent_max_seqno", 1, TString(16, 'a'), 5, tc,
-        -1, false, 10, NPersQueue::NErrorCode::BAD_REQUEST);
+    CmdWriteBatched(0, "sourceid_batch_sparse_seqno", 1, TString(16, 'a'), 5, tc,
+        -1, false, 10);
 
-    CmdWriteBatched(0, "sourceid_batch_inconsistent_max_seqno", 1, TString(16, 'b'), 5, tc);
+    CmdWriteBatched(0, "sourceid_batch_sparse_seqno", 11, TString(16, 'b'), 5, tc);
 
-    PQGetPartInfo(0, 5, tc);
+    PQGetPartInfo(0, 10, tc);
 }
 
 Y_UNIT_TEST(BatchedMessagesWriteWithPartialSeqNoOverlapFails) {

@@ -143,7 +143,7 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    void Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,

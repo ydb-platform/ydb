@@ -47,8 +47,10 @@ void TPhantomFlagStorageState::StartBuilding() {
     Building = true;
 }
 
-void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit) {
+void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit,
+        ui64 blobSizeLimit) {
     Y_DEBUG_ABORT_UNLESS(!Persistent);
+    BlobSizeLimit = blobSizeLimit;
     AdjustSize(sizeLimit);
     if (!Active) {
         return;
@@ -80,11 +82,13 @@ void TPhantomFlagStorageState::ProcessBarrierRecordFromNeighbour(ui32 orderNumbe
 }
 
 void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds,
-        ui64 sizeLimit) {
+        ui64 sizeLimit, ui64 blobSizeLimit) {
     if (!Active) {
         // PhantomFlagStorage was deactivated while building, do nothing
         return;
     }
+
+    BlobSizeLimit = blobSizeLimit;
 
     if (Persistent) {
         std::vector<TPhantomFlagStorageItem> items;
@@ -238,6 +242,9 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
 }
 
 bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
+    if (BlobSizeLimit && blobRec.LogoBlobID().BlobSize() < BlobSizeLimit) {
+        return true;
+    }
     if (StoredFlags.size() < StoredFlags.capacity()) {
         StoredFlags.emplace_back(blobRec);
         return true;

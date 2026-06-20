@@ -795,6 +795,7 @@ struct TEvBlobStorage {
         EvPhantomFlagExtractedFromChunk,
         EvSyncLogDiskOutOfSpace,
         EvRecoveryLogCutDone,
+        EvFreshCompactionStarted,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -2540,6 +2541,15 @@ struct TEvBlobStorage {
             , IsMultiCollectAllowed(isMultiCollectAllowed)
             , IgnoreBlock(ignoreBlock)
             , WriteSource(writeSource)
+        {}
+
+        // Keep compatibility with the pre-TWriteSource argument order.
+        TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
+                bool collect, ui32 collectGeneration,
+                ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
+                bool isMultiCollectAllowed, bool hard, bool ignoreBlock = false)
+            : TEvCollectGarbage(tabletId, recordGeneration, perGenerationCounter, channel, collect, collectGeneration,
+                    collectStep, keep, doNotKeep, deadline, isMultiCollectAllowed, UnknownWriteSource(), hard, ignoreBlock)
         {}
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 channel, bool collect, ui32 collectGeneration,

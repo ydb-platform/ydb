@@ -1633,6 +1633,185 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         {"json"});
     }
 
+    Y_UNIT_TEST(MoveTableWithGlobalJsonRowIdAutoProvisionIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableJsonIndex(true);
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        // Table with Utf8 PK - no __ydb_row_id yet; build will auto-provision it.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk"   Type: "Utf8" NotNull: true }
+            Columns { Name: "data" Type: "Json" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name("json_idx");
+            index.add_index_columns("data");
+            index.mutable_global_json_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"),
+                           {NLs::IsTable, NLs::IndexesCount(2)});
+
+        auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        const ui64 expectedDomainPaths =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+        const ui64 expectedDomainShards =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/texts", "/MyRoot/texts_moved");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts_moved"),
+                           {NLs::IsTable, NLs::IndexesCount(2)});
+
+        // json_idx must preserve UseRowIdAsDocId=true through the move.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx");
+            const auto& ti = d.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(ti.HasFulltextIndexDescription(),
+                "json_idx after move: FulltextIndexDescription must be set");
+            UNIT_ASSERT_C(ti.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "json_idx after move: UseRowIdAsDocId must be preserved through MoveTable");
+        }
+
+        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
+        TestDescribeResult(DescribePrivatePath(runtime,
+                "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+
+        // Auto-provisioned unique index must have been moved.
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_moved/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(expectedDomainShards)});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalJsonRowIdManualInfraIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableJsonIndex(true);
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        // Table with Utf8 PK + explicit __ydb_row_id + user-created unique index.
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "pk"   Type: "Utf8"   NotNull: true }
+                Columns { Name: "data" Type: "Json" }
+                Columns { Name: "%s"   Type: "Uint64" NotNull: true }
+                KeyColumnNames: ["pk"]
+            }
+            IndexDescription {
+                Name: "uniq_rowid"
+                KeyColumnNames: ["%s"]
+                Type: EIndexTypeGlobalUnique
+            }
+        )", NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::RowIdColumn));
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name("json_idx");
+            index.add_index_columns("data");
+            index.mutable_global_json_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"),
+                           {NLs::IsTable, NLs::IndexesCount(2)});
+
+        auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        const ui64 expectedDomainPaths =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+        const ui64 expectedDomainShards =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/texts", "/MyRoot/texts_moved");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts_moved"),
+                           {NLs::IsTable, NLs::IndexesCount(2)});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx");
+            const auto& ti = d.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(ti.HasFulltextIndexDescription(),
+                "json_idx after move: FulltextIndexDescription must be set");
+            UNIT_ASSERT_C(ti.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "json_idx after move: UseRowIdAsDocId must be preserved through MoveTable");
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+                "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+
+        // User-created unique index must have been moved.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/uniq_rowid"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // Auto-provision index must NOT exist on the moved table (user infra was reused).
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_moved/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(expectedDomainShards)});
+    }
+
     Y_UNIT_TEST(AsyncIndexWithSyncInFly) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

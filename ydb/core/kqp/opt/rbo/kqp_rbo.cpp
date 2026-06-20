@@ -6,20 +6,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-namespace {
-
-void ValidateNoDuplicateOutputIUs(TOpRoot& root) {
-    for (const auto& iter : root) {
-        THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
-        for (const auto& iu : iter.Current->GetOutputIUs()) {
-            Y_ENSURE(!seen.contains(iu), "Duplicate visible column " << iu.GetFullName() << " after " << iter.Current->GetExplainName());
-            seen.insert(iu);
-        }
-    }
-}
-
-} // anonymous namespace
-
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     auto output = SimpleMatchAndApply(input, ctx, props);
@@ -73,7 +59,7 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString s
  * Currently we obtain an iterator to the operators, match the rules, and if at least one matched we
  * apply it and start again.
  *
- * TODO: We should have a clear list of properties that are reqiuired by the rules of current stage and
+ * TODO: We should have a clear list of properties that are required by the rules of current stage and
  * ensure they are computed/maintained properly
  *
  * TODO: Add sanity checks that can be tunred on in debug mode to immediately catch transformation problems
@@ -145,7 +131,6 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
         }
         stage->RunStage(root, rboCtx);
-        ValidateNoDuplicateOutputIUs(root);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
         }

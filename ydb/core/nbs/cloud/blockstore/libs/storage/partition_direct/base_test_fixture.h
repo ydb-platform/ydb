@@ -98,6 +98,24 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         return vchunk.VChunkConfig;
     }
 
+    static bool IsDirtyMapReady(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapReady.HasValue();
+    }
+
+    static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapReady;
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeUpdateDirtyMap(
+        TVChunk& vchunk,
+        const TDBGRestoreResponse& response)
+    {
+        vchunk.UpdateDirtyMap(response);
+    }
+
 private:
     template <typename T>
     void SetResult(

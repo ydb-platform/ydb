@@ -64,6 +64,11 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         if (conj.MaybeEquiJoinCondition()) {
             TEquiJoinCondition cond(conj);
 
+            // We cannot push filter into join conditions of a LeftOnly join - will break semantics
+            if(join->JoinKind == "LeftOnly") {
+                continue;
+            }
+
             if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
                 joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
                 continue;
@@ -88,7 +93,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    if (join->JoinKind == "Cross" && !joinConditions.empty()) {
+    if ((join->JoinKind == "Cross" || join->JoinKind == "Left" ) && !joinConditions.empty()) {
         join->JoinKind = "Inner";
     }
 

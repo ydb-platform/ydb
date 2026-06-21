@@ -1,8 +1,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition_blob_encoder.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
 #include <ydb/core/persqueue/pqtablet/partition/blob_key_filter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
@@ -28,6 +30,7 @@
 
 #include <deque>
 #include <functional>
+#include <memory>
 
 template<>
 void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKikimrPQ::TEvProposeTransactionResult_EStatus v) {
@@ -4768,6 +4771,66 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
         return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
     });
     Ctx->Runtime->DispatchEvents(options);
+}
+
+TBlobKeyTokenPtr MakeTestBlobKeyToken() {
+    auto token = std::make_shared<TBlobKeyToken>();
+    token->NeedDelete = false;
+    return token;
+}
+
+void AddHeadKeyWithBatch(
+    TPartitionBlobEncoder& encoder,
+    ui32 levelBorder,
+    const TPartitionId& partitionId,
+    ui64 offset,
+    char fill,
+    ui64 seqNo)
+{
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
+    TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
+    batch.Pack();
+    const ui32 blobSize = batch.GetPackedSize();
+
+    const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
+
+    if (encoder.DataKeysHead.empty()) {
+        encoder.DataKeysHead.emplace_back(levelBorder);
+    }
+    encoder.DataKeysHead[0].AddKey(key, blobSize);
+    encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.Head.AddBatch(batch);
+}
+
+Y_UNIT_TEST(PopFrontHeadKeySyncsHeadWithRemainingHeadKeys) {
+    const TPartitionId partitionId(1);
+    TPartitionBlobEncoder encoder(partitionId, false);
+
+    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 10, 'a', 1);
+    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 11, 'b', 2);
+
+    encoder.Head.Offset = 10;
+    encoder.Head.PartNo = 0;
+    encoder.Head.PackedSize = encoder.HeadKeys[0].Size + encoder.HeadKeys[1].Size;
+
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatches().size(), 2u);
+
+    encoder.PopFrontHeadKey();
+
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.front().Key.GetOffset(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatches().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatch(0).GetOffset(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PackedSize, encoder.HeadKeys.front().Size);
+
+    TVector<TClientBlob> remaining;
+    encoder.Head.GetBatch(0).UnpackTo(&remaining);
+    UNIT_ASSERT_VALUES_EQUAL(remaining.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(remaining[0].Data[0], 'b');
 }
 
 } // End of suite

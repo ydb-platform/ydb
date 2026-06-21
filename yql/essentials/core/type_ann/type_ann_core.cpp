@@ -2465,7 +2465,6 @@ namespace NTypeAnnImpl {
                     .Add(0, input->HeadPtr())
                     .List(1)
                         .Atom(0, "_yql_", TNodeFlags::Default)
-                        .Atom(1, "__ydb_", TNodeFlags::Default)
                     .Seal()
                 .Seal()
                 .Build();

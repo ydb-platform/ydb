@@ -509,7 +509,7 @@ void TPartition::FinalizeEmptyBlobEncoder(TPartitionBlobEncoder& encoder, ui64 s
 }
 
 bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCompactionZone, const TActorContext& ctx) {
-    if (encoder.DataKeysBody.empty()) {
+    if (encoder.DataKeysBody.empty() && encoder.HeadKeys.empty()) {
         return false;
     }
 
@@ -519,28 +519,73 @@ bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCo
     const auto now = ctx.Now();
     const ui64 partitionEndOffset = GetEndOffset();
 
-    auto canDrop = [&](const TDataKey& firstKey, bool isLastBlob) {
+    auto getEncoderDataSize = [&]() {
+        ui64 size = encoder.BodySize;
+        for (const auto& key : encoder.HeadKeys) {
+            size += key.Size;
+        }
+        return size;
+    };
+
+    auto getFwzFirstKey = [&]() -> const TDataKey* {
+        if (!BlobEncoder.DataKeysBody.empty()) {
+            return &BlobEncoder.DataKeysBody.front();
+        }
+        if (!BlobEncoder.HeadKeys.empty()) {
+            return &BlobEncoder.HeadKeys.front();
+        }
+        return nullptr;
+    };
+
+    auto isLastBlobInPartition = [&](bool hasMoreInEncoder) {
+        if (hasMoreInEncoder) {
+            return false;
+        }
+        if (isCompactionZone) {
+            return BlobEncoder.DataKeysBody.empty() && BlobEncoder.HeadKeys.empty();
+        }
+        return true;
+    };
+
+    auto updateStartOffsetFromKey = [&](const TKey& key) {
+        encoder.StartOffset = key.GetOffset();
+        if (key.GetPartNo() > 0) {
+            ++encoder.StartOffset;
+        }
+    };
+
+    auto updateStartOffsetFromFront = [&]() {
+        if (!encoder.DataKeysBody.empty()) {
+            updateStartOffsetFromKey(encoder.DataKeysBody.front().Key);
+        } else if (!encoder.HeadKeys.empty()) {
+            const auto& key = encoder.HeadKeys.front().Key;
+            updateStartOffsetFromKey(key);
+            encoder.Head.Offset = key.GetOffset();
+            encoder.Head.PartNo = key.GetPartNo();
+        }
+    };
+
+    auto popFrontHead = [&]() {
+        encoder.ScheduleDelete(encoder.HeadKeys.front());
+        encoder.HeadKeys.pop_front();
+    };
+
+    auto canDrop = [&](const TDataKey& firstKey, const TDataKey* nextKey, bool isLastBlob) {
         if (isLastBlob) {
             if (ImportantConsumersNeedToKeepLastKey(firstKey, now)) {
                 return false;
             }
         } else {
-            const auto& nextKey = encoder.DataKeysBody[1];
-            if (ImportantConsumersNeedToKeepCurrentKey(firstKey, nextKey, now)) {
+            Y_ABORT_UNLESS(nextKey);
+            if (ImportantConsumersNeedToKeepCurrentKey(firstKey, *nextKey, now)) {
                 return false;
             }
         }
 
         if (hasStorageLimit) {
-            if (isLastBlob) {
-                if (encoder.BodySize < partConfig.GetStorageLimitBytes()) {
-                    return false;
-                }
-            } else {
-                const auto bodySize = encoder.BodySize - firstKey.Size;
-                if (bodySize < partConfig.GetStorageLimitBytes()) {
-                    return false;
-                }
+            const auto dataSizeAfterDrop = getEncoderDataSize() - firstKey.Size;
+            if (dataSizeAfterDrop < partConfig.GetStorageLimitBytes()) {
+                return false;
             }
         } else if (now < firstKey.Timestamp + lifetimeLimit) {
             return false;
@@ -548,44 +593,81 @@ bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCo
         return true;
     };
 
+    auto finalizeIfEmpty = [&]() {
+        if (!encoder.DataKeysBody.empty() || !encoder.HeadKeys.empty()) {
+            return;
+        }
+        if (isCompactionZone) {
+            GapOffsets.clear();
+            GapSize = 0;
+        }
+        FinalizeEmptyBlobEncoder(encoder, partitionEndOffset, !isCompactionZone);
+    };
+
     bool hasDrop = false;
+
     while (!encoder.DataKeysBody.empty()) {
         const auto& firstKey = encoder.DataKeysBody.front();
-        const bool isLastBlob = encoder.DataKeysBody.size() == 1;
-        if (!canDrop(firstKey, isLastBlob)) {
+        const bool hasMoreInEncoder = encoder.DataKeysBody.size() > 1 || !encoder.HeadKeys.empty();
+        const bool isLastBlob = isLastBlobInPartition(hasMoreInEncoder);
+        const TDataKey* nextKey = nullptr;
+        if (encoder.DataKeysBody.size() > 1) {
+            nextKey = &encoder.DataKeysBody[1];
+        } else if (!encoder.HeadKeys.empty()) {
+            nextKey = &encoder.HeadKeys.front();
+        } else if (isCompactionZone) {
+            nextKey = getFwzFirstKey();
+        }
+
+        if (!canDrop(firstKey, nextKey, isLastBlob)) {
             break;
         }
 
-        if (!isLastBlob) {
-            const auto& nextKey = encoder.DataKeysBody[1];
+        if (nextKey) {
             encoder.pop_front();
 
-            if (isCompactionZone && !GapOffsets.empty() && nextKey.Key.GetOffset() == GapOffsets.front().second) {
+            if (isCompactionZone && !GapOffsets.empty() && nextKey->Key.GetOffset() == GapOffsets.front().second) {
                 GapSize -= GapOffsets.front().second - GapOffsets.front().first;
                 GapOffsets.pop_front();
             }
         } else {
             encoder.pop_front();
-            if (isCompactionZone) {
-                GapOffsets.clear();
-                GapSize = 0;
-            }
-            FinalizeEmptyBlobEncoder(encoder, partitionEndOffset, !isCompactionZone);
         }
 
         hasDrop = true;
+        finalizeIfEmpty();
 
         if (isLastBlob) {
             break;
         }
     }
 
-    if (hasDrop && !encoder.DataKeysBody.empty()) {
-        const auto& lastKey = encoder.DataKeysBody.front().Key;
-        encoder.StartOffset = lastKey.GetOffset();
-        if (lastKey.GetPartNo() > 0) {
-            ++encoder.StartOffset;
+    while (encoder.DataKeysBody.empty() && !encoder.HeadKeys.empty()) {
+        const auto& firstKey = encoder.HeadKeys.front();
+        const bool hasMoreInEncoder = encoder.HeadKeys.size() > 1;
+        const bool isLastBlob = isLastBlobInPartition(hasMoreInEncoder);
+        const TDataKey* nextKey = nullptr;
+        if (encoder.HeadKeys.size() > 1) {
+            nextKey = &encoder.HeadKeys[1];
+        } else if (isCompactionZone) {
+            nextKey = getFwzFirstKey();
         }
+
+        if (!canDrop(firstKey, nextKey, isLastBlob)) {
+            break;
+        }
+
+        popFrontHead();
+        hasDrop = true;
+        finalizeIfEmpty();
+
+        if (isLastBlob) {
+            break;
+        }
+    }
+
+    if (hasDrop) {
+        updateStartOffsetFromFront();
     }
 
     return hasDrop;
@@ -772,8 +854,10 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
     bool hasDrop = CleanUpBlobsInEncoder(CompactionBlobEncoder, true, ctx);
 
-    if (CompactionBlobEncoder.DataKeysBody.empty()) {
-        const ui64 compactionZoneEnd = BlobEncoder.DataKeysBody.empty() ? GetEndOffset() : BlobEncoder.StartOffset;
+    if (CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.HeadKeys.empty()) {
+        const ui64 compactionZoneEnd = BlobEncoder.DataKeysBody.empty() && BlobEncoder.HeadKeys.empty()
+            ? GetEndOffset()
+            : BlobEncoder.StartOffset;
         CompactionBlobEncoder.StartOffset = compactionZoneEnd;
         CompactionBlobEncoder.EndOffset = compactionZoneEnd;
         CompactionBlobEncoder.Head.Offset = compactionZoneEnd;
@@ -781,7 +865,8 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         hasDrop |= CleanUpBlobsInEncoder(BlobEncoder, false, ctx);
     }
 
-    if (CompactionBlobEncoder.DataKeysBody.empty() && BlobEncoder.DataKeysBody.empty()) {
+    if (CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.HeadKeys.empty()
+        && BlobEncoder.DataKeysBody.empty() && BlobEncoder.HeadKeys.empty()) {
         const ui64 endOffset = GetEndOffset();
         CompactionBlobEncoder.StartOffset = endOffset;
         CompactionBlobEncoder.EndOffset = endOffset;

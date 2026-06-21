@@ -414,9 +414,6 @@ public:
             }
             return {};
         }
-        if (!RequestEv) {
-            return "nullptr";
-        }
         return RequestEv->GetQuery();
     }
 

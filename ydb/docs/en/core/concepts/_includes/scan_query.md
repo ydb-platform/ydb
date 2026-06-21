@@ -34,7 +34,7 @@ Even though *Scan Queries* do not directly interfere with OLTP transactions, the
 
 ## How to use {#how-use}
 
-Like other query types, *Scan Queries* are available through {% if link-console-main %} the [management console]({{ link-console-main }}) (you must add the pragma `PRAGMA Kikimr.ScanQuery = "true";` to the query), {% endif %} [CLI](../../reference/ydb-cli/commands/scan-query.md) and [SDK](../../reference/ydb-sdk/index.md).
+Like other query types, *Scan Queries* are available through {% if link-console-main %} the [management console]({{ link-console-main }}) (you must add the pragma `PRAGMA Kikimr.ScanQuery = "true";` to the query), {% endif %} [CLI](../../reference/ydb-cli/scan-query.md) and [SDK](../../reference/ydb-sdk/index.md).
 
 {% if oss %}
 

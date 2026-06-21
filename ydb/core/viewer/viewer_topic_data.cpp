@@ -6,6 +6,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb/services/lib/auth/auth_helpers.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
+
 namespace NKikimr::NViewer {
 
 void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -230,12 +232,12 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
             try {
                 auto decompressed = codec->DecompressData(dataChunk.GetData());
                 if (decompressed.Messages.empty()) {
-                    BLOG_ERROR("Topic data decompression failed"
-                        << ": path=" << TopicPath
-                        << ", partition=" << PartitionId
-                        << ", offset=" << r.GetOffset()
-                        << ", codec=" << dataChunk.GetCodec()
-                        << ", error=No messages in decompressed data");
+                    YDB_LOG_ERROR("Topic data decompression failed error=No messages in decompressed data",
+                        {"logPrefix", GetLogPrefix()},
+                        {"path", TopicPath},
+                        {"partition", PartitionId},
+                        {"offset", r.GetOffset()},
+                        {"codec", dataChunk.GetCodec()});
 
                     return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
                 }
@@ -271,12 +273,13 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
                 }
                 continue;
             } catch (...) {
-                BLOG_ERROR("Topic data decompression failed"
-                    << ": path=" << TopicPath
-                    << ", partition=" << PartitionId
-                    << ", offset=" << r.GetOffset()
-                    << ", codec=" << dataChunk.GetCodec()
-                    << ", error=" << CurrentExceptionMessage());
+                YDB_LOG_ERROR("Topic data decompression failed",
+                    {"logPrefix", GetLogPrefix()},
+                    {"path", TopicPath},
+                    {"partition", PartitionId},
+                    {"offset", r.GetOffset()},
+                    {"codec", dataChunk.GetCodec()},
+                    {"error", CurrentExceptionMessage()});
                 return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
             }
         } else {

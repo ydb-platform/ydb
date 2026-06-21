@@ -4,6 +4,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
+
 namespace NKikimr::NViewer {
 
 template<typename T>
@@ -1158,7 +1160,10 @@ void TViewerPipeClient::RequestDone(i32 requests) {
         return;
     }
     if (requests > DataRequests) {
-        BLOG_ERROR("Requests count mismatch: " << requests << " > " << DataRequests);
+        YDB_LOG_ERROR("Requests count",
+            {"logPrefix", GetLogPrefix()},
+            {"mismatch", requests},
+            {"dataRequests", DataRequests});
         if (Span) {
             Span.Event("Requests count mismatch");
         }
@@ -1196,7 +1201,8 @@ void TViewerPipeClient::Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TViewerPipeClient::Cancelled() {
-    BLOG_D("Request cancelled");
+    YDB_LOG_DEBUG("Request cancelled",
+        {"logPrefix", GetLogPrefix()});
     AddEvent("Cancelled");
     PassAway();
 }

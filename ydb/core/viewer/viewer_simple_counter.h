@@ -33,7 +33,11 @@ public:
         MaxCounter = std::clamp<ui32>(FromStringWithDefault(params.Get("max_counter"), MaxCounter), 1, 100000);
         Period = std::clamp<ui32>(FromStringWithDefault(params.Get("period"), Period), 1, 100000);
         FailChance = std::clamp<ui32>(FromStringWithDefault(params.Get("fail_chance"), FailChance), 0, 100);
-        BLOG_D("Started MaxCounter: " << MaxCounter << ", Period: " << Period << ", FailChance: " << FailChance);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Started",
+            {"logPrefix", GetLogPrefix()},
+            {"maxCounter", MaxCounter},
+            {"period", Period},
+            {"failChance", FailChance});
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "text/plain"));
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
@@ -43,11 +47,14 @@ public:
     void HandleTimer() {
         ++Counter;
         if (FailChance > 0 && ((ui32)NPrivate::TRandom() % 100) < FailChance) {
-            BLOG_D("Simulate fail");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Simulate fail",
+                {"logPrefix", GetLogPrefix()});
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk("failed"));
             return ReplyAndPassAway();
         }
-        BLOG_D("Counter: " << Counter);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Dump logPrefix, counter",
+            {"logPrefix", GetLogPrefix()},
+            {"counter", Counter});
         auto dataChunk = HttpResponse->CreateDataChunk(TStringBuilder() << Counter << "\n");
         if (Counter >= MaxCounter) {
             dataChunk->SetEndOfData();
@@ -61,7 +68,8 @@ public:
     }
 
     void Cancelled() {
-        BLOG_D("Cancelled");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Cancelled",
+            {"logPrefix", GetLogPrefix()});
         ReplyAndPassAway();
     }
 
@@ -72,7 +80,8 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        BLOG_D("Done");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::VIEWER, "Done",
+            {"logPrefix", GetLogPrefix()});
         HttpEvent.Reset(); // to avoid double reply
         TBase::ReplyAndPassAway("ok");
     }

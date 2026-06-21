@@ -94,7 +94,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
   # YDB
   ydb_version: "версия_системы"
-  ydb_archive: "{{ ansible_config_file | dirname }}/files/ydbd.tar.gz"
+  ydb_archive: "files/ydbd.tar.gz"
 
   # Дополнительные параметры
   ydb_allow_format_drives: true

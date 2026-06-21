@@ -1060,6 +1060,12 @@ TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {
     return new TYqlTableRefNode(std::move(position), std::move(args));
 }
 
+TNodePtr BuildYqlSelf(TPosition position) {
+    TNodePtr x = new TAstListNodeImpl(std::move(position));
+    x->Add("YqlSelf");
+    return x;
+}
+
 TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args) {
     return new TYqlValuesNode(std::move(position), std::move(args));
 }

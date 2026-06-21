@@ -71,7 +71,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
                     .FiberId = fiberId,
                     .WaitingSince = fiber->GetWaitingSince(),
                     .TraceId = traceContext ? traceContext->GetTraceId() : TTraceId(),
-                    .TraceLoggingTag = traceContext ? traceContext->GetLoggingTag() : TString(),
+                    .TraceLoggingTag = traceContext ? traceContext->GetLoggingTag() : std::string(),
                 };
 
                 auto optionalContext = TrySynthesizeLibunwindContextFromMachineContext(*fiber->GetMachineContext());

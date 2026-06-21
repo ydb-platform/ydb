@@ -39,6 +39,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferFreeSpace
 ydb/core/blobstorage/ut_blobstorage/ut_ddisk DDisk.PersistentBufferWithRestarts
 ydb/core/blobstorage/ut_blobstorage/ut_ddisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_donor Donor.ManualCrossNodeReassignMustKeepDonorForbiddenOnRetry
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestBlobSizeLimitAboveLimit
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestBlobSizeLimitBelowLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestDisabling
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestEnabling
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestLoweringMemoryLimit
@@ -69,6 +71,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneB
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers VDiskStartupBrokers.LocalRecoveryBrokerReleasesTokenOnStartupFailurePerPDisk
 ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers VDiskStartupBrokers.LocalRecoveryBrokerSerializesStartupPerNode
+ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers VDiskStartupBrokers.LocalRecoveryBrokerSerializesStartupPerPDisk
+ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers VDiskStartupBrokers.StartupDataSyncBrokerDoesNotHangWhenQueuedOwnerDiesBeforeActivation
 ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers VDiskStartupBrokers.StartupDataSyncBrokerReleasesTokenWhenPeerIsOfflinePerNode
 ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals ChunkKeeper.Random
@@ -77,6 +81,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals unittest.[*/*] chunk
 ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationHuge
 ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall
 ydb/core/blobstorage/ut_mirror3of4 unittest.sole chunk
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery01
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery03
@@ -110,6 +115,7 @@ ydb/core/kqp/ut/query KqpQueryEventLog.IssuesOnlyInFirstPartOnFailure
 ydb/core/kqp/ut/query KqpQueryEventLog.LongIssuesChunkedAcrossPartsOnFailure
 ydb/core/kqp/ut/query KqpQueryEventLog.LongIssuesTruncatedAtWarn
 ydb/core/kqp/ut/query KqpQueryEventLog.LongQueryTruncatedAtDebug
+ydb/core/kqp/ut/query KqpQueryEventLog.MetadataSystemUserSuccessSilentButFailureLogged
 ydb/core/kqp/ut/query KqpQueryEventLog.StreamingBigResultReportsResultsSize
 ydb/core/kqp/ut/query KqpQueryEventLog.SuccessSilentAtWarnButFailureLogged
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -189,7 +195,6 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_OneBatch
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/column_table unittest.sole chunk
-ydb/core/transfer/ut/functional Transfer.BaseScenario_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
@@ -232,27 +237,50 @@ ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersio
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_stable-26-2-1_to_stable-26-1-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderMixedCluster.test_simple_reader_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_prestable-26-3]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-1-1_to_stable-26-2-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-2-1_to_stable-26-1-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-2-1_to_stable-26-2-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1_and_stable-26-1-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1_and_stable-26-1-1-row]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_schema_changes_in_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_table_operations_in_mixed_cluster[mixed_prestable-26-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_table_operations_in_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRestart.test_create_alter_table_on_one_version_read_on_another[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_schema_changes_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_table_operations_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read_with_long_live_consumer[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read_with_long_live_consumer[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read_with_long_live_producer[rolling_stable-26-1-1_to_stable-26-2-1]
+ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read_with_long_live_producer[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-1-1_to_stable-26-2-1-row-False]
+ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-1-1_to_stable-26-2-1-row-True]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-2-1_to_prestable-26-3-row-False]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-2-1_to_prestable-26-3-row-True]
 ydb/tests/compatibility test_unique_index.py.TestUniqueIndex.test_unique_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerMixedCluster.test_workload_manager_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_prestable-26-3_to_prestable-26-3]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-1-1_to_stable-26-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-2-1_to_stable-26-1-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-2-1_to_stable-26-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransfer.test_workload_manager_tablet_transfer[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransfer.test_workload_manager_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest.py.TestDigest.test_digest_all[mixed_prestable-26-3_and_stable-26-2-1]
@@ -321,6 +349,7 @@ ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution
 ydb/tests/functional/limits test_schemeshard_limits.py.TestSchemeShardLimitsCase0.test_effective_acls_are_too_large
 ydb/tests/functional/nbs py3test.sole chunk
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
@@ -329,7 +358,6 @@ ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_a
 ydb/tests/functional/replication Replication.PauseAndResumeReplication
 ydb/tests/functional/replication Replication.TopicAutopartitioning
 ydb/tests/functional/replication unittest.sole chunk
-ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
 ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/statistics py3test.[test_analyze.py */*] chunk
 ydb/tests/functional/statistics test_analyze.py.test_basic
@@ -814,6 +842,7 @@ ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpTpchS0_1.test
 ydb/tests/functional/tpc/medium/tpch py3test.[test_decimal.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py */*] chunk
+ydb/tests/functional/tpc/medium/tpch py3test.[test_parallel.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_s1.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch py3test.[test_s_float.py */*] chunk
 ydb/tests/functional/tpc/medium/tpch test_decimal.py.TestTpchS0_1DecimalNative.test_tpch[10]
@@ -991,7 +1020,6 @@ ydb/tests/stress/backup/tests py3test.sole chunk
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/cdc/tests py3test.sole chunk
 ydb/tests/stress/cdc/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/ctas/tests py3test.sole chunk
 ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/federated_queries/tests py3test.sole chunk
 ydb/tests/stress/federated_queries/tests test_workload.py.TestYdbWorkload.test
@@ -1003,8 +1031,8 @@ ydb/tests/stress/kv/tests py3test.sole chunk
 ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[column]
 ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[row]
 ydb/tests/stress/kv_volume/tests py3test.sole chunk
-ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v1-ydb/tests/stress/kv_volume/tests/configs/inline_channel_read.textproto]
 ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
+ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_load
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
 ydb/tests/stress/min_max_workload/tests py3test.sole chunk
@@ -1012,6 +1040,7 @@ ydb/tests/stress/min_max_workload/tests test_workload.py.TestMinMaxWorkload.test
 ydb/tests/stress/mixedpy/tests py3test.sole chunk
 ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[column]
 ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[row]
+ydb/tests/stress/nfs_backups/tests py3test.sole chunk
 ydb/tests/stress/nfs_backups/tests test_workload.py.TestYdbNfsWorkload.test
 ydb/tests/stress/node_broker/tests py3test.sole chunk
 ydb/tests/stress/node_broker/tests test_workload.py.TestDeltaProtocol.test
@@ -1032,11 +1061,10 @@ ydb/tests/stress/s3_backups/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
 ydb/tests/stress/show_create/table/tests py3test.sole chunk
 ydb/tests/stress/show_create/table/tests test_workload.py.TestYdbWorkload.test_show_create_table_workload[30-None]
-ydb/tests/stress/show_create/table/tests test_workload.py.TestYdbWorkload.test_show_create_table_workload[30-test_sct]
 ydb/tests/stress/show_create/view/tests py3test.sole chunk
 ydb/tests/stress/show_create/view/tests test_workload.py.TestYdbWorkload.test_show_create_view_workload[30-None]
-ydb/tests/stress/show_create/view/tests test_workload.py.TestYdbWorkload.test_show_create_view_workload[30-test_scv]
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
+ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[column]
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[row]
 ydb/tests/stress/streaming/tests py3test.sole chunk
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test

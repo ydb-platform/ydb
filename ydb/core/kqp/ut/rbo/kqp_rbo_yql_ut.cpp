@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
+#include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
@@ -26,7 +27,6 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <util/system/env.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -45,6 +45,18 @@ using namespace NKikimr::NKqp;
 using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NStat;
+
+TString FormatBenchmarkTraceTitle(TStringBuf suiteName, TStringBuf benchmarkName, ui32 queryId) {
+    Y_UNUSED(suiteName);
+    const TString benchmark(benchmarkName);
+    if (benchmark.StartsWith("TPCDS")) {
+        return TStringBuilder() << "TPCDS Q" << queryId;
+    }
+    if (benchmark.StartsWith("TPCH")) {
+        return TStringBuilder() << "TPCH Q" << queryId;
+    }
+    return TStringBuilder() << benchmark << " Q" << queryId;
+}
 
 std::pair<ui32, ui32> GetNewRBOCompileCounters(TKikimrRunner& kikimr) {
     auto counters = TKqpCounters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -2427,6 +2439,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
             q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
             q = consts + "\n" + q;
+            TScopedRboTraceTitleOverride traceTitle(
+                FormatBenchmarkTraceTitle("KqpRboYql", "TPCH_YDB_PERF", qId),
+                TString(q.data(), q.size()));
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExplainDataQuery(q).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -2452,6 +2467,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(data/)"};
     static constexpr std::array<const char*, 2> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
     static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
+    static constexpr const char* BenchmarkTraceSuiteName = "KqpRboYql";
+    static constexpr std::array<const char*, 2> BenchmarkTraceName{"TPCH_YQL", "TPCDS_YQL"};
     static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
 
     bool PlanHasJoin(const NJson::TJsonValue& planNode) {
@@ -2553,6 +2570,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             q = toDecimal + "\n" + toDecimalMax + "\n" + round + "\n" + q;
 
             Cerr << "Executing benchmark query " << qId << "\n";
+            TScopedRboTraceTitleOverride traceTitle(
+                FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], qId),
+                q);
 
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
@@ -2631,6 +2651,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
             q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
 
+            TScopedRboTraceTitleOverride traceTitle(
+                FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], queryId),
+                q);
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
@@ -3060,6 +3083,54 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
     }
 
+    Y_UNIT_TEST(MapMetadataAliasFanout) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+        TPlanProps expressionProps;
+
+        auto read = MakeTestRead({TInfoUnit("id"), TInfoUnit("payload")}, pos);
+        read->Props.Metadata = TRBOMetadata();
+        read->Props.Metadata->KeyColumns = {TInfoUnit("id")};
+        read->Props.Metadata->ShuffledByColumns = {TInfoUnit("id")};
+
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend("id_alias", "id", pos, testContext.ExprCtx, expressionProps),
+        });
+        map->ComputeMetadata(testContext.RboCtx, expressionProps);
+
+        UNIT_ASSERT(map->Props.Metadata.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(map->Props.Metadata->KeyColumns.size(), 1);
+        UNIT_ASSERT(map->Props.Metadata->KeyColumns.front() == TInfoUnit("id"));
+        UNIT_ASSERT_VALUES_EQUAL(map->Props.Metadata->ShuffledByColumns.size(), 1);
+        UNIT_ASSERT(map->Props.Metadata->ShuffledByColumns.front() == TInfoUnit("id"));
+    }
+
+    Y_UNIT_TEST(MapOutputPruningKeepsInputForRewrite) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+        TPlanProps expressionProps;
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
+        auto rewrittenColumn = MakeBinaryPredicate(
+            "+",
+            MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps),
+            MakeConstant("Int64", "1", pos, &testContext.ExprCtx)
+        );
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("a_plus"), rewrittenColumn, false),
+        });
+        TOpRoot root(map, pos, {"a_plus"});
+
+        ComputeLogicalTestProps(root);
+        TLogicalOutputPruningStage outputPruning;
+        outputPruning.RunStage(root, testContext.RboCtx);
+
+        const auto mapOutput = map->GetOutputIUs();
+        UNIT_ASSERT_VALUES_EQUAL(mapOutput.size(), 2);
+        UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a")) != mapOutput.end());
+        UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a_plus")) != mapOutput.end());
+    }
+
     Y_UNIT_TEST(DontEliminateLeftJoinWhenNoPK) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();
@@ -3094,7 +3165,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeTestRename("column0", "column0", pos, testContext.ExprCtx, expressionProps),
         });
         auto rightRead = MakeTestRead({TInfoUnit("column0")}, pos);
-        auto unionAll = MakeIntrusive<TOpUnionAll>(identityMap, rightRead, pos);
+        auto unionAll = MakeIntrusive<TOpUnionAll>(
+            identityMap,
+            rightRead,
+            pos,
+            TVector<TInfoUnit>{TInfoUnit("column0")}
+        );
         TOpRoot root(unionAll, pos, {"column0"});
 
         TVector<std::unique_ptr<IRule>> rules;

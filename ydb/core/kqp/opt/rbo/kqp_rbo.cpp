@@ -1,4 +1,7 @@
 #include "kqp_rbo.h"
+#include "traces/kqp_rbo_rule_trace.h"
+#include "kqp_plan_conversion_utils.h"
+
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -77,7 +80,16 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
             for (const auto& rule : Rules) {
                 auto op = iter.Current;
 
-                if (rule->MatchAndApply(op, ctx, root.PlanProps)) {
+                TRuleTraceAttempt traceAttempt(ctx, rule->RuleName);
+                const bool ruleApplied = rule->MatchAndApply(op, ctx, root.PlanProps);
+                traceAttempt.CloseRule();
+
+                if (!ruleApplied) {
+                    traceAttempt.SubmitIfHasInfo(root, StageName);
+                    continue;
+                }
+
+                if (ruleApplied) {
                     fired = true;
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
@@ -102,6 +114,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     }
 
                     ComputeRequiredProps(root, Props, ctx, StageName);
+                    traceAttempt.SubmitApplied(root, StageName);
                     ++numMatches;
                     break;
                 }
@@ -120,11 +133,16 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
 
+    SubmitInitialPlanTrace(root, rboCtx);
+
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
     }
 
     for (const auto& stage : Stages) {
+        if (rboCtx.NeedToLog()) {
+            rboCtx.TraceLog.stage(std::string(stage->StageName.c_str()));
+        }
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
         ComputeRequiredProps(root, stage->Props, rboCtx, stage->StageName);
         if (needToLog) {

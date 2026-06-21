@@ -5,6 +5,7 @@
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
 
 #include <expected>
 
@@ -21,19 +22,18 @@ public:
     }
 
     [[nodiscard]]
-    std::expected<std::monostate, TString> Put(TStringBuf name, T value) {
-        const auto [_, isInserted] = Values_.emplace(name, std::move(value));
-        if (!isInserted) {
-            return std::unexpected(TStringBuilder() << "Redefinition is forbidden: " << name);
+    TMaybe<T> Exchange(TStringBuf name, T d) {
+        auto [it, isInserted] = Values_.try_emplace(name, std::move(d));
+        if (isInserted) {
+            return Nothing();
         }
 
-        return std::monostate();
+        return std::exchange(it->second, std::move(d));
     }
 
     const T* Get(TStringBuf name) {
-        const T* value = Values_.FindPtr(name);
+        const T* value = GetLocal(name);
         if (value) {
-            Used_.emplace(name);
             return value;
         }
 
@@ -57,6 +57,14 @@ public:
     }
 
 private:
+    const T* GetLocal(TStringBuf name) {
+        const T* value = Values_.FindPtr(name);
+        if (value) {
+            Used_.emplace(name);
+        }
+        return value;
+    }
+
     THashMap<TString, T> Values_;
     THashSet<TString> Used_;
     TPtr Parent_;

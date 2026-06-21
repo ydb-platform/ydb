@@ -49,7 +49,7 @@ public:
 
 private:
     NYql::TTypeAnnotationContext& TypeCtx;
-    const NOpt::TKqpOptimizeContext& KqpCtx;
+    NOpt::TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
 };
 

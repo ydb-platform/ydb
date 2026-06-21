@@ -1,6 +1,6 @@
 # Chaos Testing
 
-Chaos testing is a methodology for verifying the resilience of {{ ydb-short-name }} by deliberately injecting failures into a running cluster. The goal is to ensure that {{ ydb-short-name }} correctly survives real-world failures: node losses, network partitions, disk problems, and other abnormal situations. The **Nemesis** tool is responsible for injecting this chaos.
+Chaos testing is a methodology for verifying the resilience of {{ ydb-short-name }} by deliberately injecting failures into a running cluster. The goal is to ensure that {{ ydb-short-name }} correctly survives real-world failures: node losses, network partitions, disk problems, and other abnormal situations. The **[Nemesis](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stability/nemesis)** tool is responsible for injecting this chaos.
 
 ## What Is Tested
 

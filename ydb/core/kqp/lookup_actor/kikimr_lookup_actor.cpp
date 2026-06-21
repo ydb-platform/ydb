@@ -1,5 +1,4 @@
 #include "kikimr_lookup_actor.h"
-//#include "yql_generic_base_actor.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>

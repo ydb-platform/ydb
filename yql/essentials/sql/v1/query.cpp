@@ -255,6 +255,9 @@ INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSetti
     if (tableSettings.ReadReplicasSettings) {
         settings = L(settings, Q(Y(Q("readReplicasSettings"), tableSettings.ReadReplicasSettings)));
     }
+    if (tableSettings.StableDcPlacement) {
+        settings = L(settings, Q(Y(Q("stableDcPlacement"), tableSettings.StableDcPlacement)));
+    }
     if (const auto& ttl = tableSettings.TtlSettings) {
         if (ttl.IsSet()) {
             const auto& ttlSettings = ttl.GetValueSet();

@@ -958,6 +958,27 @@ namespace {
         return true;
     }
 
+    [[nodiscard]] bool ParseStableDcPlacement(
+        google::protobuf::RepeatedPtrField<TString>& stableDcPlacement,
+        const TCoNameValueTuple& setting,
+        TExprContext& ctx
+    ) {
+        const auto value = TString(
+            setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+        );
+
+        Ydb::StatusIds::StatusCode code;
+        TString errText;
+        if (!ConvertStableDcPlacementToProto(value, stableDcPlacement, code, errText)) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Pos()),
+                                  NYql::YqlStatusFromYdbStatus(code),
+                                  errText));
+            return false;
+        }
+
+        return true;
+    }
+
     bool ParseAsyncReplicationSettingsBase(
         TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
         const TString& objectName = "replication"
@@ -2352,6 +2373,10 @@ public:
                             if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), setting, ctx)) {
                                 return SyncError();
                             }
+                        } else if (name == "stableDcPlacement") {
+                            if (!ParseStableDcPlacement(*alterTableRequest.mutable_set_stable_dc_placement(), setting, ctx)) {
+                                return SyncError();
+                            }
                         } else if (name == "setTtlSettings") {
                             TTtlSettings ttlSettings;
                             TString error;
@@ -2851,6 +2876,10 @@ public:
                                     }
                                 } else if (tsName == "readReplicasSettings") {
                                     if (!ParseReadReplicasSettings(*alterTableRequest.mutable_set_read_replicas_settings(), tableSetting, ctx)) {
+                                        return SyncError();
+                                    }
+                                } else if (tsName == "stableDcPlacement") {
+                                    if (!ParseStableDcPlacement(*alterTableRequest.mutable_set_stable_dc_placement(), tableSetting, ctx)) {
                                         return SyncError();
                                     }
                                 } else {

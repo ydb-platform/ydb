@@ -1803,6 +1803,54 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateTableWithReadReplicas(true);
     }
 
+    void CreateTableWithStableDcPlacement(bool compat) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithStableDcPlacement";
+        {
+            auto queryCreate = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                STABLE_DC_PLACEMENT = "dc1,dc2,dc3"
+            );)";
+            auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(resultCreate.GetStatus(), EStatus::SUCCESS, resultCreate.GetIssues().ToString());
+        }
+
+        {
+            const auto& partitionConfig = kikimr.GetTestClient().Ls(tableName)
+                ->Record.GetPathDescription().GetTable().GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.DataCentersForStablePlacementSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetDataCentersForStablePlacement(0), "dc1");
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetDataCentersForStablePlacement(1), "dc2");
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetDataCentersForStablePlacement(2), "dc3");
+        }
+
+        AlterTableSetttings(session, tableName, {{"STABLE_DC_PLACEMENT", "\"man,vla,sas\""}}, compat);
+        {
+            const auto& partitionConfig = kikimr.GetTestClient().Ls(tableName)
+                ->Record.GetPathDescription().GetTable().GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.DataCentersForStablePlacementSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetDataCentersForStablePlacement(0), "man");
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetDataCentersForStablePlacement(1), "vla");
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetDataCentersForStablePlacement(2), "sas");
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithStableDcPlacementUncompat) {
+        CreateTableWithStableDcPlacement(false);
+    }
+
+    Y_UNIT_TEST(CreateTableWithStableDcPlacementCompat) {
+        CreateTableWithStableDcPlacement(true);
+    }
+
     void CreateTableWithTtlSettings(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

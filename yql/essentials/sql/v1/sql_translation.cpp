@@ -2635,6 +2635,15 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
             return false;
         }
+    } else if (to_lower(id.Name) == "stable_dc_placement") {
+        if (reset) {
+            Ctx_.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreString(*value, settings.StableDcPlacement, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(id.Name) == "ttl") {
         if (!reset) {
             TSqlExpression expr(*this);

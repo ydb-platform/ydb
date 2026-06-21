@@ -214,6 +214,7 @@ message TPartitionConfig {
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
     reserved 26; // deprecated -> ByKeyFilterPrefixes
     repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
+    repeated string DataCentersForStablePlacement = 28;
 }
 
 message TByKeyFilterPrefix {

@@ -1042,6 +1042,8 @@ message CreateTableRequest {
      * The metrics configuration for the given table.
      */
     optional MetricsSettings metrics_settings = 21;
+    // Data centers used for stable tablet placement (round-robin across partitions)
+    repeated string stable_dc_placement = 22;
 }
 
 message CreateTableResponse {
@@ -1154,6 +1156,8 @@ message AlterTableRequest {
         MetricsSettings set_metrics_settings = 25;
         google.protobuf.Empty drop_metrics_settings = 26;
     }
+    // Data centers used for stable tablet placement (round-robin across partitions)
+    repeated string set_stable_dc_placement = 27;
 }
 
 message AlterTableResponse {
@@ -1285,6 +1289,8 @@ message DescribeTableResult {
      * The metrics configuration for the given table.
      */
     optional MetricsSettings metrics_settings = 19;
+    // Data centers used for stable tablet placement (round-robin across partitions)
+    repeated string stable_dc_placement = 20;
 }
 
 message Query {

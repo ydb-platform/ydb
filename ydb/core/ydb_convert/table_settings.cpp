@@ -21,6 +21,29 @@ namespace {
     const ui32 defaultMinPartitions = 1;
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
 
+    bool FillStableDcPlacement(
+        NKikimrSchemeOp::TPartitionConfig& partitionConfig,
+        const google::protobuf::RepeatedPtrField<TString>& stableDcPlacement,
+        Ydb::StatusIds::StatusCode& code, TString& error)
+    {
+        if (stableDcPlacement.empty()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "STABLE_DC_PLACEMENT must contain at least one data center";
+            return false;
+        }
+
+        partitionConfig.ClearDataCentersForStablePlacement();
+        for (const auto& dc : stableDcPlacement) {
+            if (dc.empty()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "STABLE_DC_PLACEMENT contains empty data center name";
+                return false;
+            }
+            partitionConfig.AddDataCentersForStablePlacement(dc);
+        }
+        return true;
+    }
+
     template <typename TYdbProto>
     ui32 CalculateDefaultMinPartitions(const TYdbProto& proto) {
         switch (proto.partitions_case()) {
@@ -221,6 +244,12 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         default:
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Unknown read_replicas_settings type";
+            return false;
+        }
+    }
+
+    if (proto.stable_dc_placement_size() > 0) {
+        if (!FillStableDcPlacement(partitionConfig, proto.stable_dc_placement(), code, error)) {
             return false;
         }
     }
@@ -429,6 +458,13 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         default:
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Unknown read_replicas_settings type";
+            return false;
+        }
+        changed = true;
+    }
+
+    if (proto.set_stable_dc_placement_size() > 0) {
+        if (!FillStableDcPlacement(partitionConfig, proto.set_stable_dc_placement(), code, error)) {
             return false;
         }
         changed = true;

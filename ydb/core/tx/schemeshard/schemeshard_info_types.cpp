@@ -1201,6 +1201,10 @@ bool TPartitionConfigMerger::ApplyChanges(
         result.SetKeepSnapshotTimeout(changes.GetKeepSnapshotTimeout());
     }
 
+    if (changes.DataCentersForStablePlacementSize() > 0) {
+        result.MutableDataCentersForStablePlacement()->CopyFrom(changes.GetDataCentersForStablePlacement());
+    }
+
     return true;
 }
 
@@ -1481,6 +1485,20 @@ bool TPartitionConfigMerger::VerifyCreateParams(
         errDescr = TStringBuilder()
                 << "FollowerGroup: only one follower group is allowed for now";
         return false;
+    }
+
+    if (config.DataCentersForStablePlacementSize() > 0) {
+        THashSet<TString> uniqueDcs;
+        for (const auto& dc : config.GetDataCentersForStablePlacement()) {
+            if (dc.empty()) {
+                errDescr = "PartitionConfig: STABLE_DC_PLACEMENT contains empty data center name";
+                return false;
+            }
+            if (!uniqueDcs.insert(dc).second) {
+                errDescr = TStringBuilder() << "PartitionConfig: duplicate data center '" << dc << "' in STABLE_DC_PLACEMENT";
+                return false;
+            }
+        }
     }
 
     bool hasStorageConfig = false;

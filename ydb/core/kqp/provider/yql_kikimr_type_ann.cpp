@@ -1806,6 +1806,10 @@ private:
                 meta->TableSettings.ReadReplicasSettings = TString(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 );
+            } else if (name == "stableDcPlacement") {
+                meta->TableSettings.StableDcPlacement = TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                );
             } else if (name == "setTtlSettings") {
                 TTtlSettings ttlSettings;
                 TString error;

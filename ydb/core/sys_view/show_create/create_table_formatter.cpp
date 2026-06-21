@@ -388,6 +388,12 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         printed |= Format(createRequest.read_replicas_settings(), del, !printed);
     }
 
+    FillStableDcPlacement(createRequest, tableDesc);
+
+    if (createRequest.stable_dc_placement_size() > 0) {
+        printed |= Format(createRequest.stable_dc_placement(), del, !printed);
+    }
+
     FillKeyBloomFilter(createRequest, tableDesc);
 
     if (createRequest.key_bloom_filter() == Ydb::FeatureFlag::ENABLED) {
@@ -937,6 +943,27 @@ bool TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readR
             break;
     }
     return false;
+}
+
+bool TCreateTableFormatter::Format(const google::protobuf::RepeatedPtrField<TString>& stableDcPlacement, TString& del, bool needWith) {
+    if (stableDcPlacement.empty()) {
+        return false;
+    }
+
+    if (needWith) {
+        Stream << " WITH (\n";
+    }
+
+    Stream << del << "\tSTABLE_DC_PLACEMENT = \"";
+    for (int i = 0; i < stableDcPlacement.size(); ++i) {
+        if (i > 0) {
+            Stream << ",";
+        }
+        EscapeString(stableDcPlacement.Get(i), Stream);
+    }
+    Stream << "\"";
+    del = ",\n";
+    return true;
 }
 
 void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage) {

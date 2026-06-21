@@ -79,6 +79,12 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
                 ev->Record.SetFollowerCount(tablePartitionConfig->GetFollowerCount());
             }
         }
+
+        if (tablePartitionConfig->DataCentersForStablePlacementSize() > 0) {
+            size_t n = tablePartitionConfig->DataCentersForStablePlacementSize();
+            auto preferredDc = tablePartitionConfig->GetDataCentersForStablePlacement(shardIdx.Hash() % n);
+            ev->Record.MutableDataCentersPreference()->AddDataCentersGroups()->AddDataCenter(preferredDc);
+        }
     }
 
     if (shard.TabletType == ETabletType::BlockStorePartition   ||

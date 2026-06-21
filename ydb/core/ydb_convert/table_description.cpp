@@ -64,7 +64,8 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->alter_column_families_size() || req->set_compaction_policy() ||
         req->has_alter_partitioning_settings() ||
         req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
-        req->has_set_read_replicas_settings())
+        req->has_set_read_replicas_settings() ||
+        req->set_stable_dc_placement_size() > 0)
     {
         ops.emplace(EAlterOperationKind::Common);
     }
@@ -2540,6 +2541,32 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
     const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
+}
+
+template <typename TYdbProto>
+void FillStableDcPlacementImpl(TYdbProto& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+
+    if (!in.HasPartitionConfig()) {
+        return;
+    }
+
+    const auto& partConfig = in.GetPartitionConfig();
+    if (partConfig.DataCentersForStablePlacementSize() == 0) {
+        return;
+    }
+
+    out.mutable_stable_dc_placement()->CopyFrom(partConfig.GetDataCentersForStablePlacement());
+}
+
+void FillStableDcPlacement(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillStableDcPlacementImpl(out, in);
+}
+
+void FillStableDcPlacement(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillStableDcPlacementImpl(out, in);
 }
 
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,

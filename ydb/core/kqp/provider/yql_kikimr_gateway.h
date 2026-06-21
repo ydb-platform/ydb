@@ -504,6 +504,7 @@ struct TTableSettings {
     TVector<TVector<std::pair<EDataSlot, TString>>> PartitionAtKeys;
     TMaybe<TString> KeyBloomFilter;
     TMaybe<TString> ReadReplicasSettings;
+    TMaybe<TString> StableDcPlacement;
     TResetableSetting<TTtlSettings, void> TtlSettings;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
@@ -1677,6 +1678,9 @@ Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
 
 bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error);
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error);
+bool ConvertStableDcPlacementToProto(const TString& settings,
+    google::protobuf::RepeatedPtrField<TString>& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);
 

@@ -682,7 +682,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
         NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
-        NKikimrSetColumnConstraint.TSetColumnConstraintSettings SetConstraint = 55;
+        NKikimrSetColumnConstraint.TSetColumnConstraintSettings SetColumnConstraint = 55;
         NKikimrSchemeOp.TModifyScheme CreateStreamingQuery = 56;
         NKikimrSchemeOp.TModifyScheme AlterStreamingQuery = 57;
         NKikimrSchemeOp.TModifyScheme DropStreamingQuery = 58;

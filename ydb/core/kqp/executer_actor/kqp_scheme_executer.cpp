@@ -416,7 +416,7 @@ public:
                 return StartAlterOperation();
             }
 
-            case NKqpProto::TKqpSchemeOperation::kSetConstraint: {
+            case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
                 return StartAlterOperation();
             }
 
@@ -920,8 +920,8 @@ public:
                 path = compactOp.source_path();
                 break;
             }
-            case NKqpProto::TKqpSchemeOperation::kSetConstraint: {
-                path = schemeOp.GetSetConstraint().GetTablePath();
+            case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
+                path = schemeOp.GetSetColumnConstraint().GetTablePath();
                 break;
             }
             default:
@@ -1021,8 +1021,8 @@ public:
                 ForwardToSchemeShard(std::move(req));
                 break;
             }
-            case NKqpProto::TKqpSchemeOperation::kSetConstraint: {
-                const auto& constraintSettings = schemeOp.GetSetConstraint();
+            case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
+                const auto& constraintSettings = schemeOp.GetSetColumnConstraint();
                 auto req = std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvCreateRequest>(TxId, Database, constraintSettings);
                 // TODO(flown4qqqq): add user sid
                 ForwardToSchemeShard(std::move(req));
@@ -1141,7 +1141,7 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCompactTable: {
                 return GetCompactionStatus();
             }
-            case NKqpProto::TKqpSchemeOperation::kSetConstraint: {
+            case NKqpProto::TKqpSchemeOperation::kSetColumnConstraint: {
                 return GetSetColumnConstraintStatus();
             }
             default: {

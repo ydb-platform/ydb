@@ -3109,10 +3109,10 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-            bool isSetConstraint = (!constraintSetObjects.empty());
+            bool isSetColumnConstraint = (!constraintSetObjects.empty());
 
-            if (isSetConstraint) {
-                future = Gateway->SetConstraint(table.Metadata->Name, std::move(constraintSetObjects));
+            if (isSetColumnConstraint) {
+                future = Gateway->SetColumnConstraint(table.Metadata->Name, std::move(constraintSetObjects));
             } else if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {

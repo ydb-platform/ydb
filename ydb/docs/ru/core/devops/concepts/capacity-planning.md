@@ -114,8 +114,6 @@ Database Storage = Tablet Storage × RF × Overhead
     TotalPDisks ≥ ceil( UsedSlots / ExpectedSlotCount )
     ```
 
-    Это минимальная граница. Реальная конфигурация потребует больше дисков — для поддержания запаса пустых слотов, необходимого механизму [SelfHeal](../../maintenance/manual/selfheal.md).
-
 6. Выберите конфигурацию кластера — параметры `NumRacks`, `DisksPerRack`, и определите минимально необходимый запас пустых слотов:
 
     ```text
@@ -125,7 +123,7 @@ Database Storage = Tablet Storage × RF × Overhead
 
     Запас пустых слотов необходим для нормальной работы механизма [SelfHeal](../../maintenance/manual/selfheal.md), выполняющего автоматическую реконфигурацию групп хранения для замены вышедших из строя или длительное время недоступных дисков.
 
-    Здесь первое слагаемое `MaxSlotsInRack` — максимальное количество слотов в одном домене отказа. Для однородного кластера `MaxSlotsInRack = DisksPerRack × ExpectedSlotCount`, для неоднородного — `MaxSlotsInRack = max_i(DisksPerRack_i × ExpectedSlotCount)`. Этот запас необходим, чтобы при отказе наиболее ёмкого домена его VDisk'и могли уместиться на оставшемся оборудовании.
+    Первое слагаемое `MaxSlotsInRack` — максимальное количество слотов в одном домене отказа. Для однородного кластера `MaxSlotsInRack = DisksPerRack × ExpectedSlotCount`, для неоднородного — `MaxSlotsInRack = max_i(DisksPerRack_i × ExpectedSlotCount)`. Этот запас необходим, чтобы при отказе наиболее ёмкого домена его VDisk'и могли уместиться на оставшемся оборудовании.
 
     Второе слагаемое `0.027 × TotalSlots` — эмпирически подобранный операционный запас (~1 диск на 37), покрывающий внеплановую замену отдельных дисков.
 

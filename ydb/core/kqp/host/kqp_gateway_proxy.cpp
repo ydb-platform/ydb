@@ -882,19 +882,19 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) override {
-        CHECK_PREPARED_DDL(SetConstraint);
+    TFuture<TGenericResult> SetColumnConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) override {
+        CHECK_PREPARED_DDL(SetColumnConstraint);
 
         auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
         auto& phyTx = *phyQuery.AddTransactions();
         phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-        auto* setConstraintOp = phyTx.MutableSchemeOperation()->MutableSetConstraint();
-        setConstraintOp->SetTablePath(tableName);
+        auto* setColumnConstraintOp = phyTx.MutableSchemeOperation()->MutableSetColumnConstraint();
+        setColumnConstraintOp->SetTablePath(tableName);
         for (auto& s : settings) {
             switch (s.GetConstraint()) {
                 case TSetColumnConstraintSettings::NOT_NULL: {
-                    setConstraintOp->AddNotNullColumns(s.GetColumnName());
+                    setColumnConstraintOp->AddNotNullColumns(s.GetColumnName());
                 }
             }
         }

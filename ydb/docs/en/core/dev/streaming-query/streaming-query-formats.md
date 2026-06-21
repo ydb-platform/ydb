@@ -18,7 +18,7 @@ Built-in formats:
 
 [Examples of parsing custom formats](#parsing).
 
-In the examples on this page, `ydb_source` is a pre-created [external data source](../../concepts/datamodel/external_data_source.md), `input_topic` and `output_topic` are topics available through it, and `output_table` is a {{ ydb-short-name }} table.
+In the examples on this page, `input_topic` and `output_topic` are [topics](../../concepts/datamodel/topic.md) in the current database, and `output_table` is a {{ ydb-short-name }} table. For topics in another database, see [local and external topics in streaming queries](./local-and-external-topics.md).
 
 ## Write formats {#write_formats}
 
@@ -30,11 +30,11 @@ Single-column write:
 CREATE STREAMING QUERY write_string_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         CAST(Data AS String)
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -51,11 +51,11 @@ To write multiple columns, serialize them to JSON:
 CREATE STREAMING QUERY write_json_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -93,7 +93,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = csv_with_names,
         SCHEMA = (
@@ -129,7 +129,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = tsv_with_names,
         SCHEMA = (
@@ -173,7 +173,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_list,
         SCHEMA = (
@@ -190,7 +190,6 @@ END DO
 ### `json_each_row` {#json_each_row}
 
 Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a single JSON **object**. Common for systems like Apache Kafka or [{{ ydb-full-name }} topics](../../concepts/datamodel/topic.md).
-
 Multiple separate JSON objects in one message are not supported; a JSON array is also not supported.
 
 Valid example (one message):
@@ -199,7 +198,7 @@ Valid example (one message):
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 ```
 
-Invalid example (two objects in one message):
+Invalid example:
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
@@ -216,7 +215,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
@@ -256,11 +255,11 @@ Example query:
 CREATE STREAMING QUERY json_as_string_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_as_string,
         SCHEMA = (
@@ -285,7 +284,7 @@ DO BEGIN
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = parquet,
         SCHEMA = (
@@ -301,7 +300,7 @@ END DO
 
 ### `raw` {#raw}
 
-Reads message payloads as raw bytes. Default schema: `SCHEMA(Data String)`.
+Reads message payloads as raw bytes. Data read this way can be processed with [YQL](../../yql/reference/udf/list/string) string functions. Default schema: `SCHEMA(Data String)`.
 
 Example query:
 
@@ -309,11 +308,11 @@ Example query:
 CREATE STREAMING QUERY raw_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         *
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -324,7 +323,9 @@ DO BEGIN
 END DO
 ```
 
-### Supported schema types {#schema}
+### Supported data types {#schema}
+
+Table of all supported types in the query schema:
 
 | Type | csv_with_names | tsv_with_names | json_list | json_each_row | json_as_string | parquet | raw |
 |------|------------------|----------------|-----------|---------------|----------------|---------|-----|
@@ -357,12 +358,12 @@ Example query:
 CREATE STREAMING QUERY json_builtins_example AS
 DO BEGIN
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         JSON_VALUE(Data, "$.key") AS Key,
         JSON_VALUE(Data, "$.value") AS Value
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = raw,
         SCHEMA = (
@@ -398,7 +399,7 @@ DO BEGIN
             >
         )
     FROM
-        ydb_source.input_topic
+        input_topic
     WITH (
         FORMAT = json_as_string,
         SCHEMA = (
@@ -406,7 +407,7 @@ DO BEGIN
         )
     );
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         ts[0] AS Ts,
         update.volume AS Volume
@@ -441,12 +442,12 @@ DO BEGIN
     $input = SELECT
         Dsv::Parse(Data, "\t") AS Data
     FROM
-        ydb_source.input_topic
+        input_topic
     FLATTEN LIST BY (
         String::SplitToList(Data, "\n", TRUE AS SkipEmpty) AS Data
     );
 
-    INSERT INTO ydb_source.output_topic
+    INSERT INTO output_topic
     SELECT
         DictLookup(Data, "name") AS Name,
         DictLookup(Data, "uid") AS Uid

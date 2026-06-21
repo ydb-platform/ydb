@@ -1024,9 +1024,7 @@ public:
             case NKqpProto::TKqpSchemeOperation::kSetConstraint: {
                 const auto& constraintSettings = schemeOp.GetSetConstraint();
                 auto req = std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvCreateRequest>(TxId, Database, constraintSettings);
-                if (UserToken) {
-                    req->Record.SetUserSID(UserToken->GetUserSID());
-                }
+                // TODO(flown4qqqq): add user sid
                 ForwardToSchemeShard(std::move(req));
                 break;
             }

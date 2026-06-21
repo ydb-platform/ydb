@@ -1505,6 +1505,20 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns());
                 return false;
             }
+            if (alteredTable->Columns.find(index.index_columns(0)) == alteredTable->Columns.end()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
+                    TVector<TString> tableColumnNames;
+                    for(auto& col: alteredTable->Columns) {
+                        tableColumnNames.push_back(col.first);
+                    }
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames);
+                } else {
+                    error = TStringBuilder() << "Unknown index column: " << index.index_columns(0);
+                }
+                return false;
+            }
+
         }
 
         if (index.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex || index.type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
@@ -1513,20 +1527,6 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = "Only one index column is supported for local bloom indexes";
                 return false;
             }
-        }
-
-        if (alteredTable->Columns.find(index.index_columns(0)) == alteredTable->Columns.end()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
-                TVector<TString> tableColumnNames;
-                for(auto& col: alteredTable->Columns) {
-                    tableColumnNames.push_back(col.first);
-                }
-                error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames);
-            } else {
-                error = TStringBuilder() << "Unknown index column: " << index.index_columns(0);
-            }
-            return false;
         }
 
         if (!index.data_columns().empty()) {

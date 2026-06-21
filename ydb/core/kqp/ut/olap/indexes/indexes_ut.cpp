@@ -403,7 +403,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         helper.CreateTestOlapStandaloneTable();
         helper.SetForcedCompaction();
         auto tableClient = kikimr.GetTableClient();
-        auto queryServiceCLient = kikimr.GetQueryClient();
+        auto queryServiceClient = kikimr.GetQueryClient();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         auto assertDDLQueryOk = [&](TString query) {
             if (UseQueryService) {
-                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                auto result = queryServiceClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             } else {
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
 
         auto runDMLQuery = [&] (TString query) -> THashMap<TString, TVector<NYdb::TValue>> {
-            auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            auto result = queryServiceClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             THashMap<TString, TVector<NYdb::TValue>> columns;
             for(auto& rs: result.GetResultSets()) {

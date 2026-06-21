@@ -258,7 +258,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             const ui32 prevGeneration = confirmed.first;
 
             if (prevGeneration < Snapshot.first) {
-                YDB_LOG_CRIT("Snapshot overrun in gen zero entry, declared prev gen while known snapshot is",
+                YDB_LOG_CRIT("Snapshot overrun in gen zero entry, declared prev gen while known snapshot",
                     {"tabletId", Info->TabletID},
                     {"followerPrefix", (FollowerCookie ? "f " : " ")},
                     {"gen", gen},
@@ -412,7 +412,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     void ProcessKeyEntry(const TLogoBlobID &id, const TString &logBody) {
         NKikimrTabletBase::TTabletLogEntry logEntry;
         if (!logEntry.ParseFromString(logBody)) {
-            YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::ProcessKeyEntry logBody ParseFromString error,",
+            YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::ProcessKeyEntry logBody ParseFromString error",
                 {"tabletId", Info->TabletID},
                 {"followerPrefix", (FollowerCookie ? "f " : " ")},
                 {"id", id},
@@ -426,7 +426,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         LatestKnownStep = std::pair<ui32, ui32>(id.Generation(), id.Step());
         Snapshot = ExpandGenStepPair(logEntry.GetSnapshot());
 
-        YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::ProcessKeyEntry,",
+        YDB_LOG_DEBUG("TTabletReqRebuildHistoryGraph::ProcessKeyEntry",
             {"tabletId", Info->TabletID},
             {"followerPrefix", (FollowerCookie ? "f " : " ")},
             {"lastBlobID", id},
@@ -485,7 +485,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
             NKikimrTabletBase::TTabletLogEntry logEntry;
             if (!logEntry.ParseFromString(it->Buffer)) {
-                YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::ApplyDiscoveryRange it->Buffer ParseFromString error,",
+                YDB_LOG_ERROR("TTabletReqRebuildHistoryGraph::ApplyDiscoveryRange it->Buffer ParseFromString error",
                     {"tabletId", Info->TabletID},
                     {"followerPrefix", (FollowerCookie ? "f " : " ")},
                     {"id", id},

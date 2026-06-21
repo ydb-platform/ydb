@@ -389,7 +389,7 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
     auto &config = TaskConfig(task.Type);
     TTaskPtr newTask = new TTask(task, client, Now, config.Counters);
 
-    YDB_LOG_DEBUG_CTX(as, "Submitted new task resources={",
+    YDB_LOG_DEBUG_CTX(as, "Submitted new task",
         {"configName", config.Name.data()},
         {"taskId", newTask->GetIdString().data()},
         {"priority", task.Priority},
@@ -437,7 +437,7 @@ bool TScheduler::UpdateTask(ui64 taskId,
     }
 
     auto task = it->second;
-    YDB_LOG_DEBUG_CTX(as, "Update task resources={",
+    YDB_LOG_DEBUG_CTX(as, "Update task resources",
         {"taskId", task->GetIdString().data()},
         {"priority", priority},
         {"type", type.data()},
@@ -528,7 +528,7 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
         return TTerminateTaskResult(false, task);
     }
 
-    YDB_LOG_DEBUG_CTX(as, "Finish task (release resources",
+    YDB_LOG_DEBUG_CTX(as, "Finish task release resources",
         {"taskId", task->GetIdString().data()},
         {"requiredResources", JoinSeq(", ", task->RequiredResources).data()});
 
@@ -577,7 +577,7 @@ void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as)
     queue->EraseTask(task, finished, Now);
 
     if (oldp != queue->PlannedResourceUsage)
-        YDB_LOG_DEBUG_CTX(as, "Updated planned resource usage for queue from %f to %f (remove task",
+        YDB_LOG_DEBUG_CTX(as, "Updated planned resource usage for queue from %f to %f remove task",
             {"queueName", queue->Name.data()},
             {"oldp", oldp},
             {"plannedResourceUsage", queue->PlannedResourceUsage},
@@ -662,7 +662,7 @@ void TScheduler::UpdateResourceUsage(const TActorSystem &as)
         queue->UpdateRealResourceUsage(Now);
 
         if (old != queue->RealResourceUsage)
-            YDB_LOG_DEBUG_CTX(as, "Updated real resource usage for queue from %f to %f (in-fly consumption",
+            YDB_LOG_DEBUG_CTX(as, "Updated real resource usage for queue from %f to %f (in-fly consumption)",
                 {"queueName", queue->Name.data()},
                 {"old", old},
                 {"realResourceUsage", queue->RealResourceUsage},
@@ -709,13 +709,13 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
     queue->InsertTask(task, Now);
 
     if (oldr != queue->RealResourceUsage)
-        YDB_LOG_DEBUG_CTX(as, "Updated real resource usage for queue from %f to %f",
+        YDB_LOG_DEBUG_CTX(as, "Updated real resource usage for queue",
             {"queueName", queue->Name.data()},
             {"oldr", oldr},
             {"realResourceUsage", queue->RealResourceUsage});
 
     if (oldp != queue->PlannedResourceUsage)
-        YDB_LOG_DEBUG_CTX(as, "Updated planned resource usage for queue from %f to %f (insert task",
+        YDB_LOG_DEBUG_CTX(as, "Updated planned resource usage for queue from (insert task)",
             {"queueName", queue->Name.data()},
             {"oldp", oldp},
             {"plannedResourceUsage", queue->PlannedResourceUsage},

@@ -1049,7 +1049,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         return event->Record.GetSetColumnConstraint();
     }
 
-    Y_UNIT_TEST(GetRequestSimple) {
+    Y_UNIT_TEST_TWIN(GetRequestSimple, isShouldBeFailed) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
@@ -1069,6 +1069,16 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        if (isShouldBeFailed) {
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1), TCell()
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2}, TSerializedCellMatrix(cells, 1, 2), true);
+        }
+
         ui64 setConstraintTxId = ++txId;
 
         using TConstraintState = Ydb::Table::SetColumnConstraintState_State;
@@ -1079,7 +1089,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::Table::SetColumnConstraintState::STATE_VALIDATING,
             Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
             Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
-            Ydb::Table::SetColumnConstraintState::STATE_DONE
+            (isShouldBeFailed ? Ydb::Table::SetColumnConstraintState::STATE_DONE_FAILED : Ydb::Table::SetColumnConstraintState::STATE_DONE_SUCCESSFUL)
         };
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1113,7 +1123,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        // STATE_DONE: operation is fully finished.
+        // STATE_DONE_SUCCESSFUL/STATE_DONE_FAILED: operation is fully finished.
         answers.push_back(DoGetRequest(setConstraintTxId, runtime, root).GetState());
 
         UNIT_ASSERT_VALUES_EQUAL_C(

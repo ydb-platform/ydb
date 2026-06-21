@@ -55,6 +55,16 @@ public:
         auto* proto = respRecord.MutableSetColumnConstraint();
         FillSetColumnConstraint(*proto, operationInfo);
 
+        if (operationInfo.ValidationFailed) {
+            TPath tablePath = TPath::Init(operationInfo.TablePathId, Self);
+            auto* issue = respRecord.AddIssues();
+            issue->set_message(TStringBuilder()
+                << "Validation failed for SET NOT NULL on table `" << tablePath.PathString()
+                << "`: one or more columns contain NULL values");
+            issue->set_issue_code(0);
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        }
+
         return Reply();
     }
 
@@ -85,10 +95,12 @@ private:
         case EState::Finishing:
         case EState::Unlocking:
             proto.SetState(ProtoState::STATE_APPLYING);
-            proto.SetProgress(100.0f);
+            proto.SetProgress(99.9f);
             break;
         case EState::Done:
-            proto.SetState(ProtoState::STATE_DONE);
+            proto.SetState(operationInfo.ValidationFailed
+                ? ProtoState::STATE_DONE_FAILED
+                : ProtoState::STATE_DONE_SUCCESSFUL);
             proto.SetProgress(100.0f);
             break;
         case EState::Invalid:

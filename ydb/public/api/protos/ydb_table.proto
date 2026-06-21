@@ -456,7 +456,8 @@ message SetColumnConstraintState {
         STATE_PREPARING = 1;
         STATE_VALIDATING = 2;
         STATE_APPLYING = 3;
-        STATE_DONE = 4;
+        STATE_DONE_SUCCESSFUL = 4;
+        STATE_DONE_FAILED = 5;
     }
 }
 

@@ -1,11 +1,12 @@
 #pragma once
 
 #include "events.h"
-#include "logging.h"
 #include "scheme.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NReplication::NTransfer {
 
@@ -66,7 +67,9 @@ private:
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
         auto it = CookieMapping.find(ev->Cookie);
         if (it == CookieMapping.end()) {
-            LOG_W("Processed unknown cookie " << ev->Cookie);
+            YDB_LOG_WARN_COMP(NKikimrServices::TRANSFER, "Processed unknown cookie",
+                {"logPrefix", GetLogPrefix()},
+                {"cookie", ev->Cookie});
             return;
         }
 
@@ -85,7 +88,7 @@ private:
 
         auto& retry = Retries[tablePath];
 
-        if (status == Ydb::StatusIds::SCHEME_ERROR) { 
+        if (status == Ydb::StatusIds::SCHEME_ERROR) {
             const auto issues = ev->Get()->Issues.ToOneLineString();
             if (issues.contains("unknown table")) {
                 if (retry.DefaultTable) {
@@ -108,9 +111,12 @@ private:
 
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
-            LOG_D("Schedule retry: table=" << tablePath
-                << ", iteration=" << retry.Backoff.GetIteration()
-                << ", error=" << status << " " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TRANSFER, "Schedule retry",
+                {"logPrefix", GetLogPrefix()},
+                {"table", tablePath},
+                {"iteration", retry.Backoff.GetIteration()},
+                {"error", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
 
             TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath, retry.DefaultTable));
             if (schemeError) {
@@ -166,7 +172,10 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
-        LOG_E("Upload error: error=" << status << " " << issues.ToOneLineString());
+        YDB_LOG_ERROR_COMP(NKikimrServices::TRANSFER, "Upload error",
+            {"logPrefix", GetLogPrefix()},
+            {"error", status},
+            {"issues", issues.ToOneLineString()});
 
         TThis::Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(status, std::move(issues)));
         TThis::PassAway();

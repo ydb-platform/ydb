@@ -558,16 +558,12 @@ bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCo
         if (!encoder.DataKeysBody.empty()) {
             updateStartOffsetFromKey(encoder.DataKeysBody.front().Key);
         } else if (!encoder.HeadKeys.empty()) {
-            const auto& key = encoder.HeadKeys.front().Key;
-            updateStartOffsetFromKey(key);
-            encoder.Head.Offset = key.GetOffset();
-            encoder.Head.PartNo = key.GetPartNo();
+            updateStartOffsetFromKey(encoder.HeadKeys.front().Key);
         }
     };
 
     auto popFrontHead = [&]() {
-        encoder.ScheduleDelete(encoder.HeadKeys.front());
-        encoder.HeadKeys.pop_front();
+        encoder.PopFrontHeadKey();
     };
 
     auto canDrop = [&](const TDataKey& firstKey, const TDataKey* nextKey, bool isLastBlob) {

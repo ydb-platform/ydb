@@ -6,7 +6,7 @@
 
 Пример pull request с реализацией CSRF и обработкой nonce в HTTP-ответах: [#36981](https://github.com/ydb-platform/ydb/pull/36981).
 
-## Content Security Policy (CSP) и `nonce` {#csp-and-nonce}
+## Content Security Policy (CSP) и nonce {#csp-and-nonce}
 
 {% note info %}
 
@@ -26,11 +26,9 @@ Content-Security-Policy: script-src 'nonce-AbCd…=='
 
 Во встроенных тегах `<script>` требуется атрибут `nonce`. Без него браузер блокирует выполнение скрипта согласно политике CSP.
 
-{% note warning %}
+{% note alert %}
 
 Встроенный скрипт без атрибута `nonce` не выполняется при действующей политике CSP.
-
-{% endnote %}
 
 ```cpp
 // ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_http.cpp
@@ -42,6 +40,8 @@ str << R"___(
     </script>
 )___";
 ```
+
+{% endnote %}
 
 Для каждого ответа генерируется nonce, прикрепляется к событию ответа и подставляется во встроенные `<script>`. Фреймворк мониторинга (см. [#36981](https://github.com/ydb-platform/ydb/pull/36981)) предоставляет [`NActors::NMon::GenerateCspNonce()`](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.h) — случайный GUID в кодировке base64. Рендерер генерирует nonce, подставляет его во все встроенные `<script>` и записывает в `res->Nonce` исходящего `TEvRemoteHttpInfoRes` / `TEvHttpInfoRes`. HTTP-слой автоматически добавляет соответствующий заголовок `Content-Security-Policy: script-src 'nonce-<value>'`; заголовок CSP формировать вручную не требуется.
 
@@ -80,16 +80,16 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 
 В директиву `script-src` не добавляются `'unsafe-inline'`, `'unsafe-eval'` и внешние домены. Если скрипт не работает без `'unsafe-inline'`, его переписывают с использованием nonce (см. [раздел выше](#inline-script-nonce)).
 
-{% note warning %}
+{% note alert %}
 
 Нельзя ослаблять директиву `script-src`, добавляя `'unsafe-inline'`, `'unsafe-eval'` или внешние домены.
-
-{% endnote %}
 
 ```cpp
 response << "Content-Security-Policy: script-src 'unsafe-inline'\r\n";
 response << "Content-Security-Policy: script-src 'self' https://cdn.example.com\r\n";
 ```
+
+{% endnote %}
 
 ### Встроенные стили {#inline-styles}
 
@@ -97,16 +97,16 @@ response << "Content-Security-Policy: script-src 'self' https://cdn.example.com\
 
 Отсутствие блокировки встроенных стилей сегодня не означает, что их следует добавлять в новом коде.
 
-{% note warning %}
+{% note alert %}
 
 Для нового кода не рекомендуется добавлять встроенные стили — атрибуты `style="..."` и блоки `<style>`.
-
-{% endnote %}
 
 ```cpp
 str << "<div style='color:red; margin:5px'>...</div>";
 str << "<style>.my-table th { text-align: center; }</style>";
 ```
+
+{% endnote %}
 
 Предпочтительно выносить стили в статический CSS-файл, отдаваемый с того же источника (origin):
 
@@ -145,17 +145,17 @@ str << "<div class='mon-warning'>...</div>";
 - protocol-relative URL: `//example.com/...`;
 - пути от корня: `/get_blob`, `/static/js/...`.
 
-{% note warning %}
+{% note alert %}
 
 Нельзя использовать абсолютные и root-relative ссылки в генерируемом HTML.
-
-{% endnote %}
 
 ```cpp
 out << "<a href='https://ydb.tech/docs'>docs</a>\n";
 out << "<button type='submit' formaction='/get_blob'>Query</button>\n";
 out << "fetch('/api/data')\n";
 ```
+
+{% endnote %}
 
 Относительные ссылки:
 
@@ -171,16 +171,16 @@ out << "fetch('api/data')\n";
 
 Ресурсы загружаются с того же источника (origin), без внешних URL.
 
-{% note warning %}
+{% note alert %}
 
 Нельзя загружать скрипты, стили и шрифты с внешних URL.
-
-{% endnote %}
 
 ```cpp
 out << "<script src='https://code.jquery.com/jquery-3.6.0.min.js'></script>\n";
 out << "<link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>\n";
 ```
+
+{% endnote %}
 
 Bootstrap, jQuery и tablesorter уже включены в bundle и отдаются обёрткой страницы мониторинга. Рендереры отдельных страниц на C++ обычно не добавляют для них дополнительные теги `<script>`/`<link>`.
 
@@ -192,17 +192,17 @@ Bootstrap, jQuery и tablesorter уже включены в bundle и отдаю
 
 Для JavaScript-запросов применяется то же правило: только относительные URL.
 
-{% note warning %}
+{% note alert %}
 
 Нельзя выполнять `fetch()`/XHR-запросы по абсолютным или root-relative ссылкам.
-
-{% endnote %}
 
 ```cpp
 str << "fetch('https://external-api.example.com/data')\n";
 str << "fetch('/api/data')\n";
 str << "$.ajax({ url: '/api/data' })\n";
 ```
+
+{% endnote %}
 
 Относительные URL:
 
@@ -216,15 +216,15 @@ str << "fetch('../api/data')\n"; // relative path to a sibling/parent endpoint
 
 В iframe допускаются только ресурсы с того же источника.
 
-{% note warning %}
+{% note alert %}
 
 Нельзя встраивать внешние iframe.
-
-{% endnote %}
 
 ```cpp
 out << "<iframe src='https://external.example.com/widget'></iframe>\n";
 ```
+
+{% endnote %}
 
 ## Защита от CSRF {#csrf-protection}
 
@@ -258,11 +258,9 @@ function getCsrfToken() {
 
 Оба подхода допустимы. Форма подходит, когда нужен запасной вариант без JavaScript (страница «Disable Self-Heal» контроллера BlobStorage в PR — такой случай); в остальных случаях предпочтителен `fetch` с заголовком `X-CSRF-Token` — он лучше сочетается с динамическим UI и единственный для JSON-тел (как в [`state_storage_state.js`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js)).
 
-{% note warning %}
+{% note alert %}
 
 Нельзя отправлять POST-запрос, изменяющий состояние, без CSRF-токена.
-
-{% endnote %}
 
 ```cpp
 str << "<form method='POST' action=''>\n";
@@ -270,6 +268,8 @@ str << "  <input type='hidden' name='restartPDisk' value='1'>\n";
 str << "  <button type='submit'>Restart</button>\n";  // ← no csrf_token field!
 str << "</form>\n";
 ```
+
+{% endnote %}
 
 #### Вариант A: `<form>` со скрытым полем `csrf_token`
 
@@ -335,11 +335,9 @@ str << "</script>\n";
 
 GET-запросы не защищены от CSRF: `CheckCsrfToken` проверяет токен только для `POST`/`PUT`/`DELETE`/`PATCH` (см. [`mon.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp), `IsCsrfProtectedMethod`). Если странице нужно инициировать действие (перезапуск, остановка, переконфигурация), применяется один из защищённых методов — обычно POST.
 
-{% note warning %}
+{% note alert %}
 
 Нельзя выполнять операции, изменяющие состояние, в GET-обработчике.
-
-{% endnote %}
 
 ```cpp
 void RenderPage(IOutputStream& str, const TCgiParameters& params) {
@@ -349,6 +347,8 @@ void RenderPage(IOutputStream& str, const TCgiParameters& params) {
     // ... render HTML
 }
 ```
+
+{% endnote %}
 
 Разделение GET (отображение) и POST (действие):
 
@@ -374,16 +374,16 @@ void HandlePost(NMon::TEvHttpInfo::TPtr& ev) {
 
 Встроенные обработчики событий (`onclick="..."`, `onchange="..."` и т. д.) блокируются политикой CSP `script-src` даже при наличии nonce, поскольку nonce относится только к блокам `<script>`, а не к inline-атрибутам.
 
-{% note warning %}
+{% note alert %}
 
 Нельзя использовать встроенные обработчики событий в атрибутах HTML (`onclick`, `onchange` и т. д.).
-
-{% endnote %}
 
 ```cpp
 str << "<input type='checkbox' id='ignoreChecks' onchange='toggleButtonColor()'>";
 str << "<button onclick='sendRestartRequest()'>Restart</button>";
 ```
+
+{% endnote %}
 
 Привязка обработчиков из блока `<script nonce='...'>`:
 
@@ -403,16 +403,16 @@ str << "</script>\n";
 
 Любые управляемые пользователем или полученные извне данные, выводимые в HTML, должны экранироваться.
 
-{% note warning %}
+{% note alert %}
 
 Нельзя выводить в HTML пользовательские или внешние данные без экранирования.
-
-{% endnote %}
 
 ```cpp
 TABLED() { str << pathName; }           // pathName may contain <, >, &, "
 TABLED() { str << errorMessage; }       // error messages may contain HTML
 ```
+
+{% endnote %}
 
 Вывод с `HtmlEscape`:
 
@@ -434,11 +434,9 @@ str << "<a href='/path?name=" << CGIEscapeRet(name) << "'>";  // string — must
 
 У JavaScript свои правила экранирования, и `HtmlEscape` их **не покрывает**: не обрабатываются `'`, `\`, символы конца строки (`U+2028`, `U+2029`) и подстроки `</script>`. Значения вроде `O'Brien`, `foo\nbar` или `</script><script>alert(1)//` выходят из JS-литерала даже после `HtmlEscape`. Вместо самописного JS-эскейпинга на сервере тело скрипта остаётся полностью статичным, а динамические значения читаются из атрибутов `data-*` через стандартный API `dataset` — для контекста атрибута `HtmlEscape` подходит корректно.
 
-{% note warning %}
+{% note alert %}
 
 Нельзя интерполировать динамические значения непосредственно в блок `<script>`.
-
-{% endnote %}
 
 ```cpp
 str << "<script nonce='" << nonce << "'>\n";
@@ -447,6 +445,8 @@ str << "  const errorText = '" << HtmlEscape(errorText) << "';\n";  // still vul
                                                                     // a single ' or \ in the value breaks out.
 str << "</script>";
 ```
+
+{% endnote %}
 
 Передача значений через HTML-экранированные атрибуты `data-*` и чтение их из JS:
 
@@ -482,16 +482,16 @@ HTTP-ответы формируются через [`TViewer::GetHTTPOK()`](htt
 ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html; charset=utf-8", htmlContent));
 ```
 
-{% note warning %}
+{% note alert %}
 
 Нельзя формировать сырой HTTP-ответ вручную или опускать `charset=utf-8` в заголовке `Content-Type`.
-
-{% endnote %}
 
 ```cpp
 Send(Sender, new NMon::TEvHttpInfoRes("HTTP/1.1 200 Ok\r\n\r\n" + html));  // raw string
 ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html", htmlContent));     // missing charset
 ```
+
+{% endnote %}
 
 ## См. также {#see-also}
 

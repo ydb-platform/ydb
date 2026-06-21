@@ -76,6 +76,14 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 43892:Add configurable minimal size limit for blobs to be covered by PhantomFlagStorage [#43892](https://github.com/ydb-platform/ydb/pull/43892) ([Sergey Belyakov](https://github.com/serbel324))
+* 43792:Added YDB CLI option to specifically allow reading all partitions without consumer
+... [#43792](https://github.com/ydb-platform/ydb/pull/43792) ([Sergey](https://github.com/shokhor))
+* 43562:Поддержана работа с топиками по SQS XML protocol [#43562](https://github.com/ydb-platform/ydb/pull/43562) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 43516:Previously there were no possibility to read all partitions without consumer. Now it is allowed. [#43516](https://github.com/ydb-platform/ydb/pull/43516) ([Sergey](https://github.com/shokhor))
+* 43395:Added an experimental VDisk startup guard that waits for replayed LocalSyncData recovery-log records to be cut before starting startup data sync. [#43395](https://github.com/ydb-platform/ydb/pull/43395) ([Semyon Danilov](https://github.com/SammyVimes))
+* 42885:- This branch adds `node` and `host` support to `/meta/support_links`, including matching config groups.
+- It also changes request resolution so `node` and `host` groups may be returned together. [#42885](https://github.com/ydb-platform/ydb/pull/42885) ([Andrei Rykov](https://github.com/StekPerepolnen))
 
 ### Bug fixes
 
@@ -146,12 +154,11 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 43791:Fixed invalid executor id value on KQP node page [#43791](https://github.com/ydb-platform/ydb/pull/43791) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 43570:Fixed internal error in solomon writer [#43570](https://github.com/ydb-platform/ydb/pull/43570) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 43568:Fix override planner settings passing [#43568](https://github.com/ydb-platform/ydb/pull/43568) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 43491:https://github.com/ydb-platform/ydb/issues/43139 [#43491](https://github.com/ydb-platform/ydb/pull/43491) ([Pavel Velikhov](https://github.com/pavelvelikhov))
 
 ### YDB UI
 

@@ -781,6 +781,21 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
     return haveChanges;
 }
 
+ui64 TPartition::GetCompactionZoneEmptyStartOffset() const {
+    if (!CompactionBlobEncoder.HeadKeys.empty()) {
+        const auto& key = CompactionBlobEncoder.HeadKeys.front().Key;
+        return key.GetOffset() + (key.GetPartNo() > 0 ? 1 : 0);
+    }
+    if (!BlobEncoder.DataKeysBody.empty()) {
+        return BlobEncoder.StartOffset;
+    }
+    if (!BlobEncoder.HeadKeys.empty()) {
+        const auto& key = BlobEncoder.HeadKeys.front().Key;
+        return key.GetOffset() + (key.GetPartNo() > 0 ? 1 : 0);
+    }
+    return GetEndOffset();
+}
+
 bool TPartition::CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
     if (GetStartOffset() == GetEndOffset() || CompactionBlobEncoder.DataKeysBody.size() <= 1) {
         return false;
@@ -855,12 +870,11 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     bool hasDrop = CleanUpBlobsInEncoder(CompactionBlobEncoder, true, ctx);
 
     if (CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.HeadKeys.empty()) {
-        const ui64 compactionZoneEnd = BlobEncoder.DataKeysBody.empty() && BlobEncoder.HeadKeys.empty()
-            ? GetEndOffset()
-            : BlobEncoder.StartOffset;
+        const ui64 compactionZoneEnd = GetCompactionZoneEmptyStartOffset();
         CompactionBlobEncoder.StartOffset = compactionZoneEnd;
         CompactionBlobEncoder.EndOffset = compactionZoneEnd;
         CompactionBlobEncoder.Head.Offset = compactionZoneEnd;
+        CompactionBlobEncoder.Head.PartNo = 0;
 
         hasDrop |= CleanUpBlobsInEncoder(BlobEncoder, false, ctx);
     }
@@ -871,6 +885,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         CompactionBlobEncoder.StartOffset = endOffset;
         CompactionBlobEncoder.EndOffset = endOffset;
         CompactionBlobEncoder.Head.Offset = endOffset;
+        CompactionBlobEncoder.Head.PartNo = 0;
         BlobEncoder.StartOffset = endOffset;
     }
 

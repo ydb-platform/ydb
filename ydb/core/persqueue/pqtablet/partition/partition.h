@@ -345,6 +345,7 @@ private:
     bool ImportantConsumersNeedToKeepLastKey(const TDataKey& currentKey, const TInstant now) const;
     bool CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCompactionZone, const TActorContext& ctx);
     void FinalizeEmptyBlobEncoder(TPartitionBlobEncoder& encoder, ui64 startOffset, bool updateEndOffset);
+    ui64 GetCompactionZoneEmptyStartOffset() const;
     bool IsQuotingEnabled() const;
     bool WaitingForPreviousBlobQuota() const;
     bool WaitingForSubDomainQuota(const ui64 withSize = 0) const;

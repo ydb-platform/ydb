@@ -748,10 +748,11 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
     PartitionActor->CompactionBlobEncoder.BodySize = currCumulSize;
     if (PartitionActor->IsTopicRetentionDeleteLastBlobEnabled()) {
         if (PartitionActor->CompactionBlobEncoder.DataKeysBody.empty()) {
-            const ui64 endOffset = PartitionActor->GetEndOffset();
-            PartitionActor->CompactionBlobEncoder.StartOffset = endOffset;
-            PartitionActor->CompactionBlobEncoder.EndOffset = endOffset;
-            PartitionActor->CompactionBlobEncoder.Head.Offset = endOffset;
+            const ui64 startOffset = FirstHeadOffset + (FirstHeadPartNo > 0 ? 1 : 0);
+            PartitionActor->CompactionBlobEncoder.StartOffset = startOffset;
+            PartitionActor->CompactionBlobEncoder.EndOffset = startOffset;
+            PartitionActor->CompactionBlobEncoder.Head.Offset = startOffset;
+            PartitionActor->CompactionBlobEncoder.Head.PartNo = 0;
         } else {
             PartitionActor->CompactionBlobEncoder.StartOffset = Max(
                             PartitionActor->CompactionBlobEncoder.StartOffset,

@@ -167,14 +167,11 @@
 
 #|
 || **Версия** | **Дата выпуска** | **Скачать** | **Список изменений** ||
-<<<<<<< HEAD
-=======
 || **v25.3** |  |  |  |  ||
 || v.25.3.1.ent.3 | 12.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.3.1.ent.3` | [См. список](../changelog-enterprise.md#25-3-1-ent-3) ||
 || **v25.2** |  |  |  |  ||
-|| v.25.2.1.ent.13 | 12.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.13` | [См. список](../changelog-enterprise.md#25-1-4-ent-13) ||
-|| v.25.2.1.ent.4 | 12.02.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.4` | [См. список](../changelog-enterprise.md#25-1-4-ent-4) ||
->>>>>>> 1d13b9be19d (Publish 25.2.1.ent.13 and 25.3.1.ent.3 (#43272))
+|| v.25.2.1.ent.13 | 12.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.13` | [См. список](../changelog-enterprise.md#25-2-1-ent-13) ||
+|| v.25.2.1.ent.4 | 12.02.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.4` | [См. список](../changelog-enterprise.md#25-2-1-ent-4) ||
 || **v25.1** |  |  |  |  ||
 || v.25.1.4.ent.3 | 25.11.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.1.4.ent.3` | [См. список](../changelog-enterprise.md#25-1-4-ent-3) ||
 || **v24.4** |  |  |  |  ||

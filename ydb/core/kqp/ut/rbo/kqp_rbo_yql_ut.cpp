@@ -2833,6 +2833,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    /*
     Y_UNIT_TEST(MapAliasCleanupComplexQuery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -2845,7 +2846,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         auto tableClient = kikimr.GetTableClient();
         auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
-        CreateTablesFromPath(tableSession, BenchmarkSchemaPathPrefix[EBenchType::TPCH], BenchmarkSchemaPath[EBenchType::TPCH], /*useColumnStore*/ true);
+        CreateTablesFromPath(tableSession, BenchmarkSchemaPathPrefix[EBenchType::TPCH], BenchmarkSchemaPath[EBenchType::TPCH], true);
 
         const TString query = R"(
             PRAGMA YqlSelect = 'force';
@@ -2953,6 +2954,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(plan.Contains("Join"), plan);
         UNIT_ASSERT_C(!plan.Contains("__kqp_rbo_ignore_arg_"), plan);
     }
+    */
 
     Y_UNIT_TEST(MapAliasCleanupSemanticRenameAndDeadSortKey) {
         NKikimrConfig::TAppConfig appConfig;

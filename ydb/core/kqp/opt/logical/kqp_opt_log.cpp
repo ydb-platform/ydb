@@ -208,10 +208,7 @@ protected:
             return {};
         }
         auto ranges = maybeRanges.Cast();
-        //(DataSource '"kikimr" '"db") (Key '('table (String '"/Root/db"))) (Void) '()))
-        //(KqlReadTableRanges (KqpTable '"/Root/db" '"72057594046644480:38" '"" '1) (Void) ('"k" '"k2" '"v") '() '())
-        //DqLookupSourceWrap Input DataSource RowType Settings
-        const auto inputSeqType = node.Raw()->GetTypeAnn(); //->Cast<TTupleExprType>()->GetItems().at(1);
+        const auto inputSeqType = node.Raw()->GetTypeAnn();
         return Build<TDqLookupSourceWrap>(ctx, node.Pos())
             .Input<TKqpReadRangesSourceSettings>()
                 .Table(ranges.Table())
@@ -229,7 +226,9 @@ protected:
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
         // First step of stream lookup join with DQ external sources (not kqp tables)
-        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx, DqLookupSourceFromKqlReadTableRanges);
+        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx,
+                true //Config->FeatureFlags.GetEnableDqSourceStreamLookupJoinLocalLookups()
+                ? DqLookupSourceFromKqlReadTableRanges : nullptr);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

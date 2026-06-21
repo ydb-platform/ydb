@@ -546,10 +546,7 @@ private:
 class TKikimrDqIntegration : public NYql::TDqIntegrationBase {
     void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
         const TDqLookupSourceWrap wrap(&node);
-        Cerr << wrap.Settings().Raw()->Dump() << Endl;
         const auto settings = wrap.Settings().Cast<TCoAtomList>();
-        //(KqlReadTableRanges (KqpTable '"/Root/db" '"72057594046644480:38" '"" '1) (Void) ('"k" '"k2" '"v") '() '())
-        //
         const auto& path = settings.Item(0).StringValue();
 
         NKqpProto::TKikimrLookupSource source;

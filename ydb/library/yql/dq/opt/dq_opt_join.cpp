@@ -2224,10 +2224,7 @@ ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEqui
     } else if (auto maybeRead = rightList.Maybe<TDqReadWrap>()) {
         lookupSourceWrap = LookupSourceFromRead(maybeRead.Cast(), ctx, typeCtx).Ptr();
     } else if (lookupFromExtra && (lookupSourceWrap = lookupFromExtra(rightList, ctx))) {
-        Cerr << "LookupFromRanges " << rightList.Ptr()->Dump() << Endl;
-        Cerr << "Result " << lookupSourceWrap->Dump() << Endl;
     } else {
-        Cerr << "Other " << rightList.Ptr()->Dump() << Endl;
         return idx + 1;
     }
 

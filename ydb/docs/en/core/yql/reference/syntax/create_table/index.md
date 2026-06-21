@@ -43,7 +43,57 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 {% if oss == true and backend_name == "YDB" %}
 
 
+<<<<<<< HEAD
 {% if feature_olap_tables %}
+=======
+### table_name
+
+The path of the table to be created.
+
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+### IF NOT EXISTS
+
+If the table with the specified name already exists, the execution of the operator is completely skipped — no checks or schema matching is performed, and no error occurs. Note that the existing table may differ in structure from the one you would like to create with this query — no comparison or equivalence check is performed.
+
+### column_name
+
+The name of the column to be created in the new table.
+
+When choosing a name for the column, consider the common [column naming rules](../../../../concepts/datamodel/table.md#column-naming-rules).
+
+### column_data_type
+
+The data type of the column. The complete list of data types supported by {{ ydb-short-name }} is available in the [{#T}](../../types/index.md) section.
+
+{% include [column_option_list.md](../_includes/column_option_list.md) %}
+
+### INDEX
+
+Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), and [fulltext indexes](fulltext_index.md) are supported.
+
+### PRIMARY KEY
+
+Definition of the primary key of the table. Specifies the columns that make up the primary key in the order of enumeration. For more information on selecting a primary key, see the [{#T}](../../../../dev/primary-key/index.md) article.
+
+### PARTITION BY HASH
+
+Definition of the columns on which partitioning will occur for **column-oriented** tables. Specifies the columns on which [partitioning](../../../../concepts/glossary.md#partition) will occur using the hash function. The columns must be part of the primary key. The columns do not necessarily have to be a prefix or suffix — the requirement is to be part of the primary key.
+
+If the parameter is not specified, the table will be partitioned on the same columns as those included in the primary key. For more information on selecting and working with partition keys in column-oriented tables, see the [{#T}](../../../../dev/primary-key/column-oriented.md) article.
+
+For more information on partitioning column-oriented tables, see the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section.
+
+### FAMILY <column_family> (column group setting)
+
+Definition of a column group with specified parameters. For more information, see the [{#T}](family.md) section.
+
+### WITH
+
+Additional parameters for creating a table. For more information, see the [{#T}](with.md) section.
+
+{% note info %}
+>>>>>>> adf363ebb80 (Zero documentation build warnings (#44105))
 
 {{ ydb-short-name }} supports two types of tables:
 

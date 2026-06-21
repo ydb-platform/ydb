@@ -99,7 +99,7 @@ LIMIT 1"""
             with pytest.raises(ydb.issues.GenericError) as excinfo:
                 kikimr.ydb_client.query(sql)
             err = str(excinfo.value)
-            assert "Metadata key user_attributes" in err and "found" in err
+            assert "Member not found: __ydb_user_attributes" in err
             return
 
         future = kikimr.ydb_client.query_async(sql)
@@ -156,7 +156,7 @@ LIMIT 1"""
             with pytest.raises(ydb.issues.GenericError) as excinfo:
                 kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
             err = str(excinfo.value)
-            assert "Metadata key user_attributes" in err and "found" in err
+            assert "Member not found: __ydb_user_attributes" in err
             return
 
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))

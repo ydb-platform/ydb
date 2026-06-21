@@ -19,3 +19,5 @@ items:
       mode: link
   - name: Spilling
     href: spilling.md
+  - name: Scan queries
+    href: scan_query.md

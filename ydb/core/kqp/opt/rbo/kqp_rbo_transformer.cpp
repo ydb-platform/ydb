@@ -450,7 +450,6 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Logical state I
     TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;
-    addMapAliasRules(logicalStage_I_Rules, /*pushAppendsUnderFilter*/ false);
     logicalStage_I_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());

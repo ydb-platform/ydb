@@ -619,15 +619,12 @@ bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCo
             break;
         }
 
-        if (nextKey) {
-            encoder.pop_front();
+        encoder.pop_front();
 
-            if (isCompactionZone && !GapOffsets.empty() && nextKey->Key.GetOffset() == GapOffsets.front().second) {
-                GapSize -= GapOffsets.front().second - GapOffsets.front().first;
-                GapOffsets.pop_front();
-            }
-        } else {
-            encoder.pop_front();
+        if (isCompactionZone && nextKey && !GapOffsets.empty()
+            && nextKey->Key.GetOffset() == GapOffsets.front().second) {
+            GapSize -= GapOffsets.front().second - GapOffsets.front().first;
+            GapOffsets.pop_front();
         }
 
         hasDrop = true;

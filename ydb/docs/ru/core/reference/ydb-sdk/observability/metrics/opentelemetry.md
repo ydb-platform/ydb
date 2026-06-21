@@ -43,6 +43,7 @@
 ## Подключение к SDK {#integration}
 
 {% list tabs %}
+
 - C++
 
   Подключите заголовок метрик OpenTelemetry из {{ ydb-short-name }} C++ SDK и зарегистрируйте `MetricRegistry` в `TDriverConfig`:

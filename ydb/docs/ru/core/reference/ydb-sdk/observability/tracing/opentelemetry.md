@@ -78,6 +78,7 @@ SDK автоматически прокидывает заголовок W3C `tr
 ## Подключение к SDK {#integration}
 
 {% list tabs %}
+
 - C++
 
   Подключите заголовок трассировки OpenTelemetry из {{ ydb-short-name }} C++ SDK и добавьте зависимость на OTel C++ SDK:

@@ -22,6 +22,7 @@
 ## Подключение к SDK {#integration}
 
 {% list tabs %}
+
 - C++
 
   {{ ydb-short-name }} C++ SDK пишет логи через `TLogBackend` из `util`. Реализуйте бэкенд, который превращает каждую запись в OTel log record, и передайте его в драйвер через `TDriverConfig::SetLog`. Сборку OpenTelemetry C++ SDK см. в [Getting Started](https://opentelemetry.io/docs/languages/cpp/getting-started/).

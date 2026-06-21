@@ -657,7 +657,7 @@ public:
                 block = L(block, Y("let", ref, filter));
             }
             if (ctx.EnableSystemColumns) {
-                block = L(block, Y("let", ref, RemoveSystemColumns(AstNode(ref), ctx.Settings.ExtraSystemColumnPrefixes)));
+                block = L(block, Y("let", ref, Y("RemoveSystemMembers", ref)));
             }
         }
         return GroundWithExpr(block, Y("Mux", Q(muxArgs)));
@@ -1317,7 +1317,7 @@ public:
         }
 
         if (ctx.EnableSystemColumns) {
-            block = L(block, Y("let", "core", RemoveSystemColumns(AstNode(TString("core")), ctx.Settings.ExtraSystemColumnPrefixes)));
+            block = L(block, Y("let", "core", Y("RemoveSystemMembers", "core")));
         }
         block = L(block, Y("let", "core", Y("AutoDemux", partitionByKey)));
         if (Having_) {
@@ -1991,6 +1991,10 @@ public:
 
     TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label) override {
         TNodePtr cleanup;
+
+        auto removeSystemMembers = [&ctx, this](const TString& src) -> TNodePtr {
+            return RemoveSystemColumns(AstNode(src), ctx.Settings.ExtraSystemColumnPrefixes);
+        };
         if (ctx.EnableSystemColumns && ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             if (Columns_.All) {
                 cleanup = Y("let", label, Y("RemoveSystemMembers", label));
@@ -2656,7 +2660,7 @@ public:
         if (!With_) {
             auto res = input;
             if (ctx.EnableSystemColumns) {
-                res = RemoveSystemColumns(res, ctx.Settings.ExtraSystemColumnPrefixes);
+                res = Y("RemoveSystemMembers", res);
             }
 
             return res;
@@ -2672,7 +2676,7 @@ public:
         }
 
         if (WithExtFunction_) {
-            auto preTransform = RemoveSystemColumns(AstNode(TString(inputLabel)), ctx.Settings.ExtraSystemColumnPrefixes);
+            auto preTransform = Y("RemoveSystemMembers", inputLabel);
             if (!Terms_.empty()) {
                 preTransform = Y("Map", preTransform, BuildLambda(Pos_, Y("row"), Q(Terms_[0])));
             }

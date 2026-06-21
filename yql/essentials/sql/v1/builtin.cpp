@@ -2022,8 +2022,8 @@ bool TTableRows::DoInit(TContext& ctx, ISource* /*src*/) {
         return false;
     }
     Node_ = ctx.EnableSystemColumns
-        ? RemoveSystemColumns(AstNode(TString("inputRowsList")), ctx.Settings.ExtraSystemColumnPrefixes)
-        : BuildAtom(Pos_, "inputRowsList", 0);
+                ? RemoveSystemColumns(AstNode(TString("inputRowsList")), ctx.Settings.ExtraSystemColumnPrefixes)
+                : BuildAtom(Pos_, "inputRowsList", 0);
     return true;
 }
 

@@ -304,7 +304,6 @@
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Отслеживать прогресс или проголосовать за поддержку: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -337,7 +336,6 @@
     Примеры векторного поиска для PHP SDK пока недоступны.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Отслеживать прогресс или проголосовать за поддержку: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
@@ -923,7 +921,6 @@
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Отслеживать прогресс или проголосовать за поддержку: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -1021,7 +1018,6 @@
     Примеры векторного поиска для PHP SDK пока недоступны.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Отслеживать прогресс или проголосовать за поддержку: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
@@ -1258,7 +1254,6 @@
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Отслеживать прогресс или проголосовать за поддержку: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -1266,7 +1261,6 @@
     Пример добавления векторного индекса и полная программа для JavaScript SDK пока недоступны.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Отслеживать прогресс или проголосовать за поддержку: [ydb-js-sdk#627](https://github.com/ydb-platform/ydb-js-sdk/issues/627)
 
@@ -1908,7 +1902,6 @@
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Отслеживать прогресс или проголосовать за поддержку: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -2358,7 +2351,6 @@
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
     Отслеживать прогресс или проголосовать за поддержку: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
 
 - JavaScript
@@ -2366,7 +2358,6 @@
     Пример добавления векторного индекса и полная программа для JavaScript SDK пока недоступны.
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 
     Отслеживать прогресс или проголосовать за поддержку: [ydb-js-sdk#627](https://github.com/ydb-platform/ydb-js-sdk/issues/627)
 

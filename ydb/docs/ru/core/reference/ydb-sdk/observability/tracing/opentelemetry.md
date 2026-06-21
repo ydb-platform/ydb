@@ -350,7 +350,6 @@ SDK автоматически прокидывает заголовок W3C `tr
 
   {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
-
   Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)
 
 - PHP

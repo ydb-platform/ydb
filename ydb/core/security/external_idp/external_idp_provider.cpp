@@ -1,6 +1,5 @@
 #include "external_idp_provider.h"
 
-#include <ydb/core/security/external_idp/external_idp_log.h>
 #include <ydb/core/security/util/counters.h>
 #include <ydb/core/security/util/jwk.h>
 
@@ -36,6 +35,8 @@
 #include <exception>
 #include <functional>
 #include <unordered_map>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXTERNAL_IDP_PROVIDER
 
 namespace NKikimr {
 
@@ -413,13 +414,11 @@ void TExternalIdpProvider::Bootstrap(const TActorContext& ctx) {
     RegisterPages(ctx);
     RegisterFields(ctx);
 
-    BLOG_D(
-        "Initializing ExternalIdp"
-            << " issuer=" << Config.GetIssuer()
-            << " audience=" << Config.GetAudience()
-            << " subject_claim_name=" << Config.GetSubjectClaimName()
-            << " groups_claim_name=" << Config.GetGroupsClaimName()
-    );
+    YDB_LOG_DEBUG("Initializing ExternalIdp",
+        {"issuer", Config.GetIssuer()},
+        {"audience", Config.GetAudience()},
+        {"subjectClaimName", Config.GetSubjectClaimName()},
+        {"groupsClaimName", Config.GetGroupsClaimName()});
 
     Become(&TThis::StateWork, REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
 }
@@ -466,10 +465,8 @@ void TExternalIdpProvider::RegisterFields(const TActorContext& ctx) {
     }
 
     if (Config.HasIssuer() && !Config.GetIssuer().empty() && !IsHttpsUrl(Config.GetIssuer())) {
-        BLOG_E(
-            "IdP issuer must use https:// scheme, refusing to fetch keys over plaintext;"
-            " disabling External IdP provider issuer=" << Config.GetIssuer()
-        );
+        YDB_LOG_ERROR("Issuer must use https scheme",
+            {"issuer", Config.GetIssuer()});
         Config.ClearIssuer();
     }
 
@@ -509,7 +506,8 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
             TEvExternalIdpProvider::EStatus::BAD_REQUEST, "Token is not in correct format"
         );
     } catch (const std::exception& e) {
-        BLOG_E("Failed to decode token: " << e.what());
+        YDB_LOG_ERROR("Failed to decode",
+            {"token", e.what()});
         return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::UNAUTHORIZED, "Failed to decode token"
@@ -607,7 +605,8 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     try {
         verifier.verify(*decoded);
     } catch (const std::exception& e) {
-        BLOG_E("Failed to verify token: " << e.what());
+        YDB_LOG_ERROR("Failed to verify",
+            {"token", e.what()});
         return ReplyError(
             ev->Sender, msg->Key,
             TEvExternalIdpProvider::EStatus::UNAUTHORIZED, "Failed to verify token"
@@ -624,20 +623,16 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
             return sub;
         }
         if (!decoded->has_payload_claim(subClaim)) {
-            BLOG_W(
-                "Unknown claim for subject is used for token, fallback to 'sub'"
-                    << " issuer=" << Config.GetIssuer()
-                    << " subject_claim_name=" << subClaim
-            );
+            YDB_LOG_WARN("Unknown claim for subject is used for token, fallback to 'sub'",
+                {"issuer", Config.GetIssuer()},
+                {"subjectClaimName", subClaim});
             return sub;
         }
         const auto& claim = decoded->get_payload_claim(subClaim);
         if (claim.get_type() != jwt::claim::type::string) {
-            BLOG_W(
-                "Value in subject claim is not a string, fallback to 'sub'"
-                    << " issuer=" << Config.GetIssuer()
-                    << " subject_claim_name=" << subClaim
-            );
+            YDB_LOG_WARN("Value in subject claim is not a string, fallback to 'sub'",
+                {"issuer", Config.GetIssuer()},
+                {"subjectClaimName", subClaim});
             return sub;
         }
         return TString{claim.as_string()};
@@ -665,19 +660,15 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
                 }
             }
             if (skipped > 0) {
-                BLOG_W(
-                    "Ignored non-string element(s) in groups claim"
-                        << " issuer=" << Config.GetIssuer()
-                        << " groups_claim_name=" << groupsClaim
-                        << " ignored=" << skipped
-                );
+                YDB_LOG_WARN("Ignored non-string element(s) in groups claim",
+                    {"issuer", Config.GetIssuer()},
+                    {"groupsClaimName", groupsClaim},
+                    {"ignored", skipped});
             }
         } else {
-            BLOG_W(
-                "Groups claim is not an array, no groups extracted"
-                    << " issuer=" << Config.GetIssuer()
-                    << " groups_claim_name=" << groupsClaim
-            );
+            YDB_LOG_WARN("Groups claim is not an array, no groups extracted",
+                {"issuer", Config.GetIssuer()},
+                {"groupsClaimName", groupsClaim});
         }
     }
 
@@ -687,25 +678,21 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
             std::chrono::duration_cast<std::chrono::seconds>(exp.time_since_epoch()).count()
         );
     } else {
-        BLOG_W(
-            "`exp` claim is not set, use default expiration period"
-                << " issuer=" << Config.GetIssuer()
-                << " default_expiration_period=" << DEFAULT_EXPIRATION_PERIOD.Seconds()
-        );
+        YDB_LOG_WARN("`exp` claim is not set, use default expiration period",
+            {"issuer", Config.GetIssuer()},
+            {"defaultExpirationPeriod", DEFAULT_EXPIRATION_PERIOD.Seconds()});
         resp->ExpiresAt = now + DEFAULT_EXPIRATION_PERIOD;
     }
 
     CounterAuthSuccess->Inc();
 
-    BLOG_D(
-        "Authentication succeeded in ExternalIdp"
-            << " issuer=" << Config.GetIssuer()
-            << " key=" << MaskTicket(msg->Key)
-            << " status=" << resp->Status
-            << " user=" << resp->User
-            << " groups=[" << JoinSeq(", ", resp->Groups) << "]"
-            << " expires_at=" << resp->ExpiresAt
-    );
+    YDB_LOG_DEBUG("Authentication succeeded in ExternalIdp groups=[",
+        {"issuer", Config.GetIssuer()},
+        {"key", MaskTicket(msg->Key)},
+        {"status", resp->Status},
+        {"user", resp->User},
+        {"groups", JoinSeq(", ", resp->Groups)},
+        {"expiresAt", resp->ExpiresAt});
 
     Send(ev->Sender, resp.Release());
 }
@@ -716,7 +703,9 @@ void TExternalIdpProvider::StartDiscoveryFetch(const TInstant& now) {
     }
     const auto discoveryUrl = BuildDiscoveryUrl(Config.GetIssuer());
 
-    BLOG_D("Discovery fetch IdP issuer=" << Config.GetIssuer() << " url=" << discoveryUrl);
+    YDB_LOG_DEBUG("Discovery fetch IdP",
+        {"issuer", Config.GetIssuer()},
+        {"url", discoveryUrl});
 
     const auto request = NHttp::THttpOutgoingRequest::CreateRequestGet(discoveryUrl);
     const auto timeout = DiscoveryRefresh.OnRequestSending(now, request);
@@ -728,7 +717,9 @@ void TExternalIdpProvider::StartJwksFetch(const TInstant& now) {
         return;
     }
 
-    BLOG_D("JWKS fetch IdP issuer=" << Config.GetIssuer() << " url=" << JwksUrl);
+    YDB_LOG_DEBUG("JWKS fetch IdP",
+        {"issuer", Config.GetIssuer()},
+        {"url", JwksUrl});
 
     const auto request = NHttp::THttpOutgoingRequest::CreateRequestGet(JwksUrl);
     const auto timeout = JwksRefresh.OnRequestSending(now, request);
@@ -747,7 +738,9 @@ void TExternalIdpProvider::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::
         return HandleJwksResponse(*msg, now);
     }
 
-    BLOG_E("Got unexpected HTTP response for issuer=" << Config.GetIssuer() << " request=" << msg->Request->AsString());
+    YDB_LOG_ERROR("Got unexpected HTTP response",
+        {"issuer", Config.GetIssuer()},
+        {"request", msg->Request->AsString()});
 }
 
 void TExternalIdpProvider::HandleDiscoveryResponse(
@@ -763,48 +756,57 @@ void TExternalIdpProvider::HandleDiscoveryResponse(
     };
 
     if (resp.Response == nullptr) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Discovery failed: " << resp.Error);
+        YDB_LOG_ERROR("IdP message=Discovery",
+            {"issuer", Config.GetIssuer()},
+            {"failed", resp.Error});
         return;
     }
 
     if (resp.Response->Status != "200") {
-        BLOG_E(
-            "IdP issuer=" << Config.GetIssuer() << " message=Discovery fetch network error"
-                << " (" << resp.Response->Status << ") " << resp.Response->Message
-        );
+        YDB_LOG_ERROR("IdP message=Discovery fetch network error",
+            {"issuer", Config.GetIssuer()},
+            {"responseStatus", resp.Response->Status},
+            {"responseMessage", resp.Response->Message});
         return;
     }
 
     NJson::TJsonValue json;
     if (!NJson::ReadJsonTree(TString{resp.Response->Body}, &json)) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Invalid JSON in discovery response");
+        YDB_LOG_ERROR("IdP message=Invalid JSON in discovery response",
+            {"issuer", Config.GetIssuer()});
         return;
     }
     if (!Config.HasIssuer() || Config.GetIssuer().empty()) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Discovery failed with empty issuer in config");
+        YDB_LOG_ERROR("IdP message=Discovery failed with empty issuer in config",
+            {"issuer", Config.GetIssuer()});
         return;
     }
     if (!json.Has(ISSUER) || !json[ISSUER].IsString() || Config.GetIssuer() != json[ISSUER].GetString()) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Discovery document mismatch '" << ISSUER << "'");
+        YDB_LOG_ERROR("IdP message=Discovery document mismatch",
+            {"issuer", Config.GetIssuer()},
+            {"ISSUER", ISSUER});
         return;
     }
     if (!json.Has(JWKS_URI) || !json[JWKS_URI].IsString() || json[JWKS_URI].GetString().empty()) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Discovery document missing '" << JWKS_URI << "'");
+        YDB_LOG_ERROR("IdP message=Discovery document missing",
+            {"issuer", Config.GetIssuer()},
+            {"JWKSURI", JWKS_URI});
         return;
     }
 
     const auto jwksUri = json[JWKS_URI].GetString();
     if (!IsHttpsUrl(jwksUri)) {
-        BLOG_E(
-            "IdP issuer=" << Config.GetIssuer()
-                << " message=Discovery document '" << JWKS_URI << "' must use https:// scheme"
-                << " jwks_uri=" << jwksUri
-        );
+        YDB_LOG_ERROR("IdP message=Discovery document must use https:// scheme",
+            {"issuer", Config.GetIssuer()},
+            {"JWKSURI", JWKS_URI},
+            {"jwksUri", jwksUri});
         return;
     }
     JwksUrl = jwksUri;
 
-    BLOG_D("Discovery ok IdP issuer=" << Config.GetIssuer() << " jwks_uri=" << JwksUrl);
+    YDB_LOG_DEBUG("Discovery ok IdP",
+        {"issuer", Config.GetIssuer()},
+        {"jwksUri", JwksUrl});
     isSuccess = true;
 }
 
@@ -821,27 +823,31 @@ void TExternalIdpProvider::HandleJwksResponse(
     };
 
     if (resp.Response == nullptr) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=JWKS response failed: " << resp.Error);
+        YDB_LOG_ERROR("IdP message=JWKS response",
+            {"issuer", Config.GetIssuer()},
+            {"failed", resp.Error});
         return;
     }
 
     if (resp.Response->Status != "200") {
-        BLOG_E(
-            "IdP issuer=" << Config.GetIssuer() << " message=JWKS fetch network error"
-                << " (" << resp.Response->Status << ")" << " " << resp.Response->Message
-        );
+        YDB_LOG_ERROR("IdP message=JWKS fetch network error",
+            {"issuer", Config.GetIssuer()},
+            {"responseStatus", resp.Response->Status},
+            {"responseMessage", resp.Response->Message});
         return;
     }
 
     NJson::TJsonValue json;
     if (!NJson::ReadJsonTree(TString{resp.Response->Body}, &json)) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Invalid JSON in JWKS response");
+        YDB_LOG_ERROR("IdP message=Invalid JSON in JWKS response",
+            {"issuer", Config.GetIssuer()});
         return;
     }
 
     const auto arr = NSecurity::ParseJwkSet(json);
     if (!arr.has_value()) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=Failed to parse JWKS");
+        YDB_LOG_ERROR("IdP message=Failed to parse JWKS",
+            {"issuer", Config.GetIssuer()});
         return;
     }
 
@@ -849,24 +855,25 @@ void TExternalIdpProvider::HandleJwksResponse(
     for (const auto& jwk : arr->Keys) {
         auto pubkey = jwk.CalculatePublicKey();
         if (!pubkey.has_value()) {
-            BLOG_W("Skipping JWKS key with kid='" << jwk.KeyId << "': unsupported key format (no x5c)");
+            YDB_LOG_WARN("Skipping JWKS key with kid=' unsupported key format (no x5c)",
+                {"keyId", jwk.KeyId});
             continue;
         }
         newKeys[BuildKey(ToString(jwk.Type), TString{jwk.KeyId})] = std::move(pubkey.value());
     }
     if (newKeys.empty()) {
-        BLOG_E("IdP issuer=" << Config.GetIssuer() << " message=No supported keys in JWKS response");
+        YDB_LOG_ERROR("IdP message=No supported keys in JWKS response",
+            {"issuer", Config.GetIssuer()});
         return;
     }
 
     const auto oldKeyCount = JwksCache.Count();
     JwksCache.Update(now, std::move(newKeys));
 
-    BLOG_D(
-        "JWKS refreshed IdP issuer=" << Config.GetIssuer()
-            << " old_keys=" << oldKeyCount
-            << " new_keys=" << JwksCache.Count()
-    );
+    YDB_LOG_DEBUG("JWKS refreshed IdP",
+        {"issuer", Config.GetIssuer()},
+        {"oldKeys", oldKeyCount},
+        {"newKeys", JwksCache.Count()});
     isSuccess = true;
 }
 
@@ -939,14 +946,12 @@ void TExternalIdpProvider::ReplyError(
 {
     CounterAuthFailed->Inc();
 
-    BLOG_W(
-        "Authentication failed in ExternalIdp"
-            << " issuer=" << Config.GetIssuer()
-            << " key=" << MaskTicket(key)
-            << " status=" << status
-            << " retryable=" << retryable
-            << " message=" << message
-    );
+    YDB_LOG_WARN("Authentication failed in ExternalIdp",
+        {"issuer", Config.GetIssuer()},
+        {"key", MaskTicket(key)},
+        {"status", status},
+        {"retryable", retryable},
+        {"message", message});
 
     auto resp = MakeHolder<TEvExternalIdpProvider::TEvAuthenticateResponse>(key);
     resp->Status = status;

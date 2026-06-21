@@ -19,6 +19,8 @@
 
 #include <util/datetime/base.h>  // for ToInstant
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
+
 
 namespace {
 
@@ -99,7 +101,10 @@ public:
     }
 
     void Bootstrap() {
-        ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->GetURI());
+        YDB_LOG_WARN("Web UI login request",
+            {"address", Request->Address},
+            {"method", Request->Method},
+            {"uri", Request->GetURI()});
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -196,7 +201,8 @@ public:
     }
 
     void ReplyCookieAndPassAway(const TString& cookie) {
-        ALOG_DEBUG(NActorsServices::HTTP, "Login success for " << User);
+        YDB_LOG_DEBUG("Login success",
+            {"user", User});
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         TDuration maxAge = ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now();
@@ -206,7 +212,9 @@ public:
     }
 
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
-        ALOG_ERROR(NActorsServices::HTTP, "Login fail for " << User << ": " << error);
+        YDB_LOG_ERROR("Login fail",
+            {"user", User},
+            {"error", error});
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Content-Type", "application/json");
@@ -245,7 +253,10 @@ public:
     }
 
     void Bootstrap() {
-        ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->GetURI());
+        YDB_LOG_WARN("Web UI logout request",
+            {"address", Request->Address},
+            {"method", Request->Method},
+            {"uri", Request->GetURI()});
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -287,7 +298,10 @@ public:
     }
 
     void HandleTimeout() {
-        ALOG_ERROR(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->GetURI() << " timeout");
+        YDB_LOG_ERROR("Timeout",
+            {"address", Request->Address},
+            {"method", Request->Method},
+            {"uri", Request->GetURI()});
         ReplyErrorAndPassAway("504", "Gateway Timeout", "Timeout");
     }
 
@@ -311,7 +325,7 @@ public:
     }
 
     void ReplyDeleteCookieAndPassAway(const TString& userSID, const TString& sanitizedToken) {
-        ALOG_DEBUG(NActorsServices::HTTP, "Logout success");
+        YDB_LOG_DEBUG("Logout success");
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Set-Cookie", "ydb_session_id=; Max-Age=0");
@@ -323,7 +337,7 @@ public:
     }
 
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
-        ALOG_ERROR(NActorsServices::HTTP, "Logout: " << error);
+        YDB_LOG_ERROR(error);
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Content-Type", "application/json");

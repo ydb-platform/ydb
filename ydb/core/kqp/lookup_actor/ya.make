@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/control/lib
     ydb/library/aclib/protos
     ydb/library/yql/dq/actors/compute
+    ydb/library/yverify_stream
     ydb/public/api/protos
     yql/essentials/minikql/computation
     yql/essentials/public/types

@@ -31,6 +31,7 @@
 #include <util/string/escape.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #define LOG_T_AS(ctx, s) LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPUTE, s)
 #define LOG_T(s) LOG_T_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
@@ -135,9 +136,7 @@ namespace NYql::NDq {
         struct TLookupState {
             using TPtr = std::shared_ptr<TLookupState>;
             std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
-            // ^^^ must not be lock()ed without bound mkql allocator (e.g. in future
-            // handlers)
-            // ^^^ TODO: consider possible (temporal) circular ownership via Future and lambda capture
+            // ^^^ must not be lock()ed without bound mkql allocator (e.g. in future handlers)
             TBackoff Backoff;
             TInstant SentTime;
             size_t FullscanLimit = 0;
@@ -595,7 +594,13 @@ namespace NYql::NDq {
                 columnMap[c] = index;
             }
 
+            auto savedResultRows = state->ResultRows;
             while (parser.TryNextRow()) {
+                if (state->ResultRows == state->FullscanLimit && state->FullscanLimit > 0) {
+                    Y_VALIDATE(false, "Result count exceed requested limit " << state->FullscanLimit);
+                    break;
+                }
+                ++state->ResultRows;
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
                 NUdf::TUnboxedValue* outputItems;
@@ -603,7 +608,7 @@ namespace NYql::NDq {
 
                 for (ui32 j = 0; j != columnsCount; ++j) {
                     auto& v = (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second];
-                    v = YdbValueToUnboxedValue(parser.ColumnParser(j), SelectResultType->GetMemberType(j));
+                    v = YdbValueToUnboxedValue(parser.ColumnParser(columnMap[j]), SelectResultType->GetMemberType(j));
                 }
 
                 NUdf::TUnboxedValue *v;
@@ -613,6 +618,8 @@ namespace NYql::NDq {
                 } else if (auto it = request->find(key); it != request->end()) {
                     v = &(it->second);
                 } else {
+                    // Different from generic provider; connector may return unwanted keys (and we filter out them locally); for kikimr lookups this is a hard failure
+                    Y_VALIDATE(false, "SELECT returned unrequested keys, should not have happpend");
                     continue;
                 }
                 if (IsMultiMatches) {
@@ -624,8 +631,9 @@ namespace NYql::NDq {
             auto cputime = GetCpuTimeDelta(startCycleCount).MicroSeconds();
             if (CpuTime) {
                 CpuTime->Add(cputime);
+                ResultRows->Add(state->ResultRows - savedResultRows);
             }
-            LOG_T("ProcessReceivedData " << cputime);
+            LOG_T("ProcessReceivedData cputime " << cputime << " for " << (state->ResultRows - savedResultRows) << " rows");
         }
 
         void FinalizeRequest(TLookupState::TPtr state) {
@@ -641,7 +649,7 @@ namespace NYql::NDq {
             }
             LOG_T("AnswerTime " << (TInstant::Now() - state->SentTime));
             auto* ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request), state->ResultRows, state->FullscanLimit);
-            if (state->SessionId) {
+            if (state->SessionId) { // return SessionId to pool
                 SessionIds.push_back(std::move(state->SessionId));
             }
             state.reset();
@@ -695,7 +703,6 @@ namespace NYql::NDq {
                 if (c != 0) {
                     out << ",";
                 }
-                TStringBuilder output;
                 NUdf::TTypePrinter p(*TypeInfoHelper, KeyType->GetMemberType(c));
                 p.Out(out.Out);
             }
@@ -710,6 +717,7 @@ namespace NYql::NDq {
             }
             out << ") IN " << KeyTupleListName;
         }
+
         void MakeSelectWithLimit(TStringBuilder& out, ui64 limit, ui64 offset = 0) {
             MakeSelect(out);
             out << " LIMIT " << limit;

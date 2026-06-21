@@ -550,7 +550,7 @@ class TKikimrDqIntegration : public NYql::TDqIntegrationBase {
         const auto& path = settings.Item(0).StringValue();
 
         NKqpProto::TKikimrLookupSource source;
-        source.set_path(path);
+        source.SetPath(path);
 
         // preserve source description for read actor
         protoSettings.PackFrom(source);

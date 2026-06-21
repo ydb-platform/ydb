@@ -85,7 +85,7 @@ Definition of a column group with specified parameters. For more information, se
 
 Additional parameters for creating a table. For more information, see the [{#T}](with.md) section.
 
-{ % note info % }
+{% note info %}
 
 {{ ydb-short-name }} supports two types of tables:
 

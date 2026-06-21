@@ -11,6 +11,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/table.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
@@ -76,6 +77,11 @@ inline std::shared_ptr<arrow::RecordBatch> MakeBatch(int numRows, int sourceIdx)
 struct TFixture {
     std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
 
+    explicit TFixture(std::vector<std::shared_ptr<arrow::RecordBatch>> batches)
+        : Batches(std::move(batches)) {
+        NKikimr::EnableYDBBacktraceFormat();
+    }
+
     TFixture(int numSources) {
         NKikimr::EnableYDBBacktraceFormat();
         Batches.reserve(numSources);
@@ -85,111 +91,20 @@ struct TFixture {
     }
 };
 
-inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
-    auto sortSchema = MakeSortSchema();
-    auto fullSchema = MakeFullSchema();
-
-    TMergePartialStream merger(sortSchema, fullSchema, /*reverse=*/false,
-        {"ver"}, std::nullopt, std::nullopt);
-
-    for (auto& batch : f.Batches) {
-        merger.AddSource(batch, nullptr, TIterationOrder::Forward(0));
-    }
-
-    TRecordBatchBuilder builder(fullSchema->fields());
-    merger.DrainAll(builder);
-    return builder.Finalize();
-}
-
-inline std::shared_ptr<arrow::Table> MergeOnceArrow(const TFixture& f) {
-    auto sortSchema = MakeSortSchema();
-    auto fullSchema = MakeFullSchema();
-
-    arrow::compute::SortOptions sortOptions({
-        arrow::compute::SortKey("ts", arrow::compute::SortOrder::Ascending),
-        arrow::compute::SortKey("a",  arrow::compute::SortOrder::Ascending),
-        arrow::compute::SortKey("b",  arrow::compute::SortOrder::Ascending),
-        arrow::compute::SortKey("ver", arrow::compute::SortOrder::Descending),
-    });
-    auto tableRes = arrow::Table::FromRecordBatches(fullSchema, f.Batches);
-    Y_ABORT_UNLESS(tableRes.ok());
-    auto table = *tableRes;
-
-    auto indicesRes = arrow::compute::SortIndices(arrow::Datum(table), sortOptions);
-    Y_ABORT_UNLESS(indicesRes.ok());
-    auto indices = *indicesRes;
-
-
-    auto all_indices_but_first = indices->SliceSafe(1).ValueOrDie();
-    auto all_indices_but_last = indices->SliceSafe(0, indices->length() - 1).ValueOrDie();
-    
-    // arrow::VisitArrayInline(indices, nullptr);
-
-    auto takenRes = arrow::compute::Take(arrow::Datum(table), arrow::Datum(indices));
-    Y_ABORT_UNLESS(takenRes.ok());
-    auto result = takenRes->table();
-
-    auto all_data_but_first_tuple = result->Slice(1);
-
-    auto all_data_but_last_tuple = result->Slice(0, result->num_rows() - 1);
-    auto names = all_data_but_first_tuple->ColumnNames();
-    for(auto& name: names) {
-        Cerr << name << ", "; 
-    }
-    Cerr << '\n';
-    auto bools_without_first = arrow::compute::CallFunction("not_equal", {all_data_but_first_tuple->column(0), all_data_but_last_tuple->column(0)}).ValueOrDie();
-    for(ui64 index = 1; index + 1 < names.size(); ++index) {
-        bools_without_first = arrow::compute::And(bools_without_first, arrow::compute::CallFunction("not_equal", {all_data_but_first_tuple->column(index), all_data_but_last_tuple->column(index)}).ValueOrDie()).ValueOrDie();
-    }
-    arrow::BooleanBuilder bb;
-    ARROW_OK(bb.Append(true));
-    std::shared_ptr<arrow::Array> head;
-    ARROW_OK(bb.Finish(&head));
-    std::vector<std::shared_ptr<arrow::Array>> chunks;
-    chunks.push_back(head);
-    chunks.insert(chunks.end(), bools_without_first.chunked_array()->chunks().begin(), bools_without_first.chunked_array()->chunks().end());
-
-    auto bitmap = arrow::ChunkedArray::Make(chunks).ValueOrDie();
-
-    auto indices_ok = arrow::compute::CallFunction("indices_nonzero", {bitmap}).ValueOrDie();
-
-    auto res_without_first = arrow::compute::Take(result, indices_ok).ValueOrDie();
-    
-    return res_without_first.table();
-
-}
-
-// (1,1), (1,0), (2,1), (2,0)
-
-// all_but_first: (1,0), (2,1), (2,0)
-// all_but_last: (1,1), (1,0), (2,1)
-
-
-
-// ---- фикстуры: (источников, строк на источник) ----
-// Function-local static — Arrow memory pool должен быть инициализирован до первого использования билдеров.
-
-inline const TFixture& Get_2src_10k()   { static TFixture f{ 2 }; return f; }
-inline const TFixture& Get_5src_10k()   { static TFixture f{ 5 }; return f; }
-inline const TFixture& Get_10src_10k()  { static TFixture f{ 10 }; return f; }
-inline const TFixture& Get_20src_10k()  { static TFixture f{ 20 }; return f; }
-
-// ============================================================================
-// Третий алгоритм: arrow_next (arrow 20) — sort + Grouper + hash_first.
-// Логически эквивалентен мерж-with-dedup TMergePartialStream:
-//   1) concat всех источников
-//   2) sort по (ts ASC, a ASC, b ASC, ver DESC) — внутри каждой (ts,a,b) первой
-//      идёт строка с максимальным ver
-//   3) Grouper строит group_ids по (ts,a,b)
-//   4) hash_first каждой колонке (включая ver) — берёт первую строку каждой группы
-// ============================================================================
-
 inline std::shared_ptr<arrow20::Schema> MakeFullSchema20() {
     return arrow20::schema({
         arrow20::field("ts", arrow20::timestamp(arrow20::TimeUnit::MICRO)),
         arrow20::field("a", arrow20::utf8()),
         arrow20::field("b", arrow20::utf8()),
         arrow20::field("ver", arrow20::int64()),
+    });
+}
+
+inline std::shared_ptr<arrow20::Schema> MakeSortSchema20() {
+    return arrow20::schema({
+        arrow20::field("ts", arrow20::timestamp(arrow20::TimeUnit::MICRO)),
+        arrow20::field("a", arrow20::utf8()),
+        arrow20::field("b", arrow20::utf8()),
     });
 }
 
@@ -222,6 +137,10 @@ inline std::shared_ptr<arrow20::RecordBatch> MakeBatch20(int numRows, uint32_t s
 struct TFixture20 {
     std::vector<std::shared_ptr<arrow20::RecordBatch>> Batches;
 
+    explicit TFixture20(std::vector<std::shared_ptr<arrow20::RecordBatch>> batches)
+        : Batches(std::move(batches)) {
+    }
+
     TFixture20(int numSources) {
         Batches.reserve(numSources);
         for (int i = 0; i < numSources; ++i) {
@@ -229,6 +148,97 @@ struct TFixture20 {
         }
     }
 };
+
+
+inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
+    auto sortSchema = MakeSortSchema();
+    auto fullSchema = MakeFullSchema();
+
+    TMergePartialStream merger(sortSchema, fullSchema, /*reverse=*/false,
+        {"ver"}, std::nullopt, std::nullopt);
+
+    for (auto& batch : f.Batches) {
+        merger.AddSource(batch, nullptr, TIterationOrder::Forward(0));
+    }
+
+    TRecordBatchBuilder builder(fullSchema->fields());
+    merger.DrainAll(builder);
+    return builder.Finalize();
+}
+
+inline std::shared_ptr<arrow20::Table> MergeOnceArrow20(const TFixture20& f) {
+    auto fullSchema = MakeFullSchema20();
+
+    arrow20::compute::SortOptions sortOptions({
+        arrow20::compute::SortKey("ts", arrow20::compute::SortOrder::Ascending),
+        arrow20::compute::SortKey("a",  arrow20::compute::SortOrder::Ascending),
+        arrow20::compute::SortKey("b",  arrow20::compute::SortOrder::Ascending),
+        arrow20::compute::SortKey("ver", arrow20::compute::SortOrder::Descending),
+    });
+    auto batch = arrow20::ConcatenateRecordBatches(f.Batches).ValueOrDie();
+    Y_ABORT_UNLESS(batch->num_rows() > 0);
+
+    auto indicesRes = arrow20::compute::SortIndices(arrow20::Datum(batch), sortOptions);
+    Y_ABORT_UNLESS(indicesRes.ok());
+    auto indices = *indicesRes;
+
+    auto takenRes = arrow20::compute::Take(arrow20::Datum(batch), arrow20::Datum(indices));
+    Y_ABORT_UNLESS(takenRes.ok());
+    auto resultBatch = takenRes->record_batch();
+    auto result = arrow20::Table::FromRecordBatches(fullSchema, {resultBatch}).ValueOrDie();
+
+    auto all_data_but_first_tuple = result->Slice(1);
+    auto all_data_but_last_tuple = result->Slice(0, result->num_rows() - 1);
+
+    auto bools_without_first = arrow20::compute::CallFunction("not_equal", {all_data_but_first_tuple->column(0), all_data_but_last_tuple->column(0)}).ValueOrDie();
+    for (ui64 index = 1; index < 3; ++index) {
+        auto keyChanged = arrow20::compute::CallFunction("not_equal", {all_data_but_first_tuple->column(index), all_data_but_last_tuple->column(index)}).ValueOrDie();
+        bools_without_first = arrow20::compute::CallFunction("or", {bools_without_first, keyChanged}).ValueOrDie();
+    }
+    arrow20::BooleanBuilder bb;
+    auto s = bb.Append(true);
+    if (!s.ok()) s.Abort();
+    std::shared_ptr<arrow20::Array> head;
+    s = bb.Finish(&head);
+    if (!s.ok()) s.Abort();
+    std::vector<std::shared_ptr<arrow20::Array>> chunks;
+    chunks.push_back(head);
+    chunks.insert(chunks.end(), bools_without_first.chunked_array()->chunks().begin(), bools_without_first.chunked_array()->chunks().end());
+
+    auto bitmap = arrow20::ChunkedArray::Make(chunks).ValueOrDie();
+
+    auto indices_ok = arrow20::compute::CallFunction("indices_nonzero", {bitmap}).ValueOrDie();
+
+    auto res_without_first = arrow20::compute::Take(result, indices_ok).ValueOrDie();
+    
+    return res_without_first.table();
+}
+
+// (1,1), (1,0), (2,1), (2,0)
+
+// all_but_first: (1,0), (2,1), (2,0)
+// all_but_last: (1,1), (1,0), (2,1)
+
+
+
+// ---- фикстуры: (источников, строк на источник) ----
+// Function-local static — Arrow memory pool должен быть инициализирован до первого использования билдеров.
+
+inline const TFixture& Get_2src_10k()   { static TFixture f{ 2 }; return f; }
+inline const TFixture& Get_5src_10k()   { static TFixture f{ 5 }; return f; }
+inline const TFixture& Get_10src_10k()  { static TFixture f{ 10 }; return f; }
+inline const TFixture& Get_20src_10k()  { static TFixture f{ 20 }; return f; }
+
+// ============================================================================
+// Третий алгоритм: arrow_next (arrow 20) — sort + Grouper + hash_first.
+// Логически эквивалентен мерж-with-dedup TMergePartialStream:
+//   1) concat всех источников
+//   2) sort по (ts ASC, a ASC, b ASC, ver DESC) — внутри каждой (ts,a,b) первой
+//      идёт строка с максимальным ver
+//   3) Grouper строит group_ids по (ts,a,b)
+//   4) hash_first каждой колонке (включая ver) — берёт первую строку каждой группы
+// ============================================================================
+
 
 // В arrow 20 нет Acero в этой сборке, и публичного GroupBy тоже нет.
 // hash_first как HASH_AGGREGATE не вызывается через CallFunction —
@@ -309,4 +319,3 @@ inline const TFixture20& Get20_2src_10k()  { static TFixture20 f{  2}; return f;
 inline const TFixture20& Get20_5src_10k()  { static TFixture20 f{  5}; return f; }
 inline const TFixture20& Get20_10src_10k() { static TFixture20 f{ 10}; return f; }
 inline const TFixture20& Get20_20src_10k() { static TFixture20 f{ 20}; return f; }
-

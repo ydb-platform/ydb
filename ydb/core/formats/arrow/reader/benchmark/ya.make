@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/formats/arrow/reader)
+G_BENCHMARK()
 
 
 PEERDIR(
@@ -10,7 +10,6 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
-    library/cpp/testing/benchmark
 )
 
 SRCS(

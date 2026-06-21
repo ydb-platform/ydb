@@ -1620,7 +1620,7 @@ public:
             bool hasWrites = tx->GetHasEffects();
             if (!hasWrites) {
                 for (const auto& stage : tx->GetStages()) {
-                    if (stage.SinksSize()) {
+                    if (stage.SinksSize() || stage.OutputTransformsSize()) {
                         hasWrites = true;
                         break;
                     }

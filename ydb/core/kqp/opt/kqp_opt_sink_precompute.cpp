@@ -299,7 +299,9 @@ private:
                             sinkOrTransformOutputsCount++;
                             AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
                             AFL_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
-                            // Don't consider OutputTransforms to be sinks. They are results here.
+                            // OutputTransforms are not added to sinkStages directly.
+                            // They can still be processed for precomputation if they share
+                            // upstream dependencies with actual sink stages.
                         }
                     }
                 }

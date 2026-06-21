@@ -299,13 +299,14 @@ void DispatchUntilWakeup(TTestContext& tc, i32 retriesLeft = 2) {
     while (retriesLeft-- > 0) {
         tc.Runtime->ResetScheduledCount();
         try {
-            tc.Runtime->DispatchEvents(options);
-            return;
+            if (tc.Runtime->DispatchEvents(options)) {
+                return;
+            }
         } catch (const NActors::TSchedulingLimitReachedException&) {
         }
     }
 
-    UNIT_FAIL("DispatchEvents did not complete within retry budget");
+    UNIT_FAIL("DispatchEvents did not observe TEvWakeup within retry budget");
 }
 
 bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestContext& tc) {

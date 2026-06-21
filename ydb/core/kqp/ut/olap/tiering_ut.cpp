@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         )";
             
         auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(createTableQuery).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::Dev::EStatus::SUCCESS, createStatus.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());
 
         testHelper.CreateTier(DEFAULT_TIER_NAME);
         TString tablePath = Arg<0>() == EIndexForTTLColumn::MaxIndex ? "/Root/ColumnWithTTLAndMaxIndex" : "/Root/ColumnWithTTLAndMinMaxIndex";

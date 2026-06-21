@@ -5442,10 +5442,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSetColumnConstraint(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        auto kikimr = TKikimrRunner(TKikimrSettings(config));
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -5498,10 +5497,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSetColumnConstraint(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        auto kikimr = TKikimrRunner(TKikimrSettings(config));
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 

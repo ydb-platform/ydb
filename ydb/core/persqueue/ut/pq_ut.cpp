@@ -290,7 +290,6 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
 
 // TSchedulingLimitReachedException means the scheduled-event budget was exhausted,
 // not that dispatch failed. PQ UT relies on partial progress here (see pq_ut_common.cpp).
-// Retention tests assert the outcome via PQGetPartInfo after WaitRetentionCleanup.
 void DispatchWithRetry(TTestContext& tc, i32 retriesLeft = 2) {
     while (retriesLeft-- > 0) {
         tc.Runtime->ResetScheduledCount();
@@ -302,15 +301,59 @@ void DispatchWithRetry(TTestContext& tc, i32 retriesLeft = 2) {
     }
 }
 
-void DispatchPartitionWakeup(TTestContext& tc, ui32 wakeTimeoutSeconds = 5) {
-    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
-    DispatchWithRetry(tc);
+bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestContext& tc) {
+    TAutoPtr<IEventHandle> handle;
+    TEvPersQueue::TEvOffsetsResponse* result = nullptr;
+    THolder<TEvPersQueue::TEvOffsets> request;
+
+    for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
+        try {
+            tc.Runtime->ResetScheduledCount();
+            request.Reset(new TEvPersQueue::TEvOffsets);
+
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(handle);
+            if (!result) {
+                return false;
+            }
+
+            if (result->Record.PartResultSize() == 0 ||
+                result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                return false;
+            }
+
+            const ui64 startOffset = result->Record.GetPartResult(0).GetStartOffset();
+            const ui64 endOffset = result->Record.GetPartResult(0).GetEndOffset();
+            return startOffset == expectedStartOffset && endOffset == expectedEndOffset;
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+        }
+    }
+
+    return false;
 }
 
-void WaitRetentionCleanup(TTestContext& tc, ui32 retentionSeconds = 5, ui32 wakeTimeoutSeconds = 5) {
+void WaitRetentionCleanup(TTestContext& tc,
+                          ui64 expectedStartOffset,
+                          ui64 expectedEndOffset,
+                          ui32 retentionSeconds = 5,
+                          ui32 wakeTimeoutSeconds = 5,
+                          ui32 maxAttempts = 10) {
     tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
-    DispatchWithRetry(tc);
-    DispatchPartitionWakeup(tc, wakeTimeoutSeconds);
+
+    for (ui32 attempt = 0; attempt < maxAttempts; ++attempt) {
+        DispatchWithRetry(tc);
+        if (TryPQGetPartInfo(expectedStartOffset, expectedEndOffset, tc)) {
+            return;
+        }
+
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
+        DispatchWithRetry(tc);
+        if (TryPQGetPartInfo(expectedStartOffset, expectedEndOffset, tc)) {
+            return;
+        }
+    }
+
+    PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 }
 
 Y_UNIT_TEST(TestCompaction) {
@@ -4034,8 +4077,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlob) {
     writeSmall(1, true);
     PQGetPartInfo(0, 1, tc);
 
-    WaitRetentionCleanup(tc, retentionSeconds);
-    PQGetPartInfo(1, 1, tc);
+    WaitRetentionCleanup(tc, 1, 1, retentionSeconds);
 
     PQTabletRestart(tc);
     PQGetPartInfo(1, 1, tc);
@@ -4043,8 +4085,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlob) {
     writeSmall(2, false);
     PQGetPartInfo(1, 2, tc);
 
-    WaitRetentionCleanup(tc, retentionSeconds);
-    PQGetPartInfo(2, 2, tc);
+    WaitRetentionCleanup(tc, 2, 2, retentionSeconds);
 }
 
 Y_UNIT_TEST(TestRetentionDeletesLastBlobInFwz) {
@@ -4066,8 +4107,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInFwz) {
     CmdWrite(0, "sourceid_fwz", data, tc, false, {}, true);
 
     PQGetPartInfo(0, 1, tc);
-    WaitRetentionCleanup(tc, retentionSeconds);
-    PQGetPartInfo(1, 1, tc);
+    WaitRetentionCleanup(tc, 1, 1, retentionSeconds);
 }
 
 Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzb) {
@@ -4091,8 +4131,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzb) {
     PQTabletRestart(tc);
 
     PQGetPartInfo(0, 1, tc);
-    WaitRetentionCleanup(tc, retentionSeconds);
-    PQGetPartInfo(1, 1, tc);
+    WaitRetentionCleanup(tc, 1, 1, retentionSeconds);
 }
 
 Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzh) {
@@ -4126,8 +4165,7 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzh) {
     PQTabletRestart(tc);
 
     PQGetPartInfo(100, 202, tc);
-    WaitRetentionCleanup(tc, retentionSeconds);
-    PQGetPartInfo(202, 202, tc);
+    WaitRetentionCleanup(tc, 202, 202, retentionSeconds);
 }
 
 Y_UNIT_TEST(TestPartitionMetaOffsetsSurviveRestartWithoutRetentionFlag) {
@@ -4175,8 +4213,7 @@ Y_UNIT_TEST(TestRetentionCrossZoneMessages) {
     PQGetPartInfo(100, 202, tc);
 
     PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
-    WaitRetentionCleanup(tc, retentionSeconds);
-    PQGetPartInfo(202, 202, tc);
+    WaitRetentionCleanup(tc, 202, 202, retentionSeconds);
 
     PQTabletPrepare({.deleteTime = 10'000, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
     tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
@@ -4189,8 +4226,7 @@ Y_UNIT_TEST(TestRetentionCrossZoneMessages) {
     PQGetPartInfo(202, 203, tc);
 
     PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
-    WaitRetentionCleanup(tc, retentionSeconds);
-    PQGetPartInfo(203, 203, tc);
+    WaitRetentionCleanup(tc, 203, 203, retentionSeconds);
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

@@ -1039,9 +1039,23 @@ Y_UNIT_TEST_SUITE(TOlap) {
         auto& appData = runtime.GetAppData();
         appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+<<<<<<< HEAD
         // No LongTxService keeps a live registry here, so install a stand-in whose OldestCollectionTime
         // tracks the clock; otherwise the cleanup floor stays at 0 and deleted data is never collected.
         NKikimr::NTxUT::InstallTimingBasedSnapshotRegistry(runtime);
+=======
+        runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("tiling");
+
+        {
+            auto builder = CreateImmutableSnapshotRegistryBuilder();
+            auto holder = CreateImmutableSnapshotRegistryHolder();
+            holder->Set(std::move(*builder).Build());
+            appData.SnapshotRegistryHolder = holder;
+            appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+            appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
+            appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        }
+>>>>>>> 95ac7604b0b (BACKPORT-CONFLICT: manual resolution required for commit 3762dac)
 
         // apply config via reboot
         TActorId sender = runtime.AllocateEdgeActor();

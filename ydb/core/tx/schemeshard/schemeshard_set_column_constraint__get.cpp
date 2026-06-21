@@ -55,7 +55,6 @@ public:
         auto* proto = respRecord.MutableSetColumnConstraint();
         FillSetColumnConstraint(*proto, operationInfo);
 
-<<<<<<< HEAD
         if (operationInfo.ValidationFailed && operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Done) {
             TPath tablePath = TPath::Init(operationInfo.TablePathId, Self);
             auto* issue = respRecord.AddIssues();
@@ -66,8 +65,6 @@ public:
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
         }
 
-=======
->>>>>>> aa1c2dff709 (init)
         return Reply();
     }
 
@@ -98,19 +95,12 @@ private:
         case EState::Finishing:
         case EState::Unlocking:
             proto.SetState(ProtoState::STATE_APPLYING);
-<<<<<<< HEAD
             proto.SetProgress(99.9f);
             break;
         case EState::Done:
             proto.SetState(operationInfo.ValidationFailed
                 ? ProtoState::STATE_CANCELLED
                 : ProtoState::STATE_DONE);
-=======
-            proto.SetProgress(100.0f);
-            break;
-        case EState::Done:
-            proto.SetState(ProtoState::STATE_DONE);
->>>>>>> aa1c2dff709 (init)
             proto.SetProgress(100.0f);
             break;
         case EState::Invalid:

@@ -241,6 +241,12 @@ public:
                 }
                 const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
 
+                // The partition id metadata column is exposed at the expr level under the user-facing
+                // __ydb_ name when system columns are forbidden, and under the legacy _yql_sys_ name otherwise.
+                const TString partitionIdColumn = State_->ForbidYqlSysColumnsAndSystemMetadata
+                    ? "__ydb_partition_id"
+                    : "_yql_sys_partition_id";
+
                 result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
                     .Input(result)
                     .WatermarkExtractor(watermark)
@@ -248,7 +254,7 @@ public:
                         .Args({"arg"})
                         .Body<TCoMember>()
                             .Struct("arg")
-                            .Name().Build("_yql_sys_partition_id")
+                            .Name().Build(partitionIdColumn)
                             .Build()
                         .Build()
                     .WatermarkSettings(watermarkSettings.Ptr())

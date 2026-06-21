@@ -290,15 +290,22 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
 
 // TSchedulingLimitReachedException means the scheduled-event budget was exhausted,
 // not that dispatch failed. PQ UT relies on partial progress here (see pq_ut_common.cpp).
-void DispatchWithRetry(TTestContext& tc, i32 retriesLeft = 2) {
+void DispatchUntilWakeup(TTestContext& tc, i32 retriesLeft = 2) {
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+
     while (retriesLeft-- > 0) {
         tc.Runtime->ResetScheduledCount();
         try {
-            tc.Runtime->DispatchEvents();
+            tc.Runtime->DispatchEvents(options);
             return;
         } catch (const NActors::TSchedulingLimitReachedException&) {
         }
     }
+
+    UNIT_FAIL("DispatchEvents did not complete within retry budget");
 }
 
 bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestContext& tc) {
@@ -341,13 +348,13 @@ void WaitRetentionCleanup(TTestContext& tc,
     tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
 
     for (ui32 attempt = 0; attempt < maxAttempts; ++attempt) {
-        DispatchWithRetry(tc);
+        DispatchUntilWakeup(tc);
         if (TryPQGetPartInfo(expectedStartOffset, expectedEndOffset, tc)) {
             return;
         }
 
         tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
-        DispatchWithRetry(tc);
+        DispatchUntilWakeup(tc);
         if (TryPQGetPartInfo(expectedStartOffset, expectedEndOffset, tc)) {
             return;
         }

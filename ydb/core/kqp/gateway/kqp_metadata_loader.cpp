@@ -125,6 +125,37 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
     }
 }
 
+void OlapIndexProtoToMetadata(const NKikimrSchemeOp::TColumnTableDescription& desc, NYql::TKikimrTableMetadataPtr tableMeta) {
+    for (const auto& index : desc.GetSchema().GetIndexes()) {
+        NYql::TIndexDescription::EType type;
+        NYql::TIndexDescription::TSpecializedIndexDescription desc;
+        switch (index.Implementation_case()) {
+            case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter:
+                type = NYql::TIndexDescription::EType::LocalBloomFilter;
+                desc = NYql::TIndexDescription::ExtractBloomFilterDescription(index.GetBloomFilter());
+                break;
+            case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter:
+                type = NYql::TIndexDescription::EType::LocalBloomNgramFilter;
+                desc = NYql::TIndexDescription::ExtractBloomNgramFilterDescription(index.GetBloomNGrammFilter());
+                break;
+            case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex:
+                type = NYql::TIndexDescription::EType::LocalMinMax;
+                desc = std::monostate{};
+                break;
+            default:
+                continue;
+        }
+        tableMeta->Indexes.emplace_back(
+            index.GetName(),
+            TVector<TString>{},
+            TVector<TString>{},
+            type,
+            NYql::TIndexDescription::EIndexState::Ready,
+            0, 0, 0,
+            NYql::TIndexDescription::TSpecializedIndexDescription{});
+    }
+}
+
 template<typename TIndexProto>
 void CheckWritesAreDisabled(const TIndexProto& indexes, NYql::TKikimrTableMetadataPtr tableMeta) {
     TStringBuilder disableReason;
@@ -258,6 +289,10 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
     }
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);
+
+    if (entry.ColumnTableInfo) {
+        OlapIndexProtoToMetadata(entry.ColumnTableInfo->Description, tableMeta);
+    }
 
     // Check if we have unique indexes that are not built
     if (!enableOnlineAddUniqueIndex) {

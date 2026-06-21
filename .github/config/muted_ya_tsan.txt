@@ -131,7 +131,6 @@ ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpOlapScheme.DropColumn
-ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal
 ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal35
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
@@ -171,14 +170,7 @@ ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Date
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Decimal
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Double
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int16
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int32
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int64
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int8
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Utf8_LongValue
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.DropColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Attributes
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_CreateTimestamp
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_MessageGroupId
@@ -186,14 +178,7 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_Partition
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_ProducerId
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_SeqNo
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_WriteTimestamp
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingJsonMessage
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTable
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTableOtherType
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_DifferentBatch
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_OneBatch
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToColumn
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
@@ -285,7 +270,6 @@ ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransf
 ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest.py.TestDigest.test_digest_all[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility udf.test_digest_regression.py.TestDigest.test_digest_regression[mixed_prestable-26-3_and_stable-26-2-1]
-ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRollingUpgradeAndDowngrade.test_external_data_source[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityMixedCluster.test_external_data_source_secret_object_schema_compatibility[mixed_prestable-26-3]
 ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityMixedCluster.test_external_data_source_secret_object_schema_compatibility[mixed_prestable-26-3_and_stable-26-2-1]
@@ -802,8 +786,6 @@ ydb/tests/functional/tpc/medium test_diff_processing.py.TestClickbenchDiffProces
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.ERROR]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.WARNING]
-ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.ERROR]
-ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.WARNING]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.2.yql]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[second_query_set.join.sql]

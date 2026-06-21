@@ -5483,6 +5483,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(),
+                "Validation failed for SET NOT NULL on table `/Root/test/alterNotNull`: one or more columns contain NULL values");
         }
 
         {

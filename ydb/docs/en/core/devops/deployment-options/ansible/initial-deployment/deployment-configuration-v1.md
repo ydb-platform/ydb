@@ -1,10 +1,10 @@
-# Развёртывание кластера с использованием конфигурации V1
+# Deploying a cluster using configuration V1
 
-## Подготовьте окружение {# deployment-preparation}
+## Prepare the environment {#deployment-preparation}
 
-Перед развёртыванием системы обязательно выполните подготовительные действия. Ознакомьтесь с документом [{#T}](deployment-preparation.md).
+Before deploying the system, complete the preparation steps. See the [{#T}](deployment-preparation.md) document.
 
-## Создайте директорию для работы {#prepare-directory}
+## Create a working directory {#prepare-directory}
 
 ```bash
 mkdir deployment
@@ -13,15 +13,15 @@ mkdir inventory
 mkdir files
 ```
 
-## Создайте конфигурационный файл Ansible {# ansible-creat-config}
+## Create the Ansible configuration file {#ansible-creat-config}
 
-Создайте `ansible.cfg` с конфигурацией Ansible, подходящей для целевой среды развёртывания. Подробности в [справочнике по конфигурации Ansible](https://docs.ansible.com/ansible/latest/reference_appendices/config.html). Дальнейшее руководство предполагает, что поддиректория `./inventory` рабочей директории настроена для использования файлов инвентаризации.
+Create `ansible.cfg` with Ansible configuration suitable for your target deployment environment. See the [Ansible configuration reference](https://docs.ansible.com/ansible/latest/reference_appendices/config.html) for details. This guide assumes the `./inventory` subdirectory of the working directory is set up for inventory files.
 
-{% cut "Пример стартового ansible.cfg" %}
+{% cut "Example starter ansible.cfg" %}
 
 {% note info %}
 
-Использование параметра `StrictHostKeyChecking=no` в `ssh_args` повышает удобство автоматизации, но снижает уровень безопасности SSH-соединения (отключает проверку подлинности хоста). Для production-окружений рекомендуется не указывать этот аргумент и настроить доверенные ключи вручную. Используйте этот параметр только для тестовых и временных установок.
+Using the `StrictHostKeyChecking=no` parameter in `ssh_args` makes automation easier but reduces SSH connection security (disables host key verification). For production environments, we recommend omitting this argument and configuring trusted keys manually. Use this parameter only for test and temporary installations.
 
 {% endnote %}
 
@@ -47,9 +47,9 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 {% endcut %}
 
-## Создайте основной файл инвентаризации {#inventory-create}
+## Create the main inventory file {#inventory-create}
 
-Создайте файл `inventory/50-inventory.yaml` и заполните его в зависимости от выбранной топологии (подробнее: [выбор топологии](./deployment-preparation.md#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите подходящий.
+Create the file `inventory/50-inventory.yaml` and fill it according to the chosen topology (see [topology selection](./deployment-preparation.md#topology-select)). Examples for each supported topology are in the tabs below — choose the one that fits.
 
 {% list tabs %}
 
@@ -59,7 +59,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
   all:
     children:
       ydb:
-        # Серверы
+        # Servers
         hosts:
           static-node-1.ydb-cluster.com:
           static-node-2.ydb-cluster.com:
@@ -67,22 +67,18 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
         vars:
           # Ansible
-          ansible_user: имя_пользователя
-          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+          ansible_user: username
+          ansible_ssh_private_key_file: "/path/to/your/id_rsa"
 
-          # Система
+          # System
           system_timezone: UTC
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
-          # Узлы
-<<<<<<< HEAD
-          ydb_config: "./files/config.yaml"
-=======
+          # Nodes
           ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
->>>>>>> adf363ebb80 (Zero documentation build warnings (#44105))
-          ydb_version: "версия_системы"
+          ydb_version: "system_version"
 
-          # Хранилище
+          # Storage
           ydb_cores_static: 8
           ydb_disks:
             - name: /dev/vdb
@@ -104,12 +100,12 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
             - static-node-2.ydb-cluster.com
             - static-node-3.ydb-cluster.com
           
-          # База данных
+          # Database
           ydb_user: root
           ydb_domain: Root
           ydb_dbname: database
 
-          # Настройки авторизации
+          # Authorization settings
           ydb_enforce_user_token_requirement: true
           ydb_request_client_certificate: true
     ```
@@ -120,7 +116,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
   all:
     children:
       ydb:
-        # Серверы
+        # Servers
         hosts:
           static-node-1.ydb-cluster.com:
           static-node-2.ydb-cluster.com:
@@ -134,22 +130,18 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
         vars:
           # Ansible
-          ansible_user: имя_пользователя
-          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+          ansible_user: username
+          ansible_ssh_private_key_file: "/path/to/your/id_rsa"
 
-          # Система
+          # System
           system_timezone: UTC
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
-          # Узлы
-<<<<<<< HEAD
-          ydb_config: "./files/config.yaml"
-=======
+          # Nodes
           ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
->>>>>>> adf363ebb80 (Zero documentation build warnings (#44105))
-          ydb_version: "версия_системы"
+          ydb_version: "system_version"
 
-          # Хранилище
+          # Storage
           ydb_cores_static: 8
           ydb_disks:
             - name: /dev/vdb
@@ -167,12 +159,12 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
             - static-node-2.ydb-cluster.com
             - static-node-3.ydb-cluster.com
           
-          # База данных
+          # Database
           ydb_user: root
           ydb_domain: Root
           ydb_dbname: database
 
-          # Настройки авторизации
+          # Authorization settings
           ydb_enforce_user_token_requirement: true
           ydb_request_client_certificate: true
     ```
@@ -183,7 +175,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
   all:
     children:
       ydb:
-        # Серверы
+        # Servers
         hosts:
           static-node-1.ydb-cluster.com:
           static-node-2.ydb-cluster.com:
@@ -196,22 +188,18 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
         vars:
           # Ansible
-          ansible_user: имя_пользователя
-          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+          ansible_user: username
+          ansible_ssh_private_key_file: "/path/to/your/id_rsa"
 
-          # Система
+          # System
           system_timezone: UTC
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
-          # Узлы
-<<<<<<< HEAD
-          ydb_config: "./files/config.yaml"
-=======
+          # Nodes
           ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
->>>>>>> adf363ebb80 (Zero documentation build warnings (#44105))
-          ydb_version: "версия_системы"
+          ydb_version: "system_version"
 
-          # Хранилище
+          # Storage
           ydb_cores_static: 8
           ydb_disks:
             - name: /dev/vdb
@@ -229,12 +217,12 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
             - static-node-2.ydb-cluster.com
             - static-node-3.ydb-cluster.com
           
-          # База данных
+          # Database
           ydb_user: root
           ydb_domain: Root
           ydb_dbname: database
 
-          # Настройки авторизации
+          # Authorization settings
           ydb_enforce_user_token_requirement: true
           ydb_request_client_certificate: true
     ```
@@ -245,23 +233,23 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 {% include notitle [_](./_includes/recommended-settings.md) %}
 
-{% cut "Дополнительные настройки" %}
+{% cut "Additional settings" %}
 
 {% include notitle [_](./_includes/additional-settings.md) %}
 
 {% endcut %}
 
-## Измените пароль пользователя root {#change-password}
+## Change the root user password {#change-password}
 
-Создайте файл `ansible_vault_password_file` с содержимым:
+Create the file `ansible_vault_password_file` with the following content:
 
 ```text
 password
 ```
 
-Этот файл содержит пароль, который Ansible будет использовать для автоматического шифрования и расшифровки конфиденциальных данных, например, файлов с паролями пользователей. Благодаря этому пароли не хранятся в открытом виде в репозитории. Подробнее о работе механизма Ansible Vault можно прочитать в [официальной документации](https://docs.ansible.com/ansible/latest/vault_guide/index.html).
+This file contains the password that Ansible will use to encrypt and decrypt sensitive data automatically, for example user password files. This way passwords are not stored in plain text in the repository. For more on how Ansible Vault works, see the [official documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html).
 
-Далее необходимо установить пароль для начального пользователя, указанного в настройке `ydb_user` (по умолчанию `root`). Этот пользователь изначально будет иметь полные права доступа в кластере, но при необходимости это можно изменить позже. Создайте `inventory/99-inventory-vault.yaml` со следующим содержимым (замените `<password>` на фактический пароль):
+Next, set the password for the initial user specified in the `ydb_user` setting (default `root`). This user will have full access rights in the cluster initially; you can change this later if needed. Create `inventory/99-inventory-vault.yaml` with the following content (replace `<password>` with the actual password):
 
 ```yaml
 all:
@@ -271,11 +259,11 @@ all:
         ydb_password: <password>
 ```
 
-Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/99-inventory-vault.yaml`.
+Encrypt this file with the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`.
 
-## Подготовьте конфигурационный файл {{ ydb-short-name }} {#ydb-config-prepare}
+## Prepare the {{ ydb-short-name }} configuration file {#ydb-config-prepare}
 
-Создайте файл `files/config.yaml` и заполните его в зависимости от выбранной топологии (подробнее: [выбор топологии](./deployment-preparation.md#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите подходящий.
+Create the file `files/config.yaml` and fill it according to the chosen topology (see [topology selection](./deployment-preparation.md#topology-select)). Examples for each supported topology are in the tabs below — choose the one that fits.
 
 {% list tabs %}
 
@@ -837,14 +825,14 @@ all:
 
 {% endlist %}
 
-Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN на актуальные в разделах `hosts` и `blob_storage_config`.
+To speed up and simplify the initial {{ ydb-short-name }} deployment, the configuration file already contains most of the cluster setup. You only need to replace the placeholder host FQDNs with the actual ones in the `hosts` and `blob_storage_config` sections.
 
-- Раздел `hosts`:
+- The `hosts` section:
 
   ```yaml
   ...
   hosts:
-    - host: static-node-1.ydb-cluster.com #FQDN ВМ
+    - host: static-node-1.ydb-cluster.com # VM FQDN
       host_config_id: 1
       walle_location:
         body: 1
@@ -853,35 +841,35 @@ all:
   ...
   ```
 
-- Раздел `blob_storage_config`:
+- The `blob_storage_config` section:
 
   ```yaml
   ...
   - fail_domains:
     - vdisk_locations:
-      - node_id: static-node-1.ydb-cluster.com #FQDN ВМ
+      - node_id: static-node-1.ydb-cluster.com # VM FQDN
         pdisk_category: SSD
         path: /dev/disk/by-partlabel/ydb_disk_1
   ...
   ```
 
-Остальные секции и настройки конфигурационного файла остаются без изменений.
+Leave the rest of the configuration file sections and settings unchanged.
 
-## Разверните кластер {{ ydb-short-name }} {#cluster-deployment}
+## Deploy the {{ ydb-short-name }} cluster {#cluster-deployment}
 
-После завершения всех описанных выше подготовительных действий фактическое первоначальное развёртывание кластера сводится к выполнению следующей команды из рабочей директории:
+After completing all the preparation steps above, the actual initial cluster deployment is running the following command from the working directory:
 
 ```bash
 ansible-playbook ydb_platform.ydb.initial_setup
 ```
 
-Вскоре после начала будет необходимо подтвердить полную очистку настроенных дисков. Затем завершение развёртывания может занять десятки минут в зависимости от окружения и настроек. Этот плейбук выполняет примерно те же шаги, которые описаны в инструкциях для [ручного развёртывания кластера {{ ydb-short-name }}](../../manual/initial-deployment/index.md).
+Shortly after it starts, you will need to confirm full wipe of the configured disks. Completion can then take tens of minutes depending on the environment and settings. This playbook performs roughly the same steps as in the [manual {{ ydb-short-name }} cluster deployment](../../manual/initial-deployment/index.md) instructions.
 
-### Проверьте состояние кластера {#cluster-state}
+### Check cluster state {#cluster-state}
 
-На последнем этапе плейбук выполнит несколько тестовых запросов с использованием настоящих временных таблиц для проверки корректной работы. При успешном выполнении для каждого сервера будут отображены статус ok, failed=0 и результаты тестовых запросов (3 и 6) при достаточно подробном выводе плейбука.
+On the last step, the playbook runs several test queries using real temporary tables to verify correct operation. On success, you will see status ok, failed=0, and test query results (3 and 6) for each server when the playbook output is verbose enough.
 
-{% cut "Пример вывода" %}
+{% cut "Example output" %}
 
 ```txt
 ...
@@ -901,34 +889,34 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../../concepts/glossary.md#domain) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `database`) и начального [пользователя](../../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
+Running the `ydb_platform.ydb.initial_setup` playbook creates a {{ ydb-short-name }} cluster. It will contain a [domain](../../../../concepts/glossary.md#domain) named from the `ydb_domain` setting (default `Root`), a [database](../../../../concepts/glossary.md#database) named from the `ydb_dbname` setting (default `database`), and an initial [user](../../../../concepts/glossary.md#access-user) named from the `ydb_user` setting (default `root`).
 
-## Дополнительные шаги {# additional-steps}
+## Additional steps {#additional-steps}
 
-Самый простой способ исследовать только что развёрнутый кластер — использовать [Embedded UI](../../../../reference/embedded-ui/index.md), работающий на порту 8765 каждого сервера. Если нет прямого доступа к порту из браузера, можно настроить SSH-туннелирование. Для этого выполните команду `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` на локальной машине (при необходимости добавьте дополнительные опции). После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765) через браузер. Браузер может попросить принять исключение безопасности. Пример того, как это может выглядеть:
+The easiest way to explore the newly deployed cluster is [Embedded UI](../../../../reference/embedded-ui/index.md), which runs on port 8765 on each server. If you do not have direct browser access to that port, set up SSH tunneling by running `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` on your local machine (add more options if needed). After the connection is established, open [localhost:8765](http://localhost:8765) in your browser. The browser may ask you to accept a security exception. Example:
 
 ![ydb-web-ui](../../../../_assets/ydb-web-console.png)
 
-После успешного создания кластера {{ ydb-short-name }} проверьте его состояние, используя следующую страницу Embedded UI: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). Это может выглядеть так:
+After the {{ ydb-short-name }} cluster is created, check its state on this Embedded UI page: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). It might look like this:
 
 ![ydb-cluster-check](../../../../_assets/ydb-cluster-check.png)
 
-В этом разделе отображаются следующие параметры кластера {{ ydb-short-name }}, отражающие его состояние:
+This section shows the following {{ ydb-short-name }} cluster parameters:
 
-- `Tablets` — список запущенных [таблеток](../../../../concepts/glossary.md#tablet). Все индикаторы состояния таблеток должны быть зелёными.
-- `Nodes` — количество и состояние узлов хранения и узлов базы данных, запущенных в кластере. Индикатор состояния узлов должен быть зелёным, а количество созданных и запущенных узлов должно быть равным. Например, 18/18 для кластера из девяти узлов с одним узлом базы данных на сервер.
+- `Tablets` — list of running [tablets](../../../../concepts/glossary.md#tablet). All tablet state indicators should be green.
+- `Nodes` — number and state of storage and database nodes running in the cluster. The node state indicator should be green, and the number of created and running nodes should match (e.g., 18/18 for a nine-node cluster with one database node per server).
 
-Индикаторы `Load` (количество используемой RAM) и `Storage` (количество используемого дискового пространства) также должны быть зелёными.
+The `Load` (RAM used) and `Storage` (disk space used) indicators should also be green.
 
-Проверить состояние группы хранения можно в разделе `storage` — [http://localhost:8765/monitoring/cluster/storage](http://localhost:8765/monitoring/cluster/storage):
+You can check the storage group state in the `storage` section — [http://localhost:8765/monitoring/cluster/storage](http://localhost:8765/monitoring/cluster/storage):
 
 ![ydb-storage-gr-check](../../../../_assets/ydb-storage-gr-check.png)
 
-Индикаторы `VDisks` должны быть зелёными, а статус `state` (находится в подсказке при наведении на индикатор Vdisk) должен быть `Ok`. Больше об индикаторах состояния кластера и мониторинге можно прочитать в статье [{#T}](../../../../reference/embedded-ui/ydb-monitoring.md).
+The `VDisks` indicators should be green, and the `state` status (in the tooltip when hovering over the Vdisk indicator) should be `Ok`. For more on cluster state indicators and monitoring, see [{#T}](../../../../reference/embedded-ui/ydb-monitoring.md).
 
-### Тестирование кластера {#testing}
+### Cluster testing {#testing}
 
-Протестировать кластер можно с помощью встроенных нагрузочных тестов в {{ ydb-short-name }} CLI. Для этого [установите {{ ydb-short-name }} CLI](../../../../reference/ydb-cli/install.md) и создайте профиль с параметрами подключения, заменив заполнители:
+You can test the cluster using the built-in load tests in {{ ydb-short-name }} CLI. [Install {{ ydb-short-name }} CLI](../../../../reference/ydb-cli/install.md) and create a profile with connection parameters, replacing the placeholders:
 
 ```shell
 {{ ydb-cli }} \
@@ -940,20 +928,20 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
   --password-file <path-to-a-file-with-password>
 ```
 
-Параметры команды и их значения:
+Command parameters and their meaning:
 
-- `config profile create` — эта команда используется для создания профиля подключения. Укажите имя профиля. Более подробную информацию о том, как создавать и изменять профили, можно найти в статье [{#T}](../../../../reference/ydb-cli/profile/create.md).
-- `-e` — конечная точка, строка в формате `protocol://host:port`. Допускается указать FQDN любого узла кластера и опустить порт. По умолчанию используется порт 2135.
-- `--ca-file` — путь к корневому сертификату для подключений к базе данных по `grpcs`.
-- `--user` — пользователь для подключения к базе данных.
-- `--password-file` — путь к файлу с паролем. Опустите это, чтобы ввести пароль вручную.
+- `config profile create` — creates a connection profile. Specify the profile name. For more on creating and changing profiles, see [{#T}](../../../../reference/ydb-cli/profile/create.md).
+- `-e` — endpoint, a string in the form `protocol://host:port`. You can specify the FQDN of any cluster node and omit the port. Port 2135 is used by default.
+- `--ca-file` — path to the root certificate for database connections over `grpcs`.
+- `--user` — user for database connection.
+- `--password-file` — path to the password file. Omit to enter the password manually.
 
-Проверить, создался ли профиль, можно с помощью команды `{{ ydb-cli }} config profile list`, которая отобразит список профилей. После создания профиля его нужно активировать командой `{{ ydb-cli }} config profile activate <profile-name>`. Чтобы убедиться, что профиль активирован, можно повторно выполнить команду `{{ ydb-cli }} config profile list` — активный профиль будет иметь отметку `(active)`.
+To verify the profile was created, use `{{ ydb-cli }} config profile list`. Activate the profile with `{{ ydb-cli }} config profile activate <profile-name>`. To confirm it is active, run `{{ ydb-cli }} config profile list` again — the active profile will show `(active)`.
 
-Для выполнения [YQL](../../../../yql/reference/index.md) запроса можно использовать команду `{{ ydb-cli }} sql -s 'SELECT 1;'`, которая вернёт результат запроса `SELECT 1` в табличной форме в терминал. После проверки соединения можно создать тестовую таблицу командой:
-`{{ ydb-cli }} workload kv init --init-upserts 1000 --cols 4`. Это создаст тестовую таблицу `kv_test`, состоящую из 4 столбцов и 1000 строк. Проверить, что таблица `kv_test` создалась и заполнилась тестовыми данными, можно с помощью команды `{{ ydb-cli }} sql -s 'select * from kv_test limit 10;'`.
+To run a [YQL](../../../../yql/reference/index.md) query, use `{{ ydb-cli }} sql -s 'SELECT 1;'`, which returns the result of `SELECT 1` in table form in the terminal. After checking the connection, create a test table with:
+`{{ ydb-cli }} workload kv init --init-upserts 1000 --cols 4`. This creates the test table `kv_test` with 4 columns and 1000 rows. To verify the table and data, run `{{ ydb-cli }} sql -s 'select * from kv_test limit 10;'`.
 
-В терминал будет выведена таблица из 10 строк. Теперь можно выполнять тестирование производительности кластера. В статье [{#T}](../../../../reference/ydb-cli/workload-kv.md) описаны несколько типов рабочих нагрузок (`upsert`, `insert`, `select`, `read-rows`, `mixed`) и параметры их выполнения. Пример выполнения тестовой рабочей нагрузки `upsert` с параметром для вывода времени выполнения `--print-timestamp` и стандартными параметрами выполнения: `{{ ydb-cli }} workload kv run upsert --print-timestamp`:
+The terminal will show a table of 10 rows. You can then run cluster performance tests. [{#T}](../../../../reference/ydb-cli/workload-kv.md) describes workload types (`upsert`, `insert`, `select`, `read-rows`, `mixed`) and their parameters. Example for the `upsert` workload with `--print-timestamp` and default parameters: `{{ ydb-cli }} workload kv run upsert --print-timestamp`:
 
 ```text
 Window Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)        Timestamp
@@ -965,11 +953,12 @@ Window Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)        Timestamp
 ...
 ```
 
-После завершения тестов таблицу `kv_test` можно удалить командой: `{{ ydb-cli }} workload kv clean`. Подробнее о параметрах создания тестовой таблицы и тестах можно прочитать в статье [{#T}](../../../../reference/ydb-cli/workload-kv.md).
+When you are done, remove the `kv_test` table with `{{ ydb-cli }} workload kv clean`. For more on test table options and tests, see [{#T}](../../../../reference/ydb-cli/workload-kv.md).
 
-## См. также
+## See also
 
-- [Дополнительные примеры конфигурации Ansible](https://github.com/ydb-platform/ydb-ansible-examples)
+- [Additional Ansible configuration examples](https://github.com/ydb-platform/ydb-ansible-examples)
 - [{#T}](../restart.md)
 - [{#T}](../update-config.md)
 - [{#T}](../update-executable.md)
+

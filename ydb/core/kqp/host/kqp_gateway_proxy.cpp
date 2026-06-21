@@ -892,8 +892,10 @@ public:
         auto* setConstraintOp = phyTx.MutableSchemeOperation()->MutableSetConstraint();
         setConstraintOp->SetTablePath(tableName);
         for (auto& s : settings) {
-            if (s.GetConstraint() == TSetColumnConstraintSettings::NOT_NULL) {
-                setConstraintOp->AddNotNullColumns(s.GetColumnName());
+            switch (s.GetConstraint()) {
+                case TSetColumnConstraintSettings::NOT_NULL: {
+                    setConstraintOp->AddNotNullColumns(s.GetColumnName());
+                }
             }
         }
 

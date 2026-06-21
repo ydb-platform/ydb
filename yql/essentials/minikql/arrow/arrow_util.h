@@ -11,6 +11,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
 #include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/public/uuid/yql_uuid.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -202,6 +203,32 @@ struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
     };
 };
 
+template <>
+struct TPrimitiveDataType<NYql::NUuid::TUuid> {
+    using TLayout = NYql::NUuid::TUuid;
+
+    class TResult: public arrow::FixedSizeBinaryType {
+    public:
+        TResult()
+            : arrow::FixedSizeBinaryType(16)
+        {
+        }
+    };
+
+    class TScalarResult: public arrow::FixedSizeBinaryScalar {
+    public:
+        explicit TScalarResult(std::shared_ptr<arrow::Buffer> value)
+            : arrow::FixedSizeBinaryScalar(std::move(value), arrow::fixed_size_binary(16))
+        {
+        }
+
+        TScalarResult()
+            : arrow::FixedSizeBinaryScalar(arrow::fixed_size_binary(16))
+        {
+        }
+    };
+};
+
 template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
 inline arrow::Datum MakeScalarDatum(T value) {
     return arrow::Datum(std::make_shared<typename TPrimitiveDataType<T>::TScalarResult>(value));
@@ -230,6 +257,13 @@ namespace arrow {
 
 template <>
 struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<NYql::NDecimal::TInt128>::TResult> {
+    static inline std::shared_ptr<DataType> type_singleton() { // NOLINT(readability-identifier-naming)
+        return arrow::fixed_size_binary(16);
+    }
+};
+
+template <>
+struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<NYql::NUuid::TUuid>::TResult> {
     static inline std::shared_ptr<DataType> type_singleton() { // NOLINT(readability-identifier-naming)
         return arrow::fixed_size_binary(16);
     }

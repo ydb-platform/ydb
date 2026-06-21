@@ -601,7 +601,7 @@ struct TComplexTypeYsonReaderTraits {
     template <bool Nullable>
     using TTuple = TTupleYsonReader<Nullable, Native>;
     // TODO: Implement reader for decimals
-    template <typename T, bool Nullable, typename = std::enable_if_t<!std::is_same_v<T, NYql::NDecimal::TInt128> && (std::is_integral_v<T> || std::is_floating_point_v<T>)>>
+    template <typename T, bool Nullable, typename = std::enable_if_t<!std::is_same_v<T, NYql::NDecimal::TInt128> && !std::is_same_v<T, NYql::NUuid::TUuid> && (std::is_integral_v<T> || std::is_floating_point_v<T>)>>
     using TFixedSize = TFixedSizeYsonReader<T, Nullable, Native>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT>
     using TStrings = TStringYsonReader<TStringType, Nullable, OriginalT, Native>;

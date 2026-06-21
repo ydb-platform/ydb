@@ -15352,11 +15352,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[]");
     }
 
-    Y_UNIT_TEST(UnsupportedColumnTypes) {
-        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Uuid);
-        TestUnsupportedColumnTypeError(NScheme::NTypeIds::DyNumber);
-        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Interval);
-    }
+    // Interval, DyNumber, Uuid are now supported in column tables
 
     Y_UNIT_TEST(DropColumn) {
         TKikimrSettings runnerSettings;

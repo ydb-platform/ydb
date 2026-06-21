@@ -815,6 +815,19 @@ inline TUnboxedValuePod::TUnboxedValuePod(NYql::NDecimal::TUint128 value)
     Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
 }
 
+inline TUnboxedValuePod::TUnboxedValuePod(NYql::NUuid::TUuid value)
+{
+    std::memcpy(&Raw, value.Data, sizeof(NYql::NUuid::TUuid));
+    Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
+}
+
+inline NYql::NUuid::TUuid TUnboxedValuePod::GetUuid() const {
+    UDF_VERIFY(EMarkers::Empty != Raw.GetMarkers(), "Value is empty.");
+    NYql::NUuid::TUuid v;
+    std::memcpy(v.Data, &Raw, sizeof(NYql::NUuid::TUuid));
+    return v;
+}
+
 inline const void* TUnboxedValuePod::GetRawPtr() const {
     return &Raw;
 }

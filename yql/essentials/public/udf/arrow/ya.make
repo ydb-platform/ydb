@@ -16,6 +16,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/public/udf
+    yql/essentials/public/uuid
     contrib/libs/apache/arrow
 )
 

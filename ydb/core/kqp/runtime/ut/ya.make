@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/testlib/basics/pg
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
+    yql/essentials/public/uuid
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm16
     yt/yql/providers/yt/comp_nodes/dq/llvm16

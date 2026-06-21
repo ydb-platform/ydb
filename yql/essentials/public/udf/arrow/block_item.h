@@ -4,6 +4,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_string_ref.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
+#include <yql/essentials/public/uuid/yql_uuid.h>
 
 namespace NYql::NUdf {
 
@@ -25,6 +26,11 @@ public:
 
     inline explicit TBlockItem(NYql::NDecimal::TInt128 value) {
         *reinterpret_cast<NYql::NDecimal::TInt128*>(&Raw) = value;
+        Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
+    }
+
+    inline explicit TBlockItem(NYql::NUuid::TUuid value) {
+        std::memcpy(&Raw, value.Data, sizeof(NYql::NUuid::TUuid));
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
     }
 
@@ -97,6 +103,13 @@ public:
         auto v = *reinterpret_cast<const NYql::NDecimal::TInt128*>(&Raw);
         const auto p = reinterpret_cast<ui8*>(&v);
         p[0xF] = (p[0xE] & 0x80) ? 0xFF : 0x00;
+        return v;
+    }
+
+    inline NYql::NUuid::TUuid GetUuid() const {
+        Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded);
+        NYql::NUuid::TUuid v;
+        std::memcpy(v.Data, &Raw, sizeof(NYql::NUuid::TUuid));
         return v;
     }
 
@@ -291,5 +304,15 @@ VALUE_GET(bool)
 #undef VALUE_AS
 #undef VALUE_GET
 #undef VALUE_CONSTR
+
+template <>
+inline NYql::NUuid::TUuid TBlockItem::As<NYql::NUuid::TUuid>() const {
+    return GetUuid();
+}
+
+template <>
+inline NYql::NUuid::TUuid TBlockItem::Get<NYql::NUuid::TUuid>() const {
+    return GetUuid();
+}
 
 } // namespace NYql::NUdf

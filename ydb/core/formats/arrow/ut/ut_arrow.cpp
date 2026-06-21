@@ -136,7 +136,7 @@ struct TDataRow {
             arrow::field("date", arrow::uint16()),
             arrow::field("datetime", arrow::uint32()),
             arrow::field("ts", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
-            arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)),
+            arrow::field("ival", arrow::int64()),
             arrow::field("json_doc", arrow::binary()),
             arrow::field("pgint2", arrow::int16()),
             arrow::field("pgint4", arrow::int32()),
@@ -260,7 +260,7 @@ std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
     auto ard = std::static_pointer_cast<arrow::UInt16Array>(GetColumn(*table, 15));
     auto ardt = std::static_pointer_cast<arrow::UInt32Array>(GetColumn(*table, 16));
     auto arts = std::static_pointer_cast<arrow::TimestampArray>(GetColumn(*table, 17));
-    auto arival = std::static_pointer_cast<arrow::DurationArray>(GetColumn(*table, 18));
+    auto arival = std::static_pointer_cast<arrow::Int64Array>(GetColumn(*table, 18));
 
     auto arjd = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 19));
     auto arpgi2 = std::static_pointer_cast<arrow::Int16Array>(GetColumn(*table, 20));
@@ -296,7 +296,6 @@ class TDataRowTableBuilder
 public:
     TDataRowTableBuilder()
         : Bts(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
-        , Bival(arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
         //, Bdec(arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow::default_memory_pool())
     {}
 
@@ -355,7 +354,7 @@ public:
         std::shared_ptr<arrow::UInt16Array> ard;
         std::shared_ptr<arrow::UInt32Array> ardt;
         std::shared_ptr<arrow::TimestampArray> arts;
-        std::shared_ptr<arrow::DurationArray> arival;
+        std::shared_ptr<arrow::Int64Array> arival;
 
         std::shared_ptr<arrow::BinaryArray> arjd;
         std::shared_ptr<arrow::Int16Array> arpgi2;
@@ -440,7 +439,7 @@ private:
     arrow::UInt16Builder Bd;
     arrow::UInt32Builder Bdt;
     arrow::TimestampBuilder Bts;
-    arrow::DurationBuilder Bival;
+    arrow::Int64Builder Bival;
     arrow::BinaryBuilder Bjd;
     arrow::Int16Builder Bpgi2;
     arrow::Int32Builder Bpgi4;

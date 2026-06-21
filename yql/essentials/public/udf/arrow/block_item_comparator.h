@@ -144,6 +144,28 @@ public:
     }
 };
 
+template <bool Nullable>
+class TFixedSizeBlockItemComparator<NYql::NUuid::TUuid, Nullable>: public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<NYql::NUuid::TUuid, Nullable>, Nullable> {
+public:
+    i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
+        auto l = lhs.GetUuid();
+        auto r = rhs.GetUuid();
+        return std::memcmp(l.Data, r.Data, sizeof(l.Data));
+    }
+
+    bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
+        auto l = lhs.GetUuid();
+        auto r = rhs.GetUuid();
+        return l == r;
+    }
+
+    bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
+        auto l = lhs.GetUuid();
+        auto r = rhs.GetUuid();
+        return std::memcmp(l.Data, r.Data, sizeof(l.Data)) < 0;
+    }
+};
+
 template <typename TStringType, bool Nullable>
 class TStringBlockItemComparator: public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable>, Nullable> {
 public:

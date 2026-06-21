@@ -46,6 +46,7 @@ PEERDIR(
     library/cpp/resource
     yql/essentials/public/decimal
     yql/essentials/public/types
+    yql/essentials/public/uuid
     library/cpp/deprecated/atomic
 )
 

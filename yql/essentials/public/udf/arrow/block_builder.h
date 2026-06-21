@@ -589,6 +589,40 @@ public:
 };
 
 template <bool Nullable>
+class TFixedSizeArrayBuilder<NYql::NUuid::TUuid, Nullable> final: public TFixedSizeArrayBuilderBase<NYql::NUuid::TUuid, Nullable, TFixedSizeArrayBuilder<NYql::NUuid::TUuid, Nullable>> {
+    using TSelf = TFixedSizeArrayBuilder<NYql::NUuid::TUuid, Nullable>;
+    using TBase = TFixedSizeArrayBuilderBase<NYql::NUuid::TUuid, Nullable, TSelf>;
+    using TParams = TArrayBuilderBase::TParams;
+
+public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
+    {
+    }
+
+    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, type, pool, maxLen, params)
+    {
+    }
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        this->PlaceItem(value.GetUuid());
+    }
+
+    void DoAddNotNull(TBlockItem value) {
+        this->PlaceItem(value.GetUuid());
+    }
+
+    void DoAddNotNull(TInputBuffer& input) {
+        this->DoAdd(TBlockItem(input.PopNumber<NYql::NUuid::TUuid>()));
+    }
+
+    void DoAddNotNull(TBlockItem value, size_t count) {
+        std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, value.GetUuid());
+    }
+};
+
+template <bool Nullable>
 class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>> {
     using TBase = TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>;
     using TParams = TArrayBuilderBase::TParams;

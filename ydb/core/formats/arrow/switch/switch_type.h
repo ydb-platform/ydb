@@ -61,8 +61,6 @@ template <typename TFunc>
             return callback(TTypeWrapper<arrow::BinaryType>());
         case NScheme::NTypeIds::Timestamp:
             return callback(TTypeWrapper<arrow::TimestampType>());
-        case NScheme::NTypeIds::Interval:
-            return callback(TTypeWrapper<arrow::DurationType>());
         case NScheme::NTypeIds::Decimal:
         case NScheme::NTypeIds::Uuid:
             return callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
@@ -70,6 +68,7 @@ template <typename TFunc>
         case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
+        case NScheme::NTypeIds::Interval:
             return callback(TTypeWrapper<arrow::Int64Type>());
 
         case NScheme::NTypeIds::PairUi64Ui64:

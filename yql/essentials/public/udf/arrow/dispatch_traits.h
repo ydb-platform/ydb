@@ -3,6 +3,7 @@
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/uuid/yql_uuid.h>
 
 #include <arrow/type.h>
 
@@ -68,9 +69,9 @@ std::unique_ptr<typename TTraits::TResult> MakeTzDateArrowTraitsImpl(bool isOpti
     }
 }
 
-template <typename TTraits>
-concept CanInstantiateArrowTraitsForDecimal = requires {
-    typename TTraits::template TFixedSize<NYql::NDecimal::TInt128, true>;
+template <typename TTraits, typename TType>
+concept CanInstantiateArrowTraits = requires {
+    typename TTraits::template TFixedSize<TType, true>;
 };
 
 template <typename TTraits, typename... TArgs>
@@ -201,15 +202,21 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
             case NUdf::EDataSlot::TzTimestamp64:
                 return MakeTzDateArrowTraitsImpl<TTraits, TTzTimestamp64>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::Decimal: {
-                if constexpr (CanInstantiateArrowTraitsForDecimal<TTraits>) {
+                if constexpr (CanInstantiateArrowTraits<TTraits, NYql::NDecimal::TInt128>) {
                     return MakeFixedSizeArrowTraitsImpl<TTraits, NYql::NDecimal::TInt128>(isOptional, type, std::forward<TArgs>(args)...);
                 } else {
                     Y_ENSURE(false, "Unsupported data slot");
                 }
             }
-            case NUdf::EDataSlot::Uuid:
+            case NUdf::EDataSlot::Uuid: {
+                if constexpr (CanInstantiateArrowTraits<TTraits, NYql::NUuid::TUuid>) {
+                    return MakeFixedSizeArrowTraitsImpl<TTraits, NYql::NUuid::TUuid>(isOptional, type, std::forward<TArgs>(args)...);
+                } else {
+                    Y_ENSURE(false, "Unsupported data slot");
+                }
+            }
             case NUdf::EDataSlot::DyNumber:
-                Y_ENSURE(false, "Unsupported data slot");
+                return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::DyNumber>(isOptional, type, std::forward<TArgs>(args)...);
         }
     }
 

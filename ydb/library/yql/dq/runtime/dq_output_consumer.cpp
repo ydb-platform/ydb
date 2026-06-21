@@ -1,5 +1,7 @@
 #include "dq_output_consumer.h"
 
+#include "dq_arrow_helpers.h"
+
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
@@ -791,12 +793,19 @@ private:
                 if (src->is_scalar()) {
                     output.emplace_back(*src);
                 } else {
-                    IArrayBuilder::TArrayDataItem dataItem {
-                        .Data = src->array().get(),
-                        .StartOffset = 0,
-                    };
-                    Builders_[j]->AddMany(&dataItem, 1, indexes, outputBlockLen);
-                    output.emplace_back(Builders_[j]->Build(true));
+                    arrow::Datum gathered;
+                    if (NYql::NArrow::TryGatherArrayByRowIndices(
+                            *src, indexes, outputBlockLen, NYql::NUdf::GetYqlMemoryPool(), &gathered))
+                    {
+                        output.emplace_back(std::move(gathered));
+                    } else {
+                        IArrayBuilder::TArrayDataItem dataItem {
+                            .Data = src->array().get(),
+                            .StartOffset = 0,
+                        };
+                        Builders_[j]->AddMany(&dataItem, 1, indexes, outputBlockLen);
+                        output.emplace_back(Builders_[j]->Build(true));
+                    }
                 }
             }
             outputData.emplace_back(std::make_unique<TArgsDechunker>(std::move(output)));

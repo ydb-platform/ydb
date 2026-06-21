@@ -52,6 +52,7 @@ namespace NKikimr {
 
             // just trim log based by TrimTailLsn (which is confirmed lsn from peers)
             bool PerformTrimTailAction() {
+<<<<<<< HEAD
                 const bool hasToCommit = KeepState.PerformTrimTailAction();
 
                 // we don't need to commit because we either remove mem pages or
@@ -59,14 +60,13 @@ namespace NKikimr {
                 // so wait until TEvSyncLogFreeChunk message)
                 Y_ABORT_UNLESS(!hasToCommit);
                 return false;
+=======
+                return KeepState.PerformTrimTailAction();
+>>>>>>> d91b9939b24 (Fix VDisk sync log race (#30779))
             }
 
             bool PerformMemOverflowAction() {
                 return KeepState.PerformMemOverflowAction();
-            }
-
-            bool PerformDeleteChunkAction() {
-                return KeepState.PerformDeleteChunkAction();
             }
 
             bool PerformInitialCommit() {
@@ -78,6 +78,11 @@ namespace NKikimr {
             // PERFORM ACTIONS
             ////////////////////////////////////////////////////////////////////////
             void PerformActions(const TActorContext &ctx) {
+                if (auto v = KeepState.GetChunksToForget(); !v.empty()) {
+                    Send(SlCtx->PDiskCtx->PDiskId, new NPDisk::TEvChunkForget(SlCtx->PDiskCtx->Dsk->Owner,
+                        SlCtx->PDiskCtx->Dsk->OwnerRound, std::move(v)));
+                }
+
                 if (CommitterId || !KeepState.HasDelayedActions()) {
                     // be fast: already committing or has no actions? Return.
                     return;
@@ -87,8 +92,8 @@ namespace NKikimr {
                 generateCommit |= PerformTrimTailAction();
                 generateCommit |= PerformCutLogAction(ctx);
                 generateCommit |= PerformMemOverflowAction();
-                generateCommit |= PerformDeleteChunkAction();
                 generateCommit |= PerformInitialCommit();
+                generateCommit |= KeepState.GetDeleteChunkAndClear();
 
                 if (generateCommit) {
                     Y_ABORT_UNLESS(!CommitterId);
@@ -259,6 +264,15 @@ namespace NKikimr {
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
                 HFunc(TEvListChunks, Handle)
+<<<<<<< HEAD
+=======
+                hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
+                hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+                hFunc(TEvLocalSyncData, Handle)
+                hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)
+                cFunc(TEvents::TEvWakeup::EventType, UpdateCounters)
+                hFunc(NPDisk::TEvChunkForgetResult, [&](auto&) {});
+>>>>>>> d91b9939b24 (Fix VDisk sync log race (#30779))
             )
 
         public:

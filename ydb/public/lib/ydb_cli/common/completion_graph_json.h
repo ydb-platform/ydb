@@ -8,8 +8,8 @@
 namespace NYdb::NConsoleClient {
 
 // Generate machine-readable JSON description of the CLI command tree.
-// Used by external tools (e.g. internal `ya ydb`) to build their own shell completion
-// without re-implementing the YDB CLI command structure.
+// Used by external tools to build their own shell completion without
+// re-implementing the YDB CLI command structure.
 //
 // Schema for each node (root has the same shape):
 //   {
@@ -38,8 +38,7 @@ namespace NYdb::NConsoleClient {
 // The schema is additive: new <opt_value>/<free_args_value> markers may appear
 // over time, and the "free_args" key is absent in output from older binaries.
 // Consumers should tolerate unknown string markers and treat a missing
-// "free_args" as null; the in-tree consumer (internal `ya ydb`) is updated in
-// tandem with such changes.
+// "free_args" as null; producers and consumers are expected to evolve in tandem.
 //
 // Hidden subcommands and options are omitted. Handlers and options are emitted in
 // stable (sorted) order so the output can be cached and compared between runs.

@@ -43,8 +43,6 @@ items:
       href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
       href: commands/readtable.md
-    - name: Скан запросы
-      href: commands/scan-query.md
   - name: Выгрузка и загрузка данных
     include:
       mode: link
@@ -75,6 +73,18 @@ items:
     items:
     - name: Обзор
       href: yql-query-overview.md
+<<<<<<< HEAD
+=======
+    - name: Выполнение запросов
+      href: sql.md
+    - name: Выполнение параметризованных запросов
+      href: parameterized-query-execution.md
+    - name: Интерактивный режим выполнения запросов
+      href: interactive-cli.md
+    - name: Скан запросы
+      href: scan-query.md
+# Справки по устаревшим командам:
+>>>>>>> 48da0d6260a ([YDBDOCS-2232] перенести статью https://github.com/ydb-platform/ydb/pull/41475 в "Выполнение запросов" (#43439))
     - name: Выполнение скрипта (с поддержкой стриминга)
       href: yql.md
     - name: Выполнение скрипта

@@ -43,8 +43,6 @@ items:
       href: commands/explain-plan.md
     - name: Streaming table reads
       href: commands/readtable.md
-    - name: Scan queries
-      href: commands/scan-query.md
   - name: Importing and exporting data
     include: { mode: link, path: export-import/toc_p.yaml }
   - name: Working with topics
@@ -73,6 +71,18 @@ items:
     items:
     - name: Overview
       href: yql-query-overview.md
+<<<<<<< HEAD
+=======
+    - name: Query execution
+      href: sql.md
+    - name: Parameterized query execution
+      href: parameterized-query-execution.md
+    - name: Interactive query execution mode
+      href: interactive-cli.md
+    - name: Scan queries
+      href: scan-query.md
+# Deprecated commands:
+>>>>>>> 48da0d6260a ([YDBDOCS-2232] перенести статью https://github.com/ydb-platform/ydb/pull/41475 в "Выполнение запросов" (#43439))
     - name: Running a script (with streaming support)
       href: yql.md
     - name: Running a script

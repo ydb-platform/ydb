@@ -33,7 +33,11 @@ Despite the fact that *Scan Queries* obviously don't interfere with the executio
 
 ## How do I use it? {#how-use}
 
+<<<<<<< HEAD
 Like other types of queries, *Scan Queries* are available via the {% if link-console-main %}[management console]({{ link-console-main }}) (the query must specify `PRAGMA Kikimr.ScanQuery = "true";`),{% endif %} [CLI](../../reference/ydb-cli/commands/scan-query.md), and [SDK](../../reference/ydb-sdk/index.md).
+=======
+Like other query types, *Scan Queries* are available through {% if link-console-main %} the [management console]({{ link-console-main }}) (you must add the pragma `PRAGMA Kikimr.ScanQuery = "true";` to the query), {% endif %} [CLI](../../reference/ydb-cli/scan-query.md) and [SDK](../../reference/ydb-sdk/index.md).
+>>>>>>> 48da0d6260a ([YDBDOCS-2232] перенести статью https://github.com/ydb-platform/ydb/pull/41475 в "Выполнение запросов" (#43439))
 
 {% if oss %}
 

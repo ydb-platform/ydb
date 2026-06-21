@@ -1,6 +1,12 @@
 # Выполнение скан запросов
 
+<<<<<<< HEAD
 Запуск запроса через [Scan Queries](../../../../concepts/scan_query.md) посредством {{ ydb-short-name }} CLI осуществляется добавлением флага `-t scan` в команду `{{ ydb-cli }} table query execute`.
+=======
+{% include notitle [warning](../../../../_includes/scan_query_deprecated_warning.md) %}
+
+Запуск запроса через [Scan Queries](../../../../concepts/query_execution/scan_query.md) посредством {{ ydb-short-name }} CLI осуществляется добавлением флага `-t scan` в команду `{{ ydb-cli }} table query execute`.
+>>>>>>> 48da0d6260a ([YDBDOCS-2232] перенести статью https://github.com/ydb-platform/ydb/pull/41475 в "Выполнение запросов" (#43439))
 
 Выполните запрос к данным:
 

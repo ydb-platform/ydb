@@ -95,19 +95,12 @@ private:
         case EState::Finishing:
         case EState::Unlocking:
             proto.SetState(ProtoState::STATE_APPLYING);
-<<<<<<< HEAD
             proto.SetProgress(99.9f);
             break;
         case EState::Done:
             proto.SetState(operationInfo.ValidationFailed
                 ? ProtoState::STATE_DONE_FAILED
                 : ProtoState::STATE_DONE_SUCCESSFUL);
-=======
-            proto.SetProgress(100.0f);
-            break;
-        case EState::Done:
-            proto.SetState(ProtoState::STATE_DONE);
->>>>>>> 18b9ae9349a (init)
             proto.SetProgress(100.0f);
             break;
         case EState::Invalid:

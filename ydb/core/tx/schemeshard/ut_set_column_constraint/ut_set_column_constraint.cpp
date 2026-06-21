@@ -1123,11 +1123,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-<<<<<<< HEAD:ydb/core/tx/schemeshard/ut_set_column_constraint/ut_set_column_constraint.cpp
         // STATE_DONE_SUCCESSFUL/STATE_DONE_FAILED: operation is fully finished.
-=======
-        // STATE_DONE: operation is fully finished.
->>>>>>> cd43fa6e0d4 (add unit):ydb/core/tx/schemeshard/ut_set_column_constraint_simple/ut_set_column_constraint.cpp
         answers.push_back(DoGetRequest(setConstraintTxId, runtime, root).GetState());
 
         UNIT_ASSERT_VALUES_EQUAL_C(

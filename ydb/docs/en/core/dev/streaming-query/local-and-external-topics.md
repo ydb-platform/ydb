@@ -2,7 +2,7 @@
 
 [Streaming queries](../../concepts/streaming-query.md) read events from [topics](../../concepts/datamodel/topic.md) and can write results back to topics. Messages can come from a topic **in the same database** where the query runs, or from a topic **in another** {{ ydb-short-name }} database.
 
-All [streaming query](../../concepts/streaming-query.md) scenarios work the same for local{#local-topics} and external{#external-topics} topics. One query can read from a local topic, write to an external one, or the other way around.
+All [streaming query](../../concepts/streaming-query.md) scenarios work the same for [local](#local-topics) and [external](#external-topics) topics. One query can read from a local topic, write to an external one, or the other way around.
 
 ## Local topics {#local-topics}
 
@@ -10,16 +10,13 @@ All [streaming query](../../concepts/streaming-query.md) scenarios work the same
 
 In query text, refer to them **by short name**, the same way as to a table in the current database:
 
-
 ```yql
 SELECT * FROM input_topic WITH (FORMAT = json_each_row, SCHEMA = (...));
 ```
 
-
 ```yql
 INSERT INTO output_topic SELECT ...;
 ```
-
 
 ## External topics {#external-topics}
 
@@ -29,11 +26,9 @@ A streaming query accesses them only through a pre-created [external data source
 
 After you create a source named `ext_source`, access topic `input_topic` in the external database like this:
 
-
 ```yql
 SELECT * FROM ext_source.input_topic WITH (FORMAT = json_each_row, SCHEMA = (...));
 ```
-
 
 The name `ext_source` in the documentation is **illustrative** — your source may have a different name; it must match in `CREATE EXTERNAL DATA SOURCE` and in the prefix before the topic name.
 

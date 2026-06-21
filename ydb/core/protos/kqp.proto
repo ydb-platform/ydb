@@ -940,6 +940,14 @@ message TKqpFullTextSourceSettings {
         optional string Query = 2;
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
         repeated bytes Tokens = 3;
+
+        // Resolved equality bindings for the index prefix columns (KeyColumnNames[0..n-2]).
+        // Value is a single TCell serialized with TSerializedCellVec, typed as Column.
+        message TPrefixColumn {
+            optional TKqpColumnMetadataProto Column = 1;
+            optional bytes Value = 2;
+        }
+        repeated TPrefixColumn PrefixColumns = 4;
     }
 
     message TIndexTable {

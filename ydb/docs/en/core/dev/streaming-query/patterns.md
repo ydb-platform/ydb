@@ -12,7 +12,7 @@ The examples use [local and external topics](local-and-external-topics.md).
 
 In the examples:
 
-- `ext_source` — a pre-created ⟦C2⟧;
+- `ext_source` — a pre-created external data source;
 - `input_topic` — topic to read from;
 - `output_topic` — topic to write results to;
 - `output_table` — {{ ydb-short-name }} table to write results to.

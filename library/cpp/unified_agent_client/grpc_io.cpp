@@ -17,6 +17,98 @@
 namespace NUnifiedAgent {
     namespace {
         std::once_flag GrpcConfigured{};
+
+        thread_local grpc::CompletionQueue* TlsCurrentPolledCQ = nullptr;
+
+        struct TNoOpRefStub {
+            void Ref() {
+            }
+            void UnRef() {
+            }
+        };
+        TNoOpRefStub NoOpRefStub;
+
+        /// Guards `AsyncJoiner` during queue posting. Calls `UnRef()` when destroyed,
+        /// ensuring the ref is released even if `PostIIOCallbackToCompletionQueue` throws.
+        struct TAsyncJoinerGuard {
+            TAsyncJoiner* Joiner = nullptr;
+            explicit TAsyncJoinerGuard(TAsyncJoiner* j) : Joiner(j) {}
+            TAsyncJoinerGuard(const TAsyncJoinerGuard&) = delete;
+            TAsyncJoinerGuard& operator=(const TAsyncJoinerGuard&) = delete;
+            TAsyncJoinerGuard(TAsyncJoinerGuard&& other) noexcept : Joiner(other.Joiner) {
+                other.Joiner = nullptr;
+            }
+            TAsyncJoinerGuard& operator=(TAsyncJoinerGuard&& other) noexcept {
+                if (Joiner) {
+                    Joiner->UnRef();
+                }
+                Joiner = other.Joiner;
+                other.Joiner = nullptr;
+                return *this;
+            }
+            ~TAsyncJoinerGuard() {
+                if (Joiner) {
+                    Joiner->UnRef();
+                }
+            }
+        };
+
+        /// Injected CQ op: FinalizeResult delivers `PollerTag` to the poller (same pattern as TGrpcNotification).
+        struct TPostedCompletion final : grpc::internal::CompletionQueueTag {
+            grpc::CompletionQueue& CQ;
+            THolder<grpc_cq_completion> Completion;
+            IIOCallback* PollerTag = nullptr;
+
+            TPostedCompletion(grpc::CompletionQueue& cq, THolder<grpc_cq_completion>&& completion)
+                : CQ(cq)
+                , Completion(std::move(completion))
+            {
+            }
+
+            bool FinalizeResult(void** tag, bool*) override {
+                Y_ABORT_UNLESS(PollerTag);
+                *tag = PollerTag;
+                return true;
+            }
+        };
+
+        /// Bridge: Ref forwards to payload; OnIOCompleted runs payload then deletes itself (heap-allocated).
+        struct TPostedBridge final : IIOCallback {
+            THolder<TPostedCompletion> Posted;
+            THolder<IIOCallback> Payload;
+
+            TPostedBridge(THolder<TPostedCompletion>&& posted, THolder<IIOCallback>&& payload)
+                : Posted(std::move(posted))
+                , Payload(std::move(payload))
+            {
+                Posted->PollerTag = this;
+            }
+
+            IIOCallback* Ref() override {
+                Payload->Ref();
+                return this;
+            }
+
+            void OnIOCompleted(EIOStatus status) override {
+                Payload->OnIOCompleted(status);
+                delete this;
+            }
+        };
+
+        void PostIIOCallbackToCompletionQueue(grpc::CompletionQueue& cq, THolder<IIOCallback>&& payload) {
+            auto posted = MakeHolder<TPostedCompletion>(cq, MakeHolder<grpc_cq_completion>());
+            TPostedCompletion* postedRaw = posted.Get();
+            auto* bridge = new TPostedBridge(std::move(posted), std::move(payload));
+            bridge->Ref();
+            grpc_core::ApplicationCallbackExecCtx callbackExecCtx;
+            grpc_core::ExecCtx execCtx;
+            Y_ABORT_UNLESS(grpc_cq_begin_op(cq.cq(), postedRaw));
+            grpc_cq_end_op(
+                cq.cq(), postedRaw, y_absl::OkStatus(),
+                [](void*, grpc_cq_completion*) {
+                },
+                nullptr, postedRaw->Completion.Get());
+        }
     } // namespace
 
     TGrpcNotification::TGrpcNotification(grpc::CompletionQueue& completionQueue, THolder<IIOCallback>&& ioCallback)
@@ -52,16 +144,18 @@ namespace NUnifiedAgent {
         return true;
     }
 
-    TGrpcTimer::TGrpcTimer(grpc::CompletionQueue& completionQueue, THolder<IIOCallback>&& ioCallback)
+    TGrpcTimer::TGrpcTimer(grpc::CompletionQueue& completionQueue, THolder<IIOCallback>&& ioCallback,
+                           TAsyncJoiner& asyncJoiner)
         : CompletionQueue(completionQueue)
         , IOCallback(std::move(ioCallback))
+        , AsyncJoiner(asyncJoiner)
         , Alarm()
         , AlarmIsSet(false)
         , NextTriggerTime(Nothing())
     {
     }
 
-    void TGrpcTimer::Set(TInstant triggerTime) {
+    void TGrpcTimer::ApplySet(TInstant triggerTime) {
         if (AlarmIsSet) {
             NextTriggerTime = triggerTime;
             Alarm.Cancel();
@@ -71,11 +165,45 @@ namespace NUnifiedAgent {
         }
     }
 
-    void TGrpcTimer::Cancel() {
+    void TGrpcTimer::ApplyCancel() {
         NextTriggerTime.Clear();
         if (AlarmIsSet) {
             Alarm.Cancel();
         }
+    }
+
+    void TGrpcTimer::Set(TInstant triggerTime) {
+        if (TlsCurrentPolledCQ == &CompletionQueue) {
+            ApplySet(triggerTime);
+            return;
+        }
+        if (!AsyncJoiner.TryRef()) {
+            return;
+        }
+        PostIIOCallbackToCompletionQueue(
+            CompletionQueue,
+            MakeIOCallback(
+                [this, triggerTime, guard = TAsyncJoinerGuard(&AsyncJoiner)](EIOStatus) {
+                    ApplySet(triggerTime);
+                },
+                &NoOpRefStub));
+    }
+
+    void TGrpcTimer::Cancel() {
+        if (TlsCurrentPolledCQ == &CompletionQueue) {
+            ApplyCancel();
+            return;
+        }
+        if (!AsyncJoiner.TryRef()) {
+            return;
+        }
+        PostIIOCallbackToCompletionQueue(
+            CompletionQueue,
+            MakeIOCallback(
+                [this, guard = TAsyncJoinerGuard(&AsyncJoiner)](EIOStatus) {
+                    ApplyCancel();
+                },
+                &NoOpRefStub));
     }
 
     IIOCallback* TGrpcTimer::Ref() {
@@ -107,8 +235,11 @@ namespace NUnifiedAgent {
             bool ok;
             while (Queue.Next(&tag, &ok)) {
                 try {
+                    TlsCurrentPolledCQ = &Queue;
                     static_cast<IIOCallback*>(tag)->OnIOCompleted(ok ? EIOStatus::Ok : EIOStatus::Error);
+                    TlsCurrentPolledCQ = nullptr;
                 } catch (...) {
+                    TlsCurrentPolledCQ = nullptr;
                     Y_ABORT("unexpected exception [%s]", CurrentExceptionMessage().c_str());
                 }
             }

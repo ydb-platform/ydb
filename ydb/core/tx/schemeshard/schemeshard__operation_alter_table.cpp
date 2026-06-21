@@ -58,7 +58,8 @@ bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partiti
 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed, const THashSet<TString>& localSequences,
-                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
+                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context,
+                                      bool isInternal = false) {
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
@@ -211,6 +212,37 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
+
+    // Changing the SetNotNullInProgress or NotNull to true without the Internal flag set is not
+    // possible through normal API channels. However, there is a known hack that
+    // allows sending an arbitrary ModifyScheme directly to SchemeShard:
+    //
+    //   ./ydbd --server ... db schema exec modify_scheme.txt
+    //
+    // Note that checking the Internal flag is NOT a protection against a
+    // deliberate action by a potential attacker. Rather, it is an extra
+    // guard to prevent accidental ModifyScheme sends that could corrupt
+    // the schema object state.
+    //
+    // In addition, such verification protects against a potential bug on the client side.
+    if (!isInternal) {
+        for (auto& col : *copyAlter.MutableColumns()) {
+            if (col.HasNotNull() && col.GetNotNull()) {
+                status = NKikimrScheme::StatusInvalidParameter;
+                errStr = Sprintf("Cannot set NotNull to true on column '%s' in a ModifyScheme request — Internal flag is not set. "
+                                    "To override, set Internal = true. This is dangerous: only do this if you know what you are doing", col.GetName().c_str());
+                return nullptr;
+            }
+
+            if (col.HasSetNotNullInProgress()) {
+                status = NKikimrScheme::StatusInvalidParameter;
+                errStr = Sprintf("Cannot set NotNullInProgress on column '%s' in a ModifyScheme request — Internal flag is not set. "
+                                    "To override, set Internal = true. This is dangerous: only do this if you know what you are doing", col.GetName().c_str());
+                return nullptr;
+            }
+        }
+    }
+
     copyAlter.MutablePartitionConfig()->CopyFrom(compilationPartitionConfig);
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
@@ -623,7 +655,10 @@ public:
             if (column.HasDefaultFromSequence()) {
                 TString defaultFromSequence = column.GetDefaultFromSequence();
 
-                const auto sequencePath = TPath::Resolve(defaultFromSequence, context.SS);
+                // A table-local sequence is referenced by its leaf name (the create-table convention)
+                const auto sequencePath = defaultFromSequence.StartsWith('/')
+                    ? TPath::Resolve(defaultFromSequence, context.SS)
+                    : path.Child(defaultFromSequence);
                 {
                     const auto checks = sequencePath.Check();
                     checks
@@ -642,7 +677,9 @@ public:
                     }
                 }
 
-                localSequences.insert(sequencePath.PathString());
+                // CreateAlterData compares the column's raw DefaultFromSequence against this set
+                // and stores it verbatim, so insert the same (possibly relative) form.
+                localSequences.insert(defaultFromSequence);
             }
         }
 
@@ -696,7 +733,8 @@ public:
 
         NKikimrScheme::EStatus status;
         TTableInfo::TAlterDataPtr alterData = ParseParams(
-            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context,
+            Transaction.GetInternal());
         if (!alterData) {
             result->SetError(status, errStr);
             return result;

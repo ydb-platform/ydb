@@ -217,9 +217,7 @@ Valid example (one message):
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 ```
 
-
 Invalid example:
-
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
@@ -328,7 +326,7 @@ END DO
 ```
 
 
-### raw {#raw}
+### `raw` {#raw}
 
 Reads message payloads as raw bytes. Data read this way can be processed with [YQL](../../yql/reference/udf/list/string) string functions. Default schema: `SCHEMA(Data String)`.
 
@@ -353,7 +351,6 @@ DO BEGIN
 
 END DO
 ```
-
 
 ### Supported data types {#schema}
 

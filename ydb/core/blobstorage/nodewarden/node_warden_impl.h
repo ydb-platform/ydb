@@ -251,6 +251,7 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
+        TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
 
         TControlWrapper EnableChunkKeeper;
 
@@ -285,6 +286,8 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxPutTimeoutSeconds;
 
         TControlWrapper EnableDeepScrubbing;
+
+        TControlWrapper EnableFreshSyncDataThrottling;
 
     public:
         struct TGroupRecord;

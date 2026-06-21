@@ -7,11 +7,6 @@ import "ydb/library/actors/protos/actors.proto";
 package NKikimrClient;
 option java_package = "ru.yandex.kikimr.proto";
 
-enum EMessageFormat {
-    STANDARD = 0;
-    KAFKA_BATCH = 1;
-}
-
 message TReadSessionKey {
     optional string SessionId = 1;
     optional uint64 PartitionSessionId = 2;
@@ -127,7 +122,7 @@ message TPersQueuePartitionRequest {
         optional int64 MaxSeqNo = 22;
         optional int64 MessageCount = 23 [default = 1];
         repeated TBatchMessagePartitionKey PartitionKeys = 24;
-        optional EMessageFormat MessageFormat = 25 [default = STANDARD];
+        optional bool IsBatch = 25;
     }
 
     message TCmdUpdateWriteTimestamp {
@@ -435,7 +430,7 @@ message TCmdReadResult {
         optional string PartitionKey = 11;
         optional bytes ExplicitHash = 12;
         optional uint64 MessageCount = 13 [default = 1];
-        optional EMessageFormat MessageFormat = 14 [default = STANDARD];
+        optional bool IsBatch = 14;
     }
     optional uint64 MaxOffset = 2;
     repeated TResult Result = 3;

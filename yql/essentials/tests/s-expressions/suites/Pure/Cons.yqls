@@ -1,0 +1,8 @@
+(
+(let res_sink (DataSink 'result))
+(let core (AsList (AsStruct)))
+(let test (Cons! world core))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf test)) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

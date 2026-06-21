@@ -94,7 +94,7 @@ Create the file `inventory/group_vars/ydb/all.yaml` and fill it.
 
   # YDB
   ydb_version: "system_version"
-  ydb_archive: "{{ ansible_config_file | dirname }}/files/ydbd.tar.gz"
+  ydb_archive: "{% raw %}{{ ansible_config_file | dirname }}{% endraw %}/files/ydbd.tar.gz"
 
   # Additional parameters
   ydb_allow_format_drives: true

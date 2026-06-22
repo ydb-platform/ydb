@@ -114,8 +114,6 @@
 
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
-
-
 {% endlist %}
 
 ## Включение вытеснения во внешнее S3-совместимое хранилище {#enable-tiering-on-existing-tables}

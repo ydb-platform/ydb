@@ -186,13 +186,14 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             << ". It might affect benchmark results");
     }
 
-    // The number of terminals might be hundreds of thousands.
-    // For now, we don't have more than 32 network threads (check TClientCommand::TConfig::GetNetworkThreadNum()),
-    // so that maxTerminalThreads will be around more or less around 100.
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
+    const size_t networkThreadsPerDriver = std::max<size_t>(1, (networkThreadCount + driverCount - 1) / driverCount);
+
     Drivers.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
-        Drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+        auto driverConfig = ConnectionConfig.CreateDriverConfig();
+        driverConfig.SetNetworkThreadsNum(networkThreadsPerDriver);
+        Drivers.emplace_back(driverConfig);
     }
 
     if (Config.MaxInflight == 0) {
@@ -248,7 +249,8 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         Log);
 
     LOG_I("Creating " << terminalsCount << " terminals and " << threadCount
-        << " workers on " << cpuCount << " cpus, " << driverCount << " query clients with at most "
+        << " workers on " << cpuCount << " cpus, " << driverCount << " query clients with "
+        << networkThreadsPerDriver << " network threads and at most "
         << maxSessionsPerClient << " sessions per client");
 
     Terminals.reserve(terminalsCount);

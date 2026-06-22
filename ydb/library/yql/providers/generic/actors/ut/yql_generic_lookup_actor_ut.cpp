@@ -8,6 +8,7 @@
 
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/test_creds.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_lookup_actor.h>
@@ -41,12 +42,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>&& alloc,
             TLookupActorFactory&& lookupActorFactory,
             TCallback&& callback,
-            const NActors::TActorId& edge)
+            const NActors::TActorId& edge,
+            size_t fullscanLimit = 0)
             : Alloc(std::move(alloc))
             , TypeEnv(std::make_shared<NKikimr::NMiniKQL::TTypeEnvironment>(*Alloc))
             , LookupActorFactory(std::move(lookupActorFactory))
             , Callback(std::move(callback))
             , Edge(edge)
+            , FullscanLimit(fullscanLimit)
         {
 
         }
@@ -58,7 +61,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             std::tie(actor, Request) = LookupActorFactory(SelfId(), Alloc, *TypeEnv);
             LookupActorFactory = {};
             LookupActor = RegisterWithSameMailbox(actor);
-            auto ev = new NYql::NDq::IDqAsyncLookupSource::TEvLookupRequest(Request);
+            auto ev = new NYql::NDq::IDqAsyncLookupSource::TEvLookupRequest(Request, FullscanLimit);
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(LookupActor, SelfId(), ev));
         }
 
@@ -110,9 +113,10 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         TLookupActorFactory LookupActorFactory;
         TCallback Callback;
         NActors::TActorId Edge;
+        size_t FullscanLimit;
     };
 
-    Y_UNIT_TEST_TWIN(Lookup, MultiMatches) {
+    Y_UNIT_TEST_QUAD(Lookup, MultiMatches, Fullscan) {
         NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
         auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
         NKikimr::NMiniKQL::THolderFactory holderFactory(alloc->Ref(), memUsage);
@@ -137,6 +141,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
         auto connectorMock = std::make_shared<NYql::NConnector::NTest::TConnectorClientMock>();
 
+        constexpr size_t fullscanLimit = Fullscan ? 3 : 0;
         // clang-format off
         // step 1: ListSplits
         connectorMock->ExpectListSplits()
@@ -148,7 +153,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                     .NullableColumn("string_value", Ydb::Type::STRING)
                     .Done()
                 .Table("lookup_test")
-                .Where()
+                .Where(/*skip=*/Fullscan)
                     .Filter()
                         .Disjunction()
                             .Operand()
@@ -178,7 +183,10 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                             .Done()
                         .Done()
                     .Done()
+                .Limit(/*skip=*/!Fullscan)
+                    .Limit(fullscanLimit)
                 .Done()
+            .Done()
             .MaxSplitCount(1)
             .Result()
                 .AddResponse(NewSuccess())
@@ -187,7 +195,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
         connectorMock->ExpectReadSplits()
             .DataSourceInstance(dsi)
-            .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY)
+            .Filtering(Fullscan ? NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL : NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_MANDATORY)
             .Split()
                 .Description("Actual split info is not important")
                 .Done()
@@ -240,12 +248,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                 MultiMatches);
 
             auto request = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>(3, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());
-            for (size_t i = 0; i != 3; ++i) {
-                NYql::NUdf::TUnboxedValue* keyItems;
-                auto key = holderFactory.CreateDirectArrayHolder(2, keyItems);
-                keyItems[0] = NYql::NUdf::TUnboxedValuePod(ui64(i));
-                keyItems[1] = NYql::NUdf::TUnboxedValuePod(ui64(100 + i));
-                request->emplace(std::move(key), NYql::NUdf::TUnboxedValue{});
+            if (!Fullscan) {
+                for (size_t i = 0; i != 3; ++i) {
+                    NYql::NUdf::TUnboxedValue* keyItems;
+                    auto key = holderFactory.CreateDirectArrayHolder(2, keyItems);
+                    keyItems[0] = NYql::NUdf::TUnboxedValuePod(ui64(i));
+                    keyItems[1] = NYql::NUdf::TUnboxedValuePod(ui64(100 + i));
+                    request->emplace(std::move(key), NYql::NUdf::TUnboxedValue{});
+                }
             }
 
             return std::pair { actor, std::move(request) };
@@ -256,7 +266,9 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             auto lookupResult = ev->Get()->Result.lock();
             UNIT_ASSERT(lookupResult);
 
-            UNIT_ASSERT_EQUAL(3, lookupResult->size());
+            UNIT_ASSERT_EQUAL(Fullscan ? 2 : 3, lookupResult->size());
+            UNIT_ASSERT_EQUAL(ev->Get()->FullscanLimit, fullscanLimit);
+            UNIT_ASSERT_EQUAL(ev->Get()->ResultRows, Fullscan ? 3 : 4);
             if (!MultiMatches) {
                 return;
             }
@@ -289,14 +301,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                     ++ptr;
                 }
             }
-            {
+            if (!Fullscan) {
                 const auto* v = lookupResult->FindPtr(CreateStructValue(holderFactory, {2, 102}));
                 UNIT_ASSERT(v);
                 UNIT_ASSERT(!*v);
             }
         };
 
-        auto callLookupActor = new TCallLookupActor(std::move(alloc), std::move(lookupActorFactory), std::move(callback), edge);
+        auto callLookupActor = new TCallLookupActor(std::move(alloc), std::move(lookupActorFactory), std::move(callback), edge, fullscanLimit);
         runtime.Register(callLookupActor);
         runtime.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(edge);
     }

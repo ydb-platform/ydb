@@ -952,10 +952,6 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
 void TCms::SortActionsBySysTabletPriority(
     TPermissionRequest &request) const
 {
-    if (ClusterInfo->HostsWithSysTablets.empty()) {
-        return;
-    }
-
     auto *actions = request.MutableActions();
     std::partition(actions->begin(), actions->end(),
         [this](const TAction &action) {
@@ -2293,8 +2289,6 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     TRequestInfo scheduled;
 
     auto requestStartTime = TInstant::Now();
-
-    SortActionsBySysTabletPriority(request.Request);
 
     ClusterInfo->LogManager.PushRollbackPoint();
     for (const auto &scheduled_request : State->ScheduledRequests) {

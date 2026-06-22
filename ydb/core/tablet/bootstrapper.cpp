@@ -578,7 +578,7 @@ private:
         }
 
         auto sleepDuration = Min(GetSleepDuration(), BootDelayedUntil - now);
-        YDB_LOG_DEBUG("",
+        YDB_LOG_DEBUG("Dump tablet, type, online, total, quorum, sleepDuration",
             {"tablet", TabletInfo->TabletID},
             {"type", GetTabletTypeName()},
             {"online", online},

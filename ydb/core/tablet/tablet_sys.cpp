@@ -1055,7 +1055,7 @@ void TTablet::HandleBlockBlobStorageResult(TEvTabletBase::TEvBlockBlobStorageRes
         }
     default:
         {
-            YDB_LOG_ERROR("HandleBlockBlobStorageResult,",
+            YDB_LOG_ERROR("HandleBlockBlobStorageResult",
                 {"tablet", TabletID()},
                 {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
                 {"discoveredInfo", (DiscoveredLastBlocked == Max<ui32>()                         ? ", not discovered"                         : Sprintf(", discovered gen was: %u", DiscoveredLastBlocked).c_str())},
@@ -1100,7 +1100,7 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
         return;
     default:
         {
-            YDB_LOG_ERROR("HandleRebuildGraphResult,",
+            YDB_LOG_ERROR("HandleRebuildGraphResult",
                 {"tablet", TabletID()},
                 {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
                 {"marker", "TSYS22"});
@@ -1116,7 +1116,7 @@ void TTablet::HandleWriteZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
         return StartActivePhase();
     default:
         {
-            YDB_LOG_ERROR("HandleWriteZeroEntry,",
+            YDB_LOG_ERROR("HandleWriteZeroEntry",
                 {"tablet", TabletID()},
                 {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
                 {"marker", "TSYS23"});
@@ -1530,7 +1530,7 @@ void TTablet::GcLogChannel(ui32 step) {
 
     if (GcInFly != 0 || Graph.SyncCommit.SyncStep != 0 && Graph.SyncCommit.SyncStep <= step) {
         if (GcInFlyStep < step) {
-            YDB_LOG_DEBUG("GcCollect 0 channel postponed, tablet:gen:step =>",
+            YDB_LOG_DEBUG("GcCollect 0 channel postponed",
                 {"tablet", TabletID()},
                 {"gen", gen},
                 {"step", step},
@@ -1538,7 +1538,7 @@ void TTablet::GcLogChannel(ui32 step) {
             GcNextStep = step;
             return;
         }
-        YDB_LOG_DEBUG("GcCollect 0 channel skipped, tablet:gen:step =>",
+        YDB_LOG_DEBUG("GcCollect 0 channel skipped",
             {"tablet", TabletID()},
             {"gen", gen},
             {"step", step},
@@ -1546,7 +1546,7 @@ void TTablet::GcLogChannel(ui32 step) {
         return;
     }
 
-    YDB_LOG_DEBUG("GcCollect 0 channel, tablet:gen:step =>",
+    YDB_LOG_DEBUG("GcCollect 0 channel",
         {"tablet", TabletID()},
         {"gen", gen},
         {"step", step},
@@ -2023,7 +2023,7 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
         return std::move(out);
     };
 
-    YDB_LOG_INFO("",
+    YDB_LOG_INFO("Dump tablet, type, yellowMoveChannels, marker",
         {"tablet", TabletID()},
         {"type", TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)},
         {"yellowMoveChannels", yellowMoveChannelsString()},
@@ -2039,7 +2039,7 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
 void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TString &details) {
     YDB_LOG(reason == TEvTablet::TEvTabletDead::ReasonPill
             ? NActors::NLog::PRI_NOTICE
-            : NActors::NLog::PRI_ERROR, "",
+            : NActors::NLog::PRI_ERROR, "Cancel tablet",
         {"tablet", TabletID()},
         {"type", TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)},
         {"EReason", TEvTablet::TEvTabletDead::Str(reason)},

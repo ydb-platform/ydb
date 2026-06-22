@@ -430,7 +430,7 @@ bool TScheduler::UpdateTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "UpdateTask failed for task to cannot update unknown task",
+        YDB_LOG_DEBUG_CTX(as, "UpdateTask failed for task because of cannot update unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return false;
@@ -465,7 +465,7 @@ bool TScheduler::UpdateTaskCookie(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "UpdateTaskCookie failed for task to cannot update unknown task's cookie",
+        YDB_LOG_DEBUG_CTX(as, "UpdateTaskCookie failed for task because of cannot update unknown task's cookie",
             {"taskId", taskId},
             {"client", ToString(client)});
         return false;
@@ -485,7 +485,7 @@ TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "RemoveQueuedTask failed for task to cannot remove unknown task",
+        YDB_LOG_DEBUG_CTX(as, "RemoveQueuedTask failed for task because of cannot remove unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, nullptr);
@@ -493,7 +493,7 @@ TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId,
 
     auto task = it->second;
     if (task->InFly) {
-        YDB_LOG_DEBUG_CTX(as, "RemoveQueuedTask failed for task to cannot remove in-fly task",
+        YDB_LOG_DEBUG_CTX(as, "RemoveQueuedTask failed for task because of cannot remove in-fly task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, task);
@@ -514,7 +514,7 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "FinishTask failed for task to cannot finish unknown task",
+        YDB_LOG_DEBUG_CTX(as, "FinishTask failed for task because of to cannot finish unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, nullptr);
@@ -522,13 +522,13 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
 
     auto task = it->second;
     if (!task->InFly) {
-        YDB_LOG_DEBUG_CTX(as, "FinishTask failed for task to cannot finish queued task",
+        YDB_LOG_DEBUG_CTX(as, "FinishTask failed for task because of cannot finish queued task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, task);
     }
 
-    YDB_LOG_DEBUG_CTX(as, "Finish task release resources",
+    YDB_LOG_DEBUG_CTX(as, "Finish task and release resources",
         {"taskId", task->GetIdString().data()},
         {"requiredResources", JoinSeq(", ", task->RequiredResources).data()});
 
@@ -1204,7 +1204,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         config.Swap(&current);
     }
 
-    YDB_LOG_INFO_CTX(ctx, "New",
+    YDB_LOG_INFO_CTX(ctx, "New config",
         {"config", config});
 
     TSet<TString> queues;

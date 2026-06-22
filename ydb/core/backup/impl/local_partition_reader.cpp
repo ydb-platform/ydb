@@ -70,7 +70,7 @@ private:
                 || !record.HasPartitionResponse()
                 || !record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
             // Retry via worker
-            YDB_LOG_WARN("[LocalPartitionReader] HandleInit unexpected response,",
+            YDB_LOG_WARN("[LocalPartitionReader] HandleInit unexpected response",
                 {"leaving", ev->Get()->ToString()});
             Y_ABORT_UNLESS(Worker, "Worker is always set before any PQ response: the offset request is only sent from the handshake handler");
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
@@ -165,9 +165,7 @@ public:
     {}
 
     STATEFN(StateInit) {
-        using namespace NActors::NStructuredLog;
-        TLogStack::TLogGuard guard;
-        YDB_LOG_UPDATE_CONTEXT(
+        YDB_LOG_CREATE_CONTEXT(
             {"pqTablet", PQTablet},
             {"partition", Partition},
             {"selfId", SelfId()});
@@ -184,9 +182,7 @@ public:
     }
 
     STFUNC(StateWork) {
-        using namespace NActors::NStructuredLog;
-        TLogStack::TLogGuard guard;
-        YDB_LOG_UPDATE_CONTEXT(
+        YDB_LOG_CREATE_CONTEXT(
             {"pqTablet", PQTablet},
             {"partition", Partition},
             {"selfId", SelfId()});

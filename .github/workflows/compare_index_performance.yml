@@ -21,6 +21,15 @@ on:
         description: 'S3 ref to compare against (e.g. main, stable-26-1-1)'
         required: false
         default: 'main'
+      workload:
+        description: 'Workload to run'
+        required: false
+        type: choice
+        options:
+          - all
+          - vector
+          - fulltext
+        default: all
       targets:
         description: 'Number of query vectors for vector select'
         required: false
@@ -94,6 +103,7 @@ jobs:
             --build-preset ${{ inputs.build_preset || 'relwithdebinfo' }} \
             --ref ${{ inputs.ref || 'main' }} \
             --targets ${{ inputs.targets || '100' }} \
+            --workload ${{ inputs.workload || 'all' }} \
             --iterations ${{ inputs.iterations || '3' }} \
             --warmup ${{ inputs.warmup || '30' }} \
             $MAIN_FLAG_ARGS \

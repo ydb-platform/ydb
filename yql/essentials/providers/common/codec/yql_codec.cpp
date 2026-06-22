@@ -7,7 +7,6 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
-#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/public/result_format/yql_restricted_yson.h>
 
@@ -21,8 +20,6 @@
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/detail.h>
 
-#include <yql/essentials/types/uuid/uuid.h>
-
 #include <util/string/cast.h>
 #include <util/generic/map.h>
 
@@ -31,8 +28,6 @@ namespace NYql::NCommon {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NYson::NDetail;
-
-TString UuidValueToAtomContent(const NUdf::TUnboxedValuePod& value);
 
 void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, TType* type,
                         const TVector<ui32>* structPositions) {
@@ -94,18 +89,9 @@ void WriteYsonValueImpl(NResult::TYsonResultWriter& writer, const NUdf::TUnboxed
                     return;
 
                 case NUdf::EDataSlot::String:
+                case NUdf::EDataSlot::Uuid:
                     writer.OnStringScalar(value.AsStringRef());
                     return;
-
-                case NUdf::EDataSlot::Uuid: {
-                    std::array<ui16, 8> dw;
-                    const auto data = value.AsStringRef();
-                    std::memcpy(dw.data(), data.Data(), sizeof(dw));
-                    TStringStream out;
-                    NKikimr::NUuid::UuidToString(dw.data(), out);
-                    writer.OnStringScalar(out.Str());
-                    return;
-                }
 
                 case NUdf::EDataSlot::Decimal: {
                     const auto params = static_cast<TDataDecimalType*>(type)->GetParams();
@@ -485,10 +471,9 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::Yson:
             return ToString((TStringBuf)value.AsStringRef());
-        case NUdf::EDataSlot::Uuid:
-            return UuidValueToAtomContent(value);
         case NUdf::EDataSlot::Decimal: {
             const auto params = dynamic_cast<const TDataExprParamsType*>(type);
             YQL_ENSURE(params, "Unable to cast decimal params");
@@ -765,32 +750,6 @@ NUdf::TUnboxedValue ReadYsonStringInResultFormat(char cmd, TInputBuf& buf) {
     return result;
 }
 
-NUdf::TUnboxedValue ReadUuidFromYsonString(char cmd, TInputBuf& buf) {
-    auto value = ReadYsonStringInResultFormat(cmd, buf);
-    const auto ref = value.AsStringRef();
-    if (ref.Size() == sizeof(NYql::NUuid::TUuid)) {
-        return value;
-    }
-
-    const auto parsed = ValueFromString(NUdf::EDataSlot::Uuid, ref);
-    if (!parsed) {
-        return NUdf::TUnboxedValuePod();
-    }
-
-    return parsed;
-}
-
-TString UuidValueToAtomContent(const NUdf::TUnboxedValuePod& value) {
-    const auto ref = value.AsStringRef();
-    if (ref.Size() == sizeof(NYql::NUuid::TUuid)) {
-        return ToString(TStringBuf(ref));
-    }
-
-    const auto parsed = ValueFromString(NUdf::EDataSlot::Uuid, ref);
-    YQL_ENSURE(parsed, "Invalid uuid value");
-    return ToString(TStringBuf(parsed.AsStringRef()));
-}
-
 TStringBuf ReadNextString(char cmd, TInputBuf& buf) {
     CHECK_EXPECTED(cmd, StringMarker);
     return buf.ReadYtString();
@@ -911,12 +870,9 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
 
                 case NUdf::TDataType<NUdf::TUtf8>::Id:
                 case NUdf::TDataType<char*>::Id:
-                case NUdf::TDataType<NUdf::TJson>::Id: {
-                    return ReadYsonStringInResultFormat(cmd, buf);
-                }
-
+                case NUdf::TDataType<NUdf::TJson>::Id:
                 case NUdf::TDataType<NUdf::TUuid>::Id: {
-                    return ReadUuidFromYsonString(cmd, buf);
+                    return ReadYsonStringInResultFormat(cmd, buf);
                 }
 
                 case NUdf::TDataType<NUdf::TDecimal>::Id: {

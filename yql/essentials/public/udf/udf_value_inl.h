@@ -781,11 +781,6 @@ inline NYql::NDecimal::TInt128 TUnboxedValuePod::Get<NYql::NDecimal::TInt128>() 
 }
 
 template <>
-inline NYql::NUuid::TUuid TUnboxedValuePod::Get<NYql::NUuid::TUuid>() const {
-    return GetUuid();
-}
-
-template <>
 inline TUnboxedValuePod::TUnboxedValuePod(bool value)
 {
     Raw.Simple.ui8_ = value ? 1 : 0;
@@ -818,19 +813,6 @@ inline TUnboxedValuePod::TUnboxedValuePod(NYql::NDecimal::TUint128 value)
 {
     WriteUnaligned<NYql::NDecimal::TUint128>(&Raw, value);
     Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
-}
-
-inline TUnboxedValuePod::TUnboxedValuePod(NYql::NUuid::TUuid value)
-{
-    std::memcpy(&Raw, value.Data, sizeof(NYql::NUuid::TUuid));
-    Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
-}
-
-inline NYql::NUuid::TUuid TUnboxedValuePod::GetUuid() const {
-    UDF_VERIFY(EMarkers::Empty != Raw.GetMarkers(), "Value is empty.");
-    NYql::NUuid::TUuid v;
-    std::memcpy(v.Data, &Raw, sizeof(NYql::NUuid::TUuid));
-    return v;
 }
 
 inline const void* TUnboxedValuePod::GetRawPtr() const {

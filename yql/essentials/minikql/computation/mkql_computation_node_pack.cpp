@@ -717,13 +717,8 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
                     PackData<Fast>(value.Get<i64>(), buffer);
                     break;
                 case NUdf::EDataSlot::Uuid: {
-                    if (value.IsEmbedded()) {
-                        const auto& uuid = value.GetUuid();
-                        PackBlob(uuid.Data, sizeof(uuid.Data), buffer);
-                    } else {
-                        auto ref = value.AsStringRef();
-                        PackBlob(ref.Data(), ref.Size(), buffer);
-                    }
+                    auto ref = value.AsStringRef();
+                    PackBlob(ref.Data(), ref.Size(), buffer);
                     break;
                 }
                 case NUdf::EDataSlot::TzDate: {

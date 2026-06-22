@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/udf_ptr.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
+#include <yql/essentials/public/uuid/yql_uuid.h>
 
 namespace NYql::NUdf {
 

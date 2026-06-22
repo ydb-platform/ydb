@@ -341,13 +341,8 @@ void TGraceJoinPacker::Pack() {
                 break;
             }
             case NUdf::EDataSlot::Uuid: {
-                if (value.IsEmbedded()) {
-                    const auto uuid = value.GetUuid();
-                    TupleStringHolder[i].assign(uuid.Data, sizeof(uuid.Data));
-                } else {
-                    const auto ref = value.AsStringRef();
-                    TupleStringHolder[i].assign(ref.Data(), ref.Size());
-                }
+                const auto ref = value.AsStringRef();
+                TupleStringHolder[i].assign(ref.Data(), ref.Size());
                 TupleStrings[offset] = TupleStringHolder[i].data();
                 TupleStrSizes[offset] = TupleStringHolder[i].size();
                 break;

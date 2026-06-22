@@ -182,14 +182,9 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
             }
             case NUdf::EDataSlot::Uuid: {
                 std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(sizeof(NYql::NUuid::TUuid), &pool)));
-                if (value.IsEmbedded()) {
-                    const auto& uuid = value.GetUuid();
-                    std::memcpy(buffer->mutable_data(), uuid.Data, sizeof(uuid.Data));
-                } else {
-                    const auto ref = value.AsStringRef();
-                    MKQL_ENSURE(ref.Size() == sizeof(NYql::NUuid::TUuid), "Wrong Uuid size: " << ref.Size());
-                    std::memcpy(buffer->mutable_data(), ref.Data(), ref.Size());
-                }
+                const auto ref = value.AsStringRef();
+                MKQL_ENSURE(ref.Size() == sizeof(NYql::NUuid::TUuid), "Wrong Uuid size: " << ref.Size());
+                std::memcpy(buffer->mutable_data(), ref.Data(), ref.Size());
                 return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NUuid::TUuid>::TScalarResult>(buffer));
             }
             default:

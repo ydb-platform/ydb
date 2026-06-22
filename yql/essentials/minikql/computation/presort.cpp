@@ -169,14 +169,9 @@ Y_FORCE_INLINE void Encode(TVector<ui8>& output, NUdf::EDataSlot slot, const NUd
             EncodeString<Desc>(output, TStringBuf(stringRef.Data(), stringRef.Size()));
             break;
         }
-        case NUdf::EDataSlot::Uuid: {
-            if (value.IsEmbedded()) {
-                EncodeUuid<Desc>(output, value.GetUuid().Data);
-            } else {
-                EncodeUuid<Desc>(output, value.AsStringRef().Data());
-            }
+        case NUdf::EDataSlot::Uuid:
+            EncodeUuid<Desc>(output, value.AsStringRef().Data());
             break;
-        }
         case NUdf::EDataSlot::TzDate:
             EncodeTzUnsigned<ui16, Desc>(output, value.Get<ui16>(), value.GetTimezoneId());
             break;

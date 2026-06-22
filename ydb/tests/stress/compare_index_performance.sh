@@ -21,6 +21,10 @@
 #   --targets N            Number of query vectors for vector select (default: 100)
 #   --iterations N         Number of iterations per workload (default: 3)
 #   --warmup SECONDS       Warmup duration before each measured run (default: 30)
+#   --main-feature-flag FLAG     Enable a feature flag for main branch (repeatable)
+#   --current-feature-flag FLAG  Enable a feature flag for current branch (repeatable)
+#   --main-table-service-config KEY=VALUE     Set table_service_config option for main branch (repeatable)
+#   --current-table-service-config KEY=VALUE  Set table_service_config option for current branch (repeatable)
 
 set -euo pipefail
 
@@ -35,6 +39,10 @@ WORKLOAD="all"
 TARGETS=100
 ITERATIONS=3
 WARMUP=30
+MAIN_FEATURE_FLAGS=()
+CURRENT_FEATURE_FLAGS=()
+MAIN_TABLE_SERVICE_CONFIG=()
+CURRENT_TABLE_SERVICE_CONFIG=()
 RESULTS_DIR="$REPO_ROOT/benchmark_results"
 S3_BASE_URL="https://storage.yandexcloud.net/ydb-builds"
 
@@ -49,6 +57,10 @@ while [[ $# -gt 0 ]]; do
         --targets) TARGETS="$2"; shift 2 ;;
         --iterations) ITERATIONS="$2"; shift 2 ;;
         --warmup) WARMUP="$2"; shift 2 ;;
+        --main-feature-flag) MAIN_FEATURE_FLAGS+=("$2"); shift 2 ;;
+        --current-feature-flag) CURRENT_FEATURE_FLAGS+=("$2"); shift 2 ;;
+        --main-table-service-config) MAIN_TABLE_SERVICE_CONFIG+=("$2"); shift 2 ;;
+        --current-table-service-config) CURRENT_TABLE_SERVICE_CONFIG+=("$2"); shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -60,6 +72,25 @@ fi
 
 mkdir -p "$RESULTS_DIR"
 
+# Build feature flags test params (comma-separated)
+MAIN_FEATURE_FLAGS_PARAM=""
+if [[ ${#MAIN_FEATURE_FLAGS[@]} -gt 0 ]]; then
+    MAIN_FEATURE_FLAGS_PARAM=$(IFS=,; echo "${MAIN_FEATURE_FLAGS[*]}")
+fi
+CURRENT_FEATURE_FLAGS_PARAM=""
+if [[ ${#CURRENT_FEATURE_FLAGS[@]} -gt 0 ]]; then
+    CURRENT_FEATURE_FLAGS_PARAM=$(IFS=,; echo "${CURRENT_FEATURE_FLAGS[*]}")
+fi
+# Build table_service_config test params (comma-separated key=value pairs)
+MAIN_TABLE_SERVICE_CONFIG_PARAM=""
+if [[ ${#MAIN_TABLE_SERVICE_CONFIG[@]} -gt 0 ]]; then
+    MAIN_TABLE_SERVICE_CONFIG_PARAM=$(IFS=,; echo "${MAIN_TABLE_SERVICE_CONFIG[*]}")
+fi
+CURRENT_TABLE_SERVICE_CONFIG_PARAM=""
+if [[ ${#CURRENT_TABLE_SERVICE_CONFIG[@]} -gt 0 ]]; then
+    CURRENT_TABLE_SERVICE_CONFIG_PARAM=$(IFS=,; echo "${CURRENT_TABLE_SERVICE_CONFIG[*]}")
+fi
+
 CURRENT_BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
 echo "=== Performance comparison: $S3_REF vs $CURRENT_BRANCH ==="
 echo "Build preset: $BUILD_PRESET"
@@ -68,6 +99,18 @@ echo "Workload: $WORKLOAD"
 echo "Vector targets: $TARGETS"
 echo "Iterations: $ITERATIONS"
 echo "Warmup: ${WARMUP}s"
+if [[ ${#MAIN_FEATURE_FLAGS[@]} -gt 0 ]]; then
+    echo "Main feature flags: ${MAIN_FEATURE_FLAGS[*]}"
+fi
+if [[ ${#CURRENT_FEATURE_FLAGS[@]} -gt 0 ]]; then
+    echo "Current feature flags: ${CURRENT_FEATURE_FLAGS[*]}"
+fi
+if [[ ${#MAIN_TABLE_SERVICE_CONFIG[@]} -gt 0 ]]; then
+    echo "Main table_service_config: ${MAIN_TABLE_SERVICE_CONFIG[*]}"
+fi
+if [[ ${#CURRENT_TABLE_SERVICE_CONFIG[@]} -gt 0 ]]; then
+    echo "Current table_service_config: ${CURRENT_TABLE_SERVICE_CONFIG[*]}"
+fi
 echo ""
 
 # --- Download ydbd from S3 if not provided ---
@@ -121,7 +164,7 @@ run_test() {
         -DYDB_DRIVER_BINARY_PREBUILT="$ydbd_path" \
         --test-param stress_default_duration="$DURATION" \
         "${extra_params[@]}" \
-        2>&1 | tee "$log_file" | tail -5
+        2>&1 | tee "$log_file" | tail -5 || true
     echo ""
 }
 
@@ -265,11 +308,20 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
         if [[ $i -eq 1 ]]; then
             local_mode="generate"
         fi
-        run_test "$S3_REF" "$MAIN_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_main_${i}.log" \
-            --test-param vector_mode="$local_mode" \
-            --test-param vector_data_dir="$VECTOR_DATA_DIR" \
-            --test-param vector_targets="$TARGETS" \
+        VECTOR_EXTRA_PARAMS=(
+            --test-param vector_mode="$local_mode"
+            --test-param vector_data_dir="$VECTOR_DATA_DIR"
+            --test-param vector_targets="$TARGETS"
             --test-param vector_warmup="$WARMUP"
+        )
+        if [[ -n "$MAIN_FEATURE_FLAGS_PARAM" ]]; then
+            VECTOR_EXTRA_PARAMS+=(--test-param feature_flags="$MAIN_FEATURE_FLAGS_PARAM")
+        fi
+        if [[ -n "$MAIN_TABLE_SERVICE_CONFIG_PARAM" ]]; then
+            VECTOR_EXTRA_PARAMS+=(--test-param table_service_config="$MAIN_TABLE_SERVICE_CONFIG_PARAM")
+        fi
+        run_test "$S3_REF" "$MAIN_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_main_${i}.log" \
+            "${VECTOR_EXTRA_PARAMS[@]}"
         VECTOR_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
         val=$(extract_total_txs_sec "$VECTOR_LOG_DIR")
         if [[ "$val" != "N/A" && -n "$val" ]]; then
@@ -278,11 +330,20 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
         echo "  $S3_REF iteration $i: $val Txs/Sec"
 
         # Run current
-        run_test "current" "$CURRENT_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_current_${i}.log" \
-            --test-param vector_mode=load \
-            --test-param vector_data_dir="$VECTOR_DATA_DIR" \
-            --test-param vector_targets="$TARGETS" \
+        VECTOR_EXTRA_PARAMS=(
+            --test-param vector_mode=load
+            --test-param vector_data_dir="$VECTOR_DATA_DIR"
+            --test-param vector_targets="$TARGETS"
             --test-param vector_warmup="$WARMUP"
+        )
+        if [[ -n "$CURRENT_FEATURE_FLAGS_PARAM" ]]; then
+            VECTOR_EXTRA_PARAMS+=(--test-param feature_flags="$CURRENT_FEATURE_FLAGS_PARAM")
+        fi
+        if [[ -n "$CURRENT_TABLE_SERVICE_CONFIG_PARAM" ]]; then
+            VECTOR_EXTRA_PARAMS+=(--test-param table_service_config="$CURRENT_TABLE_SERVICE_CONFIG_PARAM")
+        fi
+        run_test "current" "$CURRENT_YDBD" "$VECTOR_TEST" "$RESULTS_DIR/vector_current_${i}.log" \
+            "${VECTOR_EXTRA_PARAMS[@]}"
         VECTOR_LOG_DIR="$REPO_ROOT/$VECTOR_TEST/test-results/py3test/testing_out_stuff"
         val=$(extract_total_txs_sec "$VECTOR_LOG_DIR")
         if [[ "$val" != "N/A" && -n "$val" ]]; then
@@ -326,7 +387,15 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
         echo "=== Fulltext iteration $i/$ITERATIONS ==="
 
         # Run main
-        run_test "$S3_REF" "$MAIN_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_main_${i}.log"
+        FULLTEXT_EXTRA_PARAMS=()
+        if [[ -n "$MAIN_FEATURE_FLAGS_PARAM" ]]; then
+            FULLTEXT_EXTRA_PARAMS+=(--test-param feature_flags="$MAIN_FEATURE_FLAGS_PARAM")
+        fi
+        if [[ -n "$MAIN_TABLE_SERVICE_CONFIG_PARAM" ]]; then
+            FULLTEXT_EXTRA_PARAMS+=(--test-param table_service_config="$MAIN_TABLE_SERVICE_CONFIG_PARAM")
+        fi
+        run_test "$S3_REF" "$MAIN_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_main_${i}.log" \
+            "${FULLTEXT_EXTRA_PARAMS[@]}"
         FULLTEXT_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
         val=$(extract_total_txs_sec "$FULLTEXT_LOG_DIR")
         if [[ "$val" != "N/A" && -n "$val" ]]; then
@@ -335,7 +404,15 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
         echo "  $S3_REF iteration $i: $val Txs/Sec"
 
         # Run current
-        run_test "current" "$CURRENT_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_current_${i}.log"
+        FULLTEXT_EXTRA_PARAMS=()
+        if [[ -n "$CURRENT_FEATURE_FLAGS_PARAM" ]]; then
+            FULLTEXT_EXTRA_PARAMS+=(--test-param feature_flags="$CURRENT_FEATURE_FLAGS_PARAM")
+        fi
+        if [[ -n "$CURRENT_TABLE_SERVICE_CONFIG_PARAM" ]]; then
+            FULLTEXT_EXTRA_PARAMS+=(--test-param table_service_config="$CURRENT_TABLE_SERVICE_CONFIG_PARAM")
+        fi
+        run_test "current" "$CURRENT_YDBD" "$FULLTEXT_TEST" "$RESULTS_DIR/fulltext_current_${i}.log" \
+            "${FULLTEXT_EXTRA_PARAMS[@]}"
         FULLTEXT_LOG_DIR="$REPO_ROOT/$FULLTEXT_TEST/test-results/py3test/testing_out_stuff"
         val=$(extract_total_txs_sec "$FULLTEXT_LOG_DIR")
         if [[ "$val" != "N/A" && -n "$val" ]]; then

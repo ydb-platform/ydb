@@ -33,6 +33,22 @@ on:
         description: 'Warmup duration in seconds before each measured run'
         required: false
         default: '30'
+      main_feature_flags:
+        description: 'Comma-separated feature flags for main branch (e.g. enable_foo,enable_bar)'
+        required: false
+        default: ''
+      current_feature_flags:
+        description: 'Comma-separated feature flags for current branch (e.g. enable_foo,enable_bar)'
+        required: false
+        default: ''
+      main_table_service_config:
+        description: 'Comma-separated table_service_config options for main branch (e.g. enable_vector_index_read=true)'
+        required: false
+        default: ''
+      current_table_service_config:
+        description: 'Comma-separated table_service_config options for current branch (e.g. enable_vector_index_read=true)'
+        required: false
+        default: ''
 
 jobs:
   compare:
@@ -45,13 +61,45 @@ jobs:
 
       - name: Run performance comparison
         run: |
+          MAIN_FLAG_ARGS=""
+          IFS=',' read -ra FLAGS <<< "${{ inputs.main_feature_flags || '' }}"
+          for flag in "${FLAGS[@]}"; do
+            if [[ -n "$flag" ]]; then
+              MAIN_FLAG_ARGS="$MAIN_FLAG_ARGS --main-feature-flag $flag"
+            fi
+          done
+          CURRENT_FLAG_ARGS=""
+          IFS=',' read -ra FLAGS <<< "${{ inputs.current_feature_flags || '' }}"
+          for flag in "${FLAGS[@]}"; do
+            if [[ -n "$flag" ]]; then
+              CURRENT_FLAG_ARGS="$CURRENT_FLAG_ARGS --current-feature-flag $flag"
+            fi
+          done
+          MAIN_TSC_ARGS=""
+          IFS=',' read -ra OPTS <<< "${{ inputs.main_table_service_config || '' }}"
+          for opt in "${OPTS[@]}"; do
+            if [[ -n "$opt" ]]; then
+              MAIN_TSC_ARGS="$MAIN_TSC_ARGS --main-table-service-config $opt"
+            fi
+          done
+          CURRENT_TSC_ARGS=""
+          IFS=',' read -ra OPTS <<< "${{ inputs.current_table_service_config || '' }}"
+          for opt in "${OPTS[@]}"; do
+            if [[ -n "$opt" ]]; then
+              CURRENT_TSC_ARGS="$CURRENT_TSC_ARGS --current-table-service-config $opt"
+            fi
+          done
           ./ydb/tests/stress/compare_index_performance.sh \
             --duration ${{ inputs.duration || '600' }} \
             --build-preset ${{ inputs.build_preset || 'relwithdebinfo' }} \
             --ref ${{ inputs.ref || 'main' }} \
             --targets ${{ inputs.targets || '100' }} \
             --iterations ${{ inputs.iterations || '3' }} \
-            --warmup ${{ inputs.warmup || '30' }}
+            --warmup ${{ inputs.warmup || '30' }} \
+            $MAIN_FLAG_ARGS \
+            $CURRENT_FLAG_ARGS \
+            $MAIN_TSC_ARGS \
+            $CURRENT_TSC_ARGS
 
       - name: Post results to job summary
         if: always()

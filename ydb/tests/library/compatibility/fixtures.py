@@ -54,6 +54,29 @@ def prepare_feature_flags(extra_feature_flags, disabled_feature_flags):
     return extra_feature_flags, disabled_feature_flags
 
 
+def _wait_for_cluster_readiness(driver, timeout=120, interval=2):
+    query = """
+        CREATE TABLE `test_readiness` (
+        id Int64 NOT NULL,
+        PRIMARY KEY (id)
+    ) """
+    start_time = time.time()
+    last_exception = None
+    while time.time() - start_time < timeout:
+        try:
+            with ydb.QuerySessionPool(driver) as session_pool:
+                session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1))
+            break
+        except Exception as e:
+            last_exception = e
+            time.sleep(interval)
+    else:
+        raise last_exception
+    query = """DROP TABLE `test_readiness`"""
+    with ydb.QuerySessionPool(driver) as session_pool:
+        session_pool.execute_with_retries(query)
+
+
 current_binary_path = os.environ.get('YDB_CURRENT_BINARY_PATH', yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target"))
 current_name = 'current'
 if current_binary_path is not None:
@@ -162,11 +185,7 @@ class RestartToAnotherVersionFixture:
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = self.create_driver()
-
-        # TODO: remove sleep
-        # without sleep there are errors like
-        # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
-        time.sleep(60)
+        _wait_for_cluster_readiness(self.driver)
 
 
 all_binary_combinations_mixed = [
@@ -275,30 +294,7 @@ class RollingUpgradeAndDowngradeFixture:
     def _wait_for_readiness(self):
         if self.recreate_driver:
             self.driver = self.create_driver()
-
-        query = """
-            CREATE TABLE `test_readiness` (
-            id Int64 NOT NULL,
-            PRIMARY KEY (id)
-        ) """
-        timeout = 120  # seconds
-        interval = 2  # seconds
-
-        start_time = time.time()
-        last_exception = None
-        while time.time() - start_time < timeout:
-            try:
-                with ydb.QuerySessionPool(self.driver) as session_pool:
-                    session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1))
-                break
-            except Exception as e:
-                last_exception = e
-                time.sleep(interval)
-        else:
-            raise last_exception
-        query = """DROP TABLE `test_readiness`"""
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(query)
+        _wait_for_cluster_readiness(self.driver)
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))

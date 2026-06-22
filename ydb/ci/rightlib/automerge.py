@@ -116,11 +116,10 @@ class PrAutomerger:
 
     def refresh_base_and_merge(self, pr: PullRequest, commit_msg: str) -> bool:
         base_ref = pr.base.ref
-        self.git_run("fetch", "origin", base_ref)
-        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
-        self.git_run("checkout", base_ref)
-        self.git_run("reset", "--hard", f"origin/{base_ref}")
         try:
+            self.git_run("fetch", "origin", base_ref)
+            self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
+            self.git_run("reset", "--hard", f"origin/{base_ref}")
             self.git_run("merge", "PR", "-m", commit_msg)
         except subprocess.CalledProcessError:
             return False

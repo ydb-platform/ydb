@@ -264,6 +264,12 @@ Y_UNIT_TEST_SUITE(StructLog) {
         }
     };
 
+    struct TTestTypeToStringBuf {
+        TStringBuf ToString() const {
+            return "some value";
+        }
+    };
+
     struct TTestTypeToStdString {
         std::string ToString() const {
             return "some value";
@@ -274,6 +280,12 @@ Y_UNIT_TEST_SUITE(StructLog) {
         const std::string& ToString() const {
             static std::string result("some value");
             return result;
+        }
+    };
+
+    struct TTestTypeToStdStringView {
+        std::string_view ToString() const {
+            return "some value";
         }
     };
 
@@ -296,8 +308,10 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(CreateMessageToMethods) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToString{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStringRef{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStringBuf{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStdString{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStdStringRef{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStdStringView{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStructuredMessage{}}), "value.value1=1, value.value2=2");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToBoth{}}), "value.value1=1, value.value2=2");
     }

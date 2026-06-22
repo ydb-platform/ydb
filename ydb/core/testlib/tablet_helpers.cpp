@@ -1115,7 +1115,7 @@ namespace NKikimr {
         void Bootstrap(const TActorContext& ctx) {
             CreateFollower();
 
-            YDB_LOG_INFO_CTX(ctx, "Follower launcher Created follower ID for tabletId",
+            YDB_LOG_INFO_CTX(ctx, "Follower launcher created follower for tablet",
                 {"selfId", SelfId()},
                 {"followerId", FollowerId},
                 {"tabletId", TabletId},
@@ -1133,7 +1133,7 @@ namespace NKikimr {
 
         void Handle(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
             if (ev->Sender != FollowerActorId) {
-                YDB_LOG_INFO_CTX(ctx, "Follower launcher Received EvTabletDead for tabletId but from an unknown actor ID",
+                YDB_LOG_INFO_CTX(ctx, "Follower launcher received TEvTabletDead for an unknown actor",
                     {"selfId", SelfId()},
                     {"tabletId", ev->Get()->TabletID},
                     {"ignored", FollowerActorId});
@@ -1154,7 +1154,7 @@ namespace NKikimr {
             FollowerActorId = {};
             CreateFollower();
 
-            YDB_LOG_INFO_CTX(ctx, "Follower launcher Restarted follower ID for tabletId",
+            YDB_LOG_INFO_CTX(ctx, "Follower launcher restarted for tablet",
                 {"selfId", SelfId()},
                 {"followerId", FollowerId},
                 {"tabletId", TabletId},
@@ -1163,7 +1163,7 @@ namespace NKikimr {
 
         void Handle(TEvents::TEvPoison::TPtr& /* ev */, const TActorContext& ctx) {
             if (FollowerActorId) {
-                YDB_LOG_INFO_CTX(ctx, "Follower launcher Destroying follower ID for tabletId",
+                YDB_LOG_INFO_CTX(ctx, "Follower launcher destroying follower for tablet",
                     {"selfId", SelfId()},
                     {"followerId", FollowerId},
                     {"tabletId", TabletId},
@@ -1355,7 +1355,7 @@ namespace NKikimr {
                     it = State->Tablets.insert(std::make_pair(key, TTabletInfo(type, tabletId, bootstrapperActorId))).first;
                     State->TabletIdToOwner[tabletId] = key;
 
-                    YDB_LOG_INFO_CTX(ctx, "Boot OK, tablet id",
+                    YDB_LOG_INFO_CTX(ctx, "Boot OK",
                         {"logPrefix", logPrefix},
                         {"tabletId", tabletId});
 
@@ -1385,7 +1385,7 @@ namespace NKikimr {
                         }
                     }
                 } else {
-                    YDB_LOG_ERROR_CTX(ctx, "Boot failed, status",
+                    YDB_LOG_ERROR_CTX(ctx, "Boot failed",
                         {"logPrefix", logPrefix},
                         {"status", status});
                 }

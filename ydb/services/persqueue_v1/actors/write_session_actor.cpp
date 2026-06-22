@@ -19,6 +19,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
@@ -43,12 +44,6 @@ using ECodec = std::conditional_t<UseMigrationProtocol, Ydb::PersQueue::V1::Code
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
 static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
-
-bool IsTopicMessagesBatchingEnabled(const TActorContext& /*ctx*/) {
-    return HasAppData()
-        && AppData()->FeatureFlags.GetEnableTopicMessagesBatching()
-        && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
-}
 
 template <bool UseMigrationProtocol>
 ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
@@ -933,7 +928,7 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
                 init->mutable_supported_codecs()->add_codecs(CodecByName<UseMigrationProtocol>(codecName));
             }
         }
-        init->set_is_batching_supported(IsTopicMessagesBatchingEnabled(ctx));
+        init->set_is_batching_supported(NPQ::IsTopicMessagesBatchingEnabled(ctx));
     }
 
     InitSpan.End();

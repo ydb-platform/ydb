@@ -10,12 +10,24 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-namespace {
-
 bool FulltextUsesRowIdAsDocId(const TIndexDescription* indexDesc) {
     auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
     return ft && ft->GetUseRowIdAsDocId();
 }
+
+void AddFulltextDocIdColumns(const TIndexDescription* indexDesc,
+    TVector<TStringBuf>& indexTableColumns, THashSet<TStringBuf>& indexTableColumnsSet)
+{
+    // The synthetic doc-id column (__ydb_row_id) is not part of the index KeyColumns, the
+    // base-table PK, or DataColumns, so DML maintenance must thread it through explicitly.
+    if (FulltextUsesRowIdAsDocId(indexDesc)) {
+        if (indexTableColumnsSet.emplace(NTableIndex::NFulltext::RowIdColumn).second) {
+            indexTableColumns.emplace_back(NTableIndex::NFulltext::RowIdColumn);
+        }
+    }
+}
+
+namespace {
 
 template <class F>
 void ForEachFulltextDocIdColumn(const NYql::TKikimrTableMetadata& table, const TIndexDescription* indexDesc, F&& f) {
@@ -485,15 +497,17 @@ TExprBase CombineFulltextDictRows(const TVector<TExprBase>& deltas, TPositionHan
 TExprBase BuildFulltextPostingKeys(const TKikimrTableDescription& table, const TIndexDescription* indexDesc,
     const NNodes::TExprBase& tokenRows, TPositionHandle pos, NYql::TExprContext& ctx)
 {
+    // Posting-table key is [__ydb_token, doc-id...]. The doc-id is __ydb_row_id when the index uses
+    // UseRowIdAsDocId, otherwise the main-table PK.
     TVector<TExprBase> keyColumns;
     // Posting key is [prefix..., __ydb_token, doc_id...].
     ForEachFulltextPrefixColumn(indexDesc, [&](TStringBuf column) {
         keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(column).Done());
     });
     keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(NTableIndex::NFulltext::TokenColumn).Done());
-    for (const auto& column : table.Metadata->KeyColumnNames) {
+    ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
         keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(column).Done());
-    }
+    });
 
     auto rowsArg = TCoArgument(ctx.NewArgument(pos, "rows"));
     auto keyStage = Build<TDqStage>(ctx, pos)

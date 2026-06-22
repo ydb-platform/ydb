@@ -19,7 +19,8 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
   [ENCODING([OFF|DICT])]
   [, ...],
     INDEX <index_name>
-      [GLOBAL]
+      [GLOBAL|LOCAL]
+      [UNIQUE]
       [SYNC|ASYNC]
       [USING <index_type>]
       ON ( <index_columns> )

@@ -329,7 +329,9 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     for (const auto& meta: response.Meta) {
         BlocksDirtyMap.RestorePBuffer(meta.Lsn, meta.Range, meta.HostIndex);
     }
-    DirtyMapRestored = true;
+    if (!DirtyMapReady.HasValue()) {
+        DirtyMapReady.SetValue();
+    }
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
@@ -385,12 +387,7 @@ void TVChunk::DoReadBlocksLocal(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (!DirtyMapRestored) {
-        auto error = MakeError(E_REJECTED, "dirty map not restored");
-        auto ender = TEndSpanWithError(span, error);
-        promise.SetValue(TReadBlocksLocalResponse{.Error = std::move(error)});
-        return;
-    }
+    WaitForDirtyMapReady();
 
     TReadHint readHint;
     {
@@ -484,6 +481,8 @@ void TVChunk::DoReadBlocksLocal(
 void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    WaitForDirtyMapReady();
 
     // Generate the lsn and register the write as inflight on the same executor
     // thread, so the cleanup watermark covers it from the moment of generation.
@@ -979,6 +978,14 @@ void TVChunk::OnCopyComplete(
     };
 
     UpdateConfig(std::move(prepare), std::move(apply));
+}
+
+void TVChunk::WaitForDirtyMapReady()
+{
+    if (!DirtyMapReady.HasValue()) {
+        const auto dirtyMapReadyFuture = DirtyMapReady.GetFuture();
+        Executor->WaitFor(dirtyMapReadyFuture);
+    }
 }
 
 TString TVChunk::PrintInflight() const

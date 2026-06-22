@@ -34,6 +34,8 @@ items:
   include:
     mode: link
     path: local-indexes/toc_p.yaml
+- name: Hybrid search
+  href: hybrid-search.md
 - name: Query execution optimization
   href: query-execution-optimization/index.md
   include:

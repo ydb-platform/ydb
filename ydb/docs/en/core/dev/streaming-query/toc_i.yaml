@@ -1,4 +1,6 @@
 items:
+- name: Local and external topics
+  href: local-and-external-topics.md
 - name: Common patterns
   href: patterns.md
 - name: Writing to tables

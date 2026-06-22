@@ -1,4 +1,8 @@
 {
+    "Materialize": {
+        "description": "MATERIALIZE",
+        "min_langver": "max"
+    },
     "Experiments": {
         "min_langver": "max"
     },

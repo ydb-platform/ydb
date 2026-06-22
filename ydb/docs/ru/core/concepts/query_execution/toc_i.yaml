@@ -13,9 +13,13 @@ items:
     href: fulltext_search.md
   - name: Локальные индексы
     href: local_indexes.md
+  - name: Гибридный поиск
+    href: hybrid_search.md
   - name: Федеративные запросы
     include:
       path: federated_query/toc_p.yaml
       mode: link
   - name: Спиллинг
     href: spilling.md
+  - name: Скан запросы
+    href: scan_query.md

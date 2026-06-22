@@ -466,7 +466,7 @@ private:
 
     TMessageBatch CurrentBatch;
 
-    std::queue<TOriginalMessage> OriginalMessagesToSend;
+    std::deque<TOriginalMessage> OriginalMessagesToSend;
     std::priority_queue<TBlock, std::vector<TBlock>, Greater> PackedMessagesToSend;
     //! Messages that are sent but yet not acknowledged
     std::queue<TOriginalMessage> SentOriginalMessages;

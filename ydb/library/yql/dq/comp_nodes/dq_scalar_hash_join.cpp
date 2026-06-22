@@ -38,9 +38,9 @@ IComputationWideFlowNode* LocateWideFlowJoinInput(
         if (callableType->GetName() == TStringBuf("FromFlow")) {
             auto* fromFlow = AsCallable("FromFlow", callable.GetInput(inputIndex), __LOCATION__);
             MKQL_ENSURE(fromFlow->GetInputsCount() == 1, "FromFlow expects one argument");
-            TNode& inner = *fromFlow->GetInput(0).GetNode();
-            MKQL_ENSURE(inner.GetType()->IsFlow(), "FromFlow argument must be Flow");
-            auto* innerLocated = LocateNode(ctx.NodeLocator, inner, false);
+            const TRuntimeNode innerArg = fromFlow->GetInput(0);
+            MKQL_ENSURE(innerArg.GetStaticType()->IsFlow(), "FromFlow argument must be Flow");
+            auto* innerLocated = LocateNode(ctx.NodeLocator, *innerArg.GetNode(), false);
             return dynamic_cast<IComputationWideFlowNode*>(innerLocated);
         }
     }

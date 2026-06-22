@@ -141,12 +141,12 @@ public:
                 nextRetryDelay = Nothing(); // Not retryable
             }
 
-            YDB_LOG_DEBUG("Failed to add read rule to `.. Retry",
+            YDB_LOG_DEBUG("Failed to add read rule, retry",
                 {"queryId", QueryId},
                 {"topicPath", TopicConsumer.topic_path()},
                 {"statusIssues", status.GetIssues().ToOneLineString()},
                 {"status", status.GetStatus()},
-                {"after", nextRetryDelay});
+                {"nextRetryDelay", nextRetryDelay});
             if (!nextRetryDelay) { // Not retryable
                 Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();

@@ -97,8 +97,11 @@ public:
         NTable::IScan::TRow row;
         row.Init(Columns.size());
         row.Set(0, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(k));
+        // The cells below reference the backing strings, so they must outlive the Collect() call.
+        TVector<TString> values;
+        values.reserve(Columns.size());
         for (ui32 tag = 1; tag < Columns.size(); ++tag) {
-            auto value = (TStringBuilder() << v << "_" << tag << "_" << k);
+            const auto& value = values.emplace_back(TStringBuilder() << v << "_" << tag << "_" << k);
             row.Set(tag, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(value.data(), value.size()));
         }
         auto buffer = Buffer(dataFormat);

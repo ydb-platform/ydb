@@ -201,14 +201,13 @@ class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
         NYql::IHTTPGateway::TPtr httpGateway, bool antlr4ParserIsAmbiguityError)
-        : ModuleResolverState(moduleResolverState)
+        : Antlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError)
+        , ModuleResolverState(moduleResolverState)
         , KqpSettings()
-        , Config(MakeIntrusive<TKikimrConfiguration>())
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {
-        Config->SetAntlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError);
-        Config->SetEnableBatchUpdates(true);
+        InitConfig();
     }
 
     void Bootstrap() {
@@ -216,6 +215,7 @@ public:
     }
 
     void PassAway() override {
+        ReleaseCompileHost();
         TActor::PassAway();
     }
 
@@ -224,6 +224,8 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TQueryReplayEvents::TEvCompileRequest, Handle);
+                hFunc(TEvKqp::TEvContinueProcess, IgnoreStaleEvent);
+                hFunc(TEvents::TEvWakeup, IgnoreStaleEvent);
                 default:
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event in StateInit");
             }
@@ -235,7 +237,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvContinueProcess, Handle);
-                cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+                hFunc(TEvents::TEvWakeup, HandleTimeout);
                 default:
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event in CompileState");
             }
@@ -284,16 +286,31 @@ private:
                 YQL_ENSURE(false, "Unexpected query type: " << Query->Settings.QueryType);
         }
     }
+    void InitConfig() {
+        Config = MakeIntrusive<TKikimrConfiguration>();
+        Config->SetAntlr4ParserIsAmbiguityError(Antlr4ParserIsAmbiguityError);
+        Config->SetEnableBatchUpdates(true);
+    }
+
     void Continue() {
         TActorSystem* actorSystem = TActivationContext::ActorSystem();
         TActorId selfId = SelfId();
-        auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
+        const ui32 generation = WakeupTag;
+        auto callback = [actorSystem, selfId, generation](const TFuture<bool>& future) {
             bool finished = future.GetValue();
-            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(0, finished);
+            auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(generation, finished);
             actorSystem->Send(selfId, processEv.Release());
         };
 
         AsyncCompileResult->Continue().Apply(callback);
+    }
+
+    void IgnoreStaleEvent(TEvKqp::TEvContinueProcess::TPtr& ev) {
+        Y_UNUSED(ev);
+    }
+
+    void IgnoreStaleEvent(TEvents::TEvWakeup::TPtr& ev) {
+        Y_UNUSED(ev);
     }
 
     NJson::TJsonValue ExtractQueryPlan(const TString& plan) {
@@ -475,9 +492,25 @@ private:
         Reply(status, {issue});
     }
 
+    void ReleaseCompileHost() {
+        AsyncCompileResult.Reset();
+        KqpHost.Reset();
+        Gateway.Reset();
+    }
+
+    void ResetForNextRequest() {
+        Query.reset();
+        MetadataLoader.reset();
+        GUCSettings = std::make_shared<TGUCSettings>();
+        InitConfig();
+        ReplayDetails = NJson::TJsonValue();
+        TableMetadata.reset();
+        QueryId.clear();
+        Become(&TThis::StateInit);
+    }
+
     void Reply(const Ydb::StatusIds::StatusCode& status, const TIssues& issues, const std::optional<TString>& queryPlan = std::nullopt) {
         std::unique_ptr<TQueryReplayEvents::TEvCompileResponse> ev = std::make_unique<TQueryReplayEvents::TEvCompileResponse>(true);
-        Y_UNUSED(queryPlan);
         if (status != Ydb::StatusIds::SUCCESS) {
             ev->Success = false;
             if (!MetadataLoader) {
@@ -499,11 +532,13 @@ private:
         }
 
         Send(Owner, ev.release());
-        PassAway();
+        ResetForNextRequest();
     }
 
     void Handle(TQueryReplayEvents::TEvCompileRequest::TPtr& ev) {
         Owner = ev->Sender;
+
+        ReleaseCompileHost();
 
         ReplayDetails = std::move(ev->Get()->ReplayDetails);
 
@@ -553,8 +588,8 @@ private:
         GUCSettings->ImportFromJson(ReplayDetails);
 
         Config->Init(KqpSettings.DefaultSettings.GetDefaultSettings(), ReplayDetails["query_cluster"].GetStringSafe(), KqpSettings.Settings, false);
-        if (!Query->Database.empty()) {
-            Config->_KqpTablePathPrefix = ReplayDetails["query_database"].GetStringSafe();
+        if (!database.empty()) {
+            Config->_KqpTablePathPrefix = database;
         }
 
         ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
@@ -578,15 +613,18 @@ private:
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 
+        ++WakeupTag;
         StartCompilation();
         Continue();
 
-        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup(WakeupTag));
         Become(&TThis::StateCompile);
     }
 
     void Handle(TEvKqp::TEvContinueProcess::TPtr& ev) {
-        Y_ENSURE(!ev->Get()->QueryId);
+        if (ev->Get()->QueryId != WakeupTag) {
+            return;
+        }
 
         if (!ev->Get()->Finished) {
             Continue();
@@ -605,12 +643,17 @@ private:
         Reply(status, kqpResult.Issues(), queryPlan);
     }
 
-    void HandleTimeout() {
+    void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != WakeupTag) {
+            return;
+        }
         return Reply(Ydb::StatusIds::TIMEOUT, "Query compilation timed out.");
     }
 
 private:
     TActorId Owner;
+    ui32 WakeupTag = 0;
+    bool Antlr4ParserIsAmbiguityError = false;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TString QueryId;
     std::unique_ptr<TKqpQueryId> Query;

@@ -83,6 +83,7 @@ class TQueryReplayMapper
     TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> ModuleResolverState;
 
     NYql::IHTTPGateway::TPtr HttpGateway;
+    TActorId CompileActorId;
     TVector<TString> UdfFiles;
     ui32 ActorSystemThreadsCount = 5;
     NActors::NLog::EPriority YqlLogPriority = NActors::NLog::EPriority::PRI_ERROR;
@@ -168,6 +169,8 @@ public:
         ModuleResolverState = MakeIntrusive<NKikimr::NKqp::TModuleResolverState>();
         HttpGateway = NYql::IHTTPGateway::Make();
         Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
+        CompileActorId = ActorSystem->Register(CreateQueryCompiler(
+            ModuleResolverState, FunctionRegistry.Get(), HttpGateway, Antlr4ParserIsAmbiguityError));
     }
 
     THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
@@ -184,12 +187,9 @@ public:
 
         THolder<TQueryReplayEvents::TEvCompileResponse> replayResult;
         {
-            NJson::TJsonValue firstCompileReplayJson = replayJson;
-            auto compileActorId = ActorSystem->Register(CreateQueryCompiler(ModuleResolverState, FunctionRegistry.Get(), HttpGateway, Antlr4ParserIsAmbiguityError));
-
             auto future = ActorSystem->Ask<TQueryReplayEvents::TEvCompileResponse>(
-                compileActorId,
-                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(firstCompileReplayJson))),
+                CompileActorId,
+                THolder(new TQueryReplayEvents::TEvCompileRequest(std::move(replayJson))),
                 TDuration::Seconds(600));
 
             replayResult.Reset(future.ExtractValueSync().Release());

@@ -33,6 +33,7 @@ private:
     const TDuration INIT_TIMEOUT = TDuration::Minutes(2);
     const TDuration RECEIVE_READ_EVENT_TIMEOUT = TDuration::Minutes(1);
     const TDuration WRITE_TIMEOUT = TDuration::Minutes(10);
+    const TDuration READ_SESSION_CLOSE_TIMEOUT = TDuration::Seconds(5);
 
 
 private:
@@ -149,6 +150,7 @@ public:
         std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>&& messages
     );
     void StartWaitNextReaderEvent(const TActorContext& ctx);
+    void CloseReadSession();
 
 private:
     const TActorId PartitionActor;

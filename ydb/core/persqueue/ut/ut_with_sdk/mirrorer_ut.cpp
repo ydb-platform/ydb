@@ -1,11 +1,14 @@
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
+#include <ydb/core/testlib/basics/helpers.h>
 
 #include <ydb/library/kafka/kafka_records.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -13,6 +16,148 @@
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NPersQueueTests {
+
+namespace {
+
+ui64 GetBalancerTabletId(
+    NPersQueue::TTestServer& server,
+    NActors::TTestActorRuntime& runtime,
+    const TString& topicSchemePath
+) {
+    auto pathDescr = server.AnnoyingClient->Describe(&runtime, topicSchemePath, Tests::SchemeRoot, true);
+    const ui64 balancerTabletId = pathDescr.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
+    UNIT_ASSERT(balancerTabletId);
+    return balancerTabletId;
+}
+
+std::optional<ui32> TryGetReadSessionsCount(
+    NActors::TTestActorRuntime& runtime,
+    ui64 balancerTabletId,
+    const TString& consumer
+) {
+    runtime.ResetScheduledCount();
+    const TActorId sender = runtime.AllocateEdgeActor();
+
+    auto request = MakeHolder<TEvPersQueue::TEvGetReadSessionsInfo>();
+    request->Record.SetClientId(consumer);
+    runtime.SendToPipe(balancerTabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvReadSessionsInfoResponse>(TDuration::Seconds(2));
+    if (!response) {
+        return std::nullopt;
+    }
+    return response->Record.ReadSessionsSize();
+}
+
+std::optional<ui32> WaitForReadSessionsCount(
+    NActors::TTestActorRuntime& runtime,
+    ui64 balancerTabletId,
+    const TString& consumer,
+    TDuration timeout
+) {
+    const TInstant deadline = timeout.ToDeadLine();
+    while (TInstant::Now() < deadline) {
+        if (auto sessionsCount = TryGetReadSessionsCount(runtime, balancerTabletId, consumer)) {
+            return sessionsCount;
+        }
+        Sleep(TDuration::MilliSeconds(200));
+    }
+    return std::nullopt;
+}
+
+void RestartPartitionTablet(NPersQueue::TTestServer& server, const TString& topicSchemePath) {
+    auto res = server.AnnoyingClient->Ls(topicSchemePath);
+    const auto& pq = res->Record.GetPathDescription().GetPersQueueGroup();
+    THashSet<ui64> tablets;
+    for (ui32 i = 0; i < pq.PartitionsSize(); ++i) {
+        tablets.insert(pq.GetPartitions(i).GetTabletId());
+    }
+    auto* runtime = server.CleverServer->GetRuntime();
+    const TActorId sender = runtime->AllocateEdgeActor();
+    for (ui64 tabletId : tablets) {
+        NKikimr::ForwardToTablet(*runtime, tabletId, sender, new TEvents::TEvPoisonPill());
+        TDispatchOptions options;
+        try {
+            runtime->DispatchEvents(options);
+        } catch (NActors::TEmptyEventQueueException&) {
+        }
+    }
+    Sleep(TDuration::Seconds(2));
+}
+
+void WriteSingleMessageToSource(NPersQueue::TTestServer& server, const TString& srcTopic, ui64 seqNo) {
+    auto channel = grpc::CreateChannel(
+        "localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()
+    );
+    auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+    grpc::ClientContext context;
+    auto writeSession = topicStub->StreamWrite(&context);
+    UNIT_ASSERT(writeSession);
+
+    Ydb::Topic::StreamWriteMessage::FromClient req;
+    Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+    auto* init = req.mutable_init_request();
+    init->set_path(srcTopic);
+    init->set_producer_id("mirrorer_ut_producer");
+    init->set_message_group_id("mirrorer_ut_producer");
+    UNIT_ASSERT(writeSession->Write(req));
+    UNIT_ASSERT(writeSession->Read(&resp));
+
+    req.Clear();
+    auto* write = req.mutable_write_request();
+    write->set_codec(1);
+    auto* msg = write->add_messages();
+    msg->set_seq_no(seqNo);
+    msg->set_data("mirrorer-ut-data-" + ToString(seqNo));
+    msg->mutable_created_at()->set_seconds(1000);
+    UNIT_ASSERT(writeSession->Write(req));
+    UNIT_ASSERT(writeSession->Read(&resp));
+    writeSession->WritesDone();
+    writeSession->Finish();
+}
+
+bool TryReadOneMessageFromDst(NYdb::TDriver& driver, const TString& dstTopic, const TString& consumer) {
+    auto settings = NYdb::NTopic::TReadSessionSettings()
+        .AppendTopics(NYdb::NTopic::TTopicReadSettings(dstTopic))
+        .ConsumerName(consumer)
+        .Decompress(false);
+    auto reader = NYdb::NTopic::TTopicClient(driver).CreateReadSession(settings);
+
+    const TInstant deadline = TDuration::Seconds(5).ToDeadLine();
+    while (TInstant::Now() < deadline) {
+        auto event = reader->GetEvent(false);
+        if (!event) {
+            Sleep(TDuration::MilliSeconds(50));
+            continue;
+        }
+        if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            const bool hasData = !data->GetCompressedMessages().empty();
+            reader->Close(TDuration::Seconds(5));
+            return hasData;
+        }
+        if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+            start->Confirm();
+        } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+            stop->Confirm();
+        } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+            break;
+        }
+    }
+    reader->Close(TDuration::Seconds(5));
+    return false;
+}
+
+void SetupMirrorReaderFactory(NPersQueue::TTestServer& server, std::shared_ptr<NKikimr::NPQ::TPersQueueMirrorReaderFactory>& fabric) {
+    const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
+    fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
+    fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), settings);
+    for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
+        server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
+    }
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
     Y_UNIT_TEST(TestBasicRemote) {
@@ -644,6 +789,127 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
     Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetention) {
         SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(CloseReadSessionOnTabletRestart) {
+        auto pqSettings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
+        NYdb::NTopic::NTests::TTopicSdkTestSetup setup("CloseReadSessionOnTabletRestart", pqSettings, false);
+        auto& server = setup.GetServer();
+
+        std::shared_ptr<NKikimr::NPQ::TPersQueueMirrorReaderFactory> fabric;
+        SetupMirrorReaderFactory(server, fabric);
+
+        const TString srcTopic = "mirror-src";
+        const TString dstTopic = "mirror-dst";
+        const TString mirrorConsumer = "mirror-consumer";
+        const TString dstReaderConsumer = "dst-reader";
+        const TString srcTopicPath = setup.GetTopicPath(srcTopic);
+        const TString srcTopicFullPath = setup.GetFullTopicPath(srcTopic);
+        const TString dstTopicPath = setup.GetFullTopicPath(dstTopic);
+        const TString mirrorConsumerName = setup.GetConsumerName(mirrorConsumer);
+        const TString dstReaderConsumerName = setup.GetConsumerName(dstReaderConsumer);
+
+        setup.CreateTopic(srcTopic, mirrorConsumer, 1);
+
+        NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
+        mirrorFrom.SetEndpoint("localhost");
+        mirrorFrom.SetEndpointPort(server.GrpcPort);
+        mirrorFrom.SetTopic(srcTopicPath);
+        mirrorFrom.SetConsumer(mirrorConsumer);
+        mirrorFrom.SetDatabase("/Root");
+
+        TRequestCreatePQ createDstTopic(
+            dstTopic,
+            1,
+            0,
+            86400,
+            8_MB,
+            20000000,
+            "",
+            200000000,
+            {dstReaderConsumerName},
+            {},
+            mirrorFrom
+        );
+        server.AnnoyingClient->CreateTopic(createDstTopic, false);
+
+        auto* driver = server.AnnoyingClient->GetDriver();
+        NYdb::NTopic::TTopicClient topicClient(*driver);
+
+        const TInstant createDeadline = TInstant::Now() + TDuration::Seconds(30);
+        bool dstTopicCreated = false;
+        while (TInstant::Now() < createDeadline) {
+            if (topicClient.DescribeTopic(dstTopicPath).GetValueSync().IsSuccess()) {
+                dstTopicCreated = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_C(dstTopicCreated, "Timed out waiting for topic " << dstTopicPath);
+
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_MIRRORER});
+
+        WriteSingleMessageToSource(server, srcTopicPath, 1);
+
+        const TInstant waitMirrorerDeadline = TDuration::Seconds(60).ToDeadLine();
+        bool mirroringStarted = false;
+        while (TInstant::Now() < waitMirrorerDeadline) {
+            if (TryReadOneMessageFromDst(*driver, dstTopic, dstReaderConsumerName)) {
+                mirroringStarted = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(mirroringStarted, "mirrorer did not start mirroring before tablet restart");
+
+        auto& runtime = setup.GetRuntime();
+        const ui64 srcBalancerTabletId = GetBalancerTabletId(server, runtime, srcTopicFullPath);
+
+        const TInstant waitSessionDeadline = TDuration::Seconds(60).ToDeadLine();
+        while (TInstant::Now() < waitSessionDeadline) {
+            if (auto sessionsCount = TryGetReadSessionsCount(runtime, srcBalancerTabletId, mirrorConsumer)) {
+                if (*sessionsCount == 1) {
+                    break;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        {
+            auto sessionsCount = WaitForReadSessionsCount(runtime, srcBalancerTabletId, mirrorConsumer, TDuration::Seconds(5));
+            UNIT_ASSERT(sessionsCount);
+            UNIT_ASSERT_VALUES_EQUAL(*sessionsCount, 1);
+        }
+
+        RestartPartitionTablet(server, dstTopicPath);
+
+        WriteSingleMessageToSource(server, srcTopicPath, 2);
+
+        bool mirroringResumed = false;
+        const TInstant recoveryDeadline = TDuration::Seconds(60).ToDeadLine();
+        while (TInstant::Now() < recoveryDeadline) {
+            if (auto sessionsCount = TryGetReadSessionsCount(runtime, srcBalancerTabletId, mirrorConsumer)) {
+                UNIT_ASSERT_C(
+                    *sessionsCount <= 1,
+                    "stale mirrorer read session on source topic after destination tablet restart, sessions count: "
+                        << *sessionsCount
+                );
+            }
+
+            if (TryReadOneMessageFromDst(*driver, dstTopic, dstReaderConsumerName)) {
+                if (auto sessionsCount = TryGetReadSessionsCount(runtime, srcBalancerTabletId, mirrorConsumer)) {
+                    if (*sessionsCount == 1) {
+                        mirroringResumed = true;
+                        break;
+                    }
+                }
+            }
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(mirroringResumed, "mirroring did not resume after destination tablet restart");
+
+        auto sessionsCount = WaitForReadSessionsCount(runtime, srcBalancerTabletId, mirrorConsumer, TDuration::Seconds(10));
+        UNIT_ASSERT(sessionsCount);
+        UNIT_ASSERT_VALUES_EQUAL(*sessionsCount, 1);
     }
 }
 } // NKikimr::NPersQueueTests

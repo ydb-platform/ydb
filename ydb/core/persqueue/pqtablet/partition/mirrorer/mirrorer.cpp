@@ -123,12 +123,24 @@ void TMirrorer::StartInit(const TActorContext& ctx) {
     ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials);
 }
 
+void TMirrorer::CloseReadSession() {
+    ReadFuturesInFlight = 0;
+    ReadFeatures.clear();
+    WaitNextReaderEventInFlight = false;
+    EndPartitionSessionEvent = std::nullopt;
+    LastReadEventTime = TInstant::Zero();
+
+    PartitionStream.Reset();
+    if (ReadSession) {
+        LOG_N("closing read session " << ReadSession->GetSessionId());
+        ReadSession->Close(READ_SESSION_CLOSE_TIMEOUT);
+        ReadSession.reset();
+    }
+}
+
 void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     LOG_N("killed");
-    if (ReadSession)
-        ReadSession->Close(TDuration::Zero());
-    ReadSession = nullptr;
-    PartitionStream = nullptr;
+    CloseReadSession();
     CredentialsProvider = nullptr;
     Die(ctx);
 }
@@ -526,11 +538,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
             Queue.pop_back();
         }
     }
-    if (ReadSession) {
-        ReadSession->Close(TDuration::Zero());
-    }
-    ReadSession.reset();
-    PartitionStream.Reset();
+    CloseReadSession();
 
     auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
@@ -546,9 +554,6 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     });
 
     try {
-        if (ReadSession) {
-            ReadSession->Close(TDuration::Zero());
-        }
         ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT, log);
     } catch(...) {
         ProcessError(ctx, TStringBuilder() << "got an exception during the creation read session: " << CurrentExceptionMessage());
@@ -601,15 +606,7 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
 
 void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     LastInitStageTimestamp = ctx.Now();
-    if (ReadSession)
-        ReadSession->Close(TDuration::Zero());
-    ReadSession = nullptr;
-    PartitionStream = nullptr;
-    EndPartitionSessionEvent = std::nullopt;
-    ReadFuturesInFlight = 0;
-    ReadFeatures.clear();
-    WaitNextReaderEventInFlight = false;
-    LastReadEventTime = TInstant::Zero();
+    CloseReadSession();
 
     Become(&TThis::StateInitConsumer);
 

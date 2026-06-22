@@ -246,4 +246,6 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
     TActorSystem* actorSystem
 );
 
+IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
+
 }  // namespace NKikimr::NKqp

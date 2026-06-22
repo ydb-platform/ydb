@@ -1,3 +1,4 @@
+* The `ydb` interactive AI mode can now search the YDB documentation.
 
 ## 2.32.0 ##
 

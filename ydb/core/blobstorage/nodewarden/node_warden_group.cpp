@@ -321,6 +321,11 @@ namespace NKikimr::NStorage {
         }
     }
 
+    bool TNodeWarden::HasGroupProxy(ui32 groupId) const {
+        auto it = Groups.find(groupId);
+        return it != Groups.end() && it->second.ProxyId;
+    }
+
     void TNodeWarden::Handle(TEvBlobStorage::TEvUpdateGroupInfo::TPtr ev) {
         auto *msg = ev->Get();
         bool fromResolver = false;

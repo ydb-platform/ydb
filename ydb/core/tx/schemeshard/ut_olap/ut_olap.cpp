@@ -1604,8 +1604,6 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         env.TestWaitNotification(runtime, txId);
     }
-<<<<<<< HEAD
-=======
 
     // Case 1: dropping the read-only copy (non-owner) leaves the source's
     // shard alive and only removes the copy's PathId from SharedShards.
@@ -1850,5 +1848,4 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
         UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
     }
->>>>>>> 76818228942 (read only copy column table  improvements (#34867))
 }

@@ -1,10 +1,10 @@
 # client_certificate_authorization
 
-Секция `client_certificate_authorization` задаёт правила проверки клиентских SSL-сертификатов и формирования [SID](../../concepts/glossary.md#access-sid) пользователей. Настройки указываются в [статической конфигурации](./index.md) кластера. Её раздел `client_certificate_definitions` задаёт требования к заполнению полей «Subject» и «Subject Alternative Name» клиентских сертификатов, а также список присваиваемых групп (SID групп).
+Секция `client_certificate_authorization` задаёт правила проверки клиентских SSL-сертификатов и формирования [SID](../../concepts/glossary.md#access-sid) пользователей. Настройки указываются в [статической конфигурации](./index.md) кластера. Её раздел `client_certificate_definitions` задаёт требования к заполнению полей "Subject" и "Subject Alternative Name" клиентских сертификатов, а также список присваиваемых групп (SID групп).
 
-Клиентские сертификаты описываются стандартом [X.509](https://en.wikipedia.org/wiki/X.509). Поле «Subject» сертификата состоит из нескольких компонентов (например, `O` — организация, `OU` — подразделение в составе организации, `C` — страна, `CN` — имя собственное субъекта). Проверки могут быть настроены на соответствие одного или нескольких компонентов поля ожидаемым значениям.
+Клиентские сертификаты описываются стандартом [X.509](https://en.wikipedia.org/wiki/X.509). Поле "Subject" сертификата состоит из нескольких компонентов (например, `O` — организация, `OU` — подразделение в составе организации, `C` — страна, `CN` — имя собственное субъекта). Проверки могут быть настроены на соответствие одного или нескольких компонентов поля ожидаемым значениям.
 
-Поле «Subject Alternative Name» сертификата представляет собой список сетевых имён или IP-адресов. Проверка может быть настроена на соответствие сетевых имён в сертификате ожидаемым значениям.
+Поле "Subject Alternative Name" сертификата представляет собой список сетевых имён или IP-адресов. Проверка может быть настроена на соответствие сетевых имён в сертификате ожидаемым значениям.
 
 ## Синтаксис
 
@@ -38,7 +38,7 @@ client_certificate_authorization:
 
 ## Примеры
 
-Следующий фрагмент конфигурации требует, чтобы в поле "Subject" клиентского сертификата были компоненты `O=YDB` и `CN=server1.internal.corp`. Для такого сертификата будет сформирован SID пользователя `O=YDB,CN=server1.internal.corp@cert` и будет назначена группа `group@cert`:
+Следующий фрагмент конфигурации требует, чтобы в поле "Subject" клиентского сертификата были компоненты `O=YDB` и `CN=user1`. Для такого сертификата будет сформирован SID пользователя `O=YDB,CN=user1@cert` и будет назначена группа `group@cert`:
 
 ```yaml
 client_certificate_authorization:
@@ -49,16 +49,30 @@ client_certificate_authorization:
       - short_name: "O"
         values: ["YDB"]
       - short_name: "CN"
-        values: ["server1.internal.corp"]
+        values: ["user1"]
 ```
 
-Следующий фрагмент конфигурации требует клиентский сертификат с компонентами `OU=cluster1` и `O=YDB` в поле "Subject". Дополнительно проверяется, что поле "Subject Alternative Name" содержит имя хоста, заканчивающееся на суффикс `.cluster1.ydb.company.net`. Для такого сертификата будет сформирован SID пользователя `OU=cluster1,O=YDB@cert` и будет назначена группа `group@cert`:
+В компоненте `CN` может указываться сетевое имя сервера, а не имя пользователя. Такой вариант целесообразно использовать при [регистрации динамических узлов](../../devops/deployment-options/manual/node-authorization.md#vklyuchenie-rezhima-autentifikacii-i-avtorizacii-uzlov). Следующий фрагмент конфигурации требует, чтобы в поле "Subject" клиентского сертификата узла были компоненты `O=YDB` и `CN=server1.internal.corp`. Для такого сертификата будет сформирован SID `O=YDB,CN=server1.internal.corp@cert` и будет назначена группа `registerNode@cert`:
 
 ```yaml
 client_certificate_authorization:
   request_client_certificate: true
   client_certificate_definitions:
-    - member_groups: ["group@cert"]
+    - member_groups: ["registerNode@cert"]
+      subject_terms:
+      - short_name: "O"
+        values: ["YDB"]
+      - short_name: "CN"
+        values: ["server1.internal.corp"]
+```
+
+Также можно идентифицировать узел по компоненту `OU` и проверять поле "Subject Alternative Name". Следующий фрагмент конфигурации требует клиентский сертификат узла с компонентами `OU=cluster1` и `O=YDB` в поле "Subject", а также проверяет, что поле "Subject Alternative Name" содержит имя хоста, заканчивающееся на суффикс `.cluster1.ydb.company.net`. Для такого сертификата будет сформирован SID `OU=cluster1,O=YDB@cert` и будет назначена группа `registerNode@cert`:
+
+```yaml
+client_certificate_authorization:
+  request_client_certificate: true
+  client_certificate_definitions:
+    - member_groups: ["registerNode@cert"]
       subject_dns:
         suffixes: [".cluster1.ydb.company.net"]
       subject_terms:

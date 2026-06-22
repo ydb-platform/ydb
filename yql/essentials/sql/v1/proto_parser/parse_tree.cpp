@@ -42,6 +42,28 @@ bool IsEmptyQuery(google::protobuf::Message* message) {
            !sqlQuery.GetAlt_sql_query1().GetRule_sql_stmt_list1().HasBlock2();
 }
 
+const TRule_id_table_or_type* GetCTERef(const TRule_table_ref& rule) {
+    if (rule.HasBlock1()) {
+        return nullptr;
+    }
+
+    if (rule.HasBlock2()) {
+        return nullptr;
+    }
+
+    const auto& block = rule.GetBlock3();
+    if (!block.HasAlt1()) {
+        return nullptr;
+    }
+
+    const auto& key = block.GetAlt1().GetRule_table_key1();
+    if (key.HasBlock2()) {
+        return nullptr;
+    }
+
+    return &key.GetRule_id_table_or_type1();
+}
+
 const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) {
     if (!msg.GetBlock2().HasAlt1()) {
         return nullptr;
@@ -117,21 +139,25 @@ const TRule_smart_parenthesis* GetParenthesis(const TRule_expr& msg) {
                 .GetRule_smart_parenthesis1();
 }
 
+bool IsSelect(const TRule_select_or_expr& msg) {
+    if (msg.HasAlt_select_or_expr1()) {
+        return true;
+    }
+
+    return IsSelect(
+        msg
+            .GetAlt_select_or_expr2()
+            .GetRule_tuple_or_expr1()
+            .GetRule_expr1());
+}
+
 bool IsSelect(const TRule_smart_parenthesis& msg) {
     const auto* select_or_expr = GetSelectOrExpr(msg);
     if (!select_or_expr) {
         return false;
     }
 
-    if (select_or_expr->HasAlt_select_or_expr1()) {
-        return true;
-    }
-
-    return IsSelect(
-        select_or_expr
-            ->GetAlt_select_or_expr2()
-            .GetRule_tuple_or_expr1()
-            .GetRule_expr1());
+    return IsSelect(*select_or_expr);
 }
 
 bool IsSelect(const TRule_expr& msg) {

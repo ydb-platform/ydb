@@ -493,8 +493,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
     auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
 
-    auto path = TPath::Init(buildInfo.TablePathId, ss);
-
     for (const auto& colInfo : buildInfo.BuildColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         NScheme::TTypeInfo typeInfo;
@@ -509,8 +507,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         col->SetType(NScheme::TypeName(typeInfo, typeMod));
         col->SetName(colInfo.ColumnName);
         if (colInfo.IsFromSequence()) {
-            // DefaultFromSequence stores the sequence leaf; full path is <tablePath>/<leaf>.
-            *col->MutableDefaultFromSequence() = JoinPath({path.PathString(), colInfo.DefaultFromSequence});
+            // Store the sequence as a table-local leaf name (not an absolute path), matching
+            // the create-table convention and how the path describer / KQP key local
+            // sequences by leaf.
+            *col->MutableDefaultFromSequence() = colInfo.DefaultFromSequence;
         } else {
             col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
         }
@@ -1453,8 +1453,9 @@ private:
         TColumnTypes baseColumnTypes;
         TString error;
         Y_ENSURE(ExtractTypes(mainTableInfo, baseColumnTypes, error), error);
-        Y_ENSURE(buildInfo.IndexColumns.size() == 1);
-        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns[0]);
+        // Fulltext index columns are [prefix..., text]; the text column is always last.
+        Y_ENSURE(!buildInfo.IndexColumns.empty());
+        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns.back());
 
         auto types = std::make_shared<NTxProxy::TUploadTypes>(2);
         Ydb::Type type;

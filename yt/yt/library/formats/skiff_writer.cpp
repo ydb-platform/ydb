@@ -73,14 +73,14 @@ public:
         for (size_t tableIndex = 0; tableIndex < tableSchemas.size(); ++tableIndex) {
             const auto& columns = tableSchemas[tableIndex]->Columns();
             for (const auto& column : columns) {
-                Columns_[std::pair<int, TString>(tableIndex, column.Name())] = column;
+                Columns_[std::pair<int, std::string>(tableIndex, column.Name())] = column;
             }
         }
     }
 
     const TColumnSchema* GetColumnSchema(int tableIndex, TStringBuf columnName) const
     {
-        auto it = Columns_.find(std::pair<int, TString>(tableIndex, columnName));
+        auto it = Columns_.find(std::pair<int, std::string>(tableIndex, columnName));
         if (it == Columns_.end()) {
             return nullptr;
         } else {
@@ -90,7 +90,7 @@ public:
 
 private:
     // (TableIndex, ColumnName) -> ColumnSchema
-    THashMap<std::pair<int, TString>, TColumnSchema> Columns_;
+    THashMap<std::pair<int, std::string>, TColumnSchema> Columns_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -326,7 +326,7 @@ private:
     i64 RowIndex_ = Undefined;
 };
 
-TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(TString name) {
+TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(std::string name) {
     return [name = std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
         if (value.Type != EValueType::Null) {
             THROW_ERROR_EXCEPTION("Cannot represent nonnull value of column %Qv absent in schema as composite Skiff value",

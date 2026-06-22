@@ -129,7 +129,7 @@ public:
     }
 
     void Handle(NMon::TEvRemoteHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
-        Notify(ctx, ev->Get()->Html);
+        Notify(ctx, ev->Get()->Html, ev->Get()->Nonce);
         Detach(ctx);
     }
 
@@ -168,8 +168,10 @@ public:
         Detach(ctx);
     }
 
-    void Notify(const TActorContext &ctx, const TString& html) {
-        ctx.Send(Sender, new NMon::TEvHttpInfoRes(html));
+    void Notify(const TActorContext &ctx, const TString& html, const TString& nonce = {}) {
+        auto* res = new NMon::TEvHttpInfoRes(html);
+        res->Nonce = nonce;
+        ctx.Send(Sender, res);
     }
 
     void Wakeup(const TActorContext &ctx) {

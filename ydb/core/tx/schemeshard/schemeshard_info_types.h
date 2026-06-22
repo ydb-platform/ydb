@@ -3030,11 +3030,20 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            case NKikimrSchemeOp::EIndexTypeGlobalJson:
-            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 Y_ASSERT(description.empty());
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // is enabled (the serialized description is then non-empty); legacy JSON indexes have none.
+                if (!description.empty()) {
+                    auto success = SpecializedIndexDescription
+                        .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
+                        .ParseFromString(description);
+                    Y_ENSURE(success, description);
+                }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                 auto success = SpecializedIndexDescription
@@ -3129,10 +3138,16 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            case NKikimrSchemeOp::EIndexTypeGlobalJson:
-            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+                // is enabled; otherwise there is no specialized index description.
+                if (config.HasFulltextIndexDescription()) {
+                    alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
+                }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();

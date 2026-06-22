@@ -28,7 +28,8 @@ public:
     // Add all DoNotKeep records from cut synclog snapshot up to sizeLimit
     // Note: in some obscure cases there may be two active builders simultaneously
     // It shouldn't make any difference though, we just add more flags
-    void FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit);
+    void FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit,
+            ui64 blobSizeLimit);
     void Recover(TPhantomFlagThresholds&& thresholdsBatch, bool eof);
     void Deactivate();
 
@@ -43,7 +44,7 @@ public:
     void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
     // Adds DoNotKeep flags from synclog if needed (non-persistent mode only)
-    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit);
+    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit, ui64 blobSizeLimit);
 
     ui64 EstimateFlagsMemoryConsumption() const;
     ui64 EstimateThresholdsMemoryConsumption() const;
@@ -72,6 +73,7 @@ private:
     TPhantomFlags StoredFlags;
     ui64 MaxFlagsStoredCount = 0;
     TSyncedMask SyncedMask;
+    ui64 BlobSizeLimit = 0;
     bool Active = false;
     bool Building = false;
 

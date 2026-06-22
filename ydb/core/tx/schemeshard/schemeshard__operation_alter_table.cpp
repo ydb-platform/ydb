@@ -655,7 +655,10 @@ public:
             if (column.HasDefaultFromSequence()) {
                 TString defaultFromSequence = column.GetDefaultFromSequence();
 
-                const auto sequencePath = TPath::Resolve(defaultFromSequence, context.SS);
+                // A table-local sequence is referenced by its leaf name (the create-table convention)
+                const auto sequencePath = defaultFromSequence.StartsWith('/')
+                    ? TPath::Resolve(defaultFromSequence, context.SS)
+                    : path.Child(defaultFromSequence);
                 {
                     const auto checks = sequencePath.Check();
                     checks
@@ -674,7 +677,9 @@ public:
                     }
                 }
 
-                localSequences.insert(sequencePath.PathString());
+                // CreateAlterData compares the column's raw DefaultFromSequence against this set
+                // and stores it verbatim, so insert the same (possibly relative) form.
+                localSequences.insert(defaultFromSequence);
             }
         }
 

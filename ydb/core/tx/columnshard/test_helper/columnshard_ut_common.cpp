@@ -496,10 +496,9 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
     if (specials.GetUseForcedCompaction()) {
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer optimizer;
-        *schema->MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() = optimizer;
-        schema->MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName(
-            "l-buckets");   //TODO use appropriate lc-buckets configuration
+        auto* plannerConstructor = schema->MutableOptions()->MutableCompactionPlannerConstructor();
+        plannerConstructor->SetClassName("tiling++");
+        plannerConstructor->MutableTiling()->SetJson("{}");
     }
 }
 

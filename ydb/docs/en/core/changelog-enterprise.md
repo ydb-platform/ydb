@@ -1,6 +1,54 @@
 # Yandex Enterprise Database changelog
 
+## Version 25.3 {#25-3}
+
+### Version 25.3.1.ent.3 {#25-3-1-ent-3}
+
+Release date: June 12, 2026.
+
+#### New Features
+
+* Added support for two–data center configuration with synchronous data writes (Bridge mode).
+* Topic improvements:
+  * In Kafka API [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
+  * Topic APIs were extended with new `DescribeConsumer` and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
+* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/33758) an issue that caused a server-side session leak.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/36926) an issue where, in rare cases, reads from a table could block its deletion.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
+* [Fixed behavior](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18088) inconsistent results in some read-write transactions — conflicting writes no longer overwrite uncommitted changes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18234) serializability violations in read-write transactions after shard restarts.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20560) a memory management issue when committing offsets in topics with automatic partitioning enabled.
+* [Added ](https://github.com/ydb-platform/ydb/pull/18698) checks for enabled encryption in zero-copy transfers.
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20519) an issue that could cause a VDisk to hang in local recovery after a ChunkRead error.
+* [Eliminated](https://github.com/ydb-platform/ydb/pull/18924) phantom VDisk appearances caused by race conditions between group creation and deletion operations.
+* [Improved](https://github.com/ydb-platform/ydb/pull/17687) phantom VDisks caused by races between group creation and deletion operations.
+* When a session ends via attach stream, a notification is now [sent](https://github.com/ydb-platform/ydb/pull/22298).
+* The coordination service now correctly [returns](https://github.com/ydb-platform/ydb/pull/16901) `SCHEME_ERROR` for non-existent resources instead of the incorrect `INTERNAL_ERROR` code.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20157) memory handling issues and internal data consistency violations in Workload Manager and related scheduler code.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20432) an issue where PDisk info requests could time out when the target node was disabled or unavailable.
+
 ## Version 25.2 {#25-2}
+
+### Version 25.2.1.ent.13 {#25-2-1-ent-13}
+
+Release date: June 12, 2026.
+
+#### Performance
+
+* [Reduced](https://github.com/ydb-platform/ydb/pull/32880) memory consumption when processing queries with the `TopSort` operation (`SELECT ... ORDER BY x LIMIT n`).
+* Added an optimization that filters rows by secondary index columns before accessing the main table, reducing the number of read operations.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/issues/24779) the `Unexpected end of buffer, Handle(): requirement chunkSize <= Buffer.size() failed` error that caused crashes in dynamic nodes.
+* Resolved several potential hang scenarios during query execution when using `StreamIndexLookup` index access.
+* Fixed a bug where the query limit was not applied to the index table, causing it to read far more records than necessary.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38425) an [LDAP authentication](./security/authentication.md) vulnerability: knowing the login and password of any LDAP user (including one who is not a member of a group allowed to access {{ ydb-short-name }}), an attacker could bypass group membership checks and gain access to the cluster (LDAP search filter injection; special characters are now escaped per RFC 2254).
 
 ### Version 25.2.1.ent.4 {#24-2-1-ent-4}
 

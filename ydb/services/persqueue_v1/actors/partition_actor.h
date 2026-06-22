@@ -200,6 +200,7 @@ private:
     bool ClientVerifyReadOffset;
     ui64 CommittedOffset;
     ui64 WriteTimestampEstimateMs;
+    TMaybe<ui64> ClientMaxOffset;
 
     ui64 ReadIdToResponse;
     ui64 ReadIdCommitted;
@@ -281,6 +282,9 @@ private:
     bool ReadingFinishedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
+
+    inline bool IsPartitionDataReady() const;
+    inline bool IsNeedMorePartitionData() const;
 };
 
 

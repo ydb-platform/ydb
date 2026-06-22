@@ -55,6 +55,7 @@ You can use these hotkeys while working in the interactive mode:
 | `Down arrow`  | Shows the next query from history.                                        |
 | `TAB`         | Completes the current word based on YQL syntax.                           |
 | `CTRL + R`    | Searches for a query in history containing a specified substring.         |
+| `CTRL + T`    | Switches between YQL and AI modes.                                        |
 | `CTRL + D`    | Exits interactive mode.                                                   |
 
 ## Query history {#query-history}

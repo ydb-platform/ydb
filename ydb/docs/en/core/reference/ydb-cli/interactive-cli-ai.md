@@ -59,7 +59,7 @@ Before performing an action that may modify data — running a YQL query or a sh
 
 * **Approve execution** — run the query or command as is;
 * **Edit query** / **Edit command** — edit the query or command text before running it;
-* **Abort operation** — cancel the execution.
+* **Abort operation** — cancel the execution (and continue working in the same context).
 
 ## Commands {#commands}
 
@@ -87,5 +87,5 @@ A token entered directly during profile setup is stored in the configuration fil
 Variable | Description
 --- | ---
 `YDB_CLI_AI_TOKEN` | The access token for the language model API. Used if the token is not set in the active profile.
-`YDB_CLI_AI_PROFILE_FILE` | The path to the AI profiles [configuration file](#config-file). Defaults to `~/.config/ydb/ai_profiles.yaml`.
-`YDB_CLI_AI_DISABLE_HISTORY` | If set, the AI mode message history is not stored on disk between launches.
+`YDB_CLI_AI_PROFILE_FILE` | The path to the AI profiles [configuration file](#config-file). Defaults to `~/.config/ydb/ai_profiles.yaml`. Lets you use a separate profile set or a non-default file location, for example in automated scenarios.
+`YDB_CLI_AI_DISABLE_HISTORY` | If set, the AI mode message history is not stored on disk between launches. Use it when the conversation with the assistant should not be persisted to disk.

@@ -34,11 +34,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
     , IndirectWriteReplyTimeout(
           DirectBlockGroup->GetOracle()->GetPBufferReplyTimeout())
-{
-    Y_ABORT_UNLESS(
-        VChunkConfig.GetDesiredPBuffers().Count() >=
-        QuorumDirectBlockGroupHostCount);
-}
+{}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
 {
@@ -57,16 +53,23 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 void TWriteRequestExecutor::Run()
 {
     Bundle->GetSpan().Event("Run");
+
+    const auto hosts = VChunkConfig.GetDesiredPBuffers();
+    if (hosts.Count() < QuorumDirectBlockGroupHostCount) {
+        Reply(MakeError(E_REJECTED, "Not enough PBuffer hosts"));
+        return;
+    }
+
     ScheduleRequestTimeout();
     ScheduleHedging();
 
     switch (WriteMode) {
         case EWriteMode::PBufferReplication: {
-            SendIndirectWriteRequest();
+            SendIndirectWriteRequest(hosts);
             break;
         }
         case EWriteMode::DirectPBuffersFilling: {
-            for (auto host: VChunkConfig.GetDesiredPBuffers()) {
+            for (auto host: hosts) {
                 SendDirectWriteRequest(host);
             }
             break;
@@ -74,10 +77,18 @@ void TWriteRequestExecutor::Run()
     }
 }
 
-void TWriteRequestExecutor::SendIndirectWriteRequest()
+TString TWriteRequestExecutor::Print()
 {
-    RequestedIndirectWrites = VChunkConfig.GetDesiredPBuffers();
-    auto hosts = RequestedIndirectWrites.Hosts();
+    TStringBuilder result;
+    result << LogTitle.GetWithTime() << " " << ExtendedDebugState() << " "
+           << (IsReplied ? "Replied" : "Not replied");
+
+    return result;
+}
+
+void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
+{
+    RequestedIndirectWrites = hosts;
 
     LOG_DEBUG(
         *ActorSystem,
@@ -94,7 +105,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest()
     DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.GetVChunkIndex(),
         coordinator,
-        std::move(hosts),
+        hosts.Hosts(),
         Bundle->GetLsn(),
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,
@@ -509,7 +520,8 @@ TString TWriteRequestExecutor::ExtendedDebugState() const
 {
     TStringBuilder result;
     result << "dr:" << RequestedDirectWrites.Print();
-    result << " ir:" << RequestedIndirectWrites.Print();
+    result << " ir:" << IndirectCoordinator.Print()
+           << RequestedIndirectWrites.Print();
     result << " c:" << CompletedWrites.Print();
     result << " f:" << FailedWrites.Print();
     return result;

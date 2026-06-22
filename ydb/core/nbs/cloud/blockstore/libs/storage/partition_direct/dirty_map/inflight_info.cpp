@@ -300,8 +300,14 @@ TString TInflightInfo::DebugPrint(TInstant now) const
     TStringBuilder result;
     result << " " << FormatDuration(now - StartAt) << ", " << ToString(State)
            << ", size:" << ByteCount << ", locks:" << PBuffersLockCount
-           << ", requested:" << WriteRequested.Print()
-           << ", confirmed:" << WriteConfirmed.Print();
+           << ", wr:" << WriteRequested.Print()
+           << ", wc:" << WriteConfirmed.Print()
+           << ", fd:" << FlushDesired.Print()
+           << ", fr:" << FlushRequested.Print()
+           << ", fc:" << FlushConfirmed.Print()
+           << ", er:" << EraseRequested.Print()
+           << ", ec:" << EraseConfirmed.Print();
+
     return result;
 }
 

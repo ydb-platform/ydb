@@ -47,8 +47,10 @@ void TPhantomFlagStorageState::StartBuilding() {
     Building = true;
 }
 
-void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit) {
+void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit,
+        ui64 blobSizeLimit) {
     Y_DEBUG_ABORT_UNLESS(!Persistent);
+    BlobSizeLimit = blobSizeLimit;
     AdjustSize(sizeLimit);
     if (!Active) {
         return;
@@ -80,11 +82,13 @@ void TPhantomFlagStorageState::ProcessBarrierRecordFromNeighbour(ui32 orderNumbe
 }
 
 void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds,
-        ui64 sizeLimit) {
+        ui64 sizeLimit, ui64 blobSizeLimit) {
     if (!Active) {
         // PhantomFlagStorage was deactivated while building, do nothing
         return;
     }
+
+    BlobSizeLimit = blobSizeLimit;
 
     if (Persistent) {
         std::vector<TPhantomFlagStorageItem> items;
@@ -122,11 +126,14 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
     Building = false;
 }
 
-void TPhantomFlagStorageState::Recover(TPhantomFlagStorageSnapshot&& snapshot) {
+void TPhantomFlagStorageState::Recover(TPhantomFlagThresholds&& thresholdsBatch, bool eof) {
     STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS10,
-            VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"));
-    Building = false;
-    Thresholds.Merge(std::move(snapshot.Thresholds));
+            VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"),
+            (Eof, eof));
+    Thresholds.Merge(std::move(thresholdsBatch));
+    if (eof) {
+        Building = false;
+    }
 }
 
 void TPhantomFlagStorageState::Deactivate() {
@@ -150,7 +157,11 @@ void TPhantomFlagStorageState::RequestSnapshot(TEvPhantomFlagStorageGetSnapshot:
         STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_STORAGE, BSPFS05,
                 VDISKP(SlCtx->VCtx, "Acquiring snapshot"),
                 (FlagsCount, StoredFlags.size()));
-        auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(TPhantomFlagStorageSnapshot(StoredFlags, Thresholds));
+        auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(
+                TPhantomFlags(StoredFlags),
+                TPhantomFlagThresholds(Thresholds),
+                std::unordered_set<ui32>{},
+                /*eof=*/true);
         TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient, res.release()));
     }
 }
@@ -231,6 +242,9 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
 }
 
 bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
+    if (BlobSizeLimit && blobRec.LogoBlobID().BlobSize() < BlobSizeLimit) {
+        return true;
+    }
     if (StoredFlags.size() < StoredFlags.capacity()) {
         StoredFlags.emplace_back(blobRec);
         return true;

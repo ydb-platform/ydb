@@ -1094,6 +1094,12 @@ void TConnection::OnSocketRead()
         }
     }
 
+    // TCP_QUICKACK is a one-shot option that the kernel clears after each ACK,
+    // so it suffices to re-arm it once per read batch rather than per chunk.
+    if (bytesReadTotal > 0 && Config_->EnableQuickAck) {
+        Y_UNUSED(TrySetSocketEnableQuickAck(Socket_));
+    }
+
     LastIncompleteReadTime_ = HasUnreadData()
         ? NProfiling::GetCpuInstant()
         : std::numeric_limits<NProfiling::TCpuInstant>::max();
@@ -1145,12 +1151,6 @@ bool TConnection::ReadSocket(char* buffer, size_t size, size_t* bytesRead)
     UpdateBusCounter(&TBusNetworkBandCounters::InBytes, result);
 
     YT_LOG_TRACE("Socket read (BytesRead: %v)", *bytesRead);
-
-    if (Config_->EnableQuickAck) {
-        if (!TrySetSocketEnableQuickAck(Socket_)) {
-            YT_LOG_TRACE("Failed to set socket quick ack option");
-        }
-    }
 
     return true;
 }

@@ -4575,7 +4575,7 @@ void TPDisk::ProgressShredState() {
                 while (ShredLogPaddingInFlight < 2) {
                     TRcBuf data = TRcBuf::Uninitialized(2<<20);
                     memset(data.GetDataMut(), 0, data.Size());
-                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0);
+                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0, TWriteSource::ShredPadding);
                     double burstMs;
                     TLogWrite* request = ReqCreator.CreateLogWrite(evLog, PCtx->PDiskActor, burstMs, {});
                     request->Orbit = std::move(evLog.Orbit);

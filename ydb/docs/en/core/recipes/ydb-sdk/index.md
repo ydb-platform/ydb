@@ -16,27 +16,23 @@ Contents:
 - [Balancing](balancing.md)
 
   - [Uniform random selection](balancing-random-choice.md)
-  - [Prefer nearest datacenter](balancing-prefer-local.md)
+  - [Prefer nearest data center](balancing-prefer-local.md)
   - [Prefer availability zone](balancing-prefer-location.md)
-- [Retry queries](retry.md)
+- [Retrying queries](retry.md)
 - [Set session pool size](session-pool-limit.md)
 - [Data insertion](upsert.md)
 - [Batch data insertion](bulk-upsert.md)
 - [Setting transaction execution mode](tx-control.md)
-- [Configuring table TTL](ttl.md)
+- [Configuring table TTL (time to live)](ttl.md)
 - [Vector search](vector-search.md)
 - Coordination
 
-  - [Distributed locking](distributed-lock.md)
+  - [Distributed lock](distributed-lock.md)
   - [Service discovery](service-discovery.md)
   - [Configuration publishing](config-publication.md)
   - [Leader election](leader-election.md)
-- [Problem diagnostics](debug.md)
 
-  - [Enable logging](debug-logs.md)
-  - [Export logs to OpenTelemetry](debug-logs-otel.md)
-  - [Connect metrics to Prometheus](debug-prometheus.md)
-  - [Tracing with OpenTelemetry](debug-otel.md)
+Connecting {{ ydb-short-name }} SDK diagnostic tools — logging, metrics, and distributed tracing — is described in the [{#T}](../../reference/ydb-sdk/observability/index.md) section.
 
 See also:
 

@@ -1492,7 +1492,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             )", MainTestCase::CreateTransferSettings::WithDirectory("/local"));
 
         testCase.Write({"Message-1"});
-        testCase.CheckTransferStateError(" unknown table");
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
 
         testCase.DropTransfer();
         testCase.DropTopic();
@@ -1527,7 +1529,10 @@ Y_UNIT_TEST_SUITE(Transfer)
             MainTestCase::CreateTransferSettings::WithDirectory("/local"));
 
         testCase.Write({"Message-1"});
-        testCase.CheckTransferStateError(" unknown table");
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
 
         testCase.DropTransfer();
         testCase.DropTopic();
@@ -1865,5 +1870,60 @@ Y_UNIT_TEST_SUITE(Transfer)
         MessageField_Partition("ROW", true);
     }
 
-}
+    Y_UNIT_TEST(CheckCurrentDateTime) {
+        MainTestCase testCase(std::nullopt, "ROW");
 
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message DateTime,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:$x._offset,
+                            Message: CurrentUtcDatetime($x._partition, $x._offset)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+        testCase.CheckResult({
+            {_C("Key", ui64(0))},
+        });
+        Sleep(TDuration::Seconds(1)); // move current time forward
+        testCase.Write({"Message-2"});
+
+        struct TValueChecker : public IChecker {
+            void Assert(const std::string& msg, const ::Ydb::Value& value) override {
+                Cerr << (TStringBuilder() <<value.ShortDebugString() << Endl);
+                if (!First) {
+                    First = value.uint32_value();
+                    return;
+                }
+
+                auto second = value.uint32_value();
+                UNIT_ASSERT_LT_C(*First, second, TStringBuilder() << msg << " Message timestamp is not increasing: " << *First << " < " << second);
+            }
+
+            std::optional<ui32> First;
+        };
+
+        auto checker = std::make_shared<TValueChecker>();
+        testCase.CheckResult({
+            {{"Message", checker}},
+            {{"Message", checker}},
+        });
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+}

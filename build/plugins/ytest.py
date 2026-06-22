@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import base64
 import collections
 import copy
@@ -117,7 +115,8 @@ LINTER_FIELDS_BASE = (
 tidy_config_map = None
 
 
-def ontest_data(unit, *args):
+@ymake.macro
+def TEST_DATA(unit: ymake.Unit, *args: tuple[str, ...]):
     ymake.report_configure_error("TEST_DATA is removed in favour of DATA")
 
 
@@ -770,7 +769,8 @@ def detekt_report(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def onadd_check(unit, *args):
+@ymake.macro
+def ADD_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
@@ -807,7 +807,8 @@ def onadd_check(unit, *args):
         detekt_report(unit, *args)
 
 
-def on_register_no_check_imports(unit):
+@ymake.macro
+def _REGISTER_NO_CHECK_IMPORTS(unit: ymake.Unit):
     s = unit.get('NO_CHECK_IMPORTS_FOR_VALUE')
     if s not in ('', 'None'):
         unit.onresource(['DONT_COMPRESS', '-', 'py/no_check_imports/{}="{}"'.format(_common.pathid(s), s)])
@@ -983,14 +984,16 @@ def onjava_test_deps(fields, unit, *args):
     unit.set_property(['DART_DATA', data])
 
 
-def onsetup_pytest_bin(unit, *args):
+@ymake.macro
+def SETUP_PYTEST_BIN(unit: ymake.Unit, *args: tuple[str, ...]):
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON') == "yes"
     if use_arcadia_python:
         unit.onresource(['DONT_COMPRESS', '-', 'PY_MAIN={}'.format("library.python.pytest.main:main")])  # XXX
         unit.onadd_pytest_bin(list(args))
 
 
-def onrun(unit, *args):
+@ymake.macro
+def RUN(unit: ymake.Unit, *args: tuple[str, ...]):
     exectest_cmd = unit.get(["EXECTEST_COMMAND_VALUE"]) or ''
     exectest_cmd += "\n" + subprocess.list2cmdline(args)
     unit.set(["EXECTEST_COMMAND_VALUE", exectest_cmd])
@@ -1035,7 +1038,8 @@ def onsetup_exectest(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def onsetup_run_python(unit):
+@ymake.macro
+def SETUP_RUN_PYTHON(unit: ymake.Unit):
     if unit.get("USE_ARCADIA_PYTHON") == "yes":
         unit.ondepends('contrib/tools/python')
 
@@ -1560,7 +1564,8 @@ def go_bench(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def onadd_ytest(unit, *args):
+@ymake.macro
+def ADD_YTEST(unit: ymake.Unit, *args: tuple[str, ...]):
     keywords = {
         "DEPENDS": -1,
         "DATA": -1,

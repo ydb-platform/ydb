@@ -18,6 +18,7 @@ struct TExternalTableColumn {
     TString TypeMod;
     bool NotNull;
     bool IsBuildInProgress = false;
+    bool SetNotNullInProgress = false;
 };
 
 struct TColumnUnboxedPlaceInfo: public TExternalTableColumn {

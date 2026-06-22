@@ -1015,7 +1015,7 @@ public:
             success = status.ok();
         } else {
             YDB_LOG_DEBUG("Unable to parse request,",
-                {"content", content.Quote()});
+                {"content", content});
         }
         if (!success) {
             record.reset();
@@ -1035,7 +1035,7 @@ public:
             TString errorMsg = "ok";
             auto record = ParseMessage<NKikimr::TEvLoadTestRequest>(request, params.Get("config"));
             YDB_LOG_INFO("Received proto parse",
-                {"config", params.Get("config").Quote()},
+                {"config", params.Get("config")},
                 {"success", std::to_string(bool{record})});
 
             ui64 tag = 0;
@@ -1180,7 +1180,7 @@ public:
             const auto it = InfoRequests.find(id);
             if (it == InfoRequests.end()) {
                 YDB_LOG_ERROR("POST mode has no InfoRequests entry",
-                    {"modeQuote", mode.Quote()},
+                    {"modeQuote", mode},
                     {"id", id});
                 return;
             }

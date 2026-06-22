@@ -100,10 +100,10 @@ public:
             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: There are no columns that need to be updated");
         }
 
-        std::vector<std::string> sortedNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
-        std::sort(sortedNotNullColumns.begin(), sortedNotNullColumns.end());
+        std::vector<std::string> sortedSetNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
+        std::sort(sortedSetNotNullColumns.begin(), sortedSetNotNullColumns.end());
 
-        if (const auto duplicateIt = std::adjacent_find(sortedNotNullColumns.begin(), sortedNotNullColumns.end()); duplicateIt != sortedNotNullColumns.end()) {
+        if (const auto duplicateIt = std::adjacent_find(sortedSetNotNullColumns.begin(), sortedSetNotNullColumns.end()); duplicateIt != sortedSetNotNullColumns.end()) {
             TString error = TStringBuilder()
                 << "Duplicate column name `" << *duplicateIt << "` in not null columns.";
 
@@ -115,7 +115,7 @@ public:
             const auto& tableInfo = Self->Tables.at(tablePath.Base()->PathId);
             Y_ABORT_UNLESS(tableInfo);
 
-            for (const auto& columnName : sortedNotNullColumns) {
+            for (const auto& columnName : sortedSetNotNullColumns) {
                 auto id = tableInfo->GetColumnIdByNameSlow(TString(columnName));
                 if (id == TTableInfo::InvalidColumnId) {
                     return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: Column '" << columnName << "' does not exist");
@@ -133,7 +133,7 @@ public:
         operationInfo->SenderCookie = Request->Cookie;
         operationInfo->StartTime = TAppData::TimeProvider->Now();
 
-        operationInfo->NotNullColumns = std::move(sortedNotNullColumns);
+        operationInfo->SetNotNullColumns = std::move(sortedSetNotNullColumns);
 
         if (request.HasUserSID()) {
             operationInfo->UserSID = request.GetUserSID();

@@ -858,4 +858,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
     return NYql::FuseMapToMapReduce(node, ctx, getParents, State_);
 }
 
-}  // namespace NYql
+} // namespace NYql

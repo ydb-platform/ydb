@@ -69,7 +69,6 @@ public:
     FEATURE_FLAG_SETTER(EnableStrictUserManagement)
     FEATURE_FLAG_SETTER(EnableDatabaseAdmin)
     FEATURE_FLAG_SETTER(EnablePermissionsExport)
-    FEATURE_FLAG_SETTER(EnableShowCreate)
     FEATURE_FLAG_SETTER(EnableLocalDBBtreeIndex)
     FEATURE_FLAG_SETTER(EnableSharedMetadataAccessorCache)
     FEATURE_FLAG_SETTER(EnableSystemNamesProtection)

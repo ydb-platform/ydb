@@ -18,8 +18,11 @@
 #include <ydb/core/protos/tablet.pb.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>
+#include <library/cpp/json/json_writer.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <ydb/core/config/protos/marker.pb.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 template <>
@@ -1637,6 +1640,36 @@ endDiskTypeCheck:   ;
         return replaceRequest;
     }
 
+    const TVector<TOpaqueField>& OpaqueConfigFields() {
+        static const TVector<TOpaqueField> fields = [] {
+            TVector<TOpaqueField> result;
+            const auto* desc = NKikimrConfig::TAppConfig::descriptor();
+            for (int i = 0; i < desc->field_count(); ++i) {
+                const auto* field = desc->field(i);
+                if (field->options().GetExtension(NKikimrConfig::NMarkers::OpaqueConfig)) {
+                    Y_ENSURE(field->cpp_type() == ::google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE);
+                    TString name = field->name();
+                    NProtobufJson::ToSnakeCaseDense(&name);
+                    result.push_back({name});
+                }
+            }
+            return result;
+        }();
+        return fields;
+    }
+
+    void CaptureOpaqueConfigFields(NJson::TJsonValue& configJson) {
+        if (!configJson.IsMap()) {
+            return;
+        }
+        for (const auto& f : OpaqueConfigFields()) {
+            if (!configJson.Has(f.Name)) {
+                continue;
+            }
+            configJson[f.Name] = NJson::TJsonValue(NJson::JSON_MAP);
+        }
+    }
+
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
                bool transform, EParsePhase* phase, bool relaxed) {
         auto runPhase = [phase](EParsePhase value, auto&& func) {
@@ -1680,6 +1713,7 @@ endDiskTypeCheck:   ;
             ClearEphemeralFields(jsonNode);
         }
 
+        CaptureOpaqueConfigFields(jsonNode);
         runPhase(EParsePhase::JsonToProto, [&] {
             NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
         });

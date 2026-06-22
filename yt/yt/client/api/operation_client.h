@@ -24,14 +24,14 @@ struct TStartOperationOptions
 struct TAbortOperationOptions
     : public TTimeoutOptions
 {
-    std::optional<TString> AbortMessage;
+    std::optional<std::string> AbortMessage;
 };
 
 struct TSuspendOperationOptions
     : public TTimeoutOptions
 {
     bool AbortRunningJobs = false;
-    std::optional<TString> Reason;
+    std::optional<std::string> Reason;
 };
 
 struct TResumeOperationOptions
@@ -181,15 +181,15 @@ struct TListOperationsOptions
 
     std::optional<NScheduler::EOperationState> StateFilter;
     std::optional<NScheduler::EOperationType> TypeFilter;
-    std::optional<TString> SubstrFilter;
-    std::optional<TString> PoolTree;
-    std::optional<TString> Pool;
+    std::optional<std::string> SubstrFilter;
+    std::optional<std::string> PoolTree;
+    std::optional<std::string> Pool;
     std::optional<bool> WithFailedJobs;
     bool IncludeArchive = false;
     bool IncludeCounters = true;
     ui64 Limit = 100;
 
-    std::optional<THashSet<TString>> Attributes;
+    std::optional<THashSet<std::string>> Attributes;
 
     // TODO(ignat): Remove this mode when UI migrate to list_operations without enabled UI mode.
     // See st/YTFRONT-1360.
@@ -261,16 +261,16 @@ struct TListJobsOptions
     std::optional<bool> WithCompetitors;
     std::optional<bool> WithMonitoringDescriptor;
     std::optional<bool> WithInterruptionInfo;
-    std::optional<TString> TaskName;
+    std::optional<std::string> TaskName;
     std::optional<std::string> OperationIncarnation;
     std::optional<std::string> MonitoringDescriptor;
 
     std::optional<TInstant> FromTime;
     std::optional<TInstant> ToTime;
 
-    std::optional<THashSet<TString>> Attributes;
+    std::optional<THashSet<std::string>> Attributes;
 
-    std::optional<TString> ContinuationToken;
+    std::optional<std::string> ContinuationToken;
 
     TDuration RunningJobsLookbehindPeriod = TDuration::Max();
 
@@ -344,7 +344,7 @@ struct TGetOperationOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
 {
-    std::optional<THashSet<TString>> Attributes;
+    std::optional<THashSet<std::string>> Attributes;
     TDuration ArchiveTimeout = TDuration::Seconds(5);
     TDuration MaximumCypressProgressAge = TDuration::Minutes(2);
     bool IncludeRuntime = false;
@@ -354,7 +354,7 @@ struct TGetJobOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
 {
-    std::optional<THashSet<TString>> Attributes;
+    std::optional<THashSet<std::string>> Attributes;
 };
 
 struct TCheckOperationPermissionResult
@@ -419,8 +419,8 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attriubu
 struct TListOperationsResult
 {
     std::vector<TOperation> Operations;
-    std::optional<THashMap<TString, i64>> PoolTreeCounts;
-    std::optional<THashMap<TString, i64>> PoolCounts;
+    std::optional<THashMap<std::string, i64>> PoolTreeCounts;
+    std::optional<THashMap<std::string, i64>> PoolCounts;
     std::optional<THashMap<std::string, i64>> UserCounts;
     std::optional<TEnumIndexedArray<NScheduler::EOperationState, i64>> StateCounts;
     std::optional<TEnumIndexedArray<NScheduler::EOperationType, i64>> TypeCounts;
@@ -437,7 +437,7 @@ struct TJob
     std::optional<NJobTrackerClient::EJobState> ArchiveState;
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
-    std::optional<TString> Address;
+    std::optional<std::string> Address;
     std::optional<NNodeTrackerClient::TAddressMap> Addresses;
     std::optional<double> Progress;
     std::optional<ui64> StderrSize;
@@ -539,7 +539,7 @@ struct TListJobsResult
 
     std::vector<TError> Errors;
 
-    std::optional<TString> ContinuationToken;
+    std::optional<std::string> ContinuationToken;
 };
 
 struct TGetJobStderrResponse

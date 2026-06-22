@@ -141,10 +141,10 @@ public:
                 CutLogLsn = *NextCutLogLsn;
                 CutLogBytesWritten = NextCutLogBytesWritten;
                 ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(),
-                        record, DataBuffer, seg, nullptr);
+                        record, DataBuffer, seg, nullptr, TWriteSource::GroupWriteLoadActor);
             } else {
                 ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(),
-                        DataBuffer, seg, nullptr);
+                        DataBuffer, seg, nullptr, TWriteSource::GroupWriteLoadActor);
             }
             BytesInFlight += DataBuffer.GetSize();
             ++LogInFlight;

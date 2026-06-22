@@ -1546,5 +1546,175 @@ namespace NYql::NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    namespace {
+
+    IGraphTransformer::TStatus BuildListJoinCoreArgType(const TStructExprType* streamStructType, TExprNode::TPtr& inputTypeNode, const TStringBuf inputPrefix, const TTypeAnnotationNode*& inputPremapArgType, TExprContext& ctx) {
+        auto inputType = inputTypeNode->GetTypeAnn();
+
+        if (inputType && inputType->GetKind() == ETypeAnnotationKind::Universal) {
+            inputPremapArgType = nullptr;
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        const auto status = EnsureTypeRewrite(inputTypeNode, ctx);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        // Refetch particular type after EnsureTypeRewrite.
+        inputType = inputTypeNode->GetTypeAnn();
+        const auto premapArgType = inputType->Cast<TTypeExprType>()->GetType();
+        if (!EnsureStructType(inputTypeNode->Pos(), *premapArgType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        const auto premapArgStructType = premapArgType->Cast<TStructExprType>();
+
+        const auto& inputItems = streamStructType->GetItems();
+        for (const auto& item : premapArgStructType->GetItems()) {
+            const auto itemName = TString::Join(inputPrefix, item->GetName());
+            const auto itemIdx = streamStructType->FindItem(itemName);
+            if (!itemIdx) {
+                ctx.AddError(TIssue(inputTypeNode->Pos(ctx),
+                                    TStringBuilder() << itemName << " member is missing in the input stream"));
+                return IGraphTransformer::TStatus::Error;
+            }
+            const auto itemType = inputItems[*itemIdx]->GetItemType();
+            if (itemType != item->GetItemType() &&
+                itemType != ctx.MakeType<TOptionalExprType>(item->GetItemType())) {
+                ctx.AddError(TIssue(inputTypeNode->Pos(ctx),
+                                    TStringBuilder() << itemName << " type differs from the premap arg member " << item->GetName() << ": " << *itemType << " is not " << *item->GetItemType()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        inputPremapArgType = premapArgType;
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    } // namespace
+
+    IGraphTransformer::TStatus ListJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 7U, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& inputNode = input->Head();
+        auto& keyTypeNode = input->ChildRef(1U);
+        auto& leftPremapLambda = input->ChildRef(2U);
+        auto& leftInputTypeNode = input->ChildRef(3U);
+        auto& rightPremapLambda = input->ChildRef(4U);
+        auto& rightInputTypeNode = input->ChildRef(5U);
+        auto& joinLambda = input->ChildRef(6U);
+
+        const auto inputType = inputNode.GetTypeAnn();
+        if (inputType && inputType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(inputType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!EnsureStreamType(inputNode, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        const auto inputItemType = inputType->Cast<TStreamExprType>()->GetItemType();
+        if (!EnsureStructType(inputNode.Pos(), *inputItemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        const auto inputStructType = inputItemType->Cast<TStructExprType>();
+
+        const TTypeAnnotationNode* keyArgType = nullptr;
+        const TTypeAnnotationNode* leftPremapArgType = nullptr;
+        const TTypeAnnotationNode* rightPremapArgType = nullptr;
+        const auto typeStatus = BuildListJoinCoreArgType(inputStructType, keyTypeNode, "_yql_ljc_key_", keyArgType, ctx.Expr)
+            .Combine(BuildListJoinCoreArgType(inputStructType, leftInputTypeNode, "_yql_ljc_left_input_", leftPremapArgType, ctx.Expr))
+            .Combine(BuildListJoinCoreArgType(inputStructType, rightInputTypeNode, "_yql_ljc_right_input_", rightPremapArgType, ctx.Expr));
+
+        if (typeStatus != IGraphTransformer::TStatus::Ok) {
+            return typeStatus;
+        }
+
+        // XXX: See the contract in BuildListJoinCorePremapArgType.
+        if (!keyArgType || !leftPremapArgType || !rightPremapArgType) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        bool isLeftUniversal;
+        bool isRightUniversal;
+        bool isJoinUniversal;
+        const auto status = ConvertToLambda(leftPremapLambda, ctx.Expr, isLeftUniversal, 1U)
+            .Combine(ConvertToLambda(rightPremapLambda, ctx.Expr, isRightUniversal, 1U))
+            .Combine(ConvertToLambda(joinLambda, ctx.Expr, isJoinUniversal, 3U));
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (isLeftUniversal || isRightUniversal || isJoinUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(leftPremapLambda, {leftPremapArgType}, ctx.Expr) ||
+            !UpdateLambdaAllArgumentsTypes(rightPremapLambda, {rightPremapArgType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto leftPremapLambdaType = leftPremapLambda->GetTypeAnn();
+        const auto rightPremapLambdaType = rightPremapLambda->GetTypeAnn();
+        if (!leftPremapLambdaType || !rightPremapLambdaType) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (leftPremapLambdaType->GetKind() == ETypeAnnotationKind::Universal ||
+            rightPremapLambdaType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        const auto leftListArgType = ctx.Expr.MakeType<TListExprType>(leftPremapLambdaType);
+        const auto rightListArgType = ctx.Expr.MakeType<TListExprType>(rightPremapLambdaType);
+
+        if (!UpdateLambdaAllArgumentsTypes(joinLambda, {keyArgType, leftListArgType, rightListArgType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& joinLambdaType = joinLambda->GetTypeAnn();
+        if (!joinLambdaType) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* structType = nullptr;
+        switch (joinLambdaType->GetKind()) {
+            case ETypeAnnotationKind::List:
+                structType = joinLambdaType->Cast<TListExprType>()->GetItemType();
+                break;
+            case ETypeAnnotationKind::Stream:
+                structType = joinLambdaType->Cast<TStreamExprType>()->GetItemType();
+                break;
+            case ETypeAnnotationKind::Optional:
+                structType = joinLambdaType->Cast<TOptionalExprType>()->GetItemType();
+                break;
+            case ETypeAnnotationKind::Struct:
+                structType = joinLambdaType;
+                break;
+            case ETypeAnnotationKind::Universal:
+                input->SetTypeAnn(joinLambdaType);
+                return IGraphTransformer::TStatus::Ok;
+            default:
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(joinLambda->Pos()), TStringBuilder()
+                                  << "Join lambda should return one of the following: "
+                                  << "Struct, Optional<Struct>, List<Struct> or Stream<Struct>, "
+                                  << "but got " << *joinLambdaType));
+                return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStructType(joinLambda->Pos(), *structType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(joinLambdaType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
 } // namespace NYql::NTypeAnnImpl
 

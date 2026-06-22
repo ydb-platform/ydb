@@ -3687,8 +3687,8 @@ public:
                     const auto& ref = block->GetLabel();
                     YQL_ENSURE(!ref.empty());
                     Add(block);
-                    currentWorlds->Add(Y("let", "world", Y("Nth", *subqueryAliasPtr, Q("0"))));
-                    Add(Y("let", ref, Y("Nth", *subqueryAliasPtr, Q("1"))));
+                    currentWorlds->Add(Y("let", "world", Y("Left!", *subqueryAliasPtr)));
+                    Add(Y("let", ref, Y("Right!", *subqueryAliasPtr)));
                 }
             } else {
                 const auto& ref = block->GetLabel();

@@ -132,7 +132,11 @@ namespace NKikimr::NDDisk {
         config.UseIOPoll = Config.UseIOPoll;
         if (!UringRouter) {
             if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
-                UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
+                UringRouter = std::make_unique<NPDisk::TUringRouter>(
+                    DiskFd,
+                    TActivationContext::ActorSystem(),
+                    config,
+                    &Counters.UringCounters);
                 if (const auto result = UringRouter->RegisterFile(); !result) {
                     STLOG(PRI_WARN, BS_DDISK, BSDD18,
                         "TDDiskActor::InitUring failed to register fixed file for io_uring",

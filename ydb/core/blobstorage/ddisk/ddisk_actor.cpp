@@ -171,6 +171,10 @@ namespace {
                 COUNTER(DirectIO, RunningCount, false)
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
             },
+            .UringCounters = {
+                COUNTER(DirectIO, CompletionThreadCPU, true)
+                COUNTER(DirectIO, CompletionThreadBusyTimeNs, true)
+            },
             .PersistentBuffer = {
                 COUNTER(PersistentBuffer, AllocatedChunks, false)
                 COUNTER(PersistentBuffer, TotalBytes, false)

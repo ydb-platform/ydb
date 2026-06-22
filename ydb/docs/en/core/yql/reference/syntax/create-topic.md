@@ -22,6 +22,8 @@ When choosing a name for the topic, please consider the common [schema objects n
 
 {% endnote %}
 
+{% include [x](_includes/topic_consumer_parameters.md) %}
+
 ## Examples
 
 Creating a topic without consumers with default settings:
@@ -38,21 +40,26 @@ CREATE TOPIC `my_topic` (
 );
 ```
 
-### Full list of available topic consumer settings
-
-* `important`: Defines an important consumer. No data will be deleted from the topic until all the important consumers read them. Value type: `boolean`, default value: `false`.
-* `read_from`: Sets up the message write time starting from which the consumer will receive data. Data written before this time will not be read. Value type: `Datetime` OR `Timestamp` OR `integer` (unix-timestamp in the numeric format). Default value: `0` (read from the earliest available message).
-
-{% if feature_topic_codecs %}
-* `supported_codecs`: List of [codecs](concepts/topic#message-codec) supported by the consumer.
-
-{% endif %}
-
 Creating a topic with the retention period of one day:
 
 ```yql
 CREATE TOPIC `my_topic` WITH(
     retention_period = Interval('P1D')
+);
+```
+
+To create a topic with a shared consumer, run:
+
+```yql
+CREATE TOPIC `my_topic` (
+    CONSUMER my_consumer WITH (
+        type = 'shared',
+        keep_messages_order = false,
+        default_processing_timeout = Interval('PT30S'),
+        max_processing_attempts = 3,
+        dead_letter_policy = 'move',
+        dead_letter_queue = 'my_dlq_topic'
+    )
 );
 ```
 

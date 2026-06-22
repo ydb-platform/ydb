@@ -12,7 +12,13 @@ ALTER TOPIC topic_path action1, action2, ..., actionN;
 
 ## Updating a set of consumers
 
+### Add consumer {#add-consumer}
+
 `ADD CONSUMER`: Adds a [consumer](../../../concepts/datamodel/topic#consumer) to a topic.
+
+When adding consumers, you can specify their settings.
+
+{% include [x](_includes/topic_consumer_parameters.md) %}
 
 The following example will add a consumer with default settings to the topic.
 
@@ -20,22 +26,25 @@ The following example will add a consumer with default settings to the topic.
 ALTER TOPIC `my_topic` ADD CONSUMER new_consumer;
 ```
 
-When adding consumers, you can specify their settings, for example:
+The following example will add an important consumer to the topic:
 
 ```yql
-ALTER TOPIC `my_topic` ADD CONSUMER new_consumer2 WITH (important = false);
+ALTER TOPIC `my_topic` ADD CONSUMER new_consumer2 WITH (important = true);
 ```
 
-### Full list of available topic consumer settings
+The following example will add a shared consumer to the topic:
 
-* `important`: Defines an important consumer. No data will be deleted from the topic until all the important consumers read them. Value type: `boolean`, default value: `false`.
-* `read_from`: Sets up the message write time starting from which the consumer will receive data. Data written before this time will not be read. Value type: `Datetime` OR `Timestamp` OR `integer` (unix-timestamp in the numeric format). Default value: `0` (read from the earliest available message).
-
-{% if feature_topic_codecs %}
-
-* `supported_codecs`: List of [codecs](../../../concepts/datamodel/topic#message-codec) supported by the consumer.
-
-{% endif %}
+```yql
+ALTER TOPIC `my_topic`
+    ADD CONSUMER my_shared_consumer WITH (
+        type = 'shared',
+        keep_messages_order = false,
+        default_processing_timeout = Interval('PT30S'),
+        max_processing_attempts = 3,
+        dead_letter_policy = 'move',
+        dead_letter_queue = 'my_dlq_topic'
+    );
+```
 
 `DROP CONSUMER`: Deletes the consumer from the topic.
 

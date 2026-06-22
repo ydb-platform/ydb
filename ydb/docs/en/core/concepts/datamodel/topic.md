@@ -156,7 +156,52 @@ A reader is a named entity for reading data from a topic. The reader contains re
 
 A read session is a client connection to a topic for receiving messages on behalf of a reader. Read sessions work through the Topic API. One reader can establish multiple read sessions: in this case, topic partitions are distributed among these sessions. To work with read sessions, it is recommended to use the {{ ydb-short-name }} SDK (see [Working with topics](../../reference/ydb-sdk/topic.md)).
 
-{% include [topic-consumer-types.md](_includes/topic-consumer-types.md) %}
+In {{ ydb-short-name }}, readers can be of the following types:
+
+- [**streaming**](#streaming-consumer) — a reader type where a partition is exclusively assigned to one consumer, and all messages from that partition are processed by that consumer.
+- [**shared**](#shared-consumer) — a reader type that allows multiple consumers to jointly process messages from a single topic without exclusively assigning partitions to each of them.
+
+## Streaming reader {#streaming-consumer}
+
+A streaming reader is designed for stream processing of data from a topic. In this mode, multiple instances of a consumer application read messages in parallel and process them as they arrive. Typical use cases include collecting and analyzing application logs, building real-time aggregates, and replicating events to external systems.
+
+You can read from a topic using a streaming reader via the [Topic API](../../reference/ydb-sdk/topic.md) and the [Kafka](../../reference/kafka-api/index.md) protocol.
+
+In streaming mode, each topic [partition](#partitioning) is assigned to at most one consumer at any given time. All messages from the assigned partition are processed by that consumer.
+
+The {{ ydb-short-name }} server is responsible for distributing partitions among consumers. When consumers connect and disconnect, the server redistributes partitions and tries to distribute them among active consumers as evenly as possible.
+
+The number of partitions determines the maximum degree of parallelism: no more consumers than partitions can read from a topic at the same time. If there are more consumers than partitions, some instances remain without assigned partitions and idle until free partitions appear or the number of consumers decreases.
+
+## Shared reader {#shared-consumer}
+
+A shared reader in {{ ydb-short-name }} is a model for reading from a topic where one or more messages from the topic are assigned to the reader, rather than an entire topic partition. This allows a single partition to be processed simultaneously by a large number of consumers.
+
+A typical use case is messaging between microservices. You can read from a topic using a shared reader via the [SQS](../../reference/sqs-api/index.md) protocol.
+
+A message is assigned to a consumer for a certain period of time. If during this time the consumer does not report that message processing is complete and does not extend the processing time, it means the consumer failed to process the message, and the message becomes available for reading again and will be read again. Processing time is configured in the reader parameters, but can also be set for each message read request.
+
+A dead letter policy is applied to messages that cannot be processed. The dead letter policy can be configured in one of the following ways:
+
+- **none** — after unsuccessful processing, the message is returned to the queue and will later be delivered for re-reading.
+- **move** — after several processing attempts, the message is moved to a DLQ, which can be any other topic in the database.
+- **delete** — after several processing attempts, the message is deleted.
+
+By default, the dead letter policy is disabled (none). The number of processing attempts before moving a message to a DLQ (move) or deleting it (delete) is configured on the reader. If moving a message to a DLQ fails, it is returned to the queue (as with the dead letter policy disabled), and the next unsuccessful processing attempt will try to move the message to the DLQ again. For example, if you delete the topic specified as a DLQ, messages after unsuccessful processing will be returned to the queue until the topic specified as a DLQ is created or another existing topic is specified.
+
+Depending on the shared reader configuration, reading from a topic can be performed either with or without message ordering. Message order is preserved among messages with the same message-group-id, which can be set for each message when it is written. If a shared reader is configured for reading with message ordering, such a reader delivers at most one message from a single message-group-id to consumers for processing at any given time.
+
+When placing a message in a queue, you can specify a delay before the message is delivered for processing for the first time. Message order is determined by the time the message was added to the topic — if reading is performed with message ordering, a delayed message will pause delivery for processing of all subsequent messages with the same message-group-id.
+
+### Implementation details {#shared-consumer-implementation}
+
+For each "shared reader — topic partition" pair, the server maintains its own message processing state. The state consists of a contiguous block of messages from the topic partition — an inflight. The first message of the inflight is a message that has not yet been processed, is being processed, or is waiting to be moved to a DLQ. If the first message is successfully processed, the start of the block moves to the next message. Messages for processing are delivered only from messages in the inflight.
+
+An inflight for a single partition can contain up to 48,000 messages. This means that if a large number of consumers (more than 48,000) read from a single partition, no more than 48,000 consumers will receive messages for processing, even if there are more messages in the partition. Increasing the number of partitions in a topic increases the total inflight size — the total topic inflight equals the number of partitions multiplied by 48,000 messages. If you need to process a large number of messages simultaneously, increase the number of topic partitions.
+
+If a topic consists of multiple partitions, read requests are distributed evenly across all partitions. A request may land in a partition that has no messages. In this case, the consumer receives a response that there are no messages to process. If a partition has no messages to process for a long time, it is excluded from read request distribution. The partition returns to distribution as soon as messages appear in it for processing.
+
+For shared readers with message ordering, this means that if a large number of messages from a single message-group-id (more than 48,000 messages) are written consecutively to a partition, the entire inflight will be occupied by messages from a single message-group-id, and messages from other groups will not be delivered until messages from other groups appear in the inflight.
 
 ### Read position {#consumer-offset}
 

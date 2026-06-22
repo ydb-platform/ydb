@@ -36,6 +36,13 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
             res.IndexTableCount = 4;
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax: {
+            // Local indexes create only the index object itself: no impl table, no extra shards.
+            res.IndexTableCount = 0;
+            break;
+        }
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
             break;
@@ -994,10 +1001,13 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
 
     const auto indexType = GetIndexType(indexDesc);
     if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain &&
-        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalJson) {
         result.Plan = EFulltextRowIdPlan::NotApplicable;
         return result;
     }
+    // Used in user-facing error messages so a JSON index build does not talk about "Fulltext".
+    const TStringBuf indexKind = (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) ? "JSON" : "Fulltext";
 
     // Look for a live __ydb_row_id column on the main table.
     const NSchemeShard::TTableInfo::TColumn* rowIdColumn = nullptr;
@@ -1040,14 +1050,14 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
         // A user-managed or previously auto-provisioned __ydb_row_id column exists: it must be well-formed.
         if (rowIdColumn->PType.GetTypeId() != NScheme::NTypeIds::Uint64) {
             error = TStringBuilder()
-                << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn
+                << indexKind << " index opt-in requires column '" << NFulltext::RowIdColumn
                 << "' to be of type 'Uint64' but got " << NScheme::TypeName(rowIdColumn->PType);
             result.Plan = EFulltextRowIdPlan::Error;
             return result;
         }
         if (!rowIdColumn->NotNull) {
             error = TStringBuilder()
-                << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn << "' to be NOT NULL";
+                << indexKind << " index opt-in requires column '" << NFulltext::RowIdColumn << "' to be NOT NULL";
             result.Plan = EFulltextRowIdPlan::Error;
             return result;
         }
@@ -1060,7 +1070,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
             // A unique index on __ydb_row_id exists but is not Ready - either a concurrent build or an
             // interrupted prior auto-provisioning. Refuse rather than create a duplicate.
             error = TStringBuilder()
-                << "Fulltext index over '" << NFulltext::RowIdColumn << "' found a not-yet-Ready unique"
+                << indexKind << " index over '" << NFulltext::RowIdColumn << "' found a not-yet-Ready unique"
                 << " secondary index on '" << NFulltext::RowIdColumn << "'; wait for it to complete or drop"
                 << " index '" << NFulltext::RowIdUniqueIndexName << "' and retry";
             result.Plan = EFulltextRowIdPlan::Error;
@@ -1082,7 +1092,7 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
     }
 
     TString ignore;
-    if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "Fulltext", ignore)) {
+    if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, indexKind, ignore)) {
         result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
         return result;
     }
@@ -1114,7 +1124,7 @@ bool MaybeEnableFulltextRowIdMode(
             // driven by ClassifyFulltextRowId in the build-service entry point (TTxCreate) instead.
             if (error.empty()) {
                 error = TStringBuilder()
-                    << "Fulltext index over '" << NFulltext::RowIdColumn
+                    << "Index over '" << NFulltext::RowIdColumn
                     << "' requires a Ready unique secondary index on '" << NFulltext::RowIdColumn << "'";
             }
             return false;

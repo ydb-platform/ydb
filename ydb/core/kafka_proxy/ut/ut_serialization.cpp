@@ -3,12 +3,33 @@
 #include <strstream>
 
 #include <ydb/core/kafka_proxy/kafka_messages.h>
+#include <ydb/library/kafka/kafka_records.h>
 
 using namespace NKafka;
 
 void Print(std::string& sb);
 
 static constexpr size_t BUFFER_SIZE = 1 << 16;
+
+TKafkaRecordBatch ReadProduceRecords(const TKafkaBytes& records) {
+    UNIT_ASSERT(records);
+    static constexpr size_t RecordBatchMagicOffset =
+        sizeof(TKafkaInt64) + sizeof(TKafkaInt32) + sizeof(TKafkaInt32);
+
+    TStringBuf data(records->data(), records->size());
+    UNIT_ASSERT_GT(data.size(), RecordBatchMagicOffset);
+
+    const auto magic = static_cast<TKafkaVersion>(static_cast<ui8>(data[RecordBatchMagicOffset]));
+    if (magic >= TKafkaRecordBatch::MagicMeta::Default) {
+        return ReadKafkaRecordBatch(data);
+    }
+
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable readable(buffer);
+    TKafkaRecordBatch batch;
+    NKafka::NPrivate::ReadLegacyRecordBatch(readable, magic, data.size(), batch);
+    return batch;
+}
 
 Y_UNIT_TEST_SUITE(Serialization) {
 
@@ -293,7 +314,7 @@ Y_UNIT_TEST(ProduceRequestData) {
     UNIT_ASSERT_EQUAL(result.Acks, -1);
     UNIT_ASSERT_EQUAL(result.TimeoutMs, 30000);
 
-    auto& r0 = *result.TopicData[0].PartitionData[0].Records;
+    auto r0 = ReadProduceRecords(result.TopicData[0].PartitionData[0].Records);
     UNIT_ASSERT_EQUAL(r0.BaseOffset, 0);
     UNIT_ASSERT_EQUAL(r0.BatchLength, 192);
     UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, -1);
@@ -374,7 +395,7 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0) {
     UNIT_ASSERT_EQUAL(result.Acks, -1);
     UNIT_ASSERT_EQUAL(result.TimeoutMs, 30000);
 
-    auto& r0 = *result.TopicData[0].PartitionData[0].Records;
+    auto r0 = ReadProduceRecords(result.TopicData[0].PartitionData[0].Records);
     UNIT_ASSERT_EQUAL(r0.BaseOffset, 0);
     UNIT_ASSERT_EQUAL(r0.BatchLength, 0);
     UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, -1);
@@ -426,7 +447,7 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0_manyMessages) {
     UNIT_ASSERT_EQUAL(result.Acks, -1);
     UNIT_ASSERT_EQUAL(result.TimeoutMs, 30000);
 
-    auto& r0 = *result.TopicData[0].PartitionData[0].Records;
+    auto r0 = ReadProduceRecords(result.TopicData[0].PartitionData[0].Records);
     UNIT_ASSERT_EQUAL(r0.BaseOffset, 0);
     UNIT_ASSERT_EQUAL(r0.BatchLength, 0);
     UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, -1);

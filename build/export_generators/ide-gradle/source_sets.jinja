@@ -25,28 +25,37 @@
 {#-         Relative path in tests #}
 {%-         set dir = reldir + dir -%}
 {%-     endif -%}
-{%-     if auto_resource_sets and 'resources' in dir -%}
-{%-         set module = 'resources' -%}
-{%-     endif -%}
 {%-     if use_full_source_sets_path and dir|replace(export_root, "") == dir -%}
 {%-         set dir = arcadia_root + "/" + curdir + "/" + dir -%}
 {%-     endif -%}
 {%-     if dir|replace(export_root, "") != dir -%}
 {#-         Generated (re)sources -#}
-{%-         set runs_out = current_target.runs|selectattr('out')|map(attribute='out')|sum|select('in', dir) -%}
-{%-         set runs_outdir = current_target.runs|selectattr('out_dir')|map(attribute='out_dir')|sum|select('in', dir) -%}
-{%-         set cruns_outputs = current_target.custom_runs|selectattr('outputs')|map(attribute='outputs')|sum|select('in', dir) -%}
-{%-         if runs_out|length %}
-        {{ module }}.srcDir({{ PatchRoots(dir, false, 'collect') }}){{ PrintGlobs(module, some_set, dir) }}
-{%-         elif runs_outdir|length %}
-        {{ module }}.srcDir({{ PatchRoots(dir, false, 'collect') }}){{ PrintGlobs(module, some_set, dir) }}
-{%-         elif cruns_outputs|length %}
+{%-         set runs_out = current_target.runs|selectattr('out')|map(attribute='out')|sum -%}
+{%-         set runs_out_has_dir = runs_out|select('in', dir)|length -%}
+{%-         set dir_has_runs_out = runs_out|join('|') != runs_out|join('|')|replace(dir + '/', '') -%}
+{%-         set runs_outdir = current_target.runs|selectattr('out_dir')|map(attribute='out_dir')|sum -%}
+{%-         set runs_outdir_has_dir = runs_outdir|select('in', dir)|length -%}
+{%-         set dir_has_runs_outdir = runs_outdir|join('|') != runs_out|join('|')|replace(dir + '/', '') -%}
+{%-         set cruns_outputs = current_target.custom_runs|selectattr('outputs')|map(attribute='outputs')|sum -%}
+{%-         set cruns_outputs_has_dir = cruns_outputs|select('in', dir)|length -%}
+{%-         set dir_has_cruns_outputs = cruns_outputs|join('|') != runs_out|join('|')|replace(dir + '/', '') -%}
+{%-         if (runs_out_has_dir) or (dir_has_runs_out) or (runs_outdir_has_dir) or (dir_has_runs_outdir) or (cruns_outputs_has_dir) or (dir_has_cruns_outputs) %}
         {{ module }}.srcDir({{ PatchRoots(dir, false, 'collect') }}){{ PrintGlobs(module, some_set, dir) }}
 {%-         else %}
         {{ module }}.srcDir({{ PatchRoots(dir) }}){{ PrintGlobs(module, some_set, dir) }}
 {%-         endif -%}
+{%-     elif (varprefix == MAIN_VARPREFIX) and (module == "java") and (some_set.dir == '.') and not(some_set.globs|length) -%}
+{#-         Empty JAVA_SRCS() create dir == '.' and globs == [], and without this fix all files in module included #}
+        // Preventing automatic search for main
+        java.setSrcDirs(emptyList<Any>())
+{%-         if with_kotlin %}
+        kotlin.setSrcDirs(emptyList<Any>())
+{%-         endif %}
 {%-     else %}
         {{ module }}.srcDir({{ PatchRoots(dir) }}){{ PrintGlobs(module, some_set, dir) }}
+{%-     endif -%}
+{%-     if auto_resource_sets and "resources" in dir and module != "resources" -%}
+{{ SomeSet(some_set, "resources", reldir, current_target) }}
 {%-     endif -%}
 {%- endmacro -%}
 

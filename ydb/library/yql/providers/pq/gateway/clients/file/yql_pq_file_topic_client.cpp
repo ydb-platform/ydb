@@ -342,7 +342,7 @@ struct TDummyPartitionSession final : public TPartitionSessionControl {
     void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override {
     }
 
-    void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/) override {
+    void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/, std::optional<uint64_t> /*maxOffset*/) override {
         // TODO seek to offset
     }
 

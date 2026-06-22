@@ -50,8 +50,6 @@ bool ValidateWriteSessionSettings(const TWriteSessionSettings& settings, NYdb::N
 }
 using TTxIdOpt = std::optional<TTxId>;
 
-static constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
-
 TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
 {
     Y_ABORT_UNLESS(request.messages_size());
@@ -1417,15 +1415,15 @@ void TWriteSessionImpl::ResetForRetryImpl() {
         SentPackedMessage.pop();
     }
     uint64_t minId = PackedMessagesToSend.empty() ? NextId + 1 : PackedMessagesToSend.top().Offset;
-    std::queue<TOriginalMessage> freshOriginalMessagesToSend;
+    std::deque<TOriginalMessage> freshOriginalMessagesToSend;
     OriginalMessagesToSend.swap(freshOriginalMessagesToSend);
     while (!SentOriginalMessages.empty()) {
-        OriginalMessagesToSend.emplace(std::move(SentOriginalMessages.front()));
+        OriginalMessagesToSend.emplace_back(std::move(SentOriginalMessages.front()));
         SentOriginalMessages.pop();
     }
     while (!freshOriginalMessagesToSend.empty()) {
-        OriginalMessagesToSend.emplace(std::move(freshOriginalMessagesToSend.front()));
-        freshOriginalMessagesToSend.pop();
+        OriginalMessagesToSend.emplace_back(std::move(freshOriginalMessagesToSend.front()));
+        freshOriginalMessagesToSend.pop_front();
     }
     if (!OriginalMessagesToSend.empty() && OriginalMessagesToSend.front().Id < minId)
         minId = OriginalMessagesToSend.front().Id;
@@ -1525,11 +1523,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             }
             (*Counters->MessagesInflight)++;
             if (!currMessage.MessageMeta.empty()) {
-                OriginalMessagesToSend.emplace(id, createTs, datum.size(),
+                OriginalMessagesToSend.emplace_back(id, createTs, datum.size(),
                                                std::move(currMessage.MessageMeta),
                                                std::move(currMessage.Tx));
             } else {
-                OriginalMessagesToSend.emplace(id, createTs, datum.size(),
+                OriginalMessagesToSend.emplace_back(id, createTs, datum.size(),
                                                std::move(currMessage.Tx));
             }
         }
@@ -1549,9 +1547,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     return size;
 }
 
-size_t GetMaxGrpcMessageSize() {
-    return 120_MB;
-}
+namespace NGrpc = NWriteSessionGrpc;
 
 bool TWriteSessionImpl::IsReadyToSendNextImpl() const {
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -1626,7 +1622,7 @@ void TWriteSessionImpl::SendBatchBlock(
     for (size_t i = 0; i < block.MessageCount; ++i) {
         Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
         batchMessages.emplace_back(std::move(OriginalMessagesToSend.front()));
-        OriginalMessagesToSend.pop();
+        OriginalMessagesToSend.pop_front();
     }
 
     const auto& firstMessage = batchMessages.front();
@@ -1648,7 +1644,7 @@ void TWriteSessionImpl::SendBatchBlock(
     }
     for (size_t i = 1; i < batchMessages.size(); ++i) {
         for (auto& [k, v] : batchMessages[i].MessageMeta) {
-            if (k != PARTITION_KEY_META_KEY) {
+            if (k != NGrpc::PARTITION_KEY_META_KEY) {
                 continue;
             }
             auto* pair = msgData->add_metadata_items();
@@ -1694,7 +1690,7 @@ void TWriteSessionImpl::SendStandardBlock(
             pair->set_value(TStringType{v});
         }
         SentOriginalMessages.emplace(std::move(message));
-        OriginalMessagesToSend.pop();
+        OriginalMessagesToSend.pop_front();
 
         msgData->set_uncompressed_size(block.OriginalSize);
         if (block.Compressed) {
@@ -1717,10 +1713,10 @@ void TWriteSessionImpl::SendImpl() {
 
         ui32 prevCodec = 0;
 
-        ui64 currentSize = 0;
+        NGrpc::TRequestSizeLimiter sizeLimiter(2);
 
         // Send blocks while we can without messages reordering.
-        while (IsReadyToSendNextImpl() && currentSize < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
             if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
@@ -1729,6 +1725,12 @@ void TWriteSessionImpl::SendImpl() {
             if (TxIsChanged(writeRequest)) {
                 break;
             }
+
+            const size_t blockSize = NGrpc::EstimateTopicWriteRequestBlockSize(block, OriginalMessagesToSend, sizeLimiter.Empty());
+            if (!sizeLimiter.CanAdd(blockSize)) {
+                break;
+            }
+
             prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
 
@@ -1744,8 +1746,7 @@ void TWriteSessionImpl::SendImpl() {
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
-
-            currentSize += writeRequest->ByteSizeLong();
+            sizeLimiter.Add(blockSize);
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,

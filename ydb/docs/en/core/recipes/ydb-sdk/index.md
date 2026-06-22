@@ -1,6 +1,6 @@
 # Code recipes using {{ ydb-short-name }} SDK and frameworks
 
-This section contains code recipes in different programming languages for solving various common practical tasks using the {{ ydb-short-name }} SDK.
+This section contains code recipes in various programming languages for solving common practical tasks using the {{ ydb-short-name }} SDK.
 
 Contents:
 
@@ -16,14 +16,14 @@ Contents:
 - [Balancing](balancing.md)
 
   - [Uniform random selection](balancing-random-choice.md)
-  - [Prefer nearest datacenter](balancing-prefer-local.md)
+  - [Prefer nearest data center](balancing-prefer-local.md)
   - [Prefer availability zone](balancing-prefer-location.md)
 - [Retrying queries](retry.md)
-- [Setting session pool size](session-pool-limit.md)
-- [Inserting data](upsert.md)
+- [Set session pool size](session-pool-limit.md)
+- [Data insertion](upsert.md)
 - [Batch data insertion](bulk-upsert.md)
 - [Setting transaction execution mode](tx-control.md)
-- [Configuring table TTL (Time to Live)](ttl.md)
+- [Configuring table TTL (time to live)](ttl.md)
 - [Vector search](vector-search.md)
 - Coordination
 
@@ -31,11 +31,8 @@ Contents:
   - [Service discovery](service-discovery.md)
   - [Configuration publishing](config-publication.md)
   - [Leader election](leader-election.md)
-- [Problem diagnostics](debug.md)
 
-  - [Enabling logging](debug-logs.md)
-  - [Connecting metrics to Prometheus](debug-prometheus.md)
-  - [Tracing with OpenTelemetry](debug-otel-tracing.md)
+Connecting {{ ydb-short-name }} SDK diagnostic tools — logging, metrics, and distributed tracing — is described in the [{#T}](../../reference/ydb-sdk/observability/index.md) section.
 
 See also:
 

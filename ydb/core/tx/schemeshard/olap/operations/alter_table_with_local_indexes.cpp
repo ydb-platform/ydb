@@ -229,7 +229,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
                 scheme.SetInternal(true);
                 *scheme.MutableAlterTableIndex() = indexConfig;
 
-                result.push_back(CreateAlterLocalIndex(NextPartId(nextId, result), scheme));
+                result.push_back(CreateAlterColumnTableLocalIndex(NextPartId(nextId, result), scheme));
             } else {
                 NKikimrSchemeOp::TIndexCreationConfig creationConfig;
                 if (!NOlap::ConvertAlteringConfigToCreationConfig(indexConfig, creationConfig)) {
@@ -243,7 +243,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
                 scheme.SetInternal(true);
                 *scheme.MutableCreateTableIndex() = creationConfig;
 
-                result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), scheme));
+                result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), scheme));
             }
         }
 
@@ -255,7 +255,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
             scheme.SetInternal(true);
             scheme.MutableDrop()->SetName(dropIdx);
 
-            result.push_back(CreateDropLocalIndex(NextPartId(nextId, result), scheme));
+            result.push_back(CreateDropColumnTableLocalIndex(NextPartId(nextId, result), scheme));
         }
 
         // Create move operations for validated move indexes
@@ -271,7 +271,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
                 dropScheme.SetInternal(true);
                 dropScheme.MutableDrop()->SetName(destinationName);
 
-                result.push_back(CreateDropLocalIndex(NextPartId(nextId, result), dropScheme));
+                result.push_back(CreateDropColumnTableLocalIndex(NextPartId(nextId, result), dropScheme));
             }
 
             auto scheme = TransactionTemplate(
@@ -283,7 +283,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
             moving->SetSrcPath(sourceName);
             moving->SetDstPath(destinationName);
 
-            result.push_back(CreateMoveLocalIndex(NextPartId(nextId, result), scheme));
+            result.push_back(CreateMoveColumnTableLocalIndex(NextPartId(nextId, result), scheme));
         }
     }
 

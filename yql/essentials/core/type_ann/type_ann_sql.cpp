@@ -2030,6 +2030,67 @@ TMap<TString, ui32> ExtractExternalColumns(const TExprNode& select) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+IGraphTransformer::TStatus SqlSelfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus SqlIterateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!EnsureListType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto& lambda = input->ChildRef(1);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 1);
+    if (status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(lambda, { input->Head().GetTypeAnn() }, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!lambda->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (lambda->GetTypeAnn()->HasUniversal() || input->Head().GetTypeAnn()->HasUniversal()) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!IsSameAnnotation(*lambda->GetTypeAnn(), *input->Head().GetTypeAnn())) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() <<
+            "Mismatch of transform lambda return type and input type: " <<
+            *lambda->GetTypeAnn() << " != " << *input->Head().GetTypeAnn()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(input->Head().GetTypeAnn());
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus SqlStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
@@ -2972,7 +3033,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 columnOrder->AddColumn(TString(memberName));
                             }
                         } else {
-                            if (p->Head().IsCallable("PgSelf")) {
+                            if (p->Head().IsCallable({"PgSelf", "YqlSelf"})) {
                                 input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
                                 return IGraphTransformer::TStatus::Ok;
                             }
@@ -4509,7 +4570,7 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
         auto withColumnOrder = KeepColumnOrder(order, tableArg, ctx.Expr);
         auto status = OptimizeExpr(recursivePart, recursivePart, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
-            if (node->IsCallable("PgSelf")) {
+            if (node->IsCallable({"PgSelf", "YqlSelf"})) {
                 return withColumnOrder;
             }
 

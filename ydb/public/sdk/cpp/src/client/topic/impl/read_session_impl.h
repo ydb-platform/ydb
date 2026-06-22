@@ -72,7 +72,7 @@ using TASessionClosedEvent = std::conditional_t<UseMigrationProtocol,
 
 struct TMigrationPartitionStream: public NYdb::NPersQueue::TPartitionStream {
     virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
-    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) = 0;
+    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) = 0;
     virtual void ConfirmDestroy() = 0;
     virtual void ConfirmEnd(std::span<const uint32_t> childIds) = 0;
 };
@@ -755,7 +755,7 @@ public:
     void Commit(uint64_t startOffset, uint64_t endOffset) override;
     void RequestStatus() override;
 
-    void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) override;
+    void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) override;
     void ConfirmDestroy() override;
     void ConfirmEnd(std::span<const uint32_t> childIds) override;
 
@@ -1244,7 +1244,7 @@ public:
     ~TSingleClusterReadSessionImpl();
 
     void Start();
-    void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::optional<ui64> readOffset, std::optional<ui64> commitOffset);
+    void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset);
     void ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
     void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::span<const ui32> childIds);
     void RequestPartitionStreamStatus(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);

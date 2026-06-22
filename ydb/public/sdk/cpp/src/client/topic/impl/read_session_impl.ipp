@@ -100,12 +100,12 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
         if (commitOffset.has_value()) {
             SetFirstNotReadOffset(commitOffset.value());
         }
-        sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
+        sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset, maxOffset);
     }
 }
 
@@ -674,17 +674,21 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::IsActualPartitionStrea
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
-    TStringBuilder commitOffsetLogStr;
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream,
+    std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset) {
+    TStringBuilder offsetLogStr;
     if (commitOffset) {
-        commitOffsetLogStr << ". Commit offset: " << *commitOffset;
+        offsetLogStr << ". Commit offset: " << *commitOffset;
+    }
+    if (maxOffset) {
+        offsetLogStr << ". Max offset: " << *maxOffset;
     }
     LOG_LAZY(Log,
         TLOG_INFO,
         GetLogPrefix() << "Confirm partition stream create. Partition stream id: " << GetPartitionStreamId(partitionStream)
             << ". Cluster: \"" << GetCluster(partitionStream) << "\". Topic: \"" << partitionStream->GetTopicPath()
             << "\". Partition: " << partitionStream->GetPartitionId()
-            << ". Read offset: " << readOffset << commitOffsetLogStr
+            << ". Read offset: " << readOffset << offsetLogStr
     );
 
     std::lock_guard guard(Lock);
@@ -721,6 +725,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
         }
         if (commitOffset) {
             startRead.set_commit_offset(*commitOffset);
+        }
+        if (maxOffset) {
+            startRead.set_max_offset(*maxOffset);
         }
 
         WriteToProcessorImpl(std::move(req));

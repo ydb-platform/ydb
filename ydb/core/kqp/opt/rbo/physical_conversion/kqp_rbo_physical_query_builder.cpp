@@ -12,11 +12,68 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
+#include <sstream>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr;
+
+namespace {
+
+std::string ToStdString(TStringBuf value) {
+    return std::string(value.data(), value.size());
+}
+
+std::string FormatExprForTrace(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!node) {
+        return {};
+    }
+
+    return ToStdString(KqpExprToPrettyString(TExprBase(node), ctx));
+}
+
+std::string FormatPhysicalStagesForTrace(const TVector<TExprNode::TPtr>& stages, TExprContext& ctx) {
+    std::ostringstream out;
+    for (size_t i = 0; i < stages.size(); ++i) {
+        if (i) {
+            out << "\n";
+        }
+        out << "----- Stage " << i << " -----\n"
+            << FormatExprForTrace(stages[i], ctx)
+            << "\n";
+    }
+
+    return out.str();
+}
+
+void SubmitPhysicalAstTrace(TRBOContext& rboCtx, const std::string& title, std::string body) {
+    if (!rboCtx.NeedToLog() || body.empty()) {
+        return;
+    }
+
+    auto& tile = rboCtx.TraceLog.currentStage().text(title, body);
+    rboCtx.TraceLog.Submit(tile);
+}
+
+void SubmitPhysicalStagesTrace(TRBOContext& rboCtx, const std::string& title, const TVector<TExprNode::TPtr>& stages) {
+    if (!rboCtx.NeedToLog()) {
+        return;
+    }
+
+    SubmitPhysicalAstTrace(rboCtx, title, FormatPhysicalStagesForTrace(stages, rboCtx.ExprCtx));
+}
+
+void SubmitPhysicalExprTrace(TRBOContext& rboCtx, const std::string& title, const TExprNode::TPtr& node) {
+    if (!rboCtx.NeedToLog()) {
+        return;
+    }
+
+    SubmitPhysicalAstTrace(rboCtx, title, FormatExprForTrace(node, rboCtx.ExprCtx));
+}
+
+} // anonymous namespace
 
 TPhysicalQueryBuilder::TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph, THashMap<ui32, TExprNode::TPtr>&& stages, THashMap<ui32, TVector<TExprNode::TPtr>>&& stageArgs,
     THashMap<ui32, TPositionHandle>&& stagePos, TRBOContext& rboCtx)
@@ -30,9 +87,14 @@ TPhysicalQueryBuilder::TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph,
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     auto phyStages = BuildPhysicalStageGraph();
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical stage graph build", phyStages);
     phyStages = EnableWideChannelsPhysicalStages(std::move(phyStages));
+    SubmitPhysicalStagesTrace(RBOCtx, "After wide channel rewrite", phyStages);
     phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
-    return BuildPhysicalQuery(std::move(phyStages));
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    auto physicalQuery = BuildPhysicalQuery(std::move(phyStages));
+    SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
+    return physicalQuery;
 }
 
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {

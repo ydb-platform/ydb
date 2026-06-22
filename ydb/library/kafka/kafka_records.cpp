@@ -1,5 +1,6 @@
 #include "kafka_messages_int.h"
 
+#include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <limits>
@@ -13,6 +14,13 @@ namespace NKafka {
 namespace {
 
 static constexpr size_t WriteBufferChunkSize = 1 << 16;
+static constexpr size_t RecordBatchCrcOffset =
+    sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type) +
+    sizeof(TKafkaRecordBatch::BatchLengthMeta::Type) +
+    sizeof(TKafkaRecordBatch::PartitionLeaderEpochMeta::Type) +
+    sizeof(TKafkaRecordBatch::MagicMeta::Type);
+static constexpr size_t RecordBatchCrcBodyOffset =
+    RecordBatchCrcOffset + sizeof(TKafkaRecordBatch::CrcMeta::Type);
 
 void EnsureSupportedCompressionType(ECompressionType compressionType) {
     switch (compressionType) {
@@ -23,6 +31,13 @@ void EnsureSupportedCompressionType(ECompressionType compressionType) {
         default:
             ythrow yexception() << "unsupported Kafka record batch compression type: " << static_cast<int>(compressionType);
     }
+}
+
+void WriteKafkaInt32(TString& data, size_t offset, TKafkaInt32 value) {
+    data[offset] = static_cast<char>((static_cast<ui32>(value) >> 24) & 0xff);
+    data[offset + 1] = static_cast<char>((static_cast<ui32>(value) >> 16) & 0xff);
+    data[offset + 2] = static_cast<char>((static_cast<ui32>(value) >> 8) & 0xff);
+    data[offset + 3] = static_cast<char>(static_cast<ui32>(value) & 0xff);
 }
 
 TString DecompressRecordBatchPayload(TStringBuf data, ECompressionType compressionType) {
@@ -267,14 +282,20 @@ struct TLegacyHeaderConsumer {
 
 private:
     void AppendHeaderRecord(i64 offset, i64 timestamp) {
-        if (Header.RecordsCount == 0 && Magic >= 1) {
-            Header.BaseTimestamp = timestamp;
-            Header.MaxTimestamp = timestamp;
-        } else if (Magic >= 1) {
-            Header.MaxTimestamp = Max(Header.MaxTimestamp, timestamp);
+        if (Header.RecordsCount == 0) {
+            Header.BaseOffset = offset;
+            Header.LastOffsetDelta = 0;
+            if (Magic >= 1) {
+                Header.BaseTimestamp = timestamp;
+                Header.MaxTimestamp = timestamp;
+            }
+        } else {
+            Header.LastOffsetDelta = offset - Header.BaseOffset;
+            if (Magic >= 1) {
+                Header.MaxTimestamp = Max(Header.MaxTimestamp, timestamp);
+            }
         }
 
-        Header.LastOffsetDelta = offset;
         ++Header.RecordsCount;
     }
 };
@@ -903,11 +924,64 @@ TKafkaRecordBatch ReadKafkaRecordBatch(TStringBuf data, TKafkaVersion version) {
     return batch;   
 }
 
+TKafkaRecordBatch ReadRecordBatch(TStringBuf data) {
+    static constexpr size_t RecordBatchMagicOffset =
+        sizeof(TKafkaInt64) + sizeof(TKafkaInt32) + sizeof(TKafkaInt32);
+
+    if (data.size() <= RecordBatchMagicOffset) {
+        ythrow yexception() << "Kafka record batch is too small: " << data.size();
+    }
+
+    const auto magic = static_cast<TKafkaVersion>(static_cast<ui8>(data[RecordBatchMagicOffset]));
+    if (magic >= TKafkaRecordBatch::MagicMeta::Default) {
+        return ReadKafkaRecordBatch(data);
+    }
+
+    TBuffer buffer(data.data(), data.size());
+    TKafkaReadable readable(buffer);
+    TKafkaRecordBatch batch;
+    NPrivate::ReadLegacyRecordBatch(readable, magic, data.size(), batch);
+    return batch;
+}
+
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version) {
     TKafkaWriteBuffer buffer(WriteBufferChunkSize);
     TKafkaWritable writable(buffer);
     batch.Write(writable, version);
-    return buffer.AsString();
+    TString result = buffer.AsString();
+    if (result.size() >= RecordBatchCrcBodyOffset) {
+        const ui32 crc = Crc32c(result.data() + RecordBatchCrcBodyOffset, result.size() - RecordBatchCrcBodyOffset);
+        WriteKafkaInt32(result, RecordBatchCrcOffset, static_cast<TKafkaInt32>(crc));
+    }
+    return result;
+}
+
+std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header) {
+    if (header.ProducerId >= 0) {
+        if (header.BaseSequence < 0) {
+            return {EKafkaErrors::INVALID_RECORD, 0};
+        }
+        return {EKafkaErrors::NONE_ERROR, static_cast<ui64>(header.BaseSequence)};
+    }
+
+    if (header.BaseOffset < 0) {
+        return {EKafkaErrors::INVALID_RECORD, 0};
+    }
+    return {EKafkaErrors::NONE_ERROR, static_cast<ui64>(header.BaseOffset)};
+}
+
+std::pair<EKafkaErrors, ui64> GetBatchMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo) {
+    if (header.ProducerId >= 0) {
+        return {
+            EKafkaErrors::NONE_ERROR,
+            (baseSeqNo + header.RecordsCount - 1) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1)
+        };
+    }
+
+    if (header.LastOffsetDelta < 0) {
+        return {EKafkaErrors::INVALID_RECORD, 0};
+    }
+    return {EKafkaErrors::NONE_ERROR, baseSeqNo + static_cast<ui64>(header.LastOffsetDelta)};
 }
 
 std::optional<TKafkaBatchHeader> ReadKafkaBatchHeader(TStringBuf data, TKafkaVersion version) {

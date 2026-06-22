@@ -678,7 +678,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST(StrictSerializable_Basic) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = DefaultKikimrRunner({}, "", settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

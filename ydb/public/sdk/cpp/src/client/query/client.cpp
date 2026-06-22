@@ -41,7 +41,8 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
 {
     switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
-            proto->mutable_serializable_read_write();
+            proto->mutable_serializable_read_write()->set_strict(
+                txSettings.SerializableSettings_.Strict_);
             break;
         case TTxSettings::TS_ONLINE_RO:
             proto->mutable_online_read_only()->set_allow_inconsistent_reads(

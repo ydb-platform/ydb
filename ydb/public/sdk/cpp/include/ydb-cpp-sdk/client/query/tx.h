@@ -14,14 +14,22 @@ struct TTxOnlineSettings {
     TTxOnlineSettings() {}
 };
 
+struct TTxSerializableSettings {
+    using TSelf = TTxSerializableSettings;
+
+    TTxSerializableSettings() {}
+
+    FLUENT_SETTING_DEFAULT(bool, Strict, false);
+};
+
 struct TTxSettings {
     using TSelf = TTxSettings;
 
     TTxSettings()
         : Mode_(TS_SERIALIZABLE_RW) {}
 
-    static TTxSettings SerializableRW() {
-        return TTxSettings(TS_SERIALIZABLE_RW);
+    static TTxSettings SerializableRW(const TTxSerializableSettings& settings = TTxSerializableSettings()) {
+        return TTxSettings(TS_SERIALIZABLE_RW).SerializableSettings(settings);
     }
 
     static TTxSettings OnlineRO(const TTxOnlineSettings& settings = TTxOnlineSettings()) {
@@ -78,6 +86,8 @@ struct TTxSettings {
         TS_SNAPSHOT_RW,
         TS_READ_COMMITTED_RW,
     };
+
+    FLUENT_SETTING(TTxSerializableSettings, SerializableSettings);
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
 

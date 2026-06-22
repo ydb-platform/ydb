@@ -71,6 +71,7 @@ message SessionState {
 }
 
 message SerializableModeSettings {
+    bool strict = 1;
 }
 
 message OnlineModeSettings {

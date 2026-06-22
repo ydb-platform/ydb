@@ -574,7 +574,11 @@ public:
 
         ShardsToWait = ShardsIds;
 
-        AFL_ENSURE(ReceivingShards.empty() || HasTopics() || !IsSingleShard() || HasOlapTable());
+        AFL_ENSURE(ReceivingShards.empty()
+            || HasTopics()
+            || !IsSingleShard()
+            || IsolationLevel == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
+            || HasOlapTable());
     }
 
     TCommitInfo GetCommitInfo() override {

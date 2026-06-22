@@ -141,6 +141,10 @@ public:
     TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
     TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
+    TKikimrSettings& SetEnableStrictSerializableIsolation(bool value) {
+        AppConfig.MutableTableServiceConfig()->SetEnableStrictSerializableIsolation(value);
+        return *this;
+    }
     TKikimrSettings& SetVerbose(bool value) { Verbose = value; return *this; };
 };
 
@@ -273,6 +277,15 @@ inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSet
         .SetEnableScriptExecutionOperations(true);
 
     return TKikimrRunner{settings};
+}
+
+inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings,
+    const TString& authToken, const TKikimrSettings& settings)
+{
+    auto modifiedSettings = settings;
+    modifiedSettings.KqpSettings = kqpSettings;
+    modifiedSettings.AuthToken = authToken;
+    return TKikimrRunner{modifiedSettings};
 }
 
 struct TCollectedStreamResult {

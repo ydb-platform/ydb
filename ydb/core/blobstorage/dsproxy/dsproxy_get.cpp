@@ -420,8 +420,11 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     {"restartCounter", RestartCounter},
                     {"history", GetImpl.PrintHistory()});
             }
-            if (EnableStorageRetroTraceCollectionSlowRequests && Span.GetRetroSpanPtr()) {
-                NRetroTracing::DemandTrace(Span.GetTraceId());
+
+            if (EnableStorageRetroTraceCollectionSlowRequests) {
+                if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->DemandTraceOnEnd();
+                }
             }
         }
 

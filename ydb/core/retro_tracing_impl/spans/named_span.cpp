@@ -1,6 +1,7 @@
 #include "named_span.h"
 
 #include <ydb/library/actors/retro_tracing/span/universal_span.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 #include "universal_span_wilson_api.h"
 
 #include <ydb/core/base/appdata_fwd.h>
@@ -22,6 +23,14 @@ std::unique_ptr<NWilson::TSpan> TNamedSpan::MakeWilsonSpan() {
     res->Attribute("database", AppData()->TenantName);
     res->Attribute("node", AppData()->NodeName);
     return res;
+}
+
+void TNamedSpan::DemandTraceOnEnd() {
+    EnableActionOnEnd();
+}
+
+void TNamedSpan::OnEnd() {
+    NRetroTracing::DemandTrace(GetTraceId());
 }
 
 } // namespace NKikimr

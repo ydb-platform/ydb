@@ -1,7 +1,5 @@
 # Список изменений {{ ydb-short-name }} Server
 
-<<<<<<< HEAD
-=======
 ## Версия 25.4 {#25-4}
 
 ### Версия 25.4.1.15 {#25-4-1-15}
@@ -122,7 +120,6 @@
 
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/24265) ошибка в [Workload Manager](./dev/resource-consumption-management.md), из-за которой потребление CPU колоночными таблицами могло превышать установленные пределы.
 
->>>>>>> adf363ebb80 (Zero documentation build warnings (#44105))
 ## Версия 25.1 {#25-1}
 
 ### Версия 25.1.4.7 {#25-1-4-7}

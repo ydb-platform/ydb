@@ -295,7 +295,3 @@
   ```
 
 {% endlist %}
-<<<<<<< HEAD
-
-=======
->>>>>>> adf363ebb80 (Zero documentation build warnings (#44105))

@@ -41,6 +41,8 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent
     } else if (SerializedProgram) {
         ev->Record.SetOlapProgram(*SerializedProgram);
         ev->Record.SetOlapProgramType(NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS);
+    } else {
+        Y_ABORT();
     }
 
     return ev;

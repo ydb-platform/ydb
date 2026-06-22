@@ -4942,11 +4942,12 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             if (col.Name == "__ydb_added") comp->FulltextAddedTag = id;
             else if (col.Name == "__ydb_segment") comp->FulltextSegmentTag = id;
         }
-        // Determine if key type is signed from key column[1] (max_id)
-        if (tableInfo->KeyColumns.size() >= 2) {
-            auto maxIdColId = tableInfo->KeyColumns[1];
+        // Determine if key type is signed from key column[2] (max_id)
+        if (tableInfo->KeyColumns.size() >= 3) {
+            auto maxIdColId = tableInfo->KeyColumns[2];
             auto keyTypeId = tableInfo->Columns.at(maxIdColId).PType.GetTypeId();
             comp->FulltextKeySigned = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
+            comp->FulltextKeySize = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Uint64 ? 8 : 4);
         }
     }
 

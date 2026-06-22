@@ -21,6 +21,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/library/actors/core/actor.h>
 
 #include <bitset>
@@ -157,10 +158,13 @@ namespace NTabletFlatExecutor {
             }
 
             bool IsMergeable(TRowVersion minVer) const {
-                if (HasDeltas || LockMode != ELockMode::None) return false;
-                if (Versions.empty()) return false;
+                if (HasDeltas || LockMode != ELockMode::None)
+                    return false;
+                if (Versions.empty())
+                    return false;
                 for (const auto& v : Versions) {
-                    if (v.Ver > minVer) return false;
+                    if (v.Ver > minVer)
+                        return false;
                 }
                 // Latest version (first) must not be an erase
                 return Versions[0].Row.Op != NTable::ERowOp::Erase;
@@ -532,22 +536,13 @@ namespace NTabletFlatExecutor {
         // Write a single merged fulltext segment through Writer
         void WriteFulltextSegment(const NFulltext::TDeltaWriter& wr) {
             ui64 maxId = wr.GetMaxId();
-            ui32 gen = Max<ui32>();
+            NTableIndex::NFulltext::TGen gen = Max<NTableIndex::NFulltext::TGen>();
 
-            // Build key cells: (token, maxId, gen)
-            TString maxIdBuf;
-            if (Conf->FulltextKeySigned) {
-                i64 signedMaxId = static_cast<i64>(maxId);
-                maxIdBuf.assign((const char*)&signedMaxId, sizeof(signedMaxId));
-            } else {
-                maxIdBuf.assign((const char*)&maxId, sizeof(maxId));
-            }
-            TString genBuf((const char*)&gen, sizeof(gen));
-
+            // Build key cells: (token, gen, maxId) — gen before maxId
             TSmallVec<TCell> keyCells;
             keyCells.push_back(TCell(FtCurrentToken.data(), FtCurrentToken.size()));
-            keyCells.push_back(TCell(maxIdBuf.data(), maxIdBuf.size()));
-            keyCells.push_back(TCell(genBuf.data(), genBuf.size()));
+            keyCells.push_back(TCell::Make(gen));
+            keyCells.push_back(TCell((const char*)&maxId, Conf->FulltextKeySize));
 
             // Build row state with ALL columns
             NTable::TRowState rs(Scheme->Cols.size());
@@ -560,12 +555,11 @@ namespace NTabletFlatExecutor {
 
             // Set __ydb_added = true
             bool added = true;
-            rs.Set(FtAddedPos, NTable::ECellOp::Set, TCell((const char*)&added, sizeof(added)));
+            rs.Set(FtAddedPos, NTable::ECellOp::Set, TCell::Make(added));
 
             // Set __ydb_segment = merged segment data
             auto segBuf = wr.GetBuf();
-            rs.Set(FtSegmentPos, NTable::ECellOp::Set,
-                   TCell((const char*)segBuf.data(), segBuf.size()));
+            rs.Set(FtSegmentPos, NTable::ECellOp::Set, TCell((const char*)segBuf.data(), segBuf.size()));
 
             Writer->BeginKey(keyCells);
             Writer->AddKeyVersion(rs, FtMinRowVersion);
@@ -574,7 +568,9 @@ namespace NTabletFlatExecutor {
 
         // Flush all buffered keys for the current token
         void FlushFulltextToken() {
-            if (FtTokenBuf.empty()) return;
+            if (FtTokenBuf.empty()) {
+                return;
+            }
 
             // Check if ALL keys in the token are mergeable
             bool allMergeable = true;
@@ -620,8 +616,7 @@ namespace NTabletFlatExecutor {
                 if (key.IsErased()) continue; // Skip erased keys
                 for (const auto& ver : key.Versions) {
                     if (ver.Row.Op != NTable::ERowOp::Erase && !ver.Segment.empty()) {
-                        merger.Add(ver.Added,
-                            TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
+                        merger.Add(ver.Added, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
                         hasAnySegment = true;
                     }
                 }

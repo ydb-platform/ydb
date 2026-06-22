@@ -673,8 +673,24 @@ Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
     ])", FulltextSearch(db, "love"));
 }
 
+TKikimrRunner KikimrWithZeroSnapshotTimeout() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableJsonIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    // Set KeepSnapshotTimeout to 0 and CleanupSnapshotPeriod to 100ms so that
+    // MVCC watermark can advance quickly. This allows compaction to merge old
+    // row versions without waiting for the default 5-minute / 15-second timeouts.
+    settings.AppConfig.MutableDataShardConfig()->SetKeepSnapshotTimeout(0);
+    settings.AppConfig.MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
+    return TKikimrRunner(settings);
+}
+
 Y_UNIT_TEST_TWIN(LsmCompaction, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithZeroSnapshotTimeout();
     auto db = kikimr.GetQueryClient();
     const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -702,12 +718,21 @@ Y_UNIT_TEST_TWIN(LsmCompaction, WithRelevance) {
     auto indexBefore = NYdb::FormatResultSetYson(ReadIndex(db));
     Cerr << "index before LSM compaction: " << indexBefore << Endl;
 
+    // Wait for the MVCC cleanup timer to fire and advance the watermark,
+    // so that RemovedRowVersions covers all written versions.
+    // CleanupSnapshotPeriod is set to 100ms in KikimrWithCompact().
+    Sleep(TDuration::Seconds(1));
+
     // Force LSM compaction on the index impl table
     auto* server = &kikimr.GetTestServer();
     WaitForCompaction(server, "/Root/Texts/fulltext_idx/indexImplTable");
 
     auto indexAfter = NYdb::FormatResultSetYson(ReadIndex(db));
     Cerr << "index after LSM compaction: " << indexAfter << Endl;
+
+    // Verify that compaction actually merged segments (fewer rows in the index)
+    UNIT_ASSERT_C(indexBefore != indexAfter,
+        "Index content should change after LSM compaction (segments should merge)");
 
     // Verify search still returns correct results after LSM compaction
     CompareYson(R"([
@@ -732,7 +757,7 @@ Y_UNIT_TEST_TWIN(LsmCompaction, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithZeroSnapshotTimeout();
     auto db = kikimr.GetQueryClient();
     const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -795,6 +820,11 @@ Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
         [[300u];["Bears love honey."];["bears data"]];
         [[301u];["Eagles love fish."];["eagles data"]]
     ])", loveBeforeCompaction);
+
+    // Wait for the MVCC cleanup timer to fire and advance the watermark,
+    // so that RemovedRowVersions covers all written versions.
+    // CleanupSnapshotPeriod is set to 100ms in KikimrWithCompact().
+    Sleep(TDuration::Seconds(1));
 
     // Force LSM compaction while the snapshot is held
     // The snapshot pins MinRowVersion, so compaction must not merge away

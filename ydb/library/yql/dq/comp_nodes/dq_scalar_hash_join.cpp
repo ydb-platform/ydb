@@ -102,17 +102,17 @@ public:
                 }
                 return Yield{};
             case EFetchResult::One: {
-                if (!ColumnPermutation_.empty()) {
-                    TMKQLVector<NYql::NUdf::TUnboxedValue> tmp(Columns_);
+                if (ColumnPermutation_.empty()) {
                     for (int i = 0; i < Columns_; ++i) {
-                        tmp[i] = Buff_[ColumnPermutation_[i]];
+                        BatchValues_.push_back(Buff_[i]);
                     }
+                } else {
+                    // Permute directly into the batch buffer; ColumnPermutation_[i]
+                    // gives the source column for output position i. Avoids a
+                    // per-row scratch allocation in this hot path.
                     for (int i = 0; i < Columns_; ++i) {
-                        Buff_[i] = tmp[i];
+                        BatchValues_.push_back(Buff_[ColumnPermutation_[i]]);
                     }
-                }
-                for (int i = 0; i < Columns_; ++i) {
-                    BatchValues_.push_back(Buff_[i]);
                 }
                 ++BatchCount_;
                 break;

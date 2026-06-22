@@ -116,10 +116,10 @@ class PrAutomerger:
 
     def refresh_base_and_merge(self, pr: PullRequest, commit_msg: str) -> bool:
         base_ref = pr.base.ref
+        self.git_run("fetch", "origin", base_ref)
+        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
+        self.git_run("reset", "--hard", f"origin/{base_ref}")
         try:
-            self.git_run("fetch", "origin", base_ref)
-            self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
-            self.git_run("reset", "--hard", f"origin/{base_ref}")
             self.git_run("merge", "PR", "-m", commit_msg)
         except subprocess.CalledProcessError:
             return False
@@ -205,14 +205,27 @@ class PrAutomerger:
 
         self.logger.info("run: %r", args)
         try:
-            output = subprocess.check_output(args, stderr=subprocess.STDOUT).decode()
+            completed = subprocess.run(
+                args,
+                capture_output=True,
+                check=True,
+            )
         except subprocess.CalledProcessError as e:
-            output = (e.output or b"").decode()
-            self.logger.error(output)
+            stdout = (e.stdout or b"").decode()
+            stderr = (e.stderr or b"").decode()
+            if stdout:
+                self.logger.error("stdout:\n%s", stdout)
+            if stderr:
+                self.logger.error("stderr:\n%s", stderr)
             raise
-        else:
-            self.logger.info("output:\n%s", output)
-        return output
+
+        stdout = completed.stdout.decode()
+        stderr = completed.stderr.decode()
+        if stdout:
+            self.logger.info("stdout:\n%s", stdout)
+        if stderr:
+            self.logger.info("stderr:\n%s", stderr)
+        return stdout
 
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").strip()

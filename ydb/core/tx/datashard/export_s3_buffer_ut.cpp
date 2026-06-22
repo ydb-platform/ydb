@@ -54,7 +54,7 @@ public:
         case EDataFormat::PARQUET:
             {
                 TParquetExportSettings dataFormatSettings;
-                dataFormatSettings.WithColumns(std::move(Columns));
+                dataFormatSettings.WithColumns(Columns);
                 dataFormatSettings.WithRowGroupSize(2);
                 // Mirror production: Parquet handles compression internally, so
                 // buffer-level compression is disabled and the codec is forwarded

@@ -390,9 +390,6 @@ WHERE IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-
 ORDER BY IntervalEnd desc, LocksBroken desc
 ```
 
-<<<<<<< HEAD
-## Auth users, groups, permissions {#auth}
-=======
 {% if feature_resource_pool %}
 
 ## Resource pool information {#resource_pools}
@@ -466,7 +463,6 @@ WHERE Name = "olap";
 ## Users, groups, and access rights {#auth}
 
 The following system views contain information about users, access groups, user membership in groups, and access rights granted to groups or directly to users.
->>>>>>> adf363ebb80 (Zero documentation build warnings (#44105))
 
 ### Auth users {#users}
 

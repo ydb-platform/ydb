@@ -155,6 +155,9 @@ public:
     ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept override;
     std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> GetNextCompactionTask(
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    bool UsesPullCompactionScheduling() const noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const ISnapshotHolders& snapshotHolders,
         const std::map<TSnapshot, THashSet<TInternalPathId>>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;

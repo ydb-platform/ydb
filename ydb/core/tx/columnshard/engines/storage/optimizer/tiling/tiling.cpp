@@ -32,6 +32,7 @@ struct TSettings {
     ui32 FullCompactionUntilLevel = 0;
     ui64 FullCompactionMaxBytes = -1;
     bool CompactNextLevelEdges = false;
+    ui32 CompactionThreads = 1;
     std::optional<ui64> NodePortionsCountLimit{};
     bool ShrinkLevel = true;
 
@@ -110,6 +111,9 @@ struct TSettings {
         MakeBooleanHandler("compact_next_level_edges", [](auto& self, auto value) {
             self.CompactNextLevelEdges = value;
         }),
+        MakeNumberHandler("compaction_threads", [](auto& self, auto value) {
+            self.CompactionThreads = static_cast<ui32>(value);
+        }),
     };
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
@@ -170,6 +174,10 @@ struct TSettings {
         if (MaxCompactionBytes < ExpectedPortionSize * 4) {
             return TConclusionStatus::Fail(TStringBuilder() << "max_compaction_bytes (" << MaxCompactionBytes << ") is too small "
                                                             << "relative to expected_portion_size (" << ExpectedPortionSize << ")");
+        }
+
+        if (CompactionThreads < 1) {
+            return TConclusionStatus::Fail("compaction_threads must be at least 1");
         }
 
         SettingsJson = jsonInfo;
@@ -758,6 +766,14 @@ private:
             RemovePortion(portion);
             PlacePortion(portion, newLevel);
         }
+    }
+
+    bool DoUsesPullCompactionScheduling() const override {
+        return true;
+    }
+
+    ui32 DoGetMaxCompactionInflight() const override {
+        return CompactionThreads;
     }
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(

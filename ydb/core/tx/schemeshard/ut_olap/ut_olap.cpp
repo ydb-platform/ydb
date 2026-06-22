@@ -1039,6 +1039,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         auto& appData = runtime.GetAppData();
         appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+        runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("tiling");
 
         // No LongTxService keeps a live registry here, so install a stand-in whose OldestCollectionTime
         // tracks the clock; otherwise the cleanup floor stays at 0 and deleted data is never collected.

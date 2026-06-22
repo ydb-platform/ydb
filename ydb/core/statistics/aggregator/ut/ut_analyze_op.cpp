@@ -206,6 +206,9 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
                     entry.GetState(), Ydb::Table::AnalyzeState::STATE_DONE,
                     "Expected STATE_DONE after completion");
                 UNIT_ASSERT_DOUBLES_EQUAL(entry.GetProgress(), 100.0f, 0.01f);
+                UNIT_ASSERT_VALUES_EQUAL(entry.InProgressPathsSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL_C(entry.DonePathsSize(), entry.PathsSize(),
+                    "DonePaths should equal Paths after completion");
                 foundDone = true;
                 break;
             }
@@ -235,6 +238,11 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             Ydb::Table::AnalyzeState::STATE_DONE,
             "Expected STATE_DONE");
         UNIT_ASSERT_DOUBLES_EQUAL(result.GetAnalyzeOperation().GetProgress(), 100.0f, 0.01f);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetAnalyzeOperation().InProgressPathsSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            result.GetAnalyzeOperation().DonePathsSize(),
+            result.GetAnalyzeOperation().PathsSize(),
+            "DonePaths should equal Paths after completion");
     }
 
     Y_UNIT_TEST(ProgressIntermediateColumnShards) {
@@ -289,6 +297,7 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         // The active table appears in InProgressPaths while traversal is running.
         UNIT_ASSERT_VALUES_EQUAL(op.InProgressPathsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(op.GetInProgressPaths(0), tableInfo.Path);
+        UNIT_ASSERT_VALUES_EQUAL(op.DonePathsSize(), 0);
     }
 
     Y_UNIT_TEST(ForgetTerminal) {

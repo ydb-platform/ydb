@@ -613,6 +613,7 @@ public:
         float Progress = 0;
         std::vector<std::string> Paths;           // All paths covered by this analyze.
         std::vector<std::string> InProgressPaths; // Subset of Paths currently being traversed
+        std::vector<std::string> DonePaths;       // Subset of Paths whose analysis completed
     };
 
     const TMetadata& Metadata() const;

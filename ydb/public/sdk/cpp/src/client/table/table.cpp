@@ -233,6 +233,8 @@ TAnalyzeOperation::TAnalyzeOperation(TStatus &&status, Ydb::Operations::Operatio
     Metadata_.Paths.assign(metadata.paths().begin(), metadata.paths().end());
     Metadata_.InProgressPaths.assign(metadata.in_progress_paths().begin(),
                                      metadata.in_progress_paths().end());
+    Metadata_.DonePaths.assign(metadata.done_paths().begin(),
+                               metadata.done_paths().end());
 }
 
 const TAnalyzeOperation::TMetadata& TAnalyzeOperation::Metadata() const {

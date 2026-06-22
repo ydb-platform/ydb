@@ -210,6 +210,7 @@ Y_UNIT_TEST(AnalyzeOperationsLifecycle) {
         UNIT_ASSERT_DOUBLES_EQUAL(meta.Progress, 100.0f, 0.1f);
         UNIT_ASSERT_GE(meta.Paths.size(), 1u);
         UNIT_ASSERT(meta.InProgressPaths.empty());
+        UNIT_ASSERT_VALUES_EQUAL(meta.DonePaths.size(), meta.Paths.size());
     }
 
     // Get by ID matches

@@ -1114,8 +1114,9 @@ message AnalyzeMetadata {
 
     repeated string paths = 1;             // All table paths covered by this analyze operation.
     repeated string in_progress_paths = 2; // Tables currently being traversed
-    optional AnalyzeState.State state = 3;
-    optional float progress = 4;
+    repeated string done_paths = 3;        // Tables for which analysis is complete
+    optional AnalyzeState.State state = 4;
+    optional float progress = 5;
 }
 
 // Alter table with given path

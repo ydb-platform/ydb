@@ -314,7 +314,7 @@ namespace {
     }
 
     TPrettyTable MakeTable(const NYdb::NTable::TAnalyzeOperation&) {
-        return TPrettyTable({"id", "ready", "status", "state", "progress", "paths", "in_progress"});
+        return TPrettyTable({"id", "ready", "status", "state", "progress", "paths", "in_progress", "done"});
     }
 
     void PrettyPrint(const NYdb::NTable::TAnalyzeOperation& operation, TPrettyTable& table) {
@@ -338,7 +338,8 @@ namespace {
             .Column(3, metadata.State)
             .Column(4, FloatToString(metadata.Progress, PREC_POINT_DIGITS, 2) + "%")
             .Column(5, joinPaths(metadata.Paths))
-            .Column(6, joinPaths(metadata.InProgressPaths));
+            .Column(6, joinPaths(metadata.InProgressPaths))
+            .Column(7, joinPaths(metadata.DonePaths));
 
         TStringBuilder freeText;
         AppendIssues(status, freeText);

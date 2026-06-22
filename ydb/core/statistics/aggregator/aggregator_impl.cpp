@@ -1082,10 +1082,10 @@ void TStatisticsAggregator::FillAnalyzeOperationProto(
         proto.AddPaths(t.Path);
         shardsTotalSum += t.ShardsTotal;
         shardsDoneSum  += t.ShardsDone;
-        const bool inProgress =
-            t.Status != TForceTraversalTable::EStatus::None &&
-            t.Status != TForceTraversalTable::EStatus::TraversalFinished;
-        if (inProgress && state == Ydb::Table::AnalyzeState::STATE_IN_PROGRESS) {
+        if (t.Status == TForceTraversalTable::EStatus::TraversalFinished) {
+            proto.AddDonePaths(t.Path);
+        } else if (t.Status != TForceTraversalTable::EStatus::None &&
+                   state == Ydb::Table::AnalyzeState::STATE_IN_PROGRESS) {
             proto.AddInProgressPaths(t.Path);
         }
     }

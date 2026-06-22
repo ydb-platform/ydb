@@ -192,6 +192,9 @@ void ToOperation(const NKikimrAnalyzeOp::TAnalyzeOperation& op, Ydb::Operations:
     for (const auto& path : op.GetInProgressPaths()) {
         metadata.add_in_progress_paths(path);
     }
+    for (const auto& path : op.GetDonePaths()) {
+        metadata.add_done_paths(path);
+    }
 
     operation->mutable_metadata()->PackFrom(metadata);
 }

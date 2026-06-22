@@ -14,8 +14,9 @@ message TAnalyzeOperation {
     optional float Progress = 5;
     repeated string Paths = 6;
     repeated string InProgressPaths = 7;
-    optional string DatabaseName = 8;
-    repeated Ydb.Issue.IssueMessage Issues = 9;
+    repeated string DonePaths = 8;
+    optional string DatabaseName = 9;
+    repeated Ydb.Issue.IssueMessage Issues = 10;
 }
 
 message TEvListRequest {

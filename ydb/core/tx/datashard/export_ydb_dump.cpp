@@ -1,6 +1,8 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "export_data_format.h"
+
+#include "export_data_format.h"
 #include "export_iface.h"
 #include "type_serialization.h"
 
@@ -21,31 +23,15 @@ class TDataFormatYdbDump: public IExportDataFormat {
     using TTagToIndex = THashMap<ui32, ui32>; // index in IScan::TRow
 
 public:
-    TDataFormatYdbDump(TYdbDumpExportSettings&& settings);
-    ~TDataFormatYdbDump() override;
 
-    bool ColumnsOrder(const TVector<ui32>& tags) override;
-    TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override;
-    TMaybe<TBuffer> Flush(bool last) override;
-    void Clear() override;
-    size_t GetReadyOutputBytes() const override;
-    TString GetError() const override;
-
-private:
-    const TTagToColumn Columns;
-
-    TTagToIndex Indices;
-    TString ErrorString;
-};
-
-TDataFormatYdbDump::TDataFormatYdbDump(TYdbDumpExportSettings&& settings)
+TDataFormatYdbDump(TYdbDumpExportSettings&& settings)
     : Columns(std::move(settings.Columns))
 {
 }
 
-TDataFormatYdbDump::~TDataFormatYdbDump() = default;
+~TDataFormatYdbDump() = default;
 
-bool TDataFormatYdbDump::ColumnsOrder(const TVector<ui32>& tags) {
+bool ColumnsOrder(const TVector<ui32>& tags) override {
     Y_ENSURE(tags.size() == Columns.size());
 
     Indices.clear();
@@ -59,7 +45,7 @@ bool TDataFormatYdbDump::ColumnsOrder(const TVector<ui32>& tags) {
     return true;
 }
 
-TMaybe<TBuffer> TDataFormatYdbDump::Collect(const NTable::IScan::TRow& row) {
+TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override {
     TBuffer rowBuffer;
     TBufferOutput out(rowBuffer);
     ErrorString.clear();
@@ -175,23 +161,31 @@ TMaybe<TBuffer> TDataFormatYdbDump::Collect(const NTable::IScan::TRow& row) {
     return rowBuffer;
 }
 
-void TDataFormatYdbDump::Clear() {
+void Clear() override {
 }
 
-size_t TDataFormatYdbDump::GetReadyOutputBytes() const {
+size_t GetReadyOutputBytes() const override {
     // Rows are serialized and returned directly from Collect, nothing is buffered here.
     return 0;
 }
 
-TString TDataFormatYdbDump::GetError() const {
+TString GetError() const override {
     return ErrorString;
 }
 
-TMaybe<TBuffer> TDataFormatYdbDump::Flush(bool last) {
+TMaybe<TBuffer> Flush(bool last) override {
     Y_UNUSED(last);
 
     return TBuffer();
 }
+
+private:
+    const TTagToColumn Columns;
+
+    TTagToIndex Indices;
+    TString ErrorString;
+};
+
 
 } // namespace
 

@@ -52,44 +52,9 @@ private:
 class TDataFormatParquet: public IExportDataFormat {
     using TTagToColumn = IExport::TTableColumns;
 
-public:
-    TDataFormatParquet(TParquetExportSettings&& settings);
-    ~TDataFormatParquet() override;
-
-    bool ColumnsOrder(const TVector<ui32>& tags) override;
-    TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override;
-    TMaybe<TBuffer> Flush(bool last) override;
-    void Clear() override;
-    size_t GetReadyOutputBytes() const override;
-    TString GetError() const override;
-
 private:
-    bool FlushRowGroup(bool last);
-    static std::shared_ptr<parquet::WriterProperties> CreateWriteProperties(const TParquetExportSettings& settings);    
 
-    const TTagToColumn Columns;
-    const ui64 RowGroupSize;
-
-    std::shared_ptr<parquet::WriterProperties> WriteProperties;
-    std::shared_ptr<arrow::Schema> Schema;
-    std::shared_ptr<TCheckpointOutputStream> OutStream;
-    std::unique_ptr<parquet::arrow::FileWriter> ArrowWriter;
-    std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
-
-    TString ErrorString;
-};
-
-TDataFormatParquet::TDataFormatParquet(TParquetExportSettings&& settings)
-    : Columns(std::move(settings.Columns))
-    , RowGroupSize(settings.RowGroupSize)
-    , WriteProperties(CreateWriteProperties(settings))
-    , OutStream(std::make_shared<TCheckpointOutputStream>())
-{
-}
-
-TDataFormatParquet::~TDataFormatParquet() = default;
-
-std::shared_ptr<parquet::WriterProperties> TDataFormatParquet::CreateWriteProperties(const TParquetExportSettings& settings) {
+static std::shared_ptr<parquet::WriterProperties> CreateWriteProperties(const TParquetExportSettings& settings) {
     auto builder = std::make_unique<parquet::WriterProperties::Builder>();
     if (settings.CompressionSettings) {
         switch (settings.CompressionSettings->Algorithm) {
@@ -105,69 +70,7 @@ std::shared_ptr<parquet::WriterProperties> TDataFormatParquet::CreateWriteProper
     return builder->build();
 }
 
-bool TDataFormatParquet::ColumnsOrder(const TVector<ui32>& tags) {
-    Y_ENSURE(tags.size() == Columns.size());
-
-    ArrowWriter.reset();
-
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> ydbColumns;
-    std::set<std::string> notNullColumns;
-    for (const auto& tag : tags) {
-        auto it = Columns.find(tag);
-        Y_ENSURE(it != Columns.end());
-        auto column = it->second;
-
-        ydbColumns.push_back({column.Name, column.Type});
-        if (column.NotNull) {
-            notNullColumns.insert(column.Name);
-        }
-    }
-
-    auto schemaRes = NArrow::MakeArrowSchema(ydbColumns, notNullColumns);
-    if (!schemaRes.ok()) {
-        ErrorString = TStringBuilder() << "Failed to make arrow schema: " << schemaRes.status().message();
-        return false;
-    }
-    Schema.swap(schemaRes.ValueOrDie());
-
-    arrow::Status status;
-    BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>();
-    if (!(status = BatchBuilder->Start(ydbColumns, Schema)).ok()) {
-        ErrorString = TStringBuilder() << "Failed to start batch builder: " << status.message();
-        return false;
-    }
-
-    return true;
-}
-
-TMaybe<TBuffer> TDataFormatParquet::Collect(const NTable::IScan::TRow& row) {
-    if (!ErrorString.empty()) {
-        return Nothing();
-    }
-
-    BatchBuilder->AddRow(*row);
-    if (BatchBuilder->Rows() >= RowGroupSize) {
-        if(!FlushRowGroup(false)) {
-            return Nothing();
-        }
-    }
-
-    return TBuffer();
-}
-
-TMaybe<TBuffer> TDataFormatParquet::Flush(bool last) {
-    if (!ErrorString.empty()) {
-        return Nothing();
-    }
-
-    if (!FlushRowGroup(last)) {
-        return Nothing();
-    }
-
-    return OutStream->Checkpoint();
-}
-
-bool TDataFormatParquet::FlushRowGroup(bool last) {
+bool FlushRowGroup(bool last) {
     if (!ErrorString.empty()) {
         return false;
     }
@@ -216,7 +119,81 @@ bool TDataFormatParquet::FlushRowGroup(bool last) {
     return true;
 }
 
-void TDataFormatParquet::Clear() {
+public:
+
+TDataFormatParquet(TParquetExportSettings&& settings)
+    : Columns(std::move(settings.Columns))
+    , RowGroupSize(settings.RowGroupSize)
+    , WriteProperties(CreateWriteProperties(settings))
+    , OutStream(std::make_shared<TCheckpointOutputStream>())
+{
+}
+
+~TDataFormatParquet() = default;
+
+bool ColumnsOrder(const TVector<ui32>& tags) override {
+    Y_ENSURE(tags.size() == Columns.size());
+
+    ArrowWriter.reset();
+
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> ydbColumns;
+    std::set<std::string> notNullColumns;
+    for (const auto& tag : tags) {
+        auto it = Columns.find(tag);
+        Y_ENSURE(it != Columns.end());
+        auto column = it->second;
+
+        ydbColumns.push_back({column.Name, column.Type});
+        if (column.NotNull) {
+            notNullColumns.insert(column.Name);
+        }
+    }
+
+    auto schemaRes = NArrow::MakeArrowSchema(ydbColumns, notNullColumns);
+    if (!schemaRes.ok()) {
+        ErrorString = TStringBuilder() << "Failed to make arrow schema: " << schemaRes.status().message();
+        return false;
+    }
+    Schema.swap(schemaRes.ValueOrDie());
+
+    arrow::Status status;
+    BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>();
+    if (!(status = BatchBuilder->Start(ydbColumns, Schema)).ok()) {
+        ErrorString = TStringBuilder() << "Failed to start batch builder: " << status.message();
+        return false;
+    }
+
+    return true;
+}
+
+TMaybe<TBuffer> Collect(const NTable::IScan::TRow& row) override {
+    if (!ErrorString.empty()) {
+        return Nothing();
+    }
+
+    BatchBuilder->AddRow(*row);
+    if (BatchBuilder->Rows() >= RowGroupSize) {
+        if(!FlushRowGroup(false)) {
+            return Nothing();
+        }
+    }
+
+    return TBuffer();
+}
+
+TMaybe<TBuffer> Flush(bool last) override {
+    if (!ErrorString.empty()) {
+        return Nothing();
+    }
+
+    if (!FlushRowGroup(last)) {
+        return Nothing();
+    }
+
+    return OutStream->Checkpoint();
+}
+
+void Clear() override {
     ErrorString.clear();
     if (BatchBuilder) {
         BatchBuilder->FlushBatch(true, false);
@@ -225,14 +202,27 @@ void TDataFormatParquet::Clear() {
     OutStream.reset(new TCheckpointOutputStream());
 }
 
-size_t TDataFormatParquet::GetReadyOutputBytes() const {
+size_t GetReadyOutputBytes() const override {
     // Encoded row groups accumulate in the output stream until the buffer flushes them.
     return OutStream->GetBufferSize();
 }
 
-TString TDataFormatParquet::GetError() const {
+TString GetError() const override {
     return ErrorString;
 }
+
+private:
+    const TTagToColumn Columns;
+    const ui64 RowGroupSize;
+
+    std::shared_ptr<parquet::WriterProperties> WriteProperties;
+    std::shared_ptr<arrow::Schema> Schema;
+    std::shared_ptr<TCheckpointOutputStream> OutStream;
+    std::unique_ptr<parquet::arrow::FileWriter> ArrowWriter;
+    std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
+
+    TString ErrorString;
+};
 
 } // namespace
 

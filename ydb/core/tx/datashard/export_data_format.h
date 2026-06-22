@@ -58,8 +58,8 @@ struct TParquetExportSettings {
         int Level = -1;
     };
 
-    TParquetExportSettings& WithColumns(const IExport::TTableColumns& columns) {
-        Columns = columns;
+    TParquetExportSettings& WithColumns(IExport::TTableColumns columns) {
+        Columns = std::move(columns);
         return *this;
     }
 

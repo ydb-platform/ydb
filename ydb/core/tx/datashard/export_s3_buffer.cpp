@@ -8,8 +8,6 @@
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/generated/runtime_feature_flags.h>
 #include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
@@ -197,7 +195,7 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
     }
 
     ++Rows;
-    
+
     return true;
 }
 
@@ -207,6 +205,12 @@ bool TS3Buffer::Append(const char *data, size_t size) {
     }
 
     TStringBuf chunk(data, size);
+
+    // Apply checksum
+    if (Checksum) {
+        Checksum->AddData(chunk);
+    }
+
     if (Compression) {
         if (!Compression->AddData(chunk)) {
             ErrorString = Compression->GetError();
@@ -214,11 +218,6 @@ bool TS3Buffer::Append(const char *data, size_t size) {
         }
     } else {
         Buffer.Append(data, size);
-    }
-
-    // Apply checksum
-    if (Checksum) {
-        Checksum->AddData(chunk);
     }
 
     return true;

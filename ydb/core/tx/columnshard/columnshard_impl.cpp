@@ -258,6 +258,10 @@ void TColumnShard::RunSchemaTx(
             RunDropTable(body.GetDropTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            RunTruncateTable(body.GetTruncateTable(), version, txc);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore: {
             RunAlterStore(body.GetAlterStore(), version, txc);
             return;
@@ -412,6 +416,44 @@ void TColumnShard::RunDropTable(
 
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
     TablesManager.DropTable(schemeShardLocalPathId, *internalPathId, version, db);
+}
+
+void TColumnShard::RunTruncateTable(
+    const NKikimrTxColumnShard::TTruncateTable& truncateProto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+
+    if (!internalPathId) {
+        LOG_S_DEBUG("TruncateTable for unknown or deleted scheme shard pathId: " << schemeShardLocalPathId << " at tablet " << TabletID());
+        return;
+    }
+
+    const auto oldInternalPathId = *internalPathId;
+    const auto& pathId = TUnifiedPathId::BuildValid(oldInternalPathId, schemeShardLocalPathId);
+    if (!TablesManager.HasTable(oldInternalPathId)) {
+        LOG_S_DEBUG("TruncateTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
+        return;
+    }
+
+    LOG_S_DEBUG("TruncateTable for pathId: " << pathId << " at tablet " << TabletID());
+
+    // TruncateTable drops the old table, removes the mapping, allocates a new InternalPathId,
+    // and registers a fresh empty table. It returns the new InternalPathId.
+    const auto newInternalPathId = TablesManager.TruncateTable(schemeShardLocalPathId, oldInternalPathId, version, db);
+
+    // Add a table version record for the new table referencing the same schema preset.
+    // The schema preset is shared across all tables in the shard, so we just need to
+    // create a version record that points to it.
+    NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
+    newInternalPathId.ToProto(tableVerProto);
+    if (!TablesManager.GetSchemaPresets().empty()) {
+        tableVerProto.SetSchemaPresetId(*TablesManager.GetSchemaPresets().begin());
+    }
+    TablesManager.AddTableVersion(newInternalPathId, version, tableVerProto, std::nullopt, db);
+
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
 }
 
 void TColumnShard::RunMoveTable(

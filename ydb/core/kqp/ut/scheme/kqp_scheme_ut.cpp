@@ -70,9 +70,10 @@ void CreateSecret(const TString& secretName, const TString& secretValue, TSessio
     UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, queryResult.GetStatus(), queryResult.GetIssues().ToString());
 }
 
-void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bool createSecondaryIndex = false) {
+void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bool createSecondaryIndex = false, bool columnTable = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableTruncateTable(true);
+    featureFlags.SetEnableTruncateColumnTable(true);
     TKikimrRunner kikimr(featureFlags);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -80,14 +81,16 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
     auto queryClient = kikimr.GetQueryClient();
 
     {
+        const auto store = columnTable ? "COLUMN" : "ROW";
         TString query = Sprintf(R"(
             CREATE TABLE %s (
-                k Uint32,
+                k Uint32 NOT NULL,
                 v String,
                 PRIMARY KEY(k)
-            );
+            )
+            WITH (STORE = %s)
         )"
-        , tablePath.c_str());
+        , tablePath.c_str(), store);
 
         auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -113,7 +116,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
         )"
         , tablePath.c_str());
 
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
@@ -125,7 +128,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
 
         if (useQueryClient) {
             auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         } else {
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -138,7 +141,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
         )"
         , tablePath.c_str());
 
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto resultSet = result.GetResultSet(0);
@@ -14373,20 +14376,20 @@ END DO)",
         }
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableFullPathTableClient) {
-        TestTruncateTable("`/Root/TestTable`", false);
+    Y_UNIT_TEST_TWIN(SimpleTruncateTableFullPathTableClient, ColumnTable) {
+        TestTruncateTable("`/Root/TestTable`", false, false, ColumnTable);
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableNameOnlyTableClient) {
-        TestTruncateTable("TestTable", false);
+    Y_UNIT_TEST_TWIN(SimpleTruncateTableNameOnlyTableClient, ColumnTable) {
+        TestTruncateTable("TestTable", false, false, ColumnTable);
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableFullPathQueryClient) {
-        TestTruncateTable("`/Root/TestTable`", true);
+    Y_UNIT_TEST_TWIN(SimpleTruncateTableFullPathQueryClient, ColumnTable) {
+        TestTruncateTable("`/Root/TestTable`", true, false, ColumnTable);
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableNameOnlyQueryClient) {
-        TestTruncateTable("TestTable", true);
+    Y_UNIT_TEST_TWIN(SimpleTruncateTableNameOnlyQueryClient, ColumnTable) {
+        TestTruncateTable("TestTable", true, false, ColumnTable);
     }
 
     Y_UNIT_TEST(TruncateTableWithSecondaryIndex) {

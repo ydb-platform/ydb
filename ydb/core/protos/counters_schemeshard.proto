@@ -293,6 +293,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropLocalIndex = 225 [(CounterOpts) = {Name: "InFlightOps/DropLocalIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterLocalIndex = 226 [(CounterOpts) = {Name: "InFlightOps/AlterLocalIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxMoveLocalIndex = 227 [(CounterOpts) = {Name: "InFlightOps/MoveLocalIndex"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxTruncateColumnTable = 228 [(CounterOpts) = {Name: "InFlightOps/TruncateColumnTable"}];
 }
 
 enum ECumulativeCounters {
@@ -491,6 +493,8 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxDropLocalIndex = 146 [(CounterOpts) = {Name: "FinishedOps/DropLocalIndex"}];
     COUNTER_FINISHED_OPS_TxAlterLocalIndex = 147 [(CounterOpts) = {Name: "FinishedOps/AlterLocalIndex"}];
     COUNTER_FINISHED_OPS_TxMoveLocalIndex = 148 [(CounterOpts) = {Name: "FinishedOps/MoveLocalIndex"}];
+
+    COUNTER_FINISHED_OPS_TxTruncateColumnTable = 149 [(CounterOpts) = {Name: "FinishedOps/TruncateColumnTable"}];
 }
 
 enum EPercentileCounters {

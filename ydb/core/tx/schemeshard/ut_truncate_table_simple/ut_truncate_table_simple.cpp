@@ -197,6 +197,43 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             {NLs::PathExist});
     }
 
+    Y_UNIT_TEST(TruncateReadOnlyColumnTableFails) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        // Source standalone column table.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Read-only backup copy of the column table.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTableCopy"
+            CopyFromTable: "/MyRoot/ColumnTable"
+            IsBackup: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // TRUNCATE of the read-only backup copy must be rejected by the schemeshard.
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "ColumnTableCopy",
+                         {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableCopy"),
+            {NLs::PathExist});
+    }
+
     Y_UNIT_TEST(TruncateNonExistentTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

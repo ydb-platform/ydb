@@ -412,6 +412,16 @@ struct TTestSchema {
         return out;
     }
 
+    static TString TruncateTableTxBody(ui64 pathId, ui32 version) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*tx.MutableTruncateTable());
+        tx.MutableSeqNo()->SetRound(version);
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
     static THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot(const TTableSpecials& specials);
 
     static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {

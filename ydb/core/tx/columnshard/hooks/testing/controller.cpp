@@ -81,6 +81,21 @@ TController::TCheckContext TController::CheckInvariants() const {
     return context;
 }
 
+ui64 TController::GetPortionsCount() const {
+    TGuard<TMutex> g(Mutex);
+    ui64 result = 0;
+    for (auto&& [tabletId, shard] : ShardActuals) {
+        if (!shard->HasIndex()) {
+            continue;
+        }
+        const auto& index = shard->GetIndexAs<NOlap::TColumnEngineForLogs>();
+        for (auto&& [pathId, granule] : index.GetTables()) {
+            result += granule->GetPortions().size();
+        }
+    }
+    return result;
+}
+
 void TController::DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
     AFL_VERIFY(ShardActuals.emplace(shard.TabletID(), &shard).second);

@@ -13,7 +13,7 @@ def main():
     parser.add_argument("--preset", help="Name of preset", required=True)
     parser.add_argument("--vm-name", help="Name of vm", required=True)
     parser.add_argument("--label", help="github runner label", required=True)
-    parser.add_argument("--disable-update", help="Disable agent update", default=False)
+    parser.add_argument("--disable-update", help="Disable agent update", action="store_true")
     args = parser.parse_args()
 
     runner_name = args.vm_name

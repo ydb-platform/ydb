@@ -305,6 +305,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished::TPtr& ev, const TActorContext& ctx);
@@ -478,6 +479,7 @@ protected:
 
             HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
             HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+            HFunc(NOlap::NBackground::TEvRemoveSession, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
 

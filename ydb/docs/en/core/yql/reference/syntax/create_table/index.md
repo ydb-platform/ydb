@@ -16,6 +16,7 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
   [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
+  [ENCODING([OFF|DICT])]
   [, ...],
     INDEX <index_name>
       [GLOBAL|LOCAL]
@@ -37,7 +38,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 {% if oss == true and backend_name == "YDB" %}
 
-## Request parameters
+## Request parameters {#request-parameters}
 
 ### table_name
 
@@ -118,7 +119,7 @@ When choosing a name for the table, consider the common [schema object naming ru
 
 Creating and filling a table with data from a `SELECT` query. For more information, see the [{#T}](as_select.md) section.
 
-## Examples of table creation {#examples-tables-creation}
+## Examples of table creation
 
 {% list tabs %}
 
@@ -126,7 +127,7 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
   {% if feature_column_container_type %}
 
-    ```yql
+  ```yql
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
@@ -138,7 +139,7 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
   {% else %}
 
-    ```yql
+  ```yql
     CREATE TABLE <table_name> (
       a Uint64,
       b Uint64,
@@ -152,7 +153,7 @@ Creating and filling a table with data from a `SELECT` query. For more informati
   Example of creating a table with a DEFAULT value:
 
   ```yql
-  CREATE TABLE table_with_default (
+    CREATE TABLE table_with_default (
     id Uint64,
     name String DEFAULT "unknown",
     score Double NOT NULL DEFAULT 0.0,
@@ -162,11 +163,19 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
   {% if feature_column_container_type == true %}
 
-  For non-key columns, any data types are allowed, whereas for key columns only [primitive](../../types/primitive.md) types are permitted. When specifying complex types (for example, List<String>), the type should be enclosed in double quotes.
+  For non-key columns, any data types are allowed{% if feature_serial %}, except [serial](../../types/serial.md) types{% endif %}, whereas for key columns only [primitive](../../types/primitive.md) types{% if feature_serial %} and [serial](../../types/serial.md) types{% endif %} are permitted. When specifying complex types (for example, `List<String>`), the type should be enclosed in double quotes.
+
+  {% else %}
+
+  {% if feature_serial %}
+
+  For key columns, only [primitive](../../types/primitive.md) and [serial](../../types/serial.md) data types are allowed; for non-key columns, only [primitive](../../types/primitive.md) types are allowed.
 
   {% else %}
 
   For both key and non-key columns, only [primitive](../../types/primitive.md) data types are allowed.
+
+  {% endif %}
 
   {% endif %}
 
@@ -209,8 +218,7 @@ Creating and filling a table with data from a `SELECT` query. For more informati
   );
   ```
 
-  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [Partitioning Row-Oriented Tables](../../../../concepts/datamodel/table.md#partitioning_row_table) section.
-
+  Such code will create a row-oriented table with automatic partitioning by partition size (`AUTO_PARTITIONING_BY_SIZE`) enabled, and with the preferred size of each partition (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) set to 512 megabytes. The full list of row-oriented table partitioning options can be found in the [Partitioning Row-Oriented Tables](../../../../concepts/datamodel/table.md#partitioning_row_table) section of the [{#T}](../../../../concepts/datamodel/table.md) article.
 
 - Creating a column-oriented table
 
@@ -229,7 +237,7 @@ Creating and filling a table with data from a `SELECT` query. For more informati
 
   For column-oriented tables, you can explicitly specify the columns on which partitioning will occur using the `PARTITION BY HASH` construct. Usually, these are columns of the primary key with a large number of unique values, such as `Timestamp`. If `PARTITION BY HASH` is not specified, partitioning will occur automatically on all columns included in the primary key. For more information on selecting and working with partition keys in column-oriented tables, see the [{#T}](../../../../dev/primary-key/column-oriented.md) article.
 
-  It is important to specify the correct number of partitions when creating a column-oriented table with the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` parameter:
+  Column-oriented tables do not currently support automatic repartitioning, so it is important to specify the correct number of partitions when creating a table with the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` parameter:
 
   ```yql
   CREATE TABLE table_name (
@@ -245,7 +253,8 @@ Creating and filling a table with data from a `SELECT` query. For more informati
   );
   ```
 
-  This code will create a columnar table with 10 partitions. The full list of column-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section.
+  This code will create a column-oriented table with 10 partitions. The full list of column-oriented table partitioning options can be found in the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section of the [{#T}](../../../../concepts/datamodel/table.md) article.
+
 
 {% endlist %}
 
@@ -285,7 +294,7 @@ Specifying a `PRIMARY KEY` with a non-empty list of columns is mandatory. These 
 
 {% endif %}
 
-### Example
+Example:
 
 ```yql
 CREATE TABLE <table_name> (
@@ -298,7 +307,7 @@ CREATE TABLE <table_name> (
 
 {% endif %}
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 When creating row-oriented tables, it is possible to specify:
 

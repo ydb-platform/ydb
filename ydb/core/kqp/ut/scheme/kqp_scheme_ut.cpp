@@ -7679,7 +7679,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterColumnTableTtl, ELocalIndexAsSchemeObject) {
-        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
@@ -15227,7 +15227,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(AddColumnWithTtl, ELocalIndexAsSchemeObject) {
-        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
@@ -15906,7 +15906,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TTestHelper testHelper(runnerSettings);
 
@@ -16207,7 +16207,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TTestHelper testHelper(runnerSettings);
 
@@ -16246,7 +16246,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TTestHelper testHelper(runnerSettings);
 

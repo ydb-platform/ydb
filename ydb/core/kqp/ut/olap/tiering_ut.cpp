@@ -583,7 +583,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     }
 
     Y_UNIT_TEST(TieringForIndexes, ELocalIndexAsSchemeObject) {
-        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         TTieringTestHelper tieringHelper{LocalIndexAsSchemeObject};
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     }
     
     Y_UNIT_TEST(TieringViaIndex, EIndexForTTLColumn, ELocalIndexAsSchemeObject) {
-        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         TTieringTestHelper tieringHelper{LocalIndexAsSchemeObject};
         auto& csController = tieringHelper.GetCsController();
         auto& testHelper = tieringHelper.GetTestHelper();

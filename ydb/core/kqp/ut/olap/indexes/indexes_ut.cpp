@@ -1655,8 +1655,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
     }
 
     Y_UNIT_TEST(CountMinSketchIndex, EUseQueryService, ELocalIndexAsSchemeObject) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);

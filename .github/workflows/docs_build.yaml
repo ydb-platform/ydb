@@ -90,6 +90,24 @@ jobs:
           cli-version: "4.59.12"
           use-ya-opensource: ${{ steps.ya.outputs.use }}
 
+      - name: Fail on documentation build issues
+        run: |
+          set -euo pipefail
+          if [[ ! -f build-html.log ]]; then
+            echo "::error::Documentation build log (build-html.log) not found"
+            exit 1
+          fi
+          issue_count=$(grep -cE '^(ERR|WARN)' build-html.log || true)
+          if [[ "$issue_count" -gt 0 ]]; then
+            echo "::error::Documentation build has ${issue_count} error(s)/warning(s)"
+            grep -E '^(ERR|WARN)' build-html.log | sort -u | head -20
+            if [[ "$issue_count" -gt 20 ]]; then
+              echo "... and $((issue_count - 20)) more (see PR comment for full log)"
+            fi
+            exit 1
+          fi
+          echo "No documentation build warnings or errors"
+
       # docs-build-action writes github.event.number to inputs/pr-number.
       # For workflow_dispatch this field is empty, so patch the artifact.
       - name: Download inputs artifact

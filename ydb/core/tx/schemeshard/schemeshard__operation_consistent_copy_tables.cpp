@@ -322,7 +322,12 @@ bool CreateConsistentCopyTables(
             }
             scheme->SetInternal(tx.GetInternal());
             if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
-                result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), *scheme));
+                // Column tables use the OLAP local-index op; row tables use the generic one.
+                if (srcPath.Base()->IsColumnTable()) {
+                    result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), *scheme));
+                } else {
+                    result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
+                }
                 continue; // local indexes have no impl tables
             } else {
                 result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));

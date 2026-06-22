@@ -81,33 +81,38 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         for (const auto &stage : tx.GetStages()) {
             readPhases += stage.SourcesSize();
 
+            auto processTableSink = [&](const NKqpProto::TKqpInternalSink& intSink) {
+                if (!intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    return;
+                }
+                NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                AFL_ENSURE(intSink.GetSettings().UnpackTo(&sinkSettings));
+
+
+                AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
+                if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                    hasInsert = true;
+                    ++readPhases;
+                }
+                if (!sinkSettings.GetLookupColumns().empty()) {
+                    ++readPhases;
+                }
+                for (const auto& index : sinkSettings.GetIndexes()) {
+                    if (index.GetIsUniq()) {
+                        ++readPhases;
+                    }
+                }
+            };
+
             for (const auto &sink : stage.GetSinks()) {
-                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
-                    && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
-                {
-                    AFL_ENSURE(tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
-                    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));
-                    AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
-                    if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
-                        hasInsert = true;
-                        // Insert operations create new read phases,
-                        // so in presence of other reads we have to acquire snapshot.
-                        // This is unique to INSERT operation, because it can fail.
-                        ++readPhases;
-                    }
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                    processTableSink(sink.GetInternalSink());
+                }
+            }
 
-                    if (!sinkSettings.GetLookupColumns().empty()) {
-                        // Lookup for index update
-                        ++readPhases;
-                    }
-
-                    for (const auto& index : sinkSettings.GetIndexes()) {
-                        if (index.GetIsUniq()) {
-                            // Unique index check
-                            ++readPhases;
-                        }
-                    }
+            for (const auto &transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink) {
+                    processTableSink(transform.GetInternalSink());
                 }
             }
 

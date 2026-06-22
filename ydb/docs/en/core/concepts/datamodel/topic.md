@@ -156,8 +156,6 @@ A reader is a named entity for reading data from a topic. The reader contains re
 
 A read session is a client connection to a topic for receiving messages on behalf of a reader. Read sessions work through the Topic API. One reader can establish multiple read sessions: in this case, topic partitions are distributed among these sessions. To work with read sessions, it is recommended to use the {{ ydb-short-name }} SDK (see [Working with topics](../../reference/ydb-sdk/topic.md)).
 
-{% include [topic-consumer-types.md](_includes/topic-consumer-types.md) %}
-
 ### Read position {#consumer-offset}
 
 A read position is the saved [offset](#offset) of the reader for each topic partition. The read position is saved by the reader after sending an acknowledgment of the read data. When a new read session is established, messages are delivered to the reader starting from the saved read position. This allows users to avoid storing the read position on their side.

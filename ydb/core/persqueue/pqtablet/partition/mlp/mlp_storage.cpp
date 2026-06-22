@@ -734,7 +734,6 @@ void TStorage::RemoveMessageFromSlowZone(ui64 offset) {
 }
 
 bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay, ui64 logicalMessageCount) {
-    AFL_ENSURE(logicalMessageCount > 0)("offset", offset);
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
     while (!Messages.empty() && offset > GetLastOffset()) {

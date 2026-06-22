@@ -21,6 +21,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types
+    ydb/services/sqs_topic
     ydb/services/ydb
 )
 

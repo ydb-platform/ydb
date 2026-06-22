@@ -920,13 +920,11 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
     auto lastOffset = Storage->GetLastOffset();
     for (auto& result : results.GetResult()) {
-        AFL_ENSURE(result.GetLogicalMessageCount() > 0)("result", result.ShortDebugString());
         const ui64 resultLogicalMessageCount = result.GetLogicalMessageCount();
         const ui64 resultEndOffset = result.GetOffset() + resultLogicalMessageCount;
         if (lastOffset >= resultEndOffset) {
             continue;
         }
-        AFL_ENSURE(lastOffset <= result.GetOffset())("lastOffset", lastOffset)("resultOffset", result.GetOffset())("logicalMessageCount", resultLogicalMessageCount);
 
         TString messageGroupId;
         size_t delaySeconds = Config.GetDefaultDelayMessageTimeMs() / 1000;

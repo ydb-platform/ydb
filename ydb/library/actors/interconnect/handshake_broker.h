@@ -111,14 +111,18 @@ namespace NActors {
 
         void Handle(TEvHandshakeBrokerFree::TPtr& ev) {
             const TActorId sender = ev->Sender;
-            if (!PermittedLeases.erase(sender)) {
+            if (PermittedLeases.erase(sender)) {
+                // An actual slot was freed, hand it to the next waiter (or
+                // credit Capacity back). Only do this when a permitted lease
+                // was released -- a canceled waiter never consumed a slot.
+                PermitNext();
+            } else {
                 // Lease was not permitted yet, remove sender from Waiters queue
                 const auto it = WaiterLookup.find(sender);
                 Y_ABORT_UNLESS(it != WaiterLookup.end());
                 Waiters.erase(it->second);
                 WaiterLookup.erase(it);
             }
-            PermitNext();
         }
 
     public:

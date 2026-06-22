@@ -2749,6 +2749,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopic, "test");
         ReadTopicMessage(outputTopic1, "test-A");
         ReadTopicMessage(outputTopic2, "test-B");
+        WaitCheckpointByPath();
 
         const auto& results = ExecQuery(fmt::format(R"(
             SELECT * FROM `{row_table}`;

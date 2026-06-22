@@ -7,6 +7,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_min_max_index.py
     test_rename_table.py
     test_compression.py
     test_encoding.py

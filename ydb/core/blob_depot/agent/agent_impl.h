@@ -231,12 +231,12 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
-        NMonitoring::TDynamicCounters::TCounterPtr S3Gets5xx;
-        NMonitoring::TDynamicCounters::TCounterPtr S3Puts5xx;
 
+        NMonitoring::TDynamicCounterPtr S3Counters;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutsInFlightCounter;
 
         NMonitoring::TDynamicCounters::TCounterPtr AllocateIdFailures;
         NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueOverflows;
@@ -657,6 +657,7 @@ namespace NKikimr::NBlobDepot {
         ui32 CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
         ui32 ConsecutiveSuccessfulGetBatches = 0;
         ui32 S3GetsInFlight = 0;
+        ui32 S3PutsInFlight = 0;
         std::deque<TPendingS3Read> PendingS3Reads;
 
         void IssueOrEnqueueS3Read(TPendingS3Read&& read);
@@ -665,6 +666,8 @@ namespace NKikimr::NBlobDepot {
         void OnS3GetCompleted(bool success, ui64 bytes);
         void RunPendingS3ReadsIfPossible();
         void HandleS3GetThrottleWakeup();
+
+        void IncS3HttpErrorCounter(const TString& operation, int httpCode);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Metrics

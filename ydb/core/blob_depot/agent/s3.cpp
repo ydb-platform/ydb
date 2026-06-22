@@ -102,9 +102,7 @@ namespace NKikimr::NBlobDepot {
 
                 ++*Agent.S3GetsError;
                 const auto& error = msg.GetError();
-                if (static_cast<int>(error.GetResponseCode()) >= 500) {
-                    ++*Agent.S3Gets5xx;
-                }
+                Agent.IncS3HttpErrorCounter("Gets", static_cast<int>(error.GetResponseCode()));
 
                 if (IsSlowDown(error)) {
                     ++*Agent.S3GetsSlowDown;
@@ -294,25 +292,25 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Finish(std::optional<TString>&& error, bool slowDown, int httpCode = 0) {
-                if (!LifetimeToken.expired()) {
-                    InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
-                        auto& Agent = Query->Agent;
-                        const auto& QueryId = Query->QueryId;
-                        if (httpCode >= 500) {
-                            ++*Agent.S3Puts5xx;
-                        }
+                InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
+                    auto& Agent = Query->Agent;
+                    if (!LifetimeToken.expired()) {
+                        Agent.IncS3HttpErrorCounter("Puts", httpCode);
 
                         YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Written_to_S3",
                             {"marker", "BDEV37"},
                             {"VG", Agent.VirtualGroupId},
                             {"BDT", Agent.TabletId},
                             {"G", Agent.BlobDepotGeneration},
-                            {"Q", QueryId},
+                            {"Q", Query->QueryId},
                             {"blobId", Id},
                             {"locator", Locator});
                         Query->OnPutS3ObjectResponse(std::move(error), slowDown);
-                    });
-                }
+                    }
+                    Y_ABORT_UNLESS(Agent.S3PutsInFlight);
+                    --Agent.S3PutsInFlight;
+                    *Agent.S3PutsInFlightCounter = Agent.S3PutsInFlight;
+                });
                 PassAway();
             }
 
@@ -326,6 +324,9 @@ namespace NKikimr::NBlobDepot {
         if (!LifetimeToken) {
             LifetimeToken = std::make_shared<TLifetimeToken>();
         }
+
+        ++Agent.S3PutsInFlight;
+        *Agent.S3PutsInFlightCounter = Agent.S3PutsInFlight;
 
         const TActorId writerActorId = Agent.RegisterWithSameMailbox(new TWriteActor(LifetimeToken, this, id, locator));
 

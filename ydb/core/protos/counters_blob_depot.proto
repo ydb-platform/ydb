@@ -19,7 +19,7 @@ enum ESimpleCounters {
     COUNTER_DECOMMIT_MODE_PREPARING = 11 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Preparing"}];
     COUNTER_DECOMMIT_MODE_IN_PROGRESS = 12 [(NKikimr.CounterOpts) = {Name: "DecommitMode/InProgress"}];
     COUNTER_DECOMMIT_MODE_DONE = 13 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Done"}];
-    COUNTER_SPACE_COLOR = 14 [(NKikimr.CounterOpts) = {Name: "SpaceColor"}];
+    COUNTER_SPACE_COLOR = 14 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Green"}];
     COUNTER_APPROXIMATE_FREE_SPACE_SHARE = 15 [(NKikimr.CounterOpts) = {Name: "ApproximateFreeSpaceShare"}];
     COUNTER_S3_PUT_WRITES_IN_FLIGHT = 16 [(NKikimr.CounterOpts) = {Name: "S3/Put/WritesInFlight"}];
     COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT = 17 [(NKikimr.CounterOpts) = {Name: "S3/Put/MaxWritesInFlight"}];
@@ -27,6 +27,14 @@ enum ESimpleCounters {
     COUNTER_S3_DELETE_QUEUE_SIZE = 19 [(NKikimr.CounterOpts) = {Name: "S3/Delete/QueueSize"}];
     COUNTER_S3_DELETE_MAX_IN_FLIGHT = 20 [(NKikimr.CounterOpts) = {Name: "S3/Delete/MaxInFlight"}];
     COUNTER_AGENTS_CONNECTED = 21 [(NKikimr.CounterOpts) = {Name: "AgentsConnected"}];
+    COUNTER_SPACE_COLOR_CYAN = 22 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Cyan"}];
+    COUNTER_SPACE_COLOR_LIGHT_YELLOW = 23 [(NKikimr.CounterOpts) = {Name: "SpaceColor/LightYellow"}];
+    COUNTER_SPACE_COLOR_YELLOW = 24 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Yellow"}];
+    COUNTER_SPACE_COLOR_LIGHT_ORANGE = 25 [(NKikimr.CounterOpts) = {Name: "SpaceColor/LightOrange"}];
+    COUNTER_SPACE_COLOR_PRE_ORANGE = 26 [(NKikimr.CounterOpts) = {Name: "SpaceColor/PreOrange"}];
+    COUNTER_SPACE_COLOR_ORANGE = 27 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Orange"}];
+    COUNTER_SPACE_COLOR_RED = 28 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Red"}];
+    COUNTER_SPACE_COLOR_BLACK = 29 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Black"}];
 }
 
 enum ECumulativeCounters {
@@ -46,7 +54,6 @@ enum ECumulativeCounters {
     COUNTER_PICK_CHANNELS_FAILURES = 13 [(NKikimr.CounterOpts) = {Name: "PickChannels/Failures"}];
     COUNTER_S3_PUT_THROTTLE_ACTIVATIONS = 14 [(NKikimr.CounterOpts) = {Name: "S3/Put/ThrottleActivations"}];
     COUNTER_S3_DELETE_THROTTLE_ACTIVATIONS = 15 [(NKikimr.CounterOpts) = {Name: "S3/Delete/ThrottleActivations"}];
-    COUNTER_S3_DELETES_5XX = 16 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/5xx"}];
 }
 
 enum EPercentileCounters {

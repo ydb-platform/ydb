@@ -6,6 +6,33 @@ namespace NKikimr::NBlobDepot {
 
     using TSpaceMonitor = TBlobDepot::TSpaceMonitor;
 
+    static std::optional<NKikimrBlobDepot::ESimpleCounters> GetSpaceColorCounter(
+            NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        switch (color) {
+            case TColor::GREEN: return NKikimrBlobDepot::COUNTER_SPACE_COLOR;
+            case TColor::CYAN: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_CYAN;
+            case TColor::LIGHT_YELLOW: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_LIGHT_YELLOW;
+            case TColor::YELLOW: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_YELLOW;
+            case TColor::LIGHT_ORANGE: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_LIGHT_ORANGE;
+            case TColor::PRE_ORANGE: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_PRE_ORANGE;
+            case TColor::ORANGE: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_ORANGE;
+            case TColor::RED: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_RED;
+            case TColor::BLACK: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_BLACK;
+            default: return std::nullopt;
+        }
+    }
+
+    void TSpaceMonitor::SwitchSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::E oldColor,
+            NKikimrBlobStorage::TPDiskSpaceColor::E newColor) {
+        if (const auto counter = GetSpaceColorCounter(oldColor)) {
+            Self->TabletCounters->Simple()[*counter] = 0;
+        }
+        if (const auto counter = GetSpaceColorCounter(newColor)) {
+            Self->TabletCounters->Simple()[*counter] = 1;
+        }
+    }
+
     TSpaceMonitor::TSpaceMonitor(TBlobDepot *self)
         : Self(self)
     {}
@@ -78,7 +105,7 @@ namespace NKikimr::NBlobDepot {
             Groups[group].Channels.push_back(channel);
         }
 
-        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_SPACE_COLOR] = static_cast<ui64>(SpaceColor);
+        SwitchSpaceColor(SpaceColor, SpaceColor);
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_APPROXIMATE_FREE_SPACE_SHARE] = static_cast<ui64>(ApproximateFreeSpaceShare * 10000);
     }
 
@@ -111,9 +138,10 @@ namespace NKikimr::NBlobDepot {
 
     void TSpaceMonitor::SetSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare) {
         if (SpaceColor != spaceColor || ApproximateFreeSpaceShare != approximateFreeSpaceShare) {
+            const auto oldColor = SpaceColor;
             SpaceColor = spaceColor;
             ApproximateFreeSpaceShare = approximateFreeSpaceShare;
-            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_SPACE_COLOR] = static_cast<ui64>(SpaceColor);
+            SwitchSpaceColor(oldColor, SpaceColor);
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_APPROXIMATE_FREE_SPACE_SHARE] =
                 static_cast<ui64>(ApproximateFreeSpaceShare * 10000);
             Self->OnSpaceColorChange(SpaceColor, ApproximateFreeSpaceShare);

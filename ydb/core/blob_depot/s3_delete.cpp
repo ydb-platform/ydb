@@ -1,5 +1,6 @@
 #include "s3.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/wrappers/abstract.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
@@ -13,16 +14,28 @@ namespace NKikimr::NBlobDepot {
         std::vector<TS3Locator> LocatorsOk;
         std::vector<TS3Locator> LocatorsThrottled;
         std::vector<TS3Locator> LocatorsError;
-        size_t ServerErrors = 0;
+        THashMap<int, size_t> HttpErrorCounts;
 
         TEvDeleteResult(std::vector<TS3Locator>&& locatorsOk, std::vector<TS3Locator>&& locatorsThrottled,
-                std::vector<TS3Locator>&& locatorsError, size_t serverErrors = 0)
+                std::vector<TS3Locator>&& locatorsError, THashMap<int, size_t> httpErrorCounts = {})
             : LocatorsOk(std::move(locatorsOk))
             , LocatorsThrottled(std::move(locatorsThrottled))
             , LocatorsError(std::move(locatorsError))
-            , ServerErrors(serverErrors)
+            , HttpErrorCounts(std::move(httpErrorCounts))
         {}
     };
+
+    static void IncS3HttpErrorCounter(TBlobDepot* self, const char* operation, int httpCode, size_t count = 1) {
+        if (httpCode <= 0 || !count) {
+            return;
+        }
+        auto counters = GetServiceCounters(AppData()->Counters, "blob_depot")
+            ->GetSubgroup("tablet", ::ToString(self->TabletID()))
+            ->GetSubgroup("subsystem", "s3");
+        *counters->GetSubgroup(operation, "httpCode")
+            ->GetSubgroup("code", ::ToString(httpCode))
+            ->GetCounter("", true) += count;
+    }
 
     static bool IsSlowDown(const Aws::S3::S3Error& error) {
         return error.GetErrorType() == Aws::S3::S3Errors::SLOW_DOWN
@@ -54,7 +67,7 @@ namespace NKikimr::NBlobDepot {
                 Finish(error.GetMessage().c_str(), /*throttled=*/true);
             } else {
                 Finish(error.GetMessage().c_str(), /*throttled=*/false,
-                    static_cast<int>(error.GetResponseCode()) >= 500);
+                    static_cast<int>(error.GetResponseCode()));
             }
         }
 
@@ -65,7 +78,7 @@ namespace NKikimr::NBlobDepot {
             std::vector<TS3Locator> locatorsThrottled;
             std::vector<TS3Locator> locatorsError;
             bool requestThrottled = false;
-            bool requestServerError = false;
+            THashMap<int, size_t> httpErrorCounts;
 
             if (msg.IsSuccess()) {
                 auto& result = msg.Result.GetResult();
@@ -129,9 +142,10 @@ namespace NKikimr::NBlobDepot {
                     {"id", LogId},
                     {"error", msg.GetError().GetMessage().c_str()});
             } else {
-                requestServerError = static_cast<int>(msg.GetError().GetResponseCode()) >= 500;
-                STLOG(PRI_WARN, BLOB_DEPOT, BDTS12, "failed to delete object(s) from S3", (Id, LogId),
-                    (Error, msg.GetError().GetMessage().c_str()));
+                const int httpCode = static_cast<int>(msg.GetError().GetResponseCode());
+                if (httpCode > 0) {
+                    httpErrorCounts[httpCode] = Locators.size();
+                }
                 YDB_LOG_WARN("Failed to delete object(s) from S3",
                     {"marker", "BDTS12"},
                     {"id", LogId},
@@ -159,7 +173,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsThrottled),
-                std::move(locatorsError), requestServerError ? Locators.size() : 0));
+                std::move(locatorsError), std::move(httpErrorCounts)));
             PassAway();
         }
 
@@ -167,7 +181,7 @@ namespace NKikimr::NBlobDepot {
             Finish("event undelivered");
         }
 
-        void Finish(std::optional<TString> error, bool throttled = false, bool serverError = false) {
+        void Finish(std::optional<TString> error, bool throttled = false, int httpCode = 0) {
             if (error) {
                 YDB_LOG_WARN("Failed to delete object(s) from S3",
                     {"marker", "BDTS03"},
@@ -190,8 +204,12 @@ namespace NKikimr::NBlobDepot {
             for (const auto& [key, locator] : Locators) {
                 target->push_back(locator);
             }
+            THashMap<int, size_t> httpErrorCounts;
+            if (httpCode > 0 && error && !throttled) {
+                httpErrorCounts[httpCode] = Locators.size();
+            }
             Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsThrottled),
-                std::move(locatorsError), serverError ? Locators.size() : 0));
+                std::move(locatorsError), std::move(httpErrorCounts)));
             PassAway();
         }
 
@@ -339,7 +357,9 @@ namespace NKikimr::NBlobDepot {
                 Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_ERROR] += msg.LocatorsError.size();
                 Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_SLOW_DOWN] +=
                     msg.LocatorsThrottled.size();
-                Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_DELETES_5XX] += msg.ServerErrors;
+                for (const auto& [httpCode, count] : msg.HttpErrorCounts) {
+                    IncS3HttpErrorCounter(Self, "Deletes", httpCode, count);
+                }
 
                 if (!msg.LocatorsThrottled.empty()) {
                     // S3 asked us to slow down: requeue, shrink concurrency, and arm exponential backoff.

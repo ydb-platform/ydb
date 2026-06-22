@@ -22,7 +22,9 @@ SELECT 2 + 2;
 {% if feature_match_recogznize==true %}
 * к входным таблицам применяется [MATCH_RECOGNIZE](match_recognize.md)
 {% endif %}
+{% if feature_tablesample==true %}
 * вычисляется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
+{% endif %}
 * выполняется [FLATTEN COLUMNS](flatten.md#flatten-columns) или [FLATTEN BY](flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
 {% if feature_join %}
 * выполняются все [JOIN](join.md);
@@ -212,8 +214,10 @@ SELECT * FROM FILTER(
 * [ORDER BY](order_by.md)
 * [ASSUME ORDER BY](assume_order_by.md)
 * [LIMIT OFFSET](limit_offset.md)
+{% if feature_tablesample==true %}
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+{% endif %}
 {% if feature_match_recogznize==true %}
 * [MATCH_RECOGNIZE](match_recognize.md)
 {% endif %}

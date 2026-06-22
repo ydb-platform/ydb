@@ -22,6 +22,11 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+<<<<<<< HEAD
+=======
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
+>>>>>>> 57caea363ed (external data source iam auth: properly mangle discovered addresses (#43820))
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
@@ -384,6 +389,7 @@ public:
 
         InitSharedReading();
         InitCheckpointStorage();
+        InitDescribeResourceIdService();
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -477,6 +483,9 @@ public:
         if (CheckpointStorageService) {
             Send(CheckpointStorageService, new TEvents::TEvPoison());
         }
+        if (DescribeResourceIdService) {
+            Send(DescribeResourceIdService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -527,6 +536,7 @@ public:
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         InitSharedReading();
         InitCheckpointStorage();
+        InitDescribeResourceIdService();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1943,6 +1953,16 @@ private:
             NYql::NDq::MakeCheckpointStorageID(), CheckpointStorageService);
     }
 
+    void InitDescribeResourceIdService() {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableExternalDataSourceAuthMethodIam() || DescribeResourceIdService) {
+            return;
+        }
+        auto actor = CreateDescribeResourceIdServiceActor(FederatedQuerySetup->Driver);
+        DescribeResourceIdService = TActivationContext::Register(actor);
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -1995,6 +2015,7 @@ private:
     TActorId KqpQueryTextCacheService;
     TActorId RowDispatcherService;
     TActorId CheckpointStorageService;
+    TActorId DescribeResourceIdService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

@@ -53,6 +53,7 @@ ydb/core/transfer/ut/functional Transfer.CustomFlushInterval
 ydb/core/transfer/ut/functional Transfer.DescribeError_OnLambdaCompilation
 ydb/core/transfer/ut/functional Transfer.DescribeTransferWithErrorTopicNotFound
 ydb/core/transfer/ut/functional Transfer.ErrorInMultiLine
+ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Local
 ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Remote
 ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Local
@@ -159,6 +160,7 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_prestable-26-3_to_stable-26-2-1-1-False-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-0-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-1-1_to_stable-26-2-1-2-2048-COLUMN]
+ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
@@ -514,4 +516,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpc
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[9]
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[only_level-level=3-specified without an algorithm]
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic_kafka/tests test_workload_topic.py.TestYdbTopicWorkload.test

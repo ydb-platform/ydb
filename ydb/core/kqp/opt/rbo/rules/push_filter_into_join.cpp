@@ -65,17 +65,14 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
             TEquiJoinCondition cond(conj);
 
             // We cannot push filter into join conditions of a LeftOnly join - will break semantics
-            if(join->JoinKind == "LeftOnly") {
-                topLevelPreds.push_back(conj);
-                continue;
-            }
-
-            if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
-                joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
-                continue;
-            } else if (IUSetDiff({cond.GetLeftIU()}, rightIUs).empty() && IUSetDiff({cond.GetRightIU()}, leftIUs).empty()) {
-                joinConditions.push_back(std::make_pair(cond.GetRightIU(), cond.GetLeftIU()));
-                continue;
+            if(join->JoinKind != "LeftOnly") {
+                if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
+                    joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
+                    continue;
+                } else if (IUSetDiff({cond.GetLeftIU()}, rightIUs).empty() && IUSetDiff({cond.GetRightIU()}, leftIUs).empty()) {
+                    joinConditions.push_back(std::make_pair(cond.GetRightIU(), cond.GetLeftIU()));
+                    continue;
+                }
             }
         }
 

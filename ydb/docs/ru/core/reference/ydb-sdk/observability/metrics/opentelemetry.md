@@ -29,15 +29,6 @@
 | `ydb.client.retry.duration`  | Histogram | `s`         | Полная видимая клиенту длительность логической операции, выполненной через политику повторов, включая все попытки и задержки backoff. |
 | `ydb.client.retry.attempts`  | Histogram | `{attempt}` | Распределение числа попыток на одну логическую операцию. Значение `1` означает успех с первой попытки.                               |
 
-### Дополнительные метрики (JavaScript) {#js-metrics}
-
-В [JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk) пакет `@ydbjs/telemetry` использует собственные имена и семантику для метрик повторных попыток — отличные от `ydb.client.retry.*` выше:
-
-| Имя                   | Тип       | Единица     | Описание                                                                                                                                              |
-|-----------------------|-----------|-------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ydb.retry.attempts`  | Counter   | `{attempt}` | Монотонный счётчик попыток повторного выполнения с тегом исхода `ydb.retry.outcome`. В отличие от гистограммы `ydb.client.retry.attempts`, не показывает распределение числа попыток на один запрос. |
-| `ydb.retry.duration`  | Histogram | `s`         | Суммарная длительность цикла повторных попыток, включая backoff (аналог `ydb.client.retry.duration`).                                                  |
-
 ## Атрибуты {#attributes}
 
 | Имя                           | Применяется к                                                  | Значение                                                                                                        |
@@ -48,7 +39,6 @@
 | `status_code`                 | `ydb.client.operation.failed`                                  | Код статуса {{ ydb-short-name }} (например, `BAD_REQUEST`, `SCHEME_ERROR`).                                     |
 | `ydb.query.session.pool.name` | Все метрики `ydb.query.session.*`                              | Имя пула сессий. По умолчанию формируется как `<endpoint>/<database>`; настраивается через API конкретного SDK. |
 | `ydb.query.session.state`     | `ydb.query.session.count`                                      | Состояние сессии: `idle` или `used`.                                                                            |
-| `ydb.retry.outcome`           | `ydb.retry.attempts` (JavaScript)                              | Исход попытки повторного выполнения: например, `success`, `retried`.                                            |
 
 ## Подключение к SDK {#integration}
 
@@ -118,7 +108,7 @@
 
 - Python
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
 - C#
 
@@ -291,14 +281,21 @@
   await sdk.shutdown()
   ```
 
-  Пакет `@ydbjs/telemetry` подписывается на события `node:diagnostics_channel` из `@ydbjs/core`, `@ydbjs/query`, `@ydbjs/auth` и `@ydbjs/retry` и публикует метрики из [списка выше](#metrics-list) и [дополнительные метрики JavaScript SDK](#js-metrics). Длительность операций экспортируется как `db.client.operation.duration` (семантические конвенции OpenTelemetry), а не `ydb.client.operation.duration`. Текущее число ожидающих сессию запросов — gauge `ydb.query.session.acquire.pending`, а не counter `ydb.query.session.pending_requests`. Подробнее см. [репозиторий JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk).
+  Пакет `@ydbjs/telemetry` подписывается на события `node:diagnostics_channel` из `@ydbjs/core`, `@ydbjs/query`, `@ydbjs/auth` и `@ydbjs/retry` и публикует метрики из [списка выше](#metrics-list). Длительность операций экспортируется как `db.client.operation.duration` (семантические конвенции OpenTelemetry), а не `ydb.client.operation.duration`. Текущее число ожидающих сессию запросов — gauge `ydb.query.session.acquire.pending`, а не counter `ydb.query.session.pending_requests`. Подробнее см. [репозиторий JavaScript SDK](https://github.com/ydb-platform/ydb-js-sdk).
+
+  Кроме того, JavaScript SDK публикует собственные метрики повторных попыток с именами и семантикой, отличными от `ydb.client.retry.*`:
+
+  | Имя                   | Тип       | Единица     | Описание                                                                                                                                              |
+  |-----------------------|-----------|-------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | `ydb.retry.attempts`  | Counter   | `{attempt}` | Монотонный счётчик попыток повторного выполнения с тегом исхода `ydb.retry.outcome` (например, `success`, `retried`). В отличие от гистограммы `ydb.client.retry.attempts`, не показывает распределение числа попыток на один запрос. |
+  | `ydb.retry.duration`  | Histogram | `s`         | Суммарная длительность цикла повторных попыток, включая backoff (аналог `ydb.client.retry.duration`).                                                  |
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
 - PHP
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

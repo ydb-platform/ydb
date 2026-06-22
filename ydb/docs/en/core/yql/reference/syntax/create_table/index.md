@@ -39,9 +39,6 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 {% if oss == true and backend_name == "YDB" %}
 
 
-<<<<<<< HEAD
-{% if feature_olap_tables %}
-=======
 ### table_name
 
 The path of the table to be created.
@@ -89,7 +86,6 @@ Definition of a column group with specified parameters. For more information, se
 Additional parameters for creating a table. For more information, see the [{#T}](with.md) section.
 
 {% note info %}
->>>>>>> adf363ebb80 (Zero documentation build warnings (#44105))
 
 {{ ydb-short-name }} supports two types of tables:
 

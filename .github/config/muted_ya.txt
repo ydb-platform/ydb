@@ -45,6 +45,12 @@ ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_prestable-26-3]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-1-1_to_stable-26-2-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-2-1_to_stable-26-1-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
@@ -63,6 +69,12 @@ ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-1-1_to_stable-26-2-1-row-True]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-2-1_to_prestable-26-3-row-False]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-2-1_to_prestable-26-3-row-True]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_prestable-26-3_to_prestable-26-3]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-1-1_to_stable-26-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-2-1_to_stable-26-1-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransfer.test_workload_manager_tablet_transfer[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransfer.test_workload_manager_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
@@ -77,6 +89,10 @@ ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling
 ydb/tests/compatibility/olap test_min_max_index.py.TestMinMaxIndex.test_min_max_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility/result_set_format py3test.[test_result_set_arrow.py */*] chunk
+ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-26-3_to_prestable-26-3-codec5-ROW]
+ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_multistatement[restart_prestable-26-3_to_stable-26-2-1-1-True-2048-ROW]
+ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-0-2048-ROW]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk

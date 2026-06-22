@@ -50,8 +50,8 @@ public:
         }
         try {
             return GetValue<TValue>(key);
-        } catch (...) {
-            return defaultValue;
+        } catch (const std::exception& e) {
+            ythrow yexception() << "Invalid value for key '" << key << "': '" << it->second << "' (" << e.what() << ")";
         }
     }
 
@@ -207,7 +207,20 @@ private:
             return value;
         }
         else if constexpr (std::is_same_v<TValue, bool>) {
-            return value == "true" || value == "1" || value == "on";
+            std::string normalized = value;
+            std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char c) {
+                return std::tolower(c);
+            });
+
+            if (normalized == "true" || normalized == "1" || normalized == "on" || normalized == "yes") {
+                return true;
+            }
+
+            if (normalized == "false" || normalized == "0" || normalized == "off" || normalized == "no") {
+                return false;
+            }
+
+            ythrow yexception() << "Invalid boolean value: " << value;
         }
         else if constexpr (std::is_integral_v<TValue>) {
             if constexpr (std::is_unsigned_v<TValue>) {

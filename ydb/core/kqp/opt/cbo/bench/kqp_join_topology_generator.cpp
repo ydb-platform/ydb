@@ -1,10 +1,12 @@
 #include "kqp_join_topology_generator.h"
 
+#include <algorithm>
 #include <cstdint>
-#include <vector>
-#include <sstream>
 #include <random>
 #include <set>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
 
 namespace NKikimr::NKqp {
 
@@ -78,6 +80,7 @@ void TRelationGraph::Rewire(TRNG& rng, unsigned u, unsigned oldV, unsigned newV,
 void TRelationGraph::Disconnect(unsigned u, unsigned v) {
     RemoveEdgeFromList(u, v);
     RemoveEdgeFromList(v, u);
+    GlobalKeyMappingDirty_ = true;
 }
 
 bool TRelationGraph::HasEdge(unsigned u, unsigned v) const {
@@ -126,13 +129,13 @@ std::optional<TRelationGraph::TEdge> TRelationGraph::GetEdge(unsigned u, unsigne
 }
 
 void TRelationGraph::ConnectWithKeys(unsigned u, unsigned v, unsigned keyU, unsigned keyV) {
+    EnsureFreshGlobalKeyMapping();
+
     AdjacencyList_[u].push_back({v, keyU, keyV});
     AdjacencyList_[v].push_back({u, keyV, keyU});
 
-    NodeStates_[u].Counts[keyU]++;
-    NodeStates_[u].TotalEdges++;
-    NodeStates_[v].Counts[keyV]++;
-    NodeStates_[v].TotalEdges++;
+    NodeStates_[u].AddKey(keyU);
+    NodeStates_[v].AddKey(keyV);
 
     size_t idU = EnsureGlobalID(u, keyU);
     size_t idV = EnsureGlobalID(v, keyV);
@@ -140,6 +143,10 @@ void TRelationGraph::ConnectWithKeys(unsigned u, unsigned v, unsigned keyU, unsi
 }
 
 void TRelationGraph::Connect(TRNG& rng, unsigned u, unsigned v, TPitmanYorConfig config) {
+    if (config.UseGlobalStats) {
+        EnsureFreshGlobalKeyMapping();
+    }
+
     // 1. Define Accessor for LHS (U)
     // If GlobalStats is on, chance of picking a key is proportional to its Class Size.
     TWeightAccessor accessorU = nullptr;
@@ -240,6 +247,31 @@ size_t TRelationGraph::EnsureGlobalID(unsigned table, unsigned key) {
         GlobalKeyMapping_[table][key] = currentCap;
     }
     return GlobalKeyMapping_[table][key];
+}
+
+void TRelationGraph::RebuildGlobalKeyMapping() {
+    EquivalenceClasses_ = TDisjointSets(0);
+    GlobalKeyMapping_.clear();
+
+    for (unsigned u = 0; u < AdjacencyList_.size(); ++u) {
+        for (const auto& edge : AdjacencyList_[u]) {
+            if (u >= edge.Target) {
+                continue;
+            }
+
+            size_t idU = EnsureGlobalID(u, edge.ColumnLHS);
+            size_t idV = EnsureGlobalID(edge.Target, edge.ColumnRHS);
+            EquivalenceClasses_.UnionSets(idU, idV);
+        }
+    }
+
+    GlobalKeyMappingDirty_ = false;
+}
+
+void TRelationGraph::EnsureFreshGlobalKeyMapping() {
+    if (GlobalKeyMappingDirty_) {
+        RebuildGlobalKeyMapping();
+    }
 }
 
 std::vector<int> TRelationGraph::FindComponents() const {
@@ -595,6 +627,18 @@ TRelationGraph GenerateGalaxy(TRNG& rng, unsigned numNodes, TPitmanYorConfig con
 }
 
 TRelationGraph GenerateRandomGraphFixedM(TRNG &rng, unsigned numNodes, unsigned numEdges, TPitmanYorConfig config) {
+    if (numNodes < 2) {
+        if (numEdges == 0) {
+            return TRelationGraph(numNodes);
+        }
+        throw std::invalid_argument("Need at least two nodes to create edges");
+    }
+
+    unsigned maxEdges = numNodes * (numNodes - 1) / 2;
+    if (numEdges > maxEdges) {
+        throw std::invalid_argument("Requested more edges than a simple graph can contain");
+    }
+
     if (numEdges < numNodes - 1) {
         throw std::invalid_argument("Need at least N-1 edges for connected graph");
     }
@@ -602,18 +646,30 @@ TRelationGraph GenerateRandomGraphFixedM(TRNG &rng, unsigned numNodes, unsigned 
     TRelationGraph graph = GenerateRandomTree(rng, numNodes, config);
 
     unsigned edgesCreated = numNodes - 1;
+    if (edgesCreated == numEdges) {
+        return graph;
+    }
 
-    unsigned maxIters = numNodes * (numNodes - 1) / 2;
-    // Allow a bit more iterations to account for us being unlucky
-    maxIters *= 3;
+    std::vector<std::pair<unsigned, unsigned>> candidates;
+    candidates.reserve(maxEdges - edgesCreated);
+    for (unsigned u = 0; u < numNodes; ++u) {
+        for (unsigned v = u + 1; v < numNodes; ++v) {
+            if (!graph.HasEdge(u, v)) {
+                candidates.push_back({u, v});
+            }
+        }
+    }
 
-    for (ui32 i = 0; edgesCreated < numEdges && i < maxIters; ++ i) {
-        unsigned u = rng() % numNodes;
-        unsigned v = rng() % numNodes;
+    while (edgesCreated < numEdges) {
+        if (candidates.empty()) {
+            throw std::runtime_error("Failed to create requested number of edges");
+        }
 
-        if (u == v) continue;
-        if (graph.HasEdge(u, v)) continue;
-
+        std::uniform_int_distribution<size_t> dist(0, candidates.size() - 1);
+        size_t idx = dist(rng);
+        auto [u, v] = candidates[idx];
+        candidates[idx] = candidates.back();
+        candidates.pop_back();
         graph.Connect(rng, u, v, config);
         ++edgesCreated;
     }
@@ -744,26 +800,34 @@ std::vector<int> GenerateLogNormalDegrees(TRNG& rng, int numVertices, double log
 }
 
 ui32 TPitmanYorNodeState::GenerateKey(TRNG& rng, TPitmanYorConfig config, double forceQuantile, TWeightAccessor weightAccessor) {
+    if (config.Alpha < 0.0 || config.Alpha >= 1.0 || config.Theta <= -config.Alpha) {
+        throw std::invalid_argument("Invalid Pitman-Yor parameters: expected 0 <= alpha < 1 and theta > -alpha");
+    }
+
     double r = (forceQuantile >= 0.0) ? forceQuantile : getRandomNormalizedDouble(rng);
+
+    if (TotalEdges == 0) {
+        ui32 newKey = FreeKeys.empty() ? static_cast<ui32>(Counts.size()) : FreeKeys.back();
+        AddKey(newKey);
+        return newKey;
+    }
 
     // 1. Structural Decision: New vs Existing?
     // Using standard Pitman-Yor logic based on Theta and Alpha.
     // P(New) = (Theta + Alpha * ActiveTables) / (Total + Theta)
-    double probNew = (config.Theta + config.Alpha * ActiveTables) / TotalEdges + config.Theta;
+    double denominator = TotalEdges + config.Theta;
+    if (denominator <= 0.0) {
+        throw std::invalid_argument("Invalid Pitman-Yor state: TotalEdges + theta must be positive");
+    }
+    double probNew = (config.Theta + config.Alpha * ActiveTables) / denominator;
+    if (probNew < 0.0 || probNew > 1.0) {
+        throw std::invalid_argument("Invalid Pitman-Yor state: new-key probability is outside [0, 1]");
+    }
 
     // If random value falls in the upper slice, create NEW key
     if (r >= (1.0 - probNew)) {
-        ui32 newKey;
-        if (!FreeKeys.empty()) {
-            newKey = FreeKeys.back();
-            FreeKeys.pop_back();
-        } else {
-            newKey = static_cast<ui32>(Counts.size());
-            //Counts.push_back(0);
-        }
-        Counts[newKey] = 1;
-        TotalEdges++;
-        ActiveTables++;
+        ui32 newKey = FreeKeys.empty() ? static_cast<ui32>(Counts.size()) : FreeKeys.back();
+        AddKey(newKey);
         return newKey;
     }
 
@@ -774,50 +838,70 @@ ui32 TPitmanYorNodeState::GenerateKey(TRNG& rng, TPitmanYorConfig config, double
     // Calculate normalization sum for the weights
     double totalWeight = 0.0;
     if (weightAccessor) {
-        for (ui32 k = 0; k < Counts.size(); ++k) {
-            if (Counts[k] > 0) totalWeight += weightAccessor(k);
+        for (const auto& [key, count] : Counts) {
+            if (count > 0) {
+                totalWeight += weightAccessor(key);
+            }
         }
     } else {
         totalWeight = TotalEdges; // Default: proportional to edge counts
     }
+    if (totalWeight <= 0.0) {
+        throw std::runtime_error("Invalid Pitman-Yor state: no existing key weight");
+    }
 
     double cumulative = 0.0;
-    for (ui32 k = 0; k < Counts.size(); ++k) {
-        if (Counts[k] == 0) continue;
+    for (const auto& [key, count] : Counts) {
+        if (count == 0) {
+            continue;
+        }
 
         // Use custom weight (Global Size) or default (Local Count)
-        double w = weightAccessor ? weightAccessor(k) : (double)Counts[k];
+        double w = weightAccessor ? weightAccessor(key) : static_cast<double>(count);
         double prob = w / totalWeight;
 
         cumulative += prob;
         if (rExisting < cumulative) {
-            Counts[k]++;
-            TotalEdges++;
-            return k;
+            AddKey(key);
+            return key;
         }
     }
 
     // Fallback for floating point errors
-    for (int k = Counts.size() - 1; k >= 0; --k) {
-        if (Counts[k] > 0) {
-            Counts[k]++;
-            TotalEdges++;
-            return k;
+    for (auto it = Counts.rbegin(); it != Counts.rend(); ++it) {
+        if (it->second > 0) {
+            AddKey(it->first);
+            return it->first;
         }
     }
 
-    // Should be unreachable
-    return 0;
+    throw std::runtime_error("Invalid Pitman-Yor state: failed to select an existing key");
+}
+
+void TPitmanYorNodeState::AddKey(ui32 key) {
+    ui32& count = Counts[key];
+    if (count == 0) {
+        ++ActiveTables;
+        FreeKeys.erase(std::remove(FreeKeys.begin(), FreeKeys.end(), key), FreeKeys.end());
+    }
+
+    ++count;
+    ++TotalEdges;
 }
 
 void TPitmanYorNodeState::ReleaseKey(ui32 key) {
-    Y_ASSERT(key < Counts.size());
-    Y_ASSERT(Counts[key] > 0);
+    auto it = Counts.find(key);
+    if (it == Counts.end() || it->second == 0) {
+        throw std::runtime_error("Invalid Pitman-Yor state: attempt to release inactive key");
+    }
 
-    Counts[key]--;
+    it->second--;
     TotalEdges--;
 
-    if (Counts[key] == 0) {
+    if (it->second == 0) {
+        if (ActiveTables == 0) {
+            throw std::runtime_error("Invalid Pitman-Yor state: active key counter underflow");
+        }
         ActiveTables--;
         FreeKeys.push_back(key);
     }
@@ -1162,6 +1246,9 @@ TMCMCResult MCMCRandomizeEdgePreserving(TRNG& rng, TRelationGraph& graph, TPitma
             continue;
         }
 
+        auto oldEdge = graph.GetEdge(oldU, oldV);
+        Y_ASSERT(oldEdge);
+
         int oldComponents = graph.GetNumComponents();
 
         // Relocate edge
@@ -1172,7 +1259,7 @@ TMCMCResult MCMCRandomizeEdgePreserving(TRNG& rng, TRelationGraph& graph, TPitma
         // If disconnection increased components, reject this move
         if (componentsAfterDisconnect > oldComponents) {
             // Restore the edge
-            graph.Connect(rng, oldU, oldV, pyConfig);
+            graph.ConnectWithKeys(oldU, oldV, oldEdge->ColumnLHS, oldEdge->ColumnRHS);
             ++result.RejectedByGeometry;  // or could add a new rejection category
             continue;
         }

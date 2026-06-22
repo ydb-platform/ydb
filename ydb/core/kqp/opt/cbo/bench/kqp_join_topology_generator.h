@@ -142,6 +142,7 @@ struct TPitmanYorNodeState {
     ui32 ActiveTables = 0;         // How many keys have Count > 0
 
     ui32 GenerateKey(TRNG& rng, TPitmanYorConfig config, double forceQuantile = -1.0, TWeightAccessor weightAccessor = nullptr);
+    void AddKey(ui32 key);
     void ReleaseKey(ui32 key);
 };
 
@@ -223,9 +224,12 @@ private:
 
     // Maps [TableID][KeyID] -> DSU Element ID
     std::vector<std::vector<size_t>> GlobalKeyMapping_;
+    bool GlobalKeyMappingDirty_ = false;
 
     void RemoveEdgeFromList(unsigned owner, unsigned target);
     size_t EnsureGlobalID(unsigned table, unsigned key);
+    void RebuildGlobalKeyMapping();
+    void EnsureFreshGlobalKeyMapping();
 };
 
 class TSchemaStats {

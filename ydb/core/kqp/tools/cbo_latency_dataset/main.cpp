@@ -233,12 +233,12 @@ void PrintUsage(IOutputStream& os) {
             Cout << "--------------------------------- CBO-SE ---------------------------------\n";
             withoutShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/2));
 
-            if (resultType.contains("0")) {
-                results.emplace("CBO-0", (*withoutShuffleElimination - *withoutCBO).Filter([](double value) { return value > 0; }));
-            }
-
             if (!withoutShuffleElimination) {
                 return std::nullopt;
+            }
+
+            if (resultType.contains("0")) {
+                results.emplace("CBO-0", (*withoutShuffleElimination - *withoutCBO).Filter([](double value) { return value > 0; }));
             }
 
             results.emplace("CBO", *withoutShuffleElimination);
@@ -252,12 +252,12 @@ void PrintUsage(IOutputStream& os) {
             Cout << "--------------------------------- CBO+SE ---------------------------------\n";
             withShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true, /*optLevel=*/2));
 
-            if (resultType.contains("0")) {
-                results.emplace("SE-0", (*withShuffleElimination - *withoutCBO).Filter([](double value) { return value > 0; }));
-            }
-
             if (!withShuffleElimination) {
                 return std::nullopt;
+            }
+
+            if (resultType.contains("0")) {
+                results.emplace("SE-0", (*withShuffleElimination - *withoutCBO).Filter([](double value) { return value > 0; }));
             }
 
             results.emplace("SE", *withShuffleElimination);
@@ -268,8 +268,11 @@ void PrintUsage(IOutputStream& os) {
 
         Cout << "--------------------------------------------------------------------------\n";
 
-        results.emplace("SE-div-CBO", *withShuffleElimination / *withoutShuffleElimination);
-        if (resultType.contains("0")) {
+        if (withShuffleElimination && withoutShuffleElimination) {
+            results.emplace("SE-div-CBO", *withShuffleElimination / *withoutShuffleElimination);
+        }
+
+        if (resultType.contains("0") && results.contains("SE-0") && results.contains("CBO-0")) {
             auto& adjustedWithTime = results.at("SE-0");
             auto& adjustedWithoutTime = results.at("CBO-0");
 
@@ -521,6 +524,7 @@ void PrintUsage(IOutputStream& os) {
             return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma, TPitmanYorConfig config) {
                 auto initialDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
                 auto initialGraph = GenerateRandomChungLuGraph(rng, initialDegrees, config);
+                ForceReconnection(rng, initialGraph, config);
 
                 return initialGraph;
             };
@@ -686,7 +690,8 @@ void PrintUsage(IOutputStream& os) {
         static ui32 CountQueries(const TParamsMap& params) {
             ui32 degreePreservingVariants = params.GetValue<ui32>("mcmc-degree", 0);
             ui32 edgePreservingVariants = params.GetValue<ui32>("mcmc-edge", 0);
-            return 1 /* original */ + degreePreservingVariants + edgePreservingVariants;
+            bool runBase = params.GetValue<bool>("run-base", true);
+            return (runBase ? 1 : 0) + degreePreservingVariants + edgePreservingVariants;
         }
 
         static ui32 CountQueries(const TTupleParser::TTable& args) {
@@ -781,9 +786,10 @@ void PrintUsage(IOutputStream& os) {
                 ui32 degreePreservingVariants = params.GetValue<ui32>("mcmc-degree", 0);
                 ui32 edgePreservingVariants = params.GetValue<ui32>("mcmc-edge", 0);
                 bool runBase = params.GetValue<bool>("run-base", true);
+                ui32 outputOffset = 0;
 
                 if (runBase) {
-                    ProcessSingleGraph(rng, queryIdx, params, baseGraph, "BASE", baseTopology.GenerationProcess);
+                    ProcessSingleGraph(rng, queryIdx + outputOffset++, params, baseGraph, "BASE", baseTopology.GenerationProcess);
                 }
 
                 auto pyConfig = GetPitmanYor(params);
@@ -803,8 +809,7 @@ void PrintUsage(IOutputStream& os) {
                     generation.InsertValue("type", "mcmc-degree-preserving");
 
                     auto reproArgs = "run-base=false; mcmc-degree=1; ";
-                    ui32 variant = i;
-                    ProcessSingleGraph(rng, queryIdx + variant, params, graphDP, "IK#" + std::to_string(i), generation, reproArgs);
+                    ProcessSingleGraph(rng, queryIdx + outputOffset++, params, graphDP, "IK#" + std::to_string(i), generation, reproArgs);
                 }
 
                 for (ui32 i = 1; i <= edgePreservingVariants; ++i) {
@@ -823,8 +828,7 @@ void PrintUsage(IOutputStream& os) {
                     generation.InsertValue("type", "mcmc-edge-preserving");
 
                     auto reproArgs = "run-base=false; mcmc-edge=1; ";
-                    ui32 variant = degreePreservingVariants + i;
-                    ProcessSingleGraph(rng, queryIdx + variant, params, graphEP, "IE#" + std::to_string(i), generation, reproArgs);
+                    ProcessSingleGraph(rng, queryIdx + outputOffset++, params, graphEP, "IE#" + std::to_string(i), generation, reproArgs);
                 }
 
             } catch (const std::exception& e) {
@@ -1113,6 +1117,20 @@ void PrintUsage(IOutputStream& os) {
                 auto graph = topology.Graph;
                 auto explanationMCMC = MCMCRandomizeDegreePreserving(rng, graph, config, TMCMCConfig::Thorough(), debug);
                 generationProcess.InsertValue("mcmc-explain", explanationMCMC.Serialize());
+
+                return { .Graph = graph, .GenerationProcess = generationProcess };
+            }
+
+            if (topologyName == "random-log-normal-chung-lu" || topologyName == "chung-lu") {
+                double mu = params.GetValue<double>("mu");
+                double sigma = params.GetValue<double>("sigma");
+                auto initialDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
+
+                NJson::TJsonValue generationProcess;
+                generationProcess.InsertValue("initial-degrees", SerializeDegrees(initialDegrees));
+
+                auto graph = GenerateRandomChungLuGraph(rng, initialDegrees, config);
+                ForceReconnection(rng, graph, config);
 
                 return { .Graph = graph, .GenerationProcess = generationProcess };
             }

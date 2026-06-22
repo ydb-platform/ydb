@@ -246,7 +246,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
@@ -447,7 +446,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);

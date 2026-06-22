@@ -11,11 +11,15 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS(SetNotNullOnSingleColumn) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+
+            const TString root = "/MyRoot";
+            const TString tablePath = "/MyRoot/Table";
+
             {
                 TInactiveZone inactive(activeZone);
-
-                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "Table"
@@ -27,35 +31,78 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
             }
 
             const ui64 setConstraintTxId = ++t.TxId;
-            {
-                NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
-                settings.SetTablePath("/MyRoot/Table");
-                settings.AddNotNullColumns("value");
 
-                auto sender = runtime.AllocateEdgeActor();
-                auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(
-                    setConstraintTxId, "/MyRoot", std::move(settings));
-                ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request.Release());
-            }
+            TestSetColumnConstraintWithoutResponse(
+                runtime, setConstraintTxId,
+                TTestTxConfig::SchemeShard,
+                root,
+                tablePath,
+                {"value"});
 
             t.TestEnv->TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
             {
                 TInactiveZone inactive(activeZone);
+                TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+            }
+        });
+    }
 
-                const auto describeResult = DescribePath(runtime, "/MyRoot/Table");
-                const auto& columns = describeResult.GetPathDescription().GetTable().GetColumns();
+    Y_UNIT_TEST_WITH_REBOOTS(SetNotNullShouldBeFailed) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
-                bool found = false;
-                for (const auto& column : columns) {
-                    if (column.GetName() == "value") {
-                        found = true;
-                        UNIT_ASSERT_C(
-                            column.GetNotNull(),
-                            "Column 'value' must be NOT NULL after SetColumnConstraint completes");
-                    }
+
+            const TString root = "/MyRoot";
+            const TString tablePath = "/MyRoot/Table";
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key"   Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8"   }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                {
+                    TVector<TCell> cells = {
+                        TCell::Make((ui32)1), TCell()
+                    };
+
+                    WriteOp(runtime, TTestTxConfig::SchemeShard, ++t.TxId, tablePath,
+                        0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                        {1, 2}, TSerializedCellMatrix(cells, 1, 2), true);
                 }
-                UNIT_ASSERT_C(found, "Column 'value' not found in table description");
+            }
+
+            const ui64 setConstraintTxId = ++t.TxId;
+
+            TestSetColumnConstraintWithoutResponse(
+                runtime, setConstraintTxId,
+                TTestTxConfig::SchemeShard,
+                root,
+                tablePath,
+                {"value"});
+
+            t.TestEnv->TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+                {
+                    TVector<TCell> cells = {
+                        TCell::Make((ui32)2), TCell()
+                    };
+
+                    WriteOp(runtime, TTestTxConfig::SchemeShard, ++t.TxId, tablePath,
+                        0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                        {1, 2}, TSerializedCellMatrix(cells, 1, 2), true);
+                }
             }
         });
     }

@@ -457,6 +457,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData().ColumnShardConfig.MutableReadRetryPolicy()->SetMaxRetries(0);
 
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);

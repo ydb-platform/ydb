@@ -662,6 +662,8 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     return IGraphTransformer::TStatus(TStatus::Ok);
 }
 
+TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx);
+
 class TDqTypeAnnotationTransformer final : public TVisitorTransformerBase {
 public:
     TDqTypeAnnotationTransformer()

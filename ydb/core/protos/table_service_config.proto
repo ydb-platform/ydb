@@ -502,8 +502,6 @@ message TTableServiceConfig {
 
     optional bool UseBlockHashJoin = 124 [default = true, (InvalidateCompileCache) = true];
 
-    optional bool UseScalarHashJoin = 126 [default = false, (InvalidateCompileCache) = true];
-
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
 
     optional uint64 QueryDeadlockTimeoutMs = 126 [default = 600000];
@@ -539,4 +537,6 @@ message TTableServiceConfig {
     // KqpRewriteHybridRankTopSort logical rewrite, so it changes the compiled plan shape and must
     // invalidate the compile cache when toggled.
     optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
+
+    optional bool UseScalarHashJoin = 136 [default = false, (InvalidateCompileCache) = true];
 };

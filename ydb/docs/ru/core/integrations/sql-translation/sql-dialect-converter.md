@@ -72,7 +72,7 @@
 ## См. также {#see-also}
 
 - [Веб-интерфейс конвертера SQL-диалектов](https://ydb-dialect-converter.website.yandexcloud.net/)
-- [SQLGlot — плагин {{ ydb-short-name }} для библиотеки SQLGlot](sqlglot.md)
-- [Плагин DBeaver для {{ ydb-short-name }}](../gui/dbeaver-plugin.md)
+- [{#T}](sqlglot.md)
+- [{#T}](../gui/dbeaver-plugin.md)
 - [YQL Reference](../../yql/reference/index.md)
 - [SQLGlot](https://github.com/tobymao/sqlglot)

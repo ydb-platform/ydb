@@ -137,7 +137,7 @@ print(node.name)
 
 Типы данных приводятся к эквивалентам {{ ydb-short-name }}:
 
-| Стандартный SQL   | {{ ydb-short-name }}     |
+| Тип в исходном диалекте | {{ ydb-short-name }}     |
 |-------------------|--------------------------|
 | `TINYINT`         | `Int8`                   |
 | `INT`             | `Int32`                  |
@@ -155,7 +155,7 @@ print(node.name)
 
 ## См. также {#see-also}
 
-- [Конвертер SQL-диалектов в YQL](sql-dialect-converter.md)
+- [{#T}](sql-dialect-converter.md)
 - [ydb-sqlglot-plugin на GitHub](https://github.com/ydb-platform/ydb-sqlglot-plugin)
 - [SQLGlot](https://github.com/tobymao/sqlglot)
 - [YQL Reference](../../yql/reference/index.md)

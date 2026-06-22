@@ -451,7 +451,9 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     if (!tableDesc.GetTableIndexes().empty()) {
         try {
             for (const auto& indexDesc: tableDesc.GetTableIndexes()) {
-                if (indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                // Local indexes (e.g. row-table prefix bloom filter) have no impl table.
+                if (indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree
+                    && indexDesc.IndexImplTableDescriptionsSize() > 0) {
                     FormatIndexImplTable(tablePath, indexDesc.GetName(), indexDesc.GetIndexImplTableDescriptions(0));
                 }
             }

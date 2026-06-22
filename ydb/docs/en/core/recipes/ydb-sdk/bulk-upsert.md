@@ -319,6 +319,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     }
   ```
 
+  {% endlist %}
+
 - Python
 
   {% list tabs %}

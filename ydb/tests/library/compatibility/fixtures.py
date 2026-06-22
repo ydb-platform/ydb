@@ -55,6 +55,15 @@ def prepare_feature_flags(extra_feature_flags, disabled_feature_flags):
 
 
 def _wait_for_cluster_readiness(driver, timeout=120, interval=2):
+    try:
+        with ydb.QuerySessionPool(driver) as session_pool:
+            session_pool.execute_with_retries(
+                """DROP TABLE IF EXISTS `test_readiness`""",
+                retry_settings=ydb.RetrySettings(max_retries=1),
+            )
+    except Exception:
+        pass
+
     query = """
         CREATE TABLE `test_readiness` (
         id Int64 NOT NULL,
@@ -72,9 +81,15 @@ def _wait_for_cluster_readiness(driver, timeout=120, interval=2):
             time.sleep(interval)
     else:
         raise last_exception
-    query = """DROP TABLE `test_readiness`"""
-    with ydb.QuerySessionPool(driver) as session_pool:
-        session_pool.execute_with_retries(query)
+
+    try:
+        with ydb.QuerySessionPool(driver) as session_pool:
+            session_pool.execute_with_retries(
+                """DROP TABLE `test_readiness`""",
+                retry_settings=ydb.RetrySettings(max_retries=1),
+            )
+    except Exception:
+        pass
 
 
 current_binary_path = os.environ.get('YDB_CURRENT_BINARY_PATH', yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target"))

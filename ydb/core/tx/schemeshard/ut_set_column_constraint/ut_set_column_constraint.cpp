@@ -1,6 +1,5 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/testlib/helpers.h>

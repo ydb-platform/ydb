@@ -9477,6 +9477,27 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_select_yql-group_by_nokey_promotion_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-group_by_optionality]": [
+        {
+            "checksum": "ab7ee13fdc472baf8b693e1508c873de",
+            "size": 11004,
+            "uri": "https://{canondata_backend}/1871102/eb25b1ebe2b0e4a641cfac3e711cbc8b7d5fc148/resource.tar.gz#test_sql2yql.test_select_yql-group_by_optionality_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-group_by_optionality_null]": [
+        {
+            "checksum": "366a9f9cd77cf52aa3bc49420113da5a",
+            "size": 10781,
+            "uri": "https://{canondata_backend}/1903280/3231d7a47b92cae05de9e903f30e0b0e9e69f173/resource.tar.gz#test_sql2yql.test_select_yql-group_by_optionality_null_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-group_by_optionality_pgint]": [
+        {
+            "checksum": "fbcd4a6623016b188f7e9a15a794a0fe",
+            "size": 11475,
+            "uri": "https://{canondata_backend}/1784117/3f0bf9bbff9508e6f345caaefebed54cf8bfac65/resource.tar.gz#test_sql2yql.test_select_yql-group_by_optionality_pgint_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-group_by_sum_b]": [
         {
             "checksum": "de97aedaab0447fa39895f7d8f53d3fe",
@@ -17556,6 +17577,21 @@
     "test_sql_format.test[select_yql-group_by_nokey_promotion]": [
         {
             "uri": "file://test_sql_format.test_select_yql-group_by_nokey_promotion_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-group_by_optionality]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_optionality_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-group_by_optionality_null]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_optionality_null_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-group_by_optionality_pgint]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_optionality_pgint_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-group_by_sum_b]": [

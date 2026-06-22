@@ -3,6 +3,7 @@
 /* custom error: YqlSelect unsupported: (union_op select_subexpr_intersect)* */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
+PRAGMA ydb.CostBasedOptimizationLevel = '1';
 
 $year_total = (
     SELECT

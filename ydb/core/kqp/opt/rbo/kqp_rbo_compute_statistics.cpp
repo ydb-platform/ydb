@@ -158,7 +158,7 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     // Record lineage: source can rename its columns, so already we need to record that
     auto outputIUs = GetOutputIUs();
-    Y_ENSURE(Columns.size() == outputIUs.size());
+    Y_ENSURE(Columns.size() == outputIUs.size(), TStringBuilder());
 
     // KeyColumns must reference the read's actual output IUs (which may have been renamed),
     // not (Alias, physicalColumn). Columns[i] is the physical name aligned with outputIUs[i],

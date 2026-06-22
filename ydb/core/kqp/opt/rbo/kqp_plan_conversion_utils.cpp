@@ -76,6 +76,7 @@ void RepairInfoUnitReference(TInfoUnit& iu, const TVector<TInfoUnit>& visibleIUs
 
 void ValidateUniqueOutputIUs(const TIntrusivePtr<IOperator>& op, TExprContext& ctx) {
     THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
+    op->ComputeOutputIUs();
     for (const auto& iu : op->GetOutputIUs()) {
         Y_ENSURE(!seen.contains(iu), "Duplicate visible column " << iu.GetFullName() << " after " << op->ToString(ctx));
         seen.insert(iu);

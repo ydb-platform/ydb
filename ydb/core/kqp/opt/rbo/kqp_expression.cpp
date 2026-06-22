@@ -487,7 +487,7 @@ TVector<TInfoUnit> TExpression::GetInputIUs(bool includeSubplanVars, bool includ
         IUs.clear();
         Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
         GetAllMembers(Node, IUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
-        return IUs;
+        return std::move(IUs);
     }
 }
 

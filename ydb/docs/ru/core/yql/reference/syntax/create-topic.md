@@ -89,5 +89,5 @@ CREATE TOPIC `my_topic` (
         dead_letter_policy = 'move',
         dead_letter_queue = 'my_dlq_topic'
     )
-)
+);
 ```

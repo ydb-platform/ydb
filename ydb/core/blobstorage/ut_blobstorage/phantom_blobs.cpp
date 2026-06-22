@@ -507,7 +507,6 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             .PDiskChunkSize = 32_MB,
             .EnablePhantomFlagStorage = false,
             .TinySyncLog = true,
-            .EnablePersistentPhantomFlagStorage = false,
         }, 0, 10000, nodeStates, false);
 
         ui64 storedFlags = ctx.RunBlobSizeLimitTest(1_MB, blobSize, 50);
